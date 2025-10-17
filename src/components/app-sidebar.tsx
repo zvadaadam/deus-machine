@@ -98,7 +98,7 @@ export function AppSidebar({
       {/* Repositories List */}
       <SidebarContent>
         <ScrollArea className="flex-1">
-          <SidebarMenu className="p-2">
+          <SidebarMenu className="py-2 px-2">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
@@ -182,7 +182,7 @@ function RepositoryItem({
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <SidebarMenuSub className="border-l-0 ml-0 px-0">
+          <SidebarMenuSub className="border-l-0 mx-0 px-0">
             {/* New Workspace Button - At Top, Compact Height */}
             {sidebarExpanded && (
               <SidebarMenuSubItem className="mb-1">
@@ -270,7 +270,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
 
   return (
     <SidebarMenuSubItem className="overflow-visible">
-      <div className="flex items-center w-full py-3 pl-3 pr-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
+      <div className="flex items-center w-full py-3 px-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
         <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
           <GitBranch
             className={cn(
