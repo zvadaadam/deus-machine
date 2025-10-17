@@ -1,0 +1,92 @@
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use tauri::Manager;
+use conductor_lib::{
+    commands,
+    backend::BackendManager,
+    pty::PtyManager,
+    socket::SocketManager,
+};
+
+const BACKEND_PORT: u16 = 3333;
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
+        .manage(BackendManager::new(BACKEND_PORT))
+        .manage(PtyManager::new())
+        .manage(SocketManager::new())
+        .setup(|app| {
+            // Set app handle for PTY manager so it can emit events
+            let pty_manager: tauri::State<PtyManager> = app.state();
+            pty_manager.set_app_handle(app.handle().clone());
+
+            // Start backend server
+            let backend_manager: tauri::State<BackendManager> = app.state();
+
+            // Determine backend path
+            // In dev: Get the workspace root (project directory)
+            // In prod: resources/backend/server.cjs (bundled in app)
+            let backend_path = if cfg!(dev) {
+                // Development mode - resolve relative to the executable
+                let exe_dir = std::env::current_exe()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf();
+                exe_dir.join("backend/server.cjs")
+            } else {
+                // Production mode
+                app.path()
+                    .resource_dir()
+                    .unwrap()
+                    .join("backend/server.cjs")
+            };
+
+            println!("[TAURI] Starting backend from: {}", backend_path.display());
+
+            match backend_manager.start(backend_path) {
+                Ok(_) => println!("[TAURI] Backend started successfully on port {}", BACKEND_PORT),
+                Err(e) => {
+                    eprintln!("[TAURI] Failed to start backend: {}", e);
+                    eprintln!("[TAURI] App will continue but backend features will not work");
+                }
+            }
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Stop backend when window closes
+                let backend_manager: tauri::State<BackendManager> = window.state();
+                backend_manager.stop().ok();
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::spawn_pty,
+            commands::resize_pty,
+            commands::write_to_pty,
+            commands::kill_pty,
+            commands::connect_to_sidecar,
+            commands::send_sidecar_message,
+            commands::receive_sidecar_message,
+            commands::disconnect_from_sidecar,
+            commands::is_sidecar_connected,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

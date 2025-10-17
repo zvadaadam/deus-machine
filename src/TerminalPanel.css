@@ -1,0 +1,249 @@
+.terminal-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.terminal-tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  height: 35px;
+  flex-shrink: 0;
+}
+
+.terminal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  padding: 0 4px;
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #e5e7eb;
+  color: #6b7280;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.terminal-tab:hover {
+  background: #d1d5db;
+  color: #374151;
+}
+
+.terminal-tab.active {
+  background: #ffffff;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.tab-close-button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.tab-close-button:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.add-terminal-button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 18px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.add-terminal-button:hover {
+  background: #e5e7eb;
+  color: #1a1a1a;
+}
+
+.run-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  padding: 6px 12px;
+  margin-right: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.run-button:hover {
+  background: #e5e7eb;
+  color: #1a1a1a;
+}
+
+.keybinding {
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.terminal-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+/* Run workspace view */
+.run-workspace-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #ffffff;
+}
+
+.run-workspace-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 32px 48px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.run-workspace-button:hover {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.run-workspace-button:hover .play-icon {
+  color: #3b82f6;
+}
+
+.play-icon {
+  font-size: 48px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+  transition: color 0.2s;
+}
+
+.run-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.run-description {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* Browser View */
+.browser-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 35px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e5e5e5;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+.browser-url-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-right: 8px;
+}
+
+.browser-url {
+  font-size: 12px;
+  color: #666666;
+  font-family: 'Monaco', 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-close-button {
+  background: none;
+  border: none;
+  color: #666666;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.browser-close-button:hover {
+  background: #e5e5e5;
+  color: #333333;
+}
+
+.browser-iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+}
