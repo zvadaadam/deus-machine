@@ -240,22 +240,28 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
     }
   };
 
-  const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
-
-  // Format timestamp to relative time (e.g., "2h ago")
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    return `${diffDays}d`;
+  const getStatusText = (status: string | null | undefined) => {
+    return status || "idle";
   };
+
+  const getStatusTextColor = (status: string | null | undefined) => {
+    switch (status) {
+      case "working":
+        return "text-blue-500";
+      case "idle":
+        return "text-green-500";
+      case "compacting":
+        return "text-yellow-500";
+      default:
+        return "text-muted-foreground/70";
+    }
+  };
+
+  const shouldShimmer = (status: string | null | undefined) => {
+    return status === "working" || status === "compacting";
+  };
+
+  const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
 
   return (
     <SidebarMenuSubItem>
@@ -274,13 +280,19 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
             <span className="text-sm font-medium truncate">
               {workspace.branch}
             </span>
-            {/* Directory name and timestamp on bottom */}
+            {/* Directory name and status on bottom */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
-              <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">
-                • {formatTime(workspace.updated_at)}
+              <span
+                className={cn(
+                  "text-[11px] flex-shrink-0",
+                  getStatusTextColor(workspace.session_status),
+                  shouldShimmer(workspace.session_status) && "animate-shimmer"
+                )}
+              >
+                • {getStatusText(workspace.session_status)}
               </span>
             </div>
           </div>
