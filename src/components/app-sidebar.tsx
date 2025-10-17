@@ -143,10 +143,10 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => onNewWorkspace()}
-              tooltip={!isExpanded ? "Add Repository" : undefined}
+              tooltip={!isExpanded ? "New Workspace" : undefined}
             >
               <FolderPlus className="h-4 w-4" />
-              {isExpanded && <span>Add Repository</span>}
+              {isExpanded && <span>New Workspace</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -335,7 +335,14 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
 
   return (
     <SidebarMenuSubItem>
-      <div className="grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
+      <div
+        className={cn(
+          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2 min-h-[56px] rounded-md cursor-pointer",
+          isActive ? "bg-sidebar-accent ring-1 ring-sidebar-border" : "hover:bg-sidebar-accent"
+        )}
+        aria-current={isActive ? "page" : undefined}
+        onClick={onClick}
+      >
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
             <Loader2
