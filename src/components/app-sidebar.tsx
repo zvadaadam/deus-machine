@@ -269,9 +269,9 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
 
   return (
-    <SidebarMenuSubItem>
-      <div className="flex items-center gap-2 w-full py-3 px-3 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+    <SidebarMenuSubItem className="overflow-visible">
+      <div className="flex items-center gap-2 w-full py-3 pl-3 pr-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer overflow-visible" onClick={onClick}>
+        <div className="flex items-center gap-3 flex-1 min-w-0 max-w-[calc(100%-120px)]">
           <GitBranch
             className={cn(
               "h-4 w-4 flex-shrink-0",
