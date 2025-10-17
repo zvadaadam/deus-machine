@@ -194,12 +194,12 @@ function RepositoryItem({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className="w-full px-3 py-5"
+            className={cn("w-full py-5", sidebarExpanded ? "px-3" : "px-0")}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
-            <div className="flex items-center justify-between w-full">
+            <div className={cn("flex items-center w-full", sidebarExpanded ? "justify-between" : "justify-center")}>
               {!sidebarExpanded && (
-                <div className="relative mx-auto">
+                <div className="relative">
                   {(() => {
                     const repoColor = getRepoColor(repository.repo_name);
                     return (
