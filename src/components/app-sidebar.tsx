@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, FolderGit2, GitBranch, ChevronDown, Settings, Plus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -165,7 +165,6 @@ function RepositoryItem({
           >
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <FolderGit2 className="h-4 w-4 flex-shrink-0 text-sidebar-foreground/70" />
                 {sidebarExpanded && (
                   <span className="text-sm font-medium truncate">
                     {repository.repo_name}
@@ -202,9 +201,8 @@ function RepositoryItem({
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
                     "w-full justify-start h-8 px-3",
-                    "text-muted-foreground hover:text-foreground",
-                    "border border-dashed border-sidebar-border hover:border-sidebar-foreground/50",
-                    "transition-colors duration-200"
+                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50",
+                    "transition-all duration-200"
                   )}
                 >
                   <Plus className="h-3.5 w-3.5 mr-2 flex-shrink-0" />
@@ -289,7 +287,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
-              <span className="text-[10px] text-muted-foreground/70 flex-shrink-0">
+              <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">
                 • {formatTime(workspace.updated_at)}
               </span>
             </div>
