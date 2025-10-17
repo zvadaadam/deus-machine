@@ -227,6 +227,16 @@ export function Dashboard() {
   }
 
   /**
+   * Handle creating a new workspace with optional repo pre-selection
+   */
+  function handleNewWorkspace(repoId?: string) {
+    if (repoId) {
+      setSelectedRepoId(repoId);
+    }
+    openNewWorkspaceModal();
+  }
+
+  /**
    * Load and display diff for a specific file
    */
   async function handleFileClick(file: string) {
@@ -316,7 +326,7 @@ export function Dashboard() {
             action={
               <Button
                 variant="default"
-                onClick={() => openNewWorkspaceModal()}
+                onClick={() => handleNewWorkspace()}
                 size="sm"
               >
                 + Create Workspace
@@ -330,7 +340,7 @@ export function Dashboard() {
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStats={diffStats}
           onWorkspaceClick={handleWorkspaceClick}
-          onNewWorkspace={openNewWorkspaceModal}
+          onNewWorkspace={handleNewWorkspace}
           profile={{
             username: "Developer",
             email: "dev@conductor.build"
