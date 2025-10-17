@@ -193,21 +193,21 @@ function RepositoryItem({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub className="border-l-0 ml-0 px-0">
-            {/* New Workspace Button - At Top */}
+            {/* New Workspace Button - At Top, Compact Height */}
             {sidebarExpanded && (
-              <SidebarMenuSubItem>
+              <SidebarMenuSubItem className="mb-1">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
-                    "w-full justify-start h-8 px-2",
+                    "w-full justify-start h-8 px-3",
                     "text-muted-foreground hover:text-foreground",
                     "border border-dashed border-sidebar-border hover:border-sidebar-foreground/50",
                     "transition-colors duration-200"
                   )}
                 >
-                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  <Plus className="h-3.5 w-3.5 mr-2 flex-shrink-0" />
                   <span className="text-xs">New Workspace</span>
                 </Button>
               </SidebarMenuSubItem>
@@ -252,23 +252,47 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
 
   const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
 
+  // Format timestamp to relative time (e.g., "2h ago")
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "now";
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return `${diffDays}d`;
+  };
+
   return (
     <SidebarMenuSubItem>
       <SidebarMenuSubButton
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "relative py-3",
+          "relative py-4 px-3 min-h-[56px]",
           isActive && "bg-sidebar-accent"
         )}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <GitBranch className="h-3.5 w-3.5 flex-shrink-0 text-sidebar-foreground/60" />
-          <div className="flex flex-col flex-1 min-w-0 gap-0.5">
-            <span className="text-sm truncate">{workspace.directory_name}</span>
-            <span className="text-xs text-muted-foreground truncate">
+          <GitBranch className="h-4 w-4 flex-shrink-0 text-sidebar-foreground/60" />
+          <div className="flex flex-col flex-1 min-w-0 gap-1">
+            {/* Branch name on top */}
+            <span className="text-sm font-medium truncate">
               {workspace.branch}
             </span>
+            {/* Directory name and timestamp on bottom */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground truncate">
+                {workspace.directory_name}
+              </span>
+              <span className="text-[10px] text-muted-foreground/70 flex-shrink-0">
+                • {formatTime(workspace.updated_at)}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {hasChanges && (
