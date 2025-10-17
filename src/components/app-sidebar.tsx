@@ -97,7 +97,7 @@ export function AppSidebar({
       {/* Repositories List */}
       <SidebarContent>
         <ScrollArea className="flex-1">
-          <SidebarMenu className="p-2 gap-2">
+          <SidebarMenu className="p-2">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
@@ -159,7 +159,7 @@ function RepositoryItem({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className="w-full px-3"
+            className="w-full px-3 py-3"
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className="flex items-center justify-between w-full">
