@@ -48,10 +48,14 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
-  useSidebar
+  useSidebar,
 } from './sidebar';
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip';
+
+export { Avatar, AvatarImage, AvatarFallback } from './avatar';
+
+export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible';
 
 // Custom components (not shadcn)
 export { EmptyState } from './EmptyState';

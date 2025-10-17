@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceDetail } from "./WorkspaceDetail";
 import { TerminalPanel } from "./TerminalPanel";
@@ -9,7 +8,6 @@ import {
   NewWorkspaceModal,
   DiffModal,
   SystemPromptModal,
-  RepoGroup as RepoGroupComponent,
 } from "./features/dashboard/components";
 import {
   useDashboardData,
@@ -21,14 +19,10 @@ import {
   Badge,
   EmptyState,
   Skeleton,
-  Sidebar,
   SidebarProvider,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  ScrollArea,
+  SidebarInset,
 } from "./components/ui";
+import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square } from "lucide-react";
@@ -46,7 +40,6 @@ import type {
 // BASE_URL is now async - use getBaseURL()
 
 export function Dashboard() {
-  const navigate = useNavigate();
 
   // Zustand stores - Global state
   const selectedWorkspace = useWorkspaceStore((state) => state.selectedWorkspace);
@@ -58,14 +51,12 @@ export function Dashboard() {
     showNewWorkspaceModal,
     showSystemPromptModal,
     diffModal,
-    collapsedRepos,
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
     openSystemPromptModal,
     closeSystemPromptModal,
     openDiffModal,
     closeDiffModal,
-    toggleRepoCollapse,
   } = useUIStore();
 
   // Dashboard data hook - manages workspaces, stats
@@ -236,6 +227,16 @@ export function Dashboard() {
   }
 
   /**
+   * Handle creating a new workspace with optional repo pre-selection
+   */
+  function handleNewWorkspace(repoId?: string) {
+    if (repoId) {
+      setSelectedRepoId(repoId);
+    }
+    openNewWorkspaceModal();
+  }
+
+  /**
    * Load and display diff for a specific file
    */
   async function handleFileClick(file: string) {
@@ -308,96 +309,52 @@ export function Dashboard() {
 
   return (
     <SidebarProvider>
+      {/* Floating Sidebar */}
+      {loading ? (
+        <div className="p-4 space-y-3">
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-[90%]" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      ) : repoGroups.length === 0 ? (
+        <div className="p-4">
+          <EmptyState
+            icon="📁"
+            title="No Workspaces"
+            description="Create a new workspace to get started"
+            action={
+              <Button
+                variant="default"
+                onClick={() => handleNewWorkspace()}
+                size="sm"
+              >
+                + Create Workspace
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <AppSidebar
+          repositories={repoGroups}
+          selectedWorkspaceId={selectedWorkspace?.id || null}
+          diffStats={diffStats}
+          onWorkspaceClick={handleWorkspaceClick}
+          onNewWorkspace={handleNewWorkspace}
+          profile={{
+            username: "Developer"
+          }}
+        />
+      )}
+
+      {/* Main Content with SidebarInset */}
+      <SidebarInset>
       <PanelGroup
         direction="horizontal"
         autoSaveId="conductor-root-layout"
         className="app-container"
         style={{ height: "100%", width: "100%" }}
       >
-      {/* LEFT SIDEBAR - shadcn Sidebar */}
-      <Panel id="left" defaultSize={20} minSize={15} maxSize={35}>
-        <Sidebar className="border-r">
-          <SidebarHeader className="border-b px-4 py-3">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <div className="flex items-center justify-between w-full">
-                  <h1 className="text-sm font-semibold">Conductor</h1>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate('/settings')}
-                      className="h-8 w-8 p-0"
-                      title="Settings"
-                    >
-                      ⚙️
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-success-500 animate-pulse"></span>
-                    </div>
-                  </div>
-                </div>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarHeader>
-
-          <div className="px-2 py-2 border-b">
-            <Button
-              variant="outline"
-              onClick={() => openNewWorkspaceModal()}
-              className="w-full justify-start"
-              size="sm"
-            >
-              + New Workspace
-            </Button>
-          </div>
-
-          <SidebarContent>
-            <ScrollArea className="flex-1">
-              {loading ? (
-                <div className="p-4 space-y-3">
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-4 w-4/5" />
-                  <Skeleton className="h-4 w-9/10" />
-                  <Skeleton className="h-4 w-3/4" />
-                </div>
-              ) : repoGroups.length === 0 ? (
-                <div className="p-4">
-                  <EmptyState
-                    icon="📁"
-                    title="No Workspaces"
-                    description="Create a new workspace to get started"
-                    action={
-                      <Button
-                        variant="default"
-                        onClick={() => openNewWorkspaceModal()}
-                        size="sm"
-                      >
-                        + Create Workspace
-                      </Button>
-                    }
-                  />
-                </div>
-              ) : (
-                repoGroups.map((group) => (
-                  <RepoGroupComponent
-                    key={group.repo_id}
-                    group={group}
-                    isCollapsed={collapsedRepos.has(group.repo_id)}
-                    selectedWorkspaceId={selectedWorkspace?.id || null}
-                    diffStats={diffStats}
-                    onToggleCollapse={() => toggleRepoCollapse(group.repo_id)}
-                    onWorkspaceClick={handleWorkspaceClick}
-                  />
-                ))
-              )}
-            </ScrollArea>
-          </SidebarContent>
-        </Sidebar>
-      </Panel>
-
-      <PanelResizeHandle className="resize-handle" />
-
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30}>
         <div className="panel-content main-content">
@@ -671,6 +628,7 @@ export function Dashboard() {
         </div>
       </Panel>
     </PanelGroup>
+      </SidebarInset>
 
       {/* Modals */}
       <NewWorkspaceModal
