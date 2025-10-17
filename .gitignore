@@ -68,5 +68,3 @@ temp/
 
 # MCP Configuration (user-specific)
 .mcp.json
-
-package-lock.json
