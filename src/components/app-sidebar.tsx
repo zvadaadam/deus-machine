@@ -274,68 +274,70 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "relative py-3 px-3 min-h-[56px] flex items-center justify-between w-full",
+          "relative py-3 px-3 min-h-[56px]",
           isActive && "bg-sidebar-accent"
         )}
       >
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <GitBranch
-            className={cn(
-              "h-4 w-4 flex-shrink-0",
-              workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
-            )}
-          />
-          <div className="flex flex-col flex-1 min-w-0 gap-0.5">
-            {/* Branch name on top */}
-            <span className="text-sm font-medium truncate">
-              {workspace.branch}
-            </span>
-            {/* Directory name and status on bottom */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground truncate">
-                {workspace.directory_name}
+        <div className="flex items-center justify-between gap-2 w-full">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <GitBranch
+              className={cn(
+                "h-4 w-4 flex-shrink-0",
+                workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
+              )}
+            />
+            <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+              {/* Branch name on top */}
+              <span className="text-sm font-medium truncate">
+                {workspace.branch}
               </span>
-              <span className="text-xs text-muted-foreground/70 flex-shrink-0">•</span>
-              {shouldShimmer(workspace.session_status) ? (
-                <TextShimmer
-                  as="span"
-                  duration={2}
-                  className={cn(
-                    "text-xs flex-shrink-0",
-                    workspace.session_status === "working"
-                      ? "[--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
-                      : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
-                  )}
-                >
-                  {getStatusText(workspace.session_status)}
-                </TextShimmer>
-              ) : (
-                <span
-                  className={cn(
-                    "text-xs flex-shrink-0",
-                    getStatusTextColor(workspace.session_status)
-                  )}
-                >
-                  {getStatusText(workspace.session_status)}
+              {/* Directory name and status on bottom */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-xs text-muted-foreground truncate">
+                  {workspace.directory_name}
+                </span>
+                <span className="text-xs text-muted-foreground/70 flex-shrink-0">•</span>
+                {shouldShimmer(workspace.session_status) ? (
+                  <TextShimmer
+                    as="span"
+                    duration={2}
+                    className={cn(
+                      "text-xs flex-shrink-0",
+                      workspace.session_status === "working"
+                        ? "[--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                        : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
+                    )}
+                  >
+                    {getStatusText(workspace.session_status)}
+                  </TextShimmer>
+                ) : (
+                  <span
+                    className={cn(
+                      "text-xs flex-shrink-0",
+                      getStatusTextColor(workspace.session_status)
+                    )}
+                  >
+                    {getStatusText(workspace.session_status)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {hasChanges && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {diffStats.additions > 0 && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
+                  +{diffStats.additions}
+                </span>
+              )}
+              {diffStats.deletions > 0 && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">
+                  -{diffStats.deletions}
                 </span>
               )}
             </div>
-          </div>
+          )}
         </div>
-        {hasChanges && (
-          <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
-            {diffStats.additions > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
-                +{diffStats.additions}
-              </span>
-            )}
-            {diffStats.deletions > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">
-                -{diffStats.deletions}
-              </span>
-            )}
-          </div>
-        )}
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
