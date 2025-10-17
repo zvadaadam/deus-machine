@@ -27,6 +27,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
+import { OpenInDropdown } from "./components/OpenInDropdown";
 import type {
   Workspace,
   Repo,
@@ -360,114 +361,18 @@ export function Dashboard() {
         <div className="panel-content main-content">
         {selectedWorkspace ? (
           <>
-            {/* Workspace Header - Refactored with shadcn + Tailwind */}
-            <div className="border-b border-border p-4">
-              <div className="flex items-center justify-between mb-2">
-                {/* Left side: Title and Status Badges */}
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-foreground">
-                    {selectedWorkspace.directory_name}
-                  </h2>
-                  <Badge
-                    variant={selectedWorkspace.state === 'ready' ? 'ready' : selectedWorkspace.state === 'initializing' ? 'working' : 'error'}
-                  >
-                    {selectedWorkspace.state === 'ready' ? '✓' : selectedWorkspace.state === 'initializing' ? '⟳' : '•'} {selectedWorkspace.state}
-                  </Badge>
-                  {selectedWorkspace.session_status && (
-                    <Badge
-                      variant={selectedWorkspace.session_status === 'working' ? 'working' : 'ready'}
-                    >
-                      {selectedWorkspace.session_status === 'working' ? '⚡' : '✓'} {selectedWorkspace.session_status}
-                    </Badge>
-                  )}
-                  {prStatus?.has_pr && (
-                    <Badge
-                      variant={prStatus.merge_status === 'ready' ? 'ready' : 'warning'}
-                      className="cursor-pointer hover:opacity-80 transition-opacity duration-200"
-                      onClick={() => window.open(prStatus.pr_url, '_blank')}
-                      title={`PR #${prStatus.pr_number}: ${prStatus.pr_title}`}
-                    >
-                      PR #{prStatus.pr_number}
-                    </Badge>
-                  )}
-                </div>
+            {/* Workspace Header - Simplified */}
+            <div className="border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between">
+                {/* Left: Branch name */}
+                <h2 className="text-base font-medium text-foreground">
+                  {selectedWorkspace.branch}
+                </h2>
 
-                {/* Right side: Action Buttons */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={openSystemPromptEditor}
-                    variant="secondary"
-                    size="sm"
-                    className="gap-1.5"
-                    title="Edit system prompt (CLAUDE.md)"
-                  >
-                    <FileText className="h-4 w-4" />
-                    <span className="hidden sm:inline">System Prompt</span>
-                  </Button>
-
-                  {compactHandler && (
-                    <Button
-                      onClick={() => compactHandler()}
-                      variant="secondary"
-                      size="sm"
-                      className="gap-1.5"
-                      title="Compact conversation"
-                    >
-                      <Package className="h-4 w-4" />
-                      <span className="hidden sm:inline">Compact</span>
-                    </Button>
-                  )}
-
-                  {createPRHandler && (
-                    <Button
-                      onClick={() => createPRHandler()}
-                      variant="default"
-                      size="sm"
-                      className="gap-1.5"
-                      title="Create pull request"
-                    >
-                      <GitPullRequest className="h-4 w-4" />
-                      <span className="hidden sm:inline">Create PR</span>
-                    </Button>
-                  )}
-
-                  {stopHandler && selectedWorkspace.session_status === 'working' && (
-                    <Button
-                      onClick={() => stopHandler()}
-                      variant="destructive"
-                      size="sm"
-                      className="gap-1.5"
-                      title="Stop session"
-                    >
-                      <Square className="h-4 w-4" />
-                      <span className="hidden sm:inline">Stop</span>
-                    </Button>
-                  )}
-
-                  <Button
-                    onClick={() => archiveWorkspace(selectedWorkspace.id)}
-                    variant="destructive"
-                    size="sm"
-                    className="gap-1.5"
-                    title="Archive workspace"
-                  >
-                    <Archive className="h-4 w-4" />
-                    <span className="hidden sm:inline">Archive</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Metadata row */}
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span>{selectedWorkspace.repo_name}</span>
-                <span>•</span>
-                <span>{selectedWorkspace.branch}</span>
-                {selectedWorkspace.context_token_count > 0 && (
-                  <>
-                    <span>•</span>
-                    <span>{formatTokenCount(selectedWorkspace.context_token_count)} tokens</span>
-                  </>
-                )}
+                {/* Right: Open in dropdown */}
+                <OpenInDropdown
+                  workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                />
               </div>
             </div>
 

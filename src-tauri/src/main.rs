@@ -91,6 +91,8 @@ fn main() {
             commands::disconnect_from_sidecar,
             commands::is_sidecar_connected,
             commands::get_backend_port,
+            commands::get_installed_apps,
+            commands::open_in_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
