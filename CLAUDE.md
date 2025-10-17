@@ -90,3 +90,8 @@ Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
  
 - Default to spring animations when using Framer Motion.
 - Avoid using bouncy spring animations unless you are working with drag gestures.
+
+
+## Testing
+
+Test if the backend or frontend works using the browser tool or running tests.
