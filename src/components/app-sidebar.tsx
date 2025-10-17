@@ -119,7 +119,7 @@ export function AppSidebar({
       {/* Repositories List */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
         <ScrollArea className="flex-1">
-          <SidebarMenu className="py-2 px-2 overflow-visible">
+          <SidebarMenu className="py-2 px-2 overflow-visible gap-2">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
