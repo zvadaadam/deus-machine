@@ -43,7 +43,8 @@ export function Settings() {
 
   async function loadSettings() {
     try {
-      const response = await fetch(`${await getBaseURL()}/api/settings`);
+      const baseURL = await getBaseURL();
+      const response = await fetch(`${baseURL}/settings`);
       const data = await response.json();
       setSettings(data);
       setLoading(false);
@@ -59,10 +60,10 @@ export function Settings() {
 
       // Load all configs in parallel for better performance
       const [mcpData, commandsData, agentsData, hooksData] = await Promise.all([
-        fetch(`${baseURL}/api/config/mcp-servers`).then(res => res.json()),
-        fetch(`${baseURL}/api/config/commands`).then(res => res.json()),
-        fetch(`${baseURL}/api/config/agents`).then(res => res.json()),
-        fetch(`${baseURL}/api/config/hooks`).then(res => res.json()),
+        fetch(`${baseURL}/config/mcp-servers`).then(res => res.json()),
+        fetch(`${baseURL}/config/commands`).then(res => res.json()),
+        fetch(`${baseURL}/config/agents`).then(res => res.json()),
+        fetch(`${baseURL}/config/hooks`).then(res => res.json()),
       ]);
 
       setMcpServers(mcpData);
@@ -77,7 +78,8 @@ export function Settings() {
   async function saveSetting(key: string, value: any) {
     setSaving(true);
     try {
-      await fetch(`${await getBaseURL()}/api/settings`, {
+      const baseURL = await getBaseURL();
+      await fetch(`${baseURL}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value })
