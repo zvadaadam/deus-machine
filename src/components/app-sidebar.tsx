@@ -159,7 +159,7 @@ function RepositoryItem({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className="w-full px-3 py-3"
+            className="w-full px-3 py-4"
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className="flex items-center justify-between w-full">
