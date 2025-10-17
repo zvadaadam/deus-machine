@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
-import { API_CONFIG } from "../config/api.config";
+import { API_CONFIG, getBaseURL } from "../config/api.config";
 import type { RepoGroup, Stats, DiffStats, Workspace } from "../types";
 
-const API_BASE = API_CONFIG.BASE_URL;
 const POLL_INTERVAL = API_CONFIG.POLL_INTERVAL;
 
 /**
@@ -21,13 +20,15 @@ export function useDashboardData() {
    */
   const loadWorkspaces = useCallback(async () => {
     try {
+      const baseURL = await getBaseURL();
+
       // Load grouped workspaces (ready only)
-      const groupedRes = await fetch(`${API_BASE}/workspaces/by-repo?state=ready`);
+      const groupedRes = await fetch(`${baseURL}/workspaces/by-repo?state=ready`);
       const groupedData = await groupedRes.json();
       setRepoGroups(groupedData);
 
       // Load stats
-      const statsRes = await fetch(`${API_BASE}/stats`);
+      const statsRes = await fetch(`${baseURL}/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
@@ -46,9 +47,10 @@ export function useDashboardData() {
   const refreshDiffStats = useCallback(async (workspaces: Workspace[]) => {
     if (!workspaces || workspaces.length === 0) return;
 
+    const baseURL = await getBaseURL();
     const diffPromises = workspaces.map(async (workspace) => {
       try {
-        const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+        const diffRes = await fetch(`${baseURL}/workspaces/${workspace.id}/diff-stats`);
         const diffData = await diffRes.json();
         return { id: workspace.id, data: diffData };
       } catch (error) {
@@ -76,11 +78,12 @@ export function useDashboardData() {
   const loadDiffStatsProgressively = useCallback(async (workspaces: Workspace[]) => {
     if (workspaces.length === 0) return;
 
+    const baseURL = await getBaseURL();
     // Load first 5 immediately
     const first5 = workspaces.slice(0, 5);
     first5.forEach(async (workspace: Workspace) => {
       try {
-        const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+        const diffRes = await fetch(`${baseURL}/workspaces/${workspace.id}/diff-stats`);
         const diffData = await diffRes.json();
         setDiffStats(prev => ({ ...prev, [workspace.id]: diffData }));
       } catch (error) {
@@ -95,7 +98,7 @@ export function useDashboardData() {
         remaining.forEach(async (workspace: Workspace, index: number) => {
           setTimeout(async () => {
             try {
-              const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+              const diffRes = await fetch(`${baseURL}/workspaces/${workspace.id}/diff-stats`);
               const diffData = await diffRes.json();
               setDiffStats(prev => ({ ...prev, [workspace.id]: diffData }));
             } catch (error) {

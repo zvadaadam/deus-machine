@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Settings.css';
-import { API_CONFIG } from './config/api.config';
+import { getBaseURL } from './config/api.config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,8 +24,6 @@ import type {
   SettingsSection,
 } from './types';
 
-const API_BASE = API_CONFIG.BASE_URL.replace('/api', ''); // Settings uses root URL
-
 export function Settings() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
@@ -45,7 +43,8 @@ export function Settings() {
 
   async function loadSettings() {
     try {
-      const response = await fetch(`${API_BASE}/api/settings`);
+      const baseURL = await getBaseURL();
+      const response = await fetch(`${baseURL}/settings`);
       const data = await response.json();
       setSettings(data);
       setLoading(false);
@@ -57,24 +56,19 @@ export function Settings() {
 
   async function loadFileBasedConfigs() {
     try {
-      // Load MCP servers
-      const mcpResponse = await fetch(`${API_BASE}/api/config/mcp-servers`);
-      const mcpData = await mcpResponse.json();
+      const baseURL = await getBaseURL();
+
+      // Load all configs in parallel for better performance
+      const [mcpData, commandsData, agentsData, hooksData] = await Promise.all([
+        fetch(`${baseURL}/config/mcp-servers`).then(res => res.json()),
+        fetch(`${baseURL}/config/commands`).then(res => res.json()),
+        fetch(`${baseURL}/config/agents`).then(res => res.json()),
+        fetch(`${baseURL}/config/hooks`).then(res => res.json()),
+      ]);
+
       setMcpServers(mcpData);
-
-      // Load commands
-      const commandsResponse = await fetch(`${API_BASE}/api/config/commands`);
-      const commandsData = await commandsResponse.json();
       setCommands(commandsData);
-
-      // Load agents
-      const agentsResponse = await fetch(`${API_BASE}/api/config/agents`);
-      const agentsData = await agentsResponse.json();
       setAgents(agentsData);
-
-      // Load hooks
-      const hooksResponse = await fetch(`${API_BASE}/api/config/hooks`);
-      const hooksData = await hooksResponse.json();
       setHooks(hooksData);
     } catch (error) {
       console.error('Failed to load file-based configs:', error);
@@ -84,7 +78,8 @@ export function Settings() {
   async function saveSetting(key: string, value: any) {
     setSaving(true);
     try {
-      await fetch(`${API_BASE}/api/settings`, {
+      const baseURL = await getBaseURL();
+      await fetch(`${baseURL}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value })
@@ -293,7 +288,7 @@ export function Settings() {
               min="8"
               max="24"
               value={settings.terminal_font_size ?? 12}
-              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value))}
+              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value, 10))}
             />
             <p className="text-sm text-muted-foreground">Terminal font size in pixels</p>
           </div>

@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "/opt/homebrew/bin/node",
       "args": [
-        "/Users/zvada/Documents/BOX/dev-browser/dist/server/mcp-integrated-stdio.js"
+        "/path/to/your/dev-browser/dist/server/mcp-integrated-stdio.js"
       ]
     },
     "shadcn": {

@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { API_CONFIG } from "../config/api.config";
+import { API_CONFIG, getBaseURL } from "../config/api.config";
 import type { RepoGroup, DiffStats, Workspace } from "../types";
 
-const API_BASE = API_CONFIG.BASE_URL;
+// BASE_URL is now async - use getBaseURL()
 const POLL_INTERVAL = API_CONFIG.POLL_INTERVAL;
 
 export function useDiffStats(repoGroups: RepoGroup[]) {
@@ -18,7 +18,7 @@ export function useDiffStats(repoGroups: RepoGroup[]) {
     // Load all diff stats in parallel (fast update for polling)
     const diffPromises = workspaces.map(async (workspace) => {
       try {
-        const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+        const diffRes = await fetch(`${await getBaseURL()}/workspaces/${workspace.id}/diff-stats`);
         const diffData = await diffRes.json();
         return { id: workspace.id, data: diffData };
       } catch (error) {
@@ -51,7 +51,7 @@ export function useDiffStats(repoGroups: RepoGroup[]) {
     const first5 = workspaces.slice(0, 5);
     first5.forEach(async (workspace: Workspace) => {
       try {
-        const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+        const diffRes = await fetch(`${await getBaseURL()}/workspaces/${workspace.id}/diff-stats`);
         const diffData = await diffRes.json();
         setDiffStats(prev => ({ ...prev, [workspace.id]: diffData }));
       } catch (error) {
@@ -67,7 +67,7 @@ export function useDiffStats(repoGroups: RepoGroup[]) {
           // Stagger requests by 200ms each to avoid overwhelming
           setTimeout(async () => {
             try {
-              const diffRes = await fetch(`${API_BASE}/workspaces/${workspace.id}/diff-stats`);
+              const diffRes = await fetch(`${await getBaseURL()}/workspaces/${workspace.id}/diff-stats`);
               const diffData = await diffRes.json();
               setDiffStats(prev => ({ ...prev, [workspace.id]: diffData }));
             } catch (error) {
