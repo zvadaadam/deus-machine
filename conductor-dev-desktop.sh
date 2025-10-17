@@ -2,6 +2,9 @@
 
 # Conductor Desktop App Development Script
 # Runs Tauri in development mode (live reload)
+#
+# Note: Backend is managed by Tauri's Rust BackendManager with dynamic ports.
+# No need to start backend manually - Tauri handles it automatically.
 
 set -e
 
@@ -32,33 +35,15 @@ RUST_VERSION=$(rustc --version)
 echo -e "${GREEN}✓ Rust found: $RUST_VERSION${NC}"
 echo ""
 
-# Trap to kill background processes on exit
-trap 'kill $(jobs -p) 2>/dev/null' EXIT
-
-# Step 2: Start backend server in background
-echo -e "${BLUE}Starting backend server on port 3333...${NC}"
-(cd backend && node server.cjs) &
-BACKEND_PID=$!
-
-# Wait for backend to start
-sleep 2
-
-# Check if backend is running
-if ps -p $BACKEND_PID > /dev/null; then
-    echo -e "${GREEN}✓ Backend server started (PID: $BACKEND_PID)${NC}"
-else
-    echo -e "${RED}✗ Backend server failed to start${NC}"
-    exit 1
-fi
-
-echo ""
 echo -e "${BLUE}Starting Tauri desktop app...${NC}"
 echo -e "${YELLOW}⏱  First launch may take a few minutes to compile${NC}"
 echo ""
+echo -e "${YELLOW}Note: Backend will start automatically with dynamic port${NC}"
+echo ""
 
-# Step 3: Start Tauri dev mode (this will block)
+# Start Tauri dev mode (backend is managed by Rust)
 npm run tauri:dev
 
 # This line will be reached when Tauri is stopped
 echo ""
-echo -e "${YELLOW}Shutting down servers...${NC}"
+echo -e "${YELLOW}Shutting down...${NC}"

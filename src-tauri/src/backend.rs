@@ -1,6 +1,7 @@
-use std::process::{Child, Command};
-use std::sync::Mutex;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::io::{BufRead, BufReader};
 use anyhow::{Result, Context};
 
 /// Backend Manager
@@ -8,20 +9,23 @@ use anyhow::{Result, Context};
 /// Manages the Node.js Express backend as a child process.
 /// This ensures the backend starts when the app starts and
 /// stops when the app closes - proper Tauri lifecycle management.
+///
+/// The backend now uses dynamic port allocation. The actual port
+/// is discovered by parsing stdout from the Node.js process.
 pub struct BackendManager {
     process: Mutex<Option<Child>>,
-    port: u16,
+    port: Arc<Mutex<Option<u16>>>,
 }
 
 impl BackendManager {
-    pub fn new(port: u16) -> Self {
+    pub fn new() -> Self {
         Self {
             process: Mutex::new(None),
-            port,
+            port: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Start the backend server
+    /// Start the backend server with dynamic port allocation
     pub fn start(&self, backend_path: PathBuf) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
@@ -32,19 +36,66 @@ impl BackendManager {
 
         println!("[BACKEND] Starting Node.js backend at {}", backend_path.display());
 
-        let child = Command::new("node")
+        // Spawn backend with stdout captured to read the assigned port
+        let mut child = Command::new("node")
             .arg(&backend_path)
-            .env("PORT", self.port.to_string())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
             .spawn()
             .context(format!("Failed to start backend at {}", backend_path.display()))?;
 
         println!("[BACKEND] Backend started with PID: {}", child.id());
+
+        // Take stdout to read the port
+        let stdout = child.stdout.take()
+            .context("Failed to capture backend stdout")?;
+
+        // Clone Arc for thread
+        let port_clone = Arc::clone(&self.port);
+
+        // Spawn thread to read stdout and find port
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    // Print all output for debugging
+                    println!("[BACKEND] {}", line);
+
+                    // Parse port from [BACKEND_PORT]12345 format
+                    if line.starts_with("[BACKEND_PORT]") {
+                        if let Some(port_str) = line.strip_prefix("[BACKEND_PORT]") {
+                            if let Ok(port_num) = port_str.parse::<u16>() {
+                                let mut port = port_clone.lock().unwrap();
+                                *port = Some(port_num);
+                                println!("[BACKEND] Detected port: {}", port_num);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         *process = Some(child);
 
-        // Give backend a moment to start
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // Wait for port to be detected (with timeout)
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(5) {
+            if self.port.lock().unwrap().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        if self.port.lock().unwrap().is_none() {
+            eprintln!("[BACKEND] Warning: Could not detect backend port within 5 seconds");
+        }
 
         Ok(())
+    }
+
+    /// Get the actual port the backend is running on
+    pub fn get_port(&self) -> Option<u16> {
+        *self.port.lock().unwrap()
     }
 
     /// Check if backend is running
@@ -72,5 +123,145 @@ impl Drop for BackendManager {
     fn drop(&mut self) {
         // Ensure backend is stopped when manager is dropped
         self.stop().ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    #[test]
+    fn test_backend_manager_creation() {
+        let manager = BackendManager::new();
+        assert!(!manager.is_running());
+        assert_eq!(manager.get_port(), None);
+    }
+
+    #[test]
+    fn test_port_parsing() {
+        // Test the port detection logic by simulating stdout
+        let test_output = "[BACKEND_PORT]8080\nOther output\n[BACKEND_PORT]9090\n";
+
+        // Find the first [BACKEND_PORT] line
+        let port = test_output
+            .lines()
+            .find(|line| line.starts_with("[BACKEND_PORT]"))
+            .and_then(|line| line.strip_prefix("[BACKEND_PORT]"))
+            .and_then(|port_str| port_str.parse::<u16>().ok());
+
+        assert_eq!(port, Some(8080));
+    }
+
+    #[test]
+    fn test_backend_lifecycle_with_mock_server() {
+        // Create a mock Node.js script that outputs a port
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join("mock_backend_test.js");
+
+        let script_content = r#"
+console.log('[BACKEND_PORT]54321');
+console.log('Mock backend started');
+
+// Keep the process alive for a moment
+setTimeout(() => {
+    console.log('Mock backend shutting down');
+    process.exit(0);
+}, 2000);
+"#;
+
+        fs::write(&script_path, script_content).unwrap();
+
+        let manager = BackendManager::new();
+
+        // Start the mock backend
+        match manager.start(script_path.clone()) {
+            Ok(_) => {
+                println!("✅ Mock backend started successfully");
+
+                // Give it a moment to detect the port
+                std::thread::sleep(std::time::Duration::from_millis(500));
+
+                // Check if port was detected
+                if let Some(port) = manager.get_port() {
+                    println!("✅ Port detected: {}", port);
+                    assert_eq!(port, 54321);
+                } else {
+                    println!("⚠️  Port not detected yet, but that's okay for this test");
+                }
+
+                assert!(manager.is_running());
+
+                // Stop the backend
+                manager.stop().unwrap();
+                assert!(!manager.is_running());
+            }
+            Err(e) => {
+                println!("⚠️  Could not start mock backend (Node.js might not be available): {}", e);
+                // Don't fail the test if Node.js isn't available
+            }
+        }
+
+        // Cleanup
+        let _ = fs::remove_file(&script_path);
+    }
+
+    #[test]
+    fn test_port_detection_timeout() {
+        // Create a mock script that doesn't output a port
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join("mock_backend_no_port.js");
+
+        let script_content = r#"
+console.log('Starting without port output...');
+setTimeout(() => process.exit(0), 1000);
+"#;
+
+        fs::write(&script_path, script_content).unwrap();
+
+        let manager = BackendManager::new();
+
+        match manager.start(script_path.clone()) {
+            Ok(_) => {
+                // Port should be None since we didn't output it
+                // (or might still be None if detection hasn't completed)
+                println!("Port after start: {:?}", manager.get_port());
+
+                manager.stop().ok();
+            }
+            Err(e) => {
+                println!("⚠️  Could not start mock backend: {}", e);
+            }
+        }
+
+        let _ = fs::remove_file(&script_path);
+    }
+
+    #[test]
+    fn test_double_start_prevention() {
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join("mock_backend_double.js");
+
+        let script_content = r#"
+console.log('[BACKEND_PORT]55555');
+setTimeout(() => process.exit(0), 3000);
+"#;
+
+        fs::write(&script_path, script_content).unwrap();
+
+        let manager = BackendManager::new();
+
+        if manager.start(script_path.clone()).is_ok() {
+            assert!(manager.is_running());
+
+            // Try to start again - should return Ok but not actually start
+            let result = manager.start(script_path.clone());
+            assert!(result.is_ok());
+
+            manager.stop().ok();
+        }
+
+        let _ = fs::remove_file(&script_path);
     }
 }

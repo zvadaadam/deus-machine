@@ -19,8 +19,12 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-const BACKEND_URL = 'http://localhost:3333';
+// Use dynamic backend port from environment variable
+const BACKEND_PORT = process.env.BACKEND_PORT || '3333';
+const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 const SOCKET_PATH = path.join(os.tmpdir(), `conductor-claude-${process.pid}.sock`);
+
+console.log(`[SIDECAR] Using backend at ${BACKEND_URL}`);
 
 /**
  * Unix Socket Server
@@ -250,7 +254,7 @@ class UnixSocketServer {
  */
 function startKeepalive(server, interval = 30000) {
   return setInterval(() => {
-    server.broadcast({ type: 'keepalive', timestamp: Date.now() });
+    server.broadcast({ type: 'keep_alive', timestamp: Date.now() });
   }, interval);
 }
 

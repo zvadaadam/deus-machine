@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Conductor - Development Server Script
-# Runs both frontend and backend in parallel with dynamic ports
+# Conductor Dev Script (Backend Directory)
+# Runs both frontend and backend with dynamic port allocation
+#
+# Note: For the main workspace dev script, use ../dev.sh instead
+# This script is here for legacy/convenience but ../dev.sh is the canonical version
 
 set -e
 
@@ -18,12 +21,13 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Trap to kill background processes on exit
-trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend.log' EXIT
 
 # Start backend server with dynamic port
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
-PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
+cd .. && PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
+cd backend
 
 # Wait and capture the dynamic port
 echo -e "${YELLOW}Waiting for backend to assign port...${NC}"
@@ -57,8 +61,4 @@ echo -e "${BLUE}Starting frontend dev server...${NC}"
 echo ""
 
 # Start frontend with backend port as environment variable
-VITE_BACKEND_PORT=$BACKEND_PORT npm run dev
-
-# This line will be reached when npm run dev is stopped
-echo ""
-echo -e "${YELLOW}Shutting down servers...${NC}"
+cd .. && VITE_BACKEND_PORT=$BACKEND_PORT npm run dev

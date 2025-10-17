@@ -23,7 +23,8 @@ const { getMcpServers, saveMcpServers, getCommands, saveCommand, deleteCommand,
 const { generateUniqueCityName } = require('./lib/workspace.cjs');
 
 const app = express();
-const PORT = 3333;
+// Use environment variable PORT, or let OS assign available port (0 = auto-assign)
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 
 // Middleware
 app.use(cors());
@@ -31,6 +32,15 @@ app.use(express.json());
 
 // Initialize database
 const db = initDatabase();
+
+// Initialize settings table if it doesn't exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
 
 console.log('✅ All modules loaded successfully');
 
@@ -140,6 +150,58 @@ app.post('/api/config/hooks', (req, res) => {
     }
     const success = saveHooks(hooks);
     res.json({ success, hooks });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//============================================================================
+// SETTINGS ENDPOINTS
+//============================================================================
+
+// Get all settings
+app.get('/api/settings', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT key, value FROM settings').all();
+
+    // Convert rows to object with parsed JSON values
+    const settings = {};
+    rows.forEach(row => {
+      try {
+        settings[row.key] = JSON.parse(row.value);
+      } catch (e) {
+        settings[row.key] = row.value;
+      }
+    });
+
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save a setting
+app.post('/api/settings', (req, res) => {
+  try {
+    const { key, value } = req.body;
+
+    if (!key) {
+      return res.status(400).json({ error: 'key is required' });
+    }
+
+    // Serialize value to JSON
+    const serializedValue = JSON.stringify(value);
+
+    // Insert or update
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = datetime('now')
+    `).run(key, serializedValue);
+
+    res.json({ success: true, key, value });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -708,14 +770,20 @@ app.post('/api/sidecar/command', (req, res) => {
 // START SERVER
 //============================================================================
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
+  const actualPort = server.address().port;
+
+  // Output port in machine-readable format for Rust to capture
+  console.log(`[BACKEND_PORT]${actualPort}`);
+
   console.log('\n🎉 Conductor Backend Server (Modular)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📡 API Server: http://localhost:${PORT}`);
+  console.log(`📡 API Server: http://localhost:${actualPort}`);
   console.log(`📊 Database: ${DB_PATH}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  // Start sidecar
+  // Start sidecar with backend port
+  process.env.BACKEND_PORT = actualPort.toString();
   startSidecar(DB_PATH);
 
   console.log('✅ Server ready!\n');
