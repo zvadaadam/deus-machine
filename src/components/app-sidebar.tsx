@@ -194,7 +194,7 @@ function RepositoryItem({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className={cn("w-full py-5", sidebarExpanded ? "px-3" : "px-0")}
+            className={cn("w-full", sidebarExpanded ? "px-3 py-5" : "px-0 py-6")}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className={cn("flex items-center w-full", sidebarExpanded ? "justify-between" : "justify-center")}>
@@ -204,8 +204,8 @@ function RepositoryItem({
                     const repoColor = getRepoColor(repository.repo_name);
                     return (
                       <div className={cn(
-                        "h-6 w-6 flex items-center justify-center text-[10px] font-semibold",
-                        "rounded-[6px]",
+                        "h-9 w-9 flex items-center justify-center text-xs font-semibold",
+                        "rounded-[8px]",
                         repoColor.bg,
                         repoColor.text
                       )}>
@@ -214,9 +214,9 @@ function RepositoryItem({
                     );
                   })()}
                   {hasRunningWorkspace && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                     </span>
                   )}
                 </div>
