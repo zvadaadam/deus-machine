@@ -269,7 +269,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <GitBranch className="h-4 w-4 flex-shrink-0 text-sidebar-foreground/60" />
-          <div className="flex flex-col flex-1 min-w-0 gap-1">
+          <div className="flex flex-col flex-1 min-w-0 gap-0.5">
             {/* Branch name on top */}
             <span className="text-sm font-medium truncate">
               {workspace.branch}
