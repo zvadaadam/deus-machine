@@ -16,6 +16,15 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Validate Conductor environment variable
+if [ -z "$CONDUCTOR_ROOT_PATH" ]; then
+    echo -e "${RED}ERROR: CONDUCTOR_ROOT_PATH environment variable not set${NC}"
+    echo ""
+    echo "This script must be run by Conductor, which sets this variable automatically."
+    echo ""
+    exit 1
+fi
+
 # Step 1: Check for Node.js
 echo -e "${YELLOW}[1/3] Verifying Node.js installation...${NC}"
 if ! command -v node &> /dev/null; then
@@ -61,13 +70,7 @@ fi
 echo ""
 echo -e "${YELLOW}[3/3] Installing npm dependencies...${NC}"
 npm install
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
-else
-    echo -e "${RED}✗ Failed to install dependencies${NC}"
-    exit 1
-fi
+echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
 
 # Success!
 echo ""
