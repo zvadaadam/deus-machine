@@ -176,9 +176,25 @@ function RepositoryItem({
   onNewWorkspace,
   sidebarExpanded,
 }: RepositoryItemProps) {
+  const { toggleSidebar } = useSidebar();
   const hasRunningWorkspace = repository.workspaces.some(
     (ws) => ws.session_status === "working"
   );
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!sidebarExpanded) {
+      // When sidebar is collapsed, expand it and open the repository
+      e.preventDefault(); // Prevent default collapsible behavior
+      toggleSidebar();
+      // Use setTimeout to ensure sidebar expands before toggling repository
+      setTimeout(() => {
+        if (isCollapsed) {
+          onToggleCollapse();
+        }
+      }, 100);
+    }
+    // When expanded, let CollapsibleTrigger handle it naturally
+  };
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
@@ -187,6 +203,7 @@ function RepositoryItem({
           <SidebarMenuButton
             className={cn("w-full", sidebarExpanded ? "px-3 py-5" : "px-0 py-6")}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
+            onClick={!sidebarExpanded ? handleClick : undefined}
           >
             <div className={cn("flex items-center w-full", sidebarExpanded ? "justify-between" : "justify-center")}>
               {!sidebarExpanded && (
