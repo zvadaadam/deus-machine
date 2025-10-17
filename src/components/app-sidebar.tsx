@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, FolderGit2, GitBranch, ChevronDown, Settings } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, FolderGit2, GitBranch, ChevronDown, Settings, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -33,7 +33,7 @@ interface AppSidebarProps {
   selectedWorkspaceId: string | null;
   diffStats: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
-  onNewWorkspace: () => void;
+  onNewWorkspace: (repoId?: string) => void;
   profile?: {
     username: string;
     email?: string;
@@ -98,20 +98,6 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
 
-      {/* New Workspace Button */}
-      {isExpanded && (
-        <div className="px-2 py-2 border-b border-sidebar-border">
-          <Button
-            variant="outline"
-            onClick={onNewWorkspace}
-            className="w-full justify-start"
-            size="sm"
-          >
-            + New Workspace
-          </Button>
-        </div>
-      )}
-
       {/* Repositories List */}
       <SidebarContent>
         <ScrollArea className="flex-1">
@@ -125,6 +111,7 @@ export function AppSidebar({
                 diffStats={diffStats}
                 onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                 onWorkspaceClick={onWorkspaceClick}
+                onNewWorkspace={onNewWorkspace}
                 sidebarExpanded={isExpanded}
               />
             ))}
@@ -157,6 +144,7 @@ interface RepositoryItemProps {
   diffStats: Record<string, DiffStats>;
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
+  onNewWorkspace: (repoId?: string) => void;
   sidebarExpanded: boolean;
 }
 
@@ -167,6 +155,7 @@ function RepositoryItem({
   diffStats,
   onToggleCollapse,
   onWorkspaceClick,
+  onNewWorkspace,
   sidebarExpanded,
 }: RepositoryItemProps) {
   return (
@@ -206,21 +195,35 @@ function RepositoryItem({
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <SidebarMenuSub>
-            {repository.workspaces.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                No workspaces
-              </div>
-            ) : (
-              repository.workspaces.map((workspace) => (
-                <WorkspaceItem
-                  key={workspace.id}
-                  workspace={workspace}
-                  isActive={workspace.id === selectedWorkspaceId}
-                  diffStats={diffStats[workspace.id]}
-                  onClick={() => onWorkspaceClick(workspace)}
-                />
-              ))
+          <SidebarMenuSub className="border-l-0 ml-0 px-0">
+            {repository.workspaces.map((workspace) => (
+              <WorkspaceItem
+                key={workspace.id}
+                workspace={workspace}
+                isActive={workspace.id === selectedWorkspaceId}
+                diffStats={diffStats[workspace.id]}
+                onClick={() => onWorkspaceClick(workspace)}
+              />
+            ))}
+
+            {/* New Workspace Button - Distinct Design */}
+            {sidebarExpanded && (
+              <SidebarMenuSubItem>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNewWorkspace(repository.repo_id)}
+                  className={cn(
+                    "w-full justify-start h-auto py-2 px-2",
+                    "text-muted-foreground hover:text-foreground",
+                    "border border-dashed border-sidebar-border hover:border-sidebar-foreground/50",
+                    "transition-colors duration-200"
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  <span className="text-xs">New Workspace</span>
+                </Button>
+              </SidebarMenuSubItem>
             )}
           </SidebarMenuSub>
         </CollapsibleContent>
