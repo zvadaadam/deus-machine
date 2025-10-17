@@ -117,9 +117,9 @@ export function AppSidebar({
       </SidebarHeader>
 
       {/* Repositories List */}
-      <SidebarContent>
+      <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
         <ScrollArea className="flex-1">
-          <SidebarMenu className="py-2 px-2">
+          <SidebarMenu className="py-2 px-2 overflow-visible">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
@@ -198,16 +198,16 @@ function RepositoryItem({
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
-      <SidebarMenuItem>
+      <SidebarMenuItem className={cn(!sidebarExpanded && "overflow-visible")}>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className={cn("w-full", sidebarExpanded ? "px-3 py-5" : "px-0 py-6")}
+            className={cn("w-full", sidebarExpanded ? "px-3 py-5" : "px-0 py-6 overflow-visible")}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
             onClick={!sidebarExpanded ? handleClick : undefined}
           >
-            <div className={cn("flex items-center w-full", sidebarExpanded ? "justify-between" : "justify-center")}>
+            <div className={cn("flex items-center w-full overflow-visible", sidebarExpanded ? "justify-between" : "justify-center")}>
               {!sidebarExpanded && (
-                <div className="relative">
+                <div className="relative overflow-visible">
                   {(() => {
                     const repoColor = getRepoColor(repository.repo_name);
                     return (
@@ -222,7 +222,7 @@ function RepositoryItem({
                     );
                   })()}
                   {hasRunningWorkspace && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3 z-10">
+                    <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                     </span>
