@@ -269,16 +269,16 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
 
   return (
-    <SidebarMenuSubItem className="overflow-visible">
-      <div className="flex items-center w-full py-3 px-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
-        <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+    <SidebarMenuSubItem>
+      <div className="grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <GitBranch
             className={cn(
               "h-4 w-4 flex-shrink-0",
               workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
             )}
           />
-          <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+          <div className="flex flex-col min-w-0 gap-0.5">
             {/* Branch name on top */}
             <span className="text-sm font-medium truncate">
               {workspace.branch}
@@ -316,14 +316,14 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
           </div>
         </div>
         {hasChanges && (
-          <div className="flex items-center gap-1.5 flex-shrink-0 min-w-[90px] justify-end">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {diffStats.additions > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400 whitespace-nowrap">
                 +{diffStats.additions}
               </span>
             )}
             {diffStats.deletions > 0 && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 whitespace-nowrap">
                 -{diffStats.deletions}
               </span>
             )}
