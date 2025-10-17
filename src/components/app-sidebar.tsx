@@ -245,7 +245,8 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const getStatusText = (status: string | null | undefined) => {
     if (!status) return "Archived";
     if (status === "idle") return formatTime(workspace.updated_at);
-    return status.charAt(0).toUpperCase() + status.slice(1);
+    const capitalized = status.charAt(0).toUpperCase() + status.slice(1);
+    return shouldShimmer(status) ? `${capitalized}...` : capitalized;
   };
 
   const getStatusTextColor = (status: string | null | undefined) => {
@@ -294,6 +295,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
+              <span className="text-xs text-muted-foreground/70 flex-shrink-0">•</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
@@ -305,7 +307,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
                       : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
                   )}
                 >
-                  • {getStatusText(workspace.session_status)}
+                  {getStatusText(workspace.session_status)}
                 </TextShimmer>
               ) : (
                 <span
@@ -314,7 +316,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
                     getStatusTextColor(workspace.session_status)
                   )}
                 >
-                  • {getStatusText(workspace.session_status)}
+                  {getStatusText(workspace.session_status)}
                 </span>
               )}
             </div>
