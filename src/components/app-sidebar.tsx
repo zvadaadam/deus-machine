@@ -22,6 +22,36 @@ import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores";
 import type { Workspace, DiffStats } from "@/types";
 
+// Helper function to get initials from repository name
+function getRepoInitials(repoName: string): string {
+  const parts = repoName.split(/[-_\s]/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return repoName.slice(0, 2).toUpperCase();
+}
+
+// Helper function to generate consistent color from string
+function getRepoColor(repoName: string): string {
+  const colors = [
+    'bg-blue-500',
+    'bg-purple-500',
+    'bg-pink-500',
+    'bg-green-500',
+    'bg-yellow-500',
+    'bg-orange-500',
+    'bg-red-500',
+    'bg-cyan-500',
+    'bg-indigo-500',
+    'bg-teal-500',
+  ];
+  let hash = 0;
+  for (let i = 0; i < repoName.length; i++) {
+    hash = repoName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
 interface Repository {
   repo_id: string;
   repo_name: string;
@@ -155,6 +185,10 @@ function RepositoryItem({
   onNewWorkspace,
   sidebarExpanded,
 }: RepositoryItemProps) {
+  const hasRunningWorkspace = repository.workspaces.some(
+    (ws) => ws.session_status === "working"
+  );
+
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarMenuItem>
@@ -164,6 +198,21 @@ function RepositoryItem({
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className="flex items-center justify-between w-full">
+              {!sidebarExpanded && (
+                <div className="relative">
+                  <Avatar className={cn("h-6 w-6", getRepoColor(repository.repo_name))}>
+                    <AvatarFallback className="text-white text-[10px] font-semibold">
+                      {getRepoInitials(repository.repo_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {hasRunningWorkspace && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    </span>
+                  )}
+                </div>
+              )}
               {sidebarExpanded && (
                 <span className="text-sm font-medium truncate">
                   {repository.repo_name}
