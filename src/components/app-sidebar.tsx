@@ -87,7 +87,7 @@ export function AppSidebar({
   return (
     <Sidebar variant="floating" collapsible="icon">
       {/* Header with Profile and Collapse Button */}
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+      <SidebarHeader className="p-4">
         <div className="flex items-center justify-between w-full">
           {isExpanded ? (
             <>
