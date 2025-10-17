@@ -1,16 +1,16 @@
-import { PanelLeftClose, PanelLeftOpen, FolderGit2, GitBranch, ChevronDown } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, FolderGit2, GitBranch, ChevronDown, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -49,60 +49,54 @@ export function AppSidebar({
   profile = { username: "User" },
 }: AppSidebarProps) {
   const navigate = useNavigate();
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const { collapsedRepos, toggleRepoCollapse } = useUIStore();
 
   const isExpanded = state === "expanded";
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      {/* Header with collapse toggle */}
+    <Sidebar variant="floating" collapsible="icon">
+      {/* Header with Profile and Collapse Button */}
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <SidebarTrigger className="h-8 w-8">
-              {isExpanded ? (
+          {isExpanded ? (
+            <>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarFallback className="text-xs">
+                    {profile.username.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{profile.username}</p>
+                  {profile.email && (
+                    <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                className="h-8 w-8 flex-shrink-0"
+                title="Collapse sidebar"
+              >
                 <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeftOpen className="h-4 w-4" />
-              )}
-            </SidebarTrigger>
-            {isExpanded && (
-              <h1 className="text-sm font-semibold truncate">OpenDevs</h1>
-            )}
-          </div>
-          {isExpanded && (
+              </Button>
+            </>
+          ) : (
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/settings")}
-              className="h-8 w-8 flex-shrink-0"
-              title="Settings"
+              onClick={toggleSidebar}
+              className="h-8 w-8 mx-auto"
+              title="Expand sidebar"
             >
-              ⚙️
+              <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
         </div>
       </SidebarHeader>
-
-      {/* Profile Section */}
-      {isExpanded && (
-        <div className="px-4 py-3 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8 flex-shrink-0">
-              <AvatarFallback className="text-xs">
-                {profile.username.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{profile.username}</p>
-              {profile.email && (
-                <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* New Workspace Button */}
       {isExpanded && (
@@ -137,6 +131,21 @@ export function AppSidebar({
           </SidebarMenu>
         </ScrollArea>
       </SidebarContent>
+
+      {/* Footer with Settings */}
+      <SidebarFooter className="border-t border-sidebar-border p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => navigate("/settings")}
+              tooltip={!isExpanded ? "Settings" : undefined}
+            >
+              <Settings className="h-4 w-4" />
+              {isExpanded && <span>Settings</span>}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

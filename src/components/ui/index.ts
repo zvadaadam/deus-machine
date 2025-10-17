@@ -48,7 +48,7 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
-  useSidebar
+  useSidebar,
 } from './sidebar';
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip';

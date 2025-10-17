@@ -20,6 +20,7 @@ import {
   EmptyState,
   Skeleton,
   SidebarProvider,
+  SidebarInset,
 } from "./components/ui";
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
@@ -298,55 +299,53 @@ export function Dashboard() {
 
   return (
     <SidebarProvider>
+      {/* Floating Sidebar */}
+      {loading ? (
+        <div className="p-4 space-y-3">
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-9/10" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      ) : repoGroups.length === 0 ? (
+        <div className="p-4">
+          <EmptyState
+            icon="📁"
+            title="No Workspaces"
+            description="Create a new workspace to get started"
+            action={
+              <Button
+                variant="default"
+                onClick={() => openNewWorkspaceModal()}
+                size="sm"
+              >
+                + Create Workspace
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <AppSidebar
+          repositories={repoGroups}
+          selectedWorkspaceId={selectedWorkspace?.id || null}
+          diffStats={diffStats}
+          onWorkspaceClick={handleWorkspaceClick}
+          onNewWorkspace={openNewWorkspaceModal}
+          profile={{
+            username: "Developer",
+            email: "dev@conductor.build"
+          }}
+        />
+      )}
+
+      {/* Main Content with SidebarInset */}
+      <SidebarInset>
       <PanelGroup
         direction="horizontal"
         autoSaveId="conductor-root-layout"
         className="app-container"
         style={{ height: "100%", width: "100%" }}
       >
-      {/* LEFT SIDEBAR - Custom AppSidebar */}
-      <Panel id="left" defaultSize={20} minSize={15} maxSize={35}>
-        {loading ? (
-          <div className="p-4 space-y-3 border-r">
-            <Skeleton className="h-6 w-full" />
-            <Skeleton className="h-4 w-4/5" />
-            <Skeleton className="h-4 w-9/10" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        ) : repoGroups.length === 0 ? (
-          <div className="p-4 border-r">
-            <EmptyState
-              icon="📁"
-              title="No Workspaces"
-              description="Create a new workspace to get started"
-              action={
-                <Button
-                  variant="default"
-                  onClick={() => openNewWorkspaceModal()}
-                  size="sm"
-                >
-                  + Create Workspace
-                </Button>
-              }
-            />
-          </div>
-        ) : (
-          <AppSidebar
-            repositories={repoGroups}
-            selectedWorkspaceId={selectedWorkspace?.id || null}
-            diffStats={diffStats}
-            onWorkspaceClick={handleWorkspaceClick}
-            onNewWorkspace={openNewWorkspaceModal}
-            profile={{
-              username: "Developer",
-              email: "dev@conductor.build"
-            }}
-          />
-        )}
-      </Panel>
-
-      <PanelResizeHandle className="resize-handle" />
-
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30}>
         <div className="panel-content main-content">
@@ -620,6 +619,7 @@ export function Dashboard() {
         </div>
       </Panel>
     </PanelGroup>
+      </SidebarInset>
 
       {/* Modals */}
       <NewWorkspaceModal
