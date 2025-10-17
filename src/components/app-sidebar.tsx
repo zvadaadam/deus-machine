@@ -160,12 +160,12 @@ function RepositoryItem({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className="w-full"
+            className="w-full px-3"
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className="flex items-center justify-between w-full">
               {sidebarExpanded && (
-                <span className="text-sm font-medium truncate pl-[28px]">
+                <span className="text-sm font-medium truncate">
                   {repository.repo_name}
                 </span>
               )}
