@@ -36,7 +36,7 @@ function getRepoColor(repoName: string): { bg: string; text: string } {
   // Using neutral gray tones for a more subtle, professional look
   return {
     bg: 'bg-sidebar-accent',
-    text: 'text-sidebar-foreground'
+    text: 'text-sidebar-foreground/60'
   };
 }
 
@@ -222,7 +222,7 @@ function RepositoryItem({
                     );
                   })()}
                   {hasRunningWorkspace && (
-                    <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3 z-10">
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                     </span>
