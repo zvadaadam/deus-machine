@@ -1,12 +1,11 @@
 {
   "mcpServers": {
-    "browser-automation": {
+    "browser-automation-prod-local": {
       "type": "stdio",
       "command": "/opt/homebrew/bin/node",
       "args": [
-        "/Users/zvada/Documents/BOX/claude-experiments/browser-automation-professional/dist/server/mcp-integrated-stdio.js"
-      ],
-      "env": {}
+        "/Users/zvada/Documents/BOX/dev-browser/dist/server/mcp-integrated-stdio.js"
+      ]
     },
     "shadcn": {
       "command": "npx",
