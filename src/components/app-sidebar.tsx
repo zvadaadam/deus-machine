@@ -14,7 +14,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -170,20 +169,13 @@ function RepositoryItem({
                 </span>
               )}
               {sidebarExpanded && (
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {repository.workspaces.length > 0 && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                      {repository.workspaces.length}
-                    </Badge>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 flex-shrink-0",
+                    isCollapsed && "-rotate-90"
                   )}
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200",
-                      isCollapsed && "-rotate-90"
-                    )}
-                    style={{ transition: "transform 200ms cubic-bezier(.165, .84, .44, 1)" }}
-                  />
-                </div>
+                  style={{ transition: "transform 200ms cubic-bezier(.165, .84, .44, 1)" }}
+                />
               )}
             </div>
           </SidebarMenuButton>
@@ -198,7 +190,7 @@ function RepositoryItem({
                   size="sm"
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
-                    "w-full h-8 px-3",
+                    "w-full h-8 px-3 -translate-x-px",
                     "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50",
                     "transition-all duration-200"
                   )}
@@ -271,7 +263,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "relative py-4 px-3 min-h-[56px]",
+          "relative py-3 px-3 min-h-[56px]",
           isActive && "bg-sidebar-accent"
         )}
       >
