@@ -45,8 +45,10 @@ class UnixSocketService {
     }
 
     try {
-      // 1. Get socket path from backend
-      const response = await fetch('http://localhost:3333/api/sidecar/status');
+      // 1. Get socket path from backend (using dynamic port)
+      const { getBaseURL } = await import('../config/api.config');
+      const baseURL = await getBaseURL();
+      const response = await fetch(`${baseURL}/sidecar/status`);
       const status = await response.json();
 
       if (!status.socketPath) {

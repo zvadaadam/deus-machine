@@ -9,8 +9,6 @@ use conductor_lib::{
     socket::SocketManager,
 };
 
-const BACKEND_PORT: u16 = 3333;
-
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -21,7 +19,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
-        .manage(BackendManager::new(BACKEND_PORT))
+        .manage(BackendManager::new())
         .manage(PtyManager::new())
         .manage(SocketManager::new())
         .setup(|app| {
@@ -60,7 +58,13 @@ fn main() {
             println!("[TAURI] Starting backend from: {}", backend_path.display());
 
             match backend_manager.start(backend_path) {
-                Ok(_) => println!("[TAURI] Backend started successfully on port {}", BACKEND_PORT),
+                Ok(_) => {
+                    if let Some(port) = backend_manager.get_port() {
+                        println!("[TAURI] Backend started successfully on port {}", port);
+                    } else {
+                        println!("[TAURI] Backend started (port detection pending)");
+                    }
+                },
                 Err(e) => {
                     eprintln!("[TAURI] Failed to start backend: {}", e);
                     eprintln!("[TAURI] App will continue but backend features will not work");
@@ -86,6 +90,7 @@ fn main() {
             commands::receive_sidecar_message,
             commands::disconnect_from_sidecar,
             commands::is_sidecar_connected,
+            commands::get_backend_port,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

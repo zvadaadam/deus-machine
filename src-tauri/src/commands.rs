@@ -1,6 +1,7 @@
 use tauri::State;
 use crate::pty::PtyManager;
 use crate::socket::SocketManager;
+use crate::backend::BackendManager;
 
 #[tauri::command]
 pub async fn spawn_pty(
@@ -92,4 +93,18 @@ pub fn is_sidecar_connected(
     socket_manager: State<'_, SocketManager>,
 ) -> Result<bool, String> {
     Ok(socket_manager.is_connected())
+}
+
+//============================================================================
+// BACKEND COMMANDS
+//============================================================================
+
+/// Get the dynamic port the backend is running on
+#[tauri::command]
+pub fn get_backend_port(
+    backend_manager: State<'_, BackendManager>,
+) -> Result<u16, String> {
+    backend_manager
+        .get_port()
+        .ok_or_else(|| "Backend port not available yet".to_string())
 }

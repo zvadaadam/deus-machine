@@ -1,17 +1,17 @@
 /**
  * Base API Client
  * Handles HTTP requests with proper error handling and type safety
+ *
+ * Now supports dynamic port allocation
  */
 
-import { API_CONFIG } from '../config/api.config';
+import { API_CONFIG, getBaseURL } from '../config/api.config';
 import type { ApiError } from '../types';
 
 class ApiClient {
-  private baseURL: string;
   private timeout: number;
 
-  constructor(baseURL: string = API_CONFIG.BASE_URL, timeout: number = API_CONFIG.REQUEST_TIMEOUT) {
-    this.baseURL = baseURL;
+  constructor(timeout: number = API_CONFIG.REQUEST_TIMEOUT) {
     this.timeout = timeout;
   }
 
@@ -55,7 +55,8 @@ class ApiClient {
    * Core request method with timeout and error handling
    */
   private async request<T>(endpoint: string, options: RequestInit): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
+    const baseURL = await getBaseURL();
+    const url = `${baseURL}${endpoint}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 

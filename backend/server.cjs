@@ -23,7 +23,8 @@ const { getMcpServers, saveMcpServers, getCommands, saveCommand, deleteCommand,
 const { generateUniqueCityName } = require('./lib/workspace.cjs');
 
 const app = express();
-const PORT = 3333;
+// Use environment variable PORT, or let OS assign available port (0 = auto-assign)
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 
 // Middleware
 app.use(cors());
@@ -708,14 +709,20 @@ app.post('/api/sidecar/command', (req, res) => {
 // START SERVER
 //============================================================================
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
+  const actualPort = server.address().port;
+
+  // Output port in machine-readable format for Rust to capture
+  console.log(`[BACKEND_PORT]${actualPort}`);
+
   console.log('\n🎉 Conductor Backend Server (Modular)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📡 API Server: http://localhost:${PORT}`);
+  console.log(`📡 API Server: http://localhost:${actualPort}`);
   console.log(`📊 Database: ${DB_PATH}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  // Start sidecar
+  // Start sidecar with backend port
+  process.env.BACKEND_PORT = actualPort.toString();
   startSidecar(DB_PATH);
 
   console.log('✅ Server ready!\n');

@@ -1,6 +1,7 @@
-use std::process::{Child, Command};
-use std::sync::Mutex;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::io::{BufRead, BufReader};
 use anyhow::{Result, Context};
 
 /// Backend Manager
@@ -8,20 +9,23 @@ use anyhow::{Result, Context};
 /// Manages the Node.js Express backend as a child process.
 /// This ensures the backend starts when the app starts and
 /// stops when the app closes - proper Tauri lifecycle management.
+///
+/// The backend now uses dynamic port allocation. The actual port
+/// is discovered by parsing stdout from the Node.js process.
 pub struct BackendManager {
     process: Mutex<Option<Child>>,
-    port: u16,
+    port: Arc<Mutex<Option<u16>>>,
 }
 
 impl BackendManager {
-    pub fn new(port: u16) -> Self {
+    pub fn new() -> Self {
         Self {
             process: Mutex::new(None),
-            port,
+            port: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Start the backend server
+    /// Start the backend server with dynamic port allocation
     pub fn start(&self, backend_path: PathBuf) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
@@ -32,19 +36,66 @@ impl BackendManager {
 
         println!("[BACKEND] Starting Node.js backend at {}", backend_path.display());
 
-        let child = Command::new("node")
+        // Spawn backend with stdout captured to read the assigned port
+        let mut child = Command::new("node")
             .arg(&backend_path)
-            .env("PORT", self.port.to_string())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
             .spawn()
             .context(format!("Failed to start backend at {}", backend_path.display()))?;
 
         println!("[BACKEND] Backend started with PID: {}", child.id());
+
+        // Take stdout to read the port
+        let stdout = child.stdout.take()
+            .context("Failed to capture backend stdout")?;
+
+        // Clone Arc for thread
+        let port_clone = Arc::clone(&self.port);
+
+        // Spawn thread to read stdout and find port
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    // Print all output for debugging
+                    println!("[BACKEND] {}", line);
+
+                    // Parse port from [BACKEND_PORT]12345 format
+                    if line.starts_with("[BACKEND_PORT]") {
+                        if let Some(port_str) = line.strip_prefix("[BACKEND_PORT]") {
+                            if let Ok(port_num) = port_str.parse::<u16>() {
+                                let mut port = port_clone.lock().unwrap();
+                                *port = Some(port_num);
+                                println!("[BACKEND] Detected port: {}", port_num);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         *process = Some(child);
 
-        // Give backend a moment to start
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        // Wait for port to be detected (with timeout)
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(5) {
+            if self.port.lock().unwrap().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        if self.port.lock().unwrap().is_none() {
+            eprintln!("[BACKEND] Warning: Could not detect backend port within 5 seconds");
+        }
 
         Ok(())
+    }
+
+    /// Get the actual port the backend is running on
+    pub fn get_port(&self) -> Option<u16> {
+        *self.port.lock().unwrap()
     }
 
     /// Check if backend is running
