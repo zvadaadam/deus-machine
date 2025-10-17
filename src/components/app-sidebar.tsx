@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores";
 import type { Workspace, DiffStats } from "@/types";
@@ -278,15 +279,29 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
-              <span
-                className={cn(
-                  "text-xs flex-shrink-0",
-                  getStatusTextColor(workspace.session_status),
-                  shouldShimmer(workspace.session_status) && "animate-shimmer"
-                )}
-              >
-                • {getStatusText(workspace.session_status)}
-              </span>
+              {shouldShimmer(workspace.session_status) ? (
+                <TextShimmer
+                  as="span"
+                  duration={2}
+                  className={cn(
+                    "text-xs flex-shrink-0",
+                    workspace.session_status === "working"
+                      ? "[--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                      : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
+                  )}
+                >
+                  • {getStatusText(workspace.session_status)}
+                </TextShimmer>
+              ) : (
+                <span
+                  className={cn(
+                    "text-xs flex-shrink-0",
+                    getStatusTextColor(workspace.session_status)
+                  )}
+                >
+                  • {getStatusText(workspace.session_status)}
+                </span>
+              )}
             </div>
           </div>
           {hasChanges && (
