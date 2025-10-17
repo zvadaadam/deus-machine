@@ -287,7 +287,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               </span>
               <span
                 className={cn(
-                  "text-[11px] flex-shrink-0",
+                  "text-xs flex-shrink-0",
                   getStatusTextColor(workspace.session_status),
                   shouldShimmer(workspace.session_status) && "animate-shimmer"
                 )}
