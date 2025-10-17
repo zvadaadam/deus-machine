@@ -164,13 +164,11 @@ function RepositoryItem({
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
           >
             <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                {sidebarExpanded && (
-                  <span className="text-sm font-medium truncate">
-                    {repository.repo_name}
-                  </span>
-                )}
-              </div>
+              {sidebarExpanded && (
+                <span className="text-sm font-medium truncate pl-[28px]">
+                  {repository.repo_name}
+                </span>
+              )}
               {sidebarExpanded && (
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {repository.workspaces.length > 0 && (
@@ -200,13 +198,15 @@ function RepositoryItem({
                   size="sm"
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
-                    "w-full justify-start h-8 px-3",
+                    "w-full h-8 px-3",
                     "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50",
                     "transition-all duration-200"
                   )}
                 >
-                  <Plus className="h-3.5 w-3.5 mr-2 flex-shrink-0" />
-                  <span className="text-xs">New Workspace</span>
+                  <div className="flex items-center gap-3 w-full">
+                    <Plus className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-xs">New Workspace</span>
+                  </div>
                 </Button>
               </SidebarMenuSubItem>
             )}
