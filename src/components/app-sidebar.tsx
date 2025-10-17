@@ -273,7 +273,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "relative py-3 px-3 min-h-[56px]",
+          "relative py-3 px-3 min-h-[56px] flex items-center justify-between w-full",
           isActive && "bg-sidebar-accent"
         )}
       >
@@ -319,13 +319,21 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               )}
             </div>
           </div>
-          {hasChanges && (
-            <div className="flex items-center gap-1 text-[10px] flex-shrink-0">
-              {diffStats.additions > 0 && <span className="text-green-500">+{diffStats.additions}</span>}
-              {diffStats.deletions > 0 && <span className="text-red-500">-{diffStats.deletions}</span>}
-            </div>
-          )}
         </div>
+        {hasChanges && (
+          <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+            {diffStats.additions > 0 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
+                +{diffStats.additions}
+              </span>
+            )}
+            {diffStats.deletions > 0 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">
+                -{diffStats.deletions}
+              </span>
+            )}
+          </div>
+        )}
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
