@@ -118,11 +118,11 @@ export function AppSidebar({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/settings")}
+              onClick={toggleSidebar}
               className="h-8 w-8 mx-auto"
-              title="Settings"
+              title="Expand sidebar"
             >
-              <Settings className="h-4 w-4" />
+              <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
         </div>
