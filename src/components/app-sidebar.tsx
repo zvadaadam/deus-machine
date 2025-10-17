@@ -227,19 +227,6 @@ interface WorkspaceItemProps {
 }
 
 function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceItemProps) {
-  const getStatusColor = (status: string | null | undefined) => {
-    switch (status) {
-      case "working":
-        return "bg-blue-500 animate-pulse";
-      case "idle":
-        return "bg-green-500";
-      case "compacting":
-        return "bg-yellow-500";
-      default:
-        return "bg-muted";
-    }
-  };
-
   const getStatusText = (status: string | null | undefined) => {
     return status || "idle";
   };
@@ -296,20 +283,12 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {hasChanges && (
-              <div className="flex items-center gap-1 text-[10px]">
-                {diffStats.additions > 0 && <span className="text-green-500">+{diffStats.additions}</span>}
-                {diffStats.deletions > 0 && <span className="text-red-500">-{diffStats.deletions}</span>}
-              </div>
-            )}
-            <div
-              className={cn(
-                "h-2 w-2 rounded-full",
-                getStatusColor(workspace.session_status)
-              )}
-            />
-          </div>
+          {hasChanges && (
+            <div className="flex items-center gap-1 text-[10px] flex-shrink-0">
+              {diffStats.additions > 0 && <span className="text-green-500">+{diffStats.additions}</span>}
+              {diffStats.deletions > 0 && <span className="text-red-500">-{diffStats.deletions}</span>}
+            </div>
+          )}
         </div>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
