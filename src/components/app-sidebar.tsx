@@ -69,9 +69,6 @@ export function AppSidebar({
                 </Avatar>
                 <div className="flex flex-col min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{profile.username}</p>
-                  {profile.email && (
-                    <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
-                  )}
                 </div>
               </div>
               <Button
@@ -196,17 +193,7 @@ function RepositoryItem({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub className="border-l-0 ml-0 px-0">
-            {repository.workspaces.map((workspace) => (
-              <WorkspaceItem
-                key={workspace.id}
-                workspace={workspace}
-                isActive={workspace.id === selectedWorkspaceId}
-                diffStats={diffStats[workspace.id]}
-                onClick={() => onWorkspaceClick(workspace)}
-              />
-            ))}
-
-            {/* New Workspace Button - Distinct Design */}
+            {/* New Workspace Button - At Top */}
             {sidebarExpanded && (
               <SidebarMenuSubItem>
                 <Button
@@ -214,7 +201,7 @@ function RepositoryItem({
                   size="sm"
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
-                    "w-full justify-start h-auto py-2 px-2",
+                    "w-full justify-start h-8 px-2",
                     "text-muted-foreground hover:text-foreground",
                     "border border-dashed border-sidebar-border hover:border-sidebar-foreground/50",
                     "transition-colors duration-200"
@@ -225,6 +212,16 @@ function RepositoryItem({
                 </Button>
               </SidebarMenuSubItem>
             )}
+
+            {repository.workspaces.map((workspace) => (
+              <WorkspaceItem
+                key={workspace.id}
+                workspace={workspace}
+                isActive={workspace.id === selectedWorkspaceId}
+                diffStats={diffStats[workspace.id]}
+                onClick={() => onWorkspaceClick(workspace)}
+              />
+            ))}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>
@@ -261,31 +258,33 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         onClick={onClick}
         isActive={isActive}
         className={cn(
-          "relative",
+          "relative py-3",
           isActive && "bg-sidebar-accent"
         )}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <GitBranch className="h-3.5 w-3.5 flex-shrink-0 text-sidebar-foreground/60" />
-          <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex flex-col flex-1 min-w-0 gap-0.5">
             <span className="text-sm truncate">{workspace.directory_name}</span>
             <span className="text-xs text-muted-foreground truncate">
               {workspace.branch}
             </span>
           </div>
-          <div
-            className={cn(
-              "h-2 w-2 rounded-full flex-shrink-0",
-              getStatusColor(workspace.session_status)
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {hasChanges && (
+              <div className="flex items-center gap-1 text-[10px]">
+                {diffStats.additions > 0 && <span className="text-green-500">+{diffStats.additions}</span>}
+                {diffStats.deletions > 0 && <span className="text-red-500">-{diffStats.deletions}</span>}
+              </div>
             )}
-          />
-        </div>
-        {hasChanges && (
-          <div className="absolute right-1 top-1 text-[10px] text-muted-foreground">
-            {diffStats.additions > 0 && <span className="text-green-500">+{diffStats.additions}</span>}
-            {diffStats.deletions > 0 && <span className="text-red-500 ml-1">-{diffStats.deletions}</span>}
+            <div
+              className={cn(
+                "h-2 w-2 rounded-full",
+                getStatusColor(workspace.session_status)
+              )}
+            />
           </div>
-        )}
+        </div>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
