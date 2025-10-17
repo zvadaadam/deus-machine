@@ -254,7 +254,7 @@ class UnixSocketServer {
  */
 function startKeepalive(server, interval = 30000) {
   return setInterval(() => {
-    server.broadcast({ type: 'keepalive', timestamp: Date.now() });
+    server.broadcast({ type: 'keep_alive', timestamp: Date.now() });
   }, interval);
 }
 
