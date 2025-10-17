@@ -33,23 +33,11 @@ function getRepoInitials(repoName: string): string {
 
 // Helper function to generate consistent color from string
 function getRepoColor(repoName: string): { bg: string; text: string } {
-  const colors = [
-    { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400' },
-    { bg: 'bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400' },
-    { bg: 'bg-pink-500/10', text: 'text-pink-600 dark:text-pink-400' },
-    { bg: 'bg-green-500/10', text: 'text-green-600 dark:text-green-400' },
-    { bg: 'bg-yellow-500/10', text: 'text-yellow-600 dark:text-yellow-400' },
-    { bg: 'bg-orange-500/10', text: 'text-orange-600 dark:text-orange-400' },
-    { bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400' },
-    { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400' },
-    { bg: 'bg-indigo-500/10', text: 'text-indigo-600 dark:text-indigo-400' },
-    { bg: 'bg-teal-500/10', text: 'text-teal-600 dark:text-teal-400' },
-  ];
-  let hash = 0;
-  for (let i = 0; i < repoName.length; i++) {
-    hash = repoName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
+  // Using neutral gray tones for a more subtle, professional look
+  return {
+    bg: 'bg-sidebar-accent',
+    text: 'text-sidebar-foreground'
+  };
 }
 
 interface Repository {
@@ -217,7 +205,7 @@ function RepositoryItem({
                     );
                   })()}
                   {hasRunningWorkspace && (
-                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3 z-10">
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3 z-10">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                     </span>
