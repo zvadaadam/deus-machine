@@ -79,8 +79,7 @@ if [ -d "src-tauri/target/release/bundle/macos/Conductor.app" ]; then
     echo "To run:"
     echo "  open /Applications/Conductor.app"
     echo ""
-    echo "Don't forget to start the backend server:"
-    echo "  cd backend && node server.cjs"
+    echo "Note: Backend starts automatically with dynamic port assignment"
     echo ""
 else
     echo -e "${RED}✗ Build failed. Check errors above.${NC}"
