@@ -23,56 +23,83 @@ export function useFileChanges({ workspaceId, diffStats }: UseFileChangesOptions
       return;
     }
 
+    // Create AbortController for cleanup
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
     (async () => {
-      const baseURL = await getBaseURL();
+      try {
+        const baseURL = await getBaseURL();
 
-      // Note: Diff stats loading is handled by useDashboardData hook
+        // Note: Diff stats loading is handled by useDashboardData hook
 
-      // Load PR status
-      fetch(`${baseURL}/workspaces/${workspaceId}/pr-status`)
-        .then(res => res.json())
-        .then(data => {
-          setPrStatus(data);
-        })
-        .catch(err => {
-          console.error('Failed to load PR status:', err);
-          setPrStatus(null);
-        });
+        // Load PR status
+        fetch(`${baseURL}/workspaces/${workspaceId}/pr-status`, { signal })
+          .then(res => res.json())
+          .then(data => {
+            if (!signal.aborted) {
+              setPrStatus(data);
+            }
+          })
+          .catch(err => {
+            if (!signal.aborted) {
+              console.error('Failed to load PR status:', err);
+              setPrStatus(null);
+            }
+          });
 
-      // Load dev servers
-      fetch(`${baseURL}/workspaces/${workspaceId}/dev-servers`)
-        .then(res => res.json())
-        .then(data => {
-          setDevServers(data.servers || []);
-        })
-        .catch(err => {
-          console.error('Failed to load dev servers:', err);
-          setDevServers([]);
-        });
+        // Load dev servers
+        fetch(`${baseURL}/workspaces/${workspaceId}/dev-servers`, { signal })
+          .then(res => res.json())
+          .then(data => {
+            if (!signal.aborted) {
+              setDevServers(data.servers || []);
+            }
+          })
+          .catch(err => {
+            if (!signal.aborted) {
+              console.error('Failed to load dev servers:', err);
+              setDevServers([]);
+            }
+          });
 
-      // Check cache first for file changes
-      if (fileChangesCache.current[workspaceId]) {
-        console.log('✅ Using cached file changes for workspace:', workspaceId);
-        setFileChanges(fileChangesCache.current[workspaceId]);
-        return;
+        // Check cache first for file changes
+        if (fileChangesCache.current[workspaceId]) {
+          console.log('✅ Using cached file changes for workspace:', workspaceId);
+          setFileChanges(fileChangesCache.current[workspaceId]);
+          return;
+        }
+
+        // Load from API if not in cache
+        console.log('🔄 Loading file changes for workspace:', workspaceId);
+        fetch(`${baseURL}/workspaces/${workspaceId}/diff-files`, { signal })
+          .then(res => res.json())
+          .then(data => {
+            if (!signal.aborted) {
+              const files = data.files || [];
+              console.log('✅ File changes loaded:', files.length, 'files');
+              setFileChanges(files);
+              // Cache the result
+              fileChangesCache.current[workspaceId] = files;
+            }
+          })
+          .catch(err => {
+            if (!signal.aborted) {
+              console.error('❌ Failed to load file changes:', err);
+              setFileChanges([]);
+            }
+          });
+      } catch (err) {
+        if (!signal.aborted) {
+          console.error('Error in useFileChanges:', err);
+        }
       }
-
-      // Load from API if not in cache
-      console.log('🔄 Loading file changes for workspace:', workspaceId);
-      fetch(`${baseURL}/workspaces/${workspaceId}/diff-files`)
-        .then(res => res.json())
-        .then(data => {
-          const files = data.files || [];
-          console.log('✅ File changes loaded:', files.length, 'files');
-          setFileChanges(files);
-          // Cache the result
-          fileChangesCache.current[workspaceId] = files;
-        })
-        .catch(err => {
-          console.error('❌ Failed to load file changes:', err);
-          setFileChanges([]);
-        });
     })();
+
+    // Cleanup: abort all in-flight requests
+    return () => {
+      abortController.abort();
+    };
   }, [workspaceId, diffStats]);
 
   const clearCache = (wid: string) => {

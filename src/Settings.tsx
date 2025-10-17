@@ -55,24 +55,19 @@ export function Settings() {
 
   async function loadFileBasedConfigs() {
     try {
-      // Load MCP servers
-      const mcpResponse = await fetch(`${await getBaseURL()}/api/config/mcp-servers`);
-      const mcpData = await mcpResponse.json();
+      const baseURL = await getBaseURL();
+
+      // Load all configs in parallel for better performance
+      const [mcpData, commandsData, agentsData, hooksData] = await Promise.all([
+        fetch(`${baseURL}/api/config/mcp-servers`).then(res => res.json()),
+        fetch(`${baseURL}/api/config/commands`).then(res => res.json()),
+        fetch(`${baseURL}/api/config/agents`).then(res => res.json()),
+        fetch(`${baseURL}/api/config/hooks`).then(res => res.json()),
+      ]);
+
       setMcpServers(mcpData);
-
-      // Load commands
-      const commandsResponse = await fetch(`${await getBaseURL()}/api/config/commands`);
-      const commandsData = await commandsResponse.json();
       setCommands(commandsData);
-
-      // Load agents
-      const agentsResponse = await fetch(`${await getBaseURL()}/api/config/agents`);
-      const agentsData = await agentsResponse.json();
       setAgents(agentsData);
-
-      // Load hooks
-      const hooksResponse = await fetch(`${await getBaseURL()}/api/config/hooks`);
-      const hooksData = await hooksResponse.json();
       setHooks(hooksData);
     } catch (error) {
       console.error('Failed to load file-based configs:', error);
@@ -291,7 +286,7 @@ export function Settings() {
               min="8"
               max="24"
               value={settings.terminal_font_size ?? 12}
-              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value))}
+              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value, 10))}
             />
             <p className="text-sm text-muted-foreground">Terminal font size in pixels</p>
           </div>

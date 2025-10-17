@@ -65,3 +65,6 @@ temp/
 
 # Claude Code
 .claude/settings.local.json
+
+# MCP Configuration (user-specific)
+.mcp.json
