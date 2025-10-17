@@ -270,8 +270,8 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
 
   return (
     <SidebarMenuSubItem className="overflow-visible">
-      <div className="flex items-center w-full py-3 pl-3 pr-3 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer overflow-visible" onClick={onClick}>
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className="flex items-center justify-between w-full py-3 pl-3 pr-3 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer overflow-visible" onClick={onClick}>
+        <div className="flex items-center gap-3 flex-1 min-w-0" style={{ maxWidth: hasChanges ? 'calc(100% - 130px)' : '100%' }}>
           <GitBranch
             className={cn(
               "h-4 w-4 flex-shrink-0",
@@ -316,7 +316,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
           </div>
         </div>
         {hasChanges && (
-          <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {diffStats.additions > 0 && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
                 +{diffStats.additions}
