@@ -197,7 +197,7 @@ function RepositoryItem({
                 >
                   <div className="flex items-center gap-3 w-full">
                     <Plus className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-xs">New Workspace</span>
+                    <span className="text-sm">New Workspace</span>
                   </div>
                 </Button>
               </SidebarMenuSubItem>
