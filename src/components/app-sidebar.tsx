@@ -223,8 +223,8 @@ function RepositoryItem({
                   })()}
                   {hasRunningWorkspace && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-600"></span>
                     </span>
                   )}
                 </div>
@@ -346,7 +346,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
             <Loader2
-              className="h-4 w-4 flex-shrink-0 text-blue-500/80 animate-spin"
+              className="h-4 w-4 flex-shrink-0 text-blue-600/80 animate-spin"
             />
           ) : (
             <GitBranch
@@ -374,7 +374,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
                   className={cn(
                     "text-xs flex-shrink-0",
                     workspace.session_status === "working"
-                      ? "[--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                      ? "[--base-color:theme(colors.blue.700)] [--base-gradient-color:theme(colors.blue.300)] dark:[--base-color:theme(colors.blue.600)] dark:[--base-gradient-color:theme(colors.blue.400)]"
                       : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
                   )}
                 >
