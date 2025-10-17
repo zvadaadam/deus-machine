@@ -38,7 +38,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       if (error instanceof SyntaxError && error.message.includes('control character')) {
         const match = error.message.match(/position (\d+)/);
         if (match) {
-          const position = parseInt(match[1]);
+          const position = parseInt(match[1], 10);
           console.error('[useMessages] Context around error position:', {
             position,
             before: content.substring(Math.max(0, position - 50), position),

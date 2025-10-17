@@ -29,7 +29,7 @@ async function getBackendPort(): Promise<number> {
   portPromise = (async () => {
     // 1. Check if running in web dev mode with dynamic port
     if (import.meta.env.VITE_BACKEND_PORT) {
-      const port = parseInt(import.meta.env.VITE_BACKEND_PORT as string);
+      const port = parseInt(import.meta.env.VITE_BACKEND_PORT as string, 10);
       if (!isNaN(port)) {
         console.log(`[API] Using web dev backend port: ${port}`);
         cachedPort = port;

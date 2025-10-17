@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "browser-automation-prod-local": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/node",
+      "args": [
+        "/path/to/your/dev-browser/dist/server/mcp-integrated-stdio.js"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    }
+  }
+}

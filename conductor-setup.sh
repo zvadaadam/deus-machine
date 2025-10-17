@@ -52,9 +52,11 @@ fi
 NPM_VERSION=$(npm --version)
 echo -e "${GREEN}✓ npm found: v$NPM_VERSION${NC}"
 
-# Step 2: Copy .env file from root repo if it exists
+# Step 2: Copy .env and .mcp.json files from root repo if they exist
 echo ""
-echo -e "${YELLOW}[2/3] Checking for .env file...${NC}"
+echo -e "${YELLOW}[2/3] Checking for .env and .mcp.json files...${NC}"
+
+# Copy .env file
 if [ -f "$CONDUCTOR_ROOT_PATH/.env" ]; then
     cp "$CONDUCTOR_ROOT_PATH/.env" .env
     echo -e "${GREEN}✓ Copied .env from root repository${NC}"
@@ -64,6 +66,21 @@ elif [ -f "$CONDUCTOR_ROOT_PATH/.env.example" ]; then
 else
     echo -e "${YELLOW}⚠ No .env file found in root repository${NC}"
     echo "  If you need environment variables, create .env manually"
+fi
+
+# Copy .mcp.json file
+if [ -f "$CONDUCTOR_ROOT_PATH/.mcp.json" ]; then
+    cp "$CONDUCTOR_ROOT_PATH/.mcp.json" .mcp.json
+    echo -e "${GREEN}✓ Copied .mcp.json from root repository${NC}"
+elif [ -f "$CONDUCTOR_ROOT_PATH/.mcp.json.example" ]; then
+    cp "$CONDUCTOR_ROOT_PATH/.mcp.json.example" .mcp.json
+    echo -e "${YELLOW}⚠ Copied .mcp.json.example - you may need to configure MCP server paths${NC}"
+elif [ -f ".mcp.json.example" ]; then
+    cp ".mcp.json.example" .mcp.json
+    echo -e "${YELLOW}⚠ Created .mcp.json from template - you may need to configure MCP server paths${NC}"
+else
+    echo -e "${YELLOW}⚠ No .mcp.json file found${NC}"
+    echo "  MCP features will use default configuration"
 fi
 
 # Step 3: Install dependencies
