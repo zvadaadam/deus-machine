@@ -342,8 +342,7 @@ export function Dashboard() {
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
           profile={{
-            username: "Developer",
-            email: "dev@conductor.build"
+            username: "Developer"
           }}
         />
       )}
