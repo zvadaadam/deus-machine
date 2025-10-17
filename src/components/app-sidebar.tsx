@@ -97,7 +97,7 @@ export function AppSidebar({
       {/* Repositories List */}
       <SidebarContent>
         <ScrollArea className="flex-1">
-          <SidebarMenu className="p-2">
+          <SidebarMenu className="p-2 gap-2">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
