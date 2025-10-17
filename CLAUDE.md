@@ -98,4 +98,4 @@ Test if the backend or frontend works using the browser tool or running tests.
 
 ## AVOID AT ALL COST
 - Never edit or even modify outside of your worktree directory — it's STRICTLY prohibited.
-- Never priject dev server outside of your worktree directory — it's STRICTLY prohibited.
+- Never start this app outside of your worktree directory — it's STRICTLY prohibited.
