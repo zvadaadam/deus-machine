@@ -228,7 +228,8 @@ interface WorkspaceItemProps {
 
 function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceItemProps) {
   const getStatusText = (status: string | null | undefined) => {
-    return status || "idle";
+    if (!status) return "Archived";
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   const getStatusTextColor = (status: string | null | undefined) => {
