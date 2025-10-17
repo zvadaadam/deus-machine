@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { API_CONFIG } from "../config/api.config";
+import { API_CONFIG, getBaseURL } from "../config/api.config";
 import type { RepoGroup, Stats } from "../types";
 
-const API_BASE = API_CONFIG.BASE_URL;
+// BASE_URL is now async - use getBaseURL()
 const POLL_INTERVAL = API_CONFIG.POLL_INTERVAL;
 
 export function useWorkspaces() {
@@ -18,12 +18,12 @@ export function useWorkspaces() {
   const loadWorkspaces = useCallback(async () => {
     try {
       // Load grouped workspaces (ready only)
-      const groupedRes = await fetch(`${API_BASE}/workspaces/by-repo?state=ready`);
+      const groupedRes = await fetch(`${await getBaseURL()}/workspaces/by-repo?state=ready`);
       const groupedData = await groupedRes.json();
       setRepoGroups(groupedData);
 
       // Load stats
-      const statsRes = await fetch(`${API_BASE}/stats`);
+      const statsRes = await fetch(`${await getBaseURL()}/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
