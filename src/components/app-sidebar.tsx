@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus, FolderPlus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus, FolderPlus, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -332,12 +332,18 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
     <SidebarMenuSubItem>
       <div className="grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          <GitBranch
-            className={cn(
-              "h-4 w-4 flex-shrink-0",
-              workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
-            )}
-          />
+          {workspace.session_status === "working" ? (
+            <Loader2
+              className="h-4 w-4 flex-shrink-0 text-blue-500/80 animate-spin"
+            />
+          ) : (
+            <GitBranch
+              className={cn(
+                "h-4 w-4 flex-shrink-0",
+                workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
+              )}
+            />
+          )}
           <div className="flex flex-col min-w-0 gap-0.5">
             {/* Branch name on top */}
             <span className="text-sm font-medium truncate">
