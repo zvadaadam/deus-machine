@@ -199,14 +199,20 @@ function RepositoryItem({
           >
             <div className="flex items-center justify-between w-full">
               {!sidebarExpanded && (
-                <div className="relative">
-                  <div className={cn(
-                    "h-6 w-6 flex items-center justify-center text-white text-[10px] font-semibold",
-                    "rounded-[6px]",
-                    getRepoColor(repository.repo_name)
-                  )}>
-                    {getRepoInitials(repository.repo_name)}
-                  </div>
+                <div className="relative mx-auto">
+                  {(() => {
+                    const repoColor = getRepoColor(repository.repo_name);
+                    return (
+                      <div className={cn(
+                        "h-6 w-6 flex items-center justify-center text-[10px] font-semibold",
+                        "rounded-[6px]",
+                        repoColor.bg,
+                        repoColor.text
+                      )}>
+                        {getRepoInitials(repository.repo_name)}
+                      </div>
+                    );
+                  })()}
                   {hasRunningWorkspace && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
