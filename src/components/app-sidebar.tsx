@@ -32,18 +32,18 @@ function getRepoInitials(repoName: string): string {
 }
 
 // Helper function to generate consistent color from string
-function getRepoColor(repoName: string): string {
+function getRepoColor(repoName: string): { bg: string; text: string } {
   const colors = [
-    'bg-blue-500',
-    'bg-purple-500',
-    'bg-pink-500',
-    'bg-green-500',
-    'bg-yellow-500',
-    'bg-orange-500',
-    'bg-red-500',
-    'bg-cyan-500',
-    'bg-indigo-500',
-    'bg-teal-500',
+    { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400' },
+    { bg: 'bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400' },
+    { bg: 'bg-pink-500/10', text: 'text-pink-600 dark:text-pink-400' },
+    { bg: 'bg-green-500/10', text: 'text-green-600 dark:text-green-400' },
+    { bg: 'bg-yellow-500/10', text: 'text-yellow-600 dark:text-yellow-400' },
+    { bg: 'bg-orange-500/10', text: 'text-orange-600 dark:text-orange-400' },
+    { bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400' },
+    { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400' },
+    { bg: 'bg-indigo-500/10', text: 'text-indigo-600 dark:text-indigo-400' },
+    { bg: 'bg-teal-500/10', text: 'text-teal-600 dark:text-teal-400' },
   ];
   let hash = 0;
   for (let i = 0; i < repoName.length; i++) {
