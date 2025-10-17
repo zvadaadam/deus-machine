@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceDetail } from "./WorkspaceDetail";
 import { TerminalPanel } from "./TerminalPanel";
-import { API_CONFIG } from "./config/api.config";
+import { getBaseURL } from "./config/api.config";
 import { formatTokenCount } from "./utils";
 import {
   NewWorkspaceModal,
@@ -43,7 +43,7 @@ import type {
  * Manages workspaces, file changes, and git diff visualization
  */
 
-const API_BASE = API_CONFIG.BASE_URL;
+// BASE_URL is now async - use getBaseURL()
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -114,10 +114,13 @@ export function Dashboard() {
 
   useEffect(() => {
     if (showNewWorkspaceModal && repos.length === 0) {
-      fetch(`${API_BASE}/repos`)
-        .then(res => res.json())
-        .then(data => setRepos(data))
-        .catch(err => console.error('Failed to load repos:', err));
+      (async () => {
+        const baseURL = await getBaseURL();
+        fetch(`${baseURL}/repos`)
+          .then(res => res.json())
+          .then(data => setRepos(data))
+          .catch(err => console.error('Failed to load repos:', err));
+      })();
     }
   }, [showNewWorkspaceModal, repos.length]);
 
@@ -158,7 +161,7 @@ export function Dashboard() {
    */
   async function archiveWorkspace(workspaceId: string) {
     try {
-      const res = await fetch(`${API_BASE}/workspaces/${workspaceId}`, {
+      const res = await fetch(`${await getBaseURL()}/workspaces/${workspaceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ state: 'archived' })
@@ -195,7 +198,7 @@ export function Dashboard() {
 
     setCreating(true);
     try {
-      const res = await fetch(`${API_BASE}/workspaces`, {
+      const res = await fetch(`${await getBaseURL()}/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repository_id: selectedRepoId })
@@ -242,7 +245,7 @@ export function Dashboard() {
     openDiffModal(file, ''); // Open with empty diff first
 
     try {
-      const res = await fetch(`${API_BASE}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
+      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
       const data = await res.json();
       openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
     } catch (error) {
@@ -264,7 +267,7 @@ export function Dashboard() {
     setSystemPrompt('');
 
     try {
-      const res = await fetch(`${API_BASE}/workspaces/${selectedWorkspace.id}/system-prompt`);
+      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`);
       const data = await res.json();
       setSystemPrompt(data.system_prompt || '');
     } catch (error) {
@@ -283,7 +286,7 @@ export function Dashboard() {
 
     setSavingSystemPrompt(true);
     try {
-      const res = await fetch(`${API_BASE}/workspaces/${selectedWorkspace.id}/system-prompt`, {
+      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ system_prompt: systemPrompt })

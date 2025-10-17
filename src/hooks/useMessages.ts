@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { API_CONFIG } from "../config/api.config";
+import { getBaseURL } from "../config/api.config";
 import { socketService } from "../services/socket";
 import type { Message, FileEdit, FileChangeGroup, SessionStatus } from "../types";
 
-const API_BASE = API_CONFIG.BASE_URL;
+// BASE_URL is now async - use getBaseURL()
 
 interface UseMessagesOptions {
   sessionId: string;
@@ -55,13 +55,13 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
   const loadMessagesAndStatus = useCallback(async () => {
     try {
       // Load session status
-      const sessionRes = await fetch(`${API_BASE}/sessions/${sessionId}`);
+      const sessionRes = await fetch(`${await getBaseURL()}/sessions/${sessionId}`);
       const sessionData = await sessionRes.json();
       setSessionStatus(sessionData.status || 'idle');
       setIsCompacting(sessionData.is_compacting === 1);
 
       // Load messages
-      const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages`);
+      const res = await fetch(`${await getBaseURL()}/sessions/${sessionId}/messages`);
       const data = await res.json();
       setMessages(data);
 
@@ -132,7 +132,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       } else {
         // Fallback to HTTP if socket not connected
         console.log('[useMessages] 📨 Sending via HTTP (socket not connected)...');
-        await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
+        await fetch(`${await getBaseURL()}/sessions/${sessionId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content })
@@ -156,7 +156,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
     }
 
     try {
-      await fetch(`${API_BASE}/sessions/${sessionId}/stop`, {
+      await fetch(`${await getBaseURL()}/sessions/${sessionId}/stop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

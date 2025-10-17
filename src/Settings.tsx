@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Settings.css';
-import { API_CONFIG } from './config/api.config';
+import { getBaseURL } from './config/api.config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,8 +24,6 @@ import type {
   SettingsSection,
 } from './types';
 
-const API_BASE = API_CONFIG.BASE_URL.replace('/api', ''); // Settings uses root URL
-
 export function Settings() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
@@ -45,7 +43,7 @@ export function Settings() {
 
   async function loadSettings() {
     try {
-      const response = await fetch(`${API_BASE}/api/settings`);
+      const response = await fetch(`${await getBaseURL()}/api/settings`);
       const data = await response.json();
       setSettings(data);
       setLoading(false);
@@ -58,22 +56,22 @@ export function Settings() {
   async function loadFileBasedConfigs() {
     try {
       // Load MCP servers
-      const mcpResponse = await fetch(`${API_BASE}/api/config/mcp-servers`);
+      const mcpResponse = await fetch(`${await getBaseURL()}/api/config/mcp-servers`);
       const mcpData = await mcpResponse.json();
       setMcpServers(mcpData);
 
       // Load commands
-      const commandsResponse = await fetch(`${API_BASE}/api/config/commands`);
+      const commandsResponse = await fetch(`${await getBaseURL()}/api/config/commands`);
       const commandsData = await commandsResponse.json();
       setCommands(commandsData);
 
       // Load agents
-      const agentsResponse = await fetch(`${API_BASE}/api/config/agents`);
+      const agentsResponse = await fetch(`${await getBaseURL()}/api/config/agents`);
       const agentsData = await agentsResponse.json();
       setAgents(agentsData);
 
       // Load hooks
-      const hooksResponse = await fetch(`${API_BASE}/api/config/hooks`);
+      const hooksResponse = await fetch(`${await getBaseURL()}/api/config/hooks`);
       const hooksData = await hooksResponse.json();
       setHooks(hooksData);
     } catch (error) {
@@ -84,7 +82,7 @@ export function Settings() {
   async function saveSetting(key: string, value: any) {
     setSaving(true);
     try {
-      await fetch(`${API_BASE}/api/settings`, {
+      await fetch(`${await getBaseURL()}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value })
