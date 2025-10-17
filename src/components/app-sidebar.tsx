@@ -96,9 +96,9 @@ export function AppSidebar({
       </SidebarHeader>
 
       {/* Repositories List */}
-      <SidebarContent className="!overflow-visible">
-        <ScrollArea className="flex-1 !overflow-visible">
-          <SidebarMenu className="p-2 !overflow-visible">
+      <SidebarContent>
+        <ScrollArea className="flex-1">
+          <SidebarMenu className="p-2">
             {repositories.map((repo) => (
               <RepositoryItem
                 key={repo.repo_id}
@@ -182,7 +182,7 @@ function RepositoryItem({
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <SidebarMenuSub className="border-l-0 ml-0 px-0 !overflow-visible">
+          <SidebarMenuSub className="border-l-0 ml-0 px-0">
             {/* New Workspace Button - At Top, Compact Height */}
             {sidebarExpanded && (
               <SidebarMenuSubItem className="mb-1">
@@ -270,14 +270,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
 
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        onClick={onClick}
-        isActive={isActive}
-        className={cn(
-          "relative py-3 pl-3 pr-20 min-h-[56px] !overflow-visible",
-          isActive && "bg-sidebar-accent"
-        )}
-      >
+      <div className="flex items-center gap-2 w-full py-3 px-3 min-h-[56px] rounded-md hover:bg-sidebar-accent cursor-pointer" onClick={onClick}>
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <GitBranch
             className={cn(
@@ -323,7 +316,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
           </div>
         </div>
         {hasChanges && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
             {diffStats.additions > 0 && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
                 +{diffStats.additions}
@@ -336,7 +329,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
             )}
           </div>
         )}
-      </SidebarMenuSubButton>
+      </div>
     </SidebarMenuSubItem>
   );
 }
