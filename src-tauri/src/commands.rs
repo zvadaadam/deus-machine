@@ -2,6 +2,7 @@ use tauri::State;
 use crate::pty::PtyManager;
 use crate::socket::SocketManager;
 use crate::backend::BackendManager;
+use std::path::Path;
 
 #[tauri::command]
 pub async fn spawn_pty(
@@ -107,4 +108,63 @@ pub fn get_backend_port(
     backend_manager
         .get_port()
         .ok_or_else(|| "Backend port not available yet".to_string())
+}
+
+//============================================================================
+// APP DETECTION COMMANDS
+//============================================================================
+
+#[derive(serde::Serialize)]
+pub struct InstalledApp {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+}
+
+/// Get list of installed development apps on macOS
+#[tauri::command]
+pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
+    let mut apps = Vec::new();
+
+    // List of apps to check for (id, display name, app path)
+    let app_checks = vec![
+        ("cursor", "Cursor", "/Applications/Cursor.app"),
+        ("vscode", "VS Code", "/Applications/Visual Studio Code.app"),
+        ("windsurf", "Windsurf", "/Applications/Windsurf.app"),
+        ("xcode", "Xcode", "/Applications/Xcode.app"),
+        ("terminal", "Terminal", "/System/Applications/Utilities/Terminal.app"),
+    ];
+
+    for (id, name, path) in app_checks {
+        if Path::new(path).exists() {
+            apps.push(InstalledApp {
+                id: id.to_string(),
+                name: name.to_string(),
+                path: path.to_string(),
+            });
+        }
+    }
+
+    Ok(apps)
+}
+
+/// Open a workspace directory in a specific app
+#[tauri::command]
+pub async fn open_in_app(app_id: String, workspace_path: String) -> Result<String, String> {
+    let command = match app_id.as_str() {
+        "cursor" => format!("open -a Cursor '{}'", workspace_path),
+        "vscode" => format!("open -a 'Visual Studio Code' '{}'", workspace_path),
+        "windsurf" => format!("open -a Windsurf '{}'", workspace_path),
+        "xcode" => format!("open -a Xcode '{}'", workspace_path),
+        "terminal" => format!("open -a Terminal '{}'", workspace_path),
+        _ => return Err(format!("Unknown app: {}", app_id)),
+    };
+
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .output()
+        .map_err(|e| format!("Failed to open app: {}", e))?;
+
+    Ok(format!("Opened in {}", app_id))
 }
