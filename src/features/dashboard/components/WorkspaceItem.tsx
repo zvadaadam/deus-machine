@@ -1,3 +1,4 @@
+import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { formatTimeAgo } from "../../../utils";
 import type { Workspace, DiffStats } from "../../../types";
 
@@ -9,7 +10,7 @@ interface WorkspaceItemProps {
 }
 
 /**
- * Individual workspace list item in sidebar
+ * Individual workspace list item in sidebar using shadcn SidebarMenuItem
  * Shows branch name, diff stats, and last updated time
  */
 export function WorkspaceItem({
@@ -22,37 +23,46 @@ export function WorkspaceItem({
   const timeAgo = formatTimeAgo(workspace.updated_at);
 
   return (
-    <div
-      className={`workspace-item ${isActive ? 'active' : ''}`}
-      onClick={onClick}
-    >
-      <span className="workspace-item-icon">🌿</span>
-      <div className="workspace-item-content">
-        <div className="workspace-item-header">
-          <span className="workspace-item-title">{workspace.branch}</span>
-          {hasDiff && (
-            <span className="workspace-item-diff">
-              {diffStats.additions > 0 && (
-                <span className="additions">+{diffStats.additions}</span>
-              )}
-              {diffStats.deletions > 0 && (
-                <span className="deletions">-{diffStats.deletions}</span>
-              )}
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={onClick}
+        className="flex items-start gap-2 py-2 px-2"
+      >
+        <span className="text-base flex-shrink-0 mt-0.5">🌿</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2 mb-0.5">
+            <span className="text-sm font-medium truncate">
+              {workspace.branch}
             </span>
-          )}
+            {hasDiff && (
+              <div className="flex gap-1 text-xs font-mono flex-shrink-0">
+                {diffStats.additions > 0 && (
+                  <span className="text-success-600 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
+                    +{diffStats.additions}
+                  </span>
+                )}
+                {diffStats.deletions > 0 && (
+                  <span className="text-destructive bg-destructive/10 px-1.5 py-0.5 rounded border border-destructive/20">
+                    -{diffStats.deletions}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center text-xs text-muted-foreground gap-1">
+            {workspace.session_status === 'working' ? (
+              <span className="text-primary">Working...</span>
+            ) : (
+              <>
+                <span className="truncate">{workspace.directory_name}</span>
+                <span>•</span>
+                <span>{timeAgo}</span>
+              </>
+            )}
+          </div>
         </div>
-        <div className="workspace-item-meta">
-          {workspace.session_status === 'working' ? (
-            <span className="workspace-item-status">Working...</span>
-          ) : (
-            <>
-              <span>{workspace.directory_name}</span>
-              <span> • </span>
-              <span>{timeAgo}</span>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

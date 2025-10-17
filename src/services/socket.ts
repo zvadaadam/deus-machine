@@ -5,9 +5,14 @@
  *
  * Architecture:
  * React → Tauri invoke → Rust → Unix Socket → Node Sidecar → Claude CLI
+ *
+ * Note: In web mode (non-Tauri), this service is disabled and returns mock responses
  */
 
 import { invoke } from '@tauri-apps/api/core';
+
+// Check if running in Tauri environment
+const isTauriEnv = typeof window !== 'undefined' && '__TAURI__' in window;
 
 export interface SocketMessage {
   command: string;
@@ -33,6 +38,12 @@ class UnixSocketService {
    * Initialize connection to sidecar Unix socket
    */
   async connect(): Promise<void> {
+    // Skip in web mode (non-Tauri)
+    if (!isTauriEnv) {
+      console.log('[SOCKET] ⚠️  Running in web mode - socket features disabled');
+      return;
+    }
+
     try {
       // 1. Get socket path from backend
       const response = await fetch('http://localhost:3333/api/sidecar/status');

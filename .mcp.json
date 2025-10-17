@@ -7,6 +7,10 @@
         "/Users/zvada/Documents/BOX/claude-experiments/browser-automation-professional/dist/server/mcp-integrated-stdio.js"
       ],
       "env": {}
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
     }
   }
 }
