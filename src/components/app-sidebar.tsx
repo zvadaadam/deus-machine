@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus, FolderPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -91,7 +91,10 @@ export function AppSidebar({
         <div className="flex items-center justify-between w-full">
           {isExpanded ? (
             <>
-              <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div
+                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer hover:opacity-70 transition-opacity"
+                onClick={() => navigate("/settings")}
+              >
                 <Avatar className="h-8 w-8 flex-shrink-0">
                   <AvatarFallback className="text-xs">
                     {profile.username.slice(0, 2).toUpperCase()}
@@ -115,11 +118,11 @@ export function AppSidebar({
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleSidebar}
+              onClick={() => navigate("/settings")}
               className="h-8 w-8 mx-auto"
-              title="Expand sidebar"
+              title="Settings"
             >
-              <PanelLeftOpen className="h-4 w-4" />
+              <Settings className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -146,16 +149,16 @@ export function AppSidebar({
         </ScrollArea>
       </SidebarContent>
 
-      {/* Footer with Settings */}
+      {/* Footer with Add Repository */}
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => navigate("/settings")}
-              tooltip={!isExpanded ? "Settings" : undefined}
+              onClick={() => onNewWorkspace()}
+              tooltip={!isExpanded ? "Add Repository" : undefined}
             >
-              <Settings className="h-4 w-4" />
-              {isExpanded && <span>Settings</span>}
+              <FolderPlus className="h-4 w-4" />
+              {isExpanded && <span>Add Repository</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
