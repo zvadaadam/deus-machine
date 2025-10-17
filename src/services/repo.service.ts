@@ -1,0 +1,31 @@
+/**
+ * Repository Service
+ * API methods for repository management
+ */
+
+import { apiClient } from './api';
+import { ENDPOINTS } from '../config/api.config';
+import type { Repo, Stats } from '../types';
+
+export const RepoService = {
+  /**
+   * Fetch all repositories
+   */
+  fetchAll: async (): Promise<Repo[]> => {
+    return apiClient.get<Repo[]>(ENDPOINTS.REPOS);
+  },
+
+  /**
+   * Fetch repository by ID
+   */
+  fetchById: async (id: string): Promise<Repo> => {
+    return apiClient.get<Repo>(ENDPOINTS.REPO_BY_ID(id));
+  },
+
+  /**
+   * Fetch system statistics
+   */
+  fetchStats: async (): Promise<Stats> => {
+    return apiClient.get<Stats>(ENDPOINTS.STATS);
+  },
+};

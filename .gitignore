@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+dist/
+build/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+# Note: src-tauri/sidecar/index.bundled.js is kept in git (pre-built from original Conductor)
+
+# Misc
+.DS_Store
+*.log
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database files (local development)
+*.db
+*.db-shm
+*.db-wal
+conductor.db
+database/
+
+# Logs
+logs/
+*.log
+backend.log
+backend-*.log
+frontend.log
+
+# OS
+Thumbs.DB
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Claude Code
+.claude/settings.local.json
