@@ -1,3 +1,13 @@
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
 interface DiffModalProps {
   selectedFile: string | null;
   fileDiff: string;
@@ -15,32 +25,29 @@ export function DiffModal({
   loading,
   onClose,
 }: DiffModalProps) {
-  if (!selectedFile) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Diff: {selectedFile}</h2>
-          <button onClick={onClose} className="modal-close">
-            ×
-          </button>
-        </div>
+    <Dialog open={!!selectedFile} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[800px] max-h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Diff: {selectedFile}</DialogTitle>
+        </DialogHeader>
 
-        <div className="modal-body">
+        <ScrollArea className="h-[500px] w-full rounded-md border p-4">
           {loading ? (
-            <div className="loading">Loading diff...</div>
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              Loading diff...
+            </div>
           ) : (
-            <pre className="diff-content">{fileDiff}</pre>
+            <pre className="text-sm font-mono whitespace-pre">{fileDiff}</pre>
           )}
-        </div>
+        </ScrollArea>
 
-        <div className="modal-footer">
-          <button onClick={onClose} className="btn btn-secondary">
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

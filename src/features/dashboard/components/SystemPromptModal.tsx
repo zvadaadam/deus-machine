@@ -1,3 +1,14 @@
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
 interface SystemPromptModalProps {
   show: boolean;
   workspaceName: string;
@@ -23,31 +34,26 @@ export function SystemPromptModal({
   onChange,
   onSave,
 }: SystemPromptModalProps) {
-  if (!show) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Edit System Prompt - {workspaceName}</h2>
-          <button onClick={onClose} className="modal-close">
-            ×
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <p className="modal-description">
+    <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Edit System Prompt - {workspaceName}</DialogTitle>
+          <DialogDescription>
             Edit the CLAUDE.md file to customize Claude's behavior for this
             workspace. This prompt is sent with every message.
-          </p>
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="grid gap-4 py-4">
           {loading ? (
-            <div className="loading">Loading system prompt...</div>
+            <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+              Loading system prompt...
+            </div>
           ) : (
-            <textarea
+            <Textarea
               value={systemPrompt}
               onChange={(e) => onChange(e.target.value)}
-              className="system-prompt-editor"
               placeholder="# Instructions
 
 ## Workspace Guidelines
@@ -59,42 +65,29 @@ export function SystemPromptModal({
 - Describe the project structure
 - List important files or modules
 - Add any domain-specific knowledge"
-              style={{
-                width: "100%",
-                minHeight: "400px",
-                padding: "16px",
-                fontFamily: "Monaco, Courier New, monospace",
-                fontSize: "13px",
-                lineHeight: "1.6",
-                border: "1px solid #d1d5db",
-                borderRadius: "6px",
-                resize: "vertical",
-              }}
+              className="min-h-[400px] font-mono text-sm resize-y"
             />
           )}
 
-          <div
-            style={{ marginTop: "12px", fontSize: "13px", color: "#6b7280" }}
-          >
+          <p className="text-sm text-muted-foreground">
             💡 Tip: Use Markdown formatting. Changes are saved to{" "}
-            <code>CLAUDE.md</code> in the workspace directory.
-          </div>
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">
+              CLAUDE.md
+            </code>{" "}
+            in the workspace directory.
+          </p>
         </div>
 
-        <div className="modal-footer">
-          <button onClick={onClose} className="btn btn-secondary">
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="btn-enhanced btn-enhanced-success"
-          >
-            <span className="btn-enhanced-icon">{saving ? "⟳" : "💾"}</span>
+          </Button>
+          <Button onClick={onSave} disabled={saving} className="gap-2">
+            {saving ? "⟳" : "💾"}
             {saving ? "Saving..." : "Save System Prompt"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

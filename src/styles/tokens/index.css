@@ -1,8 +1,0 @@
-/**
- * Design Tokens - Central Import
- * Import all design token files in the correct order
- */
-
-@import './colors.css';
-@import './shadows.css';
-@import './animations.css';

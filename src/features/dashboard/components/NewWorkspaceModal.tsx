@@ -1,4 +1,21 @@
 import type { Repo } from "../../../types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface NewWorkspaceModalProps {
   show: boolean;
@@ -23,57 +40,52 @@ export function NewWorkspaceModal({
   onRepoChange,
   onCreate,
 }: NewWorkspaceModalProps) {
-  if (!show) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Create New Workspace</h2>
-          <button onClick={onClose} className="modal-close">
-            ×
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <p className="modal-description">
+    <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Create New Workspace</DialogTitle>
+          <DialogDescription>
             A new workspace will be created with an auto-generated name (city
             name) and git worktree.
-          </p>
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="form-group">
-            <label>Select Repository</label>
-            <select
-              value={selectedRepoId}
-              onChange={(e) => onRepoChange(e.target.value)}
-              className="form-control"
-              autoFocus
-            >
-              <option value="">Choose a repository...</option>
-              {repos.map((repo) => (
-                <option key={repo.id} value={repo.id}>
-                  {repo.name}
-                </option>
-              ))}
-            </select>
-            <small>The workspace will be created in this repository</small>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="repo-select">Select Repository</Label>
+            <Select value={selectedRepoId} onValueChange={onRepoChange}>
+              <SelectTrigger id="repo-select">
+                <SelectValue placeholder="Choose a repository..." />
+              </SelectTrigger>
+              <SelectContent>
+                {repos.map((repo) => (
+                  <SelectItem key={repo.id} value={repo.id}>
+                    {repo.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              The workspace will be created in this repository
+            </p>
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button onClick={onClose} className="btn btn-secondary">
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onCreate}
             disabled={creating || !selectedRepoId}
-            className="btn-enhanced btn-enhanced-success"
+            className="gap-2"
           >
-            <span className="btn-enhanced-icon">{creating ? "⟳" : "+"}</span>
+            {creating ? "⟳" : "+"}
             {creating ? "Creating..." : "Create Workspace"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

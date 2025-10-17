@@ -423,6 +423,17 @@ app.get('/api/workspaces/:id/pr-status', async (req, res) => {
   }
 });
 
+// Get dev servers for a workspace
+app.get('/api/workspaces/:id/dev-servers', async (req, res) => {
+  try {
+    // For now, return empty array - this feature can be implemented later
+    // when we track dev servers per workspace
+    res.json({ servers: [] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/workspaces', async (req, res) => {
   try {
     const { repository_id } = req.body;

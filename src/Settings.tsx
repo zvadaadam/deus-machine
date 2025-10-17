@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Settings.css';
 import { API_CONFIG } from './config/api.config';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { ArrowLeft } from 'lucide-react';
 import type {
   Settings,
   MCPServer,
@@ -100,83 +113,112 @@ export function Settings() {
     ];
 
     return (
-      <nav className="settings-nav">
+      <nav className="settings-nav flex flex-col gap-1 p-2">
         {sections.map(section => (
-          <button
+          <Button
             key={section.id}
-            className={`settings-nav-item ${activeSection === section.id ? 'active' : ''}`}
+            variant={activeSection === section.id ? "default" : "ghost"}
+            className="w-full justify-start gap-3"
             onClick={() => setActiveSection(section.id)}
           >
-            <span className="settings-nav-icon">{section.icon}</span>
-            <span className="settings-nav-label">{section.label}</span>
-          </button>
+            <span className="text-lg">{section.icon}</span>
+            <span>{section.label}</span>
+          </Button>
         ))}
 
-        <div className="settings-nav-divider" />
+        <Separator className="my-2" />
 
-        <a href="https://docs.claude.com/en/docs/claude-code" target="_blank" rel="noopener noreferrer" className="settings-nav-link">
-          📖 Documentation
-        </a>
-        <a href="https://github.com/anthropics/claude-code/releases" target="_blank" rel="noopener noreferrer" className="settings-nav-link">
-          📋 Changelog
-        </a>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3"
+          asChild
+        >
+          <a href="https://docs.claude.com/en/docs/claude-code" target="_blank" rel="noopener noreferrer">
+            <span className="text-lg">📖</span>
+            <span>Documentation</span>
+          </a>
+        </Button>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3"
+          asChild
+        >
+          <a href="https://github.com/anthropics/claude-code/releases" target="_blank" rel="noopener noreferrer">
+            <span className="text-lg">📋</span>
+            <span>Changelog</span>
+          </a>
+        </Button>
       </nav>
     );
   }
 
   function renderGeneral() {
     return (
-      <div className="settings-section">
-        <h2>General Settings</h2>
+      <div className="settings-section space-y-6">
+        <h2 className="text-2xl font-semibold">General Settings</h2>
 
-        <div className="setting-group">
-          <label className="setting-label">
-            <input
-              type="checkbox"
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <Checkbox
+              id="notifications"
               checked={settings.notifications_enabled ?? true}
-              onChange={(e) => saveSetting('notifications_enabled', e.target.checked)}
+              onCheckedChange={(checked) => saveSetting('notifications_enabled', checked)}
             />
-            Enable notifications
-          </label>
-          <p className="setting-description">Show desktop notifications for important events</p>
-        </div>
+            <div className="flex-1">
+              <Label htmlFor="notifications" className="text-base font-medium cursor-pointer">
+                Enable notifications
+              </Label>
+              <p className="text-sm text-muted-foreground">Show desktop notifications for important events</p>
+            </div>
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">
-            <input
-              type="checkbox"
+          <div className="flex items-center space-x-3">
+            <Checkbox
+              id="sound-effects"
               checked={settings.sound_effects_enabled ?? true}
-              onChange={(e) => saveSetting('sound_effects_enabled', e.target.checked)}
+              onCheckedChange={(checked) => saveSetting('sound_effects_enabled', checked)}
             />
-            Enable sound effects
-          </label>
-          <p className="setting-description">Play sounds for actions and notifications</p>
-        </div>
+            <div className="flex-1">
+              <Label htmlFor="sound-effects" className="text-base font-medium cursor-pointer">
+                Enable sound effects
+              </Label>
+              <p className="text-sm text-muted-foreground">Play sounds for actions and notifications</p>
+            </div>
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Sound type</label>
-          <select
-            value={settings.sound_type ?? 'choo-choo'}
-            onChange={(e) => saveSetting('sound_type', e.target.value)}
-            className="setting-input"
-          >
-            <option value="choo-choo">Choo Choo</option>
-            <option value="beep">Beep</option>
-            <option value="chime">Chime</option>
-          </select>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="sound-type">Sound type</Label>
+            <Select
+              value={settings.sound_type ?? 'choo-choo'}
+              onValueChange={(value) => saveSetting('sound_type', value)}
+            >
+              <SelectTrigger id="sound-type">
+                <SelectValue placeholder="Select sound type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="choo-choo">Choo Choo</SelectItem>
+                <SelectItem value="beep">Beep</SelectItem>
+                <SelectItem value="chime">Chime</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Diff view mode</label>
-          <select
-            value={settings.diff_view_mode ?? 'unified'}
-            onChange={(e) => saveSetting('diff_view_mode', e.target.value)}
-            className="setting-input"
-          >
-            <option value="unified">Unified</option>
-            <option value="split">Split</option>
-          </select>
-          <p className="setting-description">How to display code diffs</p>
+          <div className="space-y-2">
+            <Label htmlFor="diff-view">Diff view mode</Label>
+            <Select
+              value={settings.diff_view_mode ?? 'unified'}
+              onValueChange={(value) => saveSetting('diff_view_mode', value)}
+            >
+              <SelectTrigger id="diff-view">
+                <SelectValue placeholder="Select diff view" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unified">Unified</SelectItem>
+                <SelectItem value="split">Split</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">How to display code diffs</p>
+          </div>
         </div>
       </div>
     );
@@ -184,52 +226,54 @@ export function Settings() {
 
   function renderAccount() {
     return (
-      <div className="settings-section">
-        <h2>Account Settings</h2>
+      <div className="settings-section space-y-6">
+        <h2 className="text-2xl font-semibold">Account Settings</h2>
 
-        <div className="setting-group">
-          <label className="setting-label">Name</label>
-          <input
-            type="text"
-            value={settings.user_name ?? ''}
-            onChange={(e) => saveSetting('user_name', e.target.value)}
-            className="setting-input"
-            placeholder="Your name"
-          />
-        </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="user-name">Name</Label>
+            <Input
+              id="user-name"
+              type="text"
+              value={settings.user_name ?? ''}
+              onChange={(e) => saveSetting('user_name', e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Email</label>
-          <input
-            type="email"
-            value={settings.user_email ?? ''}
-            onChange={(e) => saveSetting('user_email', e.target.value)}
-            className="setting-input"
-            placeholder="your@email.com"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-email">Email</Label>
+            <Input
+              id="user-email"
+              type="email"
+              value={settings.user_email ?? ''}
+              onChange={(e) => saveSetting('user_email', e.target.value)}
+              placeholder="your@email.com"
+            />
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">GitHub Username</label>
-          <input
-            type="text"
-            value={settings.user_github_username ?? ''}
-            onChange={(e) => saveSetting('user_github_username', e.target.value)}
-            className="setting-input"
-            placeholder="github-username"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="github-username">GitHub Username</Label>
+            <Input
+              id="github-username"
+              type="text"
+              value={settings.user_github_username ?? ''}
+              onChange={(e) => saveSetting('user_github_username', e.target.value)}
+              placeholder="github-username"
+            />
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Anthropic API Key</label>
-          <input
-            type="password"
-            value={settings.anthropic_api_key ?? ''}
-            onChange={(e) => saveSetting('anthropic_api_key', e.target.value)}
-            className="setting-input"
-            placeholder="sk-ant-api03-..."
-          />
-          <p className="setting-description">Your Anthropic API key for Claude models</p>
+          <div className="space-y-2">
+            <Label htmlFor="api-key">Anthropic API Key</Label>
+            <Input
+              id="api-key"
+              type="password"
+              value={settings.anthropic_api_key ?? ''}
+              onChange={(e) => saveSetting('anthropic_api_key', e.target.value)}
+              placeholder="sk-ant-api03-..."
+            />
+            <p className="text-sm text-muted-foreground">Your Anthropic API key for Claude models</p>
+          </div>
         </div>
       </div>
     );
@@ -237,35 +281,41 @@ export function Settings() {
 
   function renderTerminal() {
     return (
-      <div className="settings-section">
-        <h2>Terminal Settings</h2>
+      <div className="settings-section space-y-6">
+        <h2 className="text-2xl font-semibold">Terminal Settings</h2>
 
-        <div className="setting-group">
-          <label className="setting-label">Font size</label>
-          <input
-            type="number"
-            min="8"
-            max="24"
-            value={settings.terminal_font_size ?? 12}
-            onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value))}
-            className="setting-input"
-          />
-          <p className="setting-description">Terminal font size in pixels</p>
-        </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="font-size">Font size</Label>
+            <Input
+              id="font-size"
+              type="number"
+              min="8"
+              max="24"
+              value={settings.terminal_font_size ?? 12}
+              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value))}
+            />
+            <p className="text-sm text-muted-foreground">Terminal font size in pixels</p>
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Default editor</label>
-          <select
-            value={settings.default_open_in ?? 'cursor'}
-            onChange={(e) => saveSetting('default_open_in', e.target.value)}
-            className="setting-input"
-          >
-            <option value="cursor">Cursor</option>
-            <option value="vscode">VS Code</option>
-            <option value="sublime">Sublime Text</option>
-            <option value="vim">Vim</option>
-          </select>
-          <p className="setting-description">Which editor to open files in</p>
+          <div className="space-y-2">
+            <Label htmlFor="default-editor">Default editor</Label>
+            <Select
+              value={settings.default_open_in ?? 'cursor'}
+              onValueChange={(value) => saveSetting('default_open_in', value)}
+            >
+              <SelectTrigger id="default-editor">
+                <SelectValue placeholder="Select editor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cursor">Cursor</SelectItem>
+                <SelectItem value="vscode">VS Code</SelectItem>
+                <SelectItem value="sublime">Sublime Text</SelectItem>
+                <SelectItem value="vim">Vim</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">Which editor to open files in</p>
+          </div>
         </div>
       </div>
     );
@@ -386,33 +436,44 @@ export function Settings() {
 
   function renderMemory() {
     return (
-      <div className="settings-section">
-        <h2>Memory Settings</h2>
-        <p className="section-description">
-          Configure how Claude remembers context across conversations
-        </p>
-
-        <div className="setting-group">
-          <label className="setting-label">
-            <input type="checkbox" defaultChecked />
-            Enable conversation memory
-          </label>
-          <p className="setting-description">Allow Claude to remember previous conversations</p>
+      <div className="settings-section space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold">Memory Settings</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure how Claude remembers context across conversations
+          </p>
         </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Memory retention</label>
-          <select className="setting-input">
-            <option value="session">Current session only</option>
-            <option value="day">24 hours</option>
-            <option value="week">7 days</option>
-            <option value="forever">Forever</option>
-          </select>
-        </div>
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <Checkbox id="conversation-memory" defaultChecked />
+            <div className="flex-1">
+              <Label htmlFor="conversation-memory" className="text-base font-medium cursor-pointer">
+                Enable conversation memory
+              </Label>
+              <p className="text-sm text-muted-foreground">Allow Claude to remember previous conversations</p>
+            </div>
+          </div>
 
-        <div className="setting-group">
-          <button className="btn-secondary">Clear All Memory</button>
-          <p className="setting-description">Remove all stored conversation context</p>
+          <div className="space-y-2">
+            <Label htmlFor="memory-retention">Memory retention</Label>
+            <Select defaultValue="session">
+              <SelectTrigger id="memory-retention">
+                <SelectValue placeholder="Select retention period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="session">Current session only</SelectItem>
+                <SelectItem value="day">24 hours</SelectItem>
+                <SelectItem value="week">7 days</SelectItem>
+                <SelectItem value="forever">Forever</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Button variant="secondary">Clear All Memory</Button>
+            <p className="text-sm text-muted-foreground">Remove all stored conversation context</p>
+          </div>
         </div>
       </div>
     );
@@ -456,88 +517,110 @@ export function Settings() {
 
   function renderProvider() {
     return (
-      <div className="settings-section">
-        <h2>Provider Settings</h2>
-        <p className="section-description">
-          Configure the AI model provider and model selection
-        </p>
-
-        <div className="setting-group">
-          <label className="setting-label">Provider</label>
-          <select
-            value={settings.claude_provider ?? 'anthropic'}
-            onChange={(e) => saveSetting('claude_provider', e.target.value)}
-            className="setting-input"
-          >
-            <option value="anthropic">Anthropic (Official)</option>
-            <option value="custom">Custom Endpoint</option>
-            <option value="bedrock">AWS Bedrock</option>
-            <option value="vertex">Google Vertex AI</option>
-          </select>
+      <div className="settings-section space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold">Provider Settings</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure the AI model provider and model selection
+          </p>
         </div>
 
-        <div className="setting-group">
-          <label className="setting-label">Default Model</label>
-          <select
-            value={settings.claude_model ?? 'sonnet'}
-            onChange={(e) => saveSetting('claude_model', e.target.value)}
-            className="setting-input"
-          >
-            <option value="sonnet">Claude 3.5 Sonnet (Recommended)</option>
-            <option value="opus">Claude 3 Opus</option>
-            <option value="haiku">Claude 3.5 Haiku</option>
-          </select>
-          <p className="setting-description">Default model for new conversations</p>
-        </div>
-
-        {settings.claude_provider === 'custom' && (
-          <div className="setting-group">
-            <label className="setting-label">Custom Endpoint URL</label>
-            <input
-              type="url"
-              className="setting-input"
-              placeholder="https://api.example.com/v1"
-            />
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="provider">Provider</Label>
+            <Select
+              value={settings.claude_provider ?? 'anthropic'}
+              onValueChange={(value) => saveSetting('claude_provider', value)}
+            >
+              <SelectTrigger id="provider">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
+                <SelectItem value="custom">Custom Endpoint</SelectItem>
+                <SelectItem value="bedrock">AWS Bedrock</SelectItem>
+                <SelectItem value="vertex">Google Vertex AI</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
+
+          <div className="space-y-2">
+            <Label htmlFor="model">Default Model</Label>
+            <Select
+              value={settings.claude_model ?? 'sonnet'}
+              onValueChange={(value) => saveSetting('claude_model', value)}
+            >
+              <SelectTrigger id="model">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sonnet">Claude 3.5 Sonnet (Recommended)</SelectItem>
+                <SelectItem value="opus">Claude 3 Opus</SelectItem>
+                <SelectItem value="haiku">Claude 3.5 Haiku</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">Default model for new conversations</p>
+          </div>
+
+          {settings.claude_provider === 'custom' && (
+            <div className="space-y-2">
+              <Label htmlFor="custom-endpoint">Custom Endpoint URL</Label>
+              <Input
+                id="custom-endpoint"
+                type="url"
+                placeholder="https://api.example.com/v1"
+              />
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   function renderExperimental() {
     return (
-      <div className="settings-section">
-        <h2>Experimental Features</h2>
-        <p className="section-description">
-          Try out new features that are still in development
-        </p>
+      <div className="settings-section space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold">Experimental Features</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Try out new features that are still in development
+          </p>
+        </div>
 
-        <div className="setting-group">
-          <label className="setting-label">
-            <input
-              type="checkbox"
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <Checkbox
+              id="right-panel"
               checked={settings.right_panel_visible ?? true}
-              onChange={(e) => saveSetting('right_panel_visible', e.target.checked)}
+              onCheckedChange={(checked) => saveSetting('right_panel_visible', checked)}
             />
-            Show right panel
-          </label>
-          <p className="setting-description">Display additional information panel</p>
-        </div>
+            <div className="flex-1">
+              <Label htmlFor="right-panel" className="text-base font-medium cursor-pointer">
+                Show right panel
+              </Label>
+              <p className="text-sm text-muted-foreground">Display additional information panel</p>
+            </div>
+          </div>
 
-        <div className="setting-group">
-          <label className="setting-label">
-            <input
-              type="checkbox"
+          <div className="flex items-center space-x-3">
+            <Checkbox
+              id="split-view"
               checked={settings.using_split_view ?? false}
-              onChange={(e) => saveSetting('using_split_view', e.target.checked)}
+              onCheckedChange={(checked) => saveSetting('using_split_view', checked)}
             />
-            Use split view
-          </label>
-          <p className="setting-description">Show code and chat side by side</p>
-        </div>
+            <div className="flex-1">
+              <Label htmlFor="split-view" className="text-base font-medium cursor-pointer">
+                Use split view
+              </Label>
+              <p className="text-sm text-muted-foreground">Show code and chat side by side</p>
+            </div>
+          </div>
 
-        <div className="warning-box">
-          ⚠️ Experimental features may be unstable and could change at any time
+          <div className="rounded-lg border border-warning bg-warning/10 p-4">
+            <p className="text-sm text-warning-foreground">
+              ⚠️ Experimental features may be unstable and could change at any time
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -566,29 +649,18 @@ export function Settings() {
   return (
     <div className="settings-container">
       <div className="settings-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => navigate('/')}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '24px',
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              borderRadius: '4px',
-              transition: 'background 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
             title="Back to Dashboard"
           >
-            ←
-          </button>
-          <h1>Settings</h1>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-semibold">Settings</h1>
         </div>
-        {saving && <span className="saving-indicator">Saving...</span>}
+        {saving && <span className="text-sm text-muted-foreground">Saving...</span>}
       </div>
 
       <div className="settings-body">
