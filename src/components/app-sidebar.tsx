@@ -257,7 +257,7 @@ function RepositoryItem({
                   onClick={() => onNewWorkspace(repository.repo_id)}
                   className={cn(
                     "w-full h-8 px-3 -translate-x-px",
-                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50",
+                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
                     "transition-all duration-200"
                   )}
                 >
