@@ -925,3 +925,4 @@
    power of combining visual selection with AI chat with browser automation.
 
   It's not three separate systems - it's ONE integrated debugging experience! 🎯
+ar
