@@ -60,7 +60,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
     const textContent = typeof text === 'string' ? text : (text?.text || '');
     return (
       <div key={Math.random()} className="flex flex-col gap-1.5">
-        <p className="m-0 leading-relaxed text-foreground text-base font-sans">{textContent}</p>
+        <p className="m-0 leading-relaxed text-foreground text-base font-sans break-words overflow-wrap-anywhere">{textContent}</p>
       </div>
     );
   }
@@ -73,7 +73,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
     <div
       key={message.id}
       className={cn(
-        "max-w-[85%] rounded-xl p-5 flex flex-col gap-3 shadow-sm transition-all duration-200",
+        "max-w-[85%] rounded-xl p-5 flex flex-col gap-3 shadow-sm transition-all duration-200 overflow-hidden",
         isUser && "ml-auto bg-primary-50 border border-primary-200",
         isAssistant && "mr-auto bg-success-50 border border-success-200"
       )}
