@@ -1,0 +1,112 @@
+# Escape Key Handler - Code to Add
+
+**File:** `/Users/zvada/Documents/BOX/dev-browser/src/client/injection/element-selector.ts`
+
+## 1. Add handleKeyDown function
+
+**Location:** After `handleClick()` function (around line 440)
+
+```typescript
+/**
+ * Handle keydown for escaping selection mode
+ */
+function handleKeyDown(e: KeyboardEvent): void {
+  if (!selectionMode) return;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Notify parent that user cancelled selector
+    window.parent.postMessage({
+      type: 'exit-selection-mode'
+    }, parentOrigin);
+
+    // Deactivate selection mode locally
+    disableSelectionMode();
+  }
+}
+```
+
+## 2. Register event listener
+
+**Location:** In `initElementSelector()` function, line 472
+
+**Change FROM:**
+```typescript
+  // Add event listeners (capture phase to intercept before app handlers)
+  document.addEventListener('mousedown', handleMouseDown, true);
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseup', handleMouseUp, true);
+  document.addEventListener('click', handleClick, true);
+}
+```
+
+**Change TO:**
+```typescript
+  // Add event listeners (capture phase to intercept before app handlers)
+  document.addEventListener('mousedown', handleMouseDown, true);
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseup', handleMouseUp, true);
+  document.addEventListener('click', handleClick, true);
+  document.addEventListener('keydown', handleKeyDown, true);
+}
+```
+
+## 3. Clean up event listener
+
+**Location:** In `disableSelectionMode()` function (optional but good practice)
+
+**Add after removing other listeners:**
+```typescript
+function disableSelectionMode(): void {
+  selectionMode = false;
+  document.body.style.cursor = '';
+
+  // ... existing cleanup code ...
+
+  // Remove event listeners (add this)
+  document.removeEventListener('mousedown', handleMouseDown, true);
+  document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('mouseup', handleMouseUp, true);
+  document.removeEventListener('click', handleClick, true);
+  document.removeEventListener('keydown', handleKeyDown, true);
+}
+```
+
+## 4. Rebuild bundle
+
+```bash
+cd /Users/zvada/Documents/BOX/dev-browser
+npm run build:injection
+```
+
+---
+
+## Why This is Needed
+
+**Current Behavior:**
+- User clicks Target button → Selector activates
+- User hovers → Sees overlay
+- User presses Escape → **NOTHING HAPPENS**
+- User must click Target button again to deactivate
+
+**After Fix:**
+- User presses Escape → Selector deactivates immediately
+- Sends 'exit-selection-mode' message to parent
+- BrowserPanel receives message and updates state
+- Clean UX matching Cursor's behavior
+
+---
+
+## Testing After Fix
+
+1. Start app
+2. Load test page
+3. Click Target button
+4. Press Escape
+5. Verify:
+   - Visual effects disappear
+   - Cursor returns to normal
+   - Target button stops pulsing
+   - Console logs "Element selector deactivated (Escape pressed)"
