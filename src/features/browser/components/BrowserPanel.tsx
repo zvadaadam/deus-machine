@@ -8,13 +8,13 @@ interface BrowserPanelProps {
   workspaceId: string | null;
 }
 
-export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
+export function BrowserPanel({ }: BrowserPanelProps) {
   const [url, setUrl] = useState("https://example.com");
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [serverRunning, setServerRunning] = useState(false);
   const [serverPort, setServerPort] = useState<number | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   // Start dev-browser server when component mounts
   useEffect(() => {
@@ -37,12 +37,16 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       // Wait a bit for server to start
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Get the port
+      // Get the port and auth token
       const port = await invoke<number>("get_browser_port");
+      const token = await invoke<string>("get_browser_auth_token");
+
       setServerPort(port);
+      setAuthToken(token);
       setServerRunning(true);
 
       console.log("Browser server started on port:", port);
+      console.log("Auth token:", token.substring(0, 16) + "...");
     } catch (error) {
       console.error("Failed to start browser server:", error);
       setServerRunning(false);
@@ -56,25 +60,27 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       await invoke("stop_browser_server");
       setServerRunning(false);
       setServerPort(null);
+      setAuthToken(null);
     } catch (error) {
       console.error("Failed to stop browser server:", error);
     }
   }
 
   async function navigateToUrl() {
-    if (!serverRunning || !serverPort) {
-      console.error("Browser server not running");
+    if (!serverRunning || !serverPort || !authToken) {
+      console.error("Browser server not running or missing auth token");
       return;
     }
 
     try {
       setLoading(true);
 
-      // Call dev-browser navigate tool
+      // Call dev-browser navigate tool with auth token
       const response = await fetch(`http://localhost:${serverPort}/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-MCP-Auth-Token": authToken,
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -90,7 +96,11 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       const data = await response.json();
       console.log("Navigate result:", data);
 
-      setCurrentUrl(url);
+      if (data.error) {
+        console.error("Navigation error:", data.error);
+      } else {
+        setCurrentUrl(url);
+      }
     } catch (error) {
       console.error("Failed to navigate:", error);
     } finally {
