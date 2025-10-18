@@ -37,8 +37,12 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const tabId = `browser-${workspaceId || 'main'}`;
 
   // Helper to add console log
+  const MAX_LOGS = 500;
   const addLog = (level: ConsoleLog['level'], message: string) => {
-    setConsoleLogs(prev => [...prev, { timestamp: new Date(), level, message }]);
+    setConsoleLogs(prev => {
+      const next = [...prev, { timestamp: new Date(), level, message }];
+      return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
+    });
   };
 
   // Auto-scroll console to bottom
@@ -177,7 +181,10 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       // Get injection script from dev-browser
       const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}&parentOrigin=${encodeURIComponent(parentOrigin)}`;
-      const response = await fetch(injectionUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(injectionUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch script: ${response.status}`);
@@ -199,7 +206,8 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
         // Check if automation registered after a delay
         setTimeout(() => {
           try {
-            const automationReady = iframe.contentWindow?.eval('window.__browserAutomation !== undefined');
+            // Avoid eval; directly probe the flag placed by the injected script
+            const automationReady = Boolean((iframe.contentWindow as any)?.__browserAutomation);
             if (automationReady) {
               addLog('info', '✓ Browser automation registered and ready');
             } else {
@@ -230,7 +238,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
   function openInExternalBrowser() {
     if (currentUrl) {
-      window.open(currentUrl, '_blank');
+      window.open(currentUrl, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -272,7 +280,13 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     if (!iframeRef.current || !injected || !currentUrl) return;
 
     // Get target origin for secure postMessage
-    const targetOrigin = new URL(currentUrl).origin;
+    let targetOrigin: string;
+    try {
+      targetOrigin = new URL(currentUrl).origin;
+    } catch {
+      addLog('warn', 'Invalid URL origin; cannot toggle element selector securely');
+      return;
+    }
 
     if (selectorActive) {
       // Disable selector mode
@@ -296,7 +310,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
    * Formats element data and dispatches to chat
    */
   function handleElementSelected(elementData: any) {
-    addLog('info', `✓ Element selected: ${elementData.element.tagName.toLowerCase()}${elementData.element.id ? '#' + elementData.element.id : ''}`);
+    const tn = elementData?.element?.tagName?.toLowerCase?.() ?? 'element';
+    const eid = elementData?.element?.id ? `#${elementData.element.id}` : '';
+    addLog('info', `✓ Element selected: ${tn}${eid}`);
 
     const formatted = formatElementForChat(elementData);
 
@@ -306,6 +322,14 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     }));
 
     setSelectorActive(false);
+    // Best-effort: ensure selector is turned off in iframe as well
+    try {
+      const frame = iframeRef.current?.contentWindow;
+      if (frame && currentUrl) {
+        const to = new URL(currentUrl).origin;
+        frame.postMessage({ type: 'disable-element-selection' }, to);
+      }
+    } catch {}
     addLog('info', '📝 Element data sent to chat');
   }
 
@@ -481,6 +505,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
           className="h-8 w-8"
           onClick={toggleElementSelector}
           disabled={!currentUrl || !injected || isCrossOrigin}
+          aria-pressed={selectorActive}
           title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
         >
           <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
