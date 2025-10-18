@@ -88,7 +88,7 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
         <Button
           variant="outline"
           size="sm"
-          className="gap-2 px-3"
+          className="gap-2 px-3 font-mono"
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
