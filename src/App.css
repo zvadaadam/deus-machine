@@ -219,19 +219,42 @@ body {
    Ensures layout stays within viewport
    ============================================ */
 
-/* Ensure Sidebar components fill viewport height without growing */
-.group[data-sidebar="sidebar"] {
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
+/* Fix SidebarProvider - prevent growing beyond viewport */
+/* Using attribute selector to handle special characters in class name */
+div[class*="sidebar-wrapper"] {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
 }
 
-/* Main content area (SidebarInset) */
-main[data-sidebar="inset"],
-div[data-sidebar="inset"] {
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+/* Also target with proper escape for forward slash */
+.group\/sidebar-wrapper {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* Main content area (SidebarInset) - constrain to parent height */
+main[class*="flex-1"] {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Ensure Panel containers don't grow */
+div[data-panel-group-id] {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+div[data-panel-id] {
+  overflow: hidden !important;
 }
