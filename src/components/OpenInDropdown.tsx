@@ -49,15 +49,13 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
     };
   }, []);
 
-  async function handleOpenInApp(appId: string) {
-    try {
-      await invoke("open_in_app", {
-        appId,
-        workspacePath,
-      });
-    } catch (error) {
+  function handleOpenInApp(appId: string) {
+    invoke("open_in_app", {
+      appId,
+      workspacePath,
+    }).catch((error) => {
       console.error(`Failed to open in ${appId}:`, error);
-    }
+    });
   }
 
   function handleOpen() {
