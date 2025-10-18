@@ -24,6 +24,7 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const closeTimeoutRef = useRef<NodeJS.Timeout>();
+  const isHoveringRef = useRef(false);
 
   useEffect(() => {
     async function loadInstalledApps() {
@@ -41,7 +42,6 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   }, []);
 
   useEffect(() => {
-    // Cleanup timeout on unmount
     return () => {
       if (closeTimeoutRef.current) {
         clearTimeout(closeTimeoutRef.current);
@@ -60,19 +60,22 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
     }
   }
 
-  function handleMouseEnter() {
-    // Clear any pending close timeout
+  function handleOpen() {
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
     }
+    isHoveringRef.current = true;
     setOpen(true);
   }
 
-  function handleMouseLeave() {
-    // Add a small delay before closing to prevent flickering
+  function handleClose() {
+    isHoveringRef.current = false;
+    // Very short delay to handle rapid mouse movements
     closeTimeoutRef.current = setTimeout(() => {
-      setOpen(false);
-    }, 150);
+      if (!isHoveringRef.current) {
+        setOpen(false);
+      }
+    }, 50);
   }
 
   if (loading || installedApps.length === 0) {
@@ -80,32 +83,36 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <div
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
-            <ExternalLink className="h-4 w-4" />
-            Open in
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 px-4"
+          onPointerEnter={handleOpen}
+          onPointerLeave={handleClose}
         >
-          {installedApps.map((app) => (
-            <DropdownMenuItem
-              key={app.id}
-              onClick={() => handleOpenInApp(app.id)}
-            >
-              {app.name}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </div>
+          <ExternalLink className="h-4 w-4" />
+          Open in
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={2}
+        className="min-w-[140px]"
+        onPointerEnter={handleOpen}
+        onPointerLeave={handleClose}
+      >
+        {installedApps.map((app) => (
+          <DropdownMenuItem
+            key={app.id}
+            onClick={() => handleOpenInApp(app.id)}
+            className="cursor-pointer"
+          >
+            {app.name}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 }
