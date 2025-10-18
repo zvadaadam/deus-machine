@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{Manager, State};
 use crate::pty::PtyManager;
 use crate::socket::SocketManager;
 use crate::backend::BackendManager;
@@ -322,4 +322,65 @@ pub fn is_browser_running(
     browser_manager: State<'_, BrowserManager>,
 ) -> Result<bool, String> {
     Ok(browser_manager.is_running())
+}
+
+//============================================================================
+// WEBVIEW BROWSER COMMANDS
+//============================================================================
+
+use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri::window::Window;
+
+/// Create an embedded webview browser
+#[tauri::command]
+pub async fn create_browser_webview(
+    app: tauri::AppHandle,
+    label: String,
+    url: String,
+) -> Result<String, String> {
+    let webview = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(url.parse().map_err(|e| format!("Invalid URL: {}", e))?))
+        .title("Browser")
+        .inner_size(800.0, 600.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Failed to create webview: {}", e))?;
+
+    Ok(label)
+}
+
+/// Navigate webview to URL
+#[tauri::command]
+pub async fn navigate_webview(
+    app: tauri::AppHandle,
+    label: String,
+    url: String,
+) -> Result<(), String> {
+    // Close existing webview and create a new one with the new URL
+    if let Some(window) = app.get_webview_window(&label) {
+        window.destroy()
+            .map_err(|e| format!("Failed to close webview: {}", e))?;
+    }
+
+    // Create new webview with the new URL
+    let _webview = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(url.parse().map_err(|e| format!("Invalid URL: {}", e))?))
+        .title("Browser")
+        .inner_size(800.0, 600.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Failed to create webview: {}", e))?;
+
+    Ok(())
+}
+
+/// Close webview browser
+#[tauri::command]
+pub async fn close_browser_webview(
+    app: tauri::AppHandle,
+    label: String,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(&label) {
+        window.destroy()
+            .map_err(|e| format!("Failed to close webview: {}", e))?;
+    }
+    Ok(())
 }

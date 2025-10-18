@@ -1,23 +1,30 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ArrowLeft, ArrowRight, Loader2, ExternalLink } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
 
 interface BrowserPanelProps {
   workspaceId: string | null;
 }
 
-export function BrowserPanel({ }: BrowserPanelProps) {
+export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [url, setUrl] = useState("https://example.com");
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const navigationHistory = useRef<string[]>([]);
-  const currentIndex = useRef<number>(-1);
+  const [webviewCreated, setWebviewCreated] = useState(false);
+  const webviewLabel = `browser-${workspaceId || 'main'}`;
 
-  function navigateToUrl() {
+  // Clean up webview on unmount
+  useEffect(() => {
+    return () => {
+      if (webviewCreated) {
+        invoke("close_browser_webview", { label: webviewLabel }).catch(console.error);
+      }
+    };
+  }, [webviewCreated, webviewLabel]);
+
+  async function navigateToUrl() {
     if (!url) return;
 
     try {
@@ -29,53 +36,42 @@ export function BrowserPanel({ }: BrowserPanelProps) {
         fullUrl = 'https://' + url;
       }
 
-      // Update history
-      if (currentIndex.current < navigationHistory.current.length - 1) {
-        // Clear forward history
-        navigationHistory.current = navigationHistory.current.slice(0, currentIndex.current + 1);
+      if (!webviewCreated) {
+        // Create webview for the first time
+        await invoke("create_browser_webview", {
+          label: webviewLabel,
+          url: fullUrl,
+        });
+        setWebviewCreated(true);
+      } else {
+        // Navigate existing webview
+        await invoke("navigate_webview", {
+          label: webviewLabel,
+          url: fullUrl,
+        });
       }
-      navigationHistory.current.push(fullUrl);
-      currentIndex.current = navigationHistory.current.length - 1;
 
       setCurrentUrl(fullUrl);
-      updateNavigationButtons();
-
-      // Iframe will load automatically when currentUrl changes
-      setTimeout(() => setLoading(false), 500);
     } catch (error) {
       console.error("Failed to navigate:", error);
+    } finally {
       setLoading(false);
     }
   }
 
-  function goBack() {
-    if (canGoBack && currentIndex.current > 0) {
-      currentIndex.current--;
-      setCurrentUrl(navigationHistory.current[currentIndex.current]);
-      setUrl(navigationHistory.current[currentIndex.current]);
-      updateNavigationButtons();
-    }
-  }
-
-  function goForward() {
-    if (canGoForward && currentIndex.current < navigationHistory.current.length - 1) {
-      currentIndex.current++;
-      setCurrentUrl(navigationHistory.current[currentIndex.current]);
-      setUrl(navigationHistory.current[currentIndex.current]);
-      updateNavigationButtons();
-    }
-  }
-
-  function updateNavigationButtons() {
-    setCanGoBack(currentIndex.current > 0);
-    setCanGoForward(currentIndex.current < navigationHistory.current.length - 1);
-  }
-
-  function reload() {
-    if (currentUrl && iframeRef.current) {
-      setLoading(true);
-      iframeRef.current.src = currentUrl;
-      setTimeout(() => setLoading(false), 500);
+  async function reload() {
+    if (currentUrl && webviewCreated) {
+      try {
+        setLoading(true);
+        await invoke("navigate_webview", {
+          label: webviewLabel,
+          url: currentUrl,
+        });
+      } catch (error) {
+        console.error("Failed to reload:", error);
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
@@ -95,28 +91,6 @@ export function BrowserPanel({ }: BrowserPanelProps) {
     <div className="h-full flex flex-col bg-background">
       {/* Browser Controls */}
       <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={goBack}
-          disabled={!canGoBack || loading}
-          title="Go back"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={goForward}
-          disabled={!canGoForward || loading}
-          title="Go forward"
-        >
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-
         <Button
           variant="ghost"
           size="icon"
@@ -163,33 +137,39 @@ export function BrowserPanel({ }: BrowserPanelProps) {
         </Button>
       </div>
 
-      {/* Browser View */}
+      {/* Browser View - Shows instruction */}
       <div className="flex-1 relative bg-background overflow-hidden">
-        {currentUrl ? (
-          <iframe
-            ref={iframeRef}
-            src={currentUrl}
-            className="w-full h-full border-0"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-            onLoad={() => setLoading(false)}
-            onError={() => setLoading(false)}
-            title="Embedded Browser"
-          />
+        {webviewCreated && currentUrl ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center max-w-md p-8">
+              <Globe className="h-16 w-16 mx-auto mb-4 text-primary" />
+              <h3 className="text-lg font-semibold mb-2">Browser Window Active</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                The browser is open in a separate window. You can resize, move, or minimize it.
+              </p>
+              <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md font-mono break-all">
+                Current URL: {currentUrl}
+              </div>
+              <p className="text-xs text-muted-foreground mt-4">
+                Use the controls above to navigate to different pages.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md p-8">
               <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Enter a URL above and click Go to start browsing
+                Enter a URL above and click Go to open the browser
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Some sites may restrict embedding. Use the external browser button if needed.
+                A native browser window will open that you can control from here
               </p>
             </div>
           </div>
         )}
 
-        {loading && currentUrl && (
+        {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -199,15 +179,13 @@ export function BrowserPanel({ }: BrowserPanelProps) {
       {/* Status Bar */}
       <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
+          <div className={`h-2 w-2 rounded-full ${webviewCreated ? "bg-green-500" : "bg-gray-400"}`} />
           <span className="truncate max-w-[400px]">
-            {currentUrl || "Not connected"}
+            {webviewCreated ? (currentUrl || "Browser ready") : "Browser not started"}
           </span>
         </div>
-        {currentUrl && (
-          <span className="text-muted-foreground/60">
-            {navigationHistory.current.length} {navigationHistory.current.length === 1 ? 'page' : 'pages'}
-          </span>
+        {webviewCreated && (
+          <span className="text-muted-foreground/60">Native WebView</span>
         )}
       </div>
     </div>
