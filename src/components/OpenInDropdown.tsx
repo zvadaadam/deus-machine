@@ -22,6 +22,7 @@ interface OpenInDropdownProps {
 export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     async function loadInstalledApps() {
@@ -54,23 +55,28 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <ExternalLink className="h-4 w-4" />
-          Open in
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {installedApps.map((app) => (
-          <DropdownMenuItem
-            key={app.id}
-            onClick={() => handleOpenInApp(app.id)}
-          >
-            {app.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <div
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <ExternalLink className="h-4 w-4" />
+            Open in
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {installedApps.map((app) => (
+            <DropdownMenuItem
+              key={app.id}
+              onClick={() => handleOpenInApp(app.id)}
+            >
+              {app.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </div>
     </DropdownMenu>
   );
 }
