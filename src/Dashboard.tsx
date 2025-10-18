@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceDetail } from "./WorkspaceDetail";
 import { TerminalPanel } from "./TerminalPanel";
@@ -93,6 +93,9 @@ export function Dashboard() {
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
   const [stopHandler, setStopHandler] = useState<(() => void) | null>(null);
 
+  // Ref to WorkspaceDetail for inserting text from browser element selector
+  const workspaceDetailRef = useRef<{ insertText: (text: string) => void }>(null);
+
   // System Prompt Editor (local state - specific to this feature)
   const [systemPrompt, setSystemPrompt] = useState('');
   const [loadingSystemPrompt, setLoadingSystemPrompt] = useState(false);
@@ -153,6 +156,20 @@ export function Dashboard() {
       showSystemPromptModal,
     },
   });
+
+  // Listen for 'insert-to-chat' events from BrowserPanel (element selector)
+  useEffect(() => {
+    const handleInsertToChat = (event: Event) => {
+      const customEvent = event as CustomEvent<{ text: string }>;
+      if (customEvent.detail?.text && workspaceDetailRef.current) {
+        console.log('[Dashboard] 🎯 Inserting element data to chat');
+        workspaceDetailRef.current.insertText(customEvent.detail.text);
+      }
+    };
+
+    window.addEventListener('insert-to-chat', handleInsertToChat);
+    return () => window.removeEventListener('insert-to-chat', handleInsertToChat);
+  }, []);
 
   /**
    * Archive a workspace (sets state to 'archived')
@@ -385,6 +402,7 @@ export function Dashboard() {
                 <div className="content-section workspace-messages-section" style={{ margin: 0, border: 'none', borderRadius: 0, padding: 0 }}>
                   <div className="section-content" style={{ height: '100%' }}>
                     <WorkspaceDetail
+                      ref={workspaceDetailRef}
                       workspaceId={selectedWorkspace.id}
                       sessionId={selectedWorkspace.active_session_id}
                       onClose={() => {}}
