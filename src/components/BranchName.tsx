@@ -73,12 +73,12 @@ export function BranchName({ branch }: BranchNameProps) {
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
+            <span className="inline-flex items-center h-[30px] px-2 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
               Isolated
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[240px]">
-            <p className="text-xs">This is an isolated Git worktree. Safe to experiment — changes won't affect your main branch.</p>
+            <p className="text-xs">Isolated Git worktree. Experiment safely without affecting your main branch.</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
