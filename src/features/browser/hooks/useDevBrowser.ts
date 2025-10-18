@@ -39,8 +39,21 @@ export function useDevBrowser() {
           browserPath: devBrowserPath,
         });
 
-        // Wait a bit for server to start
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait for server to start with retry
+        const maxAttempts = 10;
+        const delayMs = 500;
+        let attempt = 0;
+        let serverReady = false;
+
+        while (attempt < maxAttempts && !serverReady) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          serverReady = await invoke<boolean>("is_browser_running");
+          attempt++;
+        }
+
+        if (!serverReady) {
+          throw new Error("Server failed to start within 5 seconds");
+        }
 
         // Get port and auth token
         const port = await invoke<number | null>("get_browser_port");
@@ -110,8 +123,8 @@ export function useDevBrowser() {
         const running = await invoke<boolean>("is_browser_running");
 
         if (running) {
-          const port = await invoke<number>("get_browser_port");
-          const authToken = await invoke<string>("get_browser_auth_token");
+          const port = await invoke<number | null>("get_browser_port");
+          const authToken = await invoke<string | null>("get_browser_auth_token");
 
           setStatus({
             running: true,
