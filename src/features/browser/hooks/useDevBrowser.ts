@@ -30,7 +30,9 @@ export function useDevBrowser() {
     try {
       if (isTauriMode()) {
         // Tauri mode: start server via Rust backend
-        const devBrowserPath = "/Users/zvada/Documents/BOX/dev-browser";
+        // Use environment variable if available, otherwise use relative path
+        const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH ||
+          "../../../dev-browser";
 
         await invoke("start_browser_server", {
           browserPath: devBrowserPath,

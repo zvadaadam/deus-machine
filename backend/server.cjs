@@ -51,13 +51,17 @@ console.log('✅ All modules loaded successfully');
 // HEALTH & DISCOVERY ENDPOINTS
 //============================================================================
 
-// Health check endpoint that also returns the server port
-// This allows web browsers to discover the backend port
+// Comprehensive health check endpoint
+// Returns server port for discovery + database/sidecar status
 app.get('/api/health', (req, res) => {
+  const sidecarStatus = getSidecarStatus();
   res.json({
     status: 'ok',
     port: actualServerPort,
     timestamp: new Date().toISOString(),
+    database: db ? 'connected' : 'disconnected',
+    sidecar: sidecarStatus.running ? 'running' : 'stopped',
+    socket: sidecarStatus.connected ? 'connected' : 'disconnected'
   });
 });
 
@@ -761,16 +765,6 @@ app.get('/api/stats', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
-
-app.get('/api/health', (req, res) => {
-  const sidecarStatus = getSidecarStatus();
-  res.json({
-    status: 'ok',
-    database: db ? 'connected' : 'disconnected',
-    sidecar: sidecarStatus.running ? 'running' : 'stopped',
-    socket: sidecarStatus.connected ? 'connected' : 'disconnected'
-  });
 });
 
 app.get('/api/sidecar/status', (req, res) => {
