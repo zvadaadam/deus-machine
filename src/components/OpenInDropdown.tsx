@@ -23,7 +23,7 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const closeTimeoutRef = useRef<NodeJS.Timeout>();
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isHoveringRef = useRef(false);
 
   useEffect(() => {
@@ -95,11 +95,9 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
           <ExternalLink className="h-4 w-4" />
           <span className="text-sm">Open in</span>
           <ChevronRight
-            className="h-4 w-4 text-muted-foreground transition-transform duration-200"
-            style={{
-              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-              transition: 'transform 200ms cubic-bezier(.215, .61, .355, 1)',
-            }}
+            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ease-out ${
+              open ? 'rotate-90' : 'rotate-0'
+            }`}
           />
         </Button>
       </DropdownMenuTrigger>
