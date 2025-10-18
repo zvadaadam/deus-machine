@@ -57,5 +57,17 @@ export { Avatar, AvatarImage, AvatarFallback } from './avatar';
 
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible';
 
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuGroup,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuRadioGroup,
+} from './dropdown-menu';
+
 // Custom components (not shadcn)
 export { EmptyState } from './EmptyState';

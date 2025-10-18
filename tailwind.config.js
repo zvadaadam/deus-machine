@@ -89,6 +89,7 @@ module.exports = {
   		},
   		fontFamily: {
   			sans: [
+  				'Helvetica Neue',
   				'-apple-system',
   				'BlinkMacSystemFont',
   				'Segoe UI',
@@ -98,6 +99,7 @@ module.exports = {
   				'sans-serif'
   			],
   			mono: [
+  				'Ioskeley Mono',
   				'SF Mono',
   				'Monaco',
   				'Cascadia Code',
