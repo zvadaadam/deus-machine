@@ -61,7 +61,7 @@ export function BranchName({ branch }: BranchNameProps) {
               ) : (
                 <GitBranch className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors duration-200" />
               )}
-              <span className="text-base font-medium">{branch}</span>
+              <span className="text-base font-mono font-semibold">{branch}</span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
