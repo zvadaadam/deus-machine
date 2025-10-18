@@ -259,7 +259,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-background">
+    <div className="w-full flex flex-col bg-background h-full overflow-hidden">
       {/* Browser Controls */}
       <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50 flex-shrink-0">
         <Button
@@ -481,7 +481,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="h-40 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
+        <div className="min-h-[100px] max-h-40 border-t border-border bg-muted/10 flex flex-col">
           {/* Console Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
