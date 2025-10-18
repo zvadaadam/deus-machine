@@ -14,7 +14,7 @@ interface BranchNameProps {
 export function BranchName({ branch }: BranchNameProps) {
   const [copied, setCopied] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
-  const closeTimeoutRef = useRef<NodeJS.Timeout>();
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => {
@@ -57,7 +57,7 @@ export function BranchName({ branch }: BranchNameProps) {
               className="flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 -ml-2 transition-colors duration-200"
             >
               {copied ? (
-                <Check className="h-4 w-4 text-green-500 transition-all duration-200" />
+                <Check className="h-4 w-4 text-green-500 transition-colors duration-200" />
               ) : (
                 <GitBranch className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors duration-200" />
               )}
