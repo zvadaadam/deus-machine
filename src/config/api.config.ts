@@ -15,7 +15,17 @@ let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
 
 // Common ports to try during discovery (most recently used ports)
-const DISCOVERY_PORTS = [59270, 59271, 59269, 3333, 3334, 3335, 8080, 8081];
+// Backend uses PORT=0 for dynamic allocation, so we try a range of common ports
+const DISCOVERY_PORTS = [
+  51176, 52820, 53792, // Recent dynamic ports
+  59270, 59271, 59269, // Previous attempts
+  3333, 3334, 3335,    // Default fallback range
+  8080, 8081, 8082,    // Alternative common ports
+  50000, 50001, 50002, 50003, 50004, 50005, // Dynamic port range
+  51000, 51001, 51002, 51003, 51004, 51005, // More dynamic ports
+  52000, 52001, 52002, 52003, 52004, 52005, // More dynamic ports
+  53000, 53001, 53002, 53003, 53004, 53005, // More dynamic ports
+];
 
 /**
  * Try to discover backend port by checking /api/health on common ports
@@ -39,22 +49,37 @@ async function discoverBackendPort(): Promise<number | null> {
     }
   }
 
-  // Try discovery on common ports
-  for (const port of DISCOVERY_PORTS) {
+  // Try discovery on common ports in parallel for speed
+  console.log(`[API] Scanning ${DISCOVERY_PORTS.length} ports for backend...`);
+
+  const portChecks = DISCOVERY_PORTS.map(async (port) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 500);
+
       const response = await fetch(`http://localhost:${port}/api/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(1000)
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+
       if (response.ok) {
-        console.log(`[API] Discovered backend on port: ${port}`);
-        // Store for next time
-        localStorage.setItem('conductor_backend_port', port.toString());
         return port;
       }
     } catch (e) {
-      // Port not available, try next
+      // Port not available
     }
+    return null;
+  });
+
+  const results = await Promise.all(portChecks);
+  const foundPort = results.find(port => port !== null);
+
+  if (foundPort) {
+    console.log(`[API] Discovered backend on port: ${foundPort}`);
+    localStorage.setItem('conductor_backend_port', foundPort.toString());
+    return foundPort;
   }
 
   return null;
