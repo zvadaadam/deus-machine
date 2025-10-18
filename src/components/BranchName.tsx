@@ -73,7 +73,7 @@ export function BranchName({ branch }: BranchNameProps) {
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex items-center px-2 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
+            <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
               Isolated
             </span>
           </TooltipTrigger>
