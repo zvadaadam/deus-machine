@@ -35,10 +35,11 @@ impl BrowserManager {
 
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
-        // Run npm run start:http in the dev-browser directory
+        // Run npm run start:http with PORT=0 for dynamic port allocation
         let mut child = Command::new("npm")
             .arg("run")
             .arg("start:http")
+            .env("PORT", "0")  // Use port 0 for dynamic allocation (avoids conflicts)
             .current_dir(&dev_browser_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -63,23 +64,24 @@ impl BrowserManager {
                     // Print all output for debugging
                     println!("[BROWSER] {}", line);
 
-                    // Parse port from output (e.g., "HTTP Server started on http://localhost:3000")
-                    if line.contains("HTTP Server started on") {
-                        if let Some(port_str) = line.split(":").last() {
-                            if let Ok(port_num) = port_str.trim().parse::<u16>() {
+                    // Parse port from "Server URL: http://localhost:PORT"
+                    if line.contains("Server URL:") && line.contains("localhost:") {
+                        if let Some(url_part) = line.split("localhost:").nth(1) {
+                            let port_str = url_part.trim();
+                            if let Ok(port_num) = port_str.parse::<u16>() {
                                 let mut port = port_clone.lock().unwrap();
                                 *port = Some(port_num);
-                                println!("[BROWSER] Detected port: {}", port_num);
+                                println!("[BROWSER] ✓ Detected port: {}", port_num);
                             }
                         }
                     }
 
-                    // Parse auth token from output (e.g., "Auth Token: abc123...")
-                    if line.contains("Auth Token:") || line.contains("authToken") {
-                        if let Some(token) = line.split(":").nth(1) {
+                    // Parse auth token from "Auth Token: TOKEN"
+                    if line.starts_with("Auth Token:") {
+                        if let Some(token) = line.strip_prefix("Auth Token:") {
                             let mut auth = token_clone.lock().unwrap();
                             *auth = Some(token.trim().to_string());
-                            println!("[BROWSER] Auth token detected");
+                            println!("[BROWSER] ✓ Auth token detected");
                         }
                     }
                 }
