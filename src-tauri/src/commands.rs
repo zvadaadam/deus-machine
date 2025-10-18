@@ -173,43 +173,52 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
 /// Open a workspace directory in a specific app
 #[tauri::command]
 pub async fn open_in_app(app_id: String, workspace_path: String) -> Result<String, String> {
-    let command = match app_id.as_str() {
+    let app_name = match app_id.as_str() {
         // Code Editors
-        "cursor" => format!("open -a Cursor '{}'", workspace_path),
-        "vscode" => format!("open -a 'Visual Studio Code' '{}'", workspace_path),
-        "windsurf" => format!("open -a Windsurf '{}'", workspace_path),
-        "zed" => format!("open -a Zed '{}'", workspace_path),
-        "sublime" => format!("open -a 'Sublime Text' '{}'", workspace_path),
-        "nova" => format!("open -a Nova '{}'", workspace_path),
+        "cursor" => "Cursor",
+        "vscode" => "Visual Studio Code",
+        "windsurf" => "Windsurf",
+        "zed" => "Zed",
+        "sublime" => "Sublime Text",
+        "nova" => "Nova",
 
         // JetBrains IDEs
-        "webstorm" => format!("open -a WebStorm '{}'", workspace_path),
-        "intellij" => format!("open -a 'IntelliJ IDEA' '{}'", workspace_path),
-        "pycharm" => format!("open -a PyCharm '{}'", workspace_path),
-        "phpstorm" => format!("open -a PhpStorm '{}'", workspace_path),
-        "rubymine" => format!("open -a RubyMine '{}'", workspace_path),
-        "goland" => format!("open -a GoLand '{}'", workspace_path),
-        "clion" => format!("open -a CLion '{}'", workspace_path),
-        "fleet" => format!("open -a Fleet '{}'", workspace_path),
-        "rider" => format!("open -a Rider '{}'", workspace_path),
-        "androidstudio" => format!("open -a 'Android Studio' '{}'", workspace_path),
+        "webstorm" => "WebStorm",
+        "intellij" => "IntelliJ IDEA",
+        "pycharm" => "PyCharm",
+        "phpstorm" => "PhpStorm",
+        "rubymine" => "RubyMine",
+        "goland" => "GoLand",
+        "clion" => "CLion",
+        "fleet" => "Fleet",
+        "rider" => "Rider",
+        "androidstudio" => "Android Studio",
 
         // Apple IDEs
-        "xcode" => format!("open -a Xcode '{}'", workspace_path),
+        "xcode" => "Xcode",
 
         // Terminals
-        "terminal" => format!("open -a Terminal '{}'", workspace_path),
-        "iterm" => format!("open -a iTerm '{}'", workspace_path),
-        "warp" => format!("open -a Warp '{}'", workspace_path),
+        "terminal" => "Terminal",
+        "iterm" => "iTerm",
+        "warp" => "Warp",
 
         _ => return Err(format!("Unknown app: {}", app_id)),
     };
 
-    std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&command)
+    // Use proper argument passing to prevent command injection
+    let output = std::process::Command::new("open")
+        .arg("-a")
+        .arg(app_name)
+        .arg(&workspace_path)
         .output()
         .map_err(|e| format!("Failed to open app: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to open app: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
 
     Ok(format!("Opened in {}", app_id))
 }
