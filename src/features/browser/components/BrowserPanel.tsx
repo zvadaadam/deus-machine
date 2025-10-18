@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle } from "lucide-react";
 
 interface BrowserPanelProps {
   workspaceId: string | null;
@@ -12,23 +11,15 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [url, setUrl] = useState("https://example.com");
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [webviewCreated, setWebviewCreated] = useState(false);
-  const webviewLabel = `browser-${workspaceId || 'main'}`;
-
-  // Clean up webview on unmount
-  useEffect(() => {
-    return () => {
-      if (webviewCreated) {
-        invoke("close_browser_webview", { label: webviewLabel }).catch(console.error);
-      }
-    };
-  }, [webviewCreated, webviewLabel]);
+  const [error, setError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   async function navigateToUrl() {
     if (!url) return;
 
     try {
       setLoading(true);
+      setError(null);
 
       // Ensure URL has protocol
       let fullUrl = url;
@@ -36,42 +27,23 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
         fullUrl = 'https://' + url;
       }
 
-      if (!webviewCreated) {
-        // Create webview for the first time
-        await invoke("create_browser_webview", {
-          label: webviewLabel,
-          url: fullUrl,
-        });
-        setWebviewCreated(true);
-      } else {
-        // Navigate existing webview
-        await invoke("navigate_webview", {
-          label: webviewLabel,
-          url: fullUrl,
-        });
+      // Update iframe src
+      if (iframeRef.current) {
+        iframeRef.current.src = fullUrl;
       }
 
       setCurrentUrl(fullUrl);
-    } catch (error) {
-      console.error("Failed to navigate:", error);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("Failed to navigate:", err);
+      setError(err instanceof Error ? err.message : "Navigation failed");
     }
   }
 
-  async function reload() {
-    if (currentUrl && webviewCreated) {
-      try {
-        setLoading(true);
-        await invoke("navigate_webview", {
-          label: webviewLabel,
-          url: currentUrl,
-        });
-      } catch (error) {
-        console.error("Failed to reload:", error);
-      } finally {
-        setLoading(false);
-      }
+  function reload() {
+    if (iframeRef.current && currentUrl) {
+      setLoading(true);
+      setError(null);
+      iframeRef.current.src = currentUrl;
     }
   }
 
@@ -85,6 +57,16 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     if (e.key === "Enter") {
       navigateToUrl();
     }
+  }
+
+  function handleIframeLoad() {
+    setLoading(false);
+    setError(null);
+  }
+
+  function handleIframeError() {
+    setLoading(false);
+    setError("Failed to load page. The site may block embedding or have CORS restrictions.");
   }
 
   return (
@@ -137,38 +119,55 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
         </Button>
       </div>
 
-      {/* Browser View - Shows instruction */}
+      {/* Browser View - Sandboxed iframe like Cursor */}
       <div className="flex-1 relative bg-background overflow-hidden">
-        {webviewCreated && currentUrl ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md p-8">
-              <Globe className="h-16 w-16 mx-auto mb-4 text-primary" />
-              <h3 className="text-lg font-semibold mb-2">Browser Window Active</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                The browser is open in a separate window. You can resize, move, or minimize it.
-              </p>
-              <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md font-mono break-all">
-                Current URL: {currentUrl}
+        {currentUrl ? (
+          <>
+            {/* Sandboxed iframe with Cursor-like permissions */}
+            <iframe
+              ref={iframeRef}
+              src={currentUrl}
+              sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-pointer-lock allow-popups allow-modals"
+              className="w-full h-full border-0"
+              onLoad={handleIframeLoad}
+              onError={handleIframeError}
+              title="Browser"
+            />
+
+            {/* Error overlay */}
+            {error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/95">
+                <div className="text-center max-w-md p-8">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+                  <h3 className="text-lg font-semibold mb-2">Unable to Load Page</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" onClick={reload} variant="outline">
+                      Try Again
+                    </Button>
+                    <Button size="sm" onClick={openInExternalBrowser}>
+                      Open Externally
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-4">
-                Use the controls above to navigate to different pages.
-              </p>
-            </div>
-          </div>
+            )}
+          </>
         ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md p-8">
               <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Enter a URL above and click Go to open the browser
+                Enter a URL above and click Go to browse
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                A native browser window will open that you can control from here
+                Web content will be displayed in a sandboxed iframe
               </p>
             </div>
           </div>
         )}
 
+        {/* Loading overlay */}
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -179,13 +178,13 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       {/* Status Bar */}
       <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${webviewCreated ? "bg-green-500" : "bg-gray-400"}`} />
+          <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
           <span className="truncate max-w-[400px]">
-            {webviewCreated ? (currentUrl || "Browser ready") : "Browser not started"}
+            {currentUrl || "No page loaded"}
           </span>
         </div>
-        {webviewCreated && (
-          <span className="text-muted-foreground/60">Native WebView</span>
+        {currentUrl && (
+          <span className="text-muted-foreground/60">Sandboxed iframe</span>
         )}
       </div>
     </div>
