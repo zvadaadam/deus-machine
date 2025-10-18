@@ -60,7 +60,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
     const textContent = typeof text === 'string' ? text : (text?.text || '');
     return (
       <div key={Math.random()} className="flex flex-col gap-1.5">
-        <p className="m-0 leading-relaxed text-foreground text-base font-sans break-words overflow-wrap-anywhere">{textContent}</p>
+        <p className="m-0 leading-relaxed text-foreground text-base font-sans break-words">{textContent}</p>
       </div>
     );
   }

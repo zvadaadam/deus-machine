@@ -33,16 +33,6 @@ impl BrowserManager {
             return Ok(());
         }
 
-        // Clean up any zombie processes on the default port (3000 or whatever PORT env is set to)
-        // This prevents "address already in use" errors from previous failed starts
-        #[cfg(target_os = "macos")]
-        {
-            let _ = std::process::Command::new("sh")
-                .arg("-c")
-                .arg("lsof -ti:3000 | xargs kill -9 2>/dev/null || true")
-                .output();
-        }
-
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
         // Run npm run start:http with PORT=0 for dynamic port allocation
