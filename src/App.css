@@ -220,18 +220,8 @@ body {
    ============================================ */
 
 /* Fix SidebarProvider - prevent growing beyond viewport */
-/* Using attribute selector to handle special characters in class name */
-div[class*="sidebar-wrapper"] {
-  min-height: 100vh !important;
-  min-height: 100dvh !important;
-  max-height: 100vh !important;
-  max-height: 100dvh !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  overflow: hidden !important;
-}
-
-/* Also target with proper escape for forward slash */
+/* Consolidated selectors: attribute + escaped class name */
+div[class*="sidebar-wrapper"],
 .group\/sidebar-wrapper {
   min-height: 100vh !important;
   min-height: 100dvh !important;

@@ -269,21 +269,24 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
    * Sends postMessage to iframe to activate/deactivate visual selection
    */
   function toggleElementSelector() {
-    if (!iframeRef.current || !injected) return;
+    if (!iframeRef.current || !injected || !currentUrl) return;
+
+    // Get target origin for secure postMessage
+    const targetOrigin = new URL(currentUrl).origin;
 
     if (selectorActive) {
       // Disable selector mode
       addLog('info', '🎯 Deactivating element selector');
       iframeRef.current.contentWindow?.postMessage({
         type: 'disable-element-selection'
-      }, '*');
+      }, targetOrigin);
       setSelectorActive(false);
     } else {
       // Enable selector mode
       addLog('info', '🎯 Activating element selector - Click any element to inspect');
       iframeRef.current.contentWindow?.postMessage({
         type: 'enable-element-selection'
-      }, '*');
+      }, targetOrigin);
       setSelectorActive(true);
     }
   }
@@ -308,40 +311,68 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
   /**
    * Format element data as markdown for chat insertion
+   * Defensive guards protect against malformed postMessage data
    */
   function formatElementForChat(elementData: any): string {
-    const el = elementData.element;
-    const tagName = el.tagName.toLowerCase();
-    const idText = el.id ? '#' + el.id : '';
-    const classText = el.className ? '.' + el.className.split(' ').filter(Boolean).join('.') : '';
+    // Defensive guards for untrusted postMessage data
+    const el = elementData?.element || {};
+    const tagName = (el.tagName || 'element').toLowerCase?.() || 'element';
+    const idText = el.id ? `#${el.id}` : '';
+    const classText = typeof el.className === 'string' && el.className
+      ? '.' + el.className.split(' ').filter(Boolean).join('.')
+      : '';
     const elementSelector = tagName + idText + classText;
 
     // Build React component section if available
-    const reactSection = elementData.reactComponent ? `
-### ⚛️ React Component
-- **Component:** \`${elementData.reactComponent.name}\`${elementData.reactComponent.fileName ? `
-- **File:** \`${elementData.reactComponent.fileName}\`${elementData.reactComponent.lineNumber ? `:${elementData.reactComponent.lineNumber}` : ''}` : ''}
-` : '';
+    const rc = elementData?.reactComponent;
+    let reactSection = '';
+    if (rc && (rc.name || rc.fileName)) {
+      const lines = ['### ⚛️ React Component'];
+      if (rc.name) lines.push(`- **Component:** \`${rc.name}\``);
+      if (rc.fileName) {
+        const fileInfo = rc.lineNumber != null ? `${rc.fileName}:${rc.lineNumber}` : rc.fileName;
+        lines.push(`- **File:** \`${fileInfo}\``);
+      }
+      reactSection = '\n' + lines.join('\n') + '\n';
+    }
+
+    // Safe rect access
+    const rect = el.rect || { left: 0, top: 0, width: 0, height: 0 };
+    const position = `(${Math.round(rect.left)}, ${Math.round(rect.top)})`;
+    const size = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
+
+    // Safe text access
+    const textContent = typeof el.innerText === 'string' && el.innerText
+      ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"`
+      : '';
+
+    // Safe attributes
+    const attributes = Array.isArray(el.attributes) && el.attributes.length > 0
+      ? el.attributes.map((a: any) => `- **${a?.name ?? 'unknown'}**: \`"${a?.value ?? ''}"\``).join('\n')
+      : '_(No attributes)_';
+
+    // Safe computed styles
+    const styles = el.computedStyle || {};
 
     return `
 ## 🎯 Selected Element
 
 **Element:** \`${elementSelector}\`
-**Path:** ${el.path}
-**Position:** (${Math.round(el.rect.left)}, ${Math.round(el.rect.top)})
-**Size:** ${Math.round(el.rect.width)}×${Math.round(el.rect.height)}
-${el.innerText ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"` : ''}
+**Path:** ${el.path ?? '_(unknown)_'}
+**Position:** ${position}
+**Size:** ${size}
+${textContent}
 ${reactSection}
 ### Attributes
-${el.attributes && el.attributes.length > 0 ? el.attributes.map((a: any) => `- **${a.name}**: \`"${a.value}"\``).join('\n') : '_(No attributes)_'}
+${attributes}
 
 ### Computed Styles
-- **color**: ${el.computedStyle.color}
-- **backgroundColor**: ${el.computedStyle.backgroundColor}
-- **fontSize**: ${el.computedStyle.fontSize}
-- **fontWeight**: ${el.computedStyle.fontWeight}
-- **display**: ${el.computedStyle.display}
-- **position**: ${el.computedStyle.position}
+- **color**: ${styles.color ?? '_'}
+- **backgroundColor**: ${styles.backgroundColor ?? '_'}
+- **fontSize**: ${styles.fontSize ?? '_'}
+- **fontWeight**: ${styles.fontWeight ?? '_'}
+- **display**: ${styles.display ?? '_'}
+- **position**: ${styles.position ?? '_'}
 
 ---
 _You can ask me to modify this element, debug it, or help with related styling._
@@ -351,11 +382,23 @@ _You can ask me to modify this element, debug it, or help with related styling._
   // Listen for postMessage from iframe (element selection results)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Security: Validate message origin
-      // Allow same-origin and iframe messages
-      if (event.source !== iframeRef.current?.contentWindow) {
-        return;
+      // Security: Validate message source, origin, and state
+      const frame = iframeRef.current?.contentWindow;
+      if (event.source !== frame) return;
+
+      // Validate origin matches iframe URL
+      try {
+        const expectedOrigin = currentUrl ? new URL(currentUrl).origin : null;
+        if (!expectedOrigin || event.origin !== expectedOrigin) return;
+      } catch {
+        return; // Invalid URL
       }
+
+      // Only accept messages when selector is active and automation is injected
+      if (!selectorActive || !injected) return;
+
+      // Validate message data structure
+      if (!event.data || typeof event.data !== 'object') return;
 
       if (event.data.type === 'element-selected') {
         handleElementSelected(event.data);
@@ -367,7 +410,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [injected, iframeRef]);
+  }, [injected, iframeRef, selectorActive, currentUrl]);
 
   // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
 
