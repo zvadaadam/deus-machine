@@ -259,9 +259,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full w-full flex flex-col bg-background">
       {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50">
+      <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -442,7 +442,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       </div>
 
       {/* Status Bar */}
-      <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
+      <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
