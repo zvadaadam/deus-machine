@@ -46,27 +46,33 @@ export function BranchName({ branch }: BranchNameProps) {
   }
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
-        <TooltipTrigger asChild>
-          <button
-            onClick={handleCopy}
-            onPointerEnter={() => !copied && setTooltipOpen(true)}
-            onPointerLeave={() => !copied && setTooltipOpen(false)}
-            className="flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 -ml-2 transition-colors duration-200"
-          >
-            {copied ? (
-              <Check className="h-4 w-4 text-green-500 transition-all duration-200" />
-            ) : (
-              <GitBranch className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors duration-200" />
-            )}
-            <span className="text-base font-medium">{branch}</span>
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          <p className="text-xs">{copied ? "Copied!" : "Click to copy"}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="flex items-center gap-2">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleCopy}
+              onPointerEnter={() => !copied && setTooltipOpen(true)}
+              onPointerLeave={() => !copied && setTooltipOpen(false)}
+              className="flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 -ml-2 transition-colors duration-200"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-green-500 transition-all duration-200" />
+              ) : (
+                <GitBranch className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors duration-200" />
+              )}
+              <span className="text-base font-medium">{branch}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">{copied ? "Copied!" : "Click to copy"}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <span className="px-2 py-0.5 text-xs font-medium text-muted-foreground bg-muted rounded-md">
+        Isolated
+      </span>
+    </div>
   );
 }
