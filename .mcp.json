@@ -10,6 +10,16 @@
       "shadcn": {
           "command": "npx",
           "args": ["shadcn@latest", "mcp"]
+      },
+      "exa": {
+      "command": "npx",
+      "args": [
+          "-y",
+          "exa-mcp-server"
+      ],
+      "env": {
+          "EXA_API_KEY": "64d127d2-c680-47d8-bf81-54b7052dd6aa"
+      }
       }
   }
 }
