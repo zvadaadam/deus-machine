@@ -213,3 +213,25 @@ body {
   flex-shrink: 0;
   border-top: 1px solid hsl(var(--border));
 }
+
+/* ============================================
+   VIEWPORT HEIGHT CONSTRAINTS
+   Ensures layout stays within viewport
+   ============================================ */
+
+/* Ensure Sidebar components fill viewport height without growing */
+.group[data-sidebar="sidebar"] {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Main content area (SidebarInset) */
+main[data-sidebar="inset"],
+div[data-sidebar="inset"] {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
