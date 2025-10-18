@@ -441,7 +441,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
   return (
     <div className="w-full flex flex-col h-full overflow-hidden">
       {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50 flex-shrink-0">
+      <div className="flex items-center gap-2 p-2 border-b border-border/40 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
