@@ -73,47 +73,27 @@ export function AppSidebar({
   const isExpanded = state === "expanded";
 
   return (
-    <Sidebar variant="floating" collapsible="icon">
-      {/* Header with Profile and Collapse Button */}
+    <Sidebar variant="inset" collapsible="icon" className="vibrancy-sidebar">
+      {/* Header with Profile (no collapse button) */}
       <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between w-full">
-          {isExpanded ? (
-            <>
-              <div
-                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer hover:opacity-70 transition-opacity"
-                onClick={() => navigate("/settings")}
-              >
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="text-xs">
-                    {profile.username.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{profile.username}</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex-shrink-0"
-                title="Collapse sidebar"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              className="h-8 w-8 mx-auto"
-              title="Expand sidebar"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        {isExpanded ? (
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Avatar className="h-8 w-8 flex-shrink-0">
+              <AvatarFallback className="text-xs">
+                {profile.username.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <p className="text-sm font-medium truncate">{profile.username}</p>
+          </div>
+        ) : (
+          <div className="mx-auto">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-xs">
+                {profile.username.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        )}
       </SidebarHeader>
 
       {/* Repositories List */}

@@ -34,7 +34,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="flex-shrink-0 m-0 p-4 border-t border-border bg-background z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] flex flex-col gap-3">
+    <div className="flex-shrink-0 m-0 p-4 border-t border-border z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] flex flex-col gap-3">
       {!embedded && (
         <div className="flex gap-2 justify-end">
           <Button

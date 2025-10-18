@@ -20,6 +20,7 @@
     }
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -29,8 +30,13 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "transparent": false,
-        "backgroundColor": "#ffffff"
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "windowEffects": {
+          "state": "active",
+          "effects": ["underWindowBackground"]
+        }
       }
     ],
     "security": {

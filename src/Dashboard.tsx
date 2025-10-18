@@ -22,6 +22,7 @@ import {
   Skeleton,
   SidebarProvider,
   SidebarInset,
+  SidebarTrigger,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -333,7 +334,7 @@ export function Dashboard() {
 
   return (
     <SidebarProvider>
-      {/* Floating Sidebar */}
+      {/* Inset Sidebar with vibrancy */}
       {loading ? (
         <div className="p-4 space-y-3">
           <Skeleton className="h-6 w-full" />
@@ -371,23 +372,28 @@ export function Dashboard() {
         />
       )}
 
-      {/* Main Content with SidebarInset */}
+      {/* Main Content with SidebarInset and inset padding */}
       <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
-      <PanelGroup
-        direction="horizontal"
-        autoSaveId="conductor-root-layout"
-        className="app-container"
-      >
+        <div className="flex h-full flex-col gap-4 pt-4 pr-4 pb-4">
+          <PanelGroup
+            direction="horizontal"
+            autoSaveId="conductor-root-layout"
+            className="flex-1 rounded-xl vibrancy-bg border border-border/40 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.12)]"
+          >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="panel-content main-content">
         {selectedWorkspace ? (
           <>
-            {/* Workspace Header - Simplified */}
+            {/* Workspace Header - with SidebarTrigger */}
             <div className="border-b border-border px-4 py-3">
               <div className="flex items-center justify-between">
-                {/* Left: Branch name with inline badge */}
-                <BranchName branch={selectedWorkspace.branch} />
+                {/* Left: SidebarTrigger, separator, and Branch name */}
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="-ml-1" />
+                  <Separator orientation="vertical" className="h-4" />
+                  <BranchName branch={selectedWorkspace.branch} />
+                </div>
 
                 {/* Right: Open in dropdown */}
                 <OpenInDropdown
@@ -617,7 +623,8 @@ export function Dashboard() {
           </TabsContent>
         </Tabs>
       </Panel>
-    </PanelGroup>
+          </PanelGroup>
+        </div>
       </SidebarInset>
 
       {/* Modals */}
