@@ -172,8 +172,11 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     try {
       addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
 
+      // Get parent origin for postMessage security
+      const parentOrigin = window.location.origin; // e.g., http://localhost:1420
+
       // Get injection script from dev-browser
-      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}`;
+      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}&parentOrigin=${encodeURIComponent(parentOrigin)}`;
       const response = await fetch(injectionUrl);
 
       if (!response.ok) {
