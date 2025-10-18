@@ -455,7 +455,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
         <Button
           size="sm"
-          onClick={navigateToUrl}
+          onClick={() => navigateToUrl()}
           disabled={loading || !url}
           className="h-8"
         >
