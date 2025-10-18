@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
   workspaceId: string | null;
+}
+
+interface ConsoleLog {
+  timestamp: Date;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;
 }
 
 export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
@@ -19,18 +25,46 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
+  // Console panel
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
+  const consoleEndRef = useRef<HTMLDivElement>(null);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { status: devBrowserStatus, startServer } = useDevBrowser();
   const tabId = `browser-${workspaceId || 'main'}`;
 
+  // Helper to add console log
+  const addLog = (level: ConsoleLog['level'], message: string) => {
+    setConsoleLogs(prev => [...prev, { timestamp: new Date(), level, message }]);
+  };
+
+  // Auto-scroll console to bottom
+  useEffect(() => {
+    if (showConsole && consoleEndRef.current) {
+      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [consoleLogs, showConsole]);
+
   // Auto-start dev-browser server on mount
   useEffect(() => {
     if (!devBrowserStatus.running && !devBrowserStatus.error) {
+      addLog('info', 'Starting dev-browser MCP server...');
       startServer().catch(err => {
         console.error("Failed to auto-start dev-browser:", err);
+        addLog('error', `Failed to start MCP server: ${err.message}`);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
+
+  // Log when MCP server starts
+  useEffect(() => {
+    if (devBrowserStatus.running && devBrowserStatus.port) {
+      addLog('info', `MCP server running on port ${devBrowserStatus.port}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devBrowserStatus.running]);
 
   async function navigateToUrl(urlToNavigate?: string) {
     const targetUrl = urlToNavigate || url;
@@ -43,9 +77,11 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       // Ensure URL has protocol
       let fullUrl = targetUrl;
-      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('file://')) {
         fullUrl = 'https://' + targetUrl;
       }
+
+      addLog('info', `Navigating to: ${fullUrl}`);
 
       // Update iframe src
       if (iframeRef.current) {
@@ -66,7 +102,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       }
     } catch (err) {
       console.error("Failed to navigate:", err);
-      setError(err instanceof Error ? err.message : "Navigation failed");
+      const errorMsg = err instanceof Error ? err.message : "Navigation failed";
+      setError(errorMsg);
+      addLog('error', `Navigation failed: ${errorMsg}`);
     }
   }
 
@@ -102,15 +140,21 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
   async function injectAutomation() {
     if (!devBrowserStatus.running || !devBrowserStatus.port || !iframeRef.current) {
-      setError("Dev-browser server not running");
+      const errorMsg = "Dev-browser server not running";
+      setError(errorMsg);
+      addLog('error', errorMsg);
       return;
     }
 
     try {
+      addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
+
       // Get injection script from dev-browser
       const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}`;
       const response = await fetch(injectionUrl);
       const scriptContent = await response.text();
+
+      addLog('debug', `Script fetched (${scriptContent.length} chars), injecting into iframe...`);
 
       // Inject into iframe
       const iframe = iframeRef.current;
@@ -123,12 +167,28 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           script.textContent = scriptContent;
           iframe.contentDocument?.body.appendChild(script);
           setInjected(true);
-          console.log('✓ Automation script injected successfully');
+          addLog('info', '✓ Automation script injected successfully');
+
+          // Check if automation registered after a delay
+          setTimeout(() => {
+            try {
+              const automationReady = iframe.contentWindow?.eval('window.__browserAutomation !== undefined');
+              if (automationReady) {
+                addLog('info', '✓ Browser automation registered and ready');
+              } else {
+                addLog('warn', 'Automation script injected but not yet registered');
+              }
+            } catch (e) {
+              addLog('warn', 'Cannot verify automation status (cross-origin restriction)');
+            }
+          }, 1000);
         }
       }
     } catch (err) {
       console.error("Failed to inject automation:", err);
-      setError(err instanceof Error ? err.message : "Injection failed");
+      const errorMsg = err instanceof Error ? err.message : "Injection failed";
+      setError(errorMsg);
+      addLog('error', `Injection failed: ${errorMsg}`);
     }
   }
 
@@ -156,9 +216,11 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   function handleIframeLoad() {
     setLoading(false);
     setError(null);
+    addLog('info', `Page loaded: ${currentUrl}`);
 
     // Auto-inject automation script after page loads
     if (devBrowserStatus.running && currentUrl && !injected) {
+      addLog('info', 'Waiting 500ms before injecting automation...');
       // Delay injection to allow page to fully initialize
       setTimeout(() => {
         injectAutomation();
@@ -168,7 +230,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
   function handleIframeError() {
     setLoading(false);
-    setError("Failed to load page. The site may block embedding or have CORS restrictions.");
+    const errorMsg = "Failed to load page. The site may block embedding or have CORS restrictions.";
+    setError(errorMsg);
+    addLog('error', errorMsg);
   }
 
   return (
@@ -241,6 +305,16 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           title="Open in external browser"
         >
           <ExternalLink className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => setShowConsole(!showConsole)}
+          title={showConsole ? "Hide console" : "Show console"}
+        >
+          <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
         </Button>
 
         <Button
@@ -339,6 +413,58 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           )}
         </div>
       </div>
+
+      {/* Console Panel */}
+      {showConsole && (
+        <div className="h-48 border-t border-border bg-muted/10 flex flex-col">
+          {/* Console Header */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Console</span>
+              <span className="text-xs text-muted-foreground/60">({consoleLogs.length})</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setConsoleLogs([])}
+                title="Clear console"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Console Content */}
+          <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
+            {consoleLogs.length === 0 ? (
+              <div className="text-muted-foreground/50 italic">Console is empty</div>
+            ) : (
+              <div className="space-y-0.5">
+                {consoleLogs.map((log, i) => (
+                  <div key={i} className={`flex gap-2 ${
+                    log.level === 'error' ? 'text-red-500' :
+                    log.level === 'warn' ? 'text-yellow-500' :
+                    log.level === 'debug' ? 'text-blue-400' :
+                    'text-foreground'
+                  }`}>
+                    <span className="text-muted-foreground/60 flex-shrink-0">
+                      {log.timestamp.toLocaleTimeString('en-US', { hour12: false })}
+                    </span>
+                    <span className="flex-shrink-0 font-semibold w-14">
+                      [{log.level.toUpperCase()}]
+                    </span>
+                    <span className="flex-1">{log.message}</span>
+                  </div>
+                ))}
+                <div ref={consoleEndRef} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
