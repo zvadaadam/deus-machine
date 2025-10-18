@@ -9,6 +9,7 @@ import {
   DiffModal,
   SystemPromptModal,
 } from "./features/dashboard/components";
+import { BrowserPanel } from "./features/browser/components";
 import {
   useDashboardData,
   useFileChanges,
@@ -21,11 +22,15 @@ import {
   Skeleton,
   SidebarProvider,
   SidebarInset,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
 } from "./components/ui";
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
@@ -350,15 +355,14 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset */}
-      <SidebarInset>
+      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
       <PanelGroup
         direction="horizontal"
         autoSaveId="conductor-root-layout"
         className="app-container"
-        style={{ height: "100%", width: "100%" }}
       >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30}>
+      <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="panel-content main-content">
         {selectedWorkspace ? (
           <>
@@ -443,93 +447,157 @@ export function Dashboard() {
 
       <PanelResizeHandle className="resize-handle" />
 
-      {/* RIGHT PANEL - File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40}>
-        <div className="panel-content right-panel-split">
-          {/* Dev Servers Section */}
-          {selectedWorkspace && devServers.length > 0 && (
-            <div className="right-panel-files max-h-[150px] min-h-[100px]">
-              <div className="right-panel-header">
-                <h3 className="right-panel-title">Dev Servers</h3>
-              </div>
-              <div className="right-panel-content">
-                {devServers.map((server, index) => (
-                  <a
-                    key={index}
-                    href={server.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="file-change-item clickable no-underline"
-                    title={`Open ${server.name} in browser`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">
-                        {server.type === 'vite' ? '⚡' :
-                         server.type === 'webpack' ? '📦' :
-                         server.type === 'angular' ? '🅰️' :
-                         server.type === 'node' ? '🟢' : '🌐'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="file-name truncate">{server.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">{server.url}</div>
-                      </div>
-                    </div>
-                    <div className="text-success text-xl flex-shrink-0">●</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* File Changes Section */}
-          <div className="right-panel-files">
-            <div className="right-panel-header">
-              <h3 className="right-panel-title">File Changes</h3>
-            </div>
-            <div className="right-panel-content">
-              {selectedWorkspace && fileChanges.length > 0 ? (
-                fileChanges.map((file, index) => (
-                  <div
-                    key={index}
-                    className="file-change-item clickable"
-                    onClick={() => handleFileClick(file.file)}
-                    title="Click to view diff"
-                  >
-                    <div className="file-name">{file.file}</div>
-                    <div className="file-stats">
-                      {file.additions > 0 && (
-                        <span className="stat-additions">+{file.additions}</span>
-                      )}
-                      {file.deletions > 0 && (
-                        <span className="stat-deletions">-{file.deletions}</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : selectedWorkspace ? (
-                <EmptyState
-                  icon="✨"
-                  description="No file changes detected"
-                />
-              ) : (
-                <EmptyState
-                  icon="📄"
-                  description="Select a workspace to view file changes"
-                />
-              )}
-            </div>
+      {/* RIGHT PANEL - Browser, File Changes & Terminal */}
+      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
+        <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
+          <div className="border-b border-border">
+            <TabsList className="h-10 w-full justify-start rounded-none bg-transparent p-0">
+              <TabsTrigger
+                value="browser"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+              >
+                <Globe className="h-4 w-4 mr-2" />
+                Browser
+              </TabsTrigger>
+              <TabsTrigger
+                value="changes"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Changes
+                {fileChanges.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+                    {fileChanges.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="terminal"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+              >
+                <TerminalIcon className="h-4 w-4 mr-2" />
+                Terminal
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          {/* Terminal Section */}
-          {selectedWorkspace && (
-            <div className="right-panel-terminal">
+          {/* Browser Tab */}
+          <TabsContent value="browser" className="flex-1 m-0 overflow-hidden">
+            {selectedWorkspace ? (
+              <BrowserPanel workspaceId={selectedWorkspace.id} />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <EmptyState
+                  icon="🌐"
+                  description="Select a workspace to use the browser"
+                />
+              </div>
+            )}
+          </TabsContent>
+
+          {/* File Changes Tab */}
+          <TabsContent value="changes" className="flex-1 m-0 overflow-hidden">
+            <div className="h-full flex flex-col">
+              {/* Dev Servers Section */}
+              {selectedWorkspace && devServers.length > 0 && (
+                <div className="border-b border-border">
+                  <div className="px-4 py-2 bg-muted/30">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dev Servers</h3>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    {devServers.map((server, index) => (
+                      <a
+                        key={index}
+                        href={server.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors no-underline group"
+                        title={`Open ${server.name} in browser`}
+                      >
+                        <span className="text-base">
+                          {server.type === 'vite' ? '⚡' :
+                           server.type === 'webpack' ? '📦' :
+                           server.type === 'angular' ? '🅰️' :
+                           server.type === 'node' ? '🟢' : '🌐'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{server.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{server.url}</div>
+                        </div>
+                        <div className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* File Changes */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-4 py-2 bg-muted/30 sticky top-0 z-10 border-b border-border">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">File Changes</h3>
+                </div>
+                <div className="p-2">
+                  {selectedWorkspace && fileChanges.length > 0 ? (
+                    <div className="space-y-1">
+                      {fileChanges.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors group"
+                          onClick={() => handleFileClick(file.file)}
+                          title="Click to view diff"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{file.file.split('/').pop()}</div>
+                            <div className="text-xs text-muted-foreground truncate font-mono">{file.file}</div>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs flex-shrink-0 ml-2">
+                            {file.additions > 0 && (
+                              <span className="text-green-600 font-medium">+{file.additions}</span>
+                            )}
+                            {file.deletions > 0 && (
+                              <span className="text-red-600 font-medium">-{file.deletions}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : selectedWorkspace ? (
+                    <div className="p-8">
+                      <EmptyState
+                        icon="✨"
+                        description="No file changes detected"
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-8">
+                      <EmptyState
+                        icon="📄"
+                        description="Select a workspace to view file changes"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Terminal Tab */}
+          <TabsContent value="terminal" className="flex-1 m-0 overflow-hidden">
+            {selectedWorkspace ? (
               <TerminalPanel
                 workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
                 workspaceName={selectedWorkspace.directory_name}
               />
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <EmptyState
+                  icon="💻"
+                  description="Select a workspace to use the terminal"
+                />
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </Panel>
     </PanelGroup>
       </SidebarInset>

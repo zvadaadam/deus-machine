@@ -30,6 +30,9 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 app.use(cors());
 app.use(express.json());
 
+// Global variable to store actual port
+let actualServerPort = null;
+
 // Initialize database
 const db = initDatabase();
 
@@ -43,6 +46,29 @@ db.exec(`
 `);
 
 console.log('✅ All modules loaded successfully');
+
+//============================================================================
+// HEALTH & DISCOVERY ENDPOINTS
+//============================================================================
+
+// Comprehensive health check endpoint
+// Returns server port for discovery + database/sidecar status
+app.get('/api/health', (req, res) => {
+  const sidecarStatus = getSidecarStatus();
+  res.json({
+    status: 'ok',
+    port: actualServerPort,
+    timestamp: new Date().toISOString(),
+    database: db ? 'connected' : 'disconnected',
+    sidecar: sidecarStatus.running ? 'running' : 'stopped',
+    socket: sidecarStatus.connected ? 'connected' : 'disconnected'
+  });
+});
+
+// Simple port endpoint for easy discovery
+app.get('/api/port', (req, res) => {
+  res.json({ port: actualServerPort });
+});
 
 //============================================================================
 // CONFIGURATION ENDPOINTS
@@ -741,16 +767,6 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
-app.get('/api/health', (req, res) => {
-  const sidecarStatus = getSidecarStatus();
-  res.json({
-    status: 'ok',
-    database: db ? 'connected' : 'disconnected',
-    sidecar: sidecarStatus.running ? 'running' : 'stopped',
-    socket: sidecarStatus.connected ? 'connected' : 'disconnected'
-  });
-});
-
 app.get('/api/sidecar/status', (req, res) => {
   res.json(getSidecarStatus());
 });
@@ -772,6 +788,7 @@ app.post('/api/sidecar/command', (req, res) => {
 
 const server = app.listen(PORT, () => {
   const actualPort = server.address().port;
+  actualServerPort = actualPort; // Store port globally for health endpoint
 
   // Output port in machine-readable format for Rust to capture
   console.log(`[BACKEND_PORT]${actualPort}`);
