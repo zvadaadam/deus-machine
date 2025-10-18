@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap } from "lucide-react";
+import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
   workspaceId: string | null;
@@ -12,7 +13,19 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [injected, setInjected] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { status: devBrowserStatus, startServer } = useDevBrowser();
+  const tabId = `browser-${workspaceId || 'main'}`;
+
+  // Auto-start dev-browser server on mount
+  useEffect(() => {
+    if (!devBrowserStatus.running && !devBrowserStatus.error) {
+      startServer().catch(err => {
+        console.error("Failed to auto-start dev-browser:", err);
+      });
+    }
+  }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
 
   async function navigateToUrl() {
     if (!url) return;
@@ -20,6 +33,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     try {
       setLoading(true);
       setError(null);
+      setInjected(false);
 
       // Ensure URL has protocol
       let fullUrl = url;
@@ -39,10 +53,43 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     }
   }
 
+  async function injectAutomation() {
+    if (!devBrowserStatus.running || !devBrowserStatus.port || !iframeRef.current) {
+      setError("Dev-browser server not running");
+      return;
+    }
+
+    try {
+      // Get injection script from dev-browser
+      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}`;
+      const response = await fetch(injectionUrl);
+      const scriptContent = await response.text();
+
+      // Inject into iframe
+      const iframe = iframeRef.current;
+      const iframeWindow = iframe.contentWindow;
+
+      if (iframeWindow) {
+        // Create script element in iframe
+        const script = iframe.contentDocument?.createElement('script');
+        if (script) {
+          script.textContent = scriptContent;
+          iframe.contentDocument?.body.appendChild(script);
+          setInjected(true);
+          console.log('✓ Automation script injected successfully');
+        }
+      }
+    } catch (err) {
+      console.error("Failed to inject automation:", err);
+      setError(err instanceof Error ? err.message : "Injection failed");
+    }
+  }
+
   function reload() {
     if (iframeRef.current && currentUrl) {
       setLoading(true);
       setError(null);
+      setInjected(false);
       iframeRef.current.src = currentUrl;
     }
   }
@@ -62,6 +109,14 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   function handleIframeLoad() {
     setLoading(false);
     setError(null);
+
+    // Auto-inject automation script after page loads
+    if (devBrowserStatus.running && currentUrl && !injected) {
+      // Delay injection to allow page to fully initialize
+      setTimeout(() => {
+        injectAutomation();
+      }, 500);
+    }
   }
 
   function handleIframeError() {
@@ -96,6 +151,17 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
             disabled={loading}
           />
         </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={injectAutomation}
+          disabled={!currentUrl || !devBrowserStatus.running || injected}
+          title={injected ? "Automation active" : "Inject automation"}
+        >
+          <Zap className={`h-4 w-4 ${injected ? "text-green-500" : ""}`} />
+        </Button>
 
         <Button
           variant="ghost"
@@ -161,7 +227,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
                 Enter a URL above and click Go to browse
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Web content will be displayed in a sandboxed iframe
+                Web content will be displayed in a sandboxed iframe with AI automation
               </p>
             </div>
           </div>
@@ -177,15 +243,32 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       {/* Status Bar */}
       <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
-          <span className="truncate max-w-[400px]">
-            {currentUrl || "No page loaded"}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
+            <span className="truncate max-w-[300px]">
+              {currentUrl || "No page loaded"}
+            </span>
+          </div>
+          {devBrowserStatus.running && (
+            <div className="flex items-center gap-1.5">
+              <Zap className={`h-3 w-3 ${injected ? "text-green-500" : "text-muted-foreground/60"}`} />
+              <span className={injected ? "text-green-500" : "text-muted-foreground/60"}>
+                {injected ? "AI-ready" : "Manual"}
+              </span>
+            </div>
+          )}
         </div>
-        {currentUrl && (
-          <span className="text-muted-foreground/60">Sandboxed iframe</span>
-        )}
+        <div className="flex items-center gap-2">
+          {devBrowserStatus.running && devBrowserStatus.port && (
+            <span className="text-muted-foreground/60">
+              MCP:{devBrowserStatus.port}
+            </span>
+          )}
+          {currentUrl && (
+            <span className="text-muted-foreground/60">Sandboxed iframe</span>
+          )}
+        </div>
       </div>
     </div>
   );
