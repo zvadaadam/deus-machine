@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ExternalLink, ChevronRight, ChevronDown } from "lucide-react";
+import { ExternalLink, ChevronRight } from "lucide-react";
 
 interface InstalledApp {
   id: string;
@@ -94,22 +94,13 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
         >
           <ExternalLink className="h-4 w-4" />
           <span>Open in</span>
-          <div className="relative w-3 h-3">
-            <ChevronRight
-              className="absolute inset-0 h-3 w-3 text-muted-foreground transition-all duration-200 ease-out-cubic"
-              style={{
-                opacity: open ? 0 : 1,
-                transform: open ? 'scale(0.8)' : 'scale(1)',
-              }}
-            />
-            <ChevronDown
-              className="absolute inset-0 h-3 w-3 text-muted-foreground transition-all duration-200 ease-out-cubic"
-              style={{
-                opacity: open ? 1 : 0,
-                transform: open ? 'scale(1)' : 'scale(0.8)',
-              }}
-            />
-          </div>
+          <ChevronRight
+            className="h-3 w-3 text-muted-foreground transition-transform duration-200"
+            style={{
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 200ms cubic-bezier(.215, .61, .355, 1)',
+            }}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
