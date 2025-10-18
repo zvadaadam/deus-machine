@@ -70,9 +70,18 @@ export function BranchName({ branch }: BranchNameProps) {
         </Tooltip>
       </TooltipProvider>
 
-      <span className="px-2 py-0.5 text-xs font-medium text-muted-foreground bg-muted rounded-md">
-        Isolated
-      </span>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="px-2 py-0.5 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
+              Isolated
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">You're in an isolated copy of your codebase</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
