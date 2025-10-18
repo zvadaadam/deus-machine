@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X, Info } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
@@ -146,48 +146,66 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       return;
     }
 
+    const iframe = iframeRef.current;
+
+    // Check if we can access iframe content (same-origin check)
+    try {
+      // Try to access contentDocument - will throw if cross-origin
+      const canAccess = iframe.contentDocument !== null;
+      if (!canAccess) {
+        throw new Error('Cross-origin iframe - cannot access content');
+      }
+    } catch (crossOriginError) {
+      const errorMsg = `Cannot inject into cross-origin iframe. Automation only works with:\n- file:// URLs (local HTML files)\n- http://localhost URLs\n- Same-origin pages`;
+      addLog('warn', 'Cross-origin restriction: Cannot inject into external websites');
+      addLog('info', 'Try: file:///Users/zvada/Documents/BOX/box-ide/.conductor/dakar/test-page.html');
+      setError(null); // Don't show error overlay, just log it
+      return;
+    }
+
     try {
       addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
 
       // Get injection script from dev-browser
       const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}`;
       const response = await fetch(injectionUrl);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch script: ${response.status}`);
+      }
+
       const scriptContent = await response.text();
 
       addLog('debug', `Script fetched (${scriptContent.length} chars), injecting into iframe...`);
 
       // Inject into iframe
-      const iframe = iframeRef.current;
-      const iframeWindow = iframe.contentWindow;
-
-      if (iframeWindow) {
+      if (iframe.contentDocument && iframe.contentDocument.body) {
         // Create script element in iframe
-        const script = iframe.contentDocument?.createElement('script');
-        if (script) {
-          script.textContent = scriptContent;
-          iframe.contentDocument?.body.appendChild(script);
-          setInjected(true);
-          addLog('info', '✓ Automation script injected successfully');
+        const script = iframe.contentDocument.createElement('script');
+        script.textContent = scriptContent;
+        iframe.contentDocument.body.appendChild(script);
+        setInjected(true);
+        addLog('info', '✓ Automation script injected successfully');
 
-          // Check if automation registered after a delay
-          setTimeout(() => {
-            try {
-              const automationReady = iframe.contentWindow?.eval('window.__browserAutomation !== undefined');
-              if (automationReady) {
-                addLog('info', '✓ Browser automation registered and ready');
-              } else {
-                addLog('warn', 'Automation script injected but not yet registered');
-              }
-            } catch (e) {
-              addLog('warn', 'Cannot verify automation status (cross-origin restriction)');
+        // Check if automation registered after a delay
+        setTimeout(() => {
+          try {
+            const automationReady = iframe.contentWindow?.eval('window.__browserAutomation !== undefined');
+            if (automationReady) {
+              addLog('info', '✓ Browser automation registered and ready');
+            } else {
+              addLog('warn', 'Automation script injected but not yet registered');
             }
-          }, 1000);
-        }
+          } catch (e) {
+            addLog('warn', 'Cannot verify automation status');
+          }
+        }, 1000);
+      } else {
+        throw new Error('Iframe document or body not available');
       }
     } catch (err) {
       console.error("Failed to inject automation:", err);
       const errorMsg = err instanceof Error ? err.message : "Injection failed";
-      setError(errorMsg);
       addLog('error', `Injection failed: ${errorMsg}`);
     }
   }
@@ -329,7 +347,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
-      <div className="flex-1 relative bg-background overflow-hidden">
+      <div className="flex-1 min-h-0 relative bg-background overflow-hidden">
         {currentUrl ? (
           <>
             {/* Sandboxed iframe with Cursor-like permissions */}
@@ -366,12 +384,25 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md p-8">
               <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mb-4">
                 Enter a URL above and click Go to browse
               </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Web content will be displayed in a sandboxed iframe with AI automation
-              </p>
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-left">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">AI automation works with:</p>
+                    <ul className="space-y-0.5 ml-2">
+                      <li>• Local files (file:// URLs)</li>
+                      <li>• Localhost pages</li>
+                      <li>• Same-origin content</li>
+                    </ul>
+                    <p className="mt-2 text-yellow-600 dark:text-yellow-500">
+                      External websites (https://) block automation due to browser security.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -416,7 +447,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="h-48 border-t border-border bg-muted/10 flex flex-col">
+        <div className="h-40 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
           {/* Console Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
