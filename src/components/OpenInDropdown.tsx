@@ -88,14 +88,14 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
         <Button
           variant="outline"
           size="sm"
-          className="gap-2 px-3 items-center"
+          className="gap-2 px-3"
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
-          <ExternalLink className="h-4 w-4 flex-shrink-0" />
-          <span className="leading-none">Open in</span>
+          <ExternalLink className="h-4 w-4" />
+          <span className="inline-flex items-center">Open in</span>
           <ChevronRight
-            className="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-200"
+            className="h-4 w-4 text-muted-foreground transition-transform duration-200"
             style={{
               transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
               transition: 'transform 200ms cubic-bezier(.215, .61, .355, 1)',
