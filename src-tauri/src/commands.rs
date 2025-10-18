@@ -2,7 +2,8 @@ use tauri::State;
 use crate::pty::PtyManager;
 use crate::socket::SocketManager;
 use crate::backend::BackendManager;
-use std::path::Path;
+use crate::browser::BrowserManager;
+use std::path::{Path, PathBuf};
 
 #[tauri::command]
 pub async fn spawn_pty(
@@ -264,3 +265,62 @@ pub fn open_in_app(app_id: String, workspace_path: String) -> Result<String, Str
         Ok(format!("Opened in {}", app_name))
     }
 }
+
+//============================================================================
+// BROWSER COMMANDS
+//============================================================================
+
+/// Start the dev-browser HTTP server
+#[tauri::command]
+pub fn start_browser_server(
+    browser_path: String,
+    browser_manager: State<'_, BrowserManager>,
+) -> Result<String, String> {
+    let path = PathBuf::from(browser_path);
+    browser_manager
+        .start(path)
+        .map_err(|e| e.to_string())?;
+
+    Ok("Browser server started".to_string())
+}
+
+/// Stop the dev-browser HTTP server
+#[tauri::command]
+pub fn stop_browser_server(
+    browser_manager: State<'_, BrowserManager>,
+) -> Result<String, String> {
+    browser_manager
+        .stop()
+        .map_err(|e| e.to_string())?;
+
+    Ok("Browser server stopped".to_string())
+}
+
+/// Get the port the browser server is running on
+#[tauri::command]
+pub fn get_browser_port(
+    browser_manager: State<'_, BrowserManager>,
+) -> Result<u16, String> {
+    browser_manager
+        .get_port()
+        .ok_or_else(|| "Browser server port not available".to_string())
+}
+
+/// Get the auth token for the browser server
+#[tauri::command]
+pub fn get_browser_auth_token(
+    browser_manager: State<'_, BrowserManager>,
+) -> Result<String, String> {
+    browser_manager
+        .get_auth_token()
+        .ok_or_else(|| "Browser server auth token not available".to_string())
+}
+
+/// Check if browser server is running
+#[tauri::command]
+pub fn is_browser_running(
+    browser_manager: State<'_, BrowserManager>,
+) -> Result<bool, String> {
+    Ok(browser_manager.is_running())
+}
+

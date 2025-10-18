@@ -5,6 +5,7 @@ use tauri::Manager;
 use conductor_lib::{
     commands,
     backend::BackendManager,
+    browser::BrowserManager,
     pty::PtyManager,
     socket::SocketManager,
 };
@@ -20,6 +21,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .manage(BackendManager::new())
+        .manage(BrowserManager::new())
         .manage(PtyManager::new())
         .manage(SocketManager::new())
         .setup(|app| {
@@ -75,9 +77,12 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Stop backend when window closes
+                // Stop backend and browser when window closes
                 let backend_manager: tauri::State<BackendManager> = window.state();
                 backend_manager.stop().ok();
+
+                let browser_manager: tauri::State<BrowserManager> = window.state();
+                browser_manager.stop().ok();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -93,6 +98,11 @@ fn main() {
             commands::get_backend_port,
             commands::get_installed_apps,
             commands::open_in_app,
+            commands::start_browser_server,
+            commands::stop_browser_server,
+            commands::get_browser_port,
+            commands::get_browser_auth_token,
+            commands::is_browser_running,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
