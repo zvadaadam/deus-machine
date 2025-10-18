@@ -20,6 +20,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [injected, setInjected] = useState(false);
+  const [isCrossOrigin, setIsCrossOrigin] = useState(false);
 
   // Navigation history
   const [history, setHistory] = useState<string[]>([]);
@@ -156,12 +157,16 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
         throw new Error('Cross-origin iframe - cannot access content');
       }
     } catch (crossOriginError) {
-      const errorMsg = `Cannot inject into cross-origin iframe. Automation only works with:\n- file:// URLs (local HTML files)\n- http://localhost URLs\n- Same-origin pages`;
-      addLog('warn', 'Cross-origin restriction: Cannot inject into external websites');
-      addLog('info', 'Try: file:///Users/zvada/Documents/BOX/box-ide/.conductor/dakar/test-page.html');
-      setError(null); // Don't show error overlay, just log it
+      // Cross-origin page detected - browsing works but automation doesn't
+      setIsCrossOrigin(true);
+      setInjected(false);
+      addLog('info', '🌐 Browsing external website (automation unavailable)');
+      addLog('info', 'ℹ️  Automation only works with: file://, localhost, or same-origin pages');
       return;
     }
+
+    // Same-origin page - automation available
+    setIsCrossOrigin(false);
 
     try {
       addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
@@ -361,6 +366,27 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
               title="Browser"
             />
 
+            {/* Cross-Origin Info Banner */}
+            {isCrossOrigin && !loading && (
+              <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-sm">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <Info className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-900 dark:text-amber-200 flex-1">
+                    <span className="font-medium">Browsing only</span> — AI automation unavailable on external websites
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 hover:bg-amber-500/20"
+                    onClick={() => setIsCrossOrigin(false)}
+                    title="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Error overlay */}
             {error && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/95">
@@ -424,11 +450,19 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
               {currentUrl || "No page loaded"}
             </span>
           </div>
-          {devBrowserStatus.running && (
+          {devBrowserStatus.running && currentUrl && (
             <div className="flex items-center gap-1.5">
-              <Zap className={`h-3 w-3 ${injected ? "text-green-500" : "text-muted-foreground/60"}`} />
-              <span className={injected ? "text-green-500" : "text-muted-foreground/60"}>
-                {injected ? "AI-ready" : "Manual"}
+              <Zap className={`h-3 w-3 ${
+                injected ? "text-green-500" :
+                isCrossOrigin ? "text-amber-500" :
+                "text-muted-foreground/60"
+              }`} />
+              <span className={
+                injected ? "text-green-500" :
+                isCrossOrigin ? "text-amber-500" :
+                "text-muted-foreground/60"
+              }>
+                {injected ? "AI-ready" : isCrossOrigin ? "Browse-only" : "Manual"}
               </span>
             </div>
           )}
