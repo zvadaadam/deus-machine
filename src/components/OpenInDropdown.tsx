@@ -50,6 +50,7 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   }, []);
 
   function handleOpenInApp(appId: string) {
+    setOpen(false);
     invoke("open_in_app", {
       appId,
       workspacePath,
