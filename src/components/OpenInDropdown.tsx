@@ -88,12 +88,12 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
         <Button
           variant="outline"
           size="sm"
-          className="gap-2 px-3"
+          className="gap-2 px-3 h-9"
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
           <ExternalLink className="h-4 w-4" />
-          <span className="inline-flex items-center">Open in</span>
+          <span className="text-sm leading-[1]">Open in</span>
           <ChevronRight
             className="h-4 w-4 text-muted-foreground transition-transform duration-200"
             style={{
