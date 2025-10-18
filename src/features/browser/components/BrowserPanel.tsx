@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X, Info } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X, Info, Target } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
@@ -21,6 +21,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [injected, setInjected] = useState(false);
   const [isCrossOrigin, setIsCrossOrigin] = useState(false);
+  const [selectorActive, setSelectorActive] = useState(false);
 
   // Navigation history
   const [history, setHistory] = useState<string[]>([]);
@@ -258,6 +259,107 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     addLog('error', errorMsg);
   }
 
+  // ==================== ELEMENT SELECTOR FUNCTIONS ====================
+
+  /**
+   * Toggle element selector mode on/off
+   * Sends postMessage to iframe to activate/deactivate visual selection
+   */
+  function toggleElementSelector() {
+    if (!iframeRef.current || !injected) return;
+
+    if (selectorActive) {
+      // Disable selector mode
+      addLog('info', '🎯 Deactivating element selector');
+      iframeRef.current.contentWindow?.postMessage({
+        type: 'disable-element-selection'
+      }, '*');
+      setSelectorActive(false);
+    } else {
+      // Enable selector mode
+      addLog('info', '🎯 Activating element selector - Click any element to inspect');
+      iframeRef.current.contentWindow?.postMessage({
+        type: 'enable-element-selection'
+      }, '*');
+      setSelectorActive(true);
+    }
+  }
+
+  /**
+   * Handle element selected from iframe
+   * Formats element data and dispatches to chat
+   */
+  function handleElementSelected(elementData: any) {
+    addLog('info', `✓ Element selected: ${elementData.element.tagName.toLowerCase()}${elementData.element.id ? '#' + elementData.element.id : ''}`);
+
+    const formatted = formatElementForChat(elementData.element);
+
+    // Dispatch custom event for Dashboard to pick up
+    window.dispatchEvent(new CustomEvent('insert-to-chat', {
+      detail: { text: formatted }
+    }));
+
+    setSelectorActive(false);
+    addLog('info', '📝 Element data sent to chat');
+  }
+
+  /**
+   * Format element data as markdown for chat insertion
+   */
+  function formatElementForChat(el: any): string {
+    const tagName = el.tagName.toLowerCase();
+    const idText = el.id ? '#' + el.id : '';
+    const classText = el.className ? '.' + el.className.split(' ').filter(Boolean).join('.') : '';
+    const elementSelector = tagName + idText + classText;
+
+    return `
+## 🎯 Selected Element
+
+**Element:** \`${elementSelector}\`
+**Path:** ${el.path}
+**Position:** (${Math.round(el.rect.left)}, ${Math.round(el.rect.top)})
+**Size:** ${Math.round(el.rect.width)}×${Math.round(el.rect.height)}
+${el.innerText ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"` : ''}
+
+### Attributes
+${el.attributes && el.attributes.length > 0 ? el.attributes.map((a: any) => `- **${a.name}**: \`"${a.value}"\``).join('\n') : '_(No attributes)_'}
+
+### Computed Styles
+- **color**: ${el.computedStyle.color}
+- **backgroundColor**: ${el.computedStyle.backgroundColor}
+- **fontSize**: ${el.computedStyle.fontSize}
+- **fontWeight**: ${el.computedStyle.fontWeight}
+- **display**: ${el.computedStyle.display}
+- **position**: ${el.computedStyle.position}
+
+---
+_You can ask me to modify this element, debug it, or help with related styling._
+`.trim();
+  }
+
+  // Listen for postMessage from iframe (element selection results)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Security: Validate message origin
+      // Allow same-origin and iframe messages
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return;
+      }
+
+      if (event.data.type === 'element-selected') {
+        handleElementSelected(event.data);
+      } else if (event.data.type === 'exit-selection-mode') {
+        setSelectorActive(false);
+        addLog('info', 'Element selector deactivated (Escape pressed)');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [injected, iframeRef]);
+
+  // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
+
   return (
     <div className="w-full flex flex-col bg-background h-full overflow-hidden">
       {/* Browser Controls */}
@@ -317,6 +419,17 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           title={injected ? "Automation active" : "Inject automation"}
         >
           <Zap className={`h-4 w-4 ${injected ? "text-green-500" : ""}`} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={toggleElementSelector}
+          disabled={!currentUrl || !injected || isCrossOrigin}
+          title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
+        >
+          <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
         </Button>
 
         <Button
