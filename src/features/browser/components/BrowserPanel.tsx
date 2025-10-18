@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
@@ -14,6 +14,11 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [injected, setInjected] = useState(false);
+
+  // Navigation history
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { status: devBrowserStatus, startServer } = useDevBrowser();
   const tabId = `browser-${workspaceId || 'main'}`;
@@ -27,8 +32,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     }
   }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
 
-  async function navigateToUrl() {
-    if (!url) return;
+  async function navigateToUrl(urlToNavigate?: string) {
+    const targetUrl = urlToNavigate || url;
+    if (!targetUrl) return;
 
     try {
       setLoading(true);
@@ -36,9 +42,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       setInjected(false);
 
       // Ensure URL has protocol
-      let fullUrl = url;
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        fullUrl = 'https://' + url;
+      let fullUrl = targetUrl;
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        fullUrl = 'https://' + targetUrl;
       }
 
       // Update iframe src
@@ -47,9 +53,50 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       }
 
       setCurrentUrl(fullUrl);
+      setUrl(fullUrl);
+
+      // Add to history (only if not navigating via back/forward)
+      if (!urlToNavigate) {
+        setHistory(prev => {
+          const newHistory = prev.slice(0, historyIndex + 1);
+          newHistory.push(fullUrl);
+          return newHistory;
+        });
+        setHistoryIndex(prev => prev + 1);
+      }
     } catch (err) {
       console.error("Failed to navigate:", err);
       setError(err instanceof Error ? err.message : "Navigation failed");
+    }
+  }
+
+  function goBack() {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const previousUrl = history[newIndex];
+      setHistoryIndex(newIndex);
+      setUrl(previousUrl);
+      setCurrentUrl(previousUrl);
+      setInjected(false);
+
+      if (iframeRef.current) {
+        iframeRef.current.src = previousUrl;
+      }
+    }
+  }
+
+  function goForward() {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const nextUrl = history[newIndex];
+      setHistoryIndex(newIndex);
+      setUrl(nextUrl);
+      setCurrentUrl(nextUrl);
+      setInjected(false);
+
+      if (iframeRef.current) {
+        iframeRef.current.src = nextUrl;
+      }
     }
   }
 
@@ -128,6 +175,28 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     <div className="h-full flex flex-col bg-background">
       {/* Browser Controls */}
       <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={goBack}
+          disabled={loading || historyIndex <= 0}
+          title="Go back"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={goForward}
+          disabled={loading || historyIndex >= history.length - 1}
+          title="Go forward"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
