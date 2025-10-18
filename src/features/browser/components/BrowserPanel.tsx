@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X, Info, Target } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
@@ -465,7 +465,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
-      <div className="flex-1 min-h-0 relative bg-background overflow-hidden">
+      <div className={`relative bg-background overflow-hidden ${showConsole ? 'flex-1' : 'flex-1 min-h-0'}`}>
         {currentUrl ? (
           <>
             {/* Sandboxed iframe with Cursor-like permissions */}
@@ -594,9 +594,9 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="min-h-[100px] max-h-40 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
+        <div className="h-[200px] border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
           {/* Console Header */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">Console</span>
@@ -611,6 +611,15 @@ _You can ask me to modify this element, debug it, or help with related styling._
                 title="Clear console"
               >
                 <X className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowConsole(false)}
+                title="Close console"
+              >
+                <ChevronDown className="h-3 w-3" />
               </Button>
             </div>
           </div>
