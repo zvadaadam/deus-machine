@@ -28,6 +28,7 @@ import { Separator } from "./components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
+import { BranchName } from "./components/BranchName";
 import type {
   Workspace,
   Repo,
@@ -364,10 +365,8 @@ export function Dashboard() {
             {/* Workspace Header - Simplified */}
             <div className="border-b border-border px-4 py-3">
               <div className="flex items-center justify-between">
-                {/* Left: Branch name */}
-                <h2 className="text-base font-medium text-foreground">
-                  {selectedWorkspace.branch}
-                </h2>
+                {/* Left: Branch name with copy */}
+                <BranchName branch={selectedWorkspace.branch} />
 
                 {/* Right: Open in dropdown */}
                 <OpenInDropdown

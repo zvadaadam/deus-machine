@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,7 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const closeTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     async function loadInstalledApps() {
@@ -39,6 +40,15 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
     loadInstalledApps();
   }, []);
 
+  useEffect(() => {
+    // Cleanup timeout on unmount
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   async function handleOpenInApp(appId: string) {
     try {
       await invoke("open_in_app", {
@@ -50,6 +60,21 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
     }
   }
 
+  function handleMouseEnter() {
+    // Clear any pending close timeout
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
+    setOpen(true);
+  }
+
+  function handleMouseLeave() {
+    // Add a small delay before closing to prevent flickering
+    closeTimeoutRef.current = setTimeout(() => {
+      setOpen(false);
+    }, 150);
+  }
+
   if (loading || installedApps.length === 0) {
     return null;
   }
@@ -57,8 +82,8 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <div
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
@@ -66,7 +91,11 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
             Open in
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           {installedApps.map((app) => (
             <DropdownMenuItem
               key={app.id}
