@@ -439,7 +439,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
   // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
 
   return (
-    <div className="w-full flex flex-col bg-background h-full overflow-hidden">
+    <div className="w-full flex flex-col h-full overflow-hidden">
       {/* Browser Controls */}
       <div className="flex items-center gap-2 p-2 border-b border-border bg-muted/50 flex-shrink-0">
         <Button
@@ -544,7 +544,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
-      <div className={`relative bg-background overflow-hidden ${showConsole ? 'flex-1' : 'flex-1 min-h-0'}`}>
+      <div className={`relative overflow-hidden ${showConsole ? 'flex-1' : 'flex-1 min-h-0'}`}>
         {currentUrl ? (
           <>
             {/* Sandboxed iframe with Cursor-like permissions */}
@@ -581,7 +581,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
             {/* Error overlay */}
             {error && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/95">
+              <div className="absolute inset-0 flex items-center justify-center vibrancy-bg">
                 <div className="text-center max-w-md p-8">
                   <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
                   <h3 className="text-lg font-semibold mb-2">Unable to Load Page</h3>
@@ -627,7 +627,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
         {/* Loading overlay */}
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+          <div className="absolute inset-0 flex items-center justify-center vibrancy-bg">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
