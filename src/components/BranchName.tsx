@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { GitBranch, Check } from "lucide-react";
 import {
   Tooltip,
@@ -13,12 +13,33 @@ interface BranchNameProps {
 
 export function BranchName({ branch }: BranchNameProps) {
   const [copied, setCopied] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const closeTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(branch);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTooltipOpen(true);
+
+      // Clear any existing timeout
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+
+      // Close tooltip after showing "Copied!" for 1.5s
+      closeTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        setTooltipOpen(false);
+      }, 1500);
     } catch (error) {
       console.error("Failed to copy branch name:", error);
     }
@@ -26,10 +47,12 @@ export function BranchName({ branch }: BranchNameProps) {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <Tooltip>
+      <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
         <TooltipTrigger asChild>
           <button
             onClick={handleCopy}
+            onPointerEnter={() => !copied && setTooltipOpen(true)}
+            onPointerLeave={() => !copied && setTooltipOpen(false)}
             className="flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 -ml-2 transition-colors duration-200"
           >
             {copied ? (
