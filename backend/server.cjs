@@ -30,6 +30,9 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 app.use(cors());
 app.use(express.json());
 
+// Global variable to store actual port
+let actualServerPort = null;
+
 // Initialize database
 const db = initDatabase();
 
@@ -43,6 +46,25 @@ db.exec(`
 `);
 
 console.log('✅ All modules loaded successfully');
+
+//============================================================================
+// HEALTH & DISCOVERY ENDPOINTS
+//============================================================================
+
+// Health check endpoint that also returns the server port
+// This allows web browsers to discover the backend port
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    port: actualServerPort,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Simple port endpoint for easy discovery
+app.get('/api/port', (req, res) => {
+  res.json({ port: actualServerPort });
+});
 
 //============================================================================
 // CONFIGURATION ENDPOINTS
@@ -772,6 +794,7 @@ app.post('/api/sidecar/command', (req, res) => {
 
 const server = app.listen(PORT, () => {
   const actualPort = server.address().port;
+  actualServerPort = actualPort; // Store port globally for health endpoint
 
   // Output port in machine-readable format for Rust to capture
   console.log(`[BACKEND_PORT]${actualPort}`);

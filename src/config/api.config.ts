@@ -5,6 +5,7 @@
  * Supports dynamic port allocation in both Tauri app and web dev mode:
  * - Tauri app: Uses Rust backend manager via invoke('get_backend_port')
  * - Web dev: Uses VITE_BACKEND_PORT environment variable from dev.sh
+ * - Port Discovery: Tries to discover backend port by checking /api/health
  * - Fallback: Port 3333 if neither is available
  */
 
@@ -12,6 +13,52 @@ import { invoke } from '@tauri-apps/api/core';
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
+
+// Common ports to try during discovery (most recently used ports)
+const DISCOVERY_PORTS = [59270, 59271, 59269, 3333, 3334, 3335, 8080, 8081];
+
+/**
+ * Try to discover backend port by checking /api/health on common ports
+ */
+async function discoverBackendPort(): Promise<number | null> {
+  // Try localStorage first (fastest)
+  const stored = localStorage.getItem('conductor_backend_port');
+  if (stored) {
+    const port = parseInt(stored);
+    try {
+      const response = await fetch(`http://localhost:${port}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(1000)
+      });
+      if (response.ok) {
+        console.log(`[API] Found backend on stored port: ${port}`);
+        return port;
+      }
+    } catch (e) {
+      // Port changed, continue discovery
+    }
+  }
+
+  // Try discovery on common ports
+  for (const port of DISCOVERY_PORTS) {
+    try {
+      const response = await fetch(`http://localhost:${port}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(1000)
+      });
+      if (response.ok) {
+        console.log(`[API] Discovered backend on port: ${port}`);
+        // Store for next time
+        localStorage.setItem('conductor_backend_port', port.toString());
+        return port;
+      }
+    } catch (e) {
+      // Port not available, try next
+    }
+  }
+
+  return null;
+}
 
 /**
  * Get the backend port (cached after first call)
@@ -44,11 +91,19 @@ async function getBackendPort(): Promise<number> {
       cachedPort = port;
       return port;
     } catch (error) {
-      console.error('[API] Failed to get backend port from Tauri:', error);
+      console.log('[API] Tauri API not available (running in web browser), trying port discovery...');
     }
 
-    // 3. Fallback to hardcoded port
-    console.warn('[API] Falling back to default port 3333');
+    // 3. Try port discovery (for web browser accessing Vite dev server)
+    const discoveredPort = await discoverBackendPort();
+    if (discoveredPort) {
+      console.log(`[API] Using discovered backend port: ${discoveredPort}`);
+      cachedPort = discoveredPort;
+      return discoveredPort;
+    }
+
+    // 4. Fallback to hardcoded port
+    console.warn('[API] Could not discover backend port, falling back to default port 3333');
     cachedPort = 3333;
     return 3333;
   })();
