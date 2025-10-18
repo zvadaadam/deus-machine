@@ -8,6 +8,15 @@ interface DevBrowserStatus {
   error: string | null;
 }
 
+// Check if we're running in Tauri or web mode
+const isTauriMode = () => {
+  try {
+    return window.__TAURI__ !== undefined;
+  } catch {
+    return false;
+  }
+};
+
 export function useDevBrowser() {
   const [status, setStatus] = useState<DevBrowserStatus>({
     running: false,
@@ -16,30 +25,50 @@ export function useDevBrowser() {
     error: null,
   });
 
-  // Start dev-browser server
+  // Start dev-browser server (Tauri mode) or check for existing server (Web mode)
   const startServer = useCallback(async () => {
     try {
-      const devBrowserPath = "/Users/zvada/Documents/BOX/dev-browser";
+      if (isTauriMode()) {
+        // Tauri mode: start server via Rust backend
+        const devBrowserPath = "/Users/zvada/Documents/BOX/dev-browser";
 
-      await invoke("start_browser_server", {
-        browserPath: devBrowserPath,
-      });
+        await invoke("start_browser_server", {
+          browserPath: devBrowserPath,
+        });
 
-      // Wait a bit for server to start
-      await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait a bit for server to start
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Get port and auth token
-      const port = await invoke<number>("get_browser_port");
-      const authToken = await invoke<string>("get_browser_auth_token");
+        // Get port and auth token
+        const port = await invoke<number>("get_browser_port");
+        const authToken = await invoke<string>("get_browser_auth_token");
 
-      setStatus({
-        running: true,
-        port,
-        authToken,
-        error: null,
-      });
+        setStatus({
+          running: true,
+          port,
+          authToken,
+          error: null,
+        });
 
-      return { port, authToken };
+        return { port, authToken };
+      } else {
+        // Web mode: check for existing MCP server on port 3000
+        const response = await fetch('http://localhost:3000/health');
+        if (response.ok) {
+          const healthData = await response.json();
+
+          setStatus({
+            running: true,
+            port: 3000,
+            authToken: null, // Auth token not needed for pre-authorized mode
+            error: null,
+          });
+
+          return { port: 3000, authToken: null };
+        } else {
+          throw new Error('MCP server not responding');
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to start dev-browser";
       setStatus({
@@ -55,7 +84,10 @@ export function useDevBrowser() {
   // Stop dev-browser server
   const stopServer = useCallback(async () => {
     try {
-      await invoke("stop_browser_server");
+      if (isTauriMode()) {
+        await invoke("stop_browser_server");
+      }
+      // In web mode, we don't stop the server (it's external)
       setStatus({
         running: false,
         port: null,
@@ -70,25 +102,57 @@ export function useDevBrowser() {
   // Check if server is running
   const checkStatus = useCallback(async () => {
     try {
-      const running = await invoke<boolean>("is_browser_running");
+      if (isTauriMode()) {
+        // Tauri mode: check via Rust backend
+        const running = await invoke<boolean>("is_browser_running");
 
-      if (running) {
-        const port = await invoke<number>("get_browser_port");
-        const authToken = await invoke<string>("get_browser_auth_token");
+        if (running) {
+          const port = await invoke<number>("get_browser_port");
+          const authToken = await invoke<string>("get_browser_auth_token");
 
-        setStatus({
-          running: true,
-          port,
-          authToken,
-          error: null,
-        });
+          setStatus({
+            running: true,
+            port,
+            authToken,
+            error: null,
+          });
+        } else {
+          setStatus({
+            running: false,
+            port: null,
+            authToken: null,
+            error: null,
+          });
+        }
       } else {
-        setStatus({
-          running: false,
-          port: null,
-          authToken: null,
-          error: null,
-        });
+        // Web mode: check for existing MCP server
+        try {
+          const response = await fetch('http://localhost:3000/health', {
+            signal: AbortSignal.timeout(2000)
+          });
+          if (response.ok) {
+            setStatus({
+              running: true,
+              port: 3000,
+              authToken: null,
+              error: null,
+            });
+          } else {
+            setStatus({
+              running: false,
+              port: null,
+              authToken: null,
+              error: null,
+            });
+          }
+        } catch (e) {
+          setStatus({
+            running: false,
+            port: null,
+            authToken: null,
+            error: 'MCP server not running on port 3000',
+          });
+        }
       }
     } catch (error) {
       setStatus(prev => ({
