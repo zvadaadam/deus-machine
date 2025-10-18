@@ -33,6 +33,16 @@ impl BrowserManager {
             return Ok(());
         }
 
+        // Clean up any zombie processes on the default port (3000 or whatever PORT env is set to)
+        // This prevents "address already in use" errors from previous failed starts
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg("lsof -ti:3000 | xargs kill -9 2>/dev/null || true")
+                .output();
+        }
+
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
         // Run npm run start:http with PORT=0 for dynamic port allocation
@@ -59,19 +69,28 @@ impl BrowserManager {
         // Spawn thread to read stdout and find port/token
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
+            let mut looking_for_port_json = false;
+
             for line in reader.lines() {
                 if let Ok(line) = line {
                     // Print all output for debugging
                     println!("[BROWSER] {}", line);
 
-                    // Parse port from "Server URL: http://localhost:PORT"
-                    if line.contains("Server URL:") && line.contains("localhost:") {
-                        if let Some(url_part) = line.split("localhost:").nth(1) {
-                            let port_str = url_part.trim();
+                    // Detect when port JSON is coming
+                    if line.contains("HTTP MCP Server started") {
+                        looking_for_port_json = true;
+                        continue;
+                    }
+
+                    // Parse port from JSON output (comes after "HTTP MCP Server started")
+                    if looking_for_port_json && line.trim().starts_with("\"port\":") {
+                        if let Some(port_str) = line.split(':').nth(1) {
+                            let port_str = port_str.trim().trim_end_matches(',');
                             if let Ok(port_num) = port_str.parse::<u16>() {
                                 let mut port = port_clone.lock().unwrap();
                                 *port = Some(port_num);
                                 println!("[BROWSER] ✓ Detected port: {}", port_num);
+                                looking_for_port_json = false;
                             }
                         }
                     }
