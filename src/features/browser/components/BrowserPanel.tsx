@@ -481,7 +481,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="min-h-[100px] max-h-40 border-t border-border bg-muted/10 flex flex-col">
+        <div className="min-h-[100px] max-h-40 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
           {/* Console Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
