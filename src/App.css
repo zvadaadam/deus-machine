@@ -213,3 +213,38 @@ body {
   flex-shrink: 0;
   border-top: 1px solid hsl(var(--border));
 }
+
+/* ============================================
+   VIEWPORT HEIGHT CONSTRAINTS
+   Ensures layout stays within viewport
+   ============================================ */
+
+/* Fix SidebarProvider - prevent growing beyond viewport */
+/* Consolidated selectors: attribute + escaped class name */
+div[class*="sidebar-wrapper"],
+.group\/sidebar-wrapper {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* Main content area (SidebarInset) - constrain to parent height */
+main[class*="flex-1"] {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Ensure Panel containers don't grow */
+div[data-panel-group-id] {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+div[data-panel-id] {
+  overflow: hidden !important;
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, Terminal, X, Info } from "lucide-react";
+import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
 import { useDevBrowser } from "../hooks/useDevBrowser";
 
 interface BrowserPanelProps {
@@ -21,6 +21,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [injected, setInjected] = useState(false);
   const [isCrossOrigin, setIsCrossOrigin] = useState(false);
+  const [selectorActive, setSelectorActive] = useState(false);
 
   // Navigation history
   const [history, setHistory] = useState<string[]>([]);
@@ -36,8 +37,12 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const tabId = `browser-${workspaceId || 'main'}`;
 
   // Helper to add console log
+  const MAX_LOGS = 500;
   const addLog = (level: ConsoleLog['level'], message: string) => {
-    setConsoleLogs(prev => [...prev, { timestamp: new Date(), level, message }]);
+    setConsoleLogs(prev => {
+      const next = [...prev, { timestamp: new Date(), level, message }];
+      return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
+    });
   };
 
   // Auto-scroll console to bottom
@@ -171,9 +176,15 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     try {
       addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
 
+      // Get parent origin for postMessage security
+      const parentOrigin = window.location.origin; // e.g., http://localhost:1420
+
       // Get injection script from dev-browser
-      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}`;
-      const response = await fetch(injectionUrl);
+      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}&parentOrigin=${encodeURIComponent(parentOrigin)}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(injectionUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch script: ${response.status}`);
@@ -195,7 +206,8 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
         // Check if automation registered after a delay
         setTimeout(() => {
           try {
-            const automationReady = iframe.contentWindow?.eval('window.__browserAutomation !== undefined');
+            // Avoid eval; directly probe the flag placed by the injected script
+            const automationReady = Boolean((iframe.contentWindow as any)?.__browserAutomation);
             if (automationReady) {
               addLog('info', '✓ Browser automation registered and ready');
             } else {
@@ -226,7 +238,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
   function openInExternalBrowser() {
     if (currentUrl) {
-      window.open(currentUrl, '_blank');
+      window.open(currentUrl, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -257,6 +269,174 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
     setError(errorMsg);
     addLog('error', errorMsg);
   }
+
+  // ==================== ELEMENT SELECTOR FUNCTIONS ====================
+
+  /**
+   * Toggle element selector mode on/off
+   * Sends postMessage to iframe to activate/deactivate visual selection
+   */
+  function toggleElementSelector() {
+    if (!iframeRef.current || !injected || !currentUrl) return;
+
+    // Get target origin for secure postMessage
+    let targetOrigin: string;
+    try {
+      targetOrigin = new URL(currentUrl).origin;
+    } catch {
+      addLog('warn', 'Invalid URL origin; cannot toggle element selector securely');
+      return;
+    }
+
+    if (selectorActive) {
+      // Disable selector mode
+      addLog('info', '🎯 Deactivating element selector');
+      iframeRef.current.contentWindow?.postMessage({
+        type: 'disable-element-selection'
+      }, targetOrigin);
+      setSelectorActive(false);
+    } else {
+      // Enable selector mode
+      addLog('info', '🎯 Activating element selector - Click any element to inspect');
+      iframeRef.current.contentWindow?.postMessage({
+        type: 'enable-element-selection'
+      }, targetOrigin);
+      setSelectorActive(true);
+    }
+  }
+
+  /**
+   * Handle element selected from iframe
+   * Formats element data and dispatches to chat
+   */
+  function handleElementSelected(elementData: any) {
+    const tn = elementData?.element?.tagName?.toLowerCase?.() ?? 'element';
+    const eid = elementData?.element?.id ? `#${elementData.element.id}` : '';
+    addLog('info', `✓ Element selected: ${tn}${eid}`);
+
+    const formatted = formatElementForChat(elementData);
+
+    // Dispatch custom event for Dashboard to pick up
+    window.dispatchEvent(new CustomEvent('insert-to-chat', {
+      detail: { text: formatted }
+    }));
+
+    setSelectorActive(false);
+    // Best-effort: ensure selector is turned off in iframe as well
+    try {
+      const frame = iframeRef.current?.contentWindow;
+      if (frame && currentUrl) {
+        const to = new URL(currentUrl).origin;
+        frame.postMessage({ type: 'disable-element-selection' }, to);
+      }
+    } catch {}
+    addLog('info', '📝 Element data sent to chat');
+  }
+
+  /**
+   * Format element data as markdown for chat insertion
+   * Defensive guards protect against malformed postMessage data
+   */
+  function formatElementForChat(elementData: any): string {
+    // Defensive guards for untrusted postMessage data
+    const el = elementData?.element || {};
+    const tagName = (el.tagName || 'element').toLowerCase?.() || 'element';
+    const idText = el.id ? `#${el.id}` : '';
+    const classText = typeof el.className === 'string' && el.className
+      ? '.' + el.className.split(' ').filter(Boolean).join('.')
+      : '';
+    const elementSelector = tagName + idText + classText;
+
+    // Build React component section if available
+    const rc = elementData?.reactComponent;
+    let reactSection = '';
+    if (rc && (rc.name || rc.fileName)) {
+      const lines = ['### ⚛️ React Component'];
+      if (rc.name) lines.push(`- **Component:** \`${rc.name}\``);
+      if (rc.fileName) {
+        const fileInfo = rc.lineNumber != null ? `${rc.fileName}:${rc.lineNumber}` : rc.fileName;
+        lines.push(`- **File:** \`${fileInfo}\``);
+      }
+      reactSection = '\n' + lines.join('\n') + '\n';
+    }
+
+    // Safe rect access
+    const rect = el.rect || { left: 0, top: 0, width: 0, height: 0 };
+    const position = `(${Math.round(rect.left)}, ${Math.round(rect.top)})`;
+    const size = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
+
+    // Safe text access
+    const textContent = typeof el.innerText === 'string' && el.innerText
+      ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"`
+      : '';
+
+    // Safe attributes
+    const attributes = Array.isArray(el.attributes) && el.attributes.length > 0
+      ? el.attributes.map((a: any) => `- **${a?.name ?? 'unknown'}**: \`"${a?.value ?? ''}"\``).join('\n')
+      : '_(No attributes)_';
+
+    // Safe computed styles
+    const styles = el.computedStyle || {};
+
+    return `
+## 🎯 Selected Element
+
+**Element:** \`${elementSelector}\`
+**Path:** ${el.path ?? '_(unknown)_'}
+**Position:** ${position}
+**Size:** ${size}
+${textContent}
+${reactSection}
+### Attributes
+${attributes}
+
+### Computed Styles
+- **color**: ${styles.color ?? '_'}
+- **backgroundColor**: ${styles.backgroundColor ?? '_'}
+- **fontSize**: ${styles.fontSize ?? '_'}
+- **fontWeight**: ${styles.fontWeight ?? '_'}
+- **display**: ${styles.display ?? '_'}
+- **position**: ${styles.position ?? '_'}
+
+---
+_You can ask me to modify this element, debug it, or help with related styling._
+`.trim();
+  }
+
+  // Listen for postMessage from iframe (element selection results)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Security: Validate message source, origin, and state
+      const frame = iframeRef.current?.contentWindow;
+      if (event.source !== frame) return;
+
+      // Validate origin matches iframe URL
+      try {
+        const expectedOrigin = currentUrl ? new URL(currentUrl).origin : null;
+        if (!expectedOrigin || event.origin !== expectedOrigin) return;
+      } catch {
+        return; // Invalid URL
+      }
+
+      // Only accept messages when selector is active and automation is injected
+      if (!selectorActive || !injected) return;
+
+      // Validate message data structure
+      if (!event.data || typeof event.data !== 'object') return;
+
+      if (event.data.type === 'element-selected') {
+        handleElementSelected(event.data);
+      } else if (event.data.type === 'exit-selection-mode') {
+        setSelectorActive(false);
+        addLog('info', 'Element selector deactivated (Escape pressed)');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [injected, iframeRef, selectorActive, currentUrl]);
+
+  // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
 
   return (
     <div className="w-full flex flex-col bg-background h-full overflow-hidden">
@@ -323,6 +503,18 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
+          onClick={toggleElementSelector}
+          disabled={!currentUrl || !injected || isCrossOrigin}
+          aria-pressed={selectorActive}
+          title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
+        >
+          <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
           onClick={openInExternalBrowser}
           disabled={!currentUrl}
           title="Open in external browser"
@@ -342,7 +534,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
         <Button
           size="sm"
-          onClick={navigateToUrl}
+          onClick={() => navigateToUrl()}
           disabled={loading || !url}
           className="h-8"
         >
@@ -352,7 +544,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
-      <div className="flex-1 min-h-0 relative bg-background overflow-hidden">
+      <div className={`relative bg-background overflow-hidden ${showConsole ? 'flex-1' : 'flex-1 min-h-0'}`}>
         {currentUrl ? (
           <>
             {/* Sandboxed iframe with Cursor-like permissions */}
@@ -481,9 +673,9 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="min-h-[100px] max-h-40 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
+        <div className="h-[200px] border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
           {/* Console Header */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">Console</span>
@@ -498,6 +690,15 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
                 title="Clear console"
               >
                 <X className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowConsole(false)}
+                title="Close console"
+              >
+                <ChevronDown className="h-3 w-3" />
               </Button>
             </div>
           </div>

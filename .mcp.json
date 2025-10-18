@@ -1,25 +1,15 @@
 {
   "mcpServers": {
-    "browser-automation-prod-local": {
-      "type": "stdio",
-      "command": "/opt/homebrew/bin/node",
-      "args": [
-        "/Users/zvada/Documents/BOX/dev-browser/dist/server/mcp-integrated-stdio.js"
-      ]
-    },
-    "shadcn": {
-      "command": "npx",
-      "args": ["shadcn@latest", "mcp"]
-    },
-  "exa": {
-    "command": "npx",
-    "args": [
-      "-y",
-      "exa-mcp-server"
-    ],
-    "env": {
-      "EXA_API_KEY": "${EXA_API_KEY}"
-    }
-  }
+      "browser-automation-prod-local": {
+          "type": "stdio",
+          "command": "/opt/homebrew/bin/node",
+          "args": [
+              "/Users/zvada/Documents/BOX/dev-browser/dist/server/mcp-integrated-stdio.js"
+          ]
+      },
+      "shadcn": {
+          "command": "npx",
+          "args": ["shadcn@latest", "mcp"]
+      }
   }
 }

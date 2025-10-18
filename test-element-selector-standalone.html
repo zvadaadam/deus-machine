@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Element Selector Test - Standalone</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-top: 0;
+            font-size: 32px;
+        }
+
+        .card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            transition: all 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button.primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        button.primary:hover {
+            background: #0052a3;
+        }
+
+        button.secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        button.secondary:hover {
+            background: #5a6268;
+        }
+
+        button.success {
+            background: #28a745;
+            color: white;
+        }
+
+        button.success:hover {
+            background: #218838;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+        }
+
+        #controls h3 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+
+        #controls button {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        #output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .status.active {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h3>Element Selector Test</h3>
+        <div id="status" class="status inactive">Inactive</div>
+        <button onclick="activateSelector()" class="primary">🎯 Activate Selector</button>
+        <button onclick="deactivateSelector()" class="secondary">❌ Deactivate</button>
+        <button onclick="clearOutput()" style="background: #17a2b8; color: white;">Clear Output</button>
+        <div id="output"></div>
+    </div>
+
+    <div class="container">
+        <h1 id="main-title">Element Selector Test Page</h1>
+
+        <p>Click the "Activate Selector" button, then hover over and click any element on this page to capture its details.</p>
+
+        <div class="card" id="card-1">
+            <h2>Test Card 1</h2>
+            <p>This is a test card with some content. Try selecting it!</p>
+            <div class="button-group">
+                <button id="btn-submit" class="primary" type="button">Submit Form</button>
+                <button id="btn-cancel" class="secondary" type="button">Cancel</button>
+                <button class="success" type="button">Confirm</button>
+            </div>
+        </div>
+
+        <div class="card alert-info" id="card-2">
+            <h2>Form Example</h2>
+            <form>
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" placeholder="Enter username">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" placeholder="Enter email">
+                </div>
+
+                <div class="form-group">
+                    <label for="role">Role:</label>
+                    <select id="role" name="role">
+                        <option value="">Select a role</option>
+                        <option value="admin">Admin</option>
+                        <option value="user">User</option>
+                        <option value="guest">Guest</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="bio">Bio:</label>
+                    <textarea id="bio" name="bio" rows="4" placeholder="Tell us about yourself"></textarea>
+                </div>
+            </form>
+        </div>
+
+        <div class="card" id="card-3">
+            <h2>List Example</h2>
+            <ul>
+                <li>List item 1 - Select me!</li>
+                <li>List item 2 - Or me!</li>
+                <li>List item 3 - Or even me!</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let selectorActive = false;
+
+        // Listen for messages from the injection script
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'element-selected') {
+                logOutput('✅ Element selected:', event.data);
+                deactivateSelector();
+            } else if (event.data.type === 'exit-selection-mode') {
+                logOutput('🚪 Exited selection mode');
+                deactivateSelector();
+            }
+        });
+
+        function activateSelector() {
+            if (selectorActive) return;
+
+            selectorActive = true;
+            document.getElementById('status').className = 'status active';
+            document.getElementById('status').textContent = 'Active - Click any element';
+
+            logOutput('🎯 Activating element selector...');
+
+            // Dynamically inject the element selector script
+            const script = document.createElement('script');
+            script.src = '/Users/zvada/Documents/BOX/dev-browser/dist/client/bundled-injection.js';
+            script.onload = () => {
+                logOutput('✅ Injection script loaded');
+
+                // Activate the selector
+                if (window.__elementSelectorAPI) {
+                    window.__elementSelectorAPI.activate();
+                    logOutput('✅ Element selector activated');
+                } else {
+                    logOutput('❌ Element selector API not found');
+                }
+            };
+            script.onerror = () => {
+                logOutput('❌ Failed to load injection script');
+                deactivateSelector();
+            };
+            document.head.appendChild(script);
+        }
+
+        function deactivateSelector() {
+            if (!selectorActive) return;
+
+            selectorActive = false;
+            document.getElementById('status').className = 'status inactive';
+            document.getElementById('status').textContent = 'Inactive';
+
+            if (window.__elementSelectorAPI) {
+                window.__elementSelectorAPI.deactivate();
+                logOutput('⏹️ Element selector deactivated');
+            }
+        }
+
+        function logOutput(message, data = null) {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.style.marginBottom = '8px';
+            entry.style.paddingBottom = '8px';
+            entry.style.borderBottom = '1px solid #dee2e6';
+
+            if (data) {
+                entry.innerHTML = `<strong>[${timestamp}]</strong> ${message}<br><pre style="margin: 5px 0 0 0; font-size: 11px;">${JSON.stringify(data, null, 2)}</pre>`;
+            } else {
+                entry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            }
+
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // Listen for Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && selectorActive) {
+                logOutput('⌨️  Escape key pressed');
+                deactivateSelector();
+            }
+        });
+
+        logOutput('📄 Page loaded and ready');
+    </script>
+</body>
+</html>
