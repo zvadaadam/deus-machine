@@ -295,7 +295,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   function handleElementSelected(elementData: any) {
     addLog('info', `✓ Element selected: ${elementData.element.tagName.toLowerCase()}${elementData.element.id ? '#' + elementData.element.id : ''}`);
 
-    const formatted = formatElementForChat(elementData.element);
+    const formatted = formatElementForChat(elementData);
 
     // Dispatch custom event for Dashboard to pick up
     window.dispatchEvent(new CustomEvent('insert-to-chat', {
@@ -309,11 +309,19 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   /**
    * Format element data as markdown for chat insertion
    */
-  function formatElementForChat(el: any): string {
+  function formatElementForChat(elementData: any): string {
+    const el = elementData.element;
     const tagName = el.tagName.toLowerCase();
     const idText = el.id ? '#' + el.id : '';
     const classText = el.className ? '.' + el.className.split(' ').filter(Boolean).join('.') : '';
     const elementSelector = tagName + idText + classText;
+
+    // Build React component section if available
+    const reactSection = elementData.reactComponent ? `
+### ⚛️ React Component
+- **Component:** \`${elementData.reactComponent.name}\`${elementData.reactComponent.fileName ? `
+- **File:** \`${elementData.reactComponent.fileName}\`${elementData.reactComponent.lineNumber ? `:${elementData.reactComponent.lineNumber}` : ''}` : ''}
+` : '';
 
     return `
 ## 🎯 Selected Element
@@ -323,7 +331,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
 **Position:** (${Math.round(el.rect.left)}, ${Math.round(el.rect.top)})
 **Size:** ${Math.round(el.rect.width)}×${Math.round(el.rect.height)}
 ${el.innerText ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"` : ''}
-
+${reactSection}
 ### Attributes
 ${el.attributes && el.attributes.length > 0 ? el.attributes.map((a: any) => `- **${a.name}**: \`"${a.value}"\``).join('\n') : '_(No attributes)_'}
 
