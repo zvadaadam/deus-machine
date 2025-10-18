@@ -11,7 +11,8 @@ interface DevBrowserStatus {
 // Check if we're running in Tauri or web mode
 const isTauriMode = () => {
   try {
-    return window.__TAURI__ !== undefined;
+    const w = window as any;
+    return !!(w && (w.__TAURI__ || w.__TAURI_IPC__));
   } catch {
     return false;
   }
@@ -42,8 +43,8 @@ export function useDevBrowser() {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Get port and auth token
-        const port = await invoke<number>("get_browser_port");
-        const authToken = await invoke<string>("get_browser_auth_token");
+        const port = await invoke<number | null>("get_browser_port");
+        const authToken = await invoke<string | null>("get_browser_auth_token");
 
         setStatus({
           running: true,
@@ -57,7 +58,7 @@ export function useDevBrowser() {
         // Web mode: check for existing MCP server on port 3000
         const response = await fetch('http://localhost:3000/health');
         if (response.ok) {
-          const healthData = await response.json();
+          await response.json(); // Response checked; details unused
 
           setStatus({
             running: true,
@@ -129,9 +130,14 @@ export function useDevBrowser() {
       } else {
         // Web mode: check for existing MCP server
         try {
-          const response = await fetch('http://localhost:3000/health', {
-            signal: AbortSignal.timeout(2000)
-          });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+          let response: Response;
+          try {
+            response = await fetch('http://localhost:3000/health', { signal: controller.signal });
+          } finally {
+            clearTimeout(timeoutId);
+          }
           if (response.ok) {
             setStatus({
               running: true,

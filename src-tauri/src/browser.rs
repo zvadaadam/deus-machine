@@ -148,8 +148,20 @@ impl BrowserManager {
 
     /// Check if browser server is running
     pub fn is_running(&self) -> bool {
-        let process = self.process.lock().unwrap();
-        process.is_some()
+        let mut lock = self.process.lock().unwrap();
+        if let Some(child) = lock.as_mut() {
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process exited; clear handle
+                    *lock = None;
+                    false
+                }
+                Ok(None) => true,  // Still running
+                Err(_) => false,   // Error checking status
+            }
+        } else {
+            false
+        }
     }
 
     /// Stop the browser server
