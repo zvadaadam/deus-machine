@@ -128,11 +128,33 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
 
     // List of apps to check for (id, display name, app path)
     let app_checks = vec![
+        // Code Editors
         ("cursor", "Cursor", "/Applications/Cursor.app"),
         ("vscode", "VS Code", "/Applications/Visual Studio Code.app"),
         ("windsurf", "Windsurf", "/Applications/Windsurf.app"),
+        ("zed", "Zed", "/Applications/Zed.app"),
+        ("sublime", "Sublime Text", "/Applications/Sublime Text.app"),
+        ("nova", "Nova", "/Applications/Nova.app"),
+
+        // JetBrains IDEs
+        ("webstorm", "WebStorm", "/Applications/WebStorm.app"),
+        ("intellij", "IntelliJ IDEA", "/Applications/IntelliJ IDEA.app"),
+        ("pycharm", "PyCharm", "/Applications/PyCharm.app"),
+        ("phpstorm", "PhpStorm", "/Applications/PhpStorm.app"),
+        ("rubymine", "RubyMine", "/Applications/RubyMine.app"),
+        ("goland", "GoLand", "/Applications/GoLand.app"),
+        ("clion", "CLion", "/Applications/CLion.app"),
+        ("fleet", "Fleet", "/Applications/Fleet.app"),
+        ("rider", "Rider", "/Applications/Rider.app"),
+        ("androidstudio", "Android Studio", "/Applications/Android Studio.app"),
+
+        // Apple IDEs
         ("xcode", "Xcode", "/Applications/Xcode.app"),
+
+        // Terminals
         ("terminal", "Terminal", "/System/Applications/Utilities/Terminal.app"),
+        ("iterm", "iTerm", "/Applications/iTerm.app"),
+        ("warp", "Warp", "/Applications/Warp.app"),
     ];
 
     for (id, name, path) in app_checks {
@@ -152,11 +174,34 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
 #[tauri::command]
 pub async fn open_in_app(app_id: String, workspace_path: String) -> Result<String, String> {
     let command = match app_id.as_str() {
+        // Code Editors
         "cursor" => format!("open -a Cursor '{}'", workspace_path),
         "vscode" => format!("open -a 'Visual Studio Code' '{}'", workspace_path),
         "windsurf" => format!("open -a Windsurf '{}'", workspace_path),
+        "zed" => format!("open -a Zed '{}'", workspace_path),
+        "sublime" => format!("open -a 'Sublime Text' '{}'", workspace_path),
+        "nova" => format!("open -a Nova '{}'", workspace_path),
+
+        // JetBrains IDEs
+        "webstorm" => format!("open -a WebStorm '{}'", workspace_path),
+        "intellij" => format!("open -a 'IntelliJ IDEA' '{}'", workspace_path),
+        "pycharm" => format!("open -a PyCharm '{}'", workspace_path),
+        "phpstorm" => format!("open -a PhpStorm '{}'", workspace_path),
+        "rubymine" => format!("open -a RubyMine '{}'", workspace_path),
+        "goland" => format!("open -a GoLand '{}'", workspace_path),
+        "clion" => format!("open -a CLion '{}'", workspace_path),
+        "fleet" => format!("open -a Fleet '{}'", workspace_path),
+        "rider" => format!("open -a Rider '{}'", workspace_path),
+        "androidstudio" => format!("open -a 'Android Studio' '{}'", workspace_path),
+
+        // Apple IDEs
         "xcode" => format!("open -a Xcode '{}'", workspace_path),
+
+        // Terminals
         "terminal" => format!("open -a Terminal '{}'", workspace_path),
+        "iterm" => format!("open -a iTerm '{}'", workspace_path),
+        "warp" => format!("open -a Warp '{}'", workspace_path),
+
         _ => return Err(format!("Unknown app: {}", app_id)),
     };
 
