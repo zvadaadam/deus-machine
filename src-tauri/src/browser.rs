@@ -76,13 +76,34 @@ impl BrowserManager {
                     // Print all output for debugging
                     println!("[BROWSER] {}", line);
 
-                    // Detect when port JSON is coming
+                    // Parse port from "Server URL: http://localhost:PORT" (after fix)
+                    if line.contains("Server URL:") && line.contains("localhost:") {
+                        if let Some(url_part) = line.split("localhost:").nth(1) {
+                            let port_str = url_part.trim();
+                            if let Ok(port_num) = port_str.parse::<u16>() {
+                                let mut port = port_clone.lock().unwrap();
+                                *port = Some(port_num);
+                                println!("[BROWSER] ✓ Detected port: {}", port_num);
+                            }
+                        }
+                    }
+
+                    // Alternative: Parse from "PORT:3000" format if added
+                    if line.starts_with("PORT:") {
+                        if let Some(port_str) = line.strip_prefix("PORT:") {
+                            if let Ok(port_num) = port_str.trim().parse::<u16>() {
+                                let mut port = port_clone.lock().unwrap();
+                                *port = Some(port_num);
+                                println!("[BROWSER] ✓ Detected port: {}", port_num);
+                            }
+                        }
+                    }
+
+                    // Fallback: Parse from JSON (in case logger output is captured)
                     if line.contains("HTTP MCP Server started") {
                         looking_for_port_json = true;
                         continue;
                     }
-
-                    // Parse port from JSON output (comes after "HTTP MCP Server started")
                     if looking_for_port_json && line.trim().starts_with("\"port\":") {
                         if let Some(port_str) = line.split(':').nth(1) {
                             let port_str = port_str.trim().trim_end_matches(',');
