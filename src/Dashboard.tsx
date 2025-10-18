@@ -25,7 +25,7 @@ import {
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Shield } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
@@ -364,9 +364,17 @@ export function Dashboard() {
           <>
             {/* Workspace Header - Simplified */}
             <div className="border-b border-border px-4 py-3">
-              <div className="flex items-center justify-between">
-                {/* Left: Branch name with copy */}
-                <BranchName branch={selectedWorkspace.branch} />
+              <div className="flex items-start justify-between">
+                {/* Left: Branch name with copy and isolated message */}
+                <div className="flex flex-col gap-1.5">
+                  <BranchName branch={selectedWorkspace.branch} />
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-0.5">
+                    <Shield className="h-3 w-3" />
+                    <span>Isolated workspace</span>
+                    <span className="opacity-50">•</span>
+                    <span>Safe to experiment</span>
+                  </div>
+                </div>
 
                 {/* Right: Open in dropdown */}
                 <OpenInDropdown
