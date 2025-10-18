@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import "./WorkspaceDetail.css";
 import type {
   FileChangeGroup,
@@ -27,7 +27,12 @@ interface WorkspaceDetailProps {
   onStop?: (handler: () => void) => void;
 }
 
-export function WorkspaceDetail({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }: WorkspaceDetailProps) {
+export interface WorkspaceDetailRef {
+  insertText: (text: string) => void;
+}
+
+export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailProps>(
+  ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
   const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -67,6 +72,18 @@ export function WorkspaceDetail({ sessionId, onClose, embedded = false, onCompac
     if (onCreatePR) onCreatePR(createPR);
     if (onStop) onStop(stopSession);
   }, [onCompact, onCreatePR, onStop, compactConversation, createPR, stopSession]);
+
+  // Expose insertText method for browser element selector
+  useImperativeHandle(ref, () => ({
+    insertText: (text: string) => {
+      console.log('[WorkspaceDetail] Inserting text to message input');
+      // Add with double newline for proper formatting
+      setMessageInput(prev => {
+        const separator = prev.trim() ? '\n\n' : '';
+        return prev + separator + text;
+      });
+    }
+  }), [setMessageInput]);
 
 
   function renderDiff(fileChange: FileChangeGroup) {
@@ -245,4 +262,6 @@ export function WorkspaceDetail({ sessionId, onClose, embedded = false, onCompac
       </div>
     </div>
   );
-}
+});
+
+WorkspaceDetail.displayName = 'WorkspaceDetail';

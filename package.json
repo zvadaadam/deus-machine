@@ -4,13 +4,33 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:backend": "node backend/server.cjs",
+    "//": "═══════════════════════════════════════════════════════════════",
+    "// MAIN COMMANDS": "Use these for development:",
+    "//1": "═══════════════════════════════════════════════════════════════",
+
+    "tauri:dev": "tauri dev",
+    "// tauri:dev": "🚀 DESKTOP APP - Runs EVERYTHING (Vite + Backend + Tauri). This is what you want for desktop development!",
+
     "dev:full": "./dev.sh",
+    "// dev:full": "🌐 WEB DEV - Runs backend + frontend together with proper port setup. Use this for web-only development.",
+
+    "//2": "═══════════════════════════════════════════════════════════════",
+    "// INDIVIDUAL COMPONENTS": "⚠️  DON'T run these separately unless you know what you're doing!",
+    "//3": "═══════════════════════════════════════════════════════════════",
+
+    "dev": "vite",
+    "// dev": "⚠️  Frontend only - requires backend running separately. Use 'dev:full' or 'tauri:dev' instead!",
+
+    "dev:backend": "node backend/server.cjs",
+    "// dev:backend": "⚠️  Backend only - requires frontend running separately. Use 'dev:full' or 'tauri:dev' instead!",
+
+    "//4": "═══════════════════════════════════════════════════════════════",
+    "// BUILD & PRODUCTION": "",
+    "//5": "═══════════════════════════════════════════════════════════════",
+
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
   "dependencies": {
