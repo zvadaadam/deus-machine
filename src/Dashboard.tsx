@@ -355,15 +355,14 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset */}
-      <SidebarInset className="overflow-hidden">
+      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
       <PanelGroup
         direction="horizontal"
         autoSaveId="conductor-root-layout"
         className="app-container"
-        style={{ height: "100%", width: "100%" }}
       >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30} style={{ minWidth: 0 }}>
+      <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="panel-content main-content">
         {selectedWorkspace ? (
           <>
@@ -449,8 +448,8 @@ export function Dashboard() {
       <PanelResizeHandle className="resize-handle" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0 }}>
-        <Tabs defaultValue="browser" className="h-full flex flex-col">
+      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
+        <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
           <div className="border-b border-border">
             <TabsList className="h-10 w-full justify-start rounded-none bg-transparent p-0">
               <TabsTrigger
