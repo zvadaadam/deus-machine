@@ -46,7 +46,7 @@ export function BranchName({ branch }: BranchNameProps) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2.5">
       <TooltipProvider delayDuration={200}>
         <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
           <TooltipTrigger asChild>
@@ -73,12 +73,12 @@ export function BranchName({ branch }: BranchNameProps) {
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="px-2 py-0.5 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
+            <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
               Isolated
             </span>
           </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-xs">You're in an isolated copy of your codebase</p>
+          <TooltipContent side="bottom" className="max-w-[240px]">
+            <p className="text-xs">This is an isolated Git worktree. Safe to experiment — changes won't affect your main branch.</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
