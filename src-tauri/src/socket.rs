@@ -12,7 +12,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
 
 /**
  * Socket Manager State
