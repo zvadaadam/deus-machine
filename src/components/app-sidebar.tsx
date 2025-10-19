@@ -79,16 +79,16 @@ export function AppSidebar({
         {isExpanded ? (
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <Avatar className="h-8 w-8 flex-shrink-0">
-              <AvatarFallback className="text-xs">
+              <AvatarFallback className="text-caption">
                 {profile.username.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <p className="text-sm font-medium truncate">{profile.username}</p>
+            <p className="text-body font-medium truncate">{profile.username}</p>
           </div>
         ) : (
           <div className="mx-auto">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">
+              <AvatarFallback className="text-caption">
                 {profile.username.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -126,7 +126,7 @@ export function AppSidebar({
               tooltip={!isExpanded ? "New Workspace" : undefined}
             >
               <FolderPlus className="h-4 w-4" />
-              {isExpanded && <span>New Workspace</span>}
+              {isExpanded && <span className="text-body-sm">New Workspace</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

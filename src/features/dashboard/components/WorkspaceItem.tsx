@@ -32,11 +32,11 @@ export function WorkspaceItem({
         <span className="text-base flex-shrink-0 mt-0.5">🌿</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2 mb-0.5">
-            <span className="text-sm font-medium truncate">
+            <span className="text-body-sm font-medium truncate">
               {workspace.branch}
             </span>
             {hasDiff && (
-              <div className="flex gap-1 text-xs font-mono flex-shrink-0">
+              <div className="flex gap-1 text-caption font-mono flex-shrink-0">
                 {diffStats.additions > 0 && (
                   <span className="text-success-600 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
                     +{diffStats.additions}
@@ -50,7 +50,7 @@ export function WorkspaceItem({
               </div>
             )}
           </div>
-          <div className="flex items-center text-xs text-muted-foreground gap-1">
+          <div className="flex items-center text-caption text-muted-foreground gap-1">
             {workspace.session_status === 'working' ? (
               <span className="text-primary">Working...</span>
             ) : (
