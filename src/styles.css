@@ -120,8 +120,9 @@
 
   /* Arc browser style frosted glass vibrancy */
   /* Root vibrancy - applied ONCE to the app container as the universal background */
+  /* No backdrop-blur needed here - Tauri's native window effects handle it for desktop */
   .vibrancy-root {
-    @apply bg-red-500/30 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
+    @apply bg-red-500/30 transition-colors duration-200;
   }
 
   /* Main content card - more opaque for distinction */
