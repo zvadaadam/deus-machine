@@ -319,8 +319,8 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         className={cn(
           "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2.5 min-h-[56px] rounded-lg cursor-pointer transition-all duration-200",
           isActive
-            ? "bg-sidebar-accent/80 ring-1 ring-border/60 elevation-2"
-            : "hover:bg-sidebar-accent/60 hover:elevation-1"
+            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
+            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent"
         )}
         aria-current={isActive ? "page" : undefined}
         onClick={onClick}
