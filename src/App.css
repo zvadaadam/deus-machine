@@ -133,7 +133,7 @@ body {
 }
 
 .main-body::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: transparent;
 }
 
 .main-body::-webkit-scrollbar-thumb {
@@ -147,8 +147,8 @@ body {
 
 /* Content Sections */
 .content-section {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
+  background: transparent;
+  border: none;
   border-radius: 0.5rem;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -182,8 +182,8 @@ body {
 .right-panel {
   width: 100%;
   height: 100%;
-  background: hsl(var(--background));
-  border-left: 1px solid hsl(var(--border));
+  background: transparent;
+  border-left: 1px solid hsl(var(--border) / 0.4);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -193,8 +193,8 @@ body {
 .right-panel-split {
   width: 100%;
   height: 100%;
-  background: hsl(var(--background));
-  border-left: 1px solid hsl(var(--border));
+  background: transparent;
+  border-left: 1px solid hsl(var(--border) / 0.4);
   display: flex;
   flex-direction: column;
   overflow: hidden;
