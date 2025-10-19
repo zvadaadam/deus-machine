@@ -496,7 +496,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
           disabled={!currentUrl || !devBrowserStatus.running || injected}
           title={injected ? "Automation active" : "Inject automation"}
         >
-          <Zap className={`h-4 w-4 ${injected ? "text-green-500" : ""}`} />
+          <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
         </Button>
 
         <Button
@@ -560,16 +560,16 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
             {/* Cross-Origin Info Banner */}
             {isCrossOrigin && !loading && (
-              <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-sm">
+              <div className="absolute top-0 left-0 right-0 bg-warning/10 border-b border-warning/20 backdrop-blur-sm">
                 <div className="flex items-center gap-2 px-3 py-2">
-                  <Info className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500 flex-shrink-0" />
-                  <p className="text-xs text-amber-900 dark:text-amber-200 flex-1">
+                  <Info className="h-3.5 w-3.5 text-warning flex-shrink-0" />
+                  <p className="text-xs text-warning-foreground flex-1">
                     <span className="font-medium">Browsing only</span> — AI automation unavailable on external websites
                   </p>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 hover:bg-amber-500/20"
+                    className="h-5 w-5 hover:bg-warning/20"
                     onClick={() => setIsCrossOrigin(false)}
                     title="Dismiss"
                   >
@@ -605,9 +605,9 @@ _You can ask me to modify this element, debug it, or help with related styling._
               <p className="text-sm text-muted-foreground mb-4">
                 Enter a URL above and click Go to browse
               </p>
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-left">
+              <div className="bg-info/10 border border-info/20 rounded-lg p-3 text-left">
                 <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <Info className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p className="font-medium text-foreground">AI automation works with:</p>
                     <ul className="space-y-0.5 ml-2">
@@ -615,7 +615,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
                       <li>• Localhost pages</li>
                       <li>• Same-origin content</li>
                     </ul>
-                    <p className="mt-2 text-yellow-600 dark:text-yellow-500">
+                    <p className="mt-2 text-warning">
                       External websites (https://) block automation due to browser security.
                     </p>
                   </div>
@@ -637,7 +637,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
       <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-green-500" : "bg-gray-400"}`} />
+            <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-success" : "bg-muted-foreground/40"}`} />
             <span className="truncate max-w-[300px]">
               {currentUrl || "No page loaded"}
             </span>
@@ -645,13 +645,13 @@ _You can ask me to modify this element, debug it, or help with related styling._
           {devBrowserStatus.running && currentUrl && (
             <div className="flex items-center gap-1.5">
               <Zap className={`h-3 w-3 ${
-                injected ? "text-green-500" :
-                isCrossOrigin ? "text-amber-500" :
+                injected ? "text-success" :
+                isCrossOrigin ? "text-warning" :
                 "text-muted-foreground/60"
               }`} />
               <span className={
-                injected ? "text-green-500" :
-                isCrossOrigin ? "text-amber-500" :
+                injected ? "text-success" :
+                isCrossOrigin ? "text-warning" :
                 "text-muted-foreground/60"
               }>
                 {injected ? "AI-ready" : isCrossOrigin ? "Browse-only" : "Manual"}
@@ -711,9 +711,9 @@ _You can ask me to modify this element, debug it, or help with related styling._
               <div className="space-y-0.5">
                 {consoleLogs.map((log, i) => (
                   <div key={i} className={`flex gap-2 ${
-                    log.level === 'error' ? 'text-red-500' :
-                    log.level === 'warn' ? 'text-yellow-500' :
-                    log.level === 'debug' ? 'text-blue-400' :
+                    log.level === 'error' ? 'text-destructive' :
+                    log.level === 'warn' ? 'text-warning' :
+                    log.level === 'debug' ? 'text-info' :
                     'text-foreground'
                   }`}>
                     <span className="text-muted-foreground/60 flex-shrink-0">

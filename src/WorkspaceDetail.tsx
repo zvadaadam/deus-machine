@@ -105,10 +105,10 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
               return (
                 <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
                   <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
-                    <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-green-100 text-green-800">New File</span>
+                    <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-success/20 text-success">New File</span>
                     <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
                   </div>
-                  <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-green-50 text-green-900">{edit.content || ''}</pre>
+                  <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.content || ''}</pre>
                 </div>
               );
             }
@@ -117,17 +117,17 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
             return (
               <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
                 <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
-                  <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-blue-100 text-blue-800">Edit #{idx + 1}</span>
+                  <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-info/20 text-info">Edit #{idx + 1}</span>
                   <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-px bg-border/40">
                   <div className="flex flex-col bg-transparent">
-                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-red-50 text-red-600">− Removed</div>
-                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-red-50 text-red-900">{edit.old_string || ''}</pre>
+                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-destructive/10 text-destructive">− Removed</div>
+                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-destructive/10 text-destructive-foreground">{edit.old_string || ''}</pre>
                   </div>
                   <div className="flex flex-col bg-transparent">
-                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-green-50 text-green-600">+ Added</div>
-                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-green-50 text-green-900">{edit.new_string || ''}</pre>
+                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-success/10 text-success">+ Added</div>
+                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.new_string || ''}</pre>
                   </div>
                 </div>
               </div>
