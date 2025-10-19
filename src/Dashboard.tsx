@@ -403,10 +403,10 @@ export function Dashboard() {
             </div>
 
             {/* Messages take full area */}
-            <div className="main-body">
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3 scrollbar-vibrancy has-[.workspace-messages]:overflow-hidden has-[.workspace-messages]:gap-3">
               {selectedWorkspace.active_session_id && (
-                <div className="content-section workspace-messages-section" style={{ margin: 0, border: 'none', borderRadius: 0, padding: 0 }}>
-                  <div className="section-content" style={{ height: '100%' }}>
+                <div className="workspace-messages flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
                     <WorkspaceDetail
                       ref={workspaceDetailRef}
                       workspaceId={selectedWorkspace.id}
@@ -423,7 +423,7 @@ export function Dashboard() {
             </div>
           </>
         ) : (
-          <div className="main-body">
+          <div className="flex-1 overflow-y-auto p-3 px-4 scrollbar-vibrancy">
             <EmptyState
               icon="👈"
               title="No Workspace Selected"
@@ -469,7 +469,7 @@ export function Dashboard() {
         </div>
       </Panel>
 
-      <PanelResizeHandle className="resize-handle" />
+      <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
       <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>

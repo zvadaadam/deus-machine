@@ -224,34 +224,67 @@ body {
     to { opacity: 1; transform: scale(1); }
   }
 
-  /* Unified vibrancy for all panels - same values for consistency */
+  /* Unified vibrancy utilities - Arc browser style frosted glass */
   .vibrancy-bg {
-    background: rgba(255, 255, 255, 0.7) !important;
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-    transition: background 0.2s cubic-bezier(0, 0, 0.2, 1);
+    @apply bg-white/70 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
   }
 
   .vibrancy-sidebar {
-    background: rgba(255, 255, 255, 0.7) !important;
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-    transition: background 0.2s cubic-bezier(0, 0, 0.2, 1);
+    @apply bg-white/70 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
+  }
+
+  .vibrancy-panel {
+    @apply bg-white/50 backdrop-blur-[20px] transition-colors duration-200;
+  }
+
+  .vibrancy-input {
+    @apply bg-white/50 backdrop-blur-[10px] transition-colors duration-200;
+  }
+
+  .vibrancy-card {
+    @apply bg-sidebar-accent/30 backdrop-blur-sm border-border/40;
   }
 
   .dark .vibrancy-bg {
-    background: rgba(0, 0, 0, 0.6) !important;
+    @apply bg-black/60;
   }
 
   .dark .vibrancy-sidebar {
-    background: rgba(0, 0, 0, 0.6) !important;
+    @apply bg-black/60;
+  }
+
+  .dark .vibrancy-panel {
+    @apply bg-black/50;
+  }
+
+  .dark .vibrancy-input {
+    @apply bg-black/40;
+  }
+
+  /* Scrollbar styles for vibrancy */
+  .scrollbar-vibrancy::-webkit-scrollbar {
+    @apply w-2.5;
+  }
+
+  .scrollbar-vibrancy::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .scrollbar-vibrancy::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-[5px];
+  }
+
+  .scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary;
   }
 
   /* Reduce motion support for vibrancy */
   @media (prefers-reduced-motion: reduce) {
     .vibrancy-bg,
-    .vibrancy-sidebar {
-      transition: none !important;
+    .vibrancy-sidebar,
+    .vibrancy-panel,
+    .vibrancy-input {
+      @apply transition-none;
     }
   }
 }
