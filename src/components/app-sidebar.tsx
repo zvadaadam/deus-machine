@@ -118,7 +118,7 @@ export function AppSidebar({
       </SidebarContent>
 
       {/* Footer with Add Repository */}
-      <SidebarFooter className="p-2">
+      <SidebarFooter className="p-4">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -335,11 +335,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
             <GitBranch
               className={cn(
                 "h-4 w-4 flex-shrink-0",
-                workspace.session_status === "idle"
-                  ? "text-success/60"
-                  : workspace.session_status === "compacting"
-                    ? "text-warning/70"
-                    : "text-sidebar-foreground/60"
+                getStatusTextColor(workspace.session_status)
               )}
             />
           )}

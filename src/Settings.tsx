@@ -317,8 +317,9 @@ export function Settings() {
               max="24"
               value={settings.terminal_font_size ?? 12}
               onChange={(e) => {
-                const next = parseInt(e.target.value, 10);
-                saveSetting('terminal_font_size', Number.isFinite(next) ? next : 12);
+                const value = parseInt(e.target.value, 10);
+                const fontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
+                saveSetting('terminal_font_size', fontSize);
               }}
             />
             <p className="text-sm text-muted-foreground">Terminal font size in pixels</p>
