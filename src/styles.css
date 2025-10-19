@@ -83,10 +83,11 @@
     @apply m-0 p-0 w-full h-full overflow-hidden;
   }
 
-  /* App root - universal vibrancy background for all routes */
+  /* App root - transparent to show Tauri window vibrancy effects */
   #root {
-    @apply min-h-screen w-full m-0 p-0 bg-background transition-colors duration-200;
+    @apply min-h-screen w-full m-0 p-0 transition-colors duration-200;
     /* Tauri-specific: keep fixed for proper window transparency */
+    background: transparent;
     position: fixed;
     inset: 0;
     max-width: none;
