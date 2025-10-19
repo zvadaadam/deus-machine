@@ -118,21 +118,21 @@
     }
   }
 
-  /* Arc browser style frosted glass vibrancy (keep these - component utilities) */
-  .vibrancy-bg {
-    @apply bg-white/70 dark:bg-black/60 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
+  /* Arc browser style frosted glass vibrancy */
+  /* Root vibrancy - applied ONCE to the app container */
+  .vibrancy-root {
+    @apply backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
+    background: transparent;
   }
 
-  .vibrancy-panel {
-    @apply bg-white/50 dark:bg-black/50 backdrop-blur-[20px] transition-colors duration-200;
+  /* Main content card - more opaque for distinction */
+  .vibrancy-card {
+    @apply bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border-border/50 transition-colors duration-200;
   }
 
+  /* Input fields */
   .vibrancy-input {
     @apply bg-white/50 dark:bg-black/40 backdrop-blur-[10px] transition-colors duration-200;
-  }
-
-  .vibrancy-card {
-    @apply bg-sidebar-accent/30 backdrop-blur-sm border-border/40;
   }
 
   /* Scrollbar styles for vibrancy */
