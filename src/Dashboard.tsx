@@ -373,7 +373,7 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset and inset padding */}
-      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
+      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0 backdrop-blur-[40px] backdrop-saturate-[180%]">
         <div className="flex h-full flex-col gap-4 pt-4 pr-4 pb-4">
           <PanelGroup
             direction="horizontal"
