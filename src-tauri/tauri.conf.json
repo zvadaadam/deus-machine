@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "identifier": "com.conductor.app",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "node backend/server.cjs & npm run dev",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
