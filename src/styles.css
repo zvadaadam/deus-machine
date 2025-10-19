@@ -121,7 +121,7 @@
   /* Arc browser style frosted glass vibrancy */
   /* Root vibrancy - applied ONCE to the app container as the universal background */
   .vibrancy-root {
-    @apply bg-background backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
+    @apply bg-red-500/30 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
   }
 
   /* Main content card - more opaque for distinction */
