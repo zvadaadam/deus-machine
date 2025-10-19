@@ -83,8 +83,9 @@
     @apply m-0 p-0 w-full h-full overflow-hidden;
   }
 
+  /* App root - universal vibrancy background for all routes */
   #root {
-    @apply min-h-screen w-full m-0 p-0;
+    @apply min-h-screen w-full m-0 p-0 bg-red-500/30 transition-colors duration-200;
     /* Tauri-specific: keep fixed for proper window transparency */
     position: fixed;
     inset: 0;
@@ -118,14 +119,12 @@
     }
   }
 
-  /* Arc browser style frosted glass vibrancy */
-  /* Root vibrancy - applied ONCE to the app container as the universal background */
-  /* No backdrop-blur needed here - Tauri's native window effects handle it for desktop */
-  .vibrancy-root {
-    @apply bg-red-500/30 transition-colors duration-200;
-  }
+  /* Arc browser-style frosted glass vibrancy */
+  /* Note: Universal background is applied to #root (line 88) */
+  /* Desktop: Tauri's native window effects handle blur */
+  /* Web: backdrop-blur applied to child panels */
 
-  /* Main content card - more opaque for distinction */
+  /* Main content card - frosted glass panel */
   .vibrancy-card {
     @apply bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border-border/50 transition-colors duration-200;
   }
