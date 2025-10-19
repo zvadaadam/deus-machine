@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft } from 'lucide-react';
+import { useTheme } from './hooks/useTheme';
 import type {
   Settings,
   MCPServer,
@@ -25,6 +26,7 @@ import type {
 
 export function Settings() {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
   const [settings, setSettings] = useState<Settings>({});
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
@@ -152,6 +154,26 @@ export function Settings() {
         <h2 className="text-2xl font-semibold">General Settings</h2>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="theme">Theme</Label>
+            <Select
+              value={theme}
+              onValueChange={(value: 'light' | 'dark' | 'system') => setTheme(value)}
+            >
+              <SelectTrigger id="theme">
+                <SelectValue placeholder="Select theme" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+                <SelectItem value="system">System</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">Choose your preferred color theme</p>
+          </div>
+
+          <Separator />
+
           <div className="flex items-center space-x-3">
             <Checkbox
               id="notifications"
