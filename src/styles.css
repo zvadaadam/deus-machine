@@ -70,15 +70,15 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    /* Semantic state colors - adjusted for dark mode */
-    --success: 142 76% 36%;                 /* Green-600 - same as light */
-    --success-foreground: 0 0% 100%;        /* White */
+    /* Semantic state colors - optimized for dark mode */
+    --success: 142 71% 45%;                 /* Green-500 - lighter for dark bg */
+    --success-foreground: 142 76% 15%;      /* Dark green text */
 
-    --warning: 38 92% 50%;                  /* Orange-500 - same as light */
-    --warning-foreground: 0 0% 100%;        /* White */
+    --warning: 38 92% 60%;                  /* Orange-400 - lighter for dark bg */
+    --warning-foreground: 38 70% 20%;       /* Dark orange text */
 
-    --info: 199 89% 48%;                    /* Cyan-600 - same as light */
-    --info-foreground: 0 0% 100%;           /* White */
+    --info: 199 89% 58%;                    /* Cyan-400 - lighter for dark bg */
+    --info-foreground: 199 80% 20%;         /* Dark cyan text */
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
