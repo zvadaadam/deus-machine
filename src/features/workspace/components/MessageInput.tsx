@@ -46,7 +46,7 @@ export function MessageInput({
   }, [messageInput]);
 
   return (
-    <div className="flex-shrink-0 m-0 p-4 z-10 flex flex-col gap-3">
+    <div className="flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
       {/* Glassmorphic ChatBox */}
       <div
         className={`

@@ -21,9 +21,9 @@ export function MessageList({
   messagesContainerRef,
 }: MessageListProps) {
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0" ref={messagesContainerRef}>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6" ref={messagesContainerRef}>
       {loading ? (
-        <div className="p-6 space-y-4">
+        <div className="space-y-4">
           <Skeleton className="h-12 w-12 rounded-full" />
           <Skeleton className="h-6 w-full" />
           <Skeleton className="h-4 w-[90%]" />
@@ -38,7 +38,7 @@ export function MessageList({
         />
       ) : (
         <>
-          <div className="flex flex-col gap-6 p-2 pb-8 min-h-min">
+          <div className="flex flex-col gap-6 pb-8 min-h-min">
             {messages.map(message => (
               <MessageItem
                 key={message.id}
