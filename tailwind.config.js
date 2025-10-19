@@ -107,6 +107,23 @@ module.exports = {
   				'monospace'
   			]
   		},
+  		fontSize: {
+  			// Display sizes - for hero sections, large headers
+  			'display-lg': ['48px', { lineHeight: '1.1', letterSpacing: '-0.02em', fontWeight: '700' }],
+  			'display': ['36px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '700' }],
+  			// Heading sizes - for section headers
+  			'heading-xl': ['32px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '600' }],
+  			'heading-lg': ['24px', { lineHeight: '1.3', letterSpacing: '-0.005em', fontWeight: '600' }],
+  			'heading': ['20px', { lineHeight: '1.4', fontWeight: '600' }],
+  			'heading-sm': ['18px', { lineHeight: '1.4', fontWeight: '600' }],
+  			// Body sizes - for content
+  			'body-lg': ['16px', { lineHeight: '1.5', fontWeight: '400' }],
+  			'body': ['14px', { lineHeight: '1.5', fontWeight: '400' }],
+  			'body-sm': ['13px', { lineHeight: '1.5', fontWeight: '400' }],
+  			// Caption sizes - for labels, metadata
+  			'caption': ['12px', { lineHeight: '1.4', fontWeight: '400' }],
+  			'caption-sm': ['11px', { lineHeight: '1.4', fontWeight: '400' }],
+  		},
   		keyframes: {
   			'accordion-down': {
   				from: {
