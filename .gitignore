@@ -21,6 +21,7 @@ src-tauri/WixTools/
 *.swp
 *.swo
 *~
+*.bak
 
 # Environment variables
 .env

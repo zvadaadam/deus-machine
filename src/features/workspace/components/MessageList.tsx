@@ -38,7 +38,7 @@ export function MessageList({
         />
       ) : (
         <>
-          <div className="flex flex-col gap-3 p-2 pb-8 min-h-min">
+          <div className="flex flex-col gap-6 p-2 pb-8 min-h-min">
             {messages.map(message => (
               <MessageItem
                 key={message.id}
@@ -48,7 +48,7 @@ export function MessageList({
             ))}
           </div>
           {sessionStatus === 'working' && (
-            <div className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success-50 border border-success-200 rounded-xl text-success-900 font-medium text-[0.85rem] shadow-sm animate-pulse">
+            <div className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success-500/10 backdrop-blur-sm border border-success-500/30 rounded-xl text-success-900 font-medium text-[0.85rem] shadow-sm animate-pulse">
               <div className="w-4 h-4 border-2 border-success-100 border-t-success-500 rounded-full animate-spin flex-shrink-0"></div>
               <span>Claude is working...</span>
             </div>

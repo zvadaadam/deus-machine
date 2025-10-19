@@ -73,47 +73,27 @@ export function AppSidebar({
   const isExpanded = state === "expanded";
 
   return (
-    <Sidebar variant="floating" collapsible="icon">
-      {/* Header with Profile and Collapse Button */}
+    <Sidebar variant="sidebar" collapsible="icon">
+      {/* Header with Profile (no collapse button) */}
       <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between w-full">
-          {isExpanded ? (
-            <>
-              <div
-                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer hover:opacity-70 transition-opacity"
-                onClick={() => navigate("/settings")}
-              >
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="text-xs">
-                    {profile.username.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{profile.username}</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex-shrink-0"
-                title="Collapse sidebar"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              className="h-8 w-8 mx-auto"
-              title="Expand sidebar"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        {isExpanded ? (
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Avatar className="h-8 w-8 flex-shrink-0">
+              <AvatarFallback className="text-caption">
+                {profile.username.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <p className="text-body font-medium truncate">{profile.username}</p>
+          </div>
+        ) : (
+          <div className="mx-auto">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-caption">
+                {profile.username.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        )}
       </SidebarHeader>
 
       {/* Repositories List */}
@@ -138,7 +118,7 @@ export function AppSidebar({
       </SidebarContent>
 
       {/* Footer with Add Repository */}
-      <SidebarFooter className="border-t border-sidebar-border p-2">
+      <SidebarFooter className="p-4">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -146,7 +126,7 @@ export function AppSidebar({
               tooltip={!isExpanded ? "New Workspace" : undefined}
             >
               <FolderPlus className="h-4 w-4" />
-              {isExpanded && <span>New Workspace</span>}
+              {isExpanded && <span className="text-body-sm">New Workspace</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -223,8 +203,8 @@ function RepositoryItem({
                   })()}
                   {hasRunningWorkspace && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-600"></span>
+                      <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                     </span>
                   )}
                 </div>
@@ -237,10 +217,9 @@ function RepositoryItem({
               {sidebarExpanded && (
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 flex-shrink-0",
+                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
                     isCollapsed && "-rotate-90"
                   )}
-                  style={{ transition: "transform 200ms cubic-bezier(.165, .84, .44, 1)" }}
                 />
               )}
             </div>
@@ -317,13 +296,13 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const getStatusTextColor = (status: string | null | undefined) => {
     switch (status) {
       case "working":
-        return "text-blue-500";
+        return "text-primary";
       case "idle":
         return "text-muted-foreground/70";
       case "compacting":
-        return "text-yellow-500";
+        return "text-warning";
       default:
-        return "text-rose-400";
+        return "text-destructive";
     }
   };
 
@@ -331,14 +310,18 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
     return status === "working" || status === "compacting";
   };
 
-  const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
+  const additions = diffStats?.additions ?? 0;
+  const deletions = diffStats?.deletions ?? 0;
+  const hasChanges = additions > 0 || deletions > 0;
 
   return (
     <SidebarMenuSubItem>
       <div
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2 min-h-[56px] rounded-md cursor-pointer",
-          isActive ? "bg-sidebar-accent ring-1 ring-sidebar-border" : "hover:bg-sidebar-accent"
+          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2.5 min-h-[56px] rounded-lg cursor-pointer transition-all duration-200",
+          isActive
+            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
+            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent"
         )}
         aria-current={isActive ? "page" : undefined}
         onClick={onClick}
@@ -346,13 +329,13 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
             <Loader2
-              className="h-4 w-4 flex-shrink-0 text-blue-600/80 animate-spin"
+              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin motion-reduce:animate-none"
             />
           ) : (
             <GitBranch
               className={cn(
                 "h-4 w-4 flex-shrink-0",
-                workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
+                getStatusTextColor(workspace.session_status)
               )}
             />
           )}
@@ -395,14 +378,14 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         </div>
         {hasChanges && (
           <div className="flex items-center gap-1 flex-shrink-0">
-            {diffStats.additions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400 whitespace-nowrap">
-                +{diffStats.additions}
+            {additions > 0 && (
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
+                +{additions}
               </span>
             )}
-            {diffStats.deletions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 whitespace-nowrap">
-                -{diffStats.deletions}
+            {deletions > 0 && (
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
+                -{deletions}
               </span>
             )}
           </div>

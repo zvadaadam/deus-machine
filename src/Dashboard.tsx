@@ -22,6 +22,7 @@ import {
   Skeleton,
   SidebarProvider,
   SidebarInset,
+  SidebarTrigger,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -30,7 +31,7 @@ import {
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, ArrowRight, Sparkles, FileCode, Monitor } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
@@ -333,7 +334,7 @@ export function Dashboard() {
 
   return (
     <SidebarProvider>
-      {/* Floating Sidebar */}
+      {/* Inset Sidebar - transparent, sits on top of #root background */}
       {loading ? (
         <div className="p-4 space-y-3">
           <Skeleton className="h-6 w-full" />
@@ -342,9 +343,9 @@ export function Dashboard() {
           <Skeleton className="h-4 w-3/4" />
         </div>
       ) : repoGroups.length === 0 ? (
-        <div className="p-4">
+        <div className="space-standard">
           <EmptyState
-            icon="📁"
+            icon={<FolderOpen />}
             title="No Workspaces"
             description="Create a new workspace to get started"
             action={
@@ -371,23 +372,28 @@ export function Dashboard() {
         />
       )}
 
-      {/* Main Content with SidebarInset */}
+      {/* Main Content with SidebarInset - tight spacing for modern feel */}
       <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
-      <PanelGroup
-        direction="horizontal"
-        autoSaveId="conductor-root-layout"
-        className="app-container"
-      >
+        <div className="flex h-full flex-col gap-2 pt-2 pr-2 pb-2">
+          <PanelGroup
+            direction="horizontal"
+            autoSaveId="conductor-root-layout"
+            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+          >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="panel-content main-content">
         {selectedWorkspace ? (
           <>
-            {/* Workspace Header - Simplified */}
-            <div className="border-b border-border px-4 py-3">
+            {/* Workspace Header - with SidebarTrigger */}
+            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1">
               <div className="flex items-center justify-between">
-                {/* Left: Branch name with inline badge */}
-                <BranchName branch={selectedWorkspace.branch} />
+                {/* Left: SidebarTrigger, separator, and Branch name */}
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="-ml-1" />
+                  <Separator orientation="vertical" className="h-4" />
+                  <BranchName branch={selectedWorkspace.branch} />
+                </div>
 
                 {/* Right: Open in dropdown */}
                 <OpenInDropdown
@@ -397,10 +403,10 @@ export function Dashboard() {
             </div>
 
             {/* Messages take full area */}
-            <div className="main-body">
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3 scrollbar-vibrancy has-[.workspace-messages]:overflow-hidden has-[.workspace-messages]:gap-3">
               {selectedWorkspace.active_session_id && (
-                <div className="content-section workspace-messages-section" style={{ margin: 0, border: 'none', borderRadius: 0, padding: 0 }}>
-                  <div className="section-content" style={{ height: '100%' }}>
+                <div className="workspace-messages flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
                     <WorkspaceDetail
                       ref={workspaceDetailRef}
                       workspaceId={selectedWorkspace.id}
@@ -417,72 +423,74 @@ export function Dashboard() {
             </div>
           </>
         ) : (
-          <div className="main-body">
-            <EmptyState
-              icon="👈"
-              title="No Workspace Selected"
-              description="Select a workspace from the sidebar to view its details and start working"
-              animate
-            />
+          <div className="flex-1 overflow-y-auto scrollbar-vibrancy">
+            <div className="h-full flex flex-col justify-center">
+              <EmptyState
+                icon={<ArrowRight  />}
+                title="No Workspace Selected"
+                description="Select a workspace from the sidebar to view its details and start working"
+                animate
+              />
 
-            {stats && (
-              <Card className="m-4">
-                <CardHeader>
-                  <CardTitle>Overview</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Workspaces</span>
-                    <span className="font-semibold">{stats.workspaces} <span className="text-xs text-muted-foreground">({stats.workspaces_ready} ready, {stats.workspaces_archived} archived)</span></span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Repositories</span>
-                    <span className="font-semibold">{stats.repos}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Sessions</span>
-                    <span className="font-semibold">{stats.sessions} <span className="text-xs text-muted-foreground">({stats.sessions_working} working, {stats.sessions_compacting} compacting)</span></span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Messages</span>
-                    <span className="font-semibold">{stats.messages.toLocaleString()}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <Badge variant={status === 'Connected' ? 'ready' : 'error'}>{status}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+              {stats && (
+                <Card className="mx-6 elevation-2">
+                  <CardHeader>
+                    <CardTitle className="text-heading">Overview</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-body text-muted-foreground">Workspaces</span>
+                      <span className="text-body font-semibold">{stats.workspaces} <span className="text-caption text-muted-foreground">({stats.workspaces_ready} ready, {stats.workspaces_archived} archived)</span></span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-body text-muted-foreground">Repositories</span>
+                      <span className="text-body font-semibold">{stats.repos}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-body text-muted-foreground">Sessions</span>
+                      <span className="text-body font-semibold">{stats.sessions} <span className="text-caption text-muted-foreground">({stats.sessions_working} working, {stats.sessions_compacting} compacting)</span></span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-body text-muted-foreground">Messages</span>
+                      <span className="text-body font-semibold">{stats.messages.toLocaleString()}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-body text-muted-foreground">Status</span>
+                      <Badge variant={status === 'Connected' ? 'ready' : 'error'}>{status}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
         )}
         </div>
       </Panel>
 
-      <PanelResizeHandle className="resize-handle" />
+      <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
       <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
-          <div className="border-b border-border">
-            <TabsList className="h-10 w-full justify-start rounded-none bg-transparent p-0">
+          <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
+            <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
                 value="browser"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
                 <Globe className="h-4 w-4 mr-2" />
-                Browser
+                <span className="text-body-sm font-medium">Browser</span>
               </TabsTrigger>
               <TabsTrigger
                 value="changes"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Changes
+                <span className="text-body-sm font-medium">Changes</span>
                 {fileChanges.length > 0 && (
                   <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
                     {fileChanges.length}
@@ -491,10 +499,10 @@ export function Dashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
                 <TerminalIcon className="h-4 w-4 mr-2" />
-                Terminal
+                <span className="text-body-sm font-medium">Terminal</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -506,7 +514,7 @@ export function Dashboard() {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <EmptyState
-                  icon="🌐"
+                  icon={<Globe  />}
                   description="Select a workspace to use the browser"
                 />
               </div>
@@ -518,31 +526,28 @@ export function Dashboard() {
             <div className="h-full flex flex-col">
               {/* Dev Servers Section */}
               {selectedWorkspace && devServers.length > 0 && (
-                <div className="border-b border-border">
-                  <div className="px-4 py-2 bg-muted/30">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dev Servers</h3>
+                <div className="border-b border-border/50 bg-background/30">
+                  <div className="px-4 py-2.5 sticky top-0 z-10 bg-background/50 backdrop-blur-sm border-b border-border/30">
+                    <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">Dev Servers</h3>
                   </div>
-                  <div className="p-2 space-y-1">
+                  <div className="p-3 space-y-2">
                     {devServers.map((server, index) => (
                       <a
                         key={index}
                         href={server.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors no-underline group"
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-all duration-200 no-underline group elevation-1 hover:elevation-2"
                         title={`Open ${server.name} in browser`}
                       >
-                        <span className="text-base">
-                          {server.type === 'vite' ? '⚡' :
-                           server.type === 'webpack' ? '📦' :
-                           server.type === 'angular' ? '🅰️' :
-                           server.type === 'node' ? '🟢' : '🌐'}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{server.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{server.url}</div>
+                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
+                          <Monitor className="w-4 h-4 text-primary" />
                         </div>
-                        <div className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors">{server.name}</div>
+                          <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
+                        </div>
+                        <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
                       </a>
                     ))}
                   </div>
@@ -551,29 +556,29 @@ export function Dashboard() {
 
               {/* File Changes */}
               <div className="flex-1 overflow-y-auto">
-                <div className="px-4 py-2 bg-muted/30 sticky top-0 z-10 border-b border-border">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">File Changes</h3>
+                <div className="px-4 py-2.5 sticky top-0 z-10 border-b border-border/50 bg-background/50 backdrop-blur-sm">
+                  <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">File Changes</h3>
                 </div>
-                <div className="p-2">
+                <div className="p-3">
                   {selectedWorkspace && fileChanges.length > 0 ? (
                     <div className="space-y-1">
                       {fileChanges.map((file, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors group"
+                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group elevation-1 hover:elevation-2"
                           onClick={() => handleFileClick(file.file)}
                           title="Click to view diff"
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{file.file.split('/').pop()}</div>
-                            <div className="text-xs text-muted-foreground truncate font-mono">{file.file}</div>
+                            <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors">{file.file.split('/').pop()}</div>
+                            <div className="text-caption text-muted-foreground truncate font-mono">{file.file}</div>
                           </div>
-                          <div className="flex items-center gap-1 text-xs flex-shrink-0 ml-2">
+                          <div className="flex items-center gap-1.5 text-xs flex-shrink-0 ml-3">
                             {file.additions > 0 && (
-                              <span className="text-green-600 font-medium">+{file.additions}</span>
+                              <span className="text-success font-semibold px-1.5 py-0.5 bg-success/10 rounded">+{file.additions}</span>
                             )}
                             {file.deletions > 0 && (
-                              <span className="text-red-600 font-medium">-{file.deletions}</span>
+                              <span className="text-destructive font-semibold px-1.5 py-0.5 bg-destructive/10 rounded">-{file.deletions}</span>
                             )}
                           </div>
                         </div>
@@ -582,14 +587,14 @@ export function Dashboard() {
                   ) : selectedWorkspace ? (
                     <div className="p-8">
                       <EmptyState
-                        icon="✨"
+                        icon={<Sparkles  />}
                         description="No file changes detected"
                       />
                     </div>
                   ) : (
                     <div className="p-8">
                       <EmptyState
-                        icon="📄"
+                        icon={<FileCode  />}
                         description="Select a workspace to view file changes"
                       />
                     </div>
@@ -609,7 +614,7 @@ export function Dashboard() {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <EmptyState
-                  icon="💻"
+                  icon={<TerminalIcon  />}
                   description="Select a workspace to use the terminal"
                 />
               </div>
@@ -617,7 +622,8 @@ export function Dashboard() {
           </TabsContent>
         </Tabs>
       </Panel>
-    </PanelGroup>
+          </PanelGroup>
+        </div>
       </SidebarInset>
 
       {/* Modals */}

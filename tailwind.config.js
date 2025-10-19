@@ -53,7 +53,19 @@ module.exports = {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
-  			muted: {
+		success: {
+			DEFAULT: 'hsl(var(--success))',
+			foreground: 'hsl(var(--success-foreground))'
+		},
+		warning: {
+			DEFAULT: 'hsl(var(--warning))',
+			foreground: 'hsl(var(--warning-foreground))'
+		},
+		info: {
+			DEFAULT: 'hsl(var(--info))',
+			foreground: 'hsl(var(--info-foreground))'
+		},
+		muted: {
   				DEFAULT: 'hsl(var(--muted))',
   				foreground: 'hsl(var(--muted-foreground))'
   			},
@@ -77,9 +89,7 @@ module.exports = {
   				accent: 'hsl(var(--sidebar-accent))',
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
-  				ring: 'hsl(var(--sidebar-ring))',
-  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))'
+  				ring: 'hsl(var(--sidebar-ring))'
   			}
   		},
   		borderRadius: {
@@ -106,6 +116,23 @@ module.exports = {
   				'Consolas',
   				'monospace'
   			]
+  		},
+  		fontSize: {
+  			// Display sizes - for hero sections, large headers
+  			'display-lg': ['48px', { lineHeight: '1.1', letterSpacing: '-0.02em', fontWeight: '700' }],
+  			'display': ['36px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '700' }],
+  			// Heading sizes - for section headers
+  			'heading-xl': ['32px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '600' }],
+  			'heading-lg': ['24px', { lineHeight: '1.3', letterSpacing: '-0.005em', fontWeight: '600' }],
+  			'heading': ['20px', { lineHeight: '1.4', fontWeight: '600' }],
+  			'heading-sm': ['18px', { lineHeight: '1.4', fontWeight: '600' }],
+  			// Body sizes - for content
+  			'body-lg': ['16px', { lineHeight: '1.5', fontWeight: '400' }],
+  			'body': ['14px', { lineHeight: '1.5', fontWeight: '400' }],
+  			'body-sm': ['13px', { lineHeight: '1.5', fontWeight: '400' }],
+  			// Caption sizes - for labels, metadata
+  			'caption': ['12px', { lineHeight: '1.4', fontWeight: '400' }],
+  			'caption-sm': ['11px', { lineHeight: '1.4', fontWeight: '400' }],
   		},
   		keyframes: {
   			'accordion-down': {
@@ -142,6 +169,46 @@ module.exports = {
   					transform: 'translateY(0)'
   				}
   			},
+  			fadeInDown: {
+  				from: {
+  					opacity: '0',
+  					transform: 'translateY(-10px)'
+  				},
+  				to: {
+  					opacity: '1',
+  					transform: 'translateY(0)'
+  				}
+  			},
+  			slideInRight: {
+  				from: {
+  					opacity: '0',
+  					transform: 'translateX(20px)'
+  				},
+  				to: {
+  					opacity: '1',
+  					transform: 'translateX(0)'
+  				}
+  			},
+  			slideInLeft: {
+  				from: {
+  					opacity: '0',
+  					transform: 'translateX(-20px)'
+  				},
+  				to: {
+  					opacity: '1',
+  					transform: 'translateX(0)'
+  				}
+  			},
+  			scaleIn: {
+  				from: {
+  					opacity: '0',
+  					transform: 'scale(0.9)'
+  				},
+  				to: {
+  					opacity: '1',
+  					transform: 'scale(1)'
+  				}
+  			},
   			shimmer: {
   				'0%, 100%': {
   					opacity: '1'
@@ -154,8 +221,12 @@ module.exports = {
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out',
-  			'fade-in': 'fadeIn 0.2s ease-out',
-  			'fade-in-up': 'fadeInUp 0.25s ease-out',
+  			'fade-in': 'fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1)',
+  			'fade-in-up': 'fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1)',
+  			'fade-in-down': 'fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1)',
+  			'slide-in-right': 'slideInRight 0.25s cubic-bezier(0, 0, 0.2, 1)',
+  			'slide-in-left': 'slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1)',
+  			'scale-in': 'scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1)',
   			'shimmer': 'shimmer 2s ease-in-out infinite'
   		}
   	}
