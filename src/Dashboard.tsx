@@ -382,11 +382,11 @@ export function Dashboard() {
           >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
-        <div className="panel-content main-content">
+        <div className="h-full flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
             {/* Workspace Header - with SidebarTrigger */}
-            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1">
+            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1 flex-shrink-0">
               <div className="flex items-center justify-between">
                 {/* Left: SidebarTrigger, separator, and Branch name */}
                 <div className="flex items-center gap-3">
@@ -403,22 +403,18 @@ export function Dashboard() {
             </div>
 
             {/* Messages take full area */}
-            <div className="flex-1 overflow-y-auto flex flex-col gap-3 scrollbar-vibrancy has-[.workspace-messages]:overflow-hidden has-[.workspace-messages]:gap-3">
+            <div className="flex-1 flex flex-col min-h-0">
               {selectedWorkspace.active_session_id && (
-                <div className="workspace-messages flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                    <WorkspaceDetail
-                      ref={workspaceDetailRef}
-                      workspaceId={selectedWorkspace.id}
-                      sessionId={selectedWorkspace.active_session_id}
-                      onClose={() => {}}
-                      embedded={true}
-                      onCompact={(handler) => setCompactHandler(() => handler)}
-                      onCreatePR={(handler) => setCreatePRHandler(() => handler)}
-                      onStop={(handler) => setStopHandler(() => handler)}
-                    />
-                  </div>
-                </div>
+                <WorkspaceDetail
+                  ref={workspaceDetailRef}
+                  workspaceId={selectedWorkspace.id}
+                  sessionId={selectedWorkspace.active_session_id}
+                  onClose={() => {}}
+                  embedded={true}
+                  onCompact={(handler) => setCompactHandler(() => handler)}
+                  onCreatePR={(handler) => setCreatePRHandler(() => handler)}
+                  onStop={(handler) => setStopHandler(() => handler)}
+                />
               )}
             </div>
           </>

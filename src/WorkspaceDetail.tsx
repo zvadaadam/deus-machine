@@ -141,7 +141,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
-      <div className="flex flex-col h-full w-full relative">
+      <div className="flex flex-col flex-1 min-h-0 w-full relative">
         <Chat
           messages={messages}
           loading={loading}
