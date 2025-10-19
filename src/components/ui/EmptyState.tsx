@@ -31,32 +31,32 @@ export function EmptyState({
   return (
     <EmptyStateContainer
       className={cn(
-        "p-12 gap-4",
-        animate && "animate-in fade-in-50 slide-in-from-bottom-4 duration-300",
+        "empty-state py-16 gap-4",
+        animate && "animate-fade-in-up",
         className
       )}
     >
       {/* Icon with subtle styling */}
-      <div className="text-5xl opacity-60 transition-opacity duration-200 ease-out hover:opacity-80">
+      <div className="transition-all duration-200 hover:scale-105">
         {icon}
       </div>
 
       {/* Title */}
       {title && (
-        <EmptyStateTitle className="text-xl font-semibold">
+        <EmptyStateTitle className="empty-state-title">
           {title}
         </EmptyStateTitle>
       )}
 
       {/* Description */}
       {description && (
-        <EmptyStateDescription className="max-w-md">
+        <EmptyStateDescription className="empty-state-description">
           {description}
         </EmptyStateDescription>
       )}
 
       {/* Optional action button */}
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </EmptyStateContainer>
   );
 }
