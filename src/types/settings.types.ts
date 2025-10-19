@@ -9,6 +9,7 @@
  */
 export interface Settings {
   // General
+  theme?: 'light' | 'dark' | 'system';
   notifications_enabled?: boolean;
   sound_effects_enabled?: boolean;
   sound_type?: string;
