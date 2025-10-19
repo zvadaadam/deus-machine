@@ -85,7 +85,7 @@
 
   /* App root - universal vibrancy background for all routes */
   #root {
-    @apply min-h-screen w-full m-0 p-0 bg-red-500/30 transition-colors duration-200;
+    @apply min-h-screen w-full m-0 p-0 bg-background transition-colors duration-200;
     /* Tauri-specific: keep fixed for proper window transparency */
     position: fixed;
     inset: 0;
