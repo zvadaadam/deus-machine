@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
-import "./WorkspaceDetail.css";
 import type {
   FileChangeGroup,
   FileEdit,
@@ -88,11 +87,11 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
 
   function renderDiff(fileChange: FileChangeGroup) {
     return (
-      <div className="diff-view">
-        <div className="diff-header">
+      <div className="vibrancy-panel border border-border/40 rounded-lg overflow-hidden">
+        <div className="p-6 vibrancy-panel border-b border-border/40 flex justify-between items-center">
           <div>
-            <h4>{fileChange.file_path}</h4>
-            <div className="diff-meta">
+            <h4 className="m-0 mb-2 text-base text-foreground font-mono font-semibold">{fileChange.file_path}</h4>
+            <div className="text-sm text-muted-foreground font-sans">
               {fileChange.edits.length} change{fileChange.edits.length > 1 ? 's' : ''} •
               First: {new Date(fileChange.first_timestamp).toLocaleString()} •
               Last: {new Date(fileChange.last_timestamp).toLocaleString()}
@@ -100,35 +99,35 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           </div>
         </div>
 
-        <div className="diff-sections">
+        <div className="flex flex-col gap-4 p-4">
           {fileChange.edits.map((edit: FileEdit, idx: number) => {
             if (edit.tool_name === 'Write') {
               return (
-                <div key={idx} className="diff-section">
-                  <div className="diff-section-header">
-                    <span className="diff-badge new-file">New File</span>
-                    <span className="diff-time">{new Date(edit.timestamp).toLocaleTimeString()}</span>
+                <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
+                  <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
+                    <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-success/20 text-success">New File</span>
+                    <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
                   </div>
-                  <pre className="diff-content new-content">{edit.content || ''}</pre>
+                  <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.content || ''}</pre>
                 </div>
               );
             }
 
             // Edit tool with old_string and new_string
             return (
-              <div key={idx} className="diff-section">
-                <div className="diff-section-header">
-                  <span className="diff-badge edit">Edit #{idx + 1}</span>
-                  <span className="diff-time">{new Date(edit.timestamp).toLocaleTimeString()}</span>
+              <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
+                <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
+                  <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-info/20 text-info">Edit #{idx + 1}</span>
+                  <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
                 </div>
-                <div className="diff-split">
-                  <div className="diff-old">
-                    <div className="diff-label">− Removed</div>
-                    <pre className="diff-content">{edit.old_string || ''}</pre>
+                <div className="grid grid-cols-2 gap-px bg-border/40">
+                  <div className="flex flex-col bg-transparent">
+                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-destructive/10 text-destructive">− Removed</div>
+                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-destructive/10 text-destructive-foreground">{edit.old_string || ''}</pre>
                   </div>
-                  <div className="diff-new">
-                    <div className="diff-label">+ Added</div>
-                    <pre className="diff-content">{edit.new_string || ''}</pre>
+                  <div className="flex flex-col bg-transparent">
+                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-success/10 text-success">+ Added</div>
+                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.new_string || ''}</pre>
                   </div>
                 </div>
               </div>
@@ -142,7 +141,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
-      <div className="embedded-chat-container">
+      <div className="flex flex-col h-full w-full relative overflow-hidden">
         <MessageList
           messages={messages}
           loading={loading}
@@ -178,10 +177,10 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   }
 
   return (
-    <div className="workspace-detail-overlay" onClick={onClose}>
-      <div className="workspace-detail" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2>Workspace Activity</h2>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={onClose}>
+      <div className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+        <div className="p-6 border-b border-border/40 flex justify-between items-center">
+          <h2 className="m-0 text-2xl text-foreground">Workspace Activity</h2>
           <Button
             variant="ghost"
             size="icon"
@@ -192,7 +191,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           </Button>
         </div>
 
-        <div className="detail-body">
+        <div className="flex-1 flex overflow-hidden">
           {/* Files Changed Sidebar */}
           <FileChangesPanel
             fileChanges={fileChanges}
@@ -201,11 +200,11 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           />
 
           {/* Main Content Area */}
-          <div className="detail-content">
+          <div className="flex-1 overflow-y-auto p-6">
             {selectedFile ? (
               // Show diff view when file is selected
-              <div className="diff-container">
-                <div className="diff-toolbar">
+              <div className="flex flex-col h-full">
+                <div className="py-4 border-b border-border/40 mb-6">
                   <Button
                     variant="ghost"
                     onClick={() => setSelectedFile(null)}
@@ -219,7 +218,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
               </div>
             ) : (
               // Show message timeline
-              <div className="chat-timeline-container">
+              <div className="flex flex-col h-full w-full relative overflow-hidden">
                 <MessageList
                   messages={messages}
                   loading={loading}

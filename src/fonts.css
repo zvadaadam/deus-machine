@@ -1,0 +1,49 @@
+/* Helvetica Neue font family */
+@font-face {
+  font-family: 'Helvetica Neue';
+  src: url('/fonts/helvetica-neue-5/HelveticaNeueRoman.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Helvetica Neue';
+  src: url('/fonts/helvetica-neue-5/HelveticaNeueMedium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Helvetica Neue';
+  src: url('/fonts/helvetica-neue-5/HelveticaNeueBold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Ioskeley Mono font family */
+@font-face {
+  font-family: 'Ioskeley Mono';
+  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Ioskeley Mono';
+  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Ioskeley Mono';
+  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}

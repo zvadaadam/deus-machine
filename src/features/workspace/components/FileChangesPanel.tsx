@@ -15,7 +15,7 @@ export function FileChangesPanel({
 }: FileChangesPanelProps) {
   return (
     <div className="w-80 bg-secondary/30 border-r border-border flex flex-col overflow-hidden">
-      <h3 className="p-4 px-6 m-0 text-base text-foreground border-b border-border bg-background">
+      <h3 className="p-4 px-6 m-0 text-base text-foreground border-b border-border">
         Files Changed ({fileChanges.length})
       </h3>
       <div className="flex-1 overflow-y-auto p-2">
@@ -31,7 +31,7 @@ export function FileChangesPanel({
               <div
                 key={idx}
                 className={cn(
-                  "flex items-center gap-3 p-3 mb-2 rounded-md cursor-pointer transition-all duration-200 bg-background border border-border",
+                  "flex items-center gap-3 p-3 mb-2 rounded-md cursor-pointer transition-all duration-200 border border-border",
                   "hover:bg-primary-50 hover:border-primary",
                   isSelected && "bg-primary-100 border-primary shadow-sm"
                 )}

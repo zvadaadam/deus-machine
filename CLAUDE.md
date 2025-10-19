@@ -1,16 +1,23 @@
-# WHAT IS IT?
+# WHAT ARE WE BUILDING?
 
-System to manage multiple parallel coding agents at once.
+New IDE to manage multiple parallel AI coding agents at once.
+
+This product is for semi-technical people who want to get the job done. They care more about the job output than the technology and code underneath.
+
+We treat AI chat as a first-class citizen here, code it secondary.
+
+
+# TechStack
 
 This is a desktop app built with Tauri app.
 It runs a backend which communicates with Claude Code CLI.
 Also has this small Rust backend which manages it.
 
-This product is for semi-technical people who want to get the job done. They care more about the output than the technology underneath.
 
 # OUR FRONTEND
 
 We want to achieve a beautiful aesthetic design of a pro consumer product.
+
 Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 
 
@@ -21,7 +28,8 @@ Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 - Using Tailwind
 - Consistent padings default 16px (this product is more dense)
 - Consistent font sizes
-- Consistent colors (avoid hardcoding colors at all cost)
+- Consistent colors (avoid hardcoding colors at all costs)
+- Always use font and color tokens from the Tailwind config
 
 ## Components
 - The base is Shadcn components
