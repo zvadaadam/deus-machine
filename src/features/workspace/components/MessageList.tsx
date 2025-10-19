@@ -38,7 +38,7 @@ export function MessageList({
         />
       ) : (
         <>
-          <div className="flex flex-col gap-3 p-2 pb-8 min-h-min">
+          <div className="flex flex-col gap-6 p-2 pb-8 min-h-min">
             {messages.map(message => (
               <MessageItem
                 key={message.id}

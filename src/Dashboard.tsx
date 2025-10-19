@@ -477,20 +477,20 @@ export function Dashboard() {
       <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
         <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
-            <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2">
+            <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
                 value="browser"
-                className="rounded-md border-b-0 data-[state=active]:bg-sidebar-accent/40 data-[state=active]:shadow-sm px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
-                <Globe className="h-3.5 w-3.5 mr-2" />
-                <span className="text-body-sm">Browser</span>
+                <Globe className="h-4 w-4 mr-2" />
+                <span className="text-body-sm font-medium">Browser</span>
               </TabsTrigger>
               <TabsTrigger
                 value="changes"
-                className="rounded-md border-b-0 data-[state=active]:bg-sidebar-accent/40 data-[state=active]:shadow-sm px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
-                <FileText className="h-3.5 w-3.5 mr-2" />
-                <span className="text-body-sm">Changes</span>
+                <FileText className="h-4 w-4 mr-2" />
+                <span className="text-body-sm font-medium">Changes</span>
                 {fileChanges.length > 0 && (
                   <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
                     {fileChanges.length}
@@ -499,10 +499,10 @@ export function Dashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
-                className="rounded-md border-b-0 data-[state=active]:bg-sidebar-accent/40 data-[state=active]:shadow-sm px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
               >
-                <TerminalIcon className="h-3.5 w-3.5 mr-2" />
-                <span className="text-body-sm">Terminal</span>
+                <TerminalIcon className="h-4 w-4 mr-2" />
+                <span className="text-body-sm font-medium">Terminal</span>
               </TabsTrigger>
             </TabsList>
           </div>
