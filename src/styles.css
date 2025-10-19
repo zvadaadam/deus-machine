@@ -230,7 +230,7 @@ body {
   }
 
   .vibrancy-sidebar {
-    @apply backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200 border-r border-r-border/50;
+    @apply bg-white/70 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200 border-r border-r-border/50;
   }
 
   .vibrancy-panel {
@@ -250,7 +250,7 @@ body {
   }
 
   .dark .vibrancy-sidebar {
-    /* No background - pure transparency with backdrop effects */
+    @apply bg-black/60;
   }
 
   .dark .vibrancy-panel {
