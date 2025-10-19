@@ -200,10 +200,10 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           />
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0">
             {selectedFile ? (
               // Show diff view when file is selected
-              <div className="flex flex-col flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6">
                 <div className="py-4 border-b border-border/40 mb-6">
                   <Button
                     variant="ghost"
@@ -217,8 +217,8 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                 {renderDiff(selectedFile)}
               </div>
             ) : (
-              // Show message timeline
-              <div className="flex flex-col flex-1 min-h-0">
+              // Show message timeline - Chat + Input
+              <>
                 <Chat
                   messages={messages}
                   loading={loading}
@@ -254,7 +254,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </div>
+              </>
             )}
           </div>
         </div>
