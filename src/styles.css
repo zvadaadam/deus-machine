@@ -119,10 +119,9 @@
   }
 
   /* Arc browser style frosted glass vibrancy */
-  /* Root vibrancy - applied ONCE to the app container */
+  /* Root vibrancy - applied ONCE to the app container as the universal background */
   .vibrancy-root {
-    @apply backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
-    background: transparent;
+    @apply bg-background backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
   }
 
   /* Main content card - more opaque for distinction */
