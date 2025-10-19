@@ -250,7 +250,7 @@ const Sidebar = React.forwardRef<
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
             className
           )}
           style={{ transition: "left 200ms cubic-bezier(0, 0, 0.2, 1), right 200ms cubic-bezier(0, 0, 0.2, 1), width 200ms cubic-bezier(0, 0, 0.2, 1)" }}
