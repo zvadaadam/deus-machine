@@ -38,7 +38,7 @@ export function WorkspaceItem({
             {hasDiff && (
               <div className="flex gap-1 text-caption font-mono flex-shrink-0">
                 {diffStats.additions > 0 && (
-                  <span className="text-success-600 bg-success-50 px-1.5 py-0.5 rounded border border-success-200">
+                  <span className="text-success bg-success/10 px-1.5 py-0.5 rounded border border-success/30">
                     +{diffStats.additions}
                   </span>
                 )}

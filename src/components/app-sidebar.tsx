@@ -203,8 +203,8 @@ function RepositoryItem({
                   })()}
                   {hasRunningWorkspace && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-600"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                     </span>
                   )}
                 </div>
@@ -297,13 +297,13 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const getStatusTextColor = (status: string | null | undefined) => {
     switch (status) {
       case "working":
-        return "text-blue-500";
+        return "text-primary";
       case "idle":
         return "text-muted-foreground/70";
       case "compacting":
-        return "text-yellow-500";
+        return "text-warning";
       default:
-        return "text-rose-400";
+        return "text-destructive";
     }
   };
 
@@ -328,13 +328,13 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
             <Loader2
-              className="h-4 w-4 flex-shrink-0 text-blue-600/80 animate-spin"
+              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin"
             />
           ) : (
             <GitBranch
               className={cn(
                 "h-4 w-4 flex-shrink-0",
-                workspace.session_status ? "text-green-500/60" : "text-sidebar-foreground/60"
+                workspace.session_status ? "text-success/60" : "text-sidebar-foreground/60"
               )}
             />
           )}
@@ -378,12 +378,12 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         {hasChanges && (
           <div className="flex items-center gap-1 flex-shrink-0">
             {diffStats.additions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400 whitespace-nowrap">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
                 +{diffStats.additions}
               </span>
             )}
             {diffStats.deletions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 whitespace-nowrap">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
                 -{diffStats.deletions}
               </span>
             )}

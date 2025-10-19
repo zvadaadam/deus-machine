@@ -547,7 +547,7 @@ export function Dashboard() {
                           <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors">{server.name}</div>
                           <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
                         </div>
-                        <div className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                        <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
                       </a>
                     ))}
                   </div>
@@ -575,10 +575,10 @@ export function Dashboard() {
                           </div>
                           <div className="flex items-center gap-1.5 text-xs flex-shrink-0 ml-3">
                             {file.additions > 0 && (
-                              <span className="text-green-600 font-semibold px-1.5 py-0.5 bg-green-500/10 rounded">+{file.additions}</span>
+                              <span className="text-success font-semibold px-1.5 py-0.5 bg-success/10 rounded">+{file.additions}</span>
                             )}
                             {file.deletions > 0 && (
-                              <span className="text-red-600 font-semibold px-1.5 py-0.5 bg-red-500/10 rounded">-{file.deletions}</span>
+                              <span className="text-destructive font-semibold px-1.5 py-0.5 bg-destructive/10 rounded">-{file.deletions}</span>
                             )}
                           </div>
                         </div>
