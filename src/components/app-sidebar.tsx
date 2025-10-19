@@ -73,7 +73,7 @@ export function AppSidebar({
   const isExpanded = state === "expanded";
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon" className="backdrop-blur-[40px] backdrop-saturate-[180%] border-r border-r-border/50">
+    <Sidebar variant="sidebar" collapsible="icon" className="border-r border-r-border/50">
       {/* Header with Profile (no collapse button) */}
       <SidebarHeader className="p-4">
         {isExpanded ? (
