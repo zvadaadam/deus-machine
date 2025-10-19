@@ -232,18 +232,17 @@ const Sidebar = React.forwardRef<
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            "relative w-[--sidebar-width] bg-transparent transition-[width] duration-200",
+            "relative w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-out motion-reduce:transition-none",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
               ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
           )}
-          style={{ transition: "width 200ms cubic-bezier(0, 0, 0.2, 1)" }}
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 md:flex",
+            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-out motion-reduce:transition-none md:flex",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -253,7 +252,6 @@ const Sidebar = React.forwardRef<
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
             className
           )}
-          style={{ transition: "left 200ms cubic-bezier(0, 0, 0.2, 1), right 200ms cubic-bezier(0, 0, 0.2, 1), width 200ms cubic-bezier(0, 0, 0.2, 1)" }}
           {...props}
         >
           <div
@@ -281,15 +279,14 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7 transition-all duration-200", className)}
-      style={{ transition: "all 200ms cubic-bezier(0, 0, 0.2, 1)" }}
+      className={cn("h-7 w-7 transition-colors duration-200 ease-out motion-reduce:transition-none", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeft className="transition-transform duration-200" style={{ transition: "transform 200ms cubic-bezier(0, 0, 0.2, 1)" }} />
+      <PanelLeft className="transition-transform duration-200 ease-out motion-reduce:transition-none" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

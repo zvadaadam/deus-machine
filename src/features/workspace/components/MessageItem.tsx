@@ -59,7 +59,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
   function renderText(text: any) {
     const textContent = typeof text === 'string' ? text : (text?.text || '');
     return (
-      <div key={Math.random()} className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <p className="m-0 leading-relaxed text-foreground text-base font-sans break-words">{textContent}</p>
       </div>
     );
@@ -88,15 +88,15 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
       </div>
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: any) => {
+          contentBlocks.map((block: any, index: number) => {
             if (!block) return null;
 
             if (block.type === 'tool_use') {
-              return renderToolUse(block);
+              return <div key={`tool-use-${index}`}>{renderToolUse(block)}</div>;
             } else if (block.type === 'tool_result') {
-              return renderToolResult(block);
+              return <div key={`tool-result-${index}`}>{renderToolResult(block)}</div>;
             } else if (block.type === 'text' || typeof block === 'string') {
-              return renderText(block);
+              return <div key={`text-${index}`}>{renderText(block)}</div>;
             } else if (typeof block === 'object') {
               // Handle unknown object types - don't try to render them directly
               console.warn('Unknown block type:', block);

@@ -189,7 +189,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
         ) : showRun && tabs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full bg-background">
             <button
-              className="flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-all duration-200 hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-all duration-200 hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
