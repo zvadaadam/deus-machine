@@ -345,7 +345,7 @@ export function Dashboard() {
       ) : repoGroups.length === 0 ? (
         <div className="space-standard">
           <EmptyState
-            icon={<FolderOpen className="empty-state-icon" />}
+            icon={<FolderOpen />}
             title="No Workspaces"
             description="Create a new workspace to get started"
             action={
@@ -426,7 +426,7 @@ export function Dashboard() {
           <div className="flex-1 overflow-y-auto scrollbar-vibrancy">
             <div className="h-full flex flex-col justify-center">
               <EmptyState
-                icon={<ArrowRight className="empty-state-icon" />}
+                icon={<ArrowRight  />}
                 title="No Workspace Selected"
                 description="Select a workspace from the sidebar to view its details and start working"
                 animate
@@ -514,7 +514,7 @@ export function Dashboard() {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <EmptyState
-                  icon={<Globe className="empty-state-icon" />}
+                  icon={<Globe  />}
                   description="Select a workspace to use the browser"
                 />
               </div>
@@ -587,14 +587,14 @@ export function Dashboard() {
                   ) : selectedWorkspace ? (
                     <div className="p-8">
                       <EmptyState
-                        icon={<Sparkles className="empty-state-icon" />}
+                        icon={<Sparkles  />}
                         description="No file changes detected"
                       />
                     </div>
                   ) : (
                     <div className="p-8">
                       <EmptyState
-                        icon={<FileCode className="empty-state-icon" />}
+                        icon={<FileCode  />}
                         description="Select a workspace to view file changes"
                       />
                     </div>
@@ -614,7 +614,7 @@ export function Dashboard() {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <EmptyState
-                  icon={<TerminalIcon className="empty-state-icon" />}
+                  icon={<TerminalIcon  />}
                   description="Select a workspace to use the terminal"
                 />
               </div>

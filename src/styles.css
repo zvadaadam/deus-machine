@@ -133,9 +133,14 @@
       0 1px 4px rgba(0, 0, 0, 0.06);
   }
 
-  /* Input fields */
-  .vibrancy-input {
-    @apply bg-white/50 dark:bg-black/40 backdrop-blur-[10px] transition-colors duration-200;
+  /* Main container background - for modals, dialogs */
+  .vibrancy-bg {
+    @apply bg-background/95 backdrop-blur-xl transition-colors duration-200;
+  }
+
+  /* Subtle panel sections - for headers, dividers */
+  .vibrancy-panel {
+    @apply bg-background/30 backdrop-blur-sm transition-colors duration-200;
   }
 
   /* Scrollbar styles for vibrancy */
@@ -158,8 +163,7 @@
   /* Reduce motion support for vibrancy */
   @media (prefers-reduced-motion: reduce) {
     .vibrancy-bg,
-    .vibrancy-panel,
-    .vibrancy-input {
+    .vibrancy-panel {
       @apply transition-none;
     }
   }
@@ -189,50 +193,7 @@
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16), 0 12px 48px rgba(0, 0, 0, 0.30);
   }
 
-  /* Typography Scale */
-  .text-display-lg {
-    @apply text-[48px] font-bold leading-[1.1] tracking-[-0.02em];
-  }
-
-  .text-display {
-    @apply text-[36px] font-bold leading-[1.2] tracking-[-0.01em];
-  }
-
-  .text-heading-xl {
-    @apply text-[32px] font-semibold leading-[1.2] tracking-[-0.01em];
-  }
-
-  .text-heading-lg {
-    @apply text-[24px] font-semibold leading-[1.3] tracking-[-0.005em];
-  }
-
-  .text-heading {
-    @apply text-[20px] font-semibold leading-[1.4];
-  }
-
-  .text-heading-sm {
-    @apply text-[18px] font-semibold leading-[1.4];
-  }
-
-  .text-body-lg {
-    @apply text-[16px] font-normal leading-[1.5];
-  }
-
-  .text-body {
-    @apply text-[14px] font-normal leading-[1.5];
-  }
-
-  .text-body-sm {
-    @apply text-[13px] font-normal leading-[1.5];
-  }
-
-  .text-caption {
-    @apply text-[12px] font-normal leading-[1.4];
-  }
-
-  .text-caption-sm {
-    @apply text-[11px] font-normal leading-[1.4];
-  }
+  /* Typography classes removed - use inline Tailwind (text-lg, text-sm, etc.) */
 
   /* Consistent Spacing */
   .space-standard {
@@ -255,20 +216,5 @@
     @apply p-6; /* 24px */
   }
 
-  /* Professional Empty States */
-  .empty-state {
-    @apply flex flex-col items-center justify-center text-center space-standard;
-  }
-
-  .empty-state-icon {
-    @apply w-16 h-16 mb-5 text-muted-foreground/50;
-  }
-
-  .empty-state-title {
-    @apply text-heading text-foreground font-semibold mb-3;
-  }
-
-  .empty-state-description {
-    @apply text-body-sm text-muted-foreground max-w-sm leading-relaxed;
-  }
+  /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
 }
