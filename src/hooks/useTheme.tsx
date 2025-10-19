@@ -13,22 +13,39 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Load theme from localStorage or default to 'system'
-    const stored = localStorage.getItem('theme') as Theme;
-    return stored || 'system';
+    const stored = localStorage.getItem('theme');
+    // Validate stored value before casting
+    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+      return stored;
+    }
+    return 'system';
   });
 
-  const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('light');
+  const [actualTheme, setActualTheme] = useState<'light' | 'dark'>(() => {
+    // Resolve initial theme synchronously to avoid flicker
+    const stored = localStorage.getItem('theme');
+    if (stored === 'light' || stored === 'dark') {
+      return stored;
+    }
+    // For 'system' or missing, resolve synchronously
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
 
   useEffect(() => {
     const root = window.document.documentElement;
 
     // Determine the actual theme to apply
-    let resolved: 'light' | 'dark' = 'light';
+    let resolved: 'light' | 'dark';
 
     if (theme === 'system') {
       // Check system preference
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       resolved = mediaQuery.matches ? 'dark' : 'light';
+
+      // Apply initial system theme to DOM
+      setActualTheme(resolved);
+      root.classList.remove('light', 'dark');
+      root.classList.add(resolved);
 
       // Listen for system theme changes
       const listener = (e: MediaQueryListEvent) => {
@@ -44,12 +61,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       return () => mediaQuery.removeEventListener('change', listener);
     } else {
       resolved = theme;
+      // Apply explicit theme choice to DOM
+      setActualTheme(resolved);
+      root.classList.remove('light', 'dark');
+      root.classList.add(resolved);
     }
-
-    // Apply theme
-    setActualTheme(resolved);
-    root.classList.remove('light', 'dark');
-    root.classList.add(resolved);
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => {

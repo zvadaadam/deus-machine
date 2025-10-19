@@ -217,10 +217,9 @@ function RepositoryItem({
               {sidebarExpanded && (
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 flex-shrink-0",
+                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
                     isCollapsed && "-rotate-90"
                   )}
-                  style={{ transition: "transform 200ms cubic-bezier(.165, .84, .44, 1)" }}
                 />
               )}
             </div>
@@ -328,7 +327,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
             <Loader2
-              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin"
+              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin motion-reduce:animate-none"
             />
           ) : (
             <GitBranch

@@ -482,7 +482,7 @@ export function Settings() {
                   {agent.tools && agent.tools.map((tool, i) => (
                     <span
                       key={i}
-                      className="px-2.5 py-1 bg-success-100 border border-success-200 rounded text-xs text-success-700 font-medium"
+                      className="px-2.5 py-1 bg-success/10 border border-success/20 rounded text-xs text-success font-medium"
                     >
                       {tool}
                     </span>
