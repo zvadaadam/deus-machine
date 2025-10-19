@@ -4,7 +4,7 @@ import type {
   FileEdit,
 } from "./types";
 import {
-  MessageList,
+  Chat,
   MessageInput,
   FileChangesPanel,
 } from "./features/workspace/components";
@@ -142,7 +142,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   if (embedded) {
     return (
       <div className="flex flex-col h-full w-full relative">
-        <MessageList
+        <Chat
           messages={messages}
           loading={loading}
           sessionStatus={sessionStatus}
@@ -218,8 +218,8 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
               </div>
             ) : (
               // Show message timeline
-              <>
-                <MessageList
+              <div className="flex flex-col flex-1 min-h-0">
+                <Chat
                   messages={messages}
                   loading={loading}
                   sessionStatus={sessionStatus}
@@ -254,7 +254,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </>
+              </div>
             )}
           </div>
         </div>

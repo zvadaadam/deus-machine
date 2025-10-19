@@ -3,7 +3,7 @@ import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface MessageListProps {
+interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
@@ -12,14 +12,14 @@ interface MessageListProps {
   messagesContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-export function MessageList({
+export function Chat({
   messages,
   loading,
   sessionStatus,
   parseContent,
   messagesEndRef,
   messagesContainerRef,
-}: MessageListProps) {
+}: ChatProps) {
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6" ref={messagesContainerRef}>
       {loading ? (
