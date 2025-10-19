@@ -373,12 +373,12 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset and inset padding */}
-      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0 backdrop-blur-[40px] backdrop-saturate-[180%]">
+      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
         <div className="flex h-full flex-col gap-4 pt-4 pr-4 pb-4">
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-xl bg-white/70 dark:bg-black/60 backdrop-blur-[40px] backdrop-saturate-[180%] border border-border/50 overflow-hidden elevation-4"
+            className="flex-1 rounded-xl  overflow-hidden elevation-4"
           >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
