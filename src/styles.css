@@ -1,58 +1,12 @@
-/* Custom Fonts */
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueRoman.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueMedium.otf') format('opentype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueBold.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
+/* Import fonts */
+@import './fonts.css';
 
 /* Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui CSS variables */
+/* Design tokens & base styles */
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -117,41 +71,35 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
-}
 
-@layer base {
-  * {
+  /* Targeted border reset (not global *) */
+  :where(button, input, textarea, select, summary) {
     @apply border-border;
   }
+
+  /* Full-screen layout for Tauri desktop app */
+  html,
+  body {
+    @apply m-0 p-0 w-full h-full overflow-hidden;
+  }
+
+  #root {
+    @apply min-h-screen w-full m-0 p-0;
+    /* Tauri-specific: keep fixed for proper window transparency */
+    position: fixed;
+    inset: 0;
+    max-width: none;
+  }
+
   body {
     @apply text-foreground font-sans;
-    background: transparent !important;
+    background: transparent;
   }
 }
 
-/* Full-screen layout - no centering, no max-width, no padding */
-html,
-body {
-  margin: 0 !important;
-  padding: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  overflow: hidden;
-}
-
-#root {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  max-width: none !important;
-}
-
-/* CLAUDE.md Animation Guidelines */
+/* Custom utilities */
 @layer utilities {
-  /* Reduced motion support */
+  /* Accessibility: Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -165,100 +113,26 @@ body {
   /* Hover transitions only on hover-capable devices */
   @media (hover: hover) and (pointer: fine) {
     .hover-transition {
-      @apply transition-colors duration-200 ease-out;
+      @apply transition-colors duration-200;
+      transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
     }
   }
 
-  /* Custom animations following CLAUDE.md guidelines */
-  .animate-fade-in {
-    animation: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .animate-fade-in-up {
-    animation: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .animate-fade-in-down {
-    animation: fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .animate-slide-in-right {
-    animation: slideInRight 0.25s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .animate-slide-in-left {
-    animation: slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .animate-scale-in {
-    animation: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes slideInRight {
-    from { opacity: 0; transform: translateX(-20px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  @keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-  }
-
-  /* Unified vibrancy utilities - Arc browser style frosted glass */
+  /* Arc browser style frosted glass vibrancy (keep these - component utilities) */
   .vibrancy-bg {
-    @apply bg-white/70 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
-  }
-
-  .vibrancy-sidebar {
-    @apply bg-white/70 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200 border-r border-r-border/50;
+    @apply bg-white/70 dark:bg-black/60 backdrop-blur-[40px] backdrop-saturate-[180%] transition-colors duration-200;
   }
 
   .vibrancy-panel {
-    @apply bg-white/50 backdrop-blur-[20px] transition-colors duration-200;
+    @apply bg-white/50 dark:bg-black/50 backdrop-blur-[20px] transition-colors duration-200;
   }
 
   .vibrancy-input {
-    @apply bg-white/50 backdrop-blur-[10px] transition-colors duration-200;
+    @apply bg-white/50 dark:bg-black/40 backdrop-blur-[10px] transition-colors duration-200;
   }
 
   .vibrancy-card {
     @apply bg-sidebar-accent/30 backdrop-blur-sm border-border/40;
-  }
-
-  .dark .vibrancy-bg {
-    @apply bg-black/60;
-  }
-
-  .dark .vibrancy-sidebar {
-    @apply bg-black/60;
-  }
-
-  .dark .vibrancy-panel {
-    @apply bg-black/50;
-  }
-
-  .dark .vibrancy-input {
-    @apply bg-black/40;
   }
 
   /* Scrollbar styles for vibrancy */
@@ -281,14 +155,13 @@ body {
   /* Reduce motion support for vibrancy */
   @media (prefers-reduced-motion: reduce) {
     .vibrancy-bg,
-    .vibrancy-sidebar,
     .vibrancy-panel,
     .vibrancy-input {
       @apply transition-none;
     }
   }
 
-  /* Elevation System - Linear/Vercel inspired with increased visibility */
+  /* Elevation System - Linear/Vercel inspired */
   .elevation-0 {
     @apply shadow-none;
   }
