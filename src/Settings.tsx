@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './Settings.css';
 import { getBaseURL } from './config/api.config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,7 +107,7 @@ export function Settings() {
     ];
 
     return (
-      <nav className="settings-nav flex flex-col gap-1 p-2">
+      <nav className="w-[250px] bg-muted/30 border-r border-border py-5 overflow-y-auto flex flex-col gap-1 p-2">
         {sections.map(section => (
           <Button
             key={section.id}
@@ -121,7 +120,7 @@ export function Settings() {
           </Button>
         ))}
 
-        <Separator className="my-2" />
+        <Separator className="my-5" />
 
         <Button
           variant="ghost"
@@ -149,7 +148,7 @@ export function Settings() {
 
   function renderGeneral() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <h2 className="text-2xl font-semibold">General Settings</h2>
 
         <div className="space-y-4">
@@ -221,7 +220,7 @@ export function Settings() {
 
   function renderAccount() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <h2 className="text-2xl font-semibold">Account Settings</h2>
 
         <div className="space-y-4">
@@ -276,7 +275,7 @@ export function Settings() {
 
   function renderTerminal() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <h2 className="text-2xl font-semibold">Terminal Settings</h2>
 
         <div className="space-y-4">
@@ -318,31 +317,47 @@ export function Settings() {
 
   function renderMCP() {
     return (
-      <div className="settings-section">
-        <h2>MCP Servers</h2>
-        <p className="section-description">
-          Configure Model Context Protocol servers to extend Claude's capabilities
-        </p>
+      <div className="max-w-[800px] space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">MCP Servers</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure Model Context Protocol servers to extend Claude's capabilities
+          </p>
+        </div>
 
-        <div className="mcp-servers-list">
+        <div className="mt-5 space-y-4">
           {mcpServers.length === 0 ? (
-            <div className="empty-state">
-              <p>No MCP servers configured</p>
-              <p className="setting-description">MCP servers are configured in <code>~/.claude/plugins/config.json</code></p>
+            <div className="text-center py-[60px] px-5 bg-muted/30 rounded-lg border border-dashed border-border">
+              <p className="mb-5 text-base text-muted-foreground">No MCP servers configured</p>
+              <p className="text-sm text-muted-foreground">
+                MCP servers are configured in <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/plugins/config.json</code>
+              </p>
             </div>
           ) : (
             mcpServers.map((server, index) => (
-              <div key={index} className="mcp-server-item">
-                <div className="mcp-server-header">
-                  <h3>{server.name}</h3>
+              <div key={index} className="bg-background border border-border rounded-lg p-5 shadow-sm">
+                <div className="flex justify-between items-center mb-2.5">
+                  <h3 className="text-base font-semibold">{server.name}</h3>
                 </div>
-                <div className="mcp-server-details">
-                  <p><strong>Command:</strong> <code>{server.command}</code></p>
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <strong className="font-medium">Command:</strong>{' '}
+                    <code className="block bg-muted border border-border p-2.5 rounded mt-2 text-xs font-mono overflow-x-auto">
+                      {server.command}
+                    </code>
+                  </p>
                   {server.args && server.args.length > 0 && (
-                    <p><strong>Args:</strong> <code>{server.args.join(' ')}</code></p>
+                    <p className="text-sm">
+                      <strong className="font-medium">Args:</strong>{' '}
+                      <code className="block bg-muted border border-border p-2.5 rounded mt-2 text-xs font-mono overflow-x-auto">
+                        {server.args.join(' ')}
+                      </code>
+                    </p>
                   )}
                   {server.env && Object.keys(server.env).length > 0 && (
-                    <p><strong>Environment:</strong> {Object.keys(server.env).length} variables</p>
+                    <p className="text-sm">
+                      <strong className="font-medium">Environment:</strong> {Object.keys(server.env).length} variables
+                    </p>
                   )}
                 </div>
               </div>
@@ -350,9 +365,21 @@ export function Settings() {
           )}
         </div>
 
-        <div className="setting-help">
-          <p>📖 Learn more about <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer">Model Context Protocol</a></p>
-          <p>Edit <code>~/.claude/plugins/config.json</code> to configure MCP servers</p>
+        <div className="mt-7 p-4 bg-muted/30 border border-border rounded-md text-sm text-muted-foreground space-y-2">
+          <p>
+            📖 Learn more about{' '}
+            <a
+              href="https://modelcontextprotocol.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline transition-all duration-200"
+            >
+              Model Context Protocol
+            </a>
+          </p>
+          <p>
+            Edit <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/plugins/config.json</code> to configure MCP servers
+          </p>
         </div>
       </div>
     );
@@ -360,32 +387,44 @@ export function Settings() {
 
   function renderCommands() {
     return (
-      <div className="settings-section">
-        <h2>Custom Commands</h2>
-        <p className="section-description">
-          Define custom slash commands for frequently used prompts
-        </p>
+      <div className="max-w-[800px] space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">Custom Commands</h2>
+          <p className="text-sm text-muted-foreground">
+            Define custom slash commands for frequently used prompts
+          </p>
+        </div>
 
-        <div className="commands-list">
+        <div className="mt-5 space-y-4">
           {commands.length === 0 ? (
-            <div className="empty-state">
-              <p>No custom commands defined</p>
-              <p className="setting-description">Create <code>.md</code> files in <code>~/.claude/commands/</code> to define commands</p>
+            <div className="text-center py-[60px] px-5 bg-muted/30 rounded-lg border border-dashed border-border">
+              <p className="mb-5 text-base text-muted-foreground">No custom commands defined</p>
+              <p className="text-sm text-muted-foreground">
+                Create <code className="bg-muted px-1.5 py-0.5 rounded text-xs">.md</code> files in{' '}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/commands/</code> to define commands
+              </p>
             </div>
           ) : (
             commands.map((cmd, index) => (
-              <div key={index} className="command-item">
-                <h3>/{cmd.name}</h3>
-                <p>{cmd.description}</p>
-                <pre>{cmd.content.substring(0, 200)}{cmd.content.length > 200 ? '...' : ''}</pre>
+              <div key={index} className="bg-background border border-border rounded-lg p-5 shadow-sm">
+                <h3 className="text-base font-semibold mb-2">/{cmd.name}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{cmd.description}</p>
+                <pre className="block bg-muted border border-border p-2.5 rounded text-xs font-mono overflow-x-auto">
+                  {cmd.content.substring(0, 200)}{cmd.content.length > 200 ? '...' : ''}
+                </pre>
               </div>
             ))
           )}
         </div>
 
-        <div className="setting-help">
-          <p>Commands are stored as <code>.md</code> files in <code>~/.claude/commands/</code></p>
-          <p>Each file becomes a <code>/{'{'}filename{'}'}</code> slash command</p>
+        <div className="mt-7 p-4 bg-muted/30 border border-border rounded-md text-sm text-muted-foreground space-y-2">
+          <p>
+            Commands are stored as <code className="bg-muted px-1.5 py-0.5 rounded text-xs">.md</code> files in{' '}
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/commands/</code>
+          </p>
+          <p>
+            Each file becomes a <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/{'{'}filename{'}'}</code> slash command
+          </p>
         </div>
       </div>
     );
@@ -393,28 +432,38 @@ export function Settings() {
 
   function renderAgents() {
     return (
-      <div className="settings-section">
-        <h2>Agent Configuration</h2>
-        <p className="section-description">
-          Configure specialized agents with specific tool access
-        </p>
+      <div className="max-w-[800px] space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">Agent Configuration</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure specialized agents with specific tool access
+          </p>
+        </div>
 
-        <div className="agents-list">
+        <div className="mt-5 space-y-4">
           {agents.length === 0 ? (
-            <div className="empty-state">
-              <p>Using default agents</p>
-              <p className="setting-description">Create <code>.json</code> files in <code>~/.claude/agents/</code> to define custom agents</p>
+            <div className="text-center py-[60px] px-5 bg-muted/30 rounded-lg border border-dashed border-border">
+              <p className="mb-5 text-base text-muted-foreground">Using default agents</p>
+              <p className="text-sm text-muted-foreground">
+                Create <code className="bg-muted px-1.5 py-0.5 rounded text-xs">.json</code> files in{' '}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/agents/</code> to define custom agents
+              </p>
             </div>
           ) : (
             agents.map((agent, index) => (
-              <div key={index} className="agent-item">
-                <div className="agent-header">
-                  <h3>{agent.name}</h3>
+              <div key={index} className="bg-background border border-border rounded-lg p-5 shadow-sm">
+                <div className="flex justify-between items-center mb-2.5">
+                  <h3 className="text-base font-semibold">{agent.name}</h3>
                 </div>
-                <p>{agent.description}</p>
-                <div className="agent-tools">
+                <p className="text-sm text-muted-foreground mb-3">{agent.description}</p>
+                <div className="flex flex-wrap gap-2 mt-3">
                   {agent.tools && agent.tools.map((tool, i) => (
-                    <span key={i} className="tool-badge">{tool}</span>
+                    <span
+                      key={i}
+                      className="px-2.5 py-1 bg-success-100 border border-success-200 rounded text-xs text-success-700 font-medium"
+                    >
+                      {tool}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -422,8 +471,11 @@ export function Settings() {
           )}
         </div>
 
-        <div className="setting-help">
-          <p>Agents are stored as <code>.json</code> files in <code>~/.claude/agents/</code></p>
+        <div className="mt-7 p-4 bg-muted/30 border border-border rounded-md text-sm text-muted-foreground">
+          <p>
+            Agents are stored as <code className="bg-muted px-1.5 py-0.5 rounded text-xs">.json</code> files in{' '}
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/agents/</code>
+          </p>
         </div>
       </div>
     );
@@ -431,7 +483,7 @@ export function Settings() {
 
   function renderMemory() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Memory Settings</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -478,33 +530,47 @@ export function Settings() {
     const hookEntries = Object.entries(hooks);
 
     return (
-      <div className="settings-section">
-        <h2>Hooks Configuration</h2>
-        <p className="section-description">
-          Run custom commands in response to events
-        </p>
+      <div className="max-w-[800px] space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold mb-2">Hooks Configuration</h2>
+          <p className="text-sm text-muted-foreground">
+            Run custom commands in response to events
+          </p>
+        </div>
 
-        <div className="hooks-list">
+        <div className="mt-5 space-y-4">
           {hookEntries.length === 0 ? (
-            <div className="empty-state">
-              <p>No hooks configured</p>
-              <p className="setting-description">Configure hooks in <code>~/.claude/settings.json</code> under the <code>hooks</code> key</p>
+            <div className="text-center py-[60px] px-5 bg-muted/30 rounded-lg border border-dashed border-border">
+              <p className="mb-5 text-base text-muted-foreground">No hooks configured</p>
+              <p className="text-sm text-muted-foreground">
+                Configure hooks in <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/settings.json</code> under the{' '}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-xs">hooks</code> key
+              </p>
             </div>
           ) : (
             hookEntries.map(([event, command], index) => (
-              <div key={index} className="hook-item">
-                <div className="hook-header">
-                  <h3>{event}</h3>
+              <div key={index} className="bg-background border border-border rounded-lg p-5 shadow-sm">
+                <div className="flex justify-between items-center mb-2.5">
+                  <h3 className="text-base font-semibold">{event}</h3>
                 </div>
-                <code>{command}</code>
+                <code className="block bg-muted border border-border p-2.5 rounded text-xs font-mono overflow-x-auto">
+                  {command}
+                </code>
               </div>
             ))
           )}
         </div>
 
-        <div className="setting-help">
-          <p>Hooks are configured in <code>~/.claude/settings.json</code></p>
-          <p>Available events: <code>tool-use</code>, <code>message-sent</code>, <code>session-start</code></p>
+        <div className="mt-7 p-4 bg-muted/30 border border-border rounded-md text-sm text-muted-foreground space-y-2">
+          <p>
+            Hooks are configured in <code className="bg-muted px-1.5 py-0.5 rounded text-xs">~/.claude/settings.json</code>
+          </p>
+          <p>
+            Available events:{' '}
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">tool-use</code>,{' '}
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">message-sent</code>,{' '}
+            <code className="bg-muted px-1.5 py-0.5 rounded text-xs">session-start</code>
+          </p>
         </div>
       </div>
     );
@@ -512,7 +578,7 @@ export function Settings() {
 
   function renderProvider() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Provider Settings</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -574,7 +640,7 @@ export function Settings() {
 
   function renderExperimental() {
     return (
-      <div className="settings-section space-y-6">
+      <div className="max-w-[800px] space-y-6">
         <div>
           <h2 className="text-2xl font-semibold">Experimental Features</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -623,7 +689,11 @@ export function Settings() {
 
   function renderContent() {
     if (loading) {
-      return <div className="settings-loading">Loading settings...</div>;
+      return (
+        <div className="flex items-center justify-center h-[400px] text-muted-foreground text-base">
+          Loading settings...
+        </div>
+      );
     }
 
     switch (activeSection) {
@@ -642,8 +712,8 @@ export function Settings() {
   }
 
   return (
-    <div className="settings-container">
-      <div className="settings-header">
+    <div className="flex flex-col h-screen bg-background text-foreground">
+      <div className="p-5 px-7 border-b border-border flex justify-between items-center vibrancy-bg">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -655,12 +725,16 @@ export function Settings() {
           </Button>
           <h1 className="text-2xl font-semibold">Settings</h1>
         </div>
-        {saving && <span className="text-sm text-muted-foreground">Saving...</span>}
+        {saving && (
+          <span className="text-sm text-muted-foreground animate-pulse">
+            Saving...
+          </span>
+        )}
       </div>
 
-      <div className="settings-body">
+      <div className="flex flex-1 overflow-hidden">
         {renderNavigation()}
-        <div className="settings-content">
+        <div className="flex-1 overflow-y-auto p-10 bg-background">
           {renderContent()}
         </div>
       </div>

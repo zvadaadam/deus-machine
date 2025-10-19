@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Terminal } from './Terminal';
-import './TerminalPanel.css';
 
 interface DevServer {
   url: string;
@@ -109,18 +108,22 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
   }
 
   return (
-    <div className="terminal-panel">
-      <div className="terminal-tabs-header">
-        <div className="terminal-tabs">
+    <div className="flex flex-col h-full bg-background border-t border-border">
+      <div className="flex items-center justify-between vibrancy-panel border-b border-border h-[35px] flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-1">
           {showRun && tabs.length === 0 && (
-            <div className="terminal-tab active">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-background text-foreground rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none font-medium">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`terminal-tab ${activeTabId === tab.id ? 'active' : ''}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none transition-colors duration-200 ${
+                activeTabId === tab.id
+                  ? 'bg-background text-foreground font-medium'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
               onClick={() => {
                 setActiveTabId(tab.id);
                 setShowRun(false);
@@ -128,7 +131,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             >
               <span>{tab.title}</span>
               <button
-                className="tab-close-button"
+                className="bg-transparent border-none text-muted-foreground text-lg leading-none p-0 w-4 h-4 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 hover:bg-muted/80 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -138,24 +141,34 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
               </button>
             </div>
           ))}
-          <button className="add-terminal-button" onClick={addTerminal} title="New terminal">
+          <button
+            className="bg-transparent border-none text-muted-foreground text-lg px-2 py-1 cursor-pointer rounded transition-colors duration-200 hover:bg-muted/80 hover:text-foreground"
+            onClick={addTerminal}
+            title="New terminal"
+          >
             +
           </button>
         </div>
-        <button className="run-button" onClick={handleRunWorkspace} title="Run workspace (⌘R)">
-          ▶ Run <span className="keybinding">⌘R</span>
+        <button
+          className="flex items-center gap-1 bg-transparent border-none text-muted-foreground px-3 py-1.5 mr-2 cursor-pointer text-[13px] rounded transition-colors duration-200 whitespace-nowrap hover:bg-muted/80 hover:text-foreground"
+          onClick={handleRunWorkspace}
+          title="Run workspace (⌘R)"
+        >
+          ▶ Run <span className="opacity-60 text-[11px]">⌘R</span>
         </button>
       </div>
 
-      <div className="terminal-content">
+      <div className="flex-1 overflow-hidden relative">
         {showBrowser ? (
-          <div className="browser-view">
-            <div className="browser-header">
-              <div className="browser-url-bar">
-                <span className="browser-url">{browserUrl}</span>
+          <div className="w-full h-full flex flex-col bg-background">
+            <div className="flex items-center justify-between h-[35px] bg-muted/30 border-b border-border px-3 flex-shrink-0">
+              <div className="flex-1 flex items-center bg-background border border-border rounded px-2 py-1 mr-2">
+                <span className="text-xs text-muted-foreground font-mono overflow-hidden text-ellipsis whitespace-nowrap">
+                  {browserUrl}
+                </span>
               </div>
               <button
-                className="browser-close-button"
+                className="bg-transparent border-none text-muted-foreground text-xl leading-none p-0 w-6 h-6 flex items-center justify-center cursor-pointer rounded transition-all duration-200 hover:bg-muted hover:text-foreground"
                 onClick={() => {
                   setShowBrowser(false);
                   setShowRun(true);
@@ -168,30 +181,34 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             </div>
             <iframe
               src={browserUrl}
-              className="browser-iframe"
+              className="flex-1 w-full h-full border-none bg-background"
               title="Development Server"
               sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
             />
           </div>
         ) : showRun && tabs.length === 0 ? (
-          <div className="run-workspace-view">
+          <div className="flex flex-col items-center justify-center h-full bg-background">
             <button
-              className="run-workspace-button"
+              className="flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-all duration-200 hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
-              <div className="play-icon">▶</div>
-              <div className="run-text">
+              <div className="text-5xl text-muted-foreground mb-2 transition-colors duration-200 group-hover:text-primary">
+                ▶
+              </div>
+              <div className="text-base font-semibold text-muted-foreground mb-1">
                 {detectingServer ? 'Detecting server...' : 'Run workspace'}
               </div>
             </button>
-            <div className="run-description">Test your changes here.</div>
+            <div className="mt-4 text-[13px] text-muted-foreground">
+              Test your changes here.
+            </div>
           </div>
         ) : (
           tabs.map((tab) => (
             <div
               key={tab.id}
-              className="terminal-wrapper"
+              className="w-full h-full"
               style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
             >
               <Terminal id={tab.id} workspacePath={workspacePath} onClose={() => closeTab(tab.id)} />
