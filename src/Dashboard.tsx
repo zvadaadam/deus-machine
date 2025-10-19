@@ -378,7 +378,7 @@ export function Dashboard() {
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-lg vibrancy-card overflow-hidden"
+            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
           >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>

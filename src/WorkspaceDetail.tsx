@@ -103,7 +103,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           {fileChange.edits.map((edit: FileEdit, idx: number) => {
             if (edit.tool_name === 'Write') {
               return (
-                <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-card">
+                <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
                   <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
                     <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-green-100 text-green-800">New File</span>
                     <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
@@ -115,7 +115,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
 
             // Edit tool with old_string and new_string
             return (
-              <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-card">
+              <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
                 <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
                   <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-blue-100 text-blue-800">Edit #{idx + 1}</span>
                   <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
