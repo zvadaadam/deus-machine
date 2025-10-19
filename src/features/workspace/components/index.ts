@@ -1,4 +1,4 @@
 export { MessageItem } from './MessageItem';
-export { MessageList } from './MessageList';
+export { Chat } from './Chat';
 export { MessageInput } from './MessageInput';
 export { FileChangesPanel } from './FileChangesPanel';
