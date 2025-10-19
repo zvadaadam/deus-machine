@@ -189,9 +189,15 @@
   }
 
   /* Global scrollbar styles - applies to all scrollable elements */
+  /* Force custom scrollbars (overrides macOS overlay scrollbars) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.15) transparent;
+  }
+
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
 
   *::-webkit-scrollbar-track {
@@ -199,21 +205,32 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.12);
+    background: hsl(var(--muted-foreground) / 0.15);
     border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
     transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.25);
+    background: hsl(var(--muted-foreground) / 0.28);
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   *::-webkit-scrollbar-thumb:active {
-    background: hsl(var(--muted-foreground) / 0.35);
+    background: hsl(var(--muted-foreground) / 0.4);
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   *::-webkit-scrollbar-corner {
     background: transparent;
+  }
+
+  /* Scrollbar buttons (helps webkit take control) */
+  *::-webkit-scrollbar-button {
+    display: none;
   }
 
   /* Reduce motion support for vibrancy and scrollbars */
