@@ -31,26 +31,26 @@ export function EmptyState({
   return (
     <EmptyStateContainer
       className={cn(
-        "empty-state py-16 gap-4",
+        "flex flex-col items-center justify-center text-center p-4 py-16 gap-4",
         animate && "animate-fade-in-up",
         className
       )}
     >
       {/* Icon with subtle styling */}
-      <div className="transition-all duration-200 hover:scale-105">
+      <div className="w-16 h-16 mb-5 text-muted-foreground/50 transition-all duration-200 hover:scale-105">
         {icon}
       </div>
 
       {/* Title */}
       {title && (
-        <EmptyStateTitle className="empty-state-title">
+        <EmptyStateTitle className="text-lg text-foreground font-semibold mb-3">
           {title}
         </EmptyStateTitle>
       )}
 
       {/* Description */}
       {description && (
-        <EmptyStateDescription className="empty-state-description">
+        <EmptyStateDescription className="text-sm text-muted-foreground max-w-sm leading-relaxed">
           {description}
         </EmptyStateDescription>
       )}
