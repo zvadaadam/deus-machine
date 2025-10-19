@@ -712,8 +712,8 @@ export function Settings() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <div className="p-5 px-7 border-b border-border flex justify-between items-center vibrancy-bg">
+    <div className="flex flex-col h-screen text-foreground">
+      <div className="p-5 px-7 border-b border-border/60 bg-background/50 backdrop-blur-sm flex justify-between items-center">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -734,7 +734,7 @@ export function Settings() {
 
       <div className="flex flex-1 overflow-hidden">
         {renderNavigation()}
-        <div className="flex-1 overflow-y-auto p-10 bg-background">
+        <div className="flex-1 overflow-y-auto p-10">
           {renderContent()}
         </div>
       </div>

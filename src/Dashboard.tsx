@@ -333,8 +333,8 @@ export function Dashboard() {
   }
 
   return (
-    <SidebarProvider className="vibrancy-root">
-      {/* Inset Sidebar - transparent, sits on top of root vibrancy */}
+    <SidebarProvider>
+      {/* Inset Sidebar - transparent, sits on top of #root background */}
       {loading ? (
         <div className="p-4 space-y-3">
           <Skeleton className="h-6 w-full" />
