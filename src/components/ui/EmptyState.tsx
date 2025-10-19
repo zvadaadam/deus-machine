@@ -32,7 +32,7 @@ export function EmptyState({
     <EmptyStateContainer
       className={cn(
         "flex flex-col items-center justify-center text-center p-4 py-16 gap-4",
-        animate && "animate-fade-in-up",
+        animate && "animate-fade-in-up motion-reduce:animate-none",
         className
       )}
     >
