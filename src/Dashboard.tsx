@@ -378,7 +378,7 @@ export function Dashboard() {
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-xl  overflow-hidden elevation-4"
+            className="flex-1 rounded-xl bg-white/70 dark:bg-black/60 border border-border/50 overflow-hidden elevation-4"
           >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
