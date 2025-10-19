@@ -165,28 +165,67 @@
     @apply bg-background/30 backdrop-blur-sm transition-colors duration-200;
   }
 
-  /* Scrollbar styles for vibrancy */
+  /* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
   .scrollbar-vibrancy::-webkit-scrollbar {
-    @apply w-2.5;
+    width: 8px;
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-[5px];
+    background: hsl(var(--muted-foreground) / 0.12);
+    border-radius: 6px;
+    transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary;
+    background: hsl(var(--muted-foreground) / 0.25);
   }
 
-  /* Reduce motion support for vibrancy */
+  .scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.35);
+  }
+
+  /* Global scrollbar styles - applies to all scrollable elements */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.12);
+    border-radius: 6px;
+    transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.25);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.35);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Reduce motion support for vibrancy and scrollbars */
   @media (prefers-reduced-motion: reduce) {
     .vibrancy-bg,
     .vibrancy-panel {
       @apply transition-none;
+    }
+
+    *::-webkit-scrollbar-thumb,
+    .scrollbar-vibrancy::-webkit-scrollbar-thumb {
+      transition: none !important;
     }
   }
 
