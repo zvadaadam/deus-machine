@@ -203,7 +203,7 @@ function RepositoryItem({
                   })()}
                   {hasRunningWorkspace && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                     </span>
                   )}
@@ -310,7 +310,9 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
     return status === "working" || status === "compacting";
   };
 
-  const hasChanges = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
+  const additions = diffStats?.additions ?? 0;
+  const deletions = diffStats?.deletions ?? 0;
+  const hasChanges = additions > 0 || deletions > 0;
 
   return (
     <SidebarMenuSubItem>
@@ -333,7 +335,11 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
             <GitBranch
               className={cn(
                 "h-4 w-4 flex-shrink-0",
-                workspace.session_status ? "text-success/60" : "text-sidebar-foreground/60"
+                workspace.session_status === "idle"
+                  ? "text-success/60"
+                  : workspace.session_status === "compacting"
+                    ? "text-warning/70"
+                    : "text-sidebar-foreground/60"
               )}
             />
           )}
@@ -376,14 +382,14 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         </div>
         {hasChanges && (
           <div className="flex items-center gap-1 flex-shrink-0">
-            {diffStats.additions > 0 && (
+            {additions > 0 && (
               <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
-                +{diffStats.additions}
+                +{additions}
               </span>
             )}
-            {diffStats.deletions > 0 && (
+            {deletions > 0 && (
               <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
-                -{diffStats.deletions}
+                -{deletions}
               </span>
             )}
           </div>

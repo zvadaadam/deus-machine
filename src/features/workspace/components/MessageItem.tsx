@@ -7,24 +7,24 @@ interface MessageItemProps {
 }
 
 export function MessageItem({ message, parseContent }: MessageItemProps) {
-  function renderToolUse(toolUse: any) {
+  function renderToolUse(toolUse: any, index: number) {
     return (
       <div
-        key={toolUse.id}
+        key={`tool-use-${index}`}
         className="bg-sidebar-accent/30 rounded-md p-2 border border-border/40 mt-1 text-[0.85rem] border-l-2 border-l-primary backdrop-blur-sm"
       >
         <div className="flex items-center gap-1.5 mb-1.5 font-semibold text-foreground text-[0.8rem]">
           <span className="text-[0.95rem] inline-flex items-center">🔧</span>
           <strong className="text-[0.8rem] font-semibold">{toolUse.name}</strong>
         </div>
-        <pre className="bg-sidebar-accent/40 p-2 rounded font-mono text-xs leading-snug overflow-x-auto m-0 whitespace-pre-wrap break-words text-foreground border-none max-h-[150px] overflow-y-auto">
+        <pre className="bg-sidebar-accent/40 p-2 rounded font-mono text-xs leading-snug overflow-x-auto m-0 whitespace-pre-wrap break-words text-foreground border-none max-h-[150px] overflow-y-auto scrollbar-vibrancy">
           {JSON.stringify(toolUse.input, null, 2)}
         </pre>
       </div>
     );
   }
 
-  function renderToolResult(toolResult: any) {
+  function renderToolResult(toolResult: any, index: number) {
     let content = toolResult.content || "";
 
     // If content is an array or object, stringify it
@@ -36,7 +36,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
 
     return (
       <div
-        key={toolResult.tool_use_id}
+        key={`tool-result-${index}`}
         className={cn(
           "bg-sidebar-accent/30 rounded-md p-2 border border-border/40 mt-1 text-[0.85rem] border-l-2 backdrop-blur-sm",
           isError ? "border-l-destructive bg-destructive/10" : "border-l-green-500"
@@ -47,7 +47,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
           <strong className="text-[0.8rem] font-semibold">Result</strong>
         </div>
         <pre className={cn(
-          "p-2 rounded font-mono text-xs leading-snug overflow-x-auto m-0 whitespace-pre-wrap break-words border-none max-h-[150px] overflow-y-auto",
+          "p-2 rounded font-mono text-xs leading-snug overflow-x-auto m-0 whitespace-pre-wrap break-words border-none max-h-[150px] overflow-y-auto scrollbar-vibrancy",
           isError ? "bg-destructive/10 text-destructive" : "bg-sidebar-accent/40 text-foreground"
         )}>
           {content}
@@ -92,9 +92,9 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
             if (!block) return null;
 
             if (block.type === 'tool_use') {
-              return <div key={`tool-use-${index}`}>{renderToolUse(block)}</div>;
+              return renderToolUse(block, index);
             } else if (block.type === 'tool_result') {
-              return <div key={`tool-result-${index}`}>{renderToolResult(block)}</div>;
+              return renderToolResult(block, index);
             } else if (block.type === 'text' || typeof block === 'string') {
               return <div key={`text-${index}`}>{renderText(block)}</div>;
             } else if (typeof block === 'object') {

@@ -80,11 +80,14 @@ export function Settings() {
     setSaving(true);
     try {
       const baseURL = await getBaseURL();
-      await fetch(`${baseURL}/settings`, {
+      const res = await fetch(`${baseURL}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value })
       });
+      if (!res.ok) {
+        throw new Error(`Failed to save: ${res.status}`);
+      }
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch (error) {
       console.error('Failed to save setting:', error);
@@ -109,7 +112,7 @@ export function Settings() {
     ];
 
     return (
-      <nav className="w-[250px] bg-muted/30 border-r border-border py-5 overflow-y-auto flex flex-col gap-1 p-2">
+      <nav aria-label="Settings navigation" className="w-[250px] bg-muted/30 border-r border-border py-5 overflow-y-auto flex flex-col gap-1 p-2">
         {sections.map(section => (
           <Button
             key={section.id}
@@ -178,7 +181,7 @@ export function Settings() {
             <Checkbox
               id="notifications"
               checked={settings.notifications_enabled ?? true}
-              onCheckedChange={(checked) => saveSetting('notifications_enabled', checked)}
+              onCheckedChange={(checked) => saveSetting('notifications_enabled', checked === true)}
             />
             <div className="flex-1">
               <Label htmlFor="notifications" className="text-base font-medium cursor-pointer">
@@ -192,7 +195,7 @@ export function Settings() {
             <Checkbox
               id="sound-effects"
               checked={settings.sound_effects_enabled ?? true}
-              onCheckedChange={(checked) => saveSetting('sound_effects_enabled', checked)}
+              onCheckedChange={(checked) => saveSetting('sound_effects_enabled', checked === true)}
             />
             <div className="flex-1">
               <Label htmlFor="sound-effects" className="text-base font-medium cursor-pointer">
@@ -285,7 +288,11 @@ export function Settings() {
               id="api-key"
               type="password"
               value={settings.anthropic_api_key ?? ''}
-              onChange={(e) => saveSetting('anthropic_api_key', e.target.value)}
+              onChange={(e) => setSettings(prev => ({ ...prev, anthropic_api_key: e.target.value }))}
+              onBlur={(e) => saveSetting('anthropic_api_key', e.currentTarget.value)}
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="off"
               placeholder="sk-ant-api03-..."
             />
             <p className="text-sm text-muted-foreground">Your Anthropic API key for Claude models</p>
@@ -309,7 +316,10 @@ export function Settings() {
               min="8"
               max="24"
               value={settings.terminal_font_size ?? 12}
-              onChange={(e) => saveSetting('terminal_font_size', parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const next = parseInt(e.target.value, 10);
+                saveSetting('terminal_font_size', Number.isFinite(next) ? next : 12);
+              }}
             />
             <p className="text-sm text-muted-foreground">Terminal font size in pixels</p>
           </div>
@@ -675,7 +685,7 @@ export function Settings() {
             <Checkbox
               id="right-panel"
               checked={settings.right_panel_visible ?? true}
-              onCheckedChange={(checked) => saveSetting('right_panel_visible', checked)}
+              onCheckedChange={(checked) => saveSetting('right_panel_visible', checked === true)}
             />
             <div className="flex-1">
               <Label htmlFor="right-panel" className="text-base font-medium cursor-pointer">
@@ -689,7 +699,7 @@ export function Settings() {
             <Checkbox
               id="split-view"
               checked={settings.using_split_view ?? false}
-              onCheckedChange={(checked) => saveSetting('using_split_view', checked)}
+              onCheckedChange={(checked) => saveSetting('using_split_view', checked === true)}
             />
             <div className="flex-1">
               <Label htmlFor="split-view" className="text-base font-medium cursor-pointer">
@@ -748,7 +758,7 @@ export function Settings() {
           <h1 className="text-2xl font-semibold">Settings</h1>
         </div>
         {saving && (
-          <span className="text-sm text-muted-foreground animate-pulse">
+          <span className="text-sm text-muted-foreground animate-pulse motion-reduce:animate-none">
             Saving...
           </span>
         )}

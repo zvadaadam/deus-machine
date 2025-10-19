@@ -182,7 +182,7 @@ module.exports = {
   			slideInRight: {
   				from: {
   					opacity: '0',
-  					transform: 'translateX(-20px)'
+  					transform: 'translateX(20px)'
   				},
   				to: {
   					opacity: '1',
@@ -192,7 +192,7 @@ module.exports = {
   			slideInLeft: {
   				from: {
   					opacity: '0',
-  					transform: 'translateX(20px)'
+  					transform: 'translateX(-20px)'
   				},
   				to: {
   					opacity: '1',
