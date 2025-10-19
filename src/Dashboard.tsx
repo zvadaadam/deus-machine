@@ -372,13 +372,13 @@ export function Dashboard() {
         />
       )}
 
-      {/* Main Content with SidebarInset and inset padding */}
+      {/* Main Content with SidebarInset - tight spacing for modern feel */}
       <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
-        <div className="flex h-full flex-col gap-4 pt-4 pr-4 pb-4">
+        <div className="flex h-full flex-col gap-2 pt-2 pr-2 pb-2">
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-xl bg-white/70 dark:bg-black/60 border border-border/50 overflow-hidden elevation-4"
+            className="flex-1 rounded-lg vibrancy-card overflow-hidden"
           >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
