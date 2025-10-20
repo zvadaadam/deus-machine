@@ -130,23 +130,25 @@ export function AppSidebar({
       </SidebarContent>
 
       {/* Footer with Add Repository */}
-      <SidebarFooter className="p-2">
+      <SidebarFooter className={cn("pb-2 pt-0", isExpanded ? "px-0" : "px-2")}>
         {isExpanded ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onAddRepository?.()}
-            className={cn(
-              "w-full h-8 px-3 mx-2",
-              "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-              "transition-all duration-200"
-            )}
-          >
-            <div className="flex items-center gap-3 w-full">
-              <Plus className="h-4 w-4 flex-shrink-0" />
-              <span className="text-sm">Add Repository</span>
-            </div>
-          </Button>
+          <div className="p-2 pt-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onAddRepository?.()}
+              className={cn(
+                "w-full h-8 px-2.5 border-l-[3px] border-l-transparent",
+                "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+                "transition-all duration-200"
+              )}
+            >
+              <div className="flex items-center gap-3 w-full">
+                <Plus className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm">Add Repository</span>
+              </div>
+            </Button>
+          </div>
         ) : (
           <SidebarMenu>
             <SidebarMenuItem>
