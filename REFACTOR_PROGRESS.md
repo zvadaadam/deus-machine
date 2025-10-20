@@ -26,6 +26,7 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 **Phase 3**: Polish & Animations ✅
 **Phase 4**: Tool Linking (Critical Fix) ✅
 **Phase 5**: Thinking Block Visualization ✅
+**Phase 6**: Empty Message Fix ✅
 
 ### Phase 4 Complete: Tool Use → Tool Result Linking
 - [x] Built toolResultMap in useMessages hook
@@ -43,6 +44,15 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 - [x] Added 'thinking' case to BlockRenderer
 - [x] Fixed empty assistant messages (now show thinking blocks)
 - [x] Signature verification indicator
+- [x] TypeScript: 0 errors
+- [x] Documentation complete
+
+### Phase 6 Complete: Empty Message Fix
+- [x] Identified root cause: Messages with empty content or only tool_result blocks
+- [x] Added hasRenderableContent check in MessageItem
+- [x] Filter out messages with no renderable blocks (tool_result only or empty)
+- [x] Return null for empty messages (don't render message container)
+- [x] Added dev logging to track skipped messages
 - [x] TypeScript: 0 errors
 - [x] Documentation complete
 
@@ -79,13 +89,16 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 
 **Last Updated**: 2025-10-20
 
-**Current Task**: Phase 5 Complete ✅ (Thinking Block Visualization)
+**Current Task**: Phase 6 Complete ✅ (Empty Message Fix)
 
 **Blockers**: None
 
-**Status**: All planned work complete, thinking blocks now render correctly (fixing empty message issue)
+**Status**: All empty message issues resolved:
+- Thinking blocks now render correctly (Phase 5)
+- Messages with no renderable content are filtered out (Phase 6)
+- tool_result-only messages don't create empty boxes
 
-**Next Steps**: Browser testing to verify thinking blocks appear correctly
+**Next Steps**: Browser testing to verify no empty messages appear in chat
 
 ---
 
@@ -130,12 +143,18 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 32. `chat/blocks/index.ts` - Exported ThinkingBlock component
 33. `blocks/BlockRenderer.tsx` - Added 'thinking' case handler
 
+**Phase 6 (Empty Message Fix):**
+34. `MessageItem.tsx` - Added empty message filtering to skip messages with no renderable content
+
 ### Key Changes
 - **Refactored MessageItem**: From 114 lines monolithic to 68 lines using composition
 - **Added Registry Pattern**: Tool renderers are now extensible plugins
 - **Theme System**: All colors use Tailwind tokens (no hardcoded colors)
 - **Better TypeScript**: Full type safety with proper interfaces
-- **Fixed Empty Messages**: Thinking blocks now render correctly (were appearing as empty assistant messages)
+- **Fixed Empty Messages**:
+  - Thinking blocks now render correctly (were appearing as empty assistant messages)
+  - Messages with no renderable content are filtered out
+  - tool_result-only messages don't create empty boxes
 - **Improved UX**:
   - Edit tool shows side-by-side diff with copy buttons
   - Read tool collapsed by default to reduce clutter
