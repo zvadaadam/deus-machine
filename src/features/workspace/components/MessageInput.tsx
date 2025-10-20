@@ -1,6 +1,6 @@
 import type { SessionStatus } from "../../../types";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Search, Minimize2, Wrench, ArrowUp, Square } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 
 interface MessageInputProps {
   messageInput: string;
@@ -27,70 +27,156 @@ export function MessageInput({
   onCreatePR,
   onStop,
 }: MessageInputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      onSend();
+      e.preventDefault();
+      e.stopPropagation();
+      if (!sending && messageInput.trim()) {
+        onSend();
+      }
     }
   };
 
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  };
+
+  // Auto-resize textarea
+  useEffect(() => {
+    resizeTextarea();
+  }, [messageInput]);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, []);
+
   return (
-    <div className="flex-shrink-0 m-0 p-4 border-t border-border z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] flex flex-col gap-3">
-      {!embedded && (
-        <div className="flex gap-2 justify-end">
-          <Button
-            onClick={onCompact}
-            disabled={sending || isCompacting}
-            variant="secondary"
-            size="sm"
-            title="Compact conversation to reduce context size"
-            className="gap-1.5 text-[13px] px-3 py-1.5"
-          >
-            {isCompacting ? '🔄' : '📦'}
-            {isCompacting ? 'Compacting...' : 'Compact'}
-          </Button>
-          <Button
-            onClick={onCreatePR}
-            disabled={sending}
-            variant="default"
-            size="sm"
-            title="Send 'Create a PR onto main' message"
-            className="gap-1.5 text-[13px] px-3 py-1.5 bg-success-600 hover:bg-success-700"
-          >
-            🔀
-            Create PR
-          </Button>
-          {sessionStatus === 'working' && (
-            <Button
-              onClick={onStop}
-              variant="destructive"
-              size="sm"
-              title="Stop Claude Code execution"
-              className="gap-1.5 text-[13px] px-3 py-1.5"
-            >
-              ⏹
-              Stop
-            </Button>
-          )}
-        </div>
-      )}
-      <div className="flex gap-3 items-end">
-        <Textarea
+    <div className="flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
+      {/* Glassmorphic ChatBox */}
+      <div
+        className={`
+          relative flex items-center gap-3 px-5 py-4
+          bg-muted/30 backdrop-blur-xl
+          border border-border/50
+          rounded-[24px]
+          shadow-lg
+          transition-all duration-200 ease-out
+          ${isFocused ? 'border-primary/50 shadow-xl' : 'hover:border-border'}
+        `}
+      >
+        {/* Search Icon */}
+        <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+
+        {/* Input Field */}
+        <textarea
+          ref={textareaRef}
           value={messageInput}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Ask Claude Code to make changes, @mention files, run /commands"
           disabled={sending}
           onKeyDown={handleKeyDown}
-          className="flex-1 min-h-[100px] max-h-[250px] resize-y transition-all duration-200"
+          onFocus={() => {
+            setIsFocused(true);
+            resizeTextarea();
+          }}
+          onBlur={() => setIsFocused(false)}
+          className="
+            flex-1 bg-transparent border-none outline-none resize-none
+            text-body-lg text-foreground placeholder:text-muted-foreground
+            min-h-[24px] max-h-[200px]
+            font-sans
+            overflow-y-auto
+            scrollbar-vibrancy
+          "
+          rows={1}
         />
-        <Button
-          onClick={onSend}
-          disabled={sending || !messageInput.trim()}
-          size="default"
-          className="gap-2 whitespace-nowrap h-fit"
-        >
-          {sending ? '⟳' : '➤'}
-          {sending ? 'Sending...' : 'Send'}
-        </Button>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {!embedded && (
+            <>
+              <button
+                type="button"
+                onClick={onCompact}
+                disabled={sending || isCompacting}
+                title="Compact conversation"
+                className="
+                  flex items-center gap-2 px-4 py-2
+                  bg-transparent hover:bg-muted/50
+                  border border-border/50 hover:border-border
+                  rounded-full
+                  text-body-sm text-muted-foreground hover:text-foreground
+                  transition-all duration-200 ease
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+              >
+                <Minimize2 className="w-4 h-4" aria-hidden="true" />
+                <span>{isCompacting ? 'Compacting...' : 'Compact'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onCreatePR}
+                disabled={sending}
+                title="Create PR"
+                className="
+                  flex items-center gap-2 px-4 py-2
+                  bg-transparent hover:bg-muted/50
+                  border border-border/50 hover:border-border
+                  rounded-full
+                  text-body-sm text-muted-foreground hover:text-foreground
+                  transition-all duration-200 ease
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+              >
+                <Wrench className="w-4 h-4" aria-hidden="true" />
+                <span>Create PR</span>
+              </button>
+
+              {sessionStatus === 'working' && (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  title="Stop execution"
+                  className="
+                    flex items-center gap-2 px-4 py-2
+                    bg-destructive/10 hover:bg-destructive/20
+                    border border-destructive/50 hover:border-destructive
+                    rounded-full
+                    text-body-sm text-destructive-foreground
+                    transition-all duration-200 ease
+                  "
+                >
+                  <Square className="w-4 h-4" aria-hidden="true" />
+                  <span>Stop</span>
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Send Button */}
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={sending || !messageInput.trim()}
+            title="Send message (⌘ + Enter)"
+            aria-label="Send message"
+            className="
+              p-2
+              text-muted-foreground hover:text-foreground
+              transition-colors duration-200 ease
+              disabled:opacity-50 disabled:cursor-not-allowed
+            "
+          >
+            <ArrowUp className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );

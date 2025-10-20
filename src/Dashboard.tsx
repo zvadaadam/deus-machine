@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { WorkspaceDetail } from "./WorkspaceDetail";
+import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
+import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { getBaseURL } from "./config/api.config";
 import { formatTokenCount } from "./utils";
@@ -90,12 +91,9 @@ export function Dashboard() {
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
-  const [compactHandler, setCompactHandler] = useState<(() => void) | null>(null);
-  const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
-  const [stopHandler, setStopHandler] = useState<(() => void) | null>(null);
 
-  // Ref to WorkspaceDetail for inserting text from browser element selector
-  const workspaceDetailRef = useRef<{ insertText: (text: string) => void }>(null);
+  // Ref to Workspace chat panel for inserting text from browser element selector
+  const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
 
   // System Prompt Editor (local state - specific to this feature)
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -161,10 +159,12 @@ export function Dashboard() {
   // Listen for 'insert-to-chat' events from BrowserPanel (element selector)
   useEffect(() => {
     const handleInsertToChat = (event: Event) => {
-      const customEvent = event as CustomEvent<{ text: string }>;
-      if (customEvent.detail?.text && workspaceDetailRef.current) {
+      if (!(event instanceof CustomEvent)) return;
+      const raw = (event.detail as { text?: string } | undefined)?.text;
+      const text = typeof raw === 'string' ? raw.trim() : '';
+      if (text && workspaceChatPanelRef.current) {
         console.log('[Dashboard] 🎯 Inserting element data to chat');
-        workspaceDetailRef.current.insertText(customEvent.detail.text);
+        workspaceChatPanelRef.current.insertText(text);
       }
     };
 
@@ -373,20 +373,20 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset - tight spacing for modern feel */}
-      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
-        <div className="flex h-full flex-col gap-2 pt-2 pr-2 pb-2">
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+        <div className="flex flex-1 flex-col gap-2 pt-2 pr-2 pb-2 min-h-0">
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
           >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
-        <div className="panel-content main-content">
+      <Panel id="center" minSize={30} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+        <div className="flex-1 flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
             {/* Workspace Header - with SidebarTrigger */}
-            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1">
+            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1 flex-shrink-0">
               <div className="flex items-center justify-between">
                 {/* Left: SidebarTrigger, separator, and Branch name */}
                 <div className="flex items-center gap-3">
@@ -403,22 +403,13 @@ export function Dashboard() {
             </div>
 
             {/* Messages take full area */}
-            <div className="flex-1 overflow-y-auto flex flex-col gap-3 scrollbar-vibrancy has-[.workspace-messages]:overflow-hidden has-[.workspace-messages]:gap-3">
+            <div className="flex-1 flex flex-col min-h-0">
               {selectedWorkspace.active_session_id && (
-                <div className="workspace-messages flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                    <WorkspaceDetail
-                      ref={workspaceDetailRef}
-                      workspaceId={selectedWorkspace.id}
-                      sessionId={selectedWorkspace.active_session_id}
-                      onClose={() => {}}
-                      embedded={true}
-                      onCompact={(handler) => setCompactHandler(() => handler)}
-                      onCreatePR={(handler) => setCreatePRHandler(() => handler)}
-                      onStop={(handler) => setStopHandler(() => handler)}
-                    />
-                  </div>
-                </div>
+                <WorkspaceChatPanel
+                  ref={workspaceChatPanelRef}
+                  sessionId={selectedWorkspace.active_session_id}
+                  embedded={true}
+                />
               )}
             </div>
           </>
@@ -474,8 +465,8 @@ export function Dashboard() {
       <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
-        <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
+      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+        <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
@@ -508,7 +499,10 @@ export function Dashboard() {
           </div>
 
           {/* Browser Tab */}
-          <TabsContent value="browser" className="flex-1 m-0 overflow-hidden">
+          <TabsContent
+            value="browser"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             {selectedWorkspace ? (
               <BrowserPanel workspaceId={selectedWorkspace.id} />
             ) : (
@@ -522,7 +516,10 @@ export function Dashboard() {
           </TabsContent>
 
           {/* File Changes Tab */}
-          <TabsContent value="changes" className="flex-1 m-0 overflow-hidden">
+          <TabsContent
+            value="changes"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             <div className="h-full flex flex-col">
               {/* Dev Servers Section */}
               {selectedWorkspace && devServers.length > 0 && (
@@ -605,7 +602,10 @@ export function Dashboard() {
           </TabsContent>
 
           {/* Terminal Tab */}
-          <TabsContent value="terminal" className="flex-1 m-0 overflow-hidden">
+          <TabsContent
+            value="terminal"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             {selectedWorkspace ? (
               <TerminalPanel
                 workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
