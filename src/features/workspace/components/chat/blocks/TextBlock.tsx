@@ -1,17 +1,23 @@
 /**
  * Text Block
  *
- * Renders plain text content blocks from Claude messages
+ * Renders text content blocks from messages.
+ * - Assistant messages: Rendered as markdown (Claude uses markdown)
+ * - User messages: Rendered as plain text (user input)
  */
 
-import type { TextBlock as TextBlockType } from '@/types';
+import type { TextBlock as TextBlockType, MessageRole } from '@/types';
 import { chatTheme } from '../theme';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { cn } from '@/lib/utils';
 
 interface TextBlockProps {
   block: TextBlockType | string;
+  role?: MessageRole;
 }
 
-export function TextBlock({ block }: TextBlockProps) {
+export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
   // Handle both TextBlock objects and plain strings
   const text = typeof block === 'string' ? block : block.text;
 
@@ -19,11 +25,46 @@ export function TextBlock({ block }: TextBlockProps) {
     return null;
   }
 
+  // User messages: plain text (preserve newlines)
+  if (role === 'user') {
+    return (
+      <div className={chatTheme.blocks.text.container}>
+        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap')}>
+          {text}
+        </p>
+      </div>
+    );
+  }
+
+  // Assistant messages: markdown
   return (
-    <div className={chatTheme.blocks.text.container}>
-      <p className={chatTheme.blocks.text.content}>
+    <div
+      className={cn(
+        chatTheme.blocks.text.container,
+        chatTheme.blocks.text.content,
+        'prose prose-sm dark:prose-invert max-w-none',
+        // Headings
+        'prose-headings:font-semibold prose-headings:tracking-tight',
+        'prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg',
+        // Links
+        'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
+        // Code
+        'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:before:content-none prose-code:after:content-none',
+        // Code blocks
+        'prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-lg',
+        // Lists
+        'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
+        // Blockquotes
+        'prose-blockquote:border-l-primary prose-blockquote:bg-muted/30 prose-blockquote:py-1',
+        // Tables
+        'prose-table:border prose-table:border-border',
+        'prose-th:bg-muted prose-th:border prose-th:border-border prose-th:p-2',
+        'prose-td:border prose-td:border-border prose-td:p-2'
+      )}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {text}
-      </p>
+      </ReactMarkdown>
     </div>
   );
 }

@@ -7,27 +7,20 @@
     "//": "═══════════════════════════════════════════════════════════════",
     "// MAIN COMMANDS": "Use these for development:",
     "//1": "═══════════════════════════════════════════════════════════════",
-
     "tauri:dev": "tauri dev",
     "// tauri:dev": "🚀 DESKTOP APP - Runs EVERYTHING (Vite + Backend + Tauri). This is what you want for desktop development!",
-
     "dev:full": "./dev.sh",
     "// dev:full": "🌐 WEB DEV - Runs backend + frontend together with proper port setup. Use this for web-only development.",
-
     "//2": "═══════════════════════════════════════════════════════════════",
     "// INDIVIDUAL COMPONENTS": "⚠️  DON'T run these separately unless you know what you're doing!",
     "//3": "═══════════════════════════════════════════════════════════════",
-
     "dev": "vite",
     "// dev": "⚠️  Frontend only - requires backend running separately. Use 'dev:full' or 'tauri:dev' instead!",
-
     "dev:backend": "node backend/server.cjs",
     "// dev:backend": "⚠️  Backend only - requires frontend running separately. Use 'dev:full' or 'tauri:dev' instead!",
-
     "//4": "═══════════════════════════════════════════════════════════════",
     "// BUILD & PRODUCTION": "",
     "//5": "═══════════════════════════════════════════════════════════════",
-
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -67,8 +60,11 @@
     "lucide-react": "^0.546.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^3.0.6",
     "react-router-dom": "^6.26.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",

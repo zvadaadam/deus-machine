@@ -9,7 +9,7 @@
  * they're only displayed as part of their tool_use block.
  */
 
-import type { ContentBlock } from '@/types';
+import type { ContentBlock, MessageRole } from '@/types';
 import type { ToolResultMap } from '../types';
 import { TextBlock } from './TextBlock';
 import { ToolUseBlock } from './ToolUseBlock';
@@ -19,9 +19,10 @@ interface BlockRendererProps {
   block: ContentBlock;
   index: number;
   toolResultMap: ToolResultMap;
+  role?: MessageRole;
 }
 
-export function BlockRenderer({ block, index, toolResultMap }: BlockRendererProps) {
+export function BlockRenderer({ block, index, toolResultMap, role }: BlockRendererProps) {
   // Handle null/undefined blocks gracefully
   if (!block) {
     if (import.meta.env.DEV) {
@@ -33,7 +34,7 @@ export function BlockRenderer({ block, index, toolResultMap }: BlockRendererProp
   // Dispatch based on block type
   switch (block.type) {
     case 'text':
-      return <TextBlock key={`text-${index}`} block={block} />;
+      return <TextBlock key={`text-${index}`} block={block} role={role} />;
 
     case 'tool_use':
       // Link tool_use with its corresponding tool_result
@@ -58,7 +59,7 @@ export function BlockRenderer({ block, index, toolResultMap }: BlockRendererProp
 
       // Try to render as text if it's a string
       if (typeof block === 'string') {
-        return <TextBlock key={`text-${index}`} block={{ type: 'text', text: block }} />;
+        return <TextBlock key={`text-${index}`} block={{ type: 'text', text: block }} role={role} />;
       }
 
       return null;
