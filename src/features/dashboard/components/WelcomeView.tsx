@@ -80,8 +80,8 @@ export function WelcomeView({
         </div>
 
         {recentWorkspaces.length > 0 ? (
-          <div className="space-y-2">
-            {recentWorkspaces.slice(0, 10).map((workspace) => (
+          <div className="max-h-[400px] overflow-y-auto scrollbar-thin space-y-2 pr-2">
+            {recentWorkspaces.map((workspace) => (
               <div
                 key={workspace.id}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group"
@@ -89,10 +89,10 @@ export function WelcomeView({
               >
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-foreground group-hover:text-primary transition-colors">
-                    {workspace.directory_name}
+                    {workspace.branch}.{workspace.directory_name}
                   </div>
-                  <div className="text-body-sm text-muted-foreground truncate font-mono">
-                    {workspace.root_path ? `${workspace.root_path}/.conductor` : ''}
+                  <div className="text-body-sm text-muted-foreground truncate">
+                    {workspace.repo_name || 'Unknown Repository'}
                   </div>
                 </div>
               </div>
