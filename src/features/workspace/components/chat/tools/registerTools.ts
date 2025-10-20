@@ -13,6 +13,7 @@ import {
   BashToolRenderer,
   ReadToolRenderer,
   GrepToolRenderer,
+  TodoWriteToolRenderer,
 } from './renderers';
 
 /**
@@ -28,6 +29,7 @@ export function registerAllTools() {
   toolRegistry.register('Bash', BashToolRenderer);
   toolRegistry.register('Read', ReadToolRenderer);
   toolRegistry.register('Grep', GrepToolRenderer);
+  toolRegistry.register('TodoWrite', TodoWriteToolRenderer);
 
   // Additional tools can be registered here:
   // toolRegistry.register('Glob', GlobToolRenderer);
