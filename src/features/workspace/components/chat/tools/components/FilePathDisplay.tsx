@@ -15,7 +15,10 @@ interface FilePathDisplayProps {
 export function FilePathDisplay({ path, className }: FilePathDisplayProps) {
   // Get file icon based on extension
   const getFileIcon = (filePath: string) => {
-    const ext = filePath.split('.').pop()?.toLowerCase();
+    // Extract filename and extension, handling edge cases like .gitignore, Dockerfile
+    const fileName = filePath.split('/').pop() || '';
+    const dotIndex = fileName.lastIndexOf('.');
+    const ext = dotIndex > 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
 
     const iconProps = { className: 'w-4 h-4 flex-shrink-0', 'aria-hidden': true };
 
