@@ -221,7 +221,7 @@ function handleClaudeMessage(sessionId, message) {
 
       db.prepare(`
         INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model)
-        VALUES (?, ?, 'assistant', ?, datetime('now'), ?, 'sonnet')
+        VALUES (?, ?, 'user', ?, datetime('now'), ?, 'sonnet')
       `).run(messageId, sessionId, prepared.content, sentAt);
 
       console.log(`   ✅ Saved user message (tool result) for session ${sessionId.substring(0, 8)}`);

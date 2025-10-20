@@ -1,4 +1,5 @@
 import type { Message, SessionStatus } from "../../../types";
+import type { ToolResultMap } from "./chat/types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +16,7 @@ interface ChatProps {
   messagesContainerRef: RefObject<HTMLDivElement>;
   showScrollButton?: boolean;
   onScrollToBottom?: () => void;
+  toolResultMap: ToolResultMap;
 }
 
 export function Chat({
@@ -26,6 +28,7 @@ export function Chat({
   messagesContainerRef,
   showScrollButton = false,
   onScrollToBottom,
+  toolResultMap,
 }: ChatProps) {
   return (
     <div
@@ -57,6 +60,7 @@ export function Chat({
                 key={message.id}
                 message={message}
                 parseContent={parseContent}
+                toolResultMap={toolResultMap}
               />
             ))}
           </div>

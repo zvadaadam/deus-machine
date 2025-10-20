@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBaseURL } from "../config/api.config";
 import { socketService } from "../services/socket";
-import type { Message, FileEdit, FileChangeGroup, SessionStatus } from "../types";
+import type { Message, FileEdit, FileChangeGroup, SessionStatus, ToolResultBlock } from "../types";
 
 // BASE_URL is now async - use getBaseURL()
 
@@ -28,23 +28,28 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       return parsed.message?.content || parsed.content || [];
     } catch (error) {
       // Enhanced error handling for JSON parse failures
-      console.error('[useMessages] ❌ JSON parse error:', {
-        error: error instanceof Error ? error.message : String(error),
-        contentLength: content.length,
-        contentPreview: content.substring(0, 200),
-      });
+      if (import.meta.env.DEV) {
+        console.error('[useMessages] ❌ JSON parse error:', {
+          error: error instanceof Error ? error.message : String(error),
+          contentLength: content.length,
+          contentPreview: content.substring(0, 200),
+        });
 
-      // Check if it's a control character error
-      if (error instanceof SyntaxError && error.message.includes('control character')) {
-        const match = error.message.match(/position (\d+)/);
-        if (match) {
-          const position = parseInt(match[1], 10);
-          console.error('[useMessages] Context around error position:', {
-            position,
-            before: content.substring(Math.max(0, position - 50), position),
-            after: content.substring(position, Math.min(content.length, position + 50))
-          });
+        // Check if it's a control character error
+        if (error instanceof SyntaxError && error.message.includes('control character')) {
+          const match = error.message.match(/position (\d+)/);
+          if (match) {
+            const position = parseInt(match[1], 10);
+            console.error('[useMessages] Context around error position:', {
+              position,
+              before: content.substring(Math.max(0, position - 50), position),
+              after: content.substring(position, Math.min(content.length, position + 50))
+            });
+          }
         }
+      } else {
+        // Production: redacted logs only
+        console.error('[useMessages] ❌ JSON parse error (redacted). length=', content.length);
       }
 
       // If JSON.parse fails, treat it as plain text (legacy format from original Conductor)
@@ -52,16 +57,47 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
     }
   }, []);
 
+  /**
+   * Build a map linking tool_use_id to tool_result blocks
+   * This enables tool renderers to display execution status (✓ Applied / ✗ Failed)
+   */
+  const toolResultMap = useMemo(() => {
+    const map = new Map<string, ToolResultBlock>();
+
+    messages.forEach(message => {
+      const contentBlocks = parseContent(message.content);
+      if (Array.isArray(contentBlocks)) {
+        contentBlocks.forEach((block: any) => {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            map.set(block.tool_use_id, block);
+          }
+        });
+      }
+    });
+
+    if (import.meta.env.DEV) {
+      console.log(`[useMessages] Built toolResultMap with ${map.size} results`);
+    }
+
+    return map;
+  }, [messages, parseContent]);
+
   const loadMessagesAndStatus = useCallback(async () => {
     try {
       // Load session status
       const sessionRes = await fetch(`${await getBaseURL()}/sessions/${sessionId}`);
+      if (!sessionRes.ok) {
+        throw new Error(`Status ${sessionRes.status} loading session`);
+      }
       const sessionData = await sessionRes.json();
       setSessionStatus(sessionData.status || 'idle');
       setIsCompacting(sessionData.is_compacting === 1);
 
       // Load messages
       const res = await fetch(`${await getBaseURL()}/sessions/${sessionId}/messages`);
+      if (!res.ok) {
+        throw new Error(`Status ${res.status} loading messages`);
+      }
       const data = await res.json();
       setMessages(data);
 
@@ -110,6 +146,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       setLoading(false);
     } catch (error) {
       console.error("Failed to load messages:", error);
+      setLoading(false);
     }
   }, [sessionId, parseContent]);
 
@@ -200,5 +237,6 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
     createPR,
     compactConversation,
     parseContent,
+    toolResultMap,
   };
 }
