@@ -144,19 +144,6 @@ export function WelcomeView({
                   </Button>
                 </div>
               )}
-
-              {showAll && hasMore && (
-                <div className="mt-4 flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAll(false)}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Show less
-                  </Button>
-                </div>
-              )}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
