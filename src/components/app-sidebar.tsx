@@ -73,7 +73,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const navigate = useNavigate();
   const { state, toggleSidebar } = useSidebar();
-  const { collapsedRepos, toggleRepoCollapse } = useUIStore();
+  const { collapsedRepos, toggleRepoCollapse, openSettingsModal } = useUIStore();
 
   const isExpanded = state === "expanded";
 
@@ -84,7 +84,7 @@ export function AppSidebar({
         {isExpanded ? (
           <div
             className="flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
-            onClick={() => navigate('/settings')}
+            onClick={openSettingsModal}
           >
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarFallback className="text-caption">
@@ -96,7 +96,7 @@ export function AppSidebar({
         ) : (
           <div
             className="mx-auto p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
-            onClick={() => navigate('/settings')}
+            onClick={openSettingsModal}
           >
             <Avatar className="h-8 w-8">
               <AvatarFallback className="text-caption">
