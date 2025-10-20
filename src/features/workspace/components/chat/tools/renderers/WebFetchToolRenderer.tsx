@@ -5,7 +5,7 @@
  * Fetches and processes web content with AI prompts
  */
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Globe, ExternalLink } from 'lucide-react';
 import { chatTheme } from '../../theme';
@@ -14,6 +14,7 @@ import type { ToolRendererProps } from '../../types';
 
 export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
+  const contentId = useId();
 
   const { url, prompt } = toolUse.input;
   const isError = toolResult?.is_error;
@@ -35,10 +36,14 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
       )}
     >
       {/* Header */}
-      <div
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
         className={cn(
           chatTheme.blocks.tool.header,
-          'cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between'
+          'w-full text-left hover:bg-muted/50 p-2 rounded transition-colors justify-between',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -65,23 +70,34 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
             {isError ? '✗ Failed' : '✓ Fetched'}
           </span>
         )}
-      </div>
+      </button>
 
       {/* URL display */}
       <div className="px-2 pb-1 space-y-1">
         {url && (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">URL:</span>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-mono truncate flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {url}
-              <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-            </a>
+            {(() => {
+              try {
+                const u = new URL(url);
+                const safe = u.protocol === 'http:' || u.protocol === 'https:';
+                return safe ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-mono truncate flex items-center gap-1"
+                  >
+                    {url}
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                  </a>
+                ) : (
+                  <span className="text-xs font-mono truncate text-muted-foreground">{url}</span>
+                );
+              } catch {
+                return <span className="text-xs font-mono truncate text-muted-foreground">{url}</span>;
+              }
+            })()}
           </div>
         )}
         {prompt && (
@@ -96,6 +112,7 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
       <AnimatePresence initial={false}>
         {isExpanded && hasResult && (
           <motion.div
+            id={contentId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

@@ -4,7 +4,7 @@
  * Specialized renderer for the Read tool (reading file contents)
  */
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { CodeBlock } from '../components/CodeBlock';
@@ -16,6 +16,7 @@ import { detectLanguageFromPath } from '../utils/detectLanguage';
 
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
+  const contentId = useId();
 
   const { file_path, offset, limit } = toolUse.input;
   const isError = toolResult?.is_error;
@@ -30,10 +31,14 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       )}
     >
       {/* Header */}
-      <div
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
         className={cn(
           chatTheme.blocks.tool.header,
-          'cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between'
+          'w-full text-left hover:bg-muted/50 p-2 rounded transition-colors justify-between',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -53,7 +58,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
             {isError ? '✗ Failed' : '✓ Read'}
           </span>
         )}
-      </div>
+      </button>
 
       {/* File path */}
       <FilePathDisplay path={file_path} />
@@ -71,6 +76,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       <AnimatePresence initial={false}>
         {isExpanded && toolResult && !isError && (
           <motion.div
+            id={contentId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

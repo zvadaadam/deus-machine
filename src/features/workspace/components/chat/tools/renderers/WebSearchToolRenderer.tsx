@@ -5,7 +5,7 @@
  * Displays web search queries and results
  */
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Search, ExternalLink } from 'lucide-react';
 import { chatTheme } from '../../theme';
@@ -14,6 +14,7 @@ import type { ToolRendererProps } from '../../types';
 
 export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
+  const contentId = useId();
 
   const { query, allowed_domains, blocked_domains } = toolUse.input;
   const isError = toolResult?.is_error;
@@ -35,10 +36,14 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
       )}
     >
       {/* Header */}
-      <div
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
         className={cn(
           chatTheme.blocks.tool.header,
-          'cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between'
+          'w-full text-left hover:bg-muted/50 p-2 rounded transition-colors justify-between',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -68,7 +73,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
             {isError ? '✗ Failed' : '✓ Found'}
           </span>
         )}
-      </div>
+      </button>
 
       {/* Query display */}
       <div className="px-2 pb-1 space-y-1">
@@ -110,6 +115,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
       <AnimatePresence initial={false}>
         {isExpanded && hasResult && (
           <motion.div
+            id={contentId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

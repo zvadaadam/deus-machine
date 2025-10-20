@@ -5,7 +5,7 @@
  * Monitors and displays output from background bash processes
  */
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Terminal, Activity } from 'lucide-react';
 import { chatTheme } from '../../theme';
@@ -14,6 +14,7 @@ import type { ToolRendererProps } from '../../types';
 
 export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expanded by default to see output
+  const contentId = useId();
 
   const { bash_id, filter } = toolUse.input;
   const isError = toolResult?.is_error;
@@ -36,10 +37,15 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
       )}
     >
       {/* Header */}
-      <div
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={contentId}
+        aria-label="Toggle background process output"
         className={cn(
           chatTheme.blocks.tool.header,
-          'cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between'
+          'w-full cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -66,7 +72,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
             {isError ? '✗ Failed' : '✓ Read'}
           </span>
         )}
-      </div>
+      </button>
 
       {/* Process info */}
       <div className="px-2 pb-1 space-y-1">
@@ -87,6 +93,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
       <AnimatePresence initial={false}>
         {isExpanded && hasOutput && (
           <motion.div
+            id={contentId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
