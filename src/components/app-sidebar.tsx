@@ -52,6 +52,7 @@ interface AppSidebarProps {
   diffStats: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
+  onAddRepository?: () => void;
   profile?: {
     username: string;
     email?: string;
@@ -64,6 +65,7 @@ export function AppSidebar({
   diffStats,
   onWorkspaceClick,
   onNewWorkspace,
+  onAddRepository,
   profile = { username: "User" },
 }: AppSidebarProps) {
   const navigate = useNavigate();
@@ -122,11 +124,11 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => onNewWorkspace()}
-              tooltip={!isExpanded ? "New Workspace" : undefined}
+              onClick={() => onAddRepository?.()}
+              tooltip={!isExpanded ? "Add Repository" : undefined}
             >
-              <FolderPlus className="h-4 w-4" />
-              {isExpanded && <span className="text-body-sm">New Workspace</span>}
+              <Plus className="h-4 w-4" />
+              {isExpanded && <span className="text-body-sm">Add Repository</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
