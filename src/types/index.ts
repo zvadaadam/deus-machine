@@ -27,6 +27,7 @@ export type {
   TextBlock,
   ToolUseBlock,
   ToolResultBlock,
+  ThinkingBlock,
   Session,
 } from './session.types';
 

@@ -13,6 +13,7 @@ import type { ContentBlock } from '@/types';
 import type { ToolResultMap } from '../types';
 import { TextBlock } from './TextBlock';
 import { ToolUseBlock } from './ToolUseBlock';
+import { ThinkingBlock } from './ThinkingBlock';
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -45,6 +46,9 @@ export function BlockRenderer({ block, index, toolResultMap }: BlockRendererProp
         console.log(`[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`);
       }
       return null;
+
+    case 'thinking':
+      return <ThinkingBlock key={`thinking-${index}`} block={block} />;
 
     default:
       // Graceful fallback for unknown block types

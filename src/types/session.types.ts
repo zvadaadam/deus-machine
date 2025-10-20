@@ -18,11 +18,11 @@ export interface Message {
 
 /**
  * Parsed message content structure
- * Content blocks can be text, tool_use, or tool_result
+ * Content blocks can be text, tool_use, tool_result, or thinking
  */
 export type MessageContent = ContentBlock[];
 
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
 
 /**
  * Text content block
@@ -52,6 +52,17 @@ export interface ToolResultBlock {
   tool_use_id: string;
   content: string | Record<string, any>;
   is_error?: boolean;
+}
+
+/**
+ * Thinking block
+ * Contains Claude's internal reasoning process
+ * Encrypted with signature for verification
+ */
+export interface ThinkingBlock {
+  type: 'thinking';
+  thinking: string;
+  signature?: string;  // Encrypted signature from Claude
 }
 
 /**
