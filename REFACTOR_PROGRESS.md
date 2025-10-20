@@ -47,12 +47,17 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 - [x] TypeScript: 0 errors
 - [x] Documentation complete
 
-### Phase 6 Complete: Empty Message Fix
-- [x] Identified root cause: Messages with empty content or only tool_result blocks
-- [x] Added hasRenderableContent check in MessageItem
-- [x] Filter out messages with no renderable blocks (tool_result only or empty)
-- [x] Return null for empty messages (don't render message container)
-- [x] Added dev logging to track skipped messages
+### Phase 6 Complete: Empty Message Fix (Root Cause + Defense)
+- [x] **Identified root cause**: Backend copy-paste bug saving user messages as assistant
+  - User messages with tool_result blocks were saved with role='assistant'
+  - tool_result blocks don't render standalone → empty assistant boxes
+- [x] **Backend fix (ROOT CAUSE)**: Changed line 224 from 'assistant' to 'user'
+  - Fixes the bug at source - user messages now saved correctly
+- [x] **Frontend fix (DEFENSIVE)**: Added hasRenderableContent check in MessageItem
+  - Filter out messages with no renderable blocks (safety net)
+  - Return null for empty messages (don't render message container)
+  - Protects against future backend bugs or malformed data
+  - Added dev logging to track skipped messages
 - [x] TypeScript: 0 errors
 - [x] Documentation complete
 
@@ -93,12 +98,13 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 
 **Blockers**: None
 
-**Status**: All empty message issues resolved:
+**Status**: All empty message issues resolved with root cause fix + defensive measures:
 - Thinking blocks now render correctly (Phase 5)
-- Messages with no renderable content are filtered out (Phase 6)
-- tool_result-only messages don't create empty boxes
+- Backend bug fixed: user messages now saved with correct role (Phase 6 - root cause)
+- Frontend filter: messages with no renderable content are skipped (Phase 6 - defensive)
+- No more empty boxes from tool_result-only messages
 
-**Next Steps**: Browser testing to verify no empty messages appear in chat
+**Next Steps**: Restart backend to apply fix, then test in browser
 
 ---
 
@@ -143,18 +149,20 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 32. `chat/blocks/index.ts` - Exported ThinkingBlock component
 33. `blocks/BlockRenderer.tsx` - Added 'thinking' case handler
 
-**Phase 6 (Empty Message Fix):**
-34. `MessageItem.tsx` - Added empty message filtering to skip messages with no renderable content
+**Phase 6 (Empty Message Fix - Root Cause + Defense):**
+34. `backend/lib/claude-session.cjs:224` - **ROOT CAUSE FIX**: Changed user message insert from 'assistant' to 'user'
+35. `MessageItem.tsx` - Added empty message filtering (defensive safety net)
 
 ### Key Changes
 - **Refactored MessageItem**: From 114 lines monolithic to 68 lines using composition
 - **Added Registry Pattern**: Tool renderers are now extensible plugins
 - **Theme System**: All colors use Tailwind tokens (no hardcoded colors)
 - **Better TypeScript**: Full type safety with proper interfaces
-- **Fixed Empty Messages**:
+- **Fixed Empty Messages** (Root Cause + Defense):
+  - **Backend**: Fixed copy-paste bug - user messages now saved with correct role
+  - **Frontend**: Filter messages with no renderable content (defensive)
   - Thinking blocks now render correctly (were appearing as empty assistant messages)
-  - Messages with no renderable content are filtered out
-  - tool_result-only messages don't create empty boxes
+  - tool_result-only messages no longer saved as assistant messages
 - **Improved UX**:
   - Edit tool shows side-by-side diff with copy buttons
   - Read tool collapsed by default to reduce clutter
