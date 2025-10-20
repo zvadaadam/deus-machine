@@ -25,6 +25,7 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 **Phase 2**: Tool Renderers ✅
 **Phase 3**: Polish & Animations ✅
 **Phase 4**: Tool Linking (Critical Fix) ✅
+**Phase 5**: Thinking Block Visualization ✅
 
 ### Phase 4 Complete: Tool Use → Tool Result Linking
 - [x] Built toolResultMap in useMessages hook
@@ -32,6 +33,16 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 - [x] Linked tool_use blocks with their tool_result
 - [x] Stopped rendering standalone tool_result blocks
 - [x] All renderers now show correct status (✓ Applied / ✗ Failed)
+- [x] TypeScript: 0 errors
+- [x] Documentation complete
+
+### Phase 5 Complete: Thinking Block Visualization
+- [x] Added ThinkingBlock type to session.types.ts
+- [x] Exported ThinkingBlock from types index
+- [x] Created ThinkingBlock renderer component (collapsible, purple theme)
+- [x] Added 'thinking' case to BlockRenderer
+- [x] Fixed empty assistant messages (now show thinking blocks)
+- [x] Signature verification indicator
 - [x] TypeScript: 0 errors
 - [x] Documentation complete
 
@@ -66,15 +77,15 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 
 ## 📊 Current Status
 
-**Last Updated**: 2025-01-20
+**Last Updated**: 2025-10-20
 
-**Current Task**: Phase 4 Complete ✅ (Tool Linking - Critical Fix)
+**Current Task**: Phase 5 Complete ✅ (Thinking Block Visualization)
 
 **Blockers**: None
 
-**Status**: All planned work complete, ready for production testing
+**Status**: All planned work complete, thinking blocks now render correctly (fixing empty message issue)
 
-**Next Steps**: Optional enhancements (pending states, browser testing)
+**Next Steps**: Browser testing to verify thinking blocks appear correctly
 
 ---
 
@@ -112,15 +123,24 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 27. `blocks/BlockRenderer.tsx` - Links tool_use with result, skips standalone tool_result
 28. `blocks/ToolUseBlock.tsx` - Receives and passes toolResult to renderers
 
+**Phase 5 (Thinking Block Visualization):**
+29. `types/session.types.ts` - Added ThinkingBlock interface
+30. `types/index.ts` - Exported ThinkingBlock type
+31. `chat/blocks/ThinkingBlock.tsx` - Collapsible thinking block renderer with signature verification
+32. `chat/blocks/index.ts` - Exported ThinkingBlock component
+33. `blocks/BlockRenderer.tsx` - Added 'thinking' case handler
+
 ### Key Changes
 - **Refactored MessageItem**: From 114 lines monolithic to 68 lines using composition
 - **Added Registry Pattern**: Tool renderers are now extensible plugins
 - **Theme System**: All colors use Tailwind tokens (no hardcoded colors)
 - **Better TypeScript**: Full type safety with proper interfaces
+- **Fixed Empty Messages**: Thinking blocks now render correctly (were appearing as empty assistant messages)
 - **Improved UX**:
   - Edit tool shows side-by-side diff with copy buttons
   - Read tool collapsed by default to reduce clutter
   - Bash tool with terminal-style green text on black
+  - Thinking blocks collapsible with purple theme and signature verification
   - Framer Motion animations (0.2s, ease-out-quint)
   - SyntaxHighlighter with line numbers and hover effects
 
