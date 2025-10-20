@@ -9,6 +9,7 @@ import {
   NewWorkspaceModal,
   DiffModal,
   SystemPromptModal,
+  WelcomeView,
 } from "./features/dashboard/components";
 import { BrowserPanel } from "./features/browser/components";
 import {
@@ -36,7 +37,6 @@ import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as 
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
-import { NoWorkspaceView } from "./components/content/NoWorkspaceView";
 import type {
   Workspace,
   Repo,
@@ -442,7 +442,7 @@ export function Dashboard() {
             </div>
           </>
         ) : (
-          <NoWorkspaceView
+          <WelcomeView
             onLoadProjects={handleLoadProjects}
             onOpenProject={handleOpenProject}
             onCloneFromGithub={handleCloneFromGithub}

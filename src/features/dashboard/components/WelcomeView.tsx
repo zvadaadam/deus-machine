@@ -28,22 +28,22 @@ function ActionCard({ icon, title, description, action, onClick }: ActionCardPro
   );
 }
 
-interface NoWorkspaceViewProps {
+interface WelcomeViewProps {
   onLoadProjects?: () => void;
   onOpenProject?: () => void;
   onCloneFromGithub?: () => void;
 }
 
 /**
- * NoWorkspaceView - Displayed when no workspace is selected
+ * WelcomeView - Dashboard welcome screen when no workspace is selected
  * Shows options to load projects, open project locally, or clone from GitHub
  * Following design inspiration from Linear, Vercel, Stripe, Airbnb, Perplexity
  */
-export function NoWorkspaceView({
+export function WelcomeView({
   onLoadProjects,
   onOpenProject,
   onCloneFromGithub,
-}: NoWorkspaceViewProps) {
+}: WelcomeViewProps) {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 max-w-5xl mx-auto">
       {/* Header */}
