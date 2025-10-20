@@ -54,8 +54,12 @@ export function Chat({
             ))}
           </div>
           {sessionStatus === 'working' && (
-            <div className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success-500/10 backdrop-blur-sm border border-success-500/30 rounded-xl text-success-900 font-medium text-[0.85rem] shadow-sm animate-pulse">
-              <div className="w-4 h-4 border-2 border-success-100 border-t-success-500 rounded-full animate-spin flex-shrink-0"></div>
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success-500/10 backdrop-blur-sm border border-success-500/30 rounded-xl text-success-900 font-medium text-[0.85rem] shadow-sm animate-pulse"
+            >
+              <div className="w-4 h-4 border-2 border-success-100 border-t-success-500 rounded-full animate-spin flex-shrink-0" aria-hidden="true"></div>
               <span>Claude is working...</span>
             </div>
           )}
@@ -70,8 +74,9 @@ export function Chat({
             className="rounded-full shadow-lg pointer-events-auto"
             onClick={() => onScrollToBottom?.()}
             title="Scroll to bottom"
+            aria-label="Scroll to bottom"
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       )}
