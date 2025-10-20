@@ -33,17 +33,28 @@ export function MessageInput({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      onSend();
+      e.stopPropagation();
+      if (!sending && messageInput.trim()) {
+        onSend();
+      }
     }
+  };
+
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   };
 
   // Auto-resize textarea
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
-    }
+    resizeTextarea();
   }, [messageInput]);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, []);
 
   return (
     <div className="flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
@@ -70,7 +81,10 @@ export function MessageInput({
           placeholder="Ask Claude Code to make changes, @mention files, run /commands"
           disabled={sending}
           onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            resizeTextarea();
+          }}
           onBlur={() => setIsFocused(false)}
           className="
             flex-1 bg-transparent border-none outline-none resize-none
@@ -78,7 +92,7 @@ export function MessageInput({
             min-h-[24px] max-h-[200px]
             font-sans
             overflow-y-auto
-            scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
+            scrollbar-vibrancy
           "
           rows={1}
         />

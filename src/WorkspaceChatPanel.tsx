@@ -66,10 +66,10 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
 
   // Expose action handlers to parent
   useEffect(() => {
-    if (onCompact) onCompact(compactConversation);
-    if (onCreatePR) onCreatePR(createPR);
-    if (onStop) onStop(stopSession);
-  }, [onCompact, onCreatePR, onStop, compactConversation, createPR, stopSession]);
+    onCompact?.(compactConversation);
+    onCreatePR?.(createPR);
+    onStop?.(stopSession);
+  }, [compactConversation, createPR, stopSession, onCompact, onCreatePR, onStop]);
 
   // Expose insertText method for browser element selector
   useImperativeHandle(ref, () => ({
