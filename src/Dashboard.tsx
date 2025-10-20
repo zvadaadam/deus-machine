@@ -504,6 +504,7 @@ export function Dashboard() {
           diffStats={diffStats}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
+          onAddRepository={() => selectWorkspace(null)}
           profile={{
             username: "Developer"
           }}
