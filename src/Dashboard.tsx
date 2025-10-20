@@ -32,10 +32,11 @@ import {
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, ArrowRight, Sparkles, FileCode, Monitor } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
+import { NoWorkspaceView } from "./components/content/NoWorkspaceView";
 import type {
   Workspace,
   Repo,
@@ -332,6 +333,33 @@ export function Dashboard() {
     }
   }
 
+  /**
+   * Handle loading projects
+   * TODO: Implement actual project loading functionality
+   */
+  function handleLoadProjects() {
+    console.log('Load projects clicked - to be implemented');
+    // Future: Show list of recent projects or browse projects
+  }
+
+  /**
+   * Handle opening a local project
+   * TODO: Implement file picker to open local project
+   */
+  function handleOpenProject() {
+    console.log('Open project clicked - to be implemented');
+    // Future: Open file picker dialog to select a local directory
+  }
+
+  /**
+   * Handle cloning from GitHub
+   * TODO: Implement GitHub clone functionality
+   */
+  function handleCloneFromGithub() {
+    console.log('Clone from GitHub clicked - to be implemented');
+    // Future: Show modal with GitHub URL input field
+  }
+
   return (
     <SidebarProvider>
       {/* Inset Sidebar - transparent, sits on top of #root background */}
@@ -414,50 +442,11 @@ export function Dashboard() {
             </div>
           </>
         ) : (
-          <div className="flex-1 overflow-y-auto scrollbar-vibrancy">
-            <div className="h-full flex flex-col justify-center">
-              <EmptyState
-                icon={<ArrowRight  />}
-                title="No Workspace Selected"
-                description="Select a workspace from the sidebar to view its details and start working"
-                animate
-              />
-
-              {stats && (
-                <Card className="mx-6 elevation-2">
-                  <CardHeader>
-                    <CardTitle className="text-heading">Overview</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Workspaces</span>
-                      <span className="text-body font-semibold">{stats.workspaces} <span className="text-caption text-muted-foreground">({stats.workspaces_ready} ready, {stats.workspaces_archived} archived)</span></span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Repositories</span>
-                      <span className="text-body font-semibold">{stats.repos}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Sessions</span>
-                      <span className="text-body font-semibold">{stats.sessions} <span className="text-caption text-muted-foreground">({stats.sessions_working} working, {stats.sessions_compacting} compacting)</span></span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Messages</span>
-                      <span className="text-body font-semibold">{stats.messages.toLocaleString()}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Status</span>
-                      <Badge variant={status === 'Connected' ? 'ready' : 'error'}>{status}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
+          <NoWorkspaceView
+            onLoadProjects={handleLoadProjects}
+            onOpenProject={handleOpenProject}
+            onCloneFromGithub={handleCloneFromGithub}
+          />
         )}
         </div>
       </Panel>
