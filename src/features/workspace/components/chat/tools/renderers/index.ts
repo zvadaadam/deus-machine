@@ -5,3 +5,5 @@ export { BashToolRenderer } from './BashToolRenderer';
 export { ReadToolRenderer } from './ReadToolRenderer';
 export { GrepToolRenderer } from './GrepToolRenderer';
 export { TodoWriteToolRenderer } from './TodoWriteToolRenderer';
+export { GlobToolRenderer } from './GlobToolRenderer';
+export { BashOutputToolRenderer } from './BashOutputToolRenderer';

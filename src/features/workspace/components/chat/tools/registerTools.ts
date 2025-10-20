@@ -14,6 +14,8 @@ import {
   ReadToolRenderer,
   GrepToolRenderer,
   TodoWriteToolRenderer,
+  GlobToolRenderer,
+  BashOutputToolRenderer,
 } from './renderers';
 
 /**
@@ -30,10 +32,12 @@ export function registerAllTools() {
   toolRegistry.register('Read', ReadToolRenderer);
   toolRegistry.register('Grep', GrepToolRenderer);
   toolRegistry.register('TodoWrite', TodoWriteToolRenderer);
+  toolRegistry.register('Glob', GlobToolRenderer);
+  toolRegistry.register('BashOutput', BashOutputToolRenderer);
 
   // Additional tools can be registered here:
-  // toolRegistry.register('Glob', GlobToolRenderer);
   // toolRegistry.register('WebFetch', WebFetchToolRenderer);
+  // toolRegistry.register('WebSearch', WebSearchToolRenderer);
   // toolRegistry.register('Task', TaskToolRenderer);
 
   if (import.meta.env.DEV) {
