@@ -27,7 +27,13 @@ export function Chat({
   onScrollToBottom,
 }: ChatProps) {
   return (
-    <div className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6" ref={messagesContainerRef}>
+    <div
+      id="chat-messages"
+      role="log"
+      aria-live="polite"
+      className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6"
+      ref={messagesContainerRef}
+    >
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-12 w-12 rounded-full" />
@@ -57,9 +63,9 @@ export function Chat({
             <div
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success-500/10 backdrop-blur-sm border border-success-500/30 rounded-xl text-success-900 font-medium text-[0.85rem] shadow-sm animate-pulse"
+              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-pulse"
             >
-              <div className="w-4 h-4 border-2 border-success-100 border-t-success-500 rounded-full animate-spin flex-shrink-0" aria-hidden="true"></div>
+              <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin flex-shrink-0" aria-hidden="true"></div>
               <span>Claude is working...</span>
             </div>
           )}
@@ -75,6 +81,7 @@ export function Chat({
             onClick={() => onScrollToBottom?.()}
             title="Scroll to bottom"
             aria-label="Scroll to bottom"
+            aria-controls="chat-messages"
           >
             <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </Button>

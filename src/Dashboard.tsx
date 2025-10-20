@@ -163,8 +163,9 @@ export function Dashboard() {
   useEffect(() => {
     const handleInsertToChat = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
-      const text = (event.detail as { text?: string } | undefined)?.text;
-      if (typeof text === 'string' && workspaceChatPanelRef.current) {
+      const raw = (event.detail as { text?: string } | undefined)?.text;
+      const text = typeof raw === 'string' ? raw.trim() : '';
+      if (text && workspaceChatPanelRef.current) {
         console.log('[Dashboard] 🎯 Inserting element data to chat');
         workspaceChatPanelRef.current.insertText(text);
       }
