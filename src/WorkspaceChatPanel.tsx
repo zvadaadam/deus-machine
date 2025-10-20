@@ -52,6 +52,7 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
     createPR,
     compactConversation,
     parseContent,
+    toolResultMap,
   } = useMessages({ sessionId, isSocketConnected: isConnected });
 
   const {
@@ -149,6 +150,7 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
           messagesContainerRef={messagesContainerRef}
           showScrollButton={showScrollButton}
           onScrollToBottom={handleScrollToBottomClick}
+          toolResultMap={toolResultMap}
         />
 
         {/* Message Input - Sticky at bottom */}
@@ -225,6 +227,7 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
                   messagesContainerRef={messagesContainerRef}
                   showScrollButton={showScrollButton}
                   onScrollToBottom={handleScrollToBottomClick}
+                  toolResultMap={toolResultMap}
                 />
 
                 {/* Message Input - Sticky at bottom */}

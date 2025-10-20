@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBaseURL } from "../config/api.config";
 import { socketService } from "../services/socket";
-import type { Message, FileEdit, FileChangeGroup, SessionStatus } from "../types";
+import type { Message, FileEdit, FileChangeGroup, SessionStatus, ToolResultBlock } from "../types";
 
 // BASE_URL is now async - use getBaseURL()
 
@@ -51,6 +51,31 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       return [{ type: 'text', text: content }];
     }
   }, []);
+
+  /**
+   * Build a map linking tool_use_id to tool_result blocks
+   * This enables tool renderers to display execution status (✓ Applied / ✗ Failed)
+   */
+  const toolResultMap = useMemo(() => {
+    const map = new Map<string, ToolResultBlock>();
+
+    messages.forEach(message => {
+      const contentBlocks = parseContent(message.content);
+      if (Array.isArray(contentBlocks)) {
+        contentBlocks.forEach((block: any) => {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            map.set(block.tool_use_id, block);
+          }
+        });
+      }
+    });
+
+    if (import.meta.env.DEV) {
+      console.log(`[useMessages] Built toolResultMap with ${map.size} results`);
+    }
+
+    return map;
+  }, [messages, parseContent]);
 
   const loadMessagesAndStatus = useCallback(async () => {
     try {
@@ -200,5 +225,6 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
     createPR,
     compactConversation,
     parseContent,
+    toolResultMap,
   };
 }
