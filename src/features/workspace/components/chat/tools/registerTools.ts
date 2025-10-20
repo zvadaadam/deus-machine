@@ -6,7 +6,14 @@
  */
 
 import { toolRegistry } from './ToolRegistry';
-import { DefaultToolRenderer, EditToolRenderer } from './renderers';
+import {
+  DefaultToolRenderer,
+  EditToolRenderer,
+  WriteToolRenderer,
+  BashToolRenderer,
+  ReadToolRenderer,
+  GrepToolRenderer,
+} from './renderers';
 
 /**
  * Initialize all tool renderers
@@ -17,13 +24,15 @@ export function registerAllTools() {
 
   // Register specific tool renderers
   toolRegistry.register('Edit', EditToolRenderer);
+  toolRegistry.register('Write', WriteToolRenderer);
+  toolRegistry.register('Bash', BashToolRenderer);
+  toolRegistry.register('Read', ReadToolRenderer);
+  toolRegistry.register('Grep', GrepToolRenderer);
 
-  // Add more tool renderers here as we build them:
-  // toolRegistry.register('Write', WriteToolRenderer);
-  // toolRegistry.register('Bash', BashToolRenderer);
-  // toolRegistry.register('Read', ReadToolRenderer);
-  // toolRegistry.register('Grep', GrepToolRenderer);
+  // Additional tools can be registered here:
   // toolRegistry.register('Glob', GlobToolRenderer);
+  // toolRegistry.register('WebFetch', WebFetchToolRenderer);
+  // toolRegistry.register('Task', TaskToolRenderer);
 
   if (import.meta.env.DEV) {
     const stats = toolRegistry.getStats();
