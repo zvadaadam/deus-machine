@@ -2,6 +2,8 @@ import type { Message, SessionStatus } from "../../../types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 
 interface ChatProps {
   messages: Message[];
@@ -10,6 +12,8 @@ interface ChatProps {
   parseContent: (content: string) => any;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   messagesContainerRef: React.RefObject<HTMLDivElement>;
+  showScrollButton?: boolean;
+  onScrollToBottom?: () => void;
 }
 
 export function Chat({
@@ -19,9 +23,11 @@ export function Chat({
   parseContent,
   messagesEndRef,
   messagesContainerRef,
+  showScrollButton = false,
+  onScrollToBottom,
 }: ChatProps) {
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6" ref={messagesContainerRef}>
+    <div className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6" ref={messagesContainerRef}>
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-12 w-12 rounded-full" />
@@ -55,6 +61,19 @@ export function Chat({
           )}
           <div ref={messagesEndRef} />
         </>
+      )}
+      {showScrollButton && (
+        <div className="sticky bottom-6 flex justify-end pointer-events-none pb-6">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-full shadow-lg pointer-events-auto"
+            onClick={() => onScrollToBottom?.()}
+            title="Scroll to bottom"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
       )}
     </div>
   );

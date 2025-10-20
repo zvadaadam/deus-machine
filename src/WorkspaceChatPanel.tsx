@@ -14,9 +14,9 @@ import {
   useAutoScroll,
 } from "./hooks";
 import { Button } from "@/components/ui/button";
-import { X, ArrowLeft, ChevronDown } from "lucide-react";
+import { X, ArrowLeft } from "lucide-react";
 
-interface WorkspaceDetailProps {
+interface WorkspaceChatPanelProps {
   workspaceId: string;
   sessionId: string;
   onClose: () => void;
@@ -26,11 +26,11 @@ interface WorkspaceDetailProps {
   onStop?: (handler: () => void) => void;
 }
 
-export interface WorkspaceDetailRef {
+export interface WorkspaceChatPanelRef {
   insertText: (text: string) => void;
 }
 
-export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailProps>(
+export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceChatPanelProps>(
   ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
   const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -75,7 +75,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   // Expose insertText method for browser element selector
   useImperativeHandle(ref, () => ({
     insertText: (text: string) => {
-      console.log('[WorkspaceDetail] Inserting text to message input');
+      console.log('[WorkspaceChatPanel] Inserting text to message input');
       // Add with double newline for proper formatting
       setMessageInput(prev => {
         const separator = prev.trim() ? '\n\n' : '';
@@ -149,20 +149,9 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           parseContent={parseContent}
           messagesEndRef={messagesEndRef}
           messagesContainerRef={messagesContainerRef}
+          showScrollButton={showScrollButton}
+          onScrollToBottom={handleScrollToBottomClick}
         />
-
-        {/* Scroll to Bottom Button */}
-        {showScrollButton && (
-          <Button
-            variant="secondary"
-            size="icon"
-            className="fixed bottom-24 right-6 rounded-full shadow-lg z-10"
-            onClick={handleScrollToBottomClick}
-            title="Scroll to bottom"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        )}
 
         {/* Message Input - Sticky at bottom */}
         <MessageInput
@@ -226,20 +215,9 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                   parseContent={parseContent}
                   messagesEndRef={messagesEndRef}
                   messagesContainerRef={messagesContainerRef}
+                  showScrollButton={showScrollButton}
+                  onScrollToBottom={handleScrollToBottomClick}
                 />
-
-                {/* Scroll to Bottom Button */}
-                {showScrollButton && (
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="fixed bottom-24 right-6 rounded-full shadow-lg z-10"
-                    onClick={handleScrollToBottomClick}
-                    title="Scroll to bottom"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                )}
 
                 {/* Message Input - Sticky at bottom */}
                 <MessageInput
@@ -263,4 +241,4 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   );
 });
 
-WorkspaceDetail.displayName = 'WorkspaceDetail';
+WorkspaceChatPanel.displayName = 'WorkspaceChatPanel';

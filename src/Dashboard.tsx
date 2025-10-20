@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { WorkspaceDetail } from "./WorkspaceDetail";
+import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
+import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { getBaseURL } from "./config/api.config";
 import { formatTokenCount } from "./utils";
@@ -94,8 +95,8 @@ export function Dashboard() {
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
   const [stopHandler, setStopHandler] = useState<(() => void) | null>(null);
 
-  // Ref to WorkspaceDetail for inserting text from browser element selector
-  const workspaceDetailRef = useRef<{ insertText: (text: string) => void }>(null);
+  // Ref to Workspace chat panel for inserting text from browser element selector
+  const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
 
   // System Prompt Editor (local state - specific to this feature)
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -162,9 +163,9 @@ export function Dashboard() {
   useEffect(() => {
     const handleInsertToChat = (event: Event) => {
       const customEvent = event as CustomEvent<{ text: string }>;
-      if (customEvent.detail?.text && workspaceDetailRef.current) {
+      if (customEvent.detail?.text && workspaceChatPanelRef.current) {
         console.log('[Dashboard] 🎯 Inserting element data to chat');
-        workspaceDetailRef.current.insertText(customEvent.detail.text);
+        workspaceChatPanelRef.current.insertText(customEvent.detail.text);
       }
     };
 
@@ -373,7 +374,7 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset - tight spacing for modern feel */}
-      <SidebarInset className="overflow-hidden min-w-0">
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         <div className="flex flex-1 flex-col gap-2 pt-2 pr-2 pb-2 min-h-0">
           <PanelGroup
             direction="horizontal"
@@ -381,7 +382,7 @@ export function Dashboard() {
             className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
           >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30} className="flex flex-col" style={{ minWidth: 0, overflowX: 'hidden' }}>
+      <Panel id="center" minSize={30} className="flex flex-col min-h-0" style={{ minWidth: 0, overflowX: 'hidden' }}>
         <div className="flex-1 flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
@@ -405,8 +406,8 @@ export function Dashboard() {
             {/* Messages take full area */}
             <div className="flex-1 flex flex-col min-h-0">
               {selectedWorkspace.active_session_id && (
-                <WorkspaceDetail
-                  ref={workspaceDetailRef}
+                <WorkspaceChatPanel
+                  ref={workspaceChatPanelRef}
                   workspaceId={selectedWorkspace.id}
                   sessionId={selectedWorkspace.active_session_id}
                   onClose={() => {}}
@@ -470,8 +471,8 @@ export function Dashboard() {
       <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} style={{ minWidth: 0, overflowX: 'hidden' }}>
-        <Tabs defaultValue="browser" className="h-full flex flex-col overflow-hidden">
+      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0" style={{ minWidth: 0, overflowX: 'hidden' }}>
+        <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
@@ -504,7 +505,7 @@ export function Dashboard() {
           </div>
 
           {/* Browser Tab */}
-          <TabsContent value="browser" className="flex-1 m-0 overflow-hidden">
+          <TabsContent value="browser" className="m-0 flex flex-1 flex-col overflow-hidden">
             {selectedWorkspace ? (
               <BrowserPanel workspaceId={selectedWorkspace.id} />
             ) : (
@@ -518,7 +519,7 @@ export function Dashboard() {
           </TabsContent>
 
           {/* File Changes Tab */}
-          <TabsContent value="changes" className="flex-1 m-0 overflow-hidden">
+          <TabsContent value="changes" className="m-0 flex flex-1 flex-col overflow-hidden">
             <div className="h-full flex flex-col">
               {/* Dev Servers Section */}
               {selectedWorkspace && devServers.length > 0 && (
@@ -601,7 +602,7 @@ export function Dashboard() {
           </TabsContent>
 
           {/* Terminal Tab */}
-          <TabsContent value="terminal" className="flex-1 m-0 overflow-hidden">
+          <TabsContent value="terminal" className="m-0 flex flex-1 flex-col overflow-hidden">
             {selectedWorkspace ? (
               <TerminalPanel
                 workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
