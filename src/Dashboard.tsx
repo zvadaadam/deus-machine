@@ -9,6 +9,7 @@ import {
   NewWorkspaceModal,
   DiffModal,
   SystemPromptModal,
+  SettingsModal,
   WelcomeView,
   CloneRepositoryModal,
 } from "./features/dashboard/components";
@@ -61,11 +62,13 @@ export function Dashboard() {
   const {
     showNewWorkspaceModal,
     showSystemPromptModal,
+    showSettingsModal,
     diffModal,
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
     openSystemPromptModal,
     closeSystemPromptModal,
+    closeSettingsModal,
     openDiffModal,
     closeDiffModal,
   } = useUIStore();
@@ -792,6 +795,11 @@ export function Dashboard() {
         cloning={cloning}
         onClose={() => setShowCloneModal(false)}
         onClone={handleCloneRepository}
+      />
+
+      <SettingsModal
+        show={showSettingsModal}
+        onClose={closeSettingsModal}
       />
     </SidebarProvider>
   );

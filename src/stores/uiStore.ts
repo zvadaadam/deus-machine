@@ -15,6 +15,7 @@ interface UIState {
   // Modals
   showNewWorkspaceModal: boolean;
   showSystemPromptModal: boolean;
+  showSettingsModal: boolean;
   diffModal: DiffModalState | null;
 
   // Sidebar
@@ -25,6 +26,8 @@ interface UIState {
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
+  openSettingsModal: () => void;
+  closeSettingsModal: () => void;
   openDiffModal: (file: string, diff: string) => void;
   closeDiffModal: () => void;
   closeAllModals: () => void;
@@ -40,6 +43,7 @@ export const useUIStore = create<UIState>()(
       // Initial state
       showNewWorkspaceModal: false,
       showSystemPromptModal: false,
+      showSettingsModal: false,
       diffModal: null,
       collapsedRepos: new Set<string>(),
 
@@ -72,6 +76,20 @@ export const useUIStore = create<UIState>()(
           'ui/closeSystemPromptModal'
         ),
 
+      openSettingsModal: () =>
+        set(
+          { showSettingsModal: true },
+          false,
+          'ui/openSettingsModal'
+        ),
+
+      closeSettingsModal: () =>
+        set(
+          { showSettingsModal: false },
+          false,
+          'ui/closeSettingsModal'
+        ),
+
       openDiffModal: (file, diff) =>
         set(
           { diffModal: { file, diff } },
@@ -91,6 +109,7 @@ export const useUIStore = create<UIState>()(
           {
             showNewWorkspaceModal: false,
             showSystemPromptModal: false,
+            showSettingsModal: false,
             diffModal: null,
           },
           false,
