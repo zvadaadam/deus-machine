@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Terminal } from 'lucide-react';
 import { CopyButton } from '../components/CopyButton';
 import { chatTheme } from '../../theme';
@@ -66,24 +67,34 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       </div>
 
       {/* Expandable output */}
-      {isExpanded && toolResult && (
-        <div className="space-y-1 px-2 pb-2">
-          <div className="text-xs text-muted-foreground">Output:</div>
-          <pre
-            className={cn(
-              'p-2 rounded font-mono text-xs overflow-x-auto scrollbar-vibrancy',
-              'max-h-[200px] overflow-y-auto',
-              isError
-                ? 'bg-destructive/10 text-destructive border border-destructive/30'
-                : 'bg-black/50 text-green-400 border border-border/40'
-            )}
+      <AnimatePresence initial={false}>
+        {isExpanded && toolResult && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="overflow-hidden"
           >
-            {typeof toolResult.content === 'object'
-              ? JSON.stringify(toolResult.content, null, 2)
-              : toolResult.content}
-          </pre>
-        </div>
-      )}
+            <div className="space-y-1 px-2 pb-2">
+              <div className="text-xs text-muted-foreground">Output:</div>
+              <pre
+                className={cn(
+                  'p-2 rounded font-mono text-xs overflow-x-auto scrollbar-vibrancy',
+                  'max-h-[200px] overflow-y-auto',
+                  isError
+                    ? 'bg-destructive/10 text-destructive border border-destructive/30'
+                    : 'bg-black/50 text-green-400 border border-border/40'
+                )}
+              >
+                {typeof toolResult.content === 'object'
+                  ? JSON.stringify(toolResult.content, null, 2)
+                  : toolResult.content}
+              </pre>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

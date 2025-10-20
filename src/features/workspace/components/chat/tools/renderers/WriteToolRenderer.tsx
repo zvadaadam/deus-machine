@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, FilePlus } from 'lucide-react';
 import { CodeBlock } from '../components/CodeBlock';
 import { FilePathDisplay } from '../components/FilePathDisplay';
@@ -75,31 +76,41 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       <FilePathDisplay path={file_path} />
 
       {/* Expandable content */}
-      {isExpanded && (
-        <div className="space-y-2 px-2 pb-2">
-          {/* File content */}
-          <div>
-            <div className="text-xs text-muted-foreground mb-1">Content:</div>
-            <CodeBlock
-              code={content}
-              language={getLanguage(file_path)}
-              showLineNumbers={true}
-              maxHeight="300px"
-            />
-          </div>
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 px-2 pb-2">
+              {/* File content */}
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Content:</div>
+                <CodeBlock
+                  code={content}
+                  language={getLanguage(file_path)}
+                  showLineNumbers={true}
+                  maxHeight="300px"
+                />
+              </div>
 
-          {/* Error display */}
-          {isError && toolResult && (
-            <div className="p-2 rounded bg-destructive/10 border border-destructive/30">
-              <p className="text-xs text-destructive-foreground font-mono m-0">
-                {typeof toolResult.content === 'object'
-                  ? JSON.stringify(toolResult.content, null, 2)
-                  : toolResult.content}
-              </p>
+              {/* Error display */}
+              {isError && toolResult && (
+                <div className="p-2 rounded bg-destructive/10 border border-destructive/30">
+                  <p className="text-xs text-destructive-foreground font-mono m-0">
+                    {typeof toolResult.content === 'object'
+                      ? JSON.stringify(toolResult.content, null, 2)
+                      : toolResult.content}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
