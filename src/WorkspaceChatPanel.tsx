@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { X, ArrowLeft } from "lucide-react";
 
 interface WorkspaceChatPanelProps {
-  workspaceId: string;
   sessionId: string;
   onClose: () => void;
   embedded?: boolean;
@@ -75,7 +74,6 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
   // Expose insertText method for browser element selector
   useImperativeHandle(ref, () => ({
     insertText: (text: string) => {
-      console.log('[WorkspaceChatPanel] Inserting text to message input');
       // Add with double newline for proper formatting
       setMessageInput(prev => {
         const separator = prev.trim() ? '\n\n' : '';
@@ -167,9 +165,15 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={onClose}>
-      <div className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workspace-activity-title"
+        className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 border-b border-border/40 flex justify-between items-center">
-          <h2 className="m-0 text-2xl text-foreground">Workspace Activity</h2>
+          <h2 id="workspace-activity-title" className="m-0 text-2xl text-foreground">Workspace Activity</h2>
           <Button
             variant="ghost"
             size="icon"

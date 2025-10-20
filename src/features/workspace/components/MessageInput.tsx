@@ -1,6 +1,5 @@
 import type { SessionStatus } from "../../../types";
-import { Button } from "@/components/ui/button";
-import { Search, Plus, Wrench, Paintbrush, Mic, ArrowUp, Square } from "lucide-react";
+import { Search, Minimize2, Wrench, ArrowUp, Square } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 interface MessageInputProps {
@@ -33,6 +32,7 @@ export function MessageInput({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
       onSend();
     }
   };
@@ -60,7 +60,7 @@ export function MessageInput({
         `}
       >
         {/* Search Icon */}
-        <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+        <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
 
         {/* Input Field */}
         <textarea
@@ -88,6 +88,7 @@ export function MessageInput({
           {!embedded && (
             <>
               <button
+                type="button"
                 onClick={onCompact}
                 disabled={sending || isCompacting}
                 title="Compact conversation"
@@ -101,11 +102,12 @@ export function MessageInput({
                   disabled:opacity-50 disabled:cursor-not-allowed
                 "
               >
-                <Plus className="w-4 h-4" />
+                <Minimize2 className="w-4 h-4" aria-hidden="true" />
                 <span>{isCompacting ? 'Compacting...' : 'Compact'}</span>
               </button>
 
               <button
+                type="button"
                 onClick={onCreatePR}
                 disabled={sending}
                 title="Create PR"
@@ -119,12 +121,13 @@ export function MessageInput({
                   disabled:opacity-50 disabled:cursor-not-allowed
                 "
               >
-                <Wrench className="w-4 h-4" />
+                <Wrench className="w-4 h-4" aria-hidden="true" />
                 <span>Create PR</span>
               </button>
 
               {sessionStatus === 'working' && (
                 <button
+                  type="button"
                   onClick={onStop}
                   title="Stop execution"
                   className="
@@ -136,32 +139,20 @@ export function MessageInput({
                     transition-all duration-200 ease
                   "
                 >
-                  <Square className="w-4 h-4" />
+                  <Square className="w-4 h-4" aria-hidden="true" />
                   <span>Stop</span>
                 </button>
               )}
             </>
           )}
 
-          {/* Voice Input Button */}
-          <button
-            disabled={sending}
-            title="Voice input"
-            className="
-              p-2
-              text-muted-foreground hover:text-foreground
-              transition-colors duration-200 ease
-              disabled:opacity-50 disabled:cursor-not-allowed
-            "
-          >
-            <Mic className="w-5 h-5" />
-          </button>
-
           {/* Send Button */}
           <button
+            type="button"
             onClick={onSend}
             disabled={sending || !messageInput.trim()}
             title="Send message (⌘ + Enter)"
+            aria-label="Send message"
             className="
               p-2
               text-muted-foreground hover:text-foreground
@@ -169,7 +160,7 @@ export function MessageInput({
               disabled:opacity-50 disabled:cursor-not-allowed
             "
           >
-            <ArrowUp className="w-5 h-5" />
+            <ArrowUp className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
       </div>

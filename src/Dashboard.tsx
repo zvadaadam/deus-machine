@@ -91,9 +91,9 @@ export function Dashboard() {
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
-  const [compactHandler, setCompactHandler] = useState<(() => void) | null>(null);
-  const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
-  const [stopHandler, setStopHandler] = useState<(() => void) | null>(null);
+  const compactHandlerRef = useRef<(() => void) | null>(null);
+  const createPRHandlerRef = useRef<(() => void) | null>(null);
+  const stopHandlerRef = useRef<(() => void) | null>(null);
 
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
@@ -162,10 +162,11 @@ export function Dashboard() {
   // Listen for 'insert-to-chat' events from BrowserPanel (element selector)
   useEffect(() => {
     const handleInsertToChat = (event: Event) => {
-      const customEvent = event as CustomEvent<{ text: string }>;
-      if (customEvent.detail?.text && workspaceChatPanelRef.current) {
+      if (!(event instanceof CustomEvent)) return;
+      const text = (event.detail as { text?: string } | undefined)?.text;
+      if (typeof text === 'string' && workspaceChatPanelRef.current) {
         console.log('[Dashboard] 🎯 Inserting element data to chat');
-        workspaceChatPanelRef.current.insertText(customEvent.detail.text);
+        workspaceChatPanelRef.current.insertText(text);
       }
     };
 
@@ -408,13 +409,18 @@ export function Dashboard() {
               {selectedWorkspace.active_session_id && (
                 <WorkspaceChatPanel
                   ref={workspaceChatPanelRef}
-                  workspaceId={selectedWorkspace.id}
                   sessionId={selectedWorkspace.active_session_id}
                   onClose={() => {}}
                   embedded={true}
-                  onCompact={(handler) => setCompactHandler(() => handler)}
-                  onCreatePR={(handler) => setCreatePRHandler(() => handler)}
-                  onStop={(handler) => setStopHandler(() => handler)}
+                  onCompact={(handler) => {
+                    compactHandlerRef.current = handler;
+                  }}
+                  onCreatePR={(handler) => {
+                    createPRHandlerRef.current = handler;
+                  }}
+                  onStop={(handler) => {
+                    stopHandlerRef.current = handler;
+                  }}
                 />
               )}
             </div>
@@ -505,7 +511,10 @@ export function Dashboard() {
           </div>
 
           {/* Browser Tab */}
-          <TabsContent value="browser" className="m-0 flex flex-1 flex-col overflow-hidden">
+          <TabsContent
+            value="browser"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             {selectedWorkspace ? (
               <BrowserPanel workspaceId={selectedWorkspace.id} />
             ) : (
@@ -519,7 +528,10 @@ export function Dashboard() {
           </TabsContent>
 
           {/* File Changes Tab */}
-          <TabsContent value="changes" className="m-0 flex flex-1 flex-col overflow-hidden">
+          <TabsContent
+            value="changes"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             <div className="h-full flex flex-col">
               {/* Dev Servers Section */}
               {selectedWorkspace && devServers.length > 0 && (
@@ -602,7 +614,10 @@ export function Dashboard() {
           </TabsContent>
 
           {/* Terminal Tab */}
-          <TabsContent value="terminal" className="m-0 flex flex-1 flex-col overflow-hidden">
+          <TabsContent
+            value="terminal"
+            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+          >
             {selectedWorkspace ? (
               <TerminalPanel
                 workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
