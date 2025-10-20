@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Dashboard } from "./Dashboard";
-import { Settings } from "./Settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { DashboardError, SettingsError } from "./components/error-fallbacks";
+import { DashboardError } from "./components/error-fallbacks";
 import { ThemeProvider } from "./hooks/useTheme";
 import { Toaster } from "./components/ui/sonner";
 
@@ -17,14 +16,6 @@ function App() {
               element={
                 <ErrorBoundary fallback={<DashboardError />}>
                   <Dashboard />
-                </ErrorBoundary>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <ErrorBoundary fallback={<SettingsError />}>
-                  <Settings />
                 </ErrorBoundary>
               }
             />
