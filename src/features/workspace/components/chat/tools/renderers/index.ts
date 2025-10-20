@@ -10,3 +10,6 @@ export { BashOutputToolRenderer } from './BashOutputToolRenderer';
 export { MultiEditToolRenderer } from './MultiEditToolRenderer';
 export { WebFetchToolRenderer } from './WebFetchToolRenderer';
 export { WebSearchToolRenderer } from './WebSearchToolRenderer';
+export { KillShellToolRenderer } from './KillShellToolRenderer';
+export { TaskToolRenderer } from './TaskToolRenderer';
+export { LSToolRenderer } from './LSToolRenderer';
