@@ -353,6 +353,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
+                  variant={workspace.session_status === "working" ? "blue" : "yellow"}
                   className="text-xs flex-shrink-0"
                 >
                   {getStatusText(workspace.session_status)}
