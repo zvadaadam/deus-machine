@@ -22,6 +22,13 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import {
+  GeneralSection,
+  AccountSection,
+  TerminalSection,
+  MemorySection,
+  ProviderSection,
+} from './settings-sections';
 import type {
   Settings,
   MCPServer,
@@ -151,189 +158,6 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     );
   }
 
-  function renderGeneral() {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">General Settings</h3>
-
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="theme">Theme</Label>
-            <Select
-              value={theme}
-              onValueChange={(value: 'light' | 'dark' | 'system') => setTheme(value)}
-            >
-              <SelectTrigger id="theme">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="notifications"
-              checked={settings.notifications_enabled ?? true}
-              onCheckedChange={(checked) => saveSetting('notifications_enabled', checked === true)}
-            />
-            <Label htmlFor="notifications" className="text-sm cursor-pointer">
-              Enable notifications
-            </Label>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="sound-effects"
-              checked={settings.sound_effects_enabled ?? true}
-              onCheckedChange={(checked) => saveSetting('sound_effects_enabled', checked === true)}
-            />
-            <Label htmlFor="sound-effects" className="text-sm cursor-pointer">
-              Enable sound effects
-            </Label>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="sound-type">Sound type</Label>
-            <Select
-              value={settings.sound_type ?? 'choo-choo'}
-              onValueChange={(value) => saveSetting('sound_type', value)}
-            >
-              <SelectTrigger id="sound-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="choo-choo">Choo Choo</SelectItem>
-                <SelectItem value="beep">Beep</SelectItem>
-                <SelectItem value="chime">Chime</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="diff-view">Diff view mode</Label>
-            <Select
-              value={settings.diff_view_mode ?? 'unified'}
-              onValueChange={(value) => saveSetting('diff_view_mode', value)}
-            >
-              <SelectTrigger id="diff-view">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unified">Unified</SelectItem>
-                <SelectItem value="split">Split</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function renderAccount() {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Account Settings</h3>
-
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="user-name">Name</Label>
-            <Input
-              id="user-name"
-              value={settings.user_name ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, user_name: e.target.value }))}
-              onBlur={(e) => saveSetting('user_name', e.currentTarget.value)}
-              placeholder="Your name"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="user-email">Email</Label>
-            <Input
-              id="user-email"
-              type="email"
-              value={settings.user_email ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, user_email: e.target.value }))}
-              onBlur={(e) => saveSetting('user_email', e.currentTarget.value)}
-              placeholder="your@email.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="github-username">GitHub Username</Label>
-            <Input
-              id="github-username"
-              value={settings.user_github_username ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, user_github_username: e.target.value }))}
-              onBlur={(e) => saveSetting('user_github_username', e.currentTarget.value)}
-              placeholder="github-username"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="api-key">Anthropic API Key</Label>
-            <Input
-              id="api-key"
-              type="password"
-              value={settings.anthropic_api_key ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, anthropic_api_key: e.target.value }))}
-              onBlur={(e) => saveSetting('anthropic_api_key', e.currentTarget.value)}
-              placeholder="sk-ant-api03-..."
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function renderTerminal() {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Terminal Settings</h3>
-
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="font-size">Font size</Label>
-            <Input
-              id="font-size"
-              type="number"
-              min="8"
-              max="24"
-              value={settings.terminal_font_size ?? 12}
-              onChange={(e) => {
-                const value = parseInt(e.target.value, 10);
-                const fontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
-                saveSetting('terminal_font_size', fontSize);
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="default-editor">Default editor</Label>
-            <Select
-              value={settings.default_open_in ?? 'cursor'}
-              onValueChange={(value) => saveSetting('default_open_in', value)}
-            >
-              <SelectTrigger id="default-editor">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cursor">Cursor</SelectItem>
-                <SelectItem value="vscode">VS Code</SelectItem>
-                <SelectItem value="sublime">Sublime Text</SelectItem>
-                <SelectItem value="vim">Vim</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   function renderMCP() {
     return (
@@ -422,64 +246,6 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     );
   }
 
-  function renderMemory() {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Memory Settings</h3>
-
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="conversation-memory"
-              checked={settings.conversation_memory_enabled ?? true}
-              onCheckedChange={(checked) => saveSetting('conversation_memory_enabled', checked === true)}
-            />
-            <Label htmlFor="conversation-memory" className="text-sm cursor-pointer">
-              Enable conversation memory
-            </Label>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="memory-retention">Memory retention</Label>
-            <Select
-              value={settings.memory_retention ?? 'session'}
-              onValueChange={(value) => saveSetting('memory_retention', value)}
-            >
-              <SelectTrigger id="memory-retention">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="session">Current session only</SelectItem>
-                <SelectItem value="day">24 hours</SelectItem>
-                <SelectItem value="week">7 days</SelectItem>
-                <SelectItem value="forever">Forever</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={async () => {
-              if (confirm('Are you sure you want to clear all memory? This cannot be undone.')) {
-                try {
-                  const baseURL = await getBaseURL();
-                  const response = await fetch(`${baseURL}/memory/clear`, { method: 'POST' });
-                  if (!response.ok) throw new Error(`Failed to clear memory: ${response.status}`);
-                  toast.success('Memory cleared successfully');
-                } catch (error) {
-                  console.error('Failed to clear memory:', error);
-                  toast.error('Failed to clear memory');
-                }
-              }
-            }}
-          >
-            Clear All Memory
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   function renderHooks() {
     const hookEntries = Object.entries(hooks);
@@ -511,64 +277,6 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     );
   }
 
-  function renderProvider() {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Provider Settings</h3>
-
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="provider">Provider</Label>
-            <Select
-              value={settings.claude_provider ?? 'anthropic'}
-              onValueChange={(value) => saveSetting('claude_provider', value)}
-            >
-              <SelectTrigger id="provider">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
-                <SelectItem value="custom">Custom Endpoint</SelectItem>
-                <SelectItem value="bedrock">AWS Bedrock</SelectItem>
-                <SelectItem value="vertex">Google Vertex AI</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="model">Default Model</Label>
-            <Select
-              value={settings.claude_model ?? 'sonnet'}
-              onValueChange={(value) => saveSetting('claude_model', value)}
-            >
-              <SelectTrigger id="model">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sonnet">Claude 3.5 Sonnet</SelectItem>
-                <SelectItem value="opus">Claude 3 Opus</SelectItem>
-                <SelectItem value="haiku">Claude 3.5 Haiku</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {settings.claude_provider === 'custom' && (
-            <div className="space-y-2">
-              <Label htmlFor="custom-endpoint">Custom Endpoint URL</Label>
-              <Input
-                id="custom-endpoint"
-                type="url"
-                placeholder="https://api.example.com/v1"
-                value={settings.custom_endpoint ?? ''}
-                onChange={(e) => setSettings(prev => ({ ...prev, custom_endpoint: e.target.value }))}
-                onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   function renderExperimental() {
     return (
@@ -617,18 +325,31 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
       );
     }
 
+    const sectionProps = { settings, setSettings, saveSetting };
+
     switch (activeSection) {
-      case 'general': return renderGeneral();
-      case 'account': return renderAccount();
-      case 'terminal': return renderTerminal();
-      case 'mcp': return renderMCP();
-      case 'commands': return renderCommands();
-      case 'agents': return renderAgents();
-      case 'memory': return renderMemory();
-      case 'hooks': return renderHooks();
-      case 'provider': return renderProvider();
-      case 'experimental': return renderExperimental();
-      default: return null;
+      case 'general':
+        return <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />;
+      case 'account':
+        return <AccountSection {...sectionProps} />;
+      case 'terminal':
+        return <TerminalSection {...sectionProps} />;
+      case 'mcp':
+        return renderMCP();
+      case 'commands':
+        return renderCommands();
+      case 'agents':
+        return renderAgents();
+      case 'memory':
+        return <MemorySection {...sectionProps} />;
+      case 'hooks':
+        return renderHooks();
+      case 'provider':
+        return <ProviderSection {...sectionProps} />;
+      case 'experimental':
+        return renderExperimental();
+      default:
+        return null;
     }
   }
 
