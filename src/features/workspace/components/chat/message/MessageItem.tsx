@@ -4,7 +4,7 @@
  * Refactored message component using the registry pattern.
  * Uses BlockRenderer for extensible content rendering.
  *
- * NOTE: This file is deprecated. Use /MessageItem.tsx instead.
+ * @deprecated Use ../MessageItem.tsx instead.
  */
 
 import type { Message } from '@/types';
@@ -25,7 +25,6 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
 
   // Determine role-based styling
   const isUser = message.role === 'user';
-  const isAssistant = message.role === 'assistant';
 
   const roleStyles = isUser
     ? chatTheme.message.user
@@ -45,16 +44,25 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
         <span className="font-semibold uppercase text-xs text-muted-foreground tracking-wide">
           {message.role}
         </span>
-        <span className="text-[0.7rem] text-muted-foreground/70">
+        <time
+          className="text-[0.7rem] text-muted-foreground/70"
+          dateTime={new Date(message.created_at).toISOString()}
+        >
           {new Date(message.created_at).toLocaleTimeString()}
-        </span>
+        </time>
       </div>
 
       {/* Message content - uses BlockRenderer */}
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: any, index: number) => (
-            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} />
+            <BlockRenderer
+              key={(block as any).id ?? index}
+              block={block}
+              index={index}
+              toolResultMap={toolResultMap}
+              role={message.role}
+            />
           ))
         ) : (
           // Fallback for non-array content
