@@ -70,7 +70,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: any, index: number) => (
-            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} />
+            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />
           ))
         ) : (
           // Fallback for non-array content
