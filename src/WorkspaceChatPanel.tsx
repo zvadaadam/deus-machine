@@ -4,7 +4,7 @@ import type {
   FileEdit,
 } from "./types";
 import {
-  MessageList,
+  Chat,
   MessageInput,
   FileChangesPanel,
 } from "./features/workspace/components";
@@ -14,23 +14,22 @@ import {
   useAutoScroll,
 } from "./hooks";
 import { Button } from "@/components/ui/button";
-import { X, ArrowLeft, ChevronDown } from "lucide-react";
+import { X, ArrowLeft } from "lucide-react";
 
-interface WorkspaceDetailProps {
-  workspaceId: string;
+interface WorkspaceChatPanelProps {
   sessionId: string;
-  onClose: () => void;
+  onClose?: () => void;
   embedded?: boolean;
   onCompact?: (handler: () => void) => void;
   onCreatePR?: (handler: () => void) => void;
   onStop?: (handler: () => void) => void;
 }
 
-export interface WorkspaceDetailRef {
+export interface WorkspaceChatPanelRef {
   insertText: (text: string) => void;
 }
 
-export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailProps>(
+export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceChatPanelProps>(
   ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
   const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -67,15 +66,14 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
 
   // Expose action handlers to parent
   useEffect(() => {
-    if (onCompact) onCompact(compactConversation);
-    if (onCreatePR) onCreatePR(createPR);
-    if (onStop) onStop(stopSession);
-  }, [onCompact, onCreatePR, onStop, compactConversation, createPR, stopSession]);
+    onCompact?.(compactConversation);
+    onCreatePR?.(createPR);
+    onStop?.(stopSession);
+  }, [compactConversation, createPR, stopSession, onCompact, onCreatePR, onStop]);
 
   // Expose insertText method for browser element selector
   useImperativeHandle(ref, () => ({
     insertText: (text: string) => {
-      console.log('[WorkspaceDetail] Inserting text to message input');
       // Add with double newline for proper formatting
       setMessageInput(prev => {
         const separator = prev.trim() ? '\n\n' : '';
@@ -141,28 +139,17 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
-      <div className="flex flex-col h-full w-full relative overflow-hidden">
-        <MessageList
+      <div className="flex flex-col flex-1 min-h-0 w-full relative">
+        <Chat
           messages={messages}
           loading={loading}
           sessionStatus={sessionStatus}
           parseContent={parseContent}
           messagesEndRef={messagesEndRef}
           messagesContainerRef={messagesContainerRef}
+          showScrollButton={showScrollButton}
+          onScrollToBottom={handleScrollToBottomClick}
         />
-
-        {/* Scroll to Bottom Button */}
-        {showScrollButton && (
-          <Button
-            variant="secondary"
-            size="icon"
-            className="fixed bottom-24 right-6 rounded-full shadow-lg z-10"
-            onClick={handleScrollToBottomClick}
-            title="Scroll to bottom"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        )}
 
         {/* Message Input - Sticky at bottom */}
         <MessageInput
@@ -176,15 +163,25 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
     );
   }
 
+  const handleClose = () => {
+    onClose?.();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={onClose}>
-      <div className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={handleClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workspace-activity-title"
+        className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 border-b border-border/40 flex justify-between items-center">
-          <h2 className="m-0 text-2xl text-foreground">Workspace Activity</h2>
+          <h2 id="workspace-activity-title" className="m-0 text-2xl text-foreground">Workspace Activity</h2>
           <Button
             variant="ghost"
             size="icon"
-            onClick={onClose}
+            onClick={handleClose}
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -200,10 +197,10 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
           />
 
           {/* Main Content Area */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 flex flex-col min-h-0">
             {selectedFile ? (
               // Show diff view when file is selected
-              <div className="flex flex-col h-full">
+              <div className="flex-1 overflow-y-auto p-6">
                 <div className="py-4 border-b border-border/40 mb-6">
                   <Button
                     variant="ghost"
@@ -217,29 +214,18 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                 {renderDiff(selectedFile)}
               </div>
             ) : (
-              // Show message timeline
-              <div className="flex flex-col h-full w-full relative overflow-hidden">
-                <MessageList
+              // Show message timeline - Chat + Input
+              <>
+                <Chat
                   messages={messages}
                   loading={loading}
                   sessionStatus={sessionStatus}
                   parseContent={parseContent}
                   messagesEndRef={messagesEndRef}
                   messagesContainerRef={messagesContainerRef}
+                  showScrollButton={showScrollButton}
+                  onScrollToBottom={handleScrollToBottomClick}
                 />
-
-                {/* Scroll to Bottom Button */}
-                {showScrollButton && (
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="fixed bottom-24 right-6 rounded-full shadow-lg z-10"
-                    onClick={handleScrollToBottomClick}
-                    title="Scroll to bottom"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                )}
 
                 {/* Message Input - Sticky at bottom */}
                 <MessageInput
@@ -254,7 +240,7 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -263,4 +249,4 @@ export const WorkspaceDetail = forwardRef<WorkspaceDetailRef, WorkspaceDetailPro
   );
 });
 
-WorkspaceDetail.displayName = 'WorkspaceDetail';
+WorkspaceChatPanel.displayName = 'WorkspaceChatPanel';
