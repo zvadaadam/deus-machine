@@ -124,7 +124,6 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
                   'bg-muted/50 border border-border',
                   'max-h-96 overflow-y-auto text-sm'
                 )}
-                style={{ maxHeight: '400px' }}
               >
                 <pre className="m-0 whitespace-pre-wrap break-words">{result}</pre>
               </div>

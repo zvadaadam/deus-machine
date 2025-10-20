@@ -12,30 +12,13 @@ import { FilePathDisplay } from '../components/FilePathDisplay';
 import { chatTheme } from '../../theme';
 import { cn } from '@/lib/utils';
 import type { ToolRendererProps } from '../../types';
+import { detectLanguageFromPath } from '../utils/detectLanguage';
 
 export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   const { file_path, content } = toolUse.input;
   const isError = toolResult?.is_error;
-
-  // Detect language from file extension
-  const getLanguage = (path: string): string => {
-    const ext = path.split('.').pop()?.toLowerCase();
-    const languageMap: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescript',
-      js: 'javascript',
-      jsx: 'javascript',
-      py: 'python',
-      rs: 'rust',
-      go: 'go',
-      java: 'java',
-      json: 'json',
-      md: 'markdown',
-    };
-    return languageMap[ext || ''] || 'text';
-  };
 
   return (
     <div
@@ -91,7 +74,7 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                 <div className="text-xs text-muted-foreground mb-1">Content:</div>
                 <CodeBlock
                   code={content}
-                  language={getLanguage(file_path)}
+                  language={detectLanguageFromPath(file_path)}
                   showLineNumbers={true}
                   maxHeight="300px"
                 />

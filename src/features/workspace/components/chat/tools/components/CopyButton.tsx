@@ -4,7 +4,7 @@
  * Reusable button for copying text to clipboard with visual feedback
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,7 @@ export function CopyButton({
   size = 'sm'
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Don't trigger parent clicks
@@ -29,11 +30,23 @@ export function CopyButton({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+
+      // Clear existing timer if any
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      // Set new timer
+      timerRef.current = window.setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
   };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const sizeClasses = {
     sm: 'h-6 px-2 text-xs',
@@ -47,6 +60,7 @@ export function CopyButton({
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className={cn(
         'inline-flex items-center gap-1.5 rounded transition-colors duration-200',

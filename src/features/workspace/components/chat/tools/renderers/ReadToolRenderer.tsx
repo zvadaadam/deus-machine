@@ -12,30 +12,13 @@ import { FilePathDisplay } from '../components/FilePathDisplay';
 import { chatTheme } from '../../theme';
 import { cn } from '@/lib/utils';
 import type { ToolRendererProps } from '../../types';
+import { detectLanguageFromPath } from '../utils/detectLanguage';
 
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
 
   const { file_path, offset, limit } = toolUse.input;
   const isError = toolResult?.is_error;
-
-  // Detect language from file extension
-  const getLanguage = (path: string): string => {
-    const ext = path.split('.').pop()?.toLowerCase();
-    const languageMap: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescript',
-      js: 'javascript',
-      jsx: 'javascript',
-      py: 'python',
-      rs: 'rust',
-      go: 'go',
-      java: 'java',
-      json: 'json',
-      md: 'markdown',
-    };
-    return languageMap[ext || ''] || 'text';
-  };
 
   return (
     <div
@@ -78,9 +61,9 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       {/* Range info */}
       {(offset !== undefined || limit !== undefined) && (
         <div className="px-2 text-xs text-muted-foreground">
-          {offset && `Offset: ${offset}`}
-          {offset && limit && ' • '}
-          {limit && `Limit: ${limit} lines`}
+          {offset !== undefined && `Offset: ${offset}`}
+          {offset !== undefined && limit !== undefined && ' • '}
+          {limit !== undefined && `Limit: ${limit} ${Number(limit) === 1 ? 'line' : 'lines'}`}
         </div>
       )}
 
@@ -102,7 +85,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                     ? JSON.stringify(toolResult.content, null, 2)
                     : toolResult.content
                 }
-                language={getLanguage(file_path)}
+                language={detectLanguageFromPath(file_path)}
                 showLineNumbers={true}
                 maxHeight="400px"
               />
