@@ -11,10 +11,41 @@ import { chatTheme } from '../theme';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
+import { CopyButton } from '../tools/components/CopyButton';
 
 interface TextBlockProps {
   block: TextBlockType | string;
   role?: MessageRole;
+}
+
+/**
+ * Custom Pre component with copy button
+ * Extracts code text and shows copy button on hover
+ */
+function PreWithCopy({ children, ...props }: any) {
+  // Extract code text from children
+  const getCodeText = (node: any): string => {
+    if (typeof node === 'string') return node;
+    if (Array.isArray(node)) return node.map(getCodeText).join('');
+    if (node?.props?.children) return getCodeText(node.props.children);
+    return '';
+  };
+
+  const codeText = getCodeText(children);
+
+  return (
+    <div className={chatTheme.blocks.code.container}>
+      {/* Copy button - visible on hover */}
+      <div className={chatTheme.blocks.code.copyButton}>
+        <CopyButton text={codeText} label="Copy" size="sm" />
+      </div>
+
+      {/* Code content */}
+      <pre {...props} className={cn(props.className, 'p-3 overflow-x-auto')}>
+        {children}
+      </pre>
+    </div>
+  );
 }
 
 export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
@@ -51,7 +82,7 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
         // Code
         'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:before:content-none prose-code:after:content-none',
         // Code blocks
-        'prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-lg',
+        'prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:p-0 prose-pre:m-0',
         // Lists
         'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
         // Blockquotes
@@ -62,7 +93,12 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
         'prose-td:border prose-td:border-border prose-td:p-2'
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          pre: PreWithCopy,
+        }}
+      >
         {text}
       </ReactMarkdown>
     </div>
