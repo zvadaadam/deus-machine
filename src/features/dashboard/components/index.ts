@@ -8,3 +8,4 @@ export { DiffModal } from './DiffModal';
 export { SystemPromptModal } from './SystemPromptModal';
 export { WorkspaceItem } from './WorkspaceItem';
 export { RepoGroup } from './RepoGroup';
+export { WelcomeView } from './WelcomeView';
