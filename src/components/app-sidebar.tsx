@@ -80,7 +80,7 @@ export function AppSidebar({
   return (
     <Sidebar variant="sidebar" collapsible="icon">
       {/* Header with Profile (no collapse button) */}
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-2">
         {isExpanded ? (
           <div
             className="flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
