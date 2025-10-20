@@ -19,6 +19,9 @@ import {
   MultiEditToolRenderer,
   WebFetchToolRenderer,
   WebSearchToolRenderer,
+  KillShellToolRenderer,
+  TaskToolRenderer,
+  LSToolRenderer,
 } from './renderers';
 
 /**
@@ -40,10 +43,9 @@ export function registerAllTools() {
   toolRegistry.register('MultiEdit', MultiEditToolRenderer);
   toolRegistry.register('WebFetch', WebFetchToolRenderer);
   toolRegistry.register('WebSearch', WebSearchToolRenderer);
-
-  // Additional tools can be registered here:
-  // toolRegistry.register('Task', TaskToolRenderer);
-  // toolRegistry.register('KillShell', KillShellToolRenderer);
+  toolRegistry.register('KillShell', KillShellToolRenderer);
+  toolRegistry.register('Task', TaskToolRenderer);
+  toolRegistry.register('LS', LSToolRenderer);
 
   if (import.meta.env.DEV) {
     const stats = toolRegistry.getStats();
