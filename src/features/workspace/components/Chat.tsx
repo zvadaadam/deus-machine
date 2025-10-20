@@ -4,14 +4,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown } from "lucide-react";
+import type { ReactNode, RefObject } from "react";
 
 interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
-  parseContent: (content: string) => any;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
-  messagesContainerRef: React.RefObject<HTMLDivElement>;
+  parseContent: (content: string) => ReactNode;
+  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesContainerRef: RefObject<HTMLDivElement>;
   showScrollButton?: boolean;
   onScrollToBottom?: () => void;
 }

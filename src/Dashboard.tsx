@@ -91,9 +91,6 @@ export function Dashboard() {
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
-  const compactHandlerRef = useRef<(() => void) | null>(null);
-  const createPRHandlerRef = useRef<(() => void) | null>(null);
-  const stopHandlerRef = useRef<(() => void) | null>(null);
 
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
@@ -413,15 +410,6 @@ export function Dashboard() {
                   sessionId={selectedWorkspace.active_session_id}
                   onClose={() => {}}
                   embedded={true}
-                  onCompact={(handler) => {
-                    compactHandlerRef.current = handler;
-                  }}
-                  onCreatePR={(handler) => {
-                    createPRHandlerRef.current = handler;
-                  }}
-                  onStop={(handler) => {
-                    stopHandlerRef.current = handler;
-                  }}
                 />
               )}
             </div>
