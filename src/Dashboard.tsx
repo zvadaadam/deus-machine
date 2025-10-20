@@ -106,6 +106,9 @@ export function Dashboard() {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloning, setCloning] = useState(false);
 
+  // User profile (local state)
+  const [username, setUsername] = useState('Developer');
+
   // File changes hook - manages file changes, PR status, dev servers
   const {
     fileChanges,
@@ -129,6 +132,22 @@ export function Dashboard() {
       })();
     }
   }, [showNewWorkspaceModal, repos.length]);
+
+  // Load username from settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const baseURL = await getBaseURL();
+        const response = await fetch(`${baseURL}/settings`);
+        const settings = await response.json();
+        if (settings.username) {
+          setUsername(settings.username);
+        }
+      } catch (error) {
+        console.error('Failed to load username:', error);
+      }
+    })();
+  }, []);
 
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
@@ -506,7 +525,7 @@ export function Dashboard() {
           onNewWorkspace={handleNewWorkspace}
           onAddRepository={() => selectWorkspace(null)}
           profile={{
-            username: "Developer"
+            username: username
           }}
         />
       )}

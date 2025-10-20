@@ -79,7 +79,10 @@ export function AppSidebar({
       {/* Header with Profile (no collapse button) */}
       <SidebarHeader className="p-4">
         {isExpanded ? (
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className="flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
+            onClick={() => navigate('/settings')}
+          >
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarFallback className="text-caption">
                 {profile.username.slice(0, 2).toUpperCase()}
@@ -88,7 +91,10 @@ export function AppSidebar({
             <p className="text-body font-medium truncate">{profile.username}</p>
           </div>
         ) : (
-          <div className="mx-auto">
+          <div
+            className="mx-auto p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
+            onClick={() => navigate('/settings')}
+          >
             <Avatar className="h-8 w-8">
               <AvatarFallback className="text-caption">
                 {profile.username.slice(0, 2).toUpperCase()}
