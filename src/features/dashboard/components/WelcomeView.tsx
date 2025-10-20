@@ -1,117 +1,119 @@
 import { FolderPlus, Github, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-
-interface ActionCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  action: React.ReactNode;
-  onClick?: () => void;
-}
-
-function ActionCard({ icon, title, description, action, onClick }: ActionCardProps) {
-  return (
-    <Card
-      className="p-6 flex flex-col items-center text-center gap-4 hover:elevation-3 transition-all duration-200 cursor-pointer group border-2 hover:border-primary/20"
-      onClick={onClick}
-    >
-      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-200">
-        {icon}
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-heading font-semibold">{title}</h3>
-        <p className="text-body-sm text-muted-foreground">{description}</p>
-      </div>
-      <div className="mt-2">{action}</div>
-    </Card>
-  );
-}
+import type { Workspace } from "@/types";
 
 interface WelcomeViewProps {
+  recentWorkspaces?: Workspace[];
   onCreateWorkspace?: () => void;
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
+  onWorkspaceClick?: (workspace: Workspace) => void;
 }
 
 /**
  * WelcomeView - Dashboard welcome screen when no workspace is selected
- * Shows options to create workspace, add local repository, or clone from GitHub
- * Following design inspiration from Linear, Vercel, Stripe, Airbnb, Perplexity
+ * Cursor-style layout: action buttons at top, recent workspaces below
+ * Following design inspiration from Cursor, Linear, Vercel
  */
 export function WelcomeView({
+  recentWorkspaces = [],
   onCreateWorkspace,
   onAddRepository,
   onCloneRepository,
+  onWorkspaceClick,
 }: WelcomeViewProps) {
   return (
-    <div className="h-full flex flex-col items-center justify-center p-8 max-w-5xl mx-auto">
+    <div className="h-full flex flex-col p-8 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="text-center mb-12 space-y-3">
-        <h1 className="text-3xl font-bold text-foreground">Welcome to Conductor</h1>
-        <p className="text-body text-muted-foreground max-w-2xl">
-          Create a workspace or add a repository to get started
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-foreground mb-1">Welcome to Conductor</h1>
+        <p className="text-body-sm text-muted-foreground">
+          Get started by adding a repository or creating a workspace
         </p>
       </div>
 
-      {/* Action Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-        <ActionCard
-          icon={<Plus className="w-8 h-8" />}
-          title="Create Workspace"
-          description="Create a new workspace from your repositories"
-          action={
-            <Button
-              variant="default"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateWorkspace?.();
-              }}
-            >
-              New Workspace
-            </Button>
-          }
-          onClick={onCreateWorkspace}
-        />
-
-        <ActionCard
-          icon={<FolderPlus className="w-8 h-8" />}
-          title="Add Repository"
-          description="Add an existing repository from your local machine"
-          action={
-            <Button
-              variant="default"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddRepository?.();
-              }}
-            >
-              Add Local
-            </Button>
-          }
+      {/* Action Buttons */}
+      <div className="grid grid-cols-2 gap-4 mb-10">
+        <Card
+          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-all duration-200 border-2 hover:border-primary/20 group"
           onClick={onAddRepository}
-        />
+        >
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200">
+            <FolderPlus className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-foreground mb-0.5">Add Repository</h3>
+            <p className="text-body-sm text-muted-foreground">From your local machine</p>
+          </div>
+        </Card>
 
-        <ActionCard
-          icon={<Github className="w-8 h-8" />}
-          title="Clone Repository"
-          description="Clone a repository from GitHub"
-          action={
+        <Card
+          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-all duration-200 border-2 hover:border-primary/20 group"
+          onClick={onCloneRepository}
+        >
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200">
+            <Github className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-foreground mb-0.5">Clone Repository</h3>
+            <p className="text-body-sm text-muted-foreground">From GitHub</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Recent Workspaces */}
+      <div className="flex-1">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-body font-semibold text-muted-foreground">Recent Workspaces</h2>
+          {recentWorkspaces.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCreateWorkspace}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Workspace
+            </Button>
+          )}
+        </div>
+
+        {recentWorkspaces.length > 0 ? (
+          <div className="space-y-2">
+            {recentWorkspaces.slice(0, 10).map((workspace) => (
+              <div
+                key={workspace.id}
+                className="flex items-center justify-between p-3 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group"
+                onClick={() => onWorkspaceClick?.(workspace)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-foreground group-hover:text-primary transition-colors">
+                    {workspace.directory_name}
+                  </div>
+                  <div className="text-body-sm text-muted-foreground truncate font-mono">
+                    {workspace.root_path ? `${workspace.root_path}/.conductor` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mb-4">
+              <FolderPlus className="w-8 h-8 text-muted-foreground/50" />
+            </div>
+            <p className="text-body text-muted-foreground mb-4">No workspaces yet</p>
             <Button
               variant="default"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloneRepository?.();
-              }}
+              onClick={onCreateWorkspace}
+              className="gap-2"
             >
-              Clone from GitHub
+              <Plus className="w-4 h-4" />
+              Create Your First Workspace
             </Button>
-          }
-          onClick={onCloneRepository}
-        />
+          </div>
+        )}
       </div>
     </div>
   );

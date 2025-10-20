@@ -748,6 +748,81 @@ app.get('/api/repos', (req, res) => {
   }
 });
 
+app.post('/api/repos', async (req, res) => {
+  try {
+    const { root_path } = req.body;
+
+    if (!root_path) {
+      return res.status(400).json({ error: 'root_path is required' });
+    }
+
+    // Validate that path exists and is a directory
+    if (!fs.existsSync(root_path)) {
+      return res.status(400).json({ error: 'Path does not exist' });
+    }
+
+    const stats = fs.statSync(root_path);
+    if (!stats.isDirectory()) {
+      return res.status(400).json({ error: 'Path is not a directory' });
+    }
+
+    // Check if it's a git repository
+    const gitDir = path.join(root_path, '.git');
+    if (!fs.existsSync(gitDir)) {
+      return res.status(400).json({ error: 'Path is not a git repository' });
+    }
+
+    const { execSync } = require('child_process');
+
+    // Get repository name from directory
+    const repoName = path.basename(root_path);
+
+    // Get default branch
+    let defaultBranch = 'main';
+    try {
+      defaultBranch = execSync('git symbolic-ref refs/remotes/origin/HEAD | sed \'s@^refs/remotes/origin/@@\'', {
+        cwd: root_path,
+        encoding: 'utf-8'
+      }).trim();
+    } catch (err) {
+      // Fallback: try to get current branch
+      try {
+        defaultBranch = execSync('git branch --show-current', {
+          cwd: root_path,
+          encoding: 'utf-8'
+        }).trim() || 'main';
+      } catch (e) {
+        console.warn('Could not determine default branch, using "main"');
+      }
+    }
+
+    // Check if repository already exists
+    const existing = db.prepare('SELECT * FROM repos WHERE root_path = ?').get(root_path);
+    if (existing) {
+      return res.status(409).json({ error: 'Repository already exists', repo: existing });
+    }
+
+    // Get highest display_order to add new repo at the end
+    const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get();
+    const displayOrder = (maxOrder?.max || 0) + 1;
+
+    // Insert repository
+    const repoId = randomUUID();
+    db.prepare(`
+      INSERT INTO repos (id, name, root_path, default_branch, display_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(repoId, repoName, root_path, defaultBranch, displayOrder);
+
+    const repo = db.prepare('SELECT * FROM repos WHERE id = ?').get(repoId);
+
+    console.log(`✅ Repository added: ${repoName} at ${root_path}`);
+    res.json(repo);
+  } catch (error) {
+    console.error('Error creating repository:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/stats', (req, res) => {
   try {
     const stats = {
