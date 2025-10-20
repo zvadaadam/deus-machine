@@ -18,7 +18,7 @@ import { X, ArrowLeft } from "lucide-react";
 
 interface WorkspaceChatPanelProps {
   sessionId: string;
-  onClose: () => void;
+  onClose?: () => void;
   embedded?: boolean;
   onCompact?: (handler: () => void) => void;
   onCreatePR?: (handler: () => void) => void;
@@ -163,8 +163,12 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
     );
   }
 
+  const handleClose = () => {
+    onClose?.();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000]" onClick={handleClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -177,7 +181,7 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
           <Button
             variant="ghost"
             size="icon"
-            onClick={onClose}
+            onClick={handleClose}
             title="Close"
           >
             <X className="h-4 w-4" />
