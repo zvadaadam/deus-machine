@@ -6,7 +6,7 @@ import type { Workspace } from "@/types";
 interface WelcomeViewProps {
   recentWorkspaces?: Workspace[];
   onCreateWorkspace?: () => void;
-  onAddRepository?: () => void;
+  onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onWorkspaceClick?: (workspace: Workspace) => void;
 }
@@ -19,7 +19,7 @@ interface WelcomeViewProps {
 export function WelcomeView({
   recentWorkspaces = [],
   onCreateWorkspace,
-  onAddRepository,
+  onOpenProject,
   onCloneRepository,
   onWorkspaceClick,
 }: WelcomeViewProps) {
@@ -29,7 +29,7 @@ export function WelcomeView({
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-1">Welcome to Conductor</h1>
         <p className="text-body-sm text-muted-foreground">
-          Get started by adding a repository or creating a workspace
+          Get started by opening a project or cloning a repository
         </p>
       </div>
 
@@ -37,13 +37,13 @@ export function WelcomeView({
       <div className="grid grid-cols-2 gap-4 mb-10">
         <Card
           className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-all duration-200 border-2 hover:border-primary/20 group"
-          onClick={onAddRepository}
+          onClick={onOpenProject}
         >
           <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200">
             <FolderPlus className="w-6 h-6" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground mb-0.5">Add Repository</h3>
+            <h3 className="font-semibold text-foreground mb-0.5">Open Project</h3>
             <p className="text-body-sm text-muted-foreground">From your local machine</p>
           </div>
         </Card>

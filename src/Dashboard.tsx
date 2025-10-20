@@ -10,6 +10,7 @@ import {
   DiffModal,
   SystemPromptModal,
   WelcomeView,
+  CloneRepositoryModal,
 } from "./features/dashboard/components";
 import { BrowserPanel } from "./features/browser/components";
 import {
@@ -100,6 +101,10 @@ export function Dashboard() {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [loadingSystemPrompt, setLoadingSystemPrompt] = useState(false);
   const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
+
+  // Clone Repository Modal (local state)
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   // File changes hook - manages file changes, PR status, dev servers
   const {
@@ -342,21 +347,127 @@ export function Dashboard() {
   }
 
   /**
-   * Handle adding a local repository
-   * TODO: Implement file picker to add local repository
+   * Handle opening a project from local folder
+   * Uses Tauri dialog picker to select a directory
    */
-  function handleAddRepository() {
-    console.log('Add repository clicked - to be implemented');
-    // Future: Open file picker dialog to select a local repository folder
+  async function handleOpenProject() {
+    try {
+      // Use Tauri's dialog plugin to select a directory
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Project Directory',
+      });
+
+      if (!selected) {
+        // User cancelled
+        return;
+      }
+
+      const folderPath = typeof selected === 'string' ? selected : selected.path;
+
+      // Call backend to add repository
+      const baseURL = await getBaseURL();
+      const res = await fetch(`${baseURL}/repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root_path: folderPath })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to add repository');
+      }
+
+      const repo = await res.json();
+      console.log('✅ Repository added:', repo);
+
+      // Refresh workspace list
+      const workspaces = await loadWorkspaces();
+      if (workspaces && workspaces.length > 0) {
+        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
+        await refreshDiffStats(allWorkspaces);
+      }
+
+      alert(`Repository "${repo.name}" added successfully!`);
+    } catch (error) {
+      console.error('Error adding repository:', error);
+      alert(`Error: ${error}`);
+    }
+  }
+
+  /**
+   * Handle opening clone repository modal
+   */
+  function handleOpenCloneModal() {
+    setShowCloneModal(true);
   }
 
   /**
    * Handle cloning a repository from GitHub
-   * TODO: Implement GitHub clone functionality
    */
-  function handleCloneRepository() {
-    console.log('Clone repository clicked - to be implemented');
-    // Future: Show modal with GitHub URL input field
+  async function handleCloneRepository(githubUrl: string, targetPath: string) {
+    setCloning(true);
+    try {
+      // Use default ~/Projects if no target path specified
+      const homeDir = process.env.HOME || '/Users/' + (process.env.USER || 'user');
+      const defaultProjectsDir = `${homeDir}/Projects`;
+
+      // Extract repo name from GitHub URL
+      const repoName = githubUrl.split('/').pop()?.replace('.git', '') || 'repo';
+      const cloneTarget = targetPath || `${defaultProjectsDir}/${repoName}`;
+
+      // Clone using git command (via backend or directly)
+      // For now, use simple git clone via Node child_process on backend
+      // TODO: Implement backend endpoint for git clone
+
+      const baseURL = await getBaseURL();
+
+      // For now, let's use a workaround: shell command via Tauri
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const output = await Command.create('git', [
+        'clone',
+        githubUrl,
+        cloneTarget
+      ]).execute();
+
+      if (output.code !== 0) {
+        throw new Error(output.stderr || 'Git clone failed');
+      }
+
+      console.log('✅ Repository cloned to:', cloneTarget);
+
+      // Add cloned repository to database
+      const res = await fetch(`${baseURL}/repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root_path: cloneTarget })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to add repository');
+      }
+
+      const repo = await res.json();
+      console.log('✅ Repository added to database:', repo);
+
+      // Refresh workspace list
+      const workspaces = await loadWorkspaces();
+      if (workspaces && workspaces.length > 0) {
+        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
+        await refreshDiffStats(allWorkspaces);
+      }
+
+      setShowCloneModal(false);
+      alert(`Repository "${repo.name}" cloned and added successfully!`);
+    } catch (error) {
+      console.error('Error cloning repository:', error);
+      alert(`Error: ${error}`);
+    } finally {
+      setCloning(false);
+    }
   }
 
   return (
@@ -442,9 +553,11 @@ export function Dashboard() {
           </>
         ) : (
           <WelcomeView
+            recentWorkspaces={repoGroups.flatMap(g => g.workspaces).slice(0, 10)}
             onCreateWorkspace={handleCreateWorkspace}
-            onAddRepository={handleAddRepository}
-            onCloneRepository={handleCloneRepository}
+            onOpenProject={handleOpenProject}
+            onCloneRepository={handleOpenCloneModal}
+            onWorkspaceClick={handleWorkspaceClick}
           />
         )}
         </div>
@@ -646,6 +759,13 @@ export function Dashboard() {
         onClose={() => closeSystemPromptModal()}
         onChange={setSystemPrompt}
         onSave={saveSystemPrompt}
+      />
+
+      <CloneRepositoryModal
+        show={showCloneModal}
+        cloning={cloning}
+        onClose={() => setShowCloneModal(false)}
+        onClone={handleCloneRepository}
       />
     </SidebarProvider>
   );
