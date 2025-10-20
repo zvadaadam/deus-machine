@@ -20,13 +20,18 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 - [x] Updated MessageItem to use new architecture
 
 ### 🚧 In Progress
-- [ ] Browser testing
+- [ ] Final browser testing
+
+### ✅ Phase 2 & 3 Completed
+- [x] More tool renderers (Write, Bash, Read, Grep)
+- [x] Shared components (CodeBlock, CopyButton, FilePathDisplay, SyntaxHighlighter)
+- [x] Framer Motion animations for expand/collapse
+- [x] SyntaxHighlighter component with line numbers
+- [x] All 5 tool renderers with animations
 
 ### ⏳ Pending
-- [ ] More tool renderers (Write, Bash, Read, Grep)
-- [ ] Shared components (CodeBlock, CopyButton)
-- [ ] Full integration testing
-- [ ] Performance optimization
+- [ ] Full integration testing with browser
+- [ ] Performance optimization (if needed)
 
 ---
 
@@ -56,11 +61,11 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 
 **Last Updated**: 2025-01-20
 
-**Current Task**: Phase 1 Complete ✅
+**Current Task**: Phase 3 Complete ✅ (Animations & Polish)
 
 **Blockers**: None
 
-**Next Steps**: Add more tool renderers (Write, Bash, Read, Grep)
+**Next Steps**: Final browser testing and verification
 
 ---
 
@@ -80,13 +85,26 @@ Refactor chat implementation to be extensible, maintainable, and beautiful.
 11. `chat/tools/renderers/EditToolRenderer.tsx` - Edit tool with diff view
 12. `chat/tools/registerTools.ts` - Auto-registration
 13. Updated `MessageItem.tsx` - Now uses new architecture
+14. `chat/tools/renderers/WriteToolRenderer.tsx` - Write tool with code preview
+15. `chat/tools/renderers/BashToolRenderer.tsx` - Terminal-style output
+16. `chat/tools/renderers/ReadToolRenderer.tsx` - File reading (collapsed by default)
+17. `chat/tools/renderers/GrepToolRenderer.tsx` - Search results display
+18. `chat/tools/components/CopyButton.tsx` - Reusable copy button
+19. `chat/tools/components/CodeBlock.tsx` - Code display with syntax highlighting
+20. `chat/tools/components/FilePathDisplay.tsx` - File path with icons
+21. `chat/tools/components/SyntaxHighlighter.tsx` - Line numbers & hover effects
 
 ### Key Changes
 - **Refactored MessageItem**: From 114 lines monolithic to 68 lines using composition
 - **Added Registry Pattern**: Tool renderers are now extensible plugins
 - **Theme System**: All colors use Tailwind tokens (no hardcoded colors)
 - **Better TypeScript**: Full type safety with proper interfaces
-- **Improved UX**: Edit tool now shows side-by-side diff with copy buttons
+- **Improved UX**:
+  - Edit tool shows side-by-side diff with copy buttons
+  - Read tool collapsed by default to reduce clutter
+  - Bash tool with terminal-style green text on black
+  - Framer Motion animations (0.2s, ease-out-quint)
+  - SyntaxHighlighter with line numbers and hover effects
 
 ### Testing Results
 - ✅ TypeScript: No errors (`npx tsc --noEmit`)

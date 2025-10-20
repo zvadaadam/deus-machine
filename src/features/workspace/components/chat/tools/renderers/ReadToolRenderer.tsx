@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { CodeBlock } from '../components/CodeBlock';
 import { FilePathDisplay } from '../components/FilePathDisplay';
@@ -84,21 +85,31 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       )}
 
       {/* Expandable content */}
-      {isExpanded && toolResult && !isError && (
-        <div className="space-y-1 px-2 pb-2">
-          <div className="text-xs text-muted-foreground">Content:</div>
-          <CodeBlock
-            code={
-              typeof toolResult.content === 'object'
-                ? JSON.stringify(toolResult.content, null, 2)
-                : toolResult.content
-            }
-            language={getLanguage(file_path)}
-            showLineNumbers={true}
-            maxHeight="400px"
-          />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {isExpanded && toolResult && !isError && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-1 px-2 pb-2">
+              <div className="text-xs text-muted-foreground">Content:</div>
+              <CodeBlock
+                code={
+                  typeof toolResult.content === 'object'
+                    ? JSON.stringify(toolResult.content, null, 2)
+                    : toolResult.content
+                }
+                language={getLanguage(file_path)}
+                showLineNumbers={true}
+                maxHeight="400px"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Error display */}
       {isError && toolResult && (
