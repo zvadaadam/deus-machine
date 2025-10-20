@@ -34,12 +34,12 @@ export function BlockRenderer({ block, index, toolResultMap, role }: BlockRender
   // Dispatch based on block type
   switch (block.type) {
     case 'text':
-      return <TextBlock key={`text-${index}`} block={block} role={role} />;
+      return <TextBlock block={block} role={role} />;
 
     case 'tool_use':
       // Link tool_use with its corresponding tool_result
       const toolResult = toolResultMap.get(block.id);
-      return <ToolUseBlock key={`tool-use-${block.id}`} block={block} toolResult={toolResult} />;
+      return <ToolUseBlock block={block} toolResult={toolResult} />;
 
     case 'tool_result':
       // Don't render tool_result standalone - it's already linked to tool_use
@@ -49,7 +49,7 @@ export function BlockRenderer({ block, index, toolResultMap, role }: BlockRender
       return null;
 
     case 'thinking':
-      return <ThinkingBlock key={`thinking-${index}`} block={block} />;
+      return <ThinkingBlock block={block} />;
 
     default:
       // Graceful fallback for unknown block types
@@ -59,7 +59,7 @@ export function BlockRenderer({ block, index, toolResultMap, role }: BlockRender
 
       // Try to render as text if it's a string
       if (typeof block === 'string') {
-        return <TextBlock key={`text-${index}`} block={{ type: 'text', text: block }} role={role} />;
+        return <TextBlock block={{ type: 'text', text: block }} role={role} />;
       }
 
       return null;

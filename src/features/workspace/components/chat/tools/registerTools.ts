@@ -24,10 +24,17 @@ import {
   LSToolRenderer,
 } from './renderers';
 
+// Idempotency guard - prevent double registration during HMR/dev
+let __didRegisterTools = false;
+
 /**
  * Initialize all tool renderers
+ * Idempotent - safe to call multiple times
  */
 export function registerAllTools() {
+  if (__didRegisterTools) return;
+  __didRegisterTools = true;
+
   // Set default renderer (fallback for unknown tools)
   toolRegistry.setDefault(DefaultToolRenderer);
 
@@ -53,5 +60,5 @@ export function registerAllTools() {
   }
 }
 
-// Auto-initialize on import
+// Auto-initialize on import (idempotent)
 registerAllTools();

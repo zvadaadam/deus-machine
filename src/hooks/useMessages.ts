@@ -135,6 +135,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       setLoading(false);
     } catch (error) {
       console.error("Failed to load messages:", error);
+      setLoading(false);
     }
   }, [sessionId, parseContent]);
 

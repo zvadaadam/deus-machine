@@ -32,7 +32,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
         chatTheme.blocks.tool.container,
         isError
           ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/5'
-          : 'border-l-4 border-l-cyan-500/50 bg-cyan-50/20 dark:bg-cyan-950/10'
+          : chatTheme.blocks.tool.borderLeft.info + ' bg-info/5'
       )}
     >
       {/* Header */}
@@ -49,7 +49,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
           ) : (
             <ChevronRight className="w-3 h-3" aria-hidden="true" />
           )}
-          <Activity className="w-4 h-4 text-cyan-600 dark:text-cyan-400" aria-hidden="true" />
+          <Activity className="w-4 h-4 text-info" aria-hidden="true" />
           <strong className="font-semibold">Background Process Output</strong>
 
           {/* Summary when collapsed */}
@@ -71,7 +71,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
       {/* Process info */}
       <div className="px-2 pb-1 space-y-1">
         <div className="flex items-center gap-2 text-sm">
-          <Terminal className="w-3 h-3 text-cyan-600 dark:text-cyan-400" aria-hidden="true" />
+          <Terminal className="w-3 h-3 text-info" aria-hidden="true" />
           <span className="text-muted-foreground">Shell ID:</span>
           <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{bash_id}</code>
         </div>
@@ -98,11 +98,10 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
               <div
                 className={cn(
                   'font-mono text-xs p-3 rounded overflow-x-auto',
-                  'bg-black/90 text-green-400',
-                  'border border-cyan-500/20 shadow-sm',
+                  'bg-sidebar-accent/90 text-success',
+                  'border border-border shadow-sm',
                   'max-h-96 overflow-y-auto'
                 )}
-                style={{ maxHeight: '400px' }}
               >
                 <pre className="m-0 whitespace-pre-wrap break-words">{output}</pre>
               </div>
