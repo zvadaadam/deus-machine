@@ -334,29 +334,28 @@ export function Dashboard() {
   }
 
   /**
-   * Handle loading projects
-   * TODO: Implement actual project loading functionality
+   * Handle creating a new workspace
+   * Opens the NewWorkspaceModal to select a repository
    */
-  function handleLoadProjects() {
-    console.log('Load projects clicked - to be implemented');
-    // Future: Show list of recent projects or browse projects
+  function handleCreateWorkspace() {
+    openNewWorkspaceModal();
   }
 
   /**
-   * Handle opening a local project
-   * TODO: Implement file picker to open local project
+   * Handle adding a local repository
+   * TODO: Implement file picker to add local repository
    */
-  function handleOpenProject() {
-    console.log('Open project clicked - to be implemented');
-    // Future: Open file picker dialog to select a local directory
+  function handleAddRepository() {
+    console.log('Add repository clicked - to be implemented');
+    // Future: Open file picker dialog to select a local repository folder
   }
 
   /**
-   * Handle cloning from GitHub
+   * Handle cloning a repository from GitHub
    * TODO: Implement GitHub clone functionality
    */
-  function handleCloneFromGithub() {
-    console.log('Clone from GitHub clicked - to be implemented');
+  function handleCloneRepository() {
+    console.log('Clone repository clicked - to be implemented');
     // Future: Show modal with GitHub URL input field
   }
 
@@ -443,18 +442,21 @@ export function Dashboard() {
           </>
         ) : (
           <WelcomeView
-            onLoadProjects={handleLoadProjects}
-            onOpenProject={handleOpenProject}
-            onCloneFromGithub={handleCloneFromGithub}
+            onCreateWorkspace={handleCreateWorkspace}
+            onAddRepository={handleAddRepository}
+            onCloneRepository={handleCloneRepository}
           />
         )}
         </div>
       </Panel>
 
-      <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
+      {/* Only show right panel when workspace is selected */}
+      {selectedWorkspace && (
+        <>
+          <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
-      {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+          {/* RIGHT PANEL - Browser, File Changes & Terminal */}
+          <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
@@ -610,8 +612,10 @@ export function Dashboard() {
             )}
           </TabsContent>
         </Tabs>
-      </Panel>
-          </PanelGroup>
+          </Panel>
+        </>
+      )}
+      </PanelGroup>
         </div>
       </SidebarInset>
 

@@ -1,4 +1,4 @@
-import { FolderOpen, Github, Plus } from "lucide-react";
+import { FolderPlus, Github, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -29,20 +29,20 @@ function ActionCard({ icon, title, description, action, onClick }: ActionCardPro
 }
 
 interface WelcomeViewProps {
-  onLoadProjects?: () => void;
-  onOpenProject?: () => void;
-  onCloneFromGithub?: () => void;
+  onCreateWorkspace?: () => void;
+  onAddRepository?: () => void;
+  onCloneRepository?: () => void;
 }
 
 /**
  * WelcomeView - Dashboard welcome screen when no workspace is selected
- * Shows options to load projects, open project locally, or clone from GitHub
+ * Shows options to create workspace, add local repository, or clone from GitHub
  * Following design inspiration from Linear, Vercel, Stripe, Airbnb, Perplexity
  */
 export function WelcomeView({
-  onLoadProjects,
-  onOpenProject,
-  onCloneFromGithub,
+  onCreateWorkspace,
+  onAddRepository,
+  onCloneRepository,
 }: WelcomeViewProps) {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 max-w-5xl mx-auto">
@@ -50,67 +50,67 @@ export function WelcomeView({
       <div className="text-center mb-12 space-y-3">
         <h1 className="text-3xl font-bold text-foreground">Welcome to OpenDevs</h1>
         <p className="text-body text-muted-foreground max-w-2xl">
-          Get started by loading existing projects, opening a local project, or cloning from GitHub
+          Create a workspace or add a repository to get started
         </p>
       </div>
 
       {/* Action Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
         <ActionCard
-          icon={<FolderOpen className="w-8 h-8" />}
-          title="Load Projects"
-          description="View and load your existing projects and workspaces"
+          icon={<Plus className="w-8 h-8" />}
+          title="Create Workspace"
+          description="Create a new workspace from your repositories"
           action={
             <Button
               variant="default"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onLoadProjects?.();
+                onCreateWorkspace?.();
               }}
             >
-              Browse Projects
+              New Workspace
             </Button>
           }
-          onClick={onLoadProjects}
+          onClick={onCreateWorkspace}
         />
 
         <ActionCard
-          icon={<Plus className="w-8 h-8" />}
-          title="Open Project"
-          description="Open a project from your local file system"
+          icon={<FolderPlus className="w-8 h-8" />}
+          title="Add Repository"
+          description="Add an existing repository from your local machine"
           action={
             <Button
               variant="default"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onOpenProject?.();
+                onAddRepository?.();
               }}
             >
-              Open Local
+              Add Local
             </Button>
           }
-          onClick={onOpenProject}
+          onClick={onAddRepository}
         />
 
         <ActionCard
           icon={<Github className="w-8 h-8" />}
-          title="Clone from GitHub"
-          description="Clone a repository from GitHub to get started"
+          title="Clone Repository"
+          description="Clone a repository from GitHub"
           action={
             <Button
               variant="default"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onCloneFromGithub?.();
+                onCloneRepository?.();
               }}
             >
-              Clone Repository
+              Clone from GitHub
             </Button>
           }
-          onClick={onCloneFromGithub}
+          onClick={onCloneRepository}
         />
       </div>
     </div>
