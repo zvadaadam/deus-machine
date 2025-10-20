@@ -51,7 +51,7 @@ export function Chat({
         />
       ) : (
         <>
-          <div className="flex flex-col gap-6 pb-8 min-h-min">
+          <div className="flex flex-col gap-6 pb-8 min-h-0">
             {messages.map(message => (
               <MessageItem
                 key={message.id}
@@ -64,7 +64,7 @@ export function Chat({
             <div
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-pulse"
+              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease-in-out_infinite]"
             >
               <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin flex-shrink-0" aria-hidden="true"></div>
               <span>Claude is working...</span>

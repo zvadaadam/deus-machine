@@ -381,7 +381,7 @@ export function Dashboard() {
             className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
           >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30} className="flex flex-col min-h-0" style={{ minWidth: 0, overflowX: 'hidden' }}>
+      <Panel id="center" minSize={30} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <div className="flex-1 flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
@@ -408,7 +408,6 @@ export function Dashboard() {
                 <WorkspaceChatPanel
                   ref={workspaceChatPanelRef}
                   sessionId={selectedWorkspace.active_session_id}
-                  onClose={() => {}}
                   embedded={true}
                 />
               )}
@@ -466,7 +465,7 @@ export function Dashboard() {
       <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
       {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0" style={{ minWidth: 0, overflowX: 'hidden' }}>
+      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
