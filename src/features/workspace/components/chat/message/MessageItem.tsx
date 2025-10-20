@@ -1,18 +1,17 @@
 /**
- * Message Item (Refactored)
+ * Message Item (New Architecture)
  *
- * Uses the new registry pattern with BlockRenderer for extensible content rendering.
- * Automatically imports and registers all tool renderers.
+ * Refactored message component using the registry pattern.
+ * Uses BlockRenderer for extensible content rendering.
+ *
+ * @deprecated Use ../MessageItem.tsx instead.
  */
 
-import type { Message } from "../../../types";
-import type { ToolResultMap } from "./chat/types";
-import { BlockRenderer } from "./chat/blocks";
-import { chatTheme } from "./chat/theme";
-import { cn } from "@/lib/utils";
-
-// Import tool registry initialization (registers all tools)
-import "./chat/tools/registerTools";
+import type { Message } from '@/types';
+import type { ToolResultMap } from '../types';
+import { BlockRenderer } from '../blocks';
+import { chatTheme } from '../theme';
+import { cn } from '@/lib/utils';
 
 interface MessageItemProps {
   message: Message;
@@ -24,23 +23,8 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
-  // Check if message has any renderable content
-  // Filter out blocks that BlockRenderer will skip (tool_result)
-  const hasRenderableContent = Array.isArray(contentBlocks) &&
-    contentBlocks.length > 0 &&
-    contentBlocks.some((block: any) => block.type !== 'tool_result');
-
-  // Don't render empty messages (fixes empty assistant messages issue)
-  if (!hasRenderableContent) {
-    if (import.meta.env.DEV) {
-      console.log(`[MessageItem] Skipping empty message ${message.id} (${message.role})`);
-    }
-    return null;
-  }
-
   // Determine role-based styling
   const isUser = message.role === 'user';
-  const isAssistant = message.role === 'assistant';
 
   const roleStyles = isUser
     ? chatTheme.message.user
@@ -48,7 +32,6 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
 
   return (
     <div
-      key={message.id}
       className={cn(
         roleStyles.maxWidth,
         roleStyles.container,
@@ -61,16 +44,25 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
         <span className="font-semibold uppercase text-xs text-muted-foreground tracking-wide">
           {message.role}
         </span>
-        <span className="text-[0.7rem] text-muted-foreground/70">
+        <time
+          className="text-[0.7rem] text-muted-foreground/70"
+          dateTime={new Date(message.created_at).toISOString()}
+        >
           {new Date(message.created_at).toLocaleTimeString()}
-        </span>
+        </time>
       </div>
 
       {/* Message content - uses BlockRenderer */}
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: any, index: number) => (
-            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />
+            <BlockRenderer
+              key={(block as any).id ?? index}
+              block={block}
+              index={index}
+              toolResultMap={toolResultMap}
+              role={message.role}
+            />
           ))
         ) : (
           // Fallback for non-array content
