@@ -16,6 +16,9 @@ import {
   TodoWriteToolRenderer,
   GlobToolRenderer,
   BashOutputToolRenderer,
+  MultiEditToolRenderer,
+  WebFetchToolRenderer,
+  WebSearchToolRenderer,
 } from './renderers';
 
 /**
@@ -34,11 +37,13 @@ export function registerAllTools() {
   toolRegistry.register('TodoWrite', TodoWriteToolRenderer);
   toolRegistry.register('Glob', GlobToolRenderer);
   toolRegistry.register('BashOutput', BashOutputToolRenderer);
+  toolRegistry.register('MultiEdit', MultiEditToolRenderer);
+  toolRegistry.register('WebFetch', WebFetchToolRenderer);
+  toolRegistry.register('WebSearch', WebSearchToolRenderer);
 
   // Additional tools can be registered here:
-  // toolRegistry.register('WebFetch', WebFetchToolRenderer);
-  // toolRegistry.register('WebSearch', WebSearchToolRenderer);
   // toolRegistry.register('Task', TaskToolRenderer);
+  // toolRegistry.register('KillShell', KillShellToolRenderer);
 
   if (import.meta.env.DEV) {
     const stats = toolRegistry.getStats();
