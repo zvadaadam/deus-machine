@@ -216,6 +216,14 @@ module.exports = {
   				'50%': {
   					opacity: '0.5'
   				}
+  			},
+  			'text-shimmer': {
+  				'0%': {
+  					backgroundPosition: '200% center'
+  				},
+  				'100%': {
+  					backgroundPosition: '-200% center'
+  				}
   			}
   		},
   		animation: {
@@ -227,7 +235,8 @@ module.exports = {
   			'slide-in-right': 'slideInRight 0.25s cubic-bezier(0, 0, 0.2, 1)',
   			'slide-in-left': 'slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1)',
   			'scale-in': 'scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1)',
-  			'shimmer': 'shimmer 2s ease-in-out infinite'
+  			'shimmer': 'shimmer 2s ease-in-out infinite',
+  			'text-shimmer': 'text-shimmer 2s linear infinite'
   		}
   	}
   },
