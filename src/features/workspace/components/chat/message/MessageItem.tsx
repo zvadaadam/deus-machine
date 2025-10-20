@@ -1,17 +1,14 @@
 /**
- * Message Item (Refactored)
+ * Message Item (New Architecture)
  *
- * Uses the new registry pattern with BlockRenderer for extensible content rendering.
- * Automatically imports and registers all tool renderers.
+ * Refactored message component using the registry pattern.
+ * Uses BlockRenderer for extensible content rendering.
  */
 
-import type { Message } from "../../../types";
-import { BlockRenderer } from "./chat/blocks";
-import { chatTheme } from "./chat/theme";
-import { cn } from "@/lib/utils";
-
-// Import tool registry initialization (registers all tools)
-import "./chat/tools/registerTools";
+import type { Message } from '@/types';
+import { BlockRenderer } from '../blocks';
+import { chatTheme } from '../theme';
+import { cn } from '@/lib/utils';
 
 interface MessageItemProps {
   message: Message;
@@ -32,7 +29,6 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
 
   return (
     <div
-      key={message.id}
       className={cn(
         roleStyles.maxWidth,
         roleStyles.container,
