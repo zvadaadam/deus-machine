@@ -6,6 +6,7 @@
  */
 
 import type { Message } from "../../../types";
+import type { ToolResultMap } from "./chat/types";
 import { BlockRenderer } from "./chat/blocks";
 import { chatTheme } from "./chat/theme";
 import { cn } from "@/lib/utils";
@@ -16,9 +17,10 @@ import "./chat/tools/registerTools";
 interface MessageItemProps {
   message: Message;
   parseContent: (content: string) => any;
+  toolResultMap: ToolResultMap;
 }
 
-export function MessageItem({ message, parseContent }: MessageItemProps) {
+export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
@@ -54,7 +56,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: any, index: number) => (
-            <BlockRenderer key={index} block={block} index={index} />
+            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} />
           ))
         ) : (
           // Fallback for non-array content

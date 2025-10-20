@@ -3,9 +3,12 @@
  *
  * Refactored message component using the registry pattern.
  * Uses BlockRenderer for extensible content rendering.
+ *
+ * NOTE: This file is deprecated. Use /MessageItem.tsx instead.
  */
 
 import type { Message } from '@/types';
+import type { ToolResultMap } from '../types';
 import { BlockRenderer } from '../blocks';
 import { chatTheme } from '../theme';
 import { cn } from '@/lib/utils';
@@ -13,9 +16,10 @@ import { cn } from '@/lib/utils';
 interface MessageItemProps {
   message: Message;
   parseContent: (content: string) => any;
+  toolResultMap: ToolResultMap;
 }
 
-export function MessageItem({ message, parseContent }: MessageItemProps) {
+export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
@@ -50,7 +54,7 @@ export function MessageItem({ message, parseContent }: MessageItemProps) {
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: any, index: number) => (
-            <BlockRenderer key={index} block={block} index={index} />
+            <BlockRenderer key={index} block={block} index={index} toolResultMap={toolResultMap} />
           ))
         ) : (
           // Fallback for non-array content

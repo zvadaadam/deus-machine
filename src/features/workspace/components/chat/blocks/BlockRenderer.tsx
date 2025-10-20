@@ -3,19 +3,24 @@
  *
  * Smart dispatcher that renders different content block types.
  * Handles text, tool_use, tool_result, and thinking blocks.
+ *
+ * CRITICAL: Links tool_use blocks with their corresponding tool_result blocks
+ * using the toolResultMap. tool_result blocks are NOT rendered standalone -
+ * they're only displayed as part of their tool_use block.
  */
 
 import type { ContentBlock } from '@/types';
+import type { ToolResultMap } from '../types';
 import { TextBlock } from './TextBlock';
 import { ToolUseBlock } from './ToolUseBlock';
-import { ToolResultBlock } from './ToolResultBlock';
 
 interface BlockRendererProps {
   block: ContentBlock;
   index: number;
+  toolResultMap: ToolResultMap;
 }
 
-export function BlockRenderer({ block, index }: BlockRendererProps) {
+export function BlockRenderer({ block, index, toolResultMap }: BlockRendererProps) {
   // Handle null/undefined blocks gracefully
   if (!block) {
     if (import.meta.env.DEV) {
@@ -30,10 +35,16 @@ export function BlockRenderer({ block, index }: BlockRendererProps) {
       return <TextBlock key={`text-${index}`} block={block} />;
 
     case 'tool_use':
-      return <ToolUseBlock key={`tool-use-${block.id}`} block={block} />;
+      // Link tool_use with its corresponding tool_result
+      const toolResult = toolResultMap.get(block.id);
+      return <ToolUseBlock key={`tool-use-${block.id}`} block={block} toolResult={toolResult} />;
 
     case 'tool_result':
-      return <ToolResultBlock key={`tool-result-${block.tool_use_id}`} block={block} />;
+      // Don't render tool_result standalone - it's already linked to tool_use
+      if (import.meta.env.DEV) {
+        console.log(`[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`);
+      }
+      return null;
 
     default:
       // Graceful fallback for unknown block types
