@@ -373,16 +373,16 @@ export function Dashboard() {
       )}
 
       {/* Main Content with SidebarInset - tight spacing for modern feel */}
-      <SidebarInset className="overflow-x-hidden overflow-y-hidden min-w-0">
-        <div className="flex h-full flex-col gap-2 pt-2 pr-2 pb-2">
+      <SidebarInset className="overflow-hidden min-w-0">
+        <div className="flex flex-1 flex-col gap-2 pt-2 pr-2 pb-2 min-h-0">
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
           >
       {/* MAIN CONTENT */}
-      <Panel id="center" minSize={30} style={{ minWidth: 0, overflowX: 'hidden' }}>
-        <div className="h-full flex flex-col min-h-0">
+      <Panel id="center" minSize={30} className="flex flex-col" style={{ minWidth: 0, overflowX: 'hidden' }}>
+        <div className="flex-1 flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
             {/* Workspace Header - with SidebarTrigger */}
