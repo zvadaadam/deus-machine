@@ -1,4 +1,5 @@
-import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus, FolderPlus, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { PanelLeftClose, PanelLeftOpen, GitBranch, ChevronDown, Settings, Plus, FolderPlus, Loader2, Archive } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -53,6 +54,7 @@ interface AppSidebarProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onAddRepository?: () => void;
+  onArchive?: (workspaceId: string) => void;
   profile?: {
     username: string;
     email?: string;
@@ -66,6 +68,7 @@ export function AppSidebar({
   onWorkspaceClick,
   onNewWorkspace,
   onAddRepository,
+  onArchive,
   profile = { username: "User" },
 }: AppSidebarProps) {
   const navigate = useNavigate();
@@ -118,6 +121,7 @@ export function AppSidebar({
                 onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                 onWorkspaceClick={onWorkspaceClick}
                 onNewWorkspace={onNewWorkspace}
+                onArchive={onArchive}
                 sidebarExpanded={isExpanded}
               />
             ))}
@@ -151,6 +155,7 @@ interface RepositoryItemProps {
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
+  onArchive?: (workspaceId: string) => void;
   sidebarExpanded: boolean;
 }
 
@@ -162,6 +167,7 @@ function RepositoryItem({
   onToggleCollapse,
   onWorkspaceClick,
   onNewWorkspace,
+  onArchive,
   sidebarExpanded,
 }: RepositoryItemProps) {
   const { toggleSidebar } = useSidebar();
@@ -263,6 +269,7 @@ function RepositoryItem({
                 isActive={workspace.id === selectedWorkspaceId}
                 diffStats={diffStats[workspace.id]}
                 onClick={() => onWorkspaceClick(workspace)}
+                onArchive={onArchive}
               />
             ))}
           </SidebarMenuSub>
@@ -277,9 +284,12 @@ interface WorkspaceItemProps {
   isActive: boolean;
   diffStats?: DiffStats;
   onClick: () => void;
+  onArchive?: (workspaceId: string) => void;
 }
 
-function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceItemProps) {
+function WorkspaceItem({ workspace, isActive, diffStats, onClick, onArchive }: WorkspaceItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -322,6 +332,16 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
   const deletions = diffStats?.deletions ?? 0;
   const hasChanges = additions > 0 || deletions > 0;
 
+  const handleArchive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onArchive) {
+      onArchive(workspace.id);
+    }
+  };
+
+  const isArchived = workspace.state === 'archived';
+  const showArchiveButton = isHovered && !isArchived && onArchive;
+
   return (
     <SidebarMenuSubItem>
       <div
@@ -333,6 +353,8 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
         )}
         aria-current={isActive ? "page" : undefined}
         onClick={onClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           {workspace.session_status === "working" ? (
@@ -384,7 +406,16 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
             </div>
           </div>
         </div>
-        {hasChanges && (
+        {showArchiveButton ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleArchive}
+            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+          >
+            <Archive className="h-3.5 w-3.5" />
+          </Button>
+        ) : hasChanges ? (
           <div className="flex items-center gap-1 flex-shrink-0">
             {additions > 0 && (
               <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
@@ -397,7 +428,7 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick }: WorkspaceIte
               </span>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </SidebarMenuSubItem>
   );

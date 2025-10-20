@@ -524,6 +524,7 @@ export function Dashboard() {
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
           onAddRepository={() => selectWorkspace(null)}
+          onArchive={archiveWorkspace}
           profile={{
             username: username
           }}
