@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
 import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
@@ -227,7 +228,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error archiving workspace:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error}`);
     }
   }
 
@@ -236,7 +237,7 @@ export function Dashboard() {
    */
   async function createWorkspace() {
     if (!selectedRepoId) {
-      alert('Please select a repository');
+      toast.error('Please select a repository');
       return;
     }
 
@@ -266,7 +267,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error creating workspace:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error}`);
     } finally {
       setCreating(false);
     }
@@ -326,7 +327,7 @@ export function Dashboard() {
       setSystemPrompt(data.system_prompt || '');
     } catch (error) {
       console.error('Failed to load system prompt:', error);
-      alert('Failed to load system prompt');
+      toast.error('Failed to load system prompt');
     } finally {
       setLoadingSystemPrompt(false);
     }
@@ -354,7 +355,7 @@ export function Dashboard() {
       closeSystemPromptModal();
     } catch (error) {
       console.error('Failed to save system prompt:', error);
-      alert('Failed to save system prompt');
+      toast.error('Failed to save system prompt');
     } finally {
       setSavingSystemPrompt(false);
     }
@@ -412,10 +413,10 @@ export function Dashboard() {
         await refreshDiffStats(allWorkspaces);
       }
 
-      alert(`Repository "${repo.name}" added successfully!`);
+      toast.success(`Repository "${repo.name}" added successfully!`);
     } catch (error) {
       console.error('Error adding repository:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error}`);
     }
   }
 
@@ -483,10 +484,10 @@ export function Dashboard() {
       }
 
       setShowCloneModal(false);
-      alert(`Repository "${repo.name}" cloned and added successfully!`);
+      toast.success(`Repository "${repo.name}" cloned and added successfully!`);
     } catch (error) {
       console.error('Error cloning repository:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error}`);
     } finally {
       setCloning(false);
     }
@@ -604,14 +605,14 @@ export function Dashboard() {
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
                 value="browser"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <Globe className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Browser</span>
               </TabsTrigger>
               <TabsTrigger
                 value="changes"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Changes</span>
@@ -623,7 +624,7 @@ export function Dashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <TerminalIcon className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Terminal</span>
@@ -667,7 +668,7 @@ export function Dashboard() {
                         href={server.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-all duration-200 no-underline group elevation-1 hover:elevation-2"
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-[background-color,box-shadow] duration-200 ease-out no-underline group elevation-1 hover:elevation-2"
                         title={`Open ${server.name} in browser`}
                       >
                         <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
@@ -695,7 +696,7 @@ export function Dashboard() {
                       {fileChanges.map((file, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group elevation-1 hover:elevation-2"
+                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,box-shadow] duration-200 ease-out group elevation-1 hover:elevation-2"
                           onClick={() => handleFileClick(file.file)}
                           title="Click to view diff"
                         >

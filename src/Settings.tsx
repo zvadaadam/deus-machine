@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { getBaseURL } from './config/api.config';
 import { Button } from '@/components/ui/button';
@@ -91,7 +92,7 @@ export function Settings() {
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch (error) {
       console.error('Failed to save setting:', error);
-      alert('Failed to save setting');
+      toast.error('Failed to save setting');
     } finally {
       setSaving(false);
     }
@@ -405,7 +406,7 @@ export function Settings() {
               href="https://modelcontextprotocol.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline transition-all duration-200"
+              className="text-primary hover:underline transition-all duration-200 ease-out"
             >
               Model Context Protocol
             </a>

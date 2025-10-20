@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { getBaseURL } from '@/config/api.config';
 import {
   Dialog,
@@ -57,6 +58,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     try {
       const baseURL = await getBaseURL();
       const response = await fetch(`${baseURL}/settings`);
+      if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
       const data = await response.json();
       setSettings(data);
       setLoading(false);
@@ -66,15 +68,21 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     }
   }
 
+  async function fetchJson(url: string) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url} → ${res.status}`);
+    return res.json();
+  }
+
   async function loadFileBasedConfigs() {
     try {
       const baseURL = await getBaseURL();
 
       const [mcpData, commandsData, agentsData, hooksData] = await Promise.all([
-        fetch(`${baseURL}/config/mcp-servers`).then(res => res.json()),
-        fetch(`${baseURL}/config/commands`).then(res => res.json()),
-        fetch(`${baseURL}/config/agents`).then(res => res.json()),
-        fetch(`${baseURL}/config/hooks`).then(res => res.json()),
+        fetchJson(`${baseURL}/config/mcp-servers`),
+        fetchJson(`${baseURL}/config/commands`),
+        fetchJson(`${baseURL}/config/agents`),
+        fetchJson(`${baseURL}/config/hooks`),
       ]);
 
       setMcpServers(mcpData);
@@ -101,7 +109,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch (error) {
       console.error('Failed to save setting:', error);
-      alert('Failed to save setting');
+      toast.error('Failed to save setting');
     } finally {
       setSaving(false);
     }
@@ -238,7 +246,8 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
             <Input
               id="user-name"
               value={settings.user_name ?? ''}
-              onChange={(e) => saveSetting('user_name', e.target.value)}
+              onChange={(e) => setSettings(prev => ({ ...prev, user_name: e.target.value }))}
+              onBlur={(e) => saveSetting('user_name', e.currentTarget.value)}
               placeholder="Your name"
             />
           </div>
@@ -249,7 +258,8 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
               id="user-email"
               type="email"
               value={settings.user_email ?? ''}
-              onChange={(e) => saveSetting('user_email', e.target.value)}
+              onChange={(e) => setSettings(prev => ({ ...prev, user_email: e.target.value }))}
+              onBlur={(e) => saveSetting('user_email', e.currentTarget.value)}
               placeholder="your@email.com"
             />
           </div>
@@ -259,7 +269,8 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
             <Input
               id="github-username"
               value={settings.user_github_username ?? ''}
-              onChange={(e) => saveSetting('user_github_username', e.target.value)}
+              onChange={(e) => setSettings(prev => ({ ...prev, user_github_username: e.target.value }))}
+              onBlur={(e) => saveSetting('user_github_username', e.currentTarget.value)}
               placeholder="github-username"
             />
           </div>
@@ -418,7 +429,11 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
         <div className="space-y-3">
           <div className="flex items-center space-x-2">
-            <Checkbox id="conversation-memory" defaultChecked />
+            <Checkbox
+              id="conversation-memory"
+              checked={settings.conversation_memory_enabled ?? true}
+              onCheckedChange={(checked) => saveSetting('conversation_memory_enabled', checked === true)}
+            />
             <Label htmlFor="conversation-memory" className="text-sm cursor-pointer">
               Enable conversation memory
             </Label>
@@ -426,7 +441,10 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
           <div className="space-y-2">
             <Label htmlFor="memory-retention">Memory retention</Label>
-            <Select defaultValue="session">
+            <Select
+              value={settings.memory_retention ?? 'session'}
+              onValueChange={(value) => saveSetting('memory_retention', value)}
+            >
               <SelectTrigger id="memory-retention">
                 <SelectValue />
               </SelectTrigger>
@@ -439,7 +457,25 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
             </Select>
           </div>
 
-          <Button variant="secondary" size="sm">Clear All Memory</Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={async () => {
+              if (confirm('Are you sure you want to clear all memory? This cannot be undone.')) {
+                try {
+                  const baseURL = await getBaseURL();
+                  const response = await fetch(`${baseURL}/memory/clear`, { method: 'POST' });
+                  if (!response.ok) throw new Error(`Failed to clear memory: ${response.status}`);
+                  toast.success('Memory cleared successfully');
+                } catch (error) {
+                  console.error('Failed to clear memory:', error);
+                  toast.error('Failed to clear memory');
+                }
+              }
+            }}
+          >
+            Clear All Memory
+          </Button>
         </div>
       </div>
     );
@@ -523,6 +559,9 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
                 id="custom-endpoint"
                 type="url"
                 placeholder="https://api.example.com/v1"
+                value={settings.custom_endpoint ?? ''}
+                onChange={(e) => setSettings(prev => ({ ...prev, custom_endpoint: e.target.value }))}
+                onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
               />
             </div>
           )}

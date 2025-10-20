@@ -10,7 +10,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const { randomUUID } = require('crypto');
 
@@ -750,10 +750,17 @@ app.get('/api/repos', (req, res) => {
 
 app.post('/api/repos', async (req, res) => {
   try {
-    const { root_path } = req.body;
+    let { root_path } = req.body;
 
     if (!root_path) {
       return res.status(400).json({ error: 'root_path is required' });
+    }
+
+    // Normalize path to resolve symlinks and get canonical path
+    try {
+      root_path = fs.realpathSync(root_path);
+    } catch (err) {
+      return res.status(400).json({ error: 'Path does not exist or is inaccessible' });
     }
 
     // Validate that path exists and is a directory
@@ -772,22 +779,22 @@ app.post('/api/repos', async (req, res) => {
       return res.status(400).json({ error: 'Path is not a git repository' });
     }
 
-    const { execSync } = require('child_process');
-
     // Get repository name from directory
     const repoName = path.basename(root_path);
 
     // Get default branch
     let defaultBranch = 'main';
     try {
-      defaultBranch = execSync('git symbolic-ref refs/remotes/origin/HEAD | sed \'s@^refs/remotes/origin/@@\'', {
+      const output = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
         cwd: root_path,
         encoding: 'utf-8'
       }).trim();
+      // Remove 'refs/remotes/origin/' prefix
+      defaultBranch = output.replace(/^refs\/remotes\/origin\//, '');
     } catch (err) {
       // Fallback: try to get current branch
       try {
-        defaultBranch = execSync('git branch --show-current', {
+        defaultBranch = execFileSync('git', ['branch', '--show-current'], {
           cwd: root_path,
           encoding: 'utf-8'
         }).trim() || 'main';
