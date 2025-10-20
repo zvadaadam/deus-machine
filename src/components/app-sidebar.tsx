@@ -82,9 +82,11 @@ export function AppSidebar({
       {/* Header with Profile (no collapse button) */}
       <SidebarHeader className="p-2">
         {isExpanded ? (
-          <div
-            className="flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
+          <button
+            type="button"
+            aria-label="Open settings"
             onClick={openSettingsModal}
+            className="flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg transition-colors duration-200 ease-out hover:bg-sidebar-accent/60 text-left w-full"
           >
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarFallback className="text-caption">
@@ -92,18 +94,20 @@ export function AppSidebar({
               </AvatarFallback>
             </Avatar>
             <p className="text-body font-medium truncate">{profile.username}</p>
-          </div>
+          </button>
         ) : (
-          <div
-            className="mx-auto p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-sidebar-accent/60"
+          <button
+            type="button"
+            aria-label="Open settings"
             onClick={openSettingsModal}
+            className="mx-auto p-2 rounded-lg transition-colors duration-200 ease-out hover:bg-sidebar-accent/60"
           >
             <Avatar className="h-8 w-8">
               <AvatarFallback className="text-caption">
                 {profile.username.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-          </div>
+          </button>
         )}
       </SidebarHeader>
 
@@ -140,7 +144,7 @@ export function AppSidebar({
               className={cn(
                 "w-full h-8 px-2.5 border-l-[3px] border-l-transparent",
                 "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-                "transition-all duration-200"
+                "transition-colors duration-200 ease-out"
               )}
             >
               <div className="flex items-center gap-3 w-full">
@@ -270,7 +274,7 @@ function RepositoryItem({
                   className={cn(
                     "w-full h-8 px-3 -translate-x-px",
                     "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-                    "transition-all duration-200"
+                    "transition-colors duration-200 ease-out"
                   )}
                 >
                   <div className="flex items-center gap-3 w-full">
@@ -359,19 +363,23 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick, onArchive }: W
   };
 
   const isArchived = workspace.state === 'archived';
-  const showArchiveButton = isHovered && !isArchived && onArchive;
+  const showArchiveButton = isHovered && !isArchived && !!onArchive;
 
   return (
     <SidebarMenuSubItem>
       <div
+        role="button"
+        tabIndex={0}
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2.5 min-h-[56px] rounded-lg cursor-pointer transition-all duration-200",
+          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
           isActive
             ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
             : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent"
         )}
         aria-current={isActive ? "page" : undefined}
+        aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick()}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -430,6 +438,8 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick, onArchive }: W
             variant="ghost"
             size="sm"
             onClick={handleArchive}
+            aria-label={`Archive workspace ${workspace.branch}`}
+            title="Archive workspace"
             className="h-7 px-2 text-muted-foreground hover:text-foreground"
           >
             <Archive className="h-3.5 w-3.5" />

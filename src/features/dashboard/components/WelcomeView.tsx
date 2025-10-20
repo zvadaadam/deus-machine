@@ -58,10 +58,13 @@ export function WelcomeView({
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4 mb-10">
         <Card
-          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-all duration-200 border-2 hover:border-primary/20 group"
+          role="button"
+          tabIndex={0}
+          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out border-2 hover:border-primary/20 group"
           onClick={onOpenProject}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
         >
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200">
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out">
             <FolderPlus className="w-6 h-6" />
           </div>
           <div className="flex-1">
@@ -71,10 +74,13 @@ export function WelcomeView({
         </Card>
 
         <Card
-          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-all duration-200 border-2 hover:border-primary/20 group"
+          role="button"
+          tabIndex={0}
+          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out border-2 hover:border-primary/20 group"
           onClick={onCloneRepository}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
         >
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200">
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out">
             <Github className="w-6 h-6" />
           </div>
           <div className="flex-1">

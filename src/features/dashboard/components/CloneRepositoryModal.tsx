@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -30,10 +31,20 @@ export function CloneRepositoryModal({
 }: CloneRepositoryModalProps) {
   const [githubUrl, setGithubUrl] = useState("");
   const [targetPath, setTargetPath] = useState("");
+  const previousCloning = useRef(cloning);
+
+  // Clear form when clone operation completes successfully
+  useEffect(() => {
+    if (previousCloning.current && !cloning) {
+      setGithubUrl("");
+      setTargetPath("");
+    }
+    previousCloning.current = cloning;
+  }, [cloning]);
 
   const handleClone = () => {
     if (!githubUrl.trim()) {
-      alert("Please enter a GitHub URL");
+      toast.error("Please enter a GitHub URL");
       return;
     }
     onClone(githubUrl.trim(), targetPath.trim());

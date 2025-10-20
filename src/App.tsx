@@ -4,6 +4,7 @@ import { Settings } from "./Settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DashboardError, SettingsError } from "./components/error-fallbacks";
 import { ThemeProvider } from "./hooks/useTheme";
+import { Toaster } from "./components/ui/sonner";
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
             />
           </Routes>
         </BrowserRouter>
+        <Toaster />
       </ErrorBoundary>
     </ThemeProvider>
   );
