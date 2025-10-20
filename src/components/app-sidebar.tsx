@@ -130,18 +130,35 @@ export function AppSidebar({
       </SidebarContent>
 
       {/* Footer with Add Repository */}
-      <SidebarFooter className="p-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => onAddRepository?.()}
-              tooltip={!isExpanded ? "Add Repository" : undefined}
-            >
-              <Plus className="h-4 w-4" />
-              {isExpanded && <span className="text-body-sm">Add Repository</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarFooter className="p-2">
+        {isExpanded ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onAddRepository?.()}
+            className={cn(
+              "w-full h-8 px-3 mx-2",
+              "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+              "transition-all duration-200"
+            )}
+          >
+            <div className="flex items-center gap-3 w-full">
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              <span className="text-sm">Add Repository</span>
+            </div>
+          </Button>
+        ) : (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => onAddRepository?.()}
+                tooltip="Add Repository"
+              >
+                <Plus className="h-4 w-4" />
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarFooter>
     </Sidebar>
   );
