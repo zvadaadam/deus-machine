@@ -24,6 +24,20 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
+  // Check if message has any renderable content
+  // Filter out blocks that BlockRenderer will skip (tool_result)
+  const hasRenderableContent = Array.isArray(contentBlocks) &&
+    contentBlocks.length > 0 &&
+    contentBlocks.some((block: any) => block.type !== 'tool_result');
+
+  // Don't render empty messages (fixes empty assistant messages issue)
+  if (!hasRenderableContent) {
+    if (import.meta.env.DEV) {
+      console.log(`[MessageItem] Skipping empty message ${message.id} (${message.role})`);
+    }
+    return null;
+  }
+
   // Determine role-based styling
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
