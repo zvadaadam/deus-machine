@@ -85,10 +85,10 @@ export function WelcomeView({
       </div>
       </div>
 
-      {/* Recent Workspaces - Scrollable Full Width */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-4xl mx-auto px-8 pb-8">
-          <div className="flex items-center justify-between mb-4">
+      {/* Recent Workspaces Header - Fixed */}
+      <div className="flex-shrink-0 border-t border-border/40">
+        <div className="max-w-4xl mx-auto px-8 py-4">
+          <div className="flex items-center justify-between">
             <h2 className="text-body font-semibold text-muted-foreground">Recent Workspaces</h2>
             {recentWorkspaces.length > 0 && (
               <Button
@@ -102,7 +102,12 @@ export function WelcomeView({
               </Button>
             )}
           </div>
+        </div>
+      </div>
 
+      {/* Workspace Items - Scrollable Only */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-4xl mx-auto px-8 pb-8">
           {recentWorkspaces.length > 0 ? (
             <>
               <div className="space-y-1">
