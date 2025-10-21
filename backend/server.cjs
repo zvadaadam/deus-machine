@@ -41,25 +41,22 @@ const db = initDatabase();
  * Helper function to verify if a git branch exists locally
  */
 function verifyBranchExists(root_path, branch) {
-  try {
-    execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], {
-      cwd: root_path,
-      timeout: 2000
-    });
-    return branch;
-  } catch {
-    // Try master as fallback
+  const checks = [
+    `refs/heads/${branch}`,
+    `refs/remotes/origin/${branch}`,
+    'refs/heads/main',
+    'refs/heads/master',
+  ];
+  for (const ref of checks) {
     try {
-      execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/master'], {
-        cwd: root_path,
-        timeout: 2000
-      });
-      console.log(`Branch '${branch}' not found, using 'master' instead`);
-      return 'master';
-    } catch {
-      return branch; // Return original even if not found
-    }
+      execFileSync('git', ['show-ref', '--verify', '--quiet', ref], { cwd: root_path, timeout: 2000 });
+      if (ref.endsWith('/main')) return 'main';
+      if (ref.endsWith('/master')) return 'master';
+      return branch;
+    } catch {}
   }
+  // Final safe default
+  return 'main';
 }
 
 /**
@@ -427,16 +424,20 @@ app.get('/api/workspaces/:id/diff-stats', async (req, res) => {
     const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
 
     // Get git diff stats comparing against parent branch
-    const { execSync } = require('child_process');
     try {
-      const output = execSync(`git diff ${parentBranch}...HEAD --shortstat`, {
-        cwd: workspacePath,
-        encoding: 'utf-8'
-      }).trim();
+      const output = execFileSync(
+        'git',
+        ['diff', `${parentBranch}...HEAD`, '--shortstat'],
+        {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          timeout: 5000
+        }
+      ).toString().trim();
 
       // Parse output like: "3 files changed, 45 insertions(+), 12 deletions(-)"
-      const additions = output.match(/(\d+) insertion/)?.[1] || '0';
-      const deletions = output.match(/(\d+) deletion/)?.[1] || '0';
+      const additions = output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || '0';
+      const deletions = output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || '0';
 
       res.json({
         additions: parseInt(additions, 10),
@@ -468,12 +469,16 @@ app.get('/api/workspaces/:id/diff-files', async (req, res) => {
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
     const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
 
-    const { execSync } = require('child_process');
     try {
-      const output = execSync(`git diff ${parentBranch}...HEAD --numstat`, {
-        cwd: workspacePath,
-        encoding: 'utf-8'
-      }).trim();
+      const output = execFileSync(
+        'git',
+        ['diff', `${parentBranch}...HEAD`, '--numstat'],
+        {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          timeout: 5000
+        }
+      ).toString().trim();
 
       if (!output) {
         return res.json({ files: [] });
@@ -521,13 +526,17 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
     const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
 
-    const { execSync } = require('child_process');
     try {
-      const output = execSync(`git diff ${parentBranch}...HEAD -- "${file}"`, {
-        cwd: workspacePath,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large diffs
-      });
+      const output = execFileSync(
+        'git',
+        ['diff', `${parentBranch}...HEAD`, '--', file],
+        {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large diffs
+          timeout: 5000
+        }
+      ).toString();
 
       res.json({
         file,
@@ -557,13 +566,17 @@ app.get('/api/workspaces/:id/pr-status', async (req, res) => {
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
 
-    const { execSync } = require('child_process');
     try {
       // Check if branch has a PR using gh CLI
-      const output = execSync(`gh pr view --json number,title,url,mergeable`, {
-        cwd: workspacePath,
-        encoding: 'utf-8'
-      }).trim();
+      const output = execFileSync(
+        'gh',
+        ['pr', 'view', '--json', 'number,title,url,mergeable'],
+        {
+          cwd: workspacePath,
+          encoding: 'utf-8',
+          timeout: 5000
+        }
+      ).toString().trim();
 
       const prData = JSON.parse(output);
 
@@ -614,7 +627,6 @@ app.post('/api/workspaces', async (req, res) => {
 
     const tmpDir = os.tmpdir();
     const initLogPath = path.join(tmpDir, `conductor-${Date.now()}-init.log`);
-    const setupLogPath = path.join(tmpDir, `conductor-${Date.now()}-setup.log`);
 
     db.prepare(`
       INSERT INTO workspaces (
@@ -642,6 +654,7 @@ app.post('/api/workspaces', async (req, res) => {
     worktreeProcess.stderr.pipe(initLog);
 
     worktreeProcess.on('close', (code) => {
+      try { initLog.end(); } catch {}
       if (code === 0) {
         console.log(`✅ Worktree created: ${workspacePath}`);
 
@@ -851,8 +864,9 @@ app.post('/api/repos', async (req, res) => {
     }
 
     // Check if it's a git repository
-    const gitDir = path.join(root_path, '.git');
-    if (!fs.existsSync(gitDir)) {
+    try {
+      execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root_path, timeout: 2000 });
+    } catch {
       return res.status(400).json({ error: 'Path is not a git repository' });
     }
 
@@ -863,12 +877,16 @@ app.post('/api/repos', async (req, res) => {
     const defaultBranch = detectDefaultBranch(root_path);
 
     // Use a transaction to prevent race conditions
-    const insertRepo = db.transaction((root_path, repoId, repoName, defaultBranch, displayOrder) => {
+    const insertRepo = db.transaction((root_path, repoId, repoName, defaultBranch) => {
       // Check if repository already exists
       const existing = db.prepare('SELECT * FROM repos WHERE root_path = ?').get(root_path);
       if (existing) {
         throw { status: 409, message: 'Repository already exists', repo: existing };
       }
+
+      // Get highest display_order to add new repo at the end (inside transaction to prevent race)
+      const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get();
+      const displayOrder = (maxOrder?.max || 0) + 1;
 
       // Insert repository
       db.prepare(`
@@ -880,12 +898,9 @@ app.post('/api/repos', async (req, res) => {
     });
 
     try {
-      // Get highest display_order to add new repo at the end
-      const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get();
-      const displayOrder = (maxOrder?.max || 0) + 1;
       const repoId = randomUUID();
 
-      const repo = insertRepo(root_path, repoId, repoName, defaultBranch, displayOrder);
+      const repo = insertRepo(root_path, repoId, repoName, defaultBranch);
 
       console.log(`✅ Repository added: ${repoName} (id: ${repoId})`);
       res.status(201).json(repo);

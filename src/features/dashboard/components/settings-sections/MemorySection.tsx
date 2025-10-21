@@ -15,6 +15,7 @@ import type { SettingsSectionProps } from './types';
 
 export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
   const [clearing, setClearing] = useState(false);
+  const [showingConfirmation, setShowingConfirmation] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -53,8 +54,9 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
         <Button
           variant="secondary"
           size="sm"
-          disabled={clearing}
+          disabled={clearing || showingConfirmation}
           onClick={() => {
+            setShowingConfirmation(true);
             toast('Are you sure you want to clear all memory?', {
               description: 'This action cannot be undone.',
               action: {
@@ -71,9 +73,12 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
                     toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
                   } finally {
                     setClearing(false);
+                    setShowingConfirmation(false);
                   }
                 },
               },
+              onDismiss: () => setShowingConfirmation(false),
+              onAutoClose: () => setShowingConfirmation(false),
             });
           }}
         >
