@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/select';
 import type { SettingsSectionProps } from './types';
 
-export function ProviderSection({ settings, setSettings, saveSetting }: SettingsSectionProps) {
+export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Provider Settings</h3>
@@ -57,8 +57,7 @@ export function ProviderSection({ settings, setSettings, saveSetting }: Settings
               id="custom-endpoint"
               type="url"
               placeholder="https://api.example.com/v1"
-              value={settings.custom_endpoint ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, custom_endpoint: e.target.value }))}
+              defaultValue={(settings as any).custom_endpoint ?? ''}
               onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
             />
           </div>

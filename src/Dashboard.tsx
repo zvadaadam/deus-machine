@@ -15,11 +15,17 @@ import {
   CloneRepositoryModal,
 } from "./features/dashboard/components";
 import { BrowserPanel } from "./features/browser/components";
+import { useKeyboardShortcuts } from "./hooks";
 import {
-  useDashboardData,
-  useFileChanges,
-  useKeyboardShortcuts,
-} from "./hooks";
+  useWorkspacesByRepo,
+  useStats,
+  useBulkDiffStats,
+  useFileChanges as useFileChangesQuery,
+  usePRStatus,
+  useDevServers,
+  useCreateWorkspace,
+  useArchiveWorkspace,
+} from "./hooks/queries";
 import {
   Button,
   Badge,
@@ -74,23 +80,22 @@ export function Dashboard() {
     closeDiffModal,
   } = useUIStore();
 
-  // Dashboard data hook - manages workspaces, stats
-  const {
-    repoGroups,
-    stats,
-    status,
-    loading,
-    diffStats: hookDiffStats,
-    loadWorkspaces,
-    refreshDiffStats,
-  } = useDashboardData();
+  // TanStack Query hooks - automatic polling and caching
+  const workspacesQuery = useWorkspacesByRepo('ready');
+  const statsQuery = useStats();
+  const diffStatsQuery = useBulkDiffStats(workspacesQuery.data || []);
 
-  // Sync hook diffStats to store
+  const repoGroups = workspacesQuery.data || [];
+  const stats = statsQuery.data || null;
+  const loading = workspacesQuery.isLoading || statsQuery.isLoading;
+  const status = workspacesQuery.isError ? 'Error loading workspaces' : 'Connected';
+
+  // Sync diff stats to store (for compatibility with existing code)
   useEffect(() => {
-    if (Object.keys(hookDiffStats).length > 0) {
-      setMultipleDiffStats(hookDiffStats);
+    if (diffStatsQuery.data) {
+      setMultipleDiffStats(diffStatsQuery.data);
     }
-  }, [hookDiffStats, setMultipleDiffStats]);
+  }, [diffStatsQuery.data, setMultipleDiffStats]);
 
   // Local component state (not global)
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -113,16 +118,18 @@ export function Dashboard() {
   // User profile (local state)
   const [username, setUsername] = useState('Developer');
 
-  // File changes hook - manages file changes, PR status, dev servers
-  const {
-    fileChanges,
-    prStatus,
-    devServers,
-    clearCache,
-  } = useFileChanges({
-    workspaceId: selectedWorkspace?.id || null,
-    diffStats,
-  });
+  // File changes queries with automatic caching
+  const fileChangesQuery = useFileChangesQuery(selectedWorkspace?.id || null);
+  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
+  const devServersQuery = useDevServers(selectedWorkspace?.id || null);
+
+  const fileChanges = fileChangesQuery.data || [];
+  const prStatus = prStatusQuery.data || null;
+  const devServers = devServersQuery.data || [];
+
+  // Mutations
+  const createWorkspaceMutation = useCreateWorkspace();
+  const archiveWorkspaceMutation = useArchiveWorkspace();
 
 
   useEffect(() => {
@@ -160,16 +167,13 @@ export function Dashboard() {
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
     onRefresh: async () => {
-      // Refresh workspaces and diffs
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
-
+      // Refetch all queries
+      workspacesQuery.refetch();
+      diffStatsQuery.refetch();
       if (selectedWorkspace) {
-        // Clear file changes cache to force reload
-        clearCache(selectedWorkspace.id);
+        fileChangesQuery.refetch();
+        prStatusQuery.refetch();
+        devServersQuery.refetch();
       }
     },
     onEscape: () => {
@@ -218,23 +222,8 @@ export function Dashboard() {
    */
   async function archiveWorkspace(workspaceId: string) {
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${workspaceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'archived' })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to archive workspace: ${res.statusText}`);
-      }
-
+      await archiveWorkspaceMutation.mutateAsync(workspaceId);
       console.log('✅ Workspace archived');
-      // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
       if (selectedWorkspace?.id === workspaceId) {
         selectWorkspace(null);
       }
@@ -255,28 +244,11 @@ export function Dashboard() {
 
     setCreating(true);
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repository_id: selectedRepoId })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to create workspace: ${res.statusText}`);
-      }
-
-      const workspace = await res.json();
+      const workspace = await createWorkspaceMutation.mutateAsync(selectedRepoId);
       console.log('✅ Workspace created:', workspace.directory_name);
 
       setSelectedRepoId('');
       closeNewWorkspaceModal();
-
-      // Refresh workspace list and load diff stats
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
     } catch (error) {
       console.error('Error creating workspace:', error);
       toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -312,9 +284,8 @@ export function Dashboard() {
     openDiffModal(file, ''); // Open with empty diff first
 
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
-      if (!res.ok) throw new Error(`Failed to load diff: ${res.status}`);
-      const data = await res.json();
+      const { WorkspaceService } = await import('./services/workspace.service');
+      const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
       openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
     } catch (error) {
       console.error('Failed to load diff:', error);
@@ -401,7 +372,7 @@ export function Dashboard() {
         return;
       }
 
-      const folderPath = typeof selected === 'string' ? selected : selected.path;
+      const folderPath = typeof selected === 'string' ? selected : (selected as any).path;
 
       // Call backend to add repository
       const baseURL = await getBaseURL();
@@ -420,11 +391,7 @@ export function Dashboard() {
       console.log('✅ Repository added:', repo);
 
       // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
+      await workspacesQuery.refetch();
 
       toast.success(`Repository "${repo.name}" added successfully!`);
     } catch (error) {
@@ -533,11 +500,7 @@ export function Dashboard() {
       console.log('✅ Repository added to database:', repo);
 
       // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
+      await workspacesQuery.refetch();
 
       setShowCloneModal(false);
       toast.success(`Repository "${repo.name}" cloned and added successfully!`);
