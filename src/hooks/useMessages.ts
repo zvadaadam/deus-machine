@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { getBaseURL } from "../config/api.config";
 import { socketService } from "../services/socket";
 import type { Message, FileEdit, FileChangeGroup, SessionStatus, ToolResultBlock } from "../types";
@@ -181,7 +182,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       loadMessagesAndStatus();
     } catch (error) {
       console.error('Failed to send message:', error);
-      alert('Failed to send message');
+      toast.error(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSending(false);
     }
@@ -202,7 +203,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       loadMessagesAndStatus();
     } catch (error) {
       console.error('Failed to stop session:', error);
-      alert('Failed to stop session');
+      toast.error(`Failed to stop session: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [sessionId, loadMessagesAndStatus]);
 

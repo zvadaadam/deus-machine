@@ -14,6 +14,42 @@ It runs a backend which communicates with Claude Code CLI.
 Also has this small Rust backend which manages it.
 
 
+# RUNNING THE APP
+
+## ⚠️ CRITICAL: Always run BOTH backend AND frontend together!
+
+### For Web Development
+```bash
+npm run dev:full
+```
+This runs `./dev.sh` which starts:
+- Backend server (Node.js) on a dynamic port (usually 50XXX)
+- Frontend dev server (Vite) on http://localhost:1420/
+
+### For Desktop Development
+```bash
+npm run tauri:dev
+```
+This runs everything: Vite + Backend + Tauri desktop app.
+
+## ❌ NEVER DO THIS
+```bash
+npm run dev  # DON'T! This only runs frontend without backend!
+```
+
+## Troubleshooting
+
+### Port 1420 already in use
+```bash
+lsof -ti:1420 | xargs kill -9
+npm run dev:full
+```
+
+### Check what's running
+- Frontend: http://localhost:1420/
+- Backend: Dynamic port (check terminal output for "Backend server started on port XXXXX")
+
+
 # OUR FRONTEND
 
 We want to achieve a beautiful aesthetic design of a pro consumer product.
