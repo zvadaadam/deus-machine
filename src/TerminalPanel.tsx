@@ -91,15 +91,14 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
         setShowBrowser(true);
         setShowRun(false);
       } else {
-        toast.error(
-          `No development server detected!\n\n` +
-          `Please start your dev server first:\n` +
-          `  • Vite: npm run dev (port 5173)\n` +
-          `  • React/Next: npm run dev (port 3000)\n` +
-          `  • Angular: ng serve (port 4200)\n\n` +
-          `Then click Run again.`,
-          { duration: 5000 }
-        );
+        toast.error('No development server detected!', {
+          description: (
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {`Please start your dev server first:\n  • Vite: npm run dev (port 5173)\n  • React/Next: npm run dev (port 3000)\n  • Angular: ng serve (port 4200)\n\nThen click Run again.`}
+            </div>
+          ),
+          duration: 5000,
+        });
       }
     } catch (error) {
       console.error('Error detecting server:', error);

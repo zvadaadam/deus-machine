@@ -116,7 +116,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
       setSettings(prev => ({ ...prev, [key]: value }));
     } catch (error) {
       console.error('Failed to save setting:', error);
-      toast.error('Failed to save setting');
+      toast.error(`Failed to save setting: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSaving(false);
     }

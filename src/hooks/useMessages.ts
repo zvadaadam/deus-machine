@@ -182,7 +182,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       loadMessagesAndStatus();
     } catch (error) {
       console.error('Failed to send message:', error);
-      toast.error('Failed to send message');
+      toast.error(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSending(false);
     }
@@ -203,7 +203,7 @@ export function useMessages({ sessionId, isSocketConnected }: UseMessagesOptions
       loadMessagesAndStatus();
     } catch (error) {
       console.error('Failed to stop session:', error);
-      toast.error('Failed to stop session');
+      toast.error(`Failed to stop session: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [sessionId, loadMessagesAndStatus]);
 

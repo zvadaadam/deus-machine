@@ -763,6 +763,13 @@ app.post('/api/repos', async (req, res) => {
       return res.status(400).json({ error: 'Path does not exist or is inaccessible' });
     }
 
+    // Check path permissions
+    try {
+      fs.accessSync(root_path, fs.constants.R_OK | fs.constants.X_OK);
+    } catch {
+      return res.status(403).json({ error: 'Path is not accessible (permission denied)' });
+    }
+
     // Validate that path exists and is a directory
     if (!fs.existsSync(root_path)) {
       return res.status(400).json({ error: 'Path does not exist' });
@@ -787,7 +794,8 @@ app.post('/api/repos', async (req, res) => {
     try {
       const output = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
         cwd: root_path,
-        encoding: 'utf-8'
+        encoding: 'utf-8',
+        timeout: 2000
       }).trim();
       // Remove 'refs/remotes/origin/' prefix
       defaultBranch = output.replace(/^refs\/remotes\/origin\//, '');
@@ -796,11 +804,28 @@ app.post('/api/repos', async (req, res) => {
       try {
         defaultBranch = execFileSync('git', ['branch', '--show-current'], {
           cwd: root_path,
-          encoding: 'utf-8'
+          encoding: 'utf-8',
+          timeout: 2000
         }).trim() || 'main';
       } catch (e) {
         console.warn('Could not determine default branch, using "main"');
       }
+    }
+
+    // If chosen branch doesn't exist locally, prefer 'master' if present
+    try {
+      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${defaultBranch}`], {
+        cwd: root_path,
+        timeout: 2000
+      });
+    } catch {
+      try {
+        execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/master'], {
+          cwd: root_path,
+          timeout: 2000
+        });
+        defaultBranch = 'master';
+      } catch {}
     }
 
     // Check if repository already exists
@@ -823,7 +848,7 @@ app.post('/api/repos', async (req, res) => {
     const repo = db.prepare('SELECT * FROM repos WHERE id = ?').get(repoId);
 
     console.log(`✅ Repository added: ${repoName} at ${root_path}`);
-    res.json(repo);
+    res.status(201).json(repo);
   } catch (error) {
     console.error('Error creating repository:', error);
     res.status(500).json({ error: error.message });

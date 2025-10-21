@@ -59,7 +59,7 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
                 toast.success('Memory cleared successfully');
               } catch (error) {
                 console.error('Failed to clear memory:', error);
-                toast.error('Failed to clear memory');
+                toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
               }
             }
           }}
