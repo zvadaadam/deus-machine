@@ -87,27 +87,27 @@ export const WorkspaceService = {
    * Fetch PR status for a workspace
    */
   fetchPRStatus: async (id: string): Promise<PRStatus | null> => {
-    return apiClient.get<PRStatus | null>(`/workspaces/${id}/pr-status`);
+    return apiClient.get<PRStatus | null>(ENDPOINTS.WORKSPACE_PR_STATUS(id));
   },
 
   /**
    * Fetch dev servers for a workspace
    */
   fetchDevServers: async (id: string): Promise<{ servers: DevServer[] }> => {
-    return apiClient.get<{ servers: DevServer[] }>(`/workspaces/${id}/dev-servers`);
+    return apiClient.get<{ servers: DevServer[] }>(ENDPOINTS.WORKSPACE_DEV_SERVERS(id));
   },
 
   /**
    * Fetch system prompt for a workspace
    */
   fetchSystemPrompt: async (id: string): Promise<{ system_prompt: string }> => {
-    return apiClient.get<{ system_prompt: string }>(`/workspaces/${id}/system-prompt`);
+    return apiClient.get<{ system_prompt: string }>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id));
   },
 
   /**
    * Update system prompt for a workspace
    */
   updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {
-    return apiClient.put(`/workspaces/${id}/system-prompt`, { system_prompt: systemPrompt });
+    return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), { system_prompt: systemPrompt });
   },
 };

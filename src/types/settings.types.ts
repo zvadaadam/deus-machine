@@ -29,6 +29,11 @@ export interface Settings {
   // Provider
   claude_provider?: string;
   claude_model?: string;
+  custom_endpoint?: string;
+
+  // Memory
+  conversation_memory_enabled?: boolean;
+  memory_retention?: string;
 
   // Experimental
   right_panel_visible?: boolean;

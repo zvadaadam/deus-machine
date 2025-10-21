@@ -25,7 +25,7 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
         <div className="flex items-center space-x-2">
           <Checkbox
             id="conversation-memory"
-            checked={(settings as any).conversation_memory_enabled ?? true}
+            checked={settings.conversation_memory_enabled ?? true}
             onCheckedChange={(checked) => saveSetting('conversation_memory_enabled', checked === true)}
           />
           <Label htmlFor="conversation-memory" className="text-sm cursor-pointer">
@@ -36,7 +36,7 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
         <div className="space-y-2">
           <Label htmlFor="memory-retention">Memory retention</Label>
           <Select
-            value={(settings as any).memory_retention ?? 'session'}
+            value={settings.memory_retention ?? 'session'}
             onValueChange={(value) => saveSetting('memory_retention', value)}
           >
             <SelectTrigger id="memory-retention">

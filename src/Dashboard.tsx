@@ -103,6 +103,13 @@ export function Dashboard() {
     }
   }, [diffStatsQuery.data, setMultipleDiffStats]);
 
+  // Initialize system prompt draft when modal opens
+  useEffect(() => {
+    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
+      setSystemPromptDraft(systemPromptQuery.data || '');
+    }
+  }, [showSystemPromptModal, systemPromptQuery.data]);
+
   // Local component state (not global)
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
@@ -119,6 +126,9 @@ export function Dashboard() {
   const reposQuery = useRepos();
   const settingsQuery = useSettingsQuery();
   const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
+
+  // Local draft state for system prompt modal (controlled component)
+  const [systemPromptDraft, setSystemPromptDraft] = useState('');
 
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || 'Developer';
@@ -723,19 +733,12 @@ export function Dashboard() {
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}
         workspaceName={selectedWorkspace?.directory_name || ""}
-        systemPrompt={systemPromptQuery.data || ''}
+        systemPrompt={systemPromptDraft}
         loading={systemPromptQuery.isLoading}
         saving={updateSystemPromptMutation.isPending}
         onClose={() => closeSystemPromptModal()}
-        onChange={(value) => {
-          // Local state management for textarea is handled by the modal
-          // We'll update this to use a local state ref
-        }}
-        onSave={() => {
-          // Get the current value from the modal's internal state
-          const promptValue = (document.querySelector('textarea[placeholder*="Instructions"]') as HTMLTextAreaElement)?.value || '';
-          saveSystemPrompt(promptValue);
-        }}
+        onChange={setSystemPromptDraft}
+        onSave={() => saveSystemPrompt(systemPromptDraft)}
       />
 
       <CloneRepositoryModal

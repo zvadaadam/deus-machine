@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useMemo } from "react";
 import type {
   FileChangeGroup,
   FileEdit,
@@ -58,16 +58,18 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
   // Local state for message input
   const [messageInput, setMessageInput] = useState('');
 
-  // Extract file changes from messages (same logic as before)
-  const fileChanges: FileChangeGroup[] = (() => {
+  // Extract file changes from messages (memoized to avoid recomputation on every render)
+  const fileChanges: FileChangeGroup[] = useMemo(() => {
     const fileMap = new Map<string, FileEdit[]>();
 
     messages.forEach((message) => {
       const contentBlocks = parseContent(message.content);
       if (Array.isArray(contentBlocks)) {
         contentBlocks.forEach((block: any) => {
-          if (block.type === 'tool_use' && (block.name === 'Edit' || block.name === 'Write')) {
-            const filePath = block.input.file_path;
+          if (block?.type === 'tool_use' && (block.name === 'Edit' || block.name === 'Write')) {
+            const filePath = block.input?.file_path;
+            if (!filePath) return; // Guard against missing file_path
+
             if (!fileMap.has(filePath)) {
               fileMap.set(filePath, []);
             }
@@ -85,7 +87,20 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
     });
 
     const changes: FileChangeGroup[] = Array.from(fileMap.entries()).map(([file_path, edits]) => {
-      const timestamps = edits.map(e => new Date(e.timestamp).getTime());
+      // Harden timestamp parsing
+      const timestamps = edits
+        .map(e => Date.parse(e.timestamp))
+        .filter((t) => Number.isFinite(t));
+
+      if (!timestamps.length) {
+        return {
+          file_path,
+          edits,
+          first_timestamp: new Date(0).toISOString(),
+          last_timestamp: new Date(0).toISOString(),
+        };
+      }
+
       return {
         file_path,
         edits,
@@ -99,10 +114,10 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
     );
 
     return changes;
-  })();
+  }, [messages, parseContent]);
 
   // Handlers using mutations
-  const sendMessage = async (customContent?: string) => {
+  const sendMessage = useCallback(async (customContent?: string) => {
     const content = customContent || messageInput.trim();
     if (!content || sendMessageMutation.isPending) return;
 
@@ -112,19 +127,19 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
     } catch (error) {
       console.error('Failed to send message:', error);
     }
-  };
+  }, [messageInput, sendMessageMutation, sessionId]);
 
-  const stopSession = async () => {
+  const stopSession = useCallback(async () => {
     if (!window.confirm('Stop the current Claude Code session?')) return;
     try {
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
       console.error('Failed to stop session:', error);
     }
-  };
+  }, [stopSessionMutation, sessionId]);
 
-  const createPR = () => sendMessage('Create a PR onto main');
-  const compactConversation = () => sendMessage('/compact');
+  const createPR = useCallback(() => sendMessage('Create a PR onto main'), [sendMessage]);
+  const compactConversation = useCallback(() => sendMessage('/compact'), [sendMessage]);
 
   // Derived state
   const sending = sendMessageMutation.isPending;
