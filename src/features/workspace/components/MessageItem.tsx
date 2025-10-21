@@ -5,11 +5,11 @@
  * Automatically imports and registers all tool renderers.
  */
 
-import type { Message } from "../../../types";
+import type { Message } from "@/shared/types";
 import type { ToolResultMap } from "./chat/types";
 import { BlockRenderer } from "./chat/blocks";
 import { chatTheme } from "./chat/theme";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 
 // Import tool registry initialization (registers all tools)
 import "./chat/tools/registerTools";

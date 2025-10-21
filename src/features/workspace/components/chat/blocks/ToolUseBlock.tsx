@@ -8,7 +8,7 @@
  * This enables renderers to show execution status (✓ Applied / ✗ Failed).
  */
 
-import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from '@/types';
+import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from '@/shared/types';
 import { toolRegistry } from '../tools/ToolRegistry';
 
 interface ToolUseBlockProps {

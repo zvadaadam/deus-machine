@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Wrench, Plug } from 'lucide-react';
 import { chatTheme } from '../../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../types';
 
 /**

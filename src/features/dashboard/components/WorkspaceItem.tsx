@@ -1,6 +1,6 @@
 import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { formatTimeAgo } from "../../../utils";
-import type { Workspace, DiffStats } from "../../../types";
+import type { Workspace, DiffStats } from "@/shared/types";
 
 interface WorkspaceItemProps {
   workspace: Workspace;

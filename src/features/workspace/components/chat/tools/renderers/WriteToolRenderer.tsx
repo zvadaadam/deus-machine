@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, FilePlus } from 'lucide-react';
 import { CodeBlock } from '../components/CodeBlock';
 import { FilePathDisplay } from '../components/FilePathDisplay';
 import { chatTheme } from '../../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../types';
 import { detectLanguageFromPath } from '../utils/detectLanguage';
 

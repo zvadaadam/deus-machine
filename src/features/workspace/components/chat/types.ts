@@ -4,7 +4,7 @@
  * Type definitions for chat components and tool renderers
  */
 
-import type { ToolUseBlock, ToolResultBlock } from '@/types';
+import type { ToolUseBlock, ToolResultBlock } from '@/shared/types';
 
 /**
  * Map of tool_use_id to ToolResultBlock

@@ -5,7 +5,7 @@
  * Can be replaced with Prism.js or Shiki later for better highlighting.
  */
 
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 
 interface SyntaxHighlighterProps {
   code: string;

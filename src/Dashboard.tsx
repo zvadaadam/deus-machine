@@ -52,7 +52,7 @@ import { BranchName } from "./components/BranchName";
 import type {
   Workspace,
   Repo,
-} from "./types";
+} from "@/shared/types";
 
 /**
  * Conductor Dashboard - Main application interface

@@ -3,8 +3,8 @@
  * API methods for workspace management operations
  */
 
-import { apiClient } from './api';
-import { ENDPOINTS } from '../config/api.config';
+import { apiClient } from '@/shared/api/client';
+import { ENDPOINTS } from '@/shared/config/api.config';
 import type {
   Workspace,
   RepoGroup,
@@ -13,7 +13,7 @@ import type {
   WorkspaceQueryParams,
   PRStatus,
   DevServer,
-} from '../types';
+} from '@/shared/types';
 
 export const WorkspaceService = {
   /**

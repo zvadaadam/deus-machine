@@ -9,7 +9,7 @@
  * they're only displayed as part of their tool_use block.
  */
 
-import type { ContentBlock, MessageRole } from '@/types';
+import type { ContentBlock, MessageRole } from '@/shared/types';
 import type { ToolResultMap } from '../types';
 import { TextBlock } from './TextBlock';
 import { ToolUseBlock } from './ToolUseBlock';

@@ -5,9 +5,9 @@
  * Shows success/error state with appropriate styling.
  */
 
-import type { ToolResultBlock as ToolResultBlockType } from '@/types';
+import type { ToolResultBlock as ToolResultBlockType } from '@/shared/types';
 import { chatTheme } from '../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 
 interface ToolResultBlockProps {
   block: ToolResultBlockType;

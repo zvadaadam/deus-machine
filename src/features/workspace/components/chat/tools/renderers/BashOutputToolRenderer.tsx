@@ -9,7 +9,7 @@ import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Terminal, Activity } from 'lucide-react';
 import { chatTheme } from '../../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../types';
 
 export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {

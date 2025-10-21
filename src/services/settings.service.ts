@@ -3,8 +3,8 @@
  * API methods for settings management
  */
 
-import { apiClient } from './api';
-import type { Settings } from '../types';
+import { apiClient } from '@/shared/api/client';
+import type { Settings } from '@/shared/types';
 
 export const SettingsService = {
   /**

@@ -1,4 +1,4 @@
-import type { SessionStatus } from "../../../types";
+import type { SessionStatus } from "@/shared/types";
 import { Search, Minimize2, Wrench, ArrowUp, Square } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 

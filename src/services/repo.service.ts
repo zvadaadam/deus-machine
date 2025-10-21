@@ -3,9 +3,9 @@
  * API methods for repository management
  */
 
-import { apiClient } from './api';
-import { ENDPOINTS } from '../config/api.config';
-import type { Repo, Stats } from '../types';
+import { apiClient } from '@/shared/api/client';
+import { ENDPOINTS } from '@/shared/config/api.config';
+import type { Repo, Stats } from '@/shared/types';
 
 export const RepoService = {
   /**

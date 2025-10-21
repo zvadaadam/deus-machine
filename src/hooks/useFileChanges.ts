@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getBaseURL } from "../config/api.config";
-import type { FileChange, PRStatus, DevServer, DiffStats } from "../types";
+import { getBaseURL } from "@/shared/config/api.config";
+import type { FileChange, PRStatus, DevServer, DiffStats } from "@/shared/types";
 
 // BASE_URL is now async - use getBaseURL()
 

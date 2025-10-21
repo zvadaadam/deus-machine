@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { getBaseURL } from "../config/api.config";
+import { getBaseURL } from "@/shared/config/api.config";
 import { socketService } from "../services/socket";
-import type { Message, FileEdit, FileChangeGroup, SessionStatus, ToolResultBlock } from "../types";
+import type { Message, FileEdit, FileChangeGroup, SessionStatus, ToolResultBlock } from "@/shared/types";
 
 // BASE_URL is now async - use getBaseURL()
 

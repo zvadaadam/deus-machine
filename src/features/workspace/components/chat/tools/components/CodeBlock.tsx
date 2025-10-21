@@ -7,7 +7,7 @@
 import { CopyButton } from './CopyButton';
 import { SyntaxHighlighter } from './SyntaxHighlighter';
 import { chatTheme } from '../../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 
 interface CodeBlockProps {
   code: string;

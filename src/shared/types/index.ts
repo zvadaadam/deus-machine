@@ -3,7 +3,7 @@
  * Import types from here throughout the application
  *
  * @example
- * import { Workspace, Message, ApiResponse } from '@/types';
+ * import { Workspace, Message, ApiResponse } from '@/shared/types';
  */
 
 // Workspace types
