@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { ptyCommands } from '@/platform';
 import 'xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -80,7 +80,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
 
     // Spawn PTY (only in Tauri mode)
     const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh';
-    invoke('spawn_pty', {
+    ptyCommands.spawn({
       id,
       command: shell,
       args: [],
@@ -100,10 +100,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     xterm.onData((data) => {
       if (isReady) {
         const bytes = new TextEncoder().encode(data);
-        invoke('write_to_pty', {
-          id,
-          data: Array.from(bytes),
-        }).catch((err) => {
+        ptyCommands.write(id, Array.from(bytes)).catch((err) => {
           console.error('Failed to write to PTY:', err);
         });
       }
@@ -128,11 +125,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
       if (isReady) {
-        invoke('resize_pty', {
-          id,
-          cols: xterm.cols,
-          rows: xterm.rows,
-        }).catch((err) => {
+        ptyCommands.resize(id, xterm.cols, xterm.rows).catch((err) => {
           console.error('Failed to resize PTY:', err);
         });
       }
@@ -144,7 +137,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
       resizeObserver.disconnect();
       unlistenData.then((fn) => fn());
       unlistenExit.then((fn) => fn());
-      invoke('kill_pty', { id }).catch((err) => {
+      ptyCommands.kill(id).catch((err) => {
         console.error('Failed to kill PTY:', err);
       });
       xterm.dispose();
@@ -157,10 +150,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
       // Re-attach onData handler with updated isReady
       xtermRef.current.onData((data) => {
         const bytes = new TextEncoder().encode(data);
-        invoke('write_to_pty', {
-          id,
-          data: Array.from(bytes),
-        }).catch((err) => {
+        ptyCommands.write(id, Array.from(bytes)).catch((err) => {
           console.error('Failed to write to PTY:', err);
         });
       });
