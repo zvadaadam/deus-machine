@@ -448,13 +448,13 @@ export function Dashboard() {
 
       // Use Tauri path API to get home directory
       const { homeDir, join } = await import('@tauri-apps/api/path');
-      const { exists, createDir } = await import('@tauri-apps/api/fs');
+      const { exists, mkdir } = await import('@tauri-apps/plugin-fs');
       const homePath = await homeDir();
       const defaultProjectsDir = await join(homePath, 'Projects');
 
       // Ensure Projects directory exists
       if (!(await exists(defaultProjectsDir))) {
-        await createDir(defaultProjectsDir, { recursive: true });
+        await mkdir(defaultProjectsDir, { recursive: true });
       }
 
       // Extract repo name from GitHub URL using URL parser
