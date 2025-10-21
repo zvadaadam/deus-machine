@@ -54,21 +54,27 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
           variant="secondary"
           size="sm"
           disabled={clearing}
-          onClick={async () => {
-            if (confirm('Are you sure you want to clear all memory? This cannot be undone.')) {
-              try {
-                setClearing(true);
-                const baseURL = await getBaseURL();
-                const response = await fetch(`${baseURL}/memory/clear`, { method: 'POST' });
-                if (!response.ok) throw new Error(`Failed to clear memory: ${response.status}`);
-                toast.success('Memory cleared successfully');
-              } catch (error) {
-                console.error('Failed to clear memory:', error);
-                toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
-              } finally {
-                setClearing(false);
-              }
-            }
+          onClick={() => {
+            toast('Are you sure you want to clear all memory?', {
+              description: 'This action cannot be undone.',
+              action: {
+                label: 'Clear Memory',
+                onClick: async () => {
+                  try {
+                    setClearing(true);
+                    const baseURL = await getBaseURL();
+                    const response = await fetch(`${baseURL}/memory/clear`, { method: 'POST' });
+                    if (!response.ok) throw new Error(`Failed to clear memory: ${response.status}`);
+                    toast.success('Memory cleared successfully');
+                  } catch (error) {
+                    console.error('Failed to clear memory:', error);
+                    toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
+                  } finally {
+                    setClearing(false);
+                  }
+                },
+              },
+            });
           }}
         >
           Clear All Memory
