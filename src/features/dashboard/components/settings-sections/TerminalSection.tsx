@@ -12,7 +12,12 @@ import type { SettingsSectionProps } from './types';
 
 export function TerminalSection({ settings, saveSetting }: SettingsSectionProps) {
   const [fontSize, setFontSize] = useState(settings.terminal_font_size ?? 12);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync if settings update externally
+  useEffect(() => {
+    setFontSize(settings.terminal_font_size ?? 12);
+  }, [settings.terminal_font_size]);
 
   // Debounce saveSetting for font size
   useEffect(() => {
@@ -44,6 +49,7 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
             type="number"
             min="8"
             max="24"
+            step="1"
             value={fontSize}
             onChange={(e) => {
               const value = parseInt(e.target.value, 10);

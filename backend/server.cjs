@@ -10,6 +10,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const os = require('os');
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const { randomUUID } = require('crypto');
@@ -540,7 +541,7 @@ app.post('/api/workspaces', async (req, res) => {
     const workspaceId = randomUUID();
     const placeholderBranchName = `zvadaadam/${workspace_name}`;
 
-    const tmpDir = '/var/folders/_r/7d8d1f2x17b1vp589_bxs8k00000gn/T';
+    const tmpDir = os.tmpdir();
     const initLogPath = path.join(tmpDir, `conductor-${Date.now()}-init.log`);
     const setupLogPath = path.join(tmpDir, `conductor-${Date.now()}-setup.log`);
 
@@ -763,16 +764,14 @@ app.post('/api/repos', async (req, res) => {
       return res.status(400).json({ error: 'Path does not exist or is inaccessible' });
     }
 
-    // Check path permissions
+    // Verify read and execute permissions
     try {
       fs.accessSync(root_path, fs.constants.R_OK | fs.constants.X_OK);
-    } catch {
-      return res.status(403).json({ error: 'Path is not accessible (permission denied)' });
-    }
-
-    // Validate that path exists and is a directory
-    if (!fs.existsSync(root_path)) {
-      return res.status(400).json({ error: 'Path does not exist' });
+    } catch (err) {
+      return res.status(403).json({
+        error: 'Path is not accessible (permission denied)',
+        details: err.code
+      });
     }
 
     const stats = fs.statSync(root_path);
@@ -800,6 +799,7 @@ app.post('/api/repos', async (req, res) => {
       // Remove 'refs/remotes/origin/' prefix
       defaultBranch = output.replace(/^refs\/remotes\/origin\//, '');
     } catch (err) {
+      console.warn('Could not determine default branch from origin, trying current branch');
       // Fallback: try to get current branch
       try {
         defaultBranch = execFileSync('git', ['branch', '--show-current'], {
@@ -824,6 +824,7 @@ app.post('/api/repos', async (req, res) => {
           cwd: root_path,
           timeout: 2000
         });
+        console.log(`Branch '${defaultBranch}' not found, using 'master' instead`);
         defaultBranch = 'master';
       } catch {}
     }

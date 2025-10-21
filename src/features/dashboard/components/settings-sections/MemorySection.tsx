@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,6 +14,8 @@ import { getBaseURL } from '@/config/api.config';
 import type { SettingsSectionProps } from './types';
 
 export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
+  const [clearing, setClearing] = useState(false);
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Memory Settings</h3>
@@ -50,9 +53,11 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
         <Button
           variant="secondary"
           size="sm"
+          disabled={clearing}
           onClick={async () => {
             if (confirm('Are you sure you want to clear all memory? This cannot be undone.')) {
               try {
+                setClearing(true);
                 const baseURL = await getBaseURL();
                 const response = await fetch(`${baseURL}/memory/clear`, { method: 'POST' });
                 if (!response.ok) throw new Error(`Failed to clear memory: ${response.status}`);
@@ -60,6 +65,8 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
               } catch (error) {
                 console.error('Failed to clear memory:', error);
                 toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
+              } finally {
+                setClearing(false);
               }
             }
           }}

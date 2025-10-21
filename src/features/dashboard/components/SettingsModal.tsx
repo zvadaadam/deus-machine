@@ -72,6 +72,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     } catch (error) {
       console.error('Failed to load settings:', error);
       setLoading(false);
+      toast.error(`Failed to load settings: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -263,8 +264,8 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
               <p className="text-sm text-muted-foreground">No hooks configured</p>
             </div>
           ) : (
-            hookEntries.map(([event, command], index) => (
-              <div key={index} className="border rounded-lg p-3">
+            hookEntries.map(([event, command]) => (
+              <div key={event} className="border rounded-lg p-3">
                 <h4 className="font-medium text-sm mb-2">{event}</h4>
                 <code className="text-xs bg-muted p-1 rounded block overflow-x-auto">
                   {command}
