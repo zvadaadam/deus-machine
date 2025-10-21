@@ -18,9 +18,6 @@ interface UIState {
   showSettingsModal: boolean;
   diffModal: DiffModalState | null;
 
-  // Sidebar
-  collapsedRepos: Set<string>;
-
   // Actions - Modals
   openNewWorkspaceModal: () => void;
   closeNewWorkspaceModal: () => void;
@@ -31,10 +28,6 @@ interface UIState {
   openDiffModal: (file: string, diff: string) => void;
   closeDiffModal: () => void;
   closeAllModals: () => void;
-
-  // Actions - Sidebar
-  toggleRepoCollapse: (repoId: string) => void;
-  setRepoCollapsed: (repoId: string, collapsed: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -45,7 +38,6 @@ export const useUIStore = create<UIState>()(
       showSystemPromptModal: false,
       showSettingsModal: false,
       diffModal: null,
-      collapsedRepos: new Set<string>(),
 
       // Modal actions
       openNewWorkspaceModal: () =>
@@ -114,37 +106,6 @@ export const useUIStore = create<UIState>()(
           },
           false,
           'ui/closeAllModals'
-        ),
-
-      // Sidebar actions
-      toggleRepoCollapse: (repoId) =>
-        set(
-          (state) => {
-            const newCollapsed = new Set(state.collapsedRepos);
-            if (newCollapsed.has(repoId)) {
-              newCollapsed.delete(repoId);
-            } else {
-              newCollapsed.add(repoId);
-            }
-            return { collapsedRepos: newCollapsed };
-          },
-          false,
-          'ui/toggleRepoCollapse'
-        ),
-
-      setRepoCollapsed: (repoId, collapsed) =>
-        set(
-          (state) => {
-            const newCollapsed = new Set(state.collapsedRepos);
-            if (collapsed) {
-              newCollapsed.add(repoId);
-            } else {
-              newCollapsed.delete(repoId);
-            }
-            return { collapsedRepos: newCollapsed };
-          },
-          false,
-          'ui/setRepoCollapsed'
         ),
     }),
     {

@@ -20,7 +20,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/shared/lib/utils";
-import { useUIStore } from "@/stores";
+import { useUIStore } from "@/shared/stores/uiStore";
+import { useSidebarStore } from "../store/sidebarStore";
 import type { Workspace, DiffStats } from "@/shared/types";
 
 // Helper function to get initials from repository name
@@ -73,7 +74,8 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const navigate = useNavigate();
   const { state, toggleSidebar } = useSidebar();
-  const { collapsedRepos, toggleRepoCollapse, openSettingsModal } = useUIStore();
+  const { openSettingsModal } = useUIStore();
+  const { collapsedRepos, toggleRepoCollapse } = useSidebarStore();
 
   const isExpanded = state === "expanded";
 
