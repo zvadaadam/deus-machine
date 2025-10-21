@@ -39,8 +39,8 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Custom hooks
-  const { isConnected } = useSocket();
+  // Custom hooks (useSocket manages socket connection lifecycle)
+  useSocket();
 
   // TanStack Query hooks
   const {
