@@ -13,23 +13,29 @@ import type { SettingsSectionProps } from './types';
 export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
   // Controlled state for custom endpoint with debounced save
   const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? '');
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const pendingValueRef = useRef<string | null>(null);
+
+  // Browser-compatible timeout ref (ReturnType<typeof setTimeout> works in both Node and browser)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track latest typed value and last successfully saved value for safe unmount flush
+  const latestValueRef = useRef(customEndpoint);
+  const lastSavedRef = useRef(settings.custom_endpoint ?? '');
 
   // Sync with external changes (e.g., from refetch)
   useEffect(() => {
     setCustomEndpoint(settings.custom_endpoint ?? '');
+    lastSavedRef.current = settings.custom_endpoint ?? '';
   }, [settings.custom_endpoint]);
 
   // Debounced save handler
   const handleEndpointChange = (value: string) => {
     setCustomEndpoint(value);
-    pendingValueRef.current = value;
+    latestValueRef.current = value;
 
-    clearTimeout(timeoutRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       saveSetting('custom_endpoint', value);
-      pendingValueRef.current = null; // Mark as saved
+      lastSavedRef.current = value; // Track what was saved
     }, 500);
   };
 
@@ -41,9 +47,9 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
         clearTimeout(timeoutRef.current);
       }
 
-      // Flush any unsaved changes ONLY on unmount (not on every re-render)
-      if (pendingValueRef.current !== null) {
-        saveSetting('custom_endpoint', pendingValueRef.current);
+      // Flush any unsaved changes ONLY on unmount (compare latest vs last saved)
+      if (latestValueRef.current !== lastSavedRef.current) {
+        saveSetting('custom_endpoint', latestValueRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
