@@ -25,6 +25,6 @@ export const SettingsService = {
    * Fetch file-based configs (MCP servers, commands, agents, hooks)
    */
   fetchFileConfig: async <T>(type: string): Promise<T> => {
-    return apiClient.get<T>(`/settings/${type}`);
+    return apiClient.get<T>(`/config/${type}`);
   },
 };
