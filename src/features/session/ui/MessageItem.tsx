@@ -24,13 +24,36 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
-  // Check if message has any renderable content
-  // Filter out blocks that BlockRenderer will skip (tool_result)
+  /**
+   * MESSAGE FILTERING LOGIC
+   *
+   * This component filters out messages that contain ONLY tool_result blocks.
+   * This is EXPECTED BEHAVIOR and not a bug.
+   *
+   * WHY: In Claude's message format, tool_result blocks are not rendered as standalone messages.
+   * Instead, they are linked to their corresponding tool_use blocks via the toolResultMap.
+   * See BlockRenderer.tsx:44-49 for how tool_use blocks retrieve and display their results.
+   *
+   * CONSOLE LOGS: You may see thousands of "[MessageItem] Skipping empty message" logs.
+   * These are normal and indicate that the filtering is working correctly. They appear when:
+   * - A message contains only tool_result blocks (will be displayed linked to tool_use)
+   * - A message is truly empty (rare edge case)
+   *
+   * ARCHITECTURE: This follows the BlockRenderer pattern where:
+   * 1. tool_use blocks are rendered with their input parameters
+   * 2. tool_result blocks are fetched via toolResultMap and displayed inline with tool_use
+   * 3. Messages with only tool_result are skipped (their content appears elsewhere)
+   *
+   * If you see messages not displaying, check:
+   * 1. BlockRenderer.tsx - ensure tool_use blocks fetch results from toolResultMap
+   * 2. session.queries.ts - ensure toolResultMap is built correctly
+   * 3. Backend API - ensure messages have correct content structure
+   */
   const hasRenderableContent = Array.isArray(contentBlocks) &&
     contentBlocks.length > 0 &&
     contentBlocks.some((block: any) => block.type !== 'tool_result');
 
-  // Don't render empty messages (fixes empty assistant messages issue)
+  // Skip messages without renderable content (see comment above for details)
   if (!hasRenderableContent) {
     if (import.meta.env.DEV) {
       console.log(`[MessageItem] Skipping empty message ${message.id} (${message.role})`);
