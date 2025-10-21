@@ -631,13 +631,13 @@ app.post('/api/workspaces', async (req, res) => {
     db.prepare(`
       INSERT INTO workspaces (
         id, repository_id, directory_name, branch, placeholder_branch_name,
-        parent_branch, state, initialization_log_path, setup_log_path,
+        parent_branch, state, initialization_log_path,
         initialization_files_copied, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       workspaceId, repository_id, workspace_name, placeholderBranchName,
       placeholderBranchName, parent_branch, 'initializing',
-      initLogPath, setupLogPath, 0
+      initLogPath, 0
     );
 
     console.log(`\n🚀 Creating workspace: ${workspace_name}`);
