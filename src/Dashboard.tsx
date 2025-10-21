@@ -4,8 +4,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
 import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
 import { TerminalPanel } from "./TerminalPanel";
-import { getBaseURL } from "./config/api.config";
-import { formatTokenCount } from "./utils";
 import {
   NewWorkspaceModal,
   DiffModal,
@@ -15,11 +13,22 @@ import {
   CloneRepositoryModal,
 } from "./features/dashboard/components";
 import { BrowserPanel } from "./features/browser/components";
+import { useKeyboardShortcuts } from "./hooks";
 import {
-  useDashboardData,
-  useFileChanges,
-  useKeyboardShortcuts,
-} from "./hooks";
+  useWorkspacesByRepo,
+  useStats,
+  useBulkDiffStats,
+  useFileChanges as useFileChangesQuery,
+  usePRStatus,
+  useDevServers,
+  useCreateWorkspace,
+  useArchiveWorkspace,
+  useRepos,
+  useAddRepo,
+  useSystemPrompt,
+  useUpdateSystemPrompt,
+  useSettings as useSettingsQuery,
+} from "./hooks/queries";
 import {
   Button,
   Badge,
@@ -50,8 +59,6 @@ import type {
  * Manages workspaces, file changes, and git diff visualization
  */
 
-// BASE_URL is now async - use getBaseURL()
-
 export function Dashboard() {
 
   // Zustand stores - Global state
@@ -74,102 +81,81 @@ export function Dashboard() {
     closeDiffModal,
   } = useUIStore();
 
-  // Dashboard data hook - manages workspaces, stats
-  const {
-    repoGroups,
-    stats,
-    status,
-    loading,
-    diffStats: hookDiffStats,
-    loadWorkspaces,
-    refreshDiffStats,
-  } = useDashboardData();
+  // TanStack Query hooks - automatic polling and caching
+  const workspacesQuery = useWorkspacesByRepo('ready');
+  const statsQuery = useStats();
+  const diffStatsQuery = useBulkDiffStats(workspacesQuery.data || []);
 
-  // Sync hook diffStats to store
+  const repoGroups = workspacesQuery.data || [];
+  const stats = statsQuery.data || null;
+  const loading = workspacesQuery.isLoading || statsQuery.isLoading;
+  const status = workspacesQuery.isError ? 'Error loading workspaces' : 'Connected';
+
+  // Sync diff stats to store (for compatibility with existing code)
   useEffect(() => {
-    if (Object.keys(hookDiffStats).length > 0) {
-      setMultipleDiffStats(hookDiffStats);
+    if (diffStatsQuery.data) {
+      setMultipleDiffStats(diffStatsQuery.data);
     }
-  }, [hookDiffStats, setMultipleDiffStats]);
+  }, [diffStatsQuery.data, setMultipleDiffStats]);
 
   // Local component state (not global)
-  const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
 
-  // System Prompt Editor (local state - specific to this feature)
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [loadingSystemPrompt, setLoadingSystemPrompt] = useState(false);
-  const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
-
   // Clone Repository Modal (local state)
   const [showCloneModal, setShowCloneModal] = useState(false);
-  const [cloning, setCloning] = useState(false);
 
-  // User profile (local state)
-  const [username, setUsername] = useState('Developer');
+  // Queries for repos, settings, system prompt
+  const reposQuery = useRepos();
+  const settingsQuery = useSettingsQuery();
+  const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
 
-  // File changes hook - manages file changes, PR status, dev servers
-  const {
-    fileChanges,
-    prStatus,
-    devServers,
-    clearCache,
-  } = useFileChanges({
-    workspaceId: selectedWorkspace?.id || null,
-    diffStats,
-  });
+  // Local draft state for system prompt modal (controlled component)
+  const [systemPromptDraft, setSystemPromptDraft] = useState('');
 
-
+  // Initialize system prompt draft when modal opens
   useEffect(() => {
-    if (showNewWorkspaceModal && repos.length === 0) {
-      (async () => {
-        const baseURL = await getBaseURL();
-        fetch(`${baseURL}/repos`)
-          .then(res => {
-            if (!res.ok) throw new Error(`Failed to load repos: ${res.status}`);
-            return res.json();
-          })
-          .then(data => setRepos(data))
-          .catch(err => console.error('Failed to load repos:', err));
-      })();
+    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
+      setSystemPromptDraft(systemPromptQuery.data || '');
     }
-  }, [showNewWorkspaceModal, repos.length]);
+  }, [showSystemPromptModal, systemPromptQuery.data]);
 
-  // Load username from settings
-  useEffect(() => {
-    (async () => {
-      try {
-        const baseURL = await getBaseURL();
-        const response = await fetch(`${baseURL}/settings`);
-        if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
-        const settings = await response.json();
-        if (settings.user_name) {
-          setUsername(settings.user_name);
-        }
-      } catch (error) {
-        console.error('Failed to load username:', error);
-      }
-    })();
-  }, []);
+  const repos = reposQuery.data || [];
+  const username = settingsQuery.data?.user_name || 'Developer';
+
+  // File changes queries with automatic caching
+  const fileChangesQuery = useFileChangesQuery(selectedWorkspace?.id || null);
+  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
+  const devServersQuery = useDevServers(selectedWorkspace?.id || null);
+
+  const fileChanges = fileChangesQuery.data || [];
+  const prStatus = prStatusQuery.data || null;
+  const devServers = devServersQuery.data || [];
+
+  // Mutations
+  const createWorkspaceMutation = useCreateWorkspace();
+  const archiveWorkspaceMutation = useArchiveWorkspace();
+  const addRepoMutation = useAddRepo();
+  const updateSystemPromptMutation = useUpdateSystemPrompt();
+
+
+  // Repos and settings loaded automatically via TanStack Query
 
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
     onRefresh: async () => {
-      // Refresh workspaces and diffs
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
-
+      // Refetch all queries
+      workspacesQuery.refetch();
+      diffStatsQuery.refetch();
       if (selectedWorkspace) {
-        // Clear file changes cache to force reload
-        clearCache(selectedWorkspace.id);
+        fileChangesQuery.refetch();
+        prStatusQuery.refetch();
+        devServersQuery.refetch();
       }
     },
     onEscape: () => {
@@ -218,23 +204,8 @@ export function Dashboard() {
    */
   async function archiveWorkspace(workspaceId: string) {
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${workspaceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: 'archived' })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to archive workspace: ${res.statusText}`);
-      }
-
+      await archiveWorkspaceMutation.mutateAsync(workspaceId);
       console.log('✅ Workspace archived');
-      // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
       if (selectedWorkspace?.id === workspaceId) {
         selectWorkspace(null);
       }
@@ -255,28 +226,11 @@ export function Dashboard() {
 
     setCreating(true);
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repository_id: selectedRepoId })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to create workspace: ${res.statusText}`);
-      }
-
-      const workspace = await res.json();
+      const workspace = await createWorkspaceMutation.mutateAsync(selectedRepoId);
       console.log('✅ Workspace created:', workspace.directory_name);
 
       setSelectedRepoId('');
       closeNewWorkspaceModal();
-
-      // Refresh workspace list and load diff stats
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
     } catch (error) {
       console.error('Error creating workspace:', error);
       toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -312,9 +266,8 @@ export function Dashboard() {
     openDiffModal(file, ''); // Open with empty diff first
 
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
-      if (!res.ok) throw new Error(`Failed to load diff: ${res.status}`);
-      const data = await res.json();
+      const { WorkspaceService } = await import('./services/workspace.service');
+      const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
       openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
     } catch (error) {
       console.error('Failed to load diff:', error);
@@ -329,48 +282,26 @@ export function Dashboard() {
    */
   async function openSystemPromptEditor() {
     if (!selectedWorkspace) return;
-
     openSystemPromptModal();
-    setLoadingSystemPrompt(true);
-    setSystemPrompt('');
-
-    try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`);
-      const data = await res.json();
-      setSystemPrompt(data.system_prompt || '');
-    } catch (error) {
-      console.error('Failed to load system prompt:', error);
-      toast.error(`Failed to load system prompt: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setLoadingSystemPrompt(false);
-    }
+    // System prompt loaded automatically via useSystemPrompt hook
   }
 
   /**
    * Save system prompt (CLAUDE.md) to workspace
    */
-  async function saveSystemPrompt() {
+  async function saveSystemPrompt(newPrompt: string) {
     if (!selectedWorkspace) return;
 
-    setSavingSystemPrompt(true);
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: systemPrompt })
+      await updateSystemPromptMutation.mutateAsync({
+        workspaceId: selectedWorkspace.id,
+        systemPrompt: newPrompt,
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to save system prompt');
-      }
-
       console.log('✅ System prompt saved');
       closeSystemPromptModal();
     } catch (error) {
       console.error('Failed to save system prompt:', error);
       toast.error(`Failed to save system prompt: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setSavingSystemPrompt(false);
     }
   }
 
@@ -401,31 +332,11 @@ export function Dashboard() {
         return;
       }
 
-      const folderPath = typeof selected === 'string' ? selected : selected.path;
+      const folderPath = typeof selected === 'string' ? selected : (selected as any).path;
 
-      // Call backend to add repository
-      const baseURL = await getBaseURL();
-      const res = await fetch(`${baseURL}/repos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root_path: folderPath })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to add repository');
-      }
-
-      const repo = await res.json();
+      // Add repository via mutation
+      const repo = await addRepoMutation.mutateAsync(folderPath);
       console.log('✅ Repository added:', repo);
-
-      // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
-
       toast.success(`Repository "${repo.name}" added successfully!`);
     } catch (error) {
       console.error('Error adding repository:', error);
@@ -501,9 +412,7 @@ export function Dashboard() {
       // For now, use simple git clone via Node child_process on backend
       // TODO: Implement backend endpoint for git clone
 
-      const baseURL = await getBaseURL();
-
-      // For now, let's use a workaround: shell command via Tauri
+      // Use Tauri shell command for git clone
       const { Command } = await import('@tauri-apps/plugin-shell');
       const output = await Command.create('git', [
         'clone',
@@ -517,27 +426,9 @@ export function Dashboard() {
 
       console.log('✅ Repository cloned to:', cloneTarget);
 
-      // Add cloned repository to database
-      const res = await fetch(`${baseURL}/repos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root_path: cloneTarget })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to add repository');
-      }
-
-      const repo = await res.json();
+      // Add cloned repository via mutation
+      const repo = await addRepoMutation.mutateAsync(cloneTarget);
       console.log('✅ Repository added to database:', repo);
-
-      // Refresh workspace list
-      const workspaces = await loadWorkspaces();
-      if (workspaces && workspaces.length > 0) {
-        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
-        await refreshDiffStats(allWorkspaces);
-      }
 
       setShowCloneModal(false);
       toast.success(`Repository "${repo.name}" cloned and added successfully!`);
@@ -834,12 +725,12 @@ export function Dashboard() {
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}
         workspaceName={selectedWorkspace?.directory_name || ""}
-        systemPrompt={systemPrompt}
-        loading={loadingSystemPrompt}
-        saving={savingSystemPrompt}
+        systemPrompt={systemPromptDraft}
+        loading={systemPromptQuery.isLoading}
+        saving={updateSystemPromptMutation.isPending}
         onClose={() => closeSystemPromptModal()}
-        onChange={setSystemPrompt}
-        onSave={saveSystemPrompt}
+        onChange={setSystemPromptDraft}
+        onSave={() => saveSystemPrompt(systemPromptDraft)}
       />
 
       <CloneRepositoryModal
