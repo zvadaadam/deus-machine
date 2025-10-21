@@ -20,7 +20,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
-import { useTheme } from '@/hooks/useTheme';
+import { useTheme } from '@/app/providers';
 import {
   useSettings,
   useMCPServers,

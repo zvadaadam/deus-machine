@@ -13,7 +13,7 @@ import { DiffModal, FileChangesPanel } from "@/features/workspace";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
-import { useKeyboardShortcuts } from "./hooks";
+import { useKeyboardShortcuts } from "@/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -34,30 +34,28 @@ import {
   Skeleton,
   SidebarProvider,
   SidebarInset,
-  SidebarTrigger,
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
-} from "./components/ui";
+} from "@/components/ui";
 import { AppSidebar } from "@/features/sidebar";
-import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
-import { Separator } from "./components/ui/separator";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
-import { useWorkspaceStore, useUIStore } from "./stores";
-import { OpenInDropdown } from "@/shared/components";
-import { BranchName } from "@/shared/components";
+import { useWorkspaceStore, useUIStore } from "@/stores";
+import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import type {
   Workspace,
   Repo,
 } from "@/shared/types";
 
 /**
- * Conductor Dashboard - Main application interface
+ * Main Layout - Application layout with sidebar and workspace panels
  * Manages workspaces, file changes, and git diff visualization
  */
 
-export function Dashboard() {
+export function MainLayout() {
 
   // Zustand stores - Global state
   const selectedWorkspace = useWorkspaceStore((state) => state.selectedWorkspace);
@@ -467,22 +465,11 @@ export function Dashboard() {
         <div className="flex-1 flex flex-col min-h-0">
         {selectedWorkspace ? (
           <>
-            {/* Workspace Header - with SidebarTrigger */}
-            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm px-4 py-3 elevation-1 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                {/* Left: SidebarTrigger, separator, and Branch name */}
-                <div className="flex items-center gap-3">
-                  <SidebarTrigger className="-ml-1" />
-                  <Separator orientation="vertical" className="h-4" />
-                  <BranchName branch={selectedWorkspace.branch} />
-                </div>
-
-                {/* Right: Open in dropdown */}
-                <OpenInDropdown
-                  workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                />
-              </div>
-            </div>
+            {/* Workspace Header */}
+            <WorkspaceHeader
+              branch={selectedWorkspace.branch}
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+            />
 
             {/* Messages take full area */}
             <div className="flex-1 flex flex-col min-h-0">
