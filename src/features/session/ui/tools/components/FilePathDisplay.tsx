@@ -17,7 +17,7 @@ export function FilePathDisplay({ path, className }: FilePathDisplayProps) {
   const getFileIcon = (filePath: string | undefined) => {
     // Guard against undefined path
     if (!filePath) {
-      return <FileIcon className="w-4 h-4 flex-shrink-0 text-muted-foreground" aria-hidden />;
+      return <File className="w-4 h-4 flex-shrink-0 text-muted-foreground" aria-hidden />;
     }
 
     // Extract filename and extension, handling edge cases like .gitignore, Dockerfile

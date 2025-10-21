@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SessionPanel } from "@/features/session";
-import type { SessionPanelRef } from "@/features/session/ui/SessionPanel";
+import type { SessionPanelRef } from "@/features/session";
 import { TerminalPanel } from "@/features/terminal";
 import {
   NewWorkspaceModal,
