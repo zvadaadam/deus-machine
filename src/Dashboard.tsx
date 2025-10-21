@@ -4,8 +4,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
 import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
 import { TerminalPanel } from "./TerminalPanel";
-import { getBaseURL } from "./config/api.config";
-import { formatTokenCount } from "./utils";
 import {
   NewWorkspaceModal,
   DiffModal,
@@ -27,7 +25,6 @@ import {
   useArchiveWorkspace,
   useRepos,
   useAddRepo,
-  useCloneRepo,
   useSystemPrompt,
   useUpdateSystemPrompt,
   useSettings as useSettingsQuery,
@@ -61,8 +58,6 @@ import type {
  * OpenDevs Dashboard - Main application interface
  * Manages workspaces, file changes, and git diff visualization
  */
-
-// BASE_URL is now async - use getBaseURL()
 
 export function Dashboard() {
 
@@ -146,7 +141,6 @@ export function Dashboard() {
   const createWorkspaceMutation = useCreateWorkspace();
   const archiveWorkspaceMutation = useArchiveWorkspace();
   const addRepoMutation = useAddRepo();
-  const cloneRepoMutation = useCloneRepo();
   const updateSystemPromptMutation = useUpdateSystemPrompt();
 
 
@@ -418,9 +412,7 @@ export function Dashboard() {
       // For now, use simple git clone via Node child_process on backend
       // TODO: Implement backend endpoint for git clone
 
-      const baseURL = await getBaseURL();
-
-      // For now, let's use a workaround: shell command via Tauri
+      // Use Tauri shell command for git clone
       const { Command } = await import('@tauri-apps/plugin-shell');
       const output = await Command.create('git', [
         'clone',
