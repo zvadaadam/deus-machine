@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { getBaseURL } from '@/config/api.config';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +21,14 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import {
+  useSettings,
+  useMCPServers,
+  useCommands,
+  useAgents,
+  useHooks,
+  useUpdateSettings,
+} from '@/hooks/queries';
 import {
   GeneralSection,
   AccountSection,
@@ -46,80 +53,29 @@ interface SettingsModalProps {
 export function SettingsModal({ show, onClose }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
-  const [settings, setSettings] = useState<Settings>({});
-  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const [commands, setCommands] = useState<Command[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [hooks, setHooks] = useState<Hook>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (show) {
-      loadSettings();
-      loadFileBasedConfigs();
-    }
-  }, [show]);
+  // TanStack Query hooks - automatic loading and caching
+  const settingsQuery = useSettings();
+  const mcpServersQuery = useMCPServers();
+  const commandsQuery = useCommands();
+  const agentsQuery = useAgents();
+  const hooksQuery = useHooks();
+  const updateSettingsMutation = useUpdateSettings();
 
-  async function loadSettings() {
-    try {
-      const baseURL = await getBaseURL();
-      const response = await fetch(`${baseURL}/settings`);
-      if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
-      const data = await response.json();
-      setSettings(data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-      setLoading(false);
-      toast.error(`Failed to load settings: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function fetchJson(url: string) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${url} → ${res.status}`);
-    return res.json();
-  }
-
-  async function loadFileBasedConfigs() {
-    try {
-      const baseURL = await getBaseURL();
-
-      const [mcpData, commandsData, agentsData, hooksData] = await Promise.all([
-        fetchJson(`${baseURL}/config/mcp-servers`),
-        fetchJson(`${baseURL}/config/commands`),
-        fetchJson(`${baseURL}/config/agents`),
-        fetchJson(`${baseURL}/config/hooks`),
-      ]);
-
-      setMcpServers(mcpData);
-      setCommands(commandsData);
-      setAgents(agentsData);
-      setHooks(hooksData);
-    } catch (error) {
-      console.error('Failed to load file-based configs:', error);
-    }
-  }
+  const settings = settingsQuery.data || {};
+  const mcpServers = mcpServersQuery.data || [];
+  const commands = commandsQuery.data || [];
+  const agents = agentsQuery.data || [];
+  const hooks = hooksQuery.data || {};
+  const loading = settingsQuery.isLoading;
+  const saving = updateSettingsMutation.isPending;
 
   async function saveSetting(key: string, value: any) {
-    setSaving(true);
     try {
-      const baseURL = await getBaseURL();
-      const res = await fetch(`${baseURL}/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value })
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to save: ${res.status}`);
-      }
-      setSettings(prev => ({ ...prev, [key]: value }));
+      await updateSettingsMutation.mutateAsync({ [key]: value });
     } catch (error) {
       console.error('Failed to save setting:', error);
       toast.error(`Failed to save setting: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -326,7 +282,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
       );
     }
 
-    const sectionProps = { settings, setSettings, saveSetting };
+    const sectionProps = { settings, saveSetting };
 
     switch (activeSection) {
       case 'general':
