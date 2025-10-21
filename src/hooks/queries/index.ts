@@ -3,8 +3,8 @@
  * Central export for all TanStack Query hooks
  */
 
-// Workspace queries
-export * from './useWorkspaceQueries';
+// Re-export workspace queries for backward compatibility
+export * from '@/features/workspace/api';
 
 // Session queries
 export * from './useSessionQueries';

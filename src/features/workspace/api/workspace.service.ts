@@ -10,6 +10,8 @@ import type {
   RepoGroup,
   DiffStats,
   FileChange,
+} from '../types';
+import type {
   WorkspaceQueryParams,
   PRStatus,
   DevServer,

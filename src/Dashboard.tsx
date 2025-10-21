@@ -9,8 +9,8 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-// TODO: Move DiffModal to workspace feature, SystemPromptModal to session feature
-import { DiffModal } from "./features/dashboard/components/DiffModal";
+import { DiffModal, FileChangesPanel } from "@/features/workspace";
+// TODO: Move SystemPromptModal to session feature
 import { SystemPromptModal } from "./features/dashboard/components/SystemPromptModal";
 import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
@@ -19,9 +19,7 @@ import {
   useWorkspacesByRepo,
   useStats,
   useBulkDiffStats,
-  useFileChanges as useFileChangesQuery,
   usePRStatus,
-  useDevServers,
   useCreateWorkspace,
   useArchiveWorkspace,
   useRepos,
@@ -129,14 +127,9 @@ export function Dashboard() {
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || 'Developer';
 
-  // File changes queries with automatic caching
-  const fileChangesQuery = useFileChangesQuery(selectedWorkspace?.id || null);
+  // PR status query
   const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
-  const devServersQuery = useDevServers(selectedWorkspace?.id || null);
-
-  const fileChanges = fileChangesQuery.data || [];
   const prStatus = prStatusQuery.data || null;
-  const devServers = devServersQuery.data || [];
 
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
@@ -154,9 +147,7 @@ export function Dashboard() {
       workspacesQuery.refetch();
       diffStatsQuery.refetch();
       if (selectedWorkspace) {
-        fileChangesQuery.refetch();
         prStatusQuery.refetch();
-        devServersQuery.refetch();
       }
     },
     onEscape: () => {
@@ -257,26 +248,7 @@ export function Dashboard() {
     openNewWorkspaceModal();
   }
 
-  /**
-   * Load and display diff for a specific file
-   */
-  async function handleFileClick(file: string) {
-    if (!selectedWorkspace) return;
-
-    setLoadingDiff(true);
-    openDiffModal(file, ''); // Open with empty diff first
-
-    try {
-      const { WorkspaceService } = await import('./services/workspace.service');
-      const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
-      openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
-    } catch (error) {
-      console.error('Failed to load diff:', error);
-      openDiffModal(file, 'Error loading diff');
-    } finally {
-      setLoadingDiff(false);
-    }
-  }
+  // Note: handleFileClick moved to FileChangesPanel component
 
   /**
    * Open system prompt editor and load current CLAUDE.md
@@ -559,11 +531,6 @@ export function Dashboard() {
               >
                 <FileText className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Changes</span>
-                {fileChanges.length > 0 && (
-                  <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
-                    {fileChanges.length}
-                  </Badge>
-                )}
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
@@ -597,85 +564,7 @@ export function Dashboard() {
             value="changes"
             className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
           >
-            <div className="h-full flex flex-col">
-              {/* Dev Servers Section */}
-              {selectedWorkspace && devServers.length > 0 && (
-                <div className="border-b border-border/50 bg-background/30">
-                  <div className="px-4 py-2.5 sticky top-0 z-10 bg-background/50 backdrop-blur-sm border-b border-border/30">
-                    <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">Dev Servers</h3>
-                  </div>
-                  <div className="p-3 space-y-2">
-                    {devServers.map((server, index) => (
-                      <a
-                        key={index}
-                        href={server.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-[background-color,box-shadow] duration-200 ease-out no-underline group elevation-1 hover:elevation-2"
-                        title={`Open ${server.name} in browser`}
-                      >
-                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
-                          <Monitor className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors">{server.name}</div>
-                          <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
-                        </div>
-                        <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* File Changes */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="px-4 py-2.5 sticky top-0 z-10 border-b border-border/50 bg-background/50 backdrop-blur-sm">
-                  <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">File Changes</h3>
-                </div>
-                <div className="p-3">
-                  {selectedWorkspace && fileChanges.length > 0 ? (
-                    <div className="space-y-1">
-                      {fileChanges.map((file, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,box-shadow] duration-200 ease-out group elevation-1 hover:elevation-2"
-                          onClick={() => handleFileClick(file.file)}
-                          title="Click to view diff"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors">{file.file.split('/').pop()}</div>
-                            <div className="text-caption text-muted-foreground truncate font-mono">{file.file}</div>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs flex-shrink-0 ml-3">
-                            {file.additions > 0 && (
-                              <span className="text-success font-semibold px-1.5 py-0.5 bg-success/10 rounded">+{file.additions}</span>
-                            )}
-                            {file.deletions > 0 && (
-                              <span className="text-destructive font-semibold px-1.5 py-0.5 bg-destructive/10 rounded">-{file.deletions}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : selectedWorkspace ? (
-                    <div className="p-8">
-                      <EmptyState
-                        icon={<Sparkles  />}
-                        description="No file changes detected"
-                      />
-                    </div>
-                  ) : (
-                    <div className="p-8">
-                      <EmptyState
-                        icon={<FileCode  />}
-                        description="Select a workspace to view file changes"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <FileChangesPanel selectedWorkspace={selectedWorkspace} />
           </TabsContent>
 
           {/* Terminal Tab */}

@@ -6,7 +6,8 @@
  * import { Workspace, Message, ApiResponse } from '@/shared/types';
  */
 
-// Workspace types
+// Note: Workspace types moved to features/workspace/types.ts
+// Re-export for backward compatibility (to be removed later)
 export type {
   Workspace,
   WorkspaceState,
@@ -16,7 +17,7 @@ export type {
   FileChange,
   FileEdit,
   FileChangeGroup,
-} from './workspace.types';
+} from '@/features/workspace';
 
 // Session types
 export type {
