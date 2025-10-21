@@ -28,4 +28,18 @@ export const RepoService = {
   fetchStats: async (): Promise<Stats> => {
     return apiClient.get<Stats>(ENDPOINTS.STATS);
   },
+
+  /**
+   * Add a new repository
+   */
+  add: async (rootPath: string): Promise<Repo> => {
+    return apiClient.post<Repo>(ENDPOINTS.REPOS, { root_path: rootPath });
+  },
+
+  /**
+   * Clone and add a repository
+   */
+  clone: async (url: string, path: string): Promise<Repo> => {
+    return apiClient.post<Repo>(`${ENDPOINTS.REPOS}/clone`, { url, path });
+  },
 };

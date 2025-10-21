@@ -189,3 +189,36 @@ export function useArchiveWorkspace() {
     },
   });
 }
+
+/**
+ * Fetch system prompt for a workspace
+ */
+export function useSystemPrompt(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['workspaces', 'system-prompt', workspaceId],
+    queryFn: async () => {
+      const result = await WorkspaceService.fetchSystemPrompt(workspaceId!);
+      return result.system_prompt || '';
+    },
+    enabled: !!workspaceId,
+    staleTime: 30000, // System prompts don't change often
+  });
+}
+
+/**
+ * Update system prompt mutation
+ */
+export function useUpdateSystemPrompt() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workspaceId, systemPrompt }: { workspaceId: string; systemPrompt: string }) =>
+      WorkspaceService.updateSystemPrompt(workspaceId, systemPrompt),
+    onSuccess: (_, variables) => {
+      // Invalidate system prompt query for this workspace
+      queryClient.invalidateQueries({
+        queryKey: ['workspaces', 'system-prompt', variables.workspaceId],
+      });
+    },
+  });
+}
