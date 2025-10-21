@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
@@ -188,6 +188,14 @@ export function Dashboard() {
       showSystemPromptModal,
     },
   });
+
+  // Memoize recent workspaces computation to avoid recalculating on every render
+  const recentWorkspaces = useMemo(() => {
+    return repoGroups
+      .flatMap(g => g.workspaces)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 15);
+  }, [repoGroups]);
 
   // Listen for 'insert-to-chat' events from BrowserPanel (element selector)
   useEffect(() => {
@@ -478,10 +486,12 @@ export function Dashboard() {
       }
       const cloneTarget = targetPath || await join(defaultProjectsDir, repoName);
 
-      // Validate target path to prevent cloning outside home directory (cross-platform security)
-      const normalizedHome = homePath.toLowerCase();
-      const normalizedTarget = cloneTarget.toLowerCase();
-      if (!normalizedTarget.startsWith(normalizedHome)) {
+      // Validate target path to prevent cloning outside home directory
+      const { normalize } = await import('@tauri-apps/api/path');
+      const normalizedHome = await normalize(homePath);
+      const normalizedTarget = await normalize(cloneTarget);
+      const { sep } = await import('@tauri-apps/api/path');
+      if (!normalizedTarget.startsWith(normalizedHome + sep) && normalizedTarget !== normalizedHome) {
         toast.error('Please clone inside your home directory');
         setCloning(false);
         return;
@@ -624,12 +634,7 @@ export function Dashboard() {
           </>
         ) : (
           <WelcomeView
-            recentWorkspaces={
-              repoGroups
-                .flatMap(g => g.workspaces)
-                .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-                .slice(0, 15)
-            }
+            recentWorkspaces={recentWorkspaces}
             onCreateWorkspace={handleCreateWorkspace}
             onOpenProject={handleOpenProject}
             onCloneRepository={handleOpenCloneModal}
