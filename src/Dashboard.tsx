@@ -98,13 +98,6 @@ export function Dashboard() {
     }
   }, [diffStatsQuery.data, setMultipleDiffStats]);
 
-  // Initialize system prompt draft when modal opens
-  useEffect(() => {
-    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
-      setSystemPromptDraft(systemPromptQuery.data || '');
-    }
-  }, [showSystemPromptModal, systemPromptQuery.data]);
-
   // Local component state (not global)
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
@@ -124,6 +117,13 @@ export function Dashboard() {
 
   // Local draft state for system prompt modal (controlled component)
   const [systemPromptDraft, setSystemPromptDraft] = useState('');
+
+  // Initialize system prompt draft when modal opens
+  useEffect(() => {
+    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
+      setSystemPromptDraft(systemPromptQuery.data || '');
+    }
+  }, [showSystemPromptModal, systemPromptQuery.data]);
 
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || 'Developer';

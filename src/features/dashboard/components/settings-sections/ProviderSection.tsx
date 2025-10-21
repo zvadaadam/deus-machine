@@ -14,6 +14,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
   // Controlled state for custom endpoint with debounced save
   const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? '');
   const timeoutRef = useRef<NodeJS.Timeout>();
+  const pendingValueRef = useRef<string | null>(null);
 
   // Sync with external changes (e.g., from refetch)
   useEffect(() => {
@@ -23,9 +24,12 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
   // Debounced save handler
   const handleEndpointChange = (value: string) => {
     setCustomEndpoint(value);
+    pendingValueRef.current = value;
+
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       saveSetting('custom_endpoint', value);
+      pendingValueRef.current = null; // Mark as saved
     }, 500);
   };
 
@@ -37,12 +41,13 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
         clearTimeout(timeoutRef.current);
       }
 
-      // Flush any unsaved changes on unmount (e.g., when switching tabs)
-      if (customEndpoint !== settings.custom_endpoint) {
-        saveSetting('custom_endpoint', customEndpoint);
+      // Flush any unsaved changes ONLY on unmount (not on every re-render)
+      if (pendingValueRef.current !== null) {
+        saveSetting('custom_endpoint', pendingValueRef.current);
       }
     };
-  }, [customEndpoint, settings.custom_endpoint, saveSetting]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps = only runs on mount/unmount, preventing infinite loop
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Provider Settings</h3>
