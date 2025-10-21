@@ -8,10 +8,10 @@ import {
   NewWorkspaceModal,
   DiffModal,
   SystemPromptModal,
-  SettingsModal,
   WelcomeView,
   CloneRepositoryModal,
 } from "./features/dashboard/components";
+import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
 import { useKeyboardShortcuts } from "./hooks";
 import {
@@ -27,8 +27,8 @@ import {
   useAddRepo,
   useSystemPrompt,
   useUpdateSystemPrompt,
-  useSettings as useSettingsQuery,
-} from "./hooks/queries";
+} from "@/hooks/queries";
+import { useSettings as useSettingsQuery } from "@/features/settings";
 import {
   Button,
   Badge,

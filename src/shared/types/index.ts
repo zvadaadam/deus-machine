@@ -46,16 +46,6 @@ export type {
   WorkspaceQueryParams,
 } from './api.types';
 
-// Settings types
-export type {
-  Settings,
-  MCPServer,
-  Command,
-  Agent,
-  Hook,
-  SettingsSection,
-} from './settings.types';
-
 // GitHub types
 export type {
   PRStatus,

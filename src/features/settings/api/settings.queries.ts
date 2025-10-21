@@ -4,9 +4,9 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SettingsService } from '@/services/settings.service';
+import { SettingsService } from './settings.service';
 import { queryKeys } from '@/shared/api/queryKeys';
-import type { Settings, MCPServer, Command, Agent, Hook } from '@/shared/types';
+import type { Settings, MCPServer, Command, Agent, Hook } from '../types';
 
 /**
  * Fetch all settings
@@ -84,7 +84,7 @@ export function useUpdateSettings() {
 export function useClearMemory() {
   return useMutation({
     mutationFn: async () => {
-      const { MemoryService } = await import('@/services/memory.service');
+      const { MemoryService } = await import('./memory.service');
       return MemoryService.clear();
     },
   });

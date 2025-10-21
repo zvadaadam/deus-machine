@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useClearMemory } from '@/hooks/queries';
+import { useClearMemory } from '../../../api/settings.queries';
 import type { SettingsSectionProps } from './types';
 
 export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
