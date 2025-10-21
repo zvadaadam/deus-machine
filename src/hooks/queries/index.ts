@@ -6,8 +6,8 @@
 // Re-export workspace queries for backward compatibility
 export * from '@/features/workspace/api';
 
-// Session queries
-export * from './useSessionQueries';
+// Re-export session queries for backward compatibility
+export * from '@/features/session/api';
 
 // Re-export repository queries for backward compatibility
 export * from '@/features/repository/api';

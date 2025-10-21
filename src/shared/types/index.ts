@@ -11,7 +11,6 @@
 export type {
   Workspace,
   WorkspaceState,
-  SessionStatus,
   RepoGroup,
   DiffStats,
   FileChange,
@@ -19,7 +18,8 @@ export type {
   FileChangeGroup,
 } from '@/features/workspace';
 
-// Session types
+// Note: Session types moved to features/session/types.ts
+// Re-export for backward compatibility (to be removed later)
 export type {
   Message,
   MessageRole,
@@ -30,7 +30,8 @@ export type {
   ToolResultBlock,
   ThinkingBlock,
   Session,
-} from './session.types';
+  SessionStatus,
+} from '@/features/session';
 
 // Note: Repo and Stats types moved to features/repository/types.ts
 // Re-export for backward compatibility (to be removed later)
