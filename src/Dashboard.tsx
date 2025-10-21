@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
-import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
+import { SessionPanel } from "@/features/session";
+import type { SessionPanelRef } from "@/features/session/ui/SessionPanel";
 import { TerminalPanel } from "@/features/terminal";
 import {
   NewWorkspaceModal,
@@ -10,8 +10,7 @@ import {
   CloneRepositoryModal,
 } from "@/features/repository";
 import { DiffModal, FileChangesPanel } from "@/features/workspace";
-// TODO: Move SystemPromptModal to session feature
-import { SystemPromptModal } from "./features/dashboard/components/SystemPromptModal";
+import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
 import { useKeyboardShortcuts } from "./hooks";
@@ -104,7 +103,7 @@ export function Dashboard() {
   const [cloning, setCloning] = useState(false);
 
   // Ref to Workspace chat panel for inserting text from browser element selector
-  const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
+  const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
 
   // Clone Repository Modal (local state)
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -488,7 +487,7 @@ export function Dashboard() {
             {/* Messages take full area */}
             <div className="flex-1 flex flex-col min-h-0">
               {selectedWorkspace.active_session_id && (
-                <WorkspaceChatPanel
+                <SessionPanel
                   ref={workspaceChatPanelRef}
                   sessionId={selectedWorkspace.active_session_id}
                   embedded={true}

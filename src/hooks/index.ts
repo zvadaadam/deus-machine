@@ -1,5 +1,5 @@
 // Legacy hooks (still used for non-data-fetching concerns)
-export { useAutoScroll } from './useAutoScroll';
+// useAutoScroll moved to @/features/session/hooks
 export { useKeyboardShortcuts } from '@/shared/hooks';
 export { useSocket } from '@/shared/hooks';
 
