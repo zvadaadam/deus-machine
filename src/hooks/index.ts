@@ -1,7 +1,7 @@
 // Legacy hooks (still used for non-data-fetching concerns)
 export { useAutoScroll } from './useAutoScroll';
-export { useKeyboardShortcuts } from './useKeyboardShortcuts';
-export { useSocket } from './useSocket';
+export { useKeyboardShortcuts } from '@/shared/hooks';
+export { useSocket } from '@/shared/hooks';
 
 // TanStack Query hooks (preferred for data fetching)
 export * from './queries';

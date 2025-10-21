@@ -4,7 +4,7 @@ import {
   EmptyStateContainer,
   EmptyStateTitle,
   EmptyStateDescription,
-} from "@/components/content/empty-state";
+} from "@/shared/components";
 
 interface EmptyStateProps {
   icon: ReactNode;

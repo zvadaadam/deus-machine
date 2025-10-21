@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { socketService } from "../services/socket";
+import { socketService } from "@/services/socket";
 
 /**
  * Hook to manage socket connection lifecycle
