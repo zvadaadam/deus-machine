@@ -439,9 +439,18 @@ export function Dashboard() {
     setCloning(true);
     try {
       // Validate GitHub URL format - accept both HTTPS and SSH
-      const httpsPattern = /^https:\/\/github\.com\/[\w-]+\/[\w.-]+(\.git)?$/;
       const sshPattern = /^git@github\.com:[\w-]+\/[\w.-]+(\.git)?$/;
-      if (!httpsPattern.test(githubUrl) && !sshPattern.test(githubUrl)) {
+      let isValid = false;
+      if (sshPattern.test(githubUrl)) {
+        isValid = true;
+      } else {
+        try {
+          const u = new URL(githubUrl);
+          const parts = u.pathname.replace(/\.git$/, '').split('/').filter(Boolean);
+          isValid = (u.protocol === 'https:' && u.hostname === 'github.com' && parts.length >= 2);
+        } catch {}
+      }
+      if (!isValid) {
         toast.error('Please enter a valid GitHub repository URL (HTTPS or SSH)');
         setCloning(false);
         return;
@@ -469,16 +478,11 @@ export function Dashboard() {
       }
       const cloneTarget = targetPath || await join(defaultProjectsDir, repoName);
 
-      // Validate target path to prevent cloning into sensitive directories
-      const sensitivePatterns = [
-        '/System', '/usr', '/bin', '/etc', '/var',
-        await join(homePath, '.ssh'),
-        await join(homePath, '.config')
-      ];
-
+      // Validate target path to prevent cloning outside home directory (cross-platform security)
+      const normalizedHome = homePath.toLowerCase();
       const normalizedTarget = cloneTarget.toLowerCase();
-      if (sensitivePatterns.some(p => normalizedTarget.startsWith(p.toLowerCase()))) {
-        toast.error('Cannot clone to system directories');
+      if (!normalizedTarget.startsWith(normalizedHome)) {
+        toast.error('Please clone inside your home directory');
         setCloning(false);
         return;
       }
