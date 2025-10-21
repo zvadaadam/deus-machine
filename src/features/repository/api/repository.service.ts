@@ -5,7 +5,7 @@
 
 import { apiClient } from '@/shared/api/client';
 import { ENDPOINTS } from '@/shared/config/api.config';
-import type { Repo, Stats } from '@/shared/types';
+import type { Repo, Stats } from '../types';
 
 export const RepoService = {
   /**

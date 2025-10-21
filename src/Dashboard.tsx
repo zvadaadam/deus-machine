@@ -6,11 +6,12 @@ import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
 import { TerminalPanel } from "@/features/terminal";
 import {
   NewWorkspaceModal,
-  DiffModal,
-  SystemPromptModal,
   WelcomeView,
   CloneRepositoryModal,
-} from "./features/dashboard/components";
+} from "@/features/repository";
+// TODO: Move DiffModal to workspace feature, SystemPromptModal to session feature
+import { DiffModal } from "./features/dashboard/components/DiffModal";
+import { SystemPromptModal } from "./features/dashboard/components/SystemPromptModal";
 import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
 import { useKeyboardShortcuts } from "./hooks";

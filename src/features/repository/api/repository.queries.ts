@@ -4,9 +4,9 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RepoService } from '@/services/repo.service';
+import { RepoService } from './repository.service';
 import { queryKeys } from '@/shared/api/queryKeys';
-import type { Repo } from '@/shared/types';
+import type { Repo } from '../types';
 
 /**
  * Fetch all repositories

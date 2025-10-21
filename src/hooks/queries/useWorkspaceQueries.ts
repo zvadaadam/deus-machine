@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { WorkspaceService } from '@/services/workspace.service';
-import { RepoService } from '@/services/repo.service';
+import { RepoService } from '@/features/repository/api/repository.service';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { API_CONFIG } from '@/shared/config/api.config';
 import type { RepoGroup, DiffStats, FileChange, PRStatus, DevServer } from '@/shared/types';
