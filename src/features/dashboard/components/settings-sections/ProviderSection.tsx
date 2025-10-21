@@ -29,12 +29,20 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
     }, 500);
   };
 
-  // Cleanup timeout on unmount
+  // Cleanup timeout on unmount and flush pending changes to prevent data loss
   useEffect(() => {
     return () => {
-      clearTimeout(timeoutRef.current);
+      // Clear pending timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      // Flush any unsaved changes on unmount (e.g., when switching tabs)
+      if (customEndpoint !== settings.custom_endpoint) {
+        saveSetting('custom_endpoint', customEndpoint);
+      }
     };
-  }, []);
+  }, [customEndpoint, settings.custom_endpoint, saveSetting]);
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Provider Settings</h3>
