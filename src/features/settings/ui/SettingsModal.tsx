@@ -28,14 +28,14 @@ import {
   useAgents,
   useHooks,
   useUpdateSettings,
-} from '@/hooks/queries';
+} from '../api/settings.queries';
 import {
   GeneralSection,
   AccountSection,
   TerminalSection,
   MemorySection,
   ProviderSection,
-} from './settings-sections';
+} from './sections';
 import type {
   Settings,
   MCPServer,
@@ -43,7 +43,7 @@ import type {
   Agent,
   Hook,
   SettingsSection,
-} from '@/shared/types';
+} from '../types';
 
 interface SettingsModalProps {
   show: boolean;

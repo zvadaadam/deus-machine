@@ -9,8 +9,5 @@ export * from './useWorkspaceQueries';
 // Session queries
 export * from './useSessionQueries';
 
-// Settings queries
-export * from './useSettingsQueries';
-
 // Repository queries
 export * from './useRepoQueries';
