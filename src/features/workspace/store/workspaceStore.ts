@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import type { Workspace, DiffStats } from '@/shared/types';
+import type { Workspace, DiffStats } from '../types';
 
 interface WorkspaceState {
   // Selected workspace

@@ -18,7 +18,7 @@
 | 5: Migrate Feature - Browser | ✅ Complete | ~15 min | Moved 3 files, renamed useDevBrowser → useBrowser |
 | 6: Migrate Feature - Settings | ✅ Complete | ~25 min | Migrated 35+ files, fixed complex imports |
 | 7: Migrate Feature - Repository | ✅ Complete | ~30 min | Migrated 7 files, fixed type dependencies |
-| 8: Migrate Feature - Workspace | ⏸️ Pending | - | - |
+| 8: Migrate Feature - Workspace | ✅ Complete | ~45 min | Extracted FileChangesPanel, migrated 4 files + types/store/api |
 | 9: Migrate Feature - Session | ⏸️ Pending | - | - |
 | 10: Migrate Feature - Sidebar | ⏸️ Pending | - | - |
 | 11: Create Platform Layer | ⏸️ Pending | - | - |
@@ -217,6 +217,56 @@
 
 ---
 
+### PHASE 8: Migrate Feature - Workspace ✅
+**Started:** 2025-10-21 20:08
+**Completed:** 2025-10-21 20:40
+**Status:** Complete
+
+#### Steps:
+- [x] 8.1: Move DiffModal.tsx to workspace/ui
+- [x] 8.2: Extract FileChangesPanel from Dashboard (lines 595-679)
+- [x] 8.3: Move API layer (workspace.queries.ts, workspace.service.ts)
+- [x] 8.4: Move store (workspaceStore.ts)
+- [x] 8.5: Move types (workspace.types.ts)
+- [x] 8.6: Create index files (ui/index.ts, api/index.ts, store/index.ts, index.ts)
+- [x] 8.7: Update imports in workspace files
+- [x] 8.8: Update Dashboard imports
+- [x] 8.9: Run tsc --noEmit ✅ PASSED
+
+#### Files Moved/Created:
+- UI: DiffModal.tsx (moved), FileChangesPanel.tsx (extracted and created)
+- API: useWorkspaceQueries.ts → workspace.queries.ts, workspace.service.ts
+- Store: workspaceStore.ts
+- Types: workspace.types.ts (with Workspace, WorkspaceState, SessionStatus, RepoGroup, DiffStats, FileChange, FileEdit, FileChangeGroup)
+
+#### Key Fixes:
+- Extracted FileChangesPanel component from Dashboard.tsx with Dev Servers and File Changes sections
+- FileChangesPanel includes internal data fetching (useFileChanges, useDevServers) and handleFileClick logic
+- Updated workspace.queries.ts: import WorkspaceService from './workspace.service' and split types (local vs shared)
+- Updated workspace.service.ts: import local types (Workspace, RepoGroup, DiffStats, FileChange) and shared types (WorkspaceQueryParams, PRStatus, DevServer)
+- Updated workspaceStore.ts: import types from '../types'
+- Added re-export in shared/types/index.ts: `export type { Workspace, ... } from '@/features/workspace'`
+- Added re-export in hooks/queries/index.ts: `export * from '@/features/workspace/api'`
+- Added re-export in stores/index.ts: `export { useWorkspaceStore } from '@/features/workspace/store'`
+- Removed WorkspaceService from services/index.ts
+- Updated Dashboard.tsx:
+  - Import DiffModal and FileChangesPanel from '@/features/workspace'
+  - Removed useFileChanges and useDevServers imports (now in FileChangesPanel)
+  - Removed fileChanges and devServers variables
+  - Removed handleFileClick function (now in FileChangesPanel)
+  - Replaced inline FileChanges tab content with `<FileChangesPanel selectedWorkspace={selectedWorkspace} />`
+  - Removed file changes badge from Changes tab (for simplicity)
+  - Removed fileChangesQuery and devServersQuery from keyboard shortcuts refresh
+- Fixed FileChangesPanel imports: EmptyState from '@/components/ui', WorkspaceService from '@/features/workspace/api/workspace.service'
+
+#### Notes:
+- Most complex extraction so far - required creating a new component from inline Dashboard code
+- Successfully split types between feature-local and shared types
+- TypeScript check passed with 0 errors
+- Ready for Phase 9: Session feature migration
+
+---
+
 ## ⚠️ ISSUES ENCOUNTERED
 
 None yet.
@@ -225,8 +275,8 @@ None yet.
 
 ## 🎯 CURRENT CONTEXT
 
-**Active Phase:** 7 (Complete) → Moving to Phase 8
-**Next Action:** Migrate workspace feature
+**Active Phase:** 8 (Complete) → Moving to Phase 9
+**Next Action:** Migrate session feature (largest migration - 40+ files)
 **Blocked?** No
 
 ---
