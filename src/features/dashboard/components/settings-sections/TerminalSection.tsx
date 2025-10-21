@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +11,27 @@ import {
 import type { SettingsSectionProps } from './types';
 
 export function TerminalSection({ settings, saveSetting }: SettingsSectionProps) {
+  const [fontSize, setFontSize] = useState(settings.terminal_font_size ?? 12);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce saveSetting for font size
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      if (fontSize !== settings.terminal_font_size) {
+        saveSetting('terminal_font_size', fontSize);
+      }
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [fontSize, settings.terminal_font_size, saveSetting]);
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Terminal Settings</h3>
@@ -22,11 +44,11 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
             type="number"
             min="8"
             max="24"
-            value={settings.terminal_font_size ?? 12}
+            value={fontSize}
             onChange={(e) => {
               const value = parseInt(e.target.value, 10);
-              const fontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
-              saveSetting('terminal_font_size', fontSize);
+              const newFontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
+              setFontSize(newFontSize);
             }}
           />
         </div>

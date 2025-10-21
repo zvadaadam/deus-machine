@@ -120,11 +120,11 @@ export function WelcomeView({
                 {displayedWorkspaces.map((workspace) => (
                   <div
                     key={workspace.id}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group"
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,color] duration-200 ease-out group"
                     onClick={() => onWorkspaceClick?.(workspace)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-foreground group-hover:text-primary transition-colors">
+                      <div className="font-medium text-foreground group-hover:text-primary transition-colors duration-200 ease-out">
                         {workspace.branch || workspace.directory_name}
                       </div>
                       <div className="text-body-sm text-muted-foreground truncate">

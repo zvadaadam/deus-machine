@@ -327,7 +327,7 @@ export function Dashboard() {
       setSystemPrompt(data.system_prompt || '');
     } catch (error) {
       console.error('Failed to load system prompt:', error);
-      toast.error('Failed to load system prompt');
+      toast.error(`Failed to load system prompt: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoadingSystemPrompt(false);
     }
@@ -355,7 +355,7 @@ export function Dashboard() {
       closeSystemPromptModal();
     } catch (error) {
       console.error('Failed to save system prompt:', error);
-      toast.error('Failed to save system prompt');
+      toast.error(`Failed to save system prompt: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSavingSystemPrompt(false);
     }
@@ -433,12 +433,21 @@ export function Dashboard() {
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
     setCloning(true);
     try {
-      // Use default ~/Projects if no target path specified
-      const homeDir = process.env.HOME || '/Users/' + (process.env.USER || 'user');
-      const defaultProjectsDir = `${homeDir}/Projects`;
+      // Validate GitHub URL format
+      const githubUrlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w.-]+(\.git)?$/;
+      if (!githubUrlPattern.test(githubUrl)) {
+        toast.error('Please enter a valid GitHub repository URL');
+        setCloning(false);
+        return;
+      }
 
-      // Extract repo name from GitHub URL
-      const repoName = githubUrl.split('/').pop()?.replace('.git', '') || 'repo';
+      // Use Tauri path API to get home directory
+      const { homeDir } = await import('@tauri-apps/api/path');
+      const homePath = await homeDir();
+      const defaultProjectsDir = `${homePath}/Projects`;
+
+      // Extract repo name from GitHub URL using URL parser
+      const repoName = new URL(githubUrl).pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || 'repo';
       const cloneTarget = targetPath || `${defaultProjectsDir}/${repoName}`;
 
       // Clone using git command (via backend or directly)
