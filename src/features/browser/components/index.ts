@@ -1,1 +1,0 @@
-export { BrowserPanel } from "./BrowserPanel";

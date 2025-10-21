@@ -12,7 +12,7 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "./features/dashboard/components";
-import { BrowserPanel } from "./features/browser/components";
+import { BrowserPanel } from "@/features/browser";
 import { useKeyboardShortcuts } from "./hooks";
 import {
   useWorkspacesByRepo,
