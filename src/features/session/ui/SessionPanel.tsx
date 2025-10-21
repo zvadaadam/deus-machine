@@ -54,6 +54,17 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     toolResultMap,
   } = useSessionWithMessages(sessionId);
 
+  // DEBUG: Log session data
+  if (import.meta.env.DEV) {
+    console.log('[SessionPanel] DEBUG:', {
+      sessionId,
+      messagesCount: messages.length,
+      loading,
+      sessionStatus,
+      firstMessage: messages[0]?.id,
+    });
+  }
+
   const sendMessageMutation = useSendMessage();
   const stopSessionMutation = useStopSession();
 
