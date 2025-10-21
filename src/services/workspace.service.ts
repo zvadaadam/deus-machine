@@ -11,6 +11,8 @@ import type {
   DiffStats,
   FileChange,
   WorkspaceQueryParams,
+  PRStatus,
+  DevServer,
 } from '../types';
 
 export const WorkspaceService = {
@@ -79,5 +81,33 @@ export const WorkspaceService = {
    */
   archive: async (id: string): Promise<Workspace> => {
     return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), { state: 'archived' });
+  },
+
+  /**
+   * Fetch PR status for a workspace
+   */
+  fetchPRStatus: async (id: string): Promise<PRStatus | null> => {
+    return apiClient.get<PRStatus | null>(ENDPOINTS.WORKSPACE_PR_STATUS(id));
+  },
+
+  /**
+   * Fetch dev servers for a workspace
+   */
+  fetchDevServers: async (id: string): Promise<{ servers: DevServer[] }> => {
+    return apiClient.get<{ servers: DevServer[] }>(ENDPOINTS.WORKSPACE_DEV_SERVERS(id));
+  },
+
+  /**
+   * Fetch system prompt for a workspace
+   */
+  fetchSystemPrompt: async (id: string): Promise<{ system_prompt: string }> => {
+    return apiClient.get<{ system_prompt: string }>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id));
+  },
+
+  /**
+   * Update system prompt for a workspace
+   */
+  updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {
+    return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), { system_prompt: systemPrompt });
   },
 };

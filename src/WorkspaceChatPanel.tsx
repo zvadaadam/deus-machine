@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useMemo } from "react";
 import type {
   FileChangeGroup,
   FileEdit,
@@ -9,10 +9,14 @@ import {
   FileChangesPanel,
 } from "./features/workspace/components";
 import {
-  useMessages,
   useSocket,
   useAutoScroll,
 } from "./hooks";
+import {
+  useSessionWithMessages,
+  useSendMessage,
+  useStopSession,
+} from "./hooks/queries";
 import { Button } from "@/components/ui/button";
 import { X, ArrowLeft } from "lucide-react";
 
@@ -35,25 +39,116 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Custom hooks
-  const { isConnected } = useSocket();
+  // Custom hooks (useSocket manages socket connection lifecycle)
+  useSocket();
 
+  // TanStack Query hooks
   const {
     messages,
-    fileChanges,
-    loading,
-    messageInput,
-    sending,
     sessionStatus,
     isCompacting,
-    setMessageInput,
-    sendMessage,
-    stopSession,
-    createPR,
-    compactConversation,
+    loading,
     parseContent,
     toolResultMap,
-  } = useMessages({ sessionId, isSocketConnected: isConnected });
+  } = useSessionWithMessages(sessionId);
+
+  const sendMessageMutation = useSendMessage();
+  const stopSessionMutation = useStopSession();
+
+  // Local state for message input
+  const [messageInput, setMessageInput] = useState('');
+
+  // Extract file changes from messages (memoized to avoid recomputation on every render)
+  const fileChanges: FileChangeGroup[] = useMemo(() => {
+    const fileMap = new Map<string, FileEdit[]>();
+
+    messages.forEach((message) => {
+      const contentBlocks = parseContent(message.content);
+      if (Array.isArray(contentBlocks)) {
+        contentBlocks.forEach((block: any) => {
+          if (block?.type === 'tool_use' && (block.name === 'Edit' || block.name === 'Write' || block.name === 'NotebookEdit')) {
+            // Support both file_path and notebook_path (for notebook edits)
+            const filePath = block.input?.file_path ?? block.input?.notebook_path;
+            if (!filePath) return; // Guard against missing file_path or notebook_path
+
+            if (!fileMap.has(filePath)) {
+              fileMap.set(filePath, []);
+            }
+
+            // Sanitize timestamp to prevent NaN at render
+            const tsNum = Date.parse(message.created_at);
+            const timestamp = Number.isFinite(tsNum) ? new Date(tsNum).toISOString() : new Date(0).toISOString();
+
+            fileMap.get(filePath)!.push({
+              old_string: block.input.old_string,
+              new_string: block.input.new_string,
+              content: block.input.content,
+              timestamp,
+              message_id: message.id,
+              tool_name: block.name
+            });
+          }
+        });
+      }
+    });
+
+    const changes: FileChangeGroup[] = Array.from(fileMap.entries()).map(([file_path, edits]) => {
+      // Harden timestamp parsing
+      const timestamps = edits
+        .map(e => Date.parse(e.timestamp))
+        .filter((t) => Number.isFinite(t));
+
+      if (!timestamps.length) {
+        return {
+          file_path,
+          edits,
+          first_timestamp: new Date(0).toISOString(),
+          last_timestamp: new Date(0).toISOString(),
+        };
+      }
+
+      return {
+        file_path,
+        edits,
+        first_timestamp: new Date(Math.min(...timestamps)).toISOString(),
+        last_timestamp: new Date(Math.max(...timestamps)).toISOString()
+      };
+    });
+
+    changes.sort((a, b) =>
+      new Date(b.last_timestamp).getTime() - new Date(a.last_timestamp).getTime()
+    );
+
+    return changes;
+  }, [messages, parseContent]);
+
+  // Handlers using mutations
+  const sendMessage = useCallback(async (customContent?: string) => {
+    const content = customContent || messageInput.trim();
+    if (!content || sendMessageMutation.isPending) return;
+
+    try {
+      await sendMessageMutation.mutateAsync({ sessionId, content });
+      setMessageInput('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  }, [messageInput, sendMessageMutation, sessionId]);
+
+  const stopSession = useCallback(async () => {
+    if (!window.confirm('Stop the current Claude Code session?')) return;
+    try {
+      await stopSessionMutation.mutateAsync(sessionId);
+    } catch (error) {
+      console.error('Failed to stop session:', error);
+    }
+  }, [stopSessionMutation, sessionId]);
+
+  const createPR = useCallback(() => sendMessage('Create a PR onto main'), [sendMessage]);
+  const compactConversation = useCallback(() => sendMessage('/compact'), [sendMessage]);
+
+  // Derived state
+  const sending = sendMessageMutation.isPending;
 
   const {
     showScrollButton,

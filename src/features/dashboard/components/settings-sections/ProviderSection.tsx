@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -9,7 +10,50 @@ import {
 } from '@/components/ui/select';
 import type { SettingsSectionProps } from './types';
 
-export function ProviderSection({ settings, setSettings, saveSetting }: SettingsSectionProps) {
+export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
+  // Controlled state for custom endpoint with debounced save
+  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? '');
+
+  // Browser-compatible timeout ref (ReturnType<typeof setTimeout> works in both Node and browser)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track latest typed value and last successfully saved value for safe unmount flush
+  const latestValueRef = useRef(customEndpoint);
+  const lastSavedRef = useRef(settings.custom_endpoint ?? '');
+
+  // Sync with external changes (e.g., from refetch)
+  useEffect(() => {
+    setCustomEndpoint(settings.custom_endpoint ?? '');
+    lastSavedRef.current = settings.custom_endpoint ?? '';
+  }, [settings.custom_endpoint]);
+
+  // Debounced save handler
+  const handleEndpointChange = (value: string) => {
+    setCustomEndpoint(value);
+    latestValueRef.current = value;
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      saveSetting('custom_endpoint', value);
+      lastSavedRef.current = value; // Track what was saved
+    }, 500);
+  };
+
+  // Cleanup timeout on unmount and flush pending changes to prevent data loss
+  useEffect(() => {
+    return () => {
+      // Clear pending timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      // Flush any unsaved changes ONLY on unmount (compare latest vs last saved)
+      if (latestValueRef.current !== lastSavedRef.current) {
+        saveSetting('custom_endpoint', latestValueRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps = only runs on mount/unmount, preventing infinite loop
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Provider Settings</h3>
@@ -57,9 +101,8 @@ export function ProviderSection({ settings, setSettings, saveSetting }: Settings
               id="custom-endpoint"
               type="url"
               placeholder="https://api.example.com/v1"
-              value={settings.custom_endpoint ?? ''}
-              onChange={(e) => setSettings(prev => ({ ...prev, custom_endpoint: e.target.value }))}
-              onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
+              value={customEndpoint}
+              onChange={(e) => handleEndpointChange(e.target.value)}
             />
           </div>
         )}
