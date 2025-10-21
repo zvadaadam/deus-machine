@@ -71,7 +71,15 @@ export function useBrowser() {
         return { port, authToken };
       } else {
         // Web mode: check for existing MCP server on port 3000
-        const response = await fetch('http://localhost:3000/health');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        let response: Response;
+        try {
+          response = await fetch('http://localhost:3000/health', { signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
         if (response.ok) {
           await response.json(); // Response checked; details unused
 
@@ -88,11 +96,11 @@ export function useBrowser() {
         }
       }
     } catch (error) {
-      console.error('[useBrowser] Error starting server:', error);
-      console.error('[useBrowser] Error type:', typeof error);
-      console.error('[useBrowser] Error details:', JSON.stringify(error, null, 2));
-      const errorMessage = error instanceof Error ? error.message : "Failed to start dev-browser";
-      console.error('[useBrowser] Error message:', errorMessage);
+      // Avoid serializing arbitrary error objects (may throw on circular refs)
+      const kind = error instanceof Error ? error.name : typeof error;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[useBrowser] Error starting server:', kind, msg);
+      const errorMessage = error instanceof Error ? error.message : "Failed to start browser";
       setStatus({
         running: false,
         port: null,

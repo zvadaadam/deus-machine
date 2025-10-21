@@ -96,16 +96,6 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
         xterm.write(`\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n`);
       });
 
-    // Handle terminal input
-    xterm.onData((data) => {
-      if (isReady) {
-        const bytes = new TextEncoder().encode(data);
-        ptyCommands.write(id, Array.from(bytes)).catch((err) => {
-          console.error('Failed to write to PTY:', err);
-        });
-      }
-    });
-
     // Listen for PTY data
     const unlistenData = listen<{ id: string; data: number[] }>('pty-data', (event) => {
       if (event.payload.id === id) {
@@ -144,17 +134,20 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     };
   }, [id, workspacePath]);
 
-  // Update isReady dependency for onData handler
+  // Handle terminal input - tracks isReady changes
   useEffect(() => {
-    if (xtermRef.current && isReady) {
-      // Re-attach onData handler with updated isReady
-      xtermRef.current.onData((data) => {
+    if (!xtermRef.current) return;
+
+    const disposable = xtermRef.current.onData((data) => {
+      if (isReady) {
         const bytes = new TextEncoder().encode(data);
         ptyCommands.write(id, Array.from(bytes)).catch((err) => {
           console.error('Failed to write to PTY:', err);
         });
-      });
-    }
+      }
+    });
+
+    return () => disposable.dispose();
   }, [isReady, id]);
 
   return (
