@@ -3,7 +3,7 @@
  * API methods for conversation memory management
  */
 
-import { apiClient } from './api';
+import { apiClient } from '@/shared/api/client';
 
 export const MemoryService = {
   /**

@@ -6,10 +6,10 @@
  * Shows encrypted signature status when present.
  */
 
-import type { ThinkingBlock as ThinkingBlockType } from '@/types';
+import type { ThinkingBlock as ThinkingBlockType } from '@/shared/types';
 import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight, Shield } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import { chatTheme } from '../theme';
 
 interface ThinkingBlockProps {

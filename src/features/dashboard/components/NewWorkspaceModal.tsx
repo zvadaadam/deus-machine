@@ -1,4 +1,4 @@
-import type { Repo } from "../../../types";
+import type { Repo } from "@/shared/types";
 import {
   Dialog,
   DialogContent,

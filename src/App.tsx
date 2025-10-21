@@ -6,7 +6,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DashboardError } from "./components/error-fallbacks";
 import { ThemeProvider } from "./hooks/useTheme";
 import { Toaster } from "./components/ui/sonner";
-import { queryClient } from "./lib/queryClient";
+import { queryClient } from "@/shared/api/queryClient";
 
 function App() {
   return (

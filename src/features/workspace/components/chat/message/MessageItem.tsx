@@ -7,11 +7,11 @@
  * @deprecated Use ../MessageItem.tsx instead.
  */
 
-import type { Message } from '@/types';
+import type { Message } from '@/shared/types';
 import type { ToolResultMap } from '../types';
 import { BlockRenderer } from '../blocks';
 import { chatTheme } from '../theme';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 
 interface MessageItemProps {
   message: Message;

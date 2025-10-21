@@ -52,7 +52,7 @@ import { BranchName } from "./components/BranchName";
 import type {
   Workspace,
   Repo,
-} from "./types";
+} from "@/shared/types";
 
 /**
  * OpenDevs Dashboard - Main application interface

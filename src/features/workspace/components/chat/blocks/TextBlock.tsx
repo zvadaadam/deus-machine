@@ -6,11 +6,11 @@
  * - User messages: Rendered as plain text (user input)
  */
 
-import type { TextBlock as TextBlockType, MessageRole } from '@/types';
+import type { TextBlock as TextBlockType, MessageRole } from '@/shared/types';
 import { chatTheme } from '../theme';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import { CopyButton } from '../tools/components/CopyButton';
 
 interface TextBlockProps {

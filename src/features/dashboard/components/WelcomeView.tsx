@@ -3,7 +3,7 @@ import { FolderPlus, Github, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Workspace } from "@/types";
+import type { Workspace } from "@/shared/types";
 
 interface WelcomeViewProps {
   recentWorkspaces?: Workspace[];

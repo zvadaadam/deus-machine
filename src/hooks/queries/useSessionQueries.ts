@@ -5,8 +5,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SessionService } from '@/services/session.service';
-import { queryKeys } from '@/lib/queryKeys';
-import type { Session, Message, SessionStatus } from '@/types';
+import { queryKeys } from '@/shared/api/queryKeys';
+import type { Session, Message, SessionStatus } from '@/shared/types';
 import { useMemo } from 'react';
 
 /**

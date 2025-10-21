@@ -7,9 +7,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { WorkspaceService } from '@/services/workspace.service';
 import { RepoService } from '@/services/repo.service';
-import { queryKeys } from '@/lib/queryKeys';
-import { API_CONFIG } from '@/config/api.config';
-import type { RepoGroup, DiffStats, FileChange, PRStatus, DevServer } from '@/types';
+import { queryKeys } from '@/shared/api/queryKeys';
+import { API_CONFIG } from '@/shared/config/api.config';
+import type { RepoGroup, DiffStats, FileChange, PRStatus, DevServer } from '@/shared/types';
 
 /**
  * Fetch workspaces grouped by repository with polling

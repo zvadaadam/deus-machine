@@ -43,7 +43,7 @@ import type {
   Agent,
   Hook,
   SettingsSection,
-} from '@/types';
+} from '@/shared/types';
 
 interface SettingsModalProps {
   show: boolean;

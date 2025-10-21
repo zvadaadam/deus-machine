@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallba
 import type {
   FileChangeGroup,
   FileEdit,
-} from "./types";
+} from "@/shared/types";
 import {
   Chat,
   MessageInput,

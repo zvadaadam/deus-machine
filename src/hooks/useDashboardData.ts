@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
-import { API_CONFIG, getBaseURL } from "../config/api.config";
-import type { RepoGroup, Stats, DiffStats, Workspace } from "../types";
+import { API_CONFIG, getBaseURL } from "@/shared/config/api.config";
+import type { RepoGroup, Stats, DiffStats, Workspace } from "@/shared/types";
 
 const POLL_INTERVAL = API_CONFIG.POLL_INTERVAL;
 

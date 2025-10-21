@@ -1,4 +1,4 @@
-import type { Message, SessionStatus } from "../../../types";
+import type { Message, SessionStatus } from "@/shared/types";
 import type { ToolResultMap } from "./chat/types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";

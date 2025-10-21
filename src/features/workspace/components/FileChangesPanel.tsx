@@ -1,5 +1,5 @@
-import type { FileChangeGroup } from "../../../types";
-import { cn } from "@/lib/utils";
+import type { FileChangeGroup } from "@/shared/types";
+import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 interface FileChangesPanelProps {

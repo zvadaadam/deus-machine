@@ -5,8 +5,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SettingsService } from '@/services/settings.service';
-import { queryKeys } from '@/lib/queryKeys';
-import type { Settings, MCPServer, Command, Agent, Hook } from '@/types';
+import { queryKeys } from '@/shared/api/queryKeys';
+import type { Settings, MCPServer, Command, Agent, Hook } from '@/shared/types';
 
 /**
  * Fetch all settings

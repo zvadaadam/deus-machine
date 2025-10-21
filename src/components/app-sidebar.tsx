@@ -19,9 +19,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TextShimmer } from "@/components/ui/text-shimmer";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/stores";
-import type { Workspace, DiffStats } from "@/types";
+import type { Workspace, DiffStats } from "@/shared/types";
 
 // Helper function to get initials from repository name
 function getRepoInitials(repoName: string): string {

@@ -11,7 +11,7 @@ import {
   SidebarMenu,
 } from "@/components/ui/sidebar";
 import { WorkspaceItem } from "./WorkspaceItem";
-import type { RepoGroup as RepoGroupType, Workspace, DiffStats } from "../../../types";
+import type { RepoGroup as RepoGroupType, Workspace, DiffStats } from "@/shared/types";
 
 interface RepoGroupProps {
   group: RepoGroupType;

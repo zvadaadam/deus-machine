@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { Workspace } from "../types";
+import type { Workspace } from "@/shared/types";
 
 interface UseKeyboardShortcutsOptions {
   onRefresh: () => Promise<void>;

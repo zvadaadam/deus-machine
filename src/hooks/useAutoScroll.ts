@@ -1,5 +1,5 @@
 import { useState, useEffect, RefObject } from "react";
-import type { Message, SessionStatus } from "../types";
+import type { Message, SessionStatus } from "@/shared/types";
 
 interface UseAutoScrollOptions {
   messages: Message[];
