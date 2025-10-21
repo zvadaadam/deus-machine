@@ -12,7 +12,7 @@ import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 
 // Import tool registry initialization (registers all tools)
-import "./chat/tools/registerTools";
+import "./tools/registerTools";
 
 interface MessageItemProps {
   message: Message;
