@@ -99,10 +99,13 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
             queryKey: queryKeys.workspaces.diffStats(id),
             queryFn: () => WorkspaceService.fetchDiffStats(id),
           })
-          .then((data) => {
+          .then(() => {
             // Update aggregate cache with new data
-            const existing = queryClient.getQueryData<Record<string, DiffStats>>(['bulk-diff-stats', workspaceIds]) || {};
-            queryClient.setQueryData(['bulk-diff-stats', workspaceIds], { ...existing, [id]: data as DiffStats });
+            const data = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
+            if (data) {
+              const existing = queryClient.getQueryData<Record<string, DiffStats>>(['bulk-diff-stats', workspaceIds]) || {};
+              queryClient.setQueryData(['bulk-diff-stats', workspaceIds], { ...existing, [id]: data });
+            }
           });
       }, idx * 200);
     });
