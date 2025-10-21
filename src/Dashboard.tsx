@@ -47,8 +47,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
-import { OpenInDropdown } from "./components/OpenInDropdown";
-import { BranchName } from "./components/BranchName";
+import { OpenInDropdown } from "@/shared/components";
+import { BranchName } from "@/shared/components";
 import type {
   Workspace,
   Repo,
