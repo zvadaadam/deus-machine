@@ -13,8 +13,8 @@
 | 0: Preparation | ✅ Complete | ~10 min | Fixed TypeScript error, build & dev working |
 | 1: Create Directory Structure | ✅ Complete | ~5 min | All dirs created, path aliases updated, tsc passed |
 | 2: Move Shared Resources | ✅ Complete | ~30 min | Moved types, lib, config, api; updated 98 files |
-| 3: Move Shared Components & Hooks | ⏳ In Progress | - | - |
-| 4: Migrate Feature - Terminal | ⏸️ Pending | - | - |
+| 3: Move Shared Components & Hooks | ✅ Complete | ~15 min | Moved 5 components, 3 hooks; fixed exports |
+| 4: Migrate Feature - Terminal | ⏳ In Progress | - | - |
 | 5: Migrate Feature - Browser | ⏸️ Pending | - | - |
 | 6: Migrate Feature - Settings | ⏸️ Pending | - | - |
 | 7: Migrate Feature - Repository | ⏸️ Pending | - | - |
@@ -96,19 +96,39 @@
 
 ---
 
-### PHASE 3: Move Shared Components & Hooks
+### PHASE 3: Move Shared Components & Hooks ✅
 **Started:** 2025-10-21 18:20
+**Completed:** 2025-10-21 18:35
+**Status:** Complete
+
+#### Steps:
+- [x] 3.1: Move shared components (BranchName, OpenInDropdown, ErrorBoundary, EmptyState, error-fallbacks/)
+- [x] 3.2: Move shared hooks (useSocket, useKeyboardShortcuts, useIsMobile)
+- [x] 3.3: Create index files
+- [x] 3.4: Update imports (bulk sed replacements)
+- [x] 3.5: Run tsc --noEmit ✅ PASSED
+
+#### Notes:
+- Moved 5 components and 3 hooks to shared/
+- Fixed export names (EmptyStateContainer, useIsMobile)
+- TypeScript check passed with 0 errors
+- Commit: afe5337
+
+---
+
+### PHASE 4: Migrate Feature - Terminal
+**Started:** 2025-10-21 18:35
 **Status:** In Progress
 
 #### Steps:
-- [ ] 3.1: Move shared components
-- [ ] 3.2: Move shared hooks
-- [ ] 3.3: Create index files
-- [ ] 3.4: Update imports
-- [ ] 3.5: Run tsc --noEmit
+- [ ] 4.1: Move UI files (TerminalPanel, Terminal, Terminal.css)
+- [ ] 4.2: Create index files
+- [ ] 4.3: Update imports
+- [ ] 4.4: Run tsc --noEmit
+- [ ] 4.5: Test terminal functionality
 
 #### Notes:
-- Starting shared components and hooks migration...
+- Starting terminal feature migration (simplest feature)...
 
 ---
 

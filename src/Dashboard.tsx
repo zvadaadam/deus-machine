@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
 import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
-import { TerminalPanel } from "./TerminalPanel";
+import { TerminalPanel } from "@/features/terminal";
 import {
   NewWorkspaceModal,
   DiffModal,
