@@ -18,7 +18,7 @@ const isTauriMode = () => {
   }
 };
 
-export function useDevBrowser() {
+export function useBrowser() {
   const [status, setStatus] = useState<DevBrowserStatus>({
     running: false,
     port: null,
@@ -35,11 +35,11 @@ export function useDevBrowser() {
         const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH ||
           "../../../dev-browser";
 
-        console.log('[useDevBrowser] Calling start_browser_server with path:', devBrowserPath);
+        console.log('[useBrowser] Calling start_browser_server with path:', devBrowserPath);
         await invoke("start_browser_server", {
           browserPath: devBrowserPath,
         });
-        console.log('[useDevBrowser] start_browser_server returned successfully');
+        console.log('[useBrowser] start_browser_server returned successfully');
 
         // Wait for server to start with retry
         const maxAttempts = 10;
@@ -88,11 +88,11 @@ export function useDevBrowser() {
         }
       }
     } catch (error) {
-      console.error('[useDevBrowser] Error starting server:', error);
-      console.error('[useDevBrowser] Error type:', typeof error);
-      console.error('[useDevBrowser] Error details:', JSON.stringify(error, null, 2));
+      console.error('[useBrowser] Error starting server:', error);
+      console.error('[useBrowser] Error type:', typeof error);
+      console.error('[useBrowser] Error details:', JSON.stringify(error, null, 2));
       const errorMessage = error instanceof Error ? error.message : "Failed to start dev-browser";
-      console.error('[useDevBrowser] Error message:', errorMessage);
+      console.error('[useBrowser] Error message:', errorMessage);
       setStatus({
         running: false,
         port: null,

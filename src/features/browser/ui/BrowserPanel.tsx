@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
-import { useDevBrowser } from "../hooks/useDevBrowser";
+import { useBrowser } from "../hooks/useBrowser";
 
 interface BrowserPanelProps {
   workspaceId: string | null;
@@ -33,7 +33,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { status: devBrowserStatus, startServer } = useDevBrowser();
+  const { status: devBrowserStatus, startServer } = useBrowser();
   const tabId = `browser-${workspaceId || 'main'}`;
 
   // Helper to add console log
