@@ -59,7 +59,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
         chatTheme.blocks.tool.container,
         isError
           ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/5'
-          : 'border-l-4 border-l-purple-500/50 bg-purple-50/30 dark:bg-purple-950/10'
+          : 'border-l-4 border-l-secondary/50 bg-secondary/5'
       )}
     >
       {/* Header */}
@@ -76,7 +76,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
           ) : (
             <ChevronRight className="w-3 h-3" aria-hidden="true" />
           )}
-          <ListChecks className="w-4 h-4 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+          <ListChecks className="w-4 h-4 text-secondary-foreground" aria-hidden="true" />
           <strong className="font-semibold">Todo List</strong>
 
           {/* Summary when collapsed */}

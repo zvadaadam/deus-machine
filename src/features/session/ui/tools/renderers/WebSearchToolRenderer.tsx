@@ -32,7 +32,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
         chatTheme.blocks.tool.container,
         isError
           ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/5'
-          : 'border-l-4 border-l-indigo-500/50 bg-indigo-50/20 dark:bg-indigo-950/10'
+          : 'border-l-4 border-l-info/50 bg-info/5'
       )}
     >
       {/* Header */}
@@ -53,7 +53,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
           ) : (
             <ChevronRight className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
           )}
-          <Search className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" aria-hidden="true" />
+          <Search className="w-4 h-4 text-info-foreground flex-shrink-0" aria-hidden="true" />
           <strong className="font-semibold">Web Search</strong>
 
           {/* Query preview when collapsed */}
@@ -79,9 +79,9 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
       <div className="px-2 pb-1 space-y-1">
         {query && (
           <div className="flex items-start gap-2 text-sm">
-            <Search className="w-3 h-3 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <Search className="w-3 h-3 text-info-foreground mt-0.5 flex-shrink-0" aria-hidden="true" />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-indigo-700 dark:text-indigo-300 break-words">
+              <div className="text-xs font-medium text-info-foreground break-words">
                 "{query}"
               </div>
             </div>

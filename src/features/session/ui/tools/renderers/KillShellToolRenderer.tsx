@@ -24,7 +24,7 @@ export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps
         chatTheme.blocks.tool.container,
         isError
           ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/5'
-          : 'border-l-4 border-l-red-500/50 bg-red-50/20 dark:bg-red-950/10'
+          : 'border-l-4 border-l-destructive/50 bg-destructive/5'
       )}
     >
       {/* Header */}
