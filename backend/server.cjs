@@ -37,6 +37,77 @@ let actualServerPort = null;
 // Initialize database
 const db = initDatabase();
 
+/**
+ * Helper function to verify if a git branch exists locally
+ */
+function verifyBranchExists(root_path, branch) {
+  try {
+    execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], {
+      cwd: root_path,
+      timeout: 2000
+    });
+    return branch;
+  } catch {
+    // Try master as fallback
+    try {
+      execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/master'], {
+        cwd: root_path,
+        timeout: 2000
+      });
+      console.log(`Branch '${branch}' not found, using 'master' instead`);
+      return 'master';
+    } catch {
+      return branch; // Return original even if not found
+    }
+  }
+}
+
+/**
+ * Detect the default branch for a git repository
+ * Tries multiple strategies with fallbacks
+ */
+function detectDefaultBranch(root_path) {
+  const strategies = [
+    {
+      name: 'origin HEAD',
+      fn: () => {
+        const output = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+          cwd: root_path,
+          encoding: 'utf-8',
+          timeout: 2000
+        }).trim();
+        return output.replace(/^refs\/remotes\/origin\//, '');
+      }
+    },
+    {
+      name: 'current branch',
+      fn: () => execFileSync('git', ['branch', '--show-current'], {
+        cwd: root_path,
+        encoding: 'utf-8',
+        timeout: 2000
+      }).trim()
+    },
+    {
+      name: 'default fallback',
+      fn: () => 'main'
+    }
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const branch = strategy.fn();
+      if (branch) {
+        console.log(`Detected default branch '${branch}' using ${strategy.name}`);
+        return verifyBranchExists(root_path, branch);
+      }
+    } catch (err) {
+      console.warn(`Failed to detect branch using ${strategy.name}`);
+    }
+  }
+
+  return 'main';
+}
+
 // Initialize settings table if it doesn't exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
@@ -788,68 +859,42 @@ app.post('/api/repos', async (req, res) => {
     // Get repository name from directory
     const repoName = path.basename(root_path);
 
-    // Get default branch
-    let defaultBranch = 'main';
-    try {
-      const output = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
-        cwd: root_path,
-        encoding: 'utf-8',
-        timeout: 2000
-      }).trim();
-      // Remove 'refs/remotes/origin/' prefix
-      defaultBranch = output.replace(/^refs\/remotes\/origin\//, '');
-    } catch (err) {
-      console.warn('Could not determine default branch from origin, trying current branch');
-      // Fallback: try to get current branch
-      try {
-        defaultBranch = execFileSync('git', ['branch', '--show-current'], {
-          cwd: root_path,
-          encoding: 'utf-8',
-          timeout: 2000
-        }).trim() || 'main';
-      } catch (e) {
-        console.warn('Could not determine default branch, using "main"');
+    // Get default branch using helper function
+    const defaultBranch = detectDefaultBranch(root_path);
+
+    // Use a transaction to prevent race conditions
+    const insertRepo = db.transaction((root_path, repoId, repoName, defaultBranch, displayOrder) => {
+      // Check if repository already exists
+      const existing = db.prepare('SELECT * FROM repos WHERE root_path = ?').get(root_path);
+      if (existing) {
+        throw { status: 409, message: 'Repository already exists', repo: existing };
       }
-    }
 
-    // If chosen branch doesn't exist locally, prefer 'master' if present
+      // Insert repository
+      db.prepare(`
+        INSERT INTO repos (id, name, root_path, default_branch, display_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(repoId, repoName, root_path, defaultBranch, displayOrder);
+
+      return db.prepare('SELECT * FROM repos WHERE id = ?').get(repoId);
+    });
+
     try {
-      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${defaultBranch}`], {
-        cwd: root_path,
-        timeout: 2000
-      });
-    } catch {
-      try {
-        execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/master'], {
-          cwd: root_path,
-          timeout: 2000
-        });
-        console.log(`Branch '${defaultBranch}' not found, using 'master' instead`);
-        defaultBranch = 'master';
-      } catch {}
+      // Get highest display_order to add new repo at the end
+      const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get();
+      const displayOrder = (maxOrder?.max || 0) + 1;
+      const repoId = randomUUID();
+
+      const repo = insertRepo(root_path, repoId, repoName, defaultBranch, displayOrder);
+
+      console.log(`✅ Repository added: ${repoName} (id: ${repoId})`);
+      res.status(201).json(repo);
+    } catch (err) {
+      if (err.status === 409) {
+        return res.status(409).json({ error: err.message, repo: err.repo });
+      }
+      throw err;
     }
-
-    // Check if repository already exists
-    const existing = db.prepare('SELECT * FROM repos WHERE root_path = ?').get(root_path);
-    if (existing) {
-      return res.status(409).json({ error: 'Repository already exists', repo: existing });
-    }
-
-    // Get highest display_order to add new repo at the end
-    const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get();
-    const displayOrder = (maxOrder?.max || 0) + 1;
-
-    // Insert repository
-    const repoId = randomUUID();
-    db.prepare(`
-      INSERT INTO repos (id, name, root_path, default_branch, display_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `).run(repoId, repoName, root_path, defaultBranch, displayOrder);
-
-    const repo = db.prepare('SELECT * FROM repos WHERE id = ?').get(repoId);
-
-    console.log(`✅ Repository added: ${repoName} at ${root_path}`);
-    res.status(201).json(repo);
   } catch (error) {
     console.error('Error creating repository:', error);
     res.status(500).json({ error: error.message });

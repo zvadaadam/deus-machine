@@ -232,7 +232,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error archiving workspace:', error);
-      toast.error(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -271,7 +271,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error creating workspace:', error);
-      toast.error(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCreating(false);
     }
@@ -421,7 +421,7 @@ export function Dashboard() {
       toast.success(`Repository "${repo.name}" added successfully!`);
     } catch (error) {
       console.error('Error adding repository:', error);
-      toast.error(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -438,10 +438,11 @@ export function Dashboard() {
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
     setCloning(true);
     try {
-      // Validate GitHub URL format
-      const githubUrlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w.-]+(\.git)?$/;
-      if (!githubUrlPattern.test(githubUrl)) {
-        toast.error('Please enter a valid GitHub repository URL');
+      // Validate GitHub URL format - accept both HTTPS and SSH
+      const httpsPattern = /^https:\/\/github\.com\/[\w-]+\/[\w.-]+(\.git)?$/;
+      const sshPattern = /^git@github\.com:[\w-]+\/[\w.-]+(\.git)?$/;
+      if (!httpsPattern.test(githubUrl) && !sshPattern.test(githubUrl)) {
+        toast.error('Please enter a valid GitHub repository URL (HTTPS or SSH)');
         setCloning(false);
         return;
       }
@@ -457,9 +458,30 @@ export function Dashboard() {
         await mkdir(defaultProjectsDir, { recursive: true });
       }
 
-      // Extract repo name from GitHub URL using URL parser
-      const repoName = new URL(githubUrl).pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || 'repo';
+      // Extract repo name from GitHub URL (works for both HTTPS and SSH)
+      let repoName = 'repo';
+      if (githubUrl.startsWith('git@')) {
+        // SSH format: git@github.com:user/repo.git
+        repoName = githubUrl.split(':')[1]?.split('/').pop()?.replace(/\.git$/, '') || 'repo';
+      } else {
+        // HTTPS format: https://github.com/user/repo.git
+        repoName = new URL(githubUrl).pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || 'repo';
+      }
       const cloneTarget = targetPath || await join(defaultProjectsDir, repoName);
+
+      // Validate target path to prevent cloning into sensitive directories
+      const sensitivePatterns = [
+        '/System', '/usr', '/bin', '/etc', '/var',
+        await join(homePath, '.ssh'),
+        await join(homePath, '.config')
+      ];
+
+      const normalizedTarget = cloneTarget.toLowerCase();
+      if (sensitivePatterns.some(p => normalizedTarget.startsWith(p.toLowerCase()))) {
+        toast.error('Cannot clone to system directories');
+        setCloning(false);
+        return;
+      }
 
       // Clone using git command (via backend or directly)
       // For now, use simple git clone via Node child_process on backend
@@ -507,7 +529,7 @@ export function Dashboard() {
       toast.success(`Repository "${repo.name}" cloned and added successfully!`);
     } catch (error) {
       console.error('Error cloning repository:', error);
-      toast.error(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCloning(false);
     }
