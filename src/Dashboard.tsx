@@ -40,7 +40,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "./components/ui";
-import { AppSidebar } from "./components/app-sidebar";
+import { AppSidebar } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
