@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { WorkspaceChatPanel } from "./WorkspaceChatPanel";
 import type { WorkspaceChatPanelRef } from "./WorkspaceChatPanel";
@@ -9,6 +10,9 @@ import {
   NewWorkspaceModal,
   DiffModal,
   SystemPromptModal,
+  SettingsModal,
+  WelcomeView,
+  CloneRepositoryModal,
 } from "./features/dashboard/components";
 import { BrowserPanel } from "./features/browser/components";
 import {
@@ -32,7 +36,7 @@ import {
 import { AppSidebar } from "./components/app-sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card";
 import { Separator } from "./components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, ArrowRight, Sparkles, FileCode, Monitor } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
 import { useWorkspaceStore, useUIStore } from "./stores";
 import { OpenInDropdown } from "./components/OpenInDropdown";
 import { BranchName } from "./components/BranchName";
@@ -59,11 +63,13 @@ export function Dashboard() {
   const {
     showNewWorkspaceModal,
     showSystemPromptModal,
+    showSettingsModal,
     diffModal,
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
     openSystemPromptModal,
     closeSystemPromptModal,
+    closeSettingsModal,
     openDiffModal,
     closeDiffModal,
   } = useUIStore();
@@ -100,6 +106,13 @@ export function Dashboard() {
   const [loadingSystemPrompt, setLoadingSystemPrompt] = useState(false);
   const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
 
+  // Clone Repository Modal (local state)
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloning, setCloning] = useState(false);
+
+  // User profile (local state)
+  const [username, setUsername] = useState('Developer');
+
   // File changes hook - manages file changes, PR status, dev servers
   const {
     fileChanges,
@@ -117,12 +130,32 @@ export function Dashboard() {
       (async () => {
         const baseURL = await getBaseURL();
         fetch(`${baseURL}/repos`)
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) throw new Error(`Failed to load repos: ${res.status}`);
+            return res.json();
+          })
           .then(data => setRepos(data))
           .catch(err => console.error('Failed to load repos:', err));
       })();
     }
   }, [showNewWorkspaceModal, repos.length]);
+
+  // Load username from settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const baseURL = await getBaseURL();
+        const response = await fetch(`${baseURL}/settings`);
+        if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
+        const settings = await response.json();
+        if (settings.user_name) {
+          setUsername(settings.user_name);
+        }
+      } catch (error) {
+        console.error('Failed to load username:', error);
+      }
+    })();
+  }, []);
 
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
@@ -155,6 +188,14 @@ export function Dashboard() {
       showSystemPromptModal,
     },
   });
+
+  // Memoize recent workspaces computation to avoid recalculating on every render
+  const recentWorkspaces = useMemo(() => {
+    return repoGroups
+      .flatMap(g => g.workspaces)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 15);
+  }, [repoGroups]);
 
   // Listen for 'insert-to-chat' events from BrowserPanel (element selector)
   useEffect(() => {
@@ -199,7 +240,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error archiving workspace:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -208,7 +249,7 @@ export function Dashboard() {
    */
   async function createWorkspace() {
     if (!selectedRepoId) {
-      alert('Please select a repository');
+      toast.error('Please select a repository');
       return;
     }
 
@@ -238,7 +279,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Error creating workspace:', error);
-      alert(`Error: ${error}`);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCreating(false);
     }
@@ -272,6 +313,7 @@ export function Dashboard() {
 
     try {
       const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
+      if (!res.ok) throw new Error(`Failed to load diff: ${res.status}`);
       const data = await res.json();
       openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
     } catch (error) {
@@ -298,7 +340,7 @@ export function Dashboard() {
       setSystemPrompt(data.system_prompt || '');
     } catch (error) {
       console.error('Failed to load system prompt:', error);
-      alert('Failed to load system prompt');
+      toast.error(`Failed to load system prompt: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoadingSystemPrompt(false);
     }
@@ -326,9 +368,184 @@ export function Dashboard() {
       closeSystemPromptModal();
     } catch (error) {
       console.error('Failed to save system prompt:', error);
-      alert('Failed to save system prompt');
+      toast.error(`Failed to save system prompt: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSavingSystemPrompt(false);
+    }
+  }
+
+  /**
+   * Handle creating a new workspace
+   * Opens the NewWorkspaceModal to select a repository
+   */
+  function handleCreateWorkspace() {
+    openNewWorkspaceModal();
+  }
+
+  /**
+   * Handle opening a project from local folder
+   * Uses Tauri dialog picker to select a directory
+   */
+  async function handleOpenProject() {
+    try {
+      // Use Tauri's dialog plugin to select a directory
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Project Directory',
+      });
+
+      if (!selected) {
+        // User cancelled
+        return;
+      }
+
+      const folderPath = typeof selected === 'string' ? selected : selected.path;
+
+      // Call backend to add repository
+      const baseURL = await getBaseURL();
+      const res = await fetch(`${baseURL}/repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root_path: folderPath })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to add repository');
+      }
+
+      const repo = await res.json();
+      console.log('✅ Repository added:', repo);
+
+      // Refresh workspace list
+      const workspaces = await loadWorkspaces();
+      if (workspaces && workspaces.length > 0) {
+        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
+        await refreshDiffStats(allWorkspaces);
+      }
+
+      toast.success(`Repository "${repo.name}" added successfully!`);
+    } catch (error) {
+      console.error('Error adding repository:', error);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Handle opening clone repository modal
+   */
+  function handleOpenCloneModal() {
+    setShowCloneModal(true);
+  }
+
+  /**
+   * Handle cloning a repository from GitHub
+   */
+  async function handleCloneRepository(githubUrl: string, targetPath: string) {
+    setCloning(true);
+    try {
+      // Validate GitHub URL format - accept both HTTPS and SSH
+      const sshPattern = /^git@github\.com:[\w-]+\/[\w.-]+(\.git)?$/;
+      let isValid = false;
+      if (sshPattern.test(githubUrl)) {
+        isValid = true;
+      } else {
+        try {
+          const u = new URL(githubUrl);
+          const parts = u.pathname.replace(/\.git$/, '').split('/').filter(Boolean);
+          isValid = (u.protocol === 'https:' && u.hostname === 'github.com' && parts.length >= 2);
+        } catch {}
+      }
+      if (!isValid) {
+        toast.error('Please enter a valid GitHub repository URL (HTTPS or SSH)');
+        setCloning(false);
+        return;
+      }
+
+      // Use Tauri path API to get home directory
+      const { homeDir, join } = await import('@tauri-apps/api/path');
+      const { exists, mkdir } = await import('@tauri-apps/plugin-fs');
+      const homePath = await homeDir();
+      const defaultProjectsDir = await join(homePath, 'Projects');
+
+      // Ensure Projects directory exists
+      if (!(await exists(defaultProjectsDir))) {
+        await mkdir(defaultProjectsDir, { recursive: true });
+      }
+
+      // Extract repo name from GitHub URL (works for both HTTPS and SSH)
+      let repoName = 'repo';
+      if (githubUrl.startsWith('git@')) {
+        // SSH format: git@github.com:user/repo.git
+        repoName = githubUrl.split(':')[1]?.split('/').pop()?.replace(/\.git$/, '') || 'repo';
+      } else {
+        // HTTPS format: https://github.com/user/repo.git
+        repoName = new URL(githubUrl).pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || 'repo';
+      }
+      const cloneTarget = targetPath || await join(defaultProjectsDir, repoName);
+
+      // Validate target path to prevent cloning outside home directory
+      const { normalize } = await import('@tauri-apps/api/path');
+      const normalizedHome = await normalize(homePath);
+      const normalizedTarget = await normalize(cloneTarget);
+      const { sep } = await import('@tauri-apps/api/path');
+      if (!normalizedTarget.startsWith(normalizedHome + sep) && normalizedTarget !== normalizedHome) {
+        toast.error('Please clone inside your home directory');
+        setCloning(false);
+        return;
+      }
+
+      // Clone using git command (via backend or directly)
+      // For now, use simple git clone via Node child_process on backend
+      // TODO: Implement backend endpoint for git clone
+
+      const baseURL = await getBaseURL();
+
+      // For now, let's use a workaround: shell command via Tauri
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const output = await Command.create('git', [
+        'clone',
+        githubUrl,
+        cloneTarget
+      ]).execute();
+
+      if (output.code !== 0) {
+        throw new Error(output.stderr || 'Git clone failed');
+      }
+
+      console.log('✅ Repository cloned to:', cloneTarget);
+
+      // Add cloned repository to database
+      const res = await fetch(`${baseURL}/repos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root_path: cloneTarget })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to add repository');
+      }
+
+      const repo = await res.json();
+      console.log('✅ Repository added to database:', repo);
+
+      // Refresh workspace list
+      const workspaces = await loadWorkspaces();
+      if (workspaces && workspaces.length > 0) {
+        const allWorkspaces = workspaces.flatMap((g: any) => g.workspaces);
+        await refreshDiffStats(allWorkspaces);
+      }
+
+      setShowCloneModal(false);
+      toast.success(`Repository "${repo.name}" cloned and added successfully!`);
+    } catch (error) {
+      console.error('Error cloning repository:', error);
+      toast.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCloning(false);
     }
   }
 
@@ -366,8 +583,10 @@ export function Dashboard() {
           diffStats={diffStats}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
+          onAddRepository={() => selectWorkspace(null)}
+          onArchive={archiveWorkspace}
           profile={{
-            username: "Developer"
+            username: username
           }}
         />
       )}
@@ -414,71 +633,37 @@ export function Dashboard() {
             </div>
           </>
         ) : (
-          <div className="flex-1 overflow-y-auto scrollbar-vibrancy">
-            <div className="h-full flex flex-col justify-center">
-              <EmptyState
-                icon={<ArrowRight  />}
-                title="No Workspace Selected"
-                description="Select a workspace from the sidebar to view its details and start working"
-                animate
-              />
-
-              {stats && (
-                <Card className="mx-6 elevation-2">
-                  <CardHeader>
-                    <CardTitle className="text-heading">Overview</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Workspaces</span>
-                      <span className="text-body font-semibold">{stats.workspaces} <span className="text-caption text-muted-foreground">({stats.workspaces_ready} ready, {stats.workspaces_archived} archived)</span></span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Repositories</span>
-                      <span className="text-body font-semibold">{stats.repos}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Sessions</span>
-                      <span className="text-body font-semibold">{stats.sessions} <span className="text-caption text-muted-foreground">({stats.sessions_working} working, {stats.sessions_compacting} compacting)</span></span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Messages</span>
-                      <span className="text-body font-semibold">{stats.messages.toLocaleString()}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-body text-muted-foreground">Status</span>
-                      <Badge variant={status === 'Connected' ? 'ready' : 'error'}>{status}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
+          <WelcomeView
+            recentWorkspaces={recentWorkspaces}
+            onCreateWorkspace={handleCreateWorkspace}
+            onOpenProject={handleOpenProject}
+            onCloneRepository={handleOpenCloneModal}
+            onWorkspaceClick={handleWorkspaceClick}
+          />
         )}
         </div>
       </Panel>
 
-      <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
+      {/* Only show right panel when workspace is selected */}
+      {selectedWorkspace && (
+        <>
+          <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
 
-      {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-      <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+          {/* RIGHT PANEL - Browser, File Changes & Terminal */}
+          <Panel id="right" defaultSize={23} minSize={15} maxSize={40} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
           <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
             <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
               <TabsTrigger
                 value="browser"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <Globe className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Browser</span>
               </TabsTrigger>
               <TabsTrigger
                 value="changes"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Changes</span>
@@ -490,7 +675,7 @@ export function Dashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-all duration-200"
+                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
               >
                 <TerminalIcon className="h-4 w-4 mr-2" />
                 <span className="text-body-sm font-medium">Terminal</span>
@@ -534,7 +719,7 @@ export function Dashboard() {
                         href={server.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-all duration-200 no-underline group elevation-1 hover:elevation-2"
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-sidebar-accent/60 transition-[background-color,box-shadow] duration-200 ease-out no-underline group elevation-1 hover:elevation-2"
                         title={`Open ${server.name} in browser`}
                       >
                         <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
@@ -562,7 +747,7 @@ export function Dashboard() {
                       {fileChanges.map((file, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-all duration-200 group elevation-1 hover:elevation-2"
+                          className="flex items-center justify-between p-2.5 rounded-lg hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,box-shadow] duration-200 ease-out group elevation-1 hover:elevation-2"
                           onClick={() => handleFileClick(file.file)}
                           title="Click to view diff"
                         >
@@ -621,8 +806,10 @@ export function Dashboard() {
             )}
           </TabsContent>
         </Tabs>
-      </Panel>
-          </PanelGroup>
+          </Panel>
+        </>
+      )}
+      </PanelGroup>
         </div>
       </SidebarInset>
 
@@ -653,6 +840,18 @@ export function Dashboard() {
         onClose={() => closeSystemPromptModal()}
         onChange={setSystemPrompt}
         onSave={saveSystemPrompt}
+      />
+
+      <CloneRepositoryModal
+        show={showCloneModal}
+        cloning={cloning}
+        onClose={() => setShowCloneModal(false)}
+        onClone={handleCloneRepository}
+      />
+
+      <SettingsModal
+        show={showSettingsModal}
+        onClose={closeSettingsModal}
       />
     </SidebarProvider>
   );

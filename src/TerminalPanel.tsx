@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Terminal } from './Terminal';
 
 interface DevServer {
@@ -90,18 +91,18 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
         setShowBrowser(true);
         setShowRun(false);
       } else {
-        alert(
-          `No development server detected!\n\n` +
-          `Please start your dev server first:\n` +
-          `  • Vite: npm run dev (port 5173)\n` +
-          `  • React/Next: npm run dev (port 3000)\n` +
-          `  • Angular: ng serve (port 4200)\n\n` +
-          `Then click Run again.`
-        );
+        toast.error('No development server detected!', {
+          description: (
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {`Please start your dev server first:\n  • Vite: npm run dev (port 5173)\n  • React/Next: npm run dev (port 3000)\n  • Angular: ng serve (port 4200)\n\nThen click Run again.`}
+            </div>
+          ),
+          duration: 5000,
+        });
       }
     } catch (error) {
       console.error('Error detecting server:', error);
-      alert('Error detecting development server. Please check the console.');
+      toast.error('Error detecting development server. Please check the console.');
     } finally {
       setDetectingServer(false);
     }
@@ -119,7 +120,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none transition-colors duration-200 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none transition-colors duration-200 ease-out ${
                 activeTabId === tab.id
                   ? 'bg-background text-foreground font-medium'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -131,7 +132,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             >
               <span>{tab.title}</span>
               <button
-                className="bg-transparent border-none text-muted-foreground text-lg leading-none p-0 w-4 h-4 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 hover:bg-muted/80 hover:text-foreground"
+                className="bg-transparent border-none text-muted-foreground text-lg leading-none p-0 w-4 h-4 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -142,7 +143,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             </div>
           ))}
           <button
-            className="bg-transparent border-none text-muted-foreground text-lg px-2 py-1 cursor-pointer rounded transition-colors duration-200 hover:bg-muted/80 hover:text-foreground"
+            className="bg-transparent border-none text-muted-foreground text-lg px-2 py-1 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
             onClick={addTerminal}
             title="New terminal"
           >
@@ -150,7 +151,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
           </button>
         </div>
         <button
-          className="flex items-center gap-1 bg-transparent border-none text-muted-foreground px-3 py-1.5 mr-2 cursor-pointer text-[13px] rounded transition-colors duration-200 whitespace-nowrap hover:bg-muted/80 hover:text-foreground"
+          className="flex items-center gap-1 bg-transparent border-none text-muted-foreground px-3 py-1.5 mr-2 cursor-pointer text-[13px] rounded transition-colors duration-200 ease-out whitespace-nowrap hover:bg-muted/80 hover:text-foreground"
           onClick={handleRunWorkspace}
           title="Run workspace (⌘R)"
         >
@@ -168,7 +169,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
                 </span>
               </div>
               <button
-                className="bg-transparent border-none text-muted-foreground text-xl leading-none p-0 w-6 h-6 flex items-center justify-center cursor-pointer rounded transition-all duration-200 hover:bg-muted hover:text-foreground"
+                className="bg-transparent border-none text-muted-foreground text-xl leading-none p-0 w-6 h-6 flex items-center justify-center cursor-pointer rounded transition-[background-color,color] duration-200 ease-out hover:bg-muted hover:text-foreground"
                 onClick={() => {
                   setShowBrowser(false);
                   setShowRun(true);
@@ -189,11 +190,11 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
         ) : showRun && tabs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full bg-background">
             <button
-              className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-all duration-200 hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
-              <div className="text-5xl text-muted-foreground mb-2 transition-colors duration-200 group-hover:text-primary">
+              <div className="text-5xl text-muted-foreground mb-2 transition-colors duration-200 ease-out group-hover:text-primary">
                 ▶
               </div>
               <div className="text-base font-semibold text-muted-foreground mb-1">
