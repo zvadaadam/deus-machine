@@ -96,4 +96,18 @@ export const WorkspaceService = {
   fetchDevServers: async (id: string): Promise<{ servers: DevServer[] }> => {
     return apiClient.get<{ servers: DevServer[] }>(`/workspaces/${id}/dev-servers`);
   },
+
+  /**
+   * Fetch system prompt for a workspace
+   */
+  fetchSystemPrompt: async (id: string): Promise<{ system_prompt: string }> => {
+    return apiClient.get<{ system_prompt: string }>(`/workspaces/${id}/system-prompt`);
+  },
+
+  /**
+   * Update system prompt for a workspace
+   */
+  updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {
+    return apiClient.put(`/workspaces/${id}/system-prompt`, { system_prompt: systemPrompt });
+  },
 };

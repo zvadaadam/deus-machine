@@ -34,6 +34,17 @@ class ApiClient {
   }
 
   /**
+   * Generic PUT request
+   */
+  async put<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  /**
    * Generic PATCH request
    */
   async patch<T>(endpoint: string, data: any): Promise<T> {

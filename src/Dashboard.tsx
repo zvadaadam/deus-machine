@@ -25,6 +25,12 @@ import {
   useDevServers,
   useCreateWorkspace,
   useArchiveWorkspace,
+  useRepos,
+  useAddRepo,
+  useCloneRepo,
+  useSystemPrompt,
+  useUpdateSystemPrompt,
+  useSettings as useSettingsQuery,
 } from "./hooks/queries";
 import {
   Button,
@@ -98,25 +104,24 @@ export function Dashboard() {
   }, [diffStatsQuery.data, setMultipleDiffStats]);
 
   // Local component state (not global)
-  const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<WorkspaceChatPanelRef | null>(null);
 
-  // System Prompt Editor (local state - specific to this feature)
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [loadingSystemPrompt, setLoadingSystemPrompt] = useState(false);
-  const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
-
   // Clone Repository Modal (local state)
   const [showCloneModal, setShowCloneModal] = useState(false);
-  const [cloning, setCloning] = useState(false);
 
-  // User profile (local state)
-  const [username, setUsername] = useState('Developer');
+  // Queries for repos, settings, system prompt
+  const reposQuery = useRepos();
+  const settingsQuery = useSettingsQuery();
+  const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
+
+  const repos = reposQuery.data || [];
+  const username = settingsQuery.data?.user_name || 'Developer';
 
   // File changes queries with automatic caching
   const fileChangesQuery = useFileChangesQuery(selectedWorkspace?.id || null);
@@ -130,39 +135,12 @@ export function Dashboard() {
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
   const archiveWorkspaceMutation = useArchiveWorkspace();
+  const addRepoMutation = useAddRepo();
+  const cloneRepoMutation = useCloneRepo();
+  const updateSystemPromptMutation = useUpdateSystemPrompt();
 
 
-  useEffect(() => {
-    if (showNewWorkspaceModal && repos.length === 0) {
-      (async () => {
-        const baseURL = await getBaseURL();
-        fetch(`${baseURL}/repos`)
-          .then(res => {
-            if (!res.ok) throw new Error(`Failed to load repos: ${res.status}`);
-            return res.json();
-          })
-          .then(data => setRepos(data))
-          .catch(err => console.error('Failed to load repos:', err));
-      })();
-    }
-  }, [showNewWorkspaceModal, repos.length]);
-
-  // Load username from settings
-  useEffect(() => {
-    (async () => {
-      try {
-        const baseURL = await getBaseURL();
-        const response = await fetch(`${baseURL}/settings`);
-        if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
-        const settings = await response.json();
-        if (settings.user_name) {
-          setUsername(settings.user_name);
-        }
-      } catch (error) {
-        console.error('Failed to load username:', error);
-      }
-    })();
-  }, []);
+  // Repos and settings loaded automatically via TanStack Query
 
   // Keyboard shortcuts hook
   useKeyboardShortcuts({
@@ -300,48 +278,26 @@ export function Dashboard() {
    */
   async function openSystemPromptEditor() {
     if (!selectedWorkspace) return;
-
     openSystemPromptModal();
-    setLoadingSystemPrompt(true);
-    setSystemPrompt('');
-
-    try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`);
-      const data = await res.json();
-      setSystemPrompt(data.system_prompt || '');
-    } catch (error) {
-      console.error('Failed to load system prompt:', error);
-      toast.error(`Failed to load system prompt: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setLoadingSystemPrompt(false);
-    }
+    // System prompt loaded automatically via useSystemPrompt hook
   }
 
   /**
    * Save system prompt (CLAUDE.md) to workspace
    */
-  async function saveSystemPrompt() {
+  async function saveSystemPrompt(newPrompt: string) {
     if (!selectedWorkspace) return;
 
-    setSavingSystemPrompt(true);
     try {
-      const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/system-prompt`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: systemPrompt })
+      await updateSystemPromptMutation.mutateAsync({
+        workspaceId: selectedWorkspace.id,
+        systemPrompt: newPrompt,
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to save system prompt');
-      }
-
       console.log('✅ System prompt saved');
       closeSystemPromptModal();
     } catch (error) {
       console.error('Failed to save system prompt:', error);
       toast.error(`Failed to save system prompt: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setSavingSystemPrompt(false);
     }
   }
 
@@ -374,25 +330,9 @@ export function Dashboard() {
 
       const folderPath = typeof selected === 'string' ? selected : (selected as any).path;
 
-      // Call backend to add repository
-      const baseURL = await getBaseURL();
-      const res = await fetch(`${baseURL}/repos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root_path: folderPath })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to add repository');
-      }
-
-      const repo = await res.json();
+      // Add repository via mutation
+      const repo = await addRepoMutation.mutateAsync(folderPath);
       console.log('✅ Repository added:', repo);
-
-      // Refresh workspace list
-      await workspacesQuery.refetch();
-
       toast.success(`Repository "${repo.name}" added successfully!`);
     } catch (error) {
       console.error('Error adding repository:', error);
@@ -484,23 +424,9 @@ export function Dashboard() {
 
       console.log('✅ Repository cloned to:', cloneTarget);
 
-      // Add cloned repository to database
-      const res = await fetch(`${baseURL}/repos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root_path: cloneTarget })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to add repository');
-      }
-
-      const repo = await res.json();
+      // Add cloned repository via mutation
+      const repo = await addRepoMutation.mutateAsync(cloneTarget);
       console.log('✅ Repository added to database:', repo);
-
-      // Refresh workspace list
-      await workspacesQuery.refetch();
 
       setShowCloneModal(false);
       toast.success(`Repository "${repo.name}" cloned and added successfully!`);
@@ -797,12 +723,19 @@ export function Dashboard() {
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}
         workspaceName={selectedWorkspace?.directory_name || ""}
-        systemPrompt={systemPrompt}
-        loading={loadingSystemPrompt}
-        saving={savingSystemPrompt}
+        systemPrompt={systemPromptQuery.data || ''}
+        loading={systemPromptQuery.isLoading}
+        saving={updateSystemPromptMutation.isPending}
         onClose={() => closeSystemPromptModal()}
-        onChange={setSystemPrompt}
-        onSave={saveSystemPrompt}
+        onChange={(value) => {
+          // Local state management for textarea is handled by the modal
+          // We'll update this to use a local state ref
+        }}
+        onSave={() => {
+          // Get the current value from the modal's internal state
+          const promptValue = (document.querySelector('textarea[placeholder*="Instructions"]') as HTMLTextAreaElement)?.value || '';
+          saveSystemPrompt(promptValue);
+        }}
       />
 
       <CloneRepositoryModal

@@ -77,3 +77,15 @@ export function useUpdateSettings() {
     },
   });
 }
+
+/**
+ * Clear conversation memory mutation
+ */
+export function useClearMemory() {
+  return useMutation({
+    mutationFn: async () => {
+      const { MemoryService } = await import('@/services/memory.service');
+      return MemoryService.clear();
+    },
+  });
+}
