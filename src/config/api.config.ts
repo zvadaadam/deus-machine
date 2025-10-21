@@ -164,6 +164,9 @@ export const ENDPOINTS = {
   WORKSPACE_DIFF_FILES: (id: string) => `/workspaces/${id}/diff-files`,
   WORKSPACE_DIFF_FILE: (id: string, file: string) =>
     `/workspaces/${id}/diff-file?file=${encodeURIComponent(file)}`,
+  WORKSPACE_PR_STATUS: (id: string) => `/workspaces/${id}/pr-status`,
+  WORKSPACE_DEV_SERVERS: (id: string) => `/workspaces/${id}/dev-servers`,
+  WORKSPACE_SYSTEM_PROMPT: (id: string) => `/workspaces/${id}/system-prompt`,
 
   // Session endpoints
   SESSIONS: '/sessions',

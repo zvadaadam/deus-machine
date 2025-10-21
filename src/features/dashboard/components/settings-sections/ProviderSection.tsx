@@ -57,7 +57,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
               id="custom-endpoint"
               type="url"
               placeholder="https://api.example.com/v1"
-              defaultValue={(settings as any).custom_endpoint ?? ''}
+              defaultValue={settings.custom_endpoint ?? ''}
               onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
             />
           </div>

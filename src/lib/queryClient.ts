@@ -21,8 +21,8 @@ export const queryClient = new QueryClient({
       // Refetch on window focus (good for IDE that might be backgrounded)
       refetchOnWindowFocus: true,
 
-      // Don't refetch on mount if data is fresh (reduces unnecessary requests)
-      refetchOnMount: 'always',
+      // Refetch on mount only if data is stale (reduces unnecessary requests)
+      refetchOnMount: true,
 
       // Don't refetch on reconnect (we handle this with polling)
       refetchOnReconnect: false,

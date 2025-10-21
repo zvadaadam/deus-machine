@@ -4,6 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { WorkspaceService } from '@/services/workspace.service';
 import { RepoService } from '@/services/repo.service';
 import { queryKeys } from '@/lib/queryKeys';
@@ -54,53 +55,65 @@ export function useDiffStats(workspaceId: string | null) {
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
 
-  // Get all workspace IDs
-  const workspaceIds = repoGroups.flatMap(g => g.workspaces.map(w => w.id));
+  // Stable, de-duplicated IDs for keying and effects
+  const workspaceIds = useMemo(() => {
+    const ids = repoGroups.flatMap(g => g.workspaces.map(w => w.id));
+    return Array.from(new Set(ids)).sort(); // stable order
+  }, [repoGroups]);
 
-  // Create queries for all workspaces
-  const queries = useQuery({
+  // Prime cache for first N and return aggregate
+  const query = useQuery({
     queryKey: ['bulk-diff-stats', workspaceIds],
+    enabled: workspaceIds.length > 0,
+    staleTime: 1000,
     queryFn: async () => {
-      // Load first 5 immediately
       const first5 = workspaceIds.slice(0, 5);
       const firstResults = await Promise.all(
         first5.map(id => WorkspaceService.fetchDiffStats(id))
       );
 
-      // Cache the first 5 results immediately
-      first5.forEach((id, index) => {
-        queryClient.setQueryData(
-          queryKeys.workspaces.diffStats(id),
-          firstResults[index]
-        );
+      // Cache first 5 results immediately
+      first5.forEach((id, i) => {
+        queryClient.setQueryData(queryKeys.workspaces.diffStats(id), firstResults[i]);
       });
 
-      // Load remaining in background (staggered)
-      if (workspaceIds.length > 5) {
-        const remaining = workspaceIds.slice(5);
-        remaining.forEach((id, index) => {
-          setTimeout(() => {
-            queryClient.prefetchQuery({
-              queryKey: queryKeys.workspaces.diffStats(id),
-              queryFn: () => WorkspaceService.fetchDiffStats(id),
-            });
-          }, index * 200);
-        });
-      }
-
-      // Return aggregated results
-      const allStats: Record<string, DiffStats> = {};
-      first5.forEach((id, index) => {
-        allStats[id] = firstResults[index];
+      // Aggregate from cache (includes any previously prefetched items)
+      const aggregate: Record<string, DiffStats> = {};
+      workspaceIds.forEach(id => {
+        const stats = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
+        if (stats) aggregate[id] = stats;
       });
-      return allStats;
+
+      return aggregate;
     },
-    enabled: workspaceIds.length > 0,
-    refetchInterval: API_CONFIG.POLL_INTERVAL,
-    staleTime: 1000,
   });
 
-  return queries;
+  // Stagger prefetch for remaining IDs with cleanup
+  useEffect(() => {
+    if (workspaceIds.length <= 5) return;
+
+    const timers = workspaceIds.slice(5).map((id, idx) => {
+      return setTimeout(() => {
+        queryClient
+          .prefetchQuery({
+            queryKey: queryKeys.workspaces.diffStats(id),
+            queryFn: () => WorkspaceService.fetchDiffStats(id),
+          })
+          .then((data) => {
+            // Update aggregate cache with new data
+            const existing = queryClient.getQueryData<Record<string, DiffStats>>(['bulk-diff-stats', workspaceIds]) || {};
+            queryClient.setQueryData(['bulk-diff-stats', workspaceIds], { ...existing, [id]: data as DiffStats });
+          });
+      }, idx * 200);
+    });
+
+    // Cleanup timers on unmount or when workspaceIds change
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [workspaceIds, queryClient]);
+
+  return query;
 }
 
 /**
