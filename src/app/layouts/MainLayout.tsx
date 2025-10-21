@@ -13,7 +13,7 @@ import { DiffModal, FileChangesPanel } from "@/features/workspace";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
 import { BrowserPanel } from "@/features/browser";
-import { useKeyboardShortcuts } from "@/hooks";
+import { useKeyboardShortcuts } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -21,11 +21,13 @@ import {
   usePRStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
-  useRepos,
-  useAddRepo,
   useSystemPrompt,
   useUpdateSystemPrompt,
-} from "@/hooks/queries";
+} from "@/features/workspace/api";
+import {
+  useRepos,
+  useAddRepo,
+} from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
 import {
   Button,
@@ -43,7 +45,8 @@ import { AppSidebar } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
-import { useWorkspaceStore, useUIStore } from "@/stores";
+import { useWorkspaceStore } from "@/features/workspace/store";
+import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import type {
   Workspace,

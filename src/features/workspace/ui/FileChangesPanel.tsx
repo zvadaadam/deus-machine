@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { EmptyState } from "@/components/ui";
-import { useFileChanges, useDevServers } from "@/hooks/queries";
-import { useUIStore } from "@/stores";
+import { useFileChanges, useDevServers } from "@/features/workspace/api";
+import { useUIStore } from "@/shared/stores/uiStore";
 import type { Workspace } from "@/shared/types";
 
 interface FileChangesPanelProps {

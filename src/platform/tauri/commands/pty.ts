@@ -4,7 +4,7 @@
  * Wrappers for Tauri invoke commands related to pseudoterminal operations
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../invoke';
 
 export const ptyCommands = {
   spawn: (options: {
