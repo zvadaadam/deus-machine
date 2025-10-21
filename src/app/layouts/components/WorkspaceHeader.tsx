@@ -1,7 +1,6 @@
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
-import { BranchName } from '@/shared/components/BranchName';
-import { OpenInDropdown } from '@/shared/components/OpenInDropdown';
+import { BranchName, OpenInDropdown } from '@/shared/components';
 
 interface WorkspaceHeaderProps {
   branch: string;

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
@@ -14,7 +14,6 @@ interface FileChangesPanelProps {
  * Shows dev servers and file changes for the selected workspace
  */
 export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
-  const [loadingDiff, setLoadingDiff] = useState(false);
   const currentFileRef = useRef<string | null>(null);
   const { openDiffModal } = useUIStore();
 
@@ -32,7 +31,6 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
     // Track this file as the current one being loaded
     currentFileRef.current = file;
 
-    setLoadingDiff(true);
     openDiffModal(file, 'Loading diff...'); // Open with loading message
 
     try {
@@ -50,8 +48,6 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
       if (currentFileRef.current !== file) return;
 
       openDiffModal(file, 'Error loading diff');
-    } finally {
-      setLoadingDiff(false);
     }
   }
 
@@ -64,9 +60,9 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
             <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">Dev Servers</h3>
           </div>
           <div className="p-3 space-y-2">
-            {devServers.map((server, index) => (
+            {devServers.map((server) => (
               <a
-                key={index}
+                key={server.url}
                 href={server.url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -95,9 +91,9 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
         <div className="p-3">
           {selectedWorkspace && fileChanges.length > 0 ? (
             <div className="space-y-1">
-              {fileChanges.map((file, index) => (
+              {fileChanges.map((file) => (
                 <div
-                  key={index}
+                  key={file.file}
                   className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer group elevation-1 hover:elevation-2 [@media(hover:hover)and(pointer:fine)]:hover:bg-sidebar-accent/60 [@media(hover:hover)and(pointer:fine)]:transition-[background-color,box-shadow] [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:ease-out"
                   onClick={() => handleFileClick(file.file)}
                   title="Click to view diff"

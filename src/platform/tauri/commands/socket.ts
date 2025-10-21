@@ -7,12 +7,12 @@
 import { invoke } from '../invoke';
 
 export const socketCommands = {
-  connect: (path: string) =>
-    invoke('socket_connect', { path }),
+  connect: (path: string): Promise<void> =>
+    invoke<void>('socket_connect', { path }),
 
-  send: (data: string) =>
-    invoke('socket_send', { data }),
+  send: (data: string): Promise<void> =>
+    invoke<void>('socket_send', { data }),
 
-  close: () =>
-    invoke('socket_close'),
+  close: (): Promise<void> =>
+    invoke<void>('socket_close'),
 };

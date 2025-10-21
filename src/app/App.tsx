@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "./layouts/MainLayout";
-import { ErrorBoundary } from "@/shared/components";
-import { DashboardError } from "@/shared/components/error-fallbacks";
+import { ErrorBoundary, DashboardError } from "@/shared/components";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
 
