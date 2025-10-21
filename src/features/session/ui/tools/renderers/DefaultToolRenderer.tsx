@@ -51,7 +51,7 @@ export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) 
     <div className={cn(
       chatTheme.blocks.tool.container,
       toolInfo.isMcp
-        ? 'border-l-4 border-l-purple-500/50 bg-purple-50/20 dark:bg-purple-950/10'
+        ? 'border-l-4 border-l-secondary/50 bg-secondary/5'
         : chatTheme.blocks.tool.borderLeft.default
     )}>
       {/* Header - Clickable to expand/collapse */}
@@ -69,7 +69,7 @@ export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) 
             <ChevronRight className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
           )}
           {toolInfo.isMcp ? (
-            <Plug className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" aria-hidden="true" />
+            <Plug className="w-4 h-4 text-secondary-foreground flex-shrink-0" aria-hidden="true" />
           ) : (
             <Wrench className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           )}

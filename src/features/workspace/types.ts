@@ -3,8 +3,9 @@
  * Centralized types for workspace entities and operations
  */
 
+import type { SessionStatus } from '@/features/session/types';
+
 export type WorkspaceState = 'ready' | 'initializing' | 'archived';
-export type SessionStatus = 'idle' | 'working' | 'compacting';
 
 /**
  * Core workspace entity

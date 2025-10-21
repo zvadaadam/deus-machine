@@ -59,7 +59,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
           {description && (
             <div className="text-xs text-muted-foreground mb-1">{description}</div>
           )}
-          <code className="text-xs font-mono bg-black/50 text-green-400 px-2 py-1 rounded block">
+          <code className="text-xs font-mono bg-muted/30 text-success px-2 py-1 rounded block">
             $ {command}
           </code>
         </div>
@@ -84,7 +84,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                   'max-h-[200px] overflow-y-auto',
                   isError
                     ? 'bg-destructive/10 text-destructive border border-destructive/30'
-                    : 'bg-black/50 text-green-400 border border-border/40'
+                    : 'bg-muted/30 text-success border border-border/40'
                 )}
               >
                 {typeof toolResult.content === 'object'
