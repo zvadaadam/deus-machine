@@ -1,14 +1,14 @@
 # 🏗️ COMPREHENSIVE REFACTORING PLAN v2.0
 
 **Date:** 2025-10-21
-**Last Updated:** 2025-10-21 (integrated external AI feedback)
+**Last Updated:** 2025-10-21 (integrated external AI feedback - 2 rounds)
 **Branch:** zvadaadam/walla-walla → src-structure-refactor
 **Architecture:** Domain-Driven Feature-First (FSD-Lite)
 **Total Files:** 141 files
 **Estimated Time:** 6-8 hours
 **Migration Approach:** Phased, non-breaking, fully reversible
 
-**✅ FEEDBACK INTEGRATED:**
+**✅ FEEDBACK INTEGRATED (Round 1):**
 - Fixed config location (shared/ not app/) to avoid upward dependencies
 - Added explicit uiStore split with code examples
 - Removed non-existent optional components (WorkspaceList, WorkspaceCard, DiffStats)
@@ -17,6 +17,13 @@
 - Added path aliases update in Phase 1
 - Added dynamic imports check in Phase 14
 - Added Tauri imports validation check
+
+**✅ FEEDBACK INTEGRATED (Round 2):**
+- Fixed tsconfig.json/vite.config.ts editing bug (was using `cat >>`, now manual edit)
+- Added SocketService behavior checklist in Phase 11 (10-point preservation checklist)
+- Added `npx tsc --noEmit` after every phase for early error detection
+- Added ESLint `no-restricted-imports` rule in Phase 13 to enforce public APIs
+- Kept React Router (deferred TanStack Router migration)
 
 ---
 
@@ -1012,29 +1019,33 @@ mkdir -p src/styles
 # 1.6: Update TypeScript and Vite path aliases
 # ⚠️ CRITICAL: Update path aliases NOW so imports work during migration
 
-# Update tsconfig.json - add new paths, keep existing
-cat >> tsconfig.json << 'EOF'
-// Add these to "compilerOptions.paths":
-{
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"],
-      "@/app/*": ["./src/app/*"],
-      "@/features/*": ["./src/features/*"],
-      "@/platform/*": ["./src/platform/*"],
-      "@/shared/*": ["./src/shared/*"],
-      "@/components/*": ["./src/components/*"]
-    }
-  }
-}
-EOF
+# MANUAL STEP: Edit tsconfig.json
+# Open tsconfig.json and update "compilerOptions.paths" to include:
+#
+#   "paths": {
+#     "@/*": ["./src/*"],
+#     "@/app/*": ["./src/app/*"],
+#     "@/features/*": ["./src/features/*"],
+#     "@/platform/*": ["./src/platform/*"],
+#     "@/shared/*": ["./src/shared/*"],
+#     "@/components/*": ["./src/components/*"]
+#   }
+#
+# Keep existing paths if any exist!
 
-# Update vite.config.ts - add new aliases
-# Edit resolve.alias section to include:
-#   '@/app': '/src/app',
-#   '@/features': '/src/features',
-#   '@/platform': '/src/platform',
-#   '@/shared': '/src/shared',
+# MANUAL STEP: Edit vite.config.ts
+# Open vite.config.ts and update resolve.alias to include:
+#
+#   resolve: {
+#     alias: {
+#       '@': path.resolve(__dirname, './src'),
+#       '@/app': path.resolve(__dirname, './src/app'),
+#       '@/features': path.resolve(__dirname, './src/features'),
+#       '@/platform': path.resolve(__dirname, './src/platform'),
+#       '@/shared': path.resolve(__dirname, './src/shared'),
+#       '@/components': path.resolve(__dirname, './src/components'),
+#     },
+#   },
 
 # 1.7: Verify structure
 tree -L 4 src/ | head -100
@@ -1134,6 +1145,11 @@ mv src/services/api.ts src/shared/api/client.ts
 
 **Test after Phase 2:**
 ```bash
+# TypeScript check
+npx tsc --noEmit
+# Should show 0 errors
+
+# Build check
 npm run build
 # Should compile (no runtime test yet)
 ```
@@ -1165,6 +1181,7 @@ mv src/hooks/use-mobile.tsx src/shared/hooks/
 
 **Test after Phase 3:**
 ```bash
+npx tsc --noEmit
 npm run build
 ```
 
@@ -1203,6 +1220,7 @@ EOF
 
 **Test after Phase 4:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Open terminal tab - verify it works
 ```
@@ -1238,6 +1256,7 @@ EOF
 
 **Test after Phase 5:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Open browser tab - verify it works
 ```
@@ -1291,6 +1310,7 @@ EOF
 
 **Test after Phase 6:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Open settings modal - verify all tabs work
 ```
@@ -1356,6 +1376,7 @@ EOF
 
 **Test after Phase 7:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Test WelcomeView, create workspace, clone repo
 ```
@@ -1429,6 +1450,7 @@ EOF
 
 **Test after Phase 8:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Select workspace, view file changes, open diff modal
 ```
@@ -1517,6 +1539,7 @@ EOF
 
 **Test after Phase 9:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Send messages, verify tools render, open system prompt modal
 ```
@@ -1599,6 +1622,7 @@ EOF
 
 **Test after Phase 10:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Verify sidebar shows, collapse/expand repos
 ```
@@ -1606,19 +1630,25 @@ npm run dev:full
 ### **PHASE 11: Create Platform Layer** (45 minutes)
 
 ```bash
-# 11.1: Create socket wrapper
-# ⚠️ CRITICAL: src/services/socket.ts does MORE than just invoke Tauri commands!
+# 11.0: Map SocketService behavior BEFORE migrating
+# ⚠️ CRITICAL: Read src/services/socket.ts and verify ALL behavior is preserved!
 #
-# It contains:
-#   - getBaseURL() - HTTP backend discovery via invoke('get_backend_port')
-#   - localStorage port caching
-#   - Browser mode fallbacks (http://localhost:PORT)
-#   - Reconnection logic
+# Behavior checklist (must preserve):
+#   ✅ Tauri environment detection (isTauriEnv check)
+#   ✅ Dynamic import of getBaseURL from config
+#   ✅ HTTP backend discovery via fetch('/sidecar/status')
+#   ✅ Socket path retrieval from backend
+#   ✅ Singleton pattern (single instance)
+#   ✅ Connection state tracking (connected flag)
+#   ✅ Web mode fallback (console log when not Tauri)
+#   ✅ High-level session methods (startSession, sendMessage, stopSession, getMessages)
+#   ✅ NDJSON message serialization
+#   ✅ Tauri invoke commands: connect_to_sidecar, send_sidecar_message, receive_sidecar_message, disconnect_from_sidecar
 #
-# When creating platform/tauri/socket/, make sure ALL this logic survives!
-# Don't just wrap invoke() calls - preserve the full SocketService behavior.
+# Before continuing, read the full file and confirm you understand each part!
 
-# Extract FULL logic from src/services/socket.ts
+# 11.1: Create socket wrapper
+# Extract FULL logic from src/services/socket.ts (not just invoke wrappers!)
 cat > src/platform/tauri/socket/SocketClient.ts << 'EOF'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -1706,6 +1736,7 @@ EOF
 
 **Test after Phase 11:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Test terminal, verify PTY commands work through wrapper
 ```
@@ -1838,6 +1869,7 @@ mv src/main.tsx src/app/main.tsx
 
 **Test after Phase 12:**
 ```bash
+npx tsc --noEmit
 npm run dev:full
 # Full app test - all features should work
 ```
@@ -1872,6 +1904,30 @@ rmdir src/hooks/queries
 rmdir src/hooks/
 rmdir src/features/dashboard/
 rmdir src/features/workspace/
+
+# 13.5: Add ESLint import guardrails
+# MANUAL STEP: Add to .eslintrc.cjs or eslint.config.js
+#
+# Add this rule to prevent deep imports into feature internals:
+#
+#   rules: {
+#     'no-restricted-imports': ['error', {
+#       patterns: [
+#         {
+#           group: ['@/features/*/ui/*', '@/features/*/api/*', '@/features/*/store/*', '@/features/*/hooks/*'],
+#           message: 'Import from feature public API only: @/features/{feature} (not internals like /ui/, /api/, etc.)',
+#         },
+#         {
+#           group: ['@/platform/tauri/*'],
+#           message: 'Import from @/platform/tauri, not internal modules',
+#         },
+#       ],
+#     }],
+#   }
+#
+# This enforces:
+#   ✅ import { SessionPanel } from '@/features/session'
+#   ❌ import { SessionPanel } from '@/features/session/ui/SessionPanel'
 ```
 
 ### **PHASE 14: Validation** (30 minutes)
