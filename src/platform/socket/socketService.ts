@@ -9,10 +9,7 @@
  * Note: In web mode (non-Tauri), this service is disabled and returns mock responses
  */
 
-import { invoke } from '@tauri-apps/api/core';
-
-// Check if running in Tauri environment
-const isTauriEnv = typeof window !== 'undefined' && '__TAURI__' in window;
+import { invoke, isTauriEnv } from '@/platform/tauri';
 
 export interface SocketMessage {
   command: string;
@@ -57,7 +54,7 @@ class UnixSocketService {
 
       this.socketPath = status.socketPath;
 
-      // 2. Connect via Tauri Rust
+      // 2. Connect via Tauri Rust (using platform wrapper)
       await invoke('connect_to_sidecar', { socketPath: this.socketPath });
 
       this.connected = true;
@@ -77,7 +74,7 @@ class UnixSocketService {
     }
 
     try {
-      // Send NDJSON message via Rust
+      // Send NDJSON message via Rust (using platform wrapper)
       const messageStr = JSON.stringify(message);
       await invoke('send_sidecar_message', { message: messageStr });
 

@@ -6,7 +6,7 @@ import path from "path";
 export default defineConfig(async () => ({
   plugins: [react()],
 
-  // Path aliases for clean imports
+  // Path aliases - FSD-Lite Architecture
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -15,12 +15,6 @@ export default defineConfig(async () => ({
       '@/platform': path.resolve(__dirname, './src/platform'),
       '@/shared': path.resolve(__dirname, './src/shared'),
       '@/components': path.resolve(__dirname, './src/components'),
-      '@/hooks': path.resolve(__dirname, './src/hooks'),
-      '@/services': path.resolve(__dirname, './src/services'),
-      '@/types': path.resolve(__dirname, './src/types'),
-      '@/config': path.resolve(__dirname, './src/config'),
-      '@/utils': path.resolve(__dirname, './src/utils'),
-      '@/styles': path.resolve(__dirname, './src/styles'),
     },
   },
 

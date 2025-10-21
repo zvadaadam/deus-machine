@@ -14,7 +14,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Path Aliases */
+    /* Path Aliases - FSD-Lite Architecture */
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
@@ -22,13 +22,7 @@
       "@/features/*": ["src/features/*"],
       "@/platform/*": ["src/platform/*"],
       "@/shared/*": ["src/shared/*"],
-      "@/components/*": ["src/components/*"],
-      "@/hooks/*": ["src/hooks/*"],
-      "@/services/*": ["src/services/*"],
-      "@/types/*": ["src/types/*"],
-      "@/config/*": ["src/config/*"],
-      "@/utils/*": ["src/utils/*"],
-      "@/styles/*": ["src/styles/*"]
+      "@/components/*": ["src/components/*"]
     },
 
     /* Linting */
