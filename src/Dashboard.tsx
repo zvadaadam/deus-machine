@@ -130,7 +130,10 @@ export function Dashboard() {
       (async () => {
         const baseURL = await getBaseURL();
         fetch(`${baseURL}/repos`)
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) throw new Error(`Failed to load repos: ${res.status}`);
+            return res.json();
+          })
           .then(data => setRepos(data))
           .catch(err => console.error('Failed to load repos:', err));
       })();
@@ -143,9 +146,10 @@ export function Dashboard() {
       try {
         const baseURL = await getBaseURL();
         const response = await fetch(`${baseURL}/settings`);
+        if (!response.ok) throw new Error(`Failed to load settings: ${response.status}`);
         const settings = await response.json();
-        if (settings.username) {
-          setUsername(settings.username);
+        if (settings.user_name) {
+          setUsername(settings.user_name);
         }
       } catch (error) {
         console.error('Failed to load username:', error);
@@ -301,6 +305,7 @@ export function Dashboard() {
 
     try {
       const res = await fetch(`${await getBaseURL()}/workspaces/${selectedWorkspace.id}/diff-file?file=${encodeURIComponent(file)}`);
+      if (!res.ok) throw new Error(`Failed to load diff: ${res.status}`);
       const data = await res.json();
       openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
     } catch (error) {
@@ -442,13 +447,19 @@ export function Dashboard() {
       }
 
       // Use Tauri path API to get home directory
-      const { homeDir } = await import('@tauri-apps/api/path');
+      const { homeDir, join } = await import('@tauri-apps/api/path');
+      const { exists, createDir } = await import('@tauri-apps/api/fs');
       const homePath = await homeDir();
-      const defaultProjectsDir = `${homePath}/Projects`;
+      const defaultProjectsDir = await join(homePath, 'Projects');
+
+      // Ensure Projects directory exists
+      if (!(await exists(defaultProjectsDir))) {
+        await createDir(defaultProjectsDir, { recursive: true });
+      }
 
       // Extract repo name from GitHub URL using URL parser
       const repoName = new URL(githubUrl).pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || 'repo';
-      const cloneTarget = targetPath || `${defaultProjectsDir}/${repoName}`;
+      const cloneTarget = targetPath || await join(defaultProjectsDir, repoName);
 
       // Clone using git command (via backend or directly)
       // For now, use simple git clone via Node child_process on backend
