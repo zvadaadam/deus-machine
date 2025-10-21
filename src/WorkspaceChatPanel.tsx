@@ -66,18 +66,24 @@ export const WorkspaceChatPanel = forwardRef<WorkspaceChatPanelRef, WorkspaceCha
       const contentBlocks = parseContent(message.content);
       if (Array.isArray(contentBlocks)) {
         contentBlocks.forEach((block: any) => {
-          if (block?.type === 'tool_use' && (block.name === 'Edit' || block.name === 'Write')) {
-            const filePath = block.input?.file_path;
-            if (!filePath) return; // Guard against missing file_path
+          if (block?.type === 'tool_use' && (block.name === 'Edit' || block.name === 'Write' || block.name === 'NotebookEdit')) {
+            // Support both file_path and notebook_path (for notebook edits)
+            const filePath = block.input?.file_path ?? block.input?.notebook_path;
+            if (!filePath) return; // Guard against missing file_path or notebook_path
 
             if (!fileMap.has(filePath)) {
               fileMap.set(filePath, []);
             }
+
+            // Sanitize timestamp to prevent NaN at render
+            const tsNum = Date.parse(message.created_at);
+            const timestamp = Number.isFinite(tsNum) ? new Date(tsNum).toISOString() : new Date(0).toISOString();
+
             fileMap.get(filePath)!.push({
               old_string: block.input.old_string,
               new_string: block.input.new_string,
               content: block.input.content,
-              timestamp: message.created_at,
+              timestamp,
               message_id: message.id,
               tool_name: block.name
             });

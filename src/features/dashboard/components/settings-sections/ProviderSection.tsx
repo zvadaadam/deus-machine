@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +11,30 @@ import {
 import type { SettingsSectionProps } from './types';
 
 export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
+  // Controlled state for custom endpoint with debounced save
+  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? '');
+  const timeoutRef = useRef<NodeJS.Timeout>();
+
+  // Sync with external changes (e.g., from refetch)
+  useEffect(() => {
+    setCustomEndpoint(settings.custom_endpoint ?? '');
+  }, [settings.custom_endpoint]);
+
+  // Debounced save handler
+  const handleEndpointChange = (value: string) => {
+    setCustomEndpoint(value);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      saveSetting('custom_endpoint', value);
+    }, 500);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(timeoutRef.current);
+    };
+  }, []);
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Provider Settings</h3>
@@ -57,8 +82,8 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
               id="custom-endpoint"
               type="url"
               placeholder="https://api.example.com/v1"
-              defaultValue={settings.custom_endpoint ?? ''}
-              onBlur={(e) => saveSetting('custom_endpoint', e.currentTarget.value)}
+              value={customEndpoint}
+              onChange={(e) => handleEndpointChange(e.target.value)}
             />
           </div>
         )}
