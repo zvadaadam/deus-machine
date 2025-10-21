@@ -9,4 +9,4 @@
 export { apiClient } from '@/shared/api/client';
 export { WorkspaceService } from './workspace.service';
 export { SessionService } from './session.service';
-export { RepoService } from './repo.service';
+// RepoService moved to @/features/repository/api

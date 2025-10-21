@@ -31,11 +31,9 @@ export type {
   Session,
 } from './session.types';
 
-// Repository types
-export type {
-  Repo,
-  Stats,
-} from './repo.types';
+// Note: Repo and Stats types moved to features/repository/types.ts
+// Re-export for backward compatibility (to be removed later)
+export type { Repo, Stats } from '@/features/repository';
 
 // API types
 export type {

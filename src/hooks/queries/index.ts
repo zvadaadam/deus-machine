@@ -9,5 +9,5 @@ export * from './useWorkspaceQueries';
 // Session queries
 export * from './useSessionQueries';
 
-// Repository queries
-export * from './useRepoQueries';
+// Re-export repository queries for backward compatibility
+export * from '@/features/repository/api';

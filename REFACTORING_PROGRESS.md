@@ -14,10 +14,10 @@
 | 1: Create Directory Structure | ✅ Complete | ~5 min | All dirs created, path aliases updated, tsc passed |
 | 2: Move Shared Resources | ✅ Complete | ~30 min | Moved types, lib, config, api; updated 98 files |
 | 3: Move Shared Components & Hooks | ✅ Complete | ~15 min | Moved 5 components, 3 hooks; fixed exports |
-| 4: Migrate Feature - Terminal | ⏳ In Progress | - | - |
-| 5: Migrate Feature - Browser | ⏸️ Pending | - | - |
-| 6: Migrate Feature - Settings | ⏸️ Pending | - | - |
-| 7: Migrate Feature - Repository | ⏸️ Pending | - | - |
+| 4: Migrate Feature - Terminal | ✅ Complete | ~10 min | Moved 3 files (2 tsx, 1 css); simple migration |
+| 5: Migrate Feature - Browser | ✅ Complete | ~15 min | Moved 3 files, renamed useDevBrowser → useBrowser |
+| 6: Migrate Feature - Settings | ✅ Complete | ~25 min | Migrated 35+ files, fixed complex imports |
+| 7: Migrate Feature - Repository | ✅ Complete | ~30 min | Migrated 7 files, fixed type dependencies |
 | 8: Migrate Feature - Workspace | ⏸️ Pending | - | - |
 | 9: Migrate Feature - Session | ⏸️ Pending | - | - |
 | 10: Migrate Feature - Sidebar | ⏸️ Pending | - | - |
@@ -116,19 +116,104 @@
 
 ---
 
-### PHASE 4: Migrate Feature - Terminal
+### PHASE 4: Migrate Feature - Terminal ✅
 **Started:** 2025-10-21 18:35
-**Status:** In Progress
+**Completed:** 2025-10-21 18:45
+**Status:** Complete
 
 #### Steps:
-- [ ] 4.1: Move UI files (TerminalPanel, Terminal, Terminal.css)
-- [ ] 4.2: Create index files
-- [ ] 4.3: Update imports
-- [ ] 4.4: Run tsc --noEmit
-- [ ] 4.5: Test terminal functionality
+- [x] 4.1: Move UI files (TerminalPanel, Terminal, Terminal.css)
+- [x] 4.2: Create index files
+- [x] 4.3: Update imports
+- [x] 4.4: Run tsc --noEmit ✅ PASSED
+- [x] 4.5: Test terminal functionality
 
 #### Notes:
-- Starting terminal feature migration (simplest feature)...
+- Simplest feature migration - only 3 files
+- TypeScript check passed with 0 errors
+- Commit: [included in batch]
+
+---
+
+### PHASE 5: Migrate Feature - Browser ✅
+**Started:** 2025-10-21 18:45
+**Completed:** 2025-10-21 19:00
+**Status:** Complete
+
+#### Steps:
+- [x] 5.1: Move UI files (BrowserPanel.tsx)
+- [x] 5.2: Move hooks (useDevBrowser.ts → useBrowser.ts)
+- [x] 5.3: Create index files
+- [x] 5.4: Update imports and rename references
+- [x] 5.5: Run tsc --noEmit ✅ PASSED
+
+#### Notes:
+- Renamed useDevBrowser → useBrowser throughout codebase
+- Removed old components/index.ts file
+- TypeScript check passed with 0 errors
+- Commit: [included in batch]
+
+---
+
+### PHASE 6: Migrate Feature - Settings ✅
+**Started:** 2025-10-21 19:00
+**Completed:** 2025-10-21 19:25
+**Status:** Complete
+
+#### Steps:
+- [x] 6.1: Move types (settings.types.ts → types.ts)
+- [x] 6.2: Move API service (settings.service.ts)
+- [x] 6.3: Move query hooks (useSettingsQueries.ts → settings.queries.ts)
+- [x] 6.4: Move UI files (SettingsModal.tsx + 35+ section files)
+- [x] 6.5: Create index files (ui/index.ts, api/index.ts, index.ts)
+- [x] 6.6: Update imports
+- [x] 6.7: Run tsc --noEmit ✅ PASSED
+
+#### Notes:
+- Most complex feature so far (35+ files)
+- Fixed settings.queries.ts imports to use local paths
+- Created sections/index.ts for section exports
+- Fixed Dashboard.tsx over-replacement issues
+- Removed settings types from shared/types/index.ts
+- TypeScript check passed with 0 errors
+- Commit: [included in batch]
+
+---
+
+### PHASE 7: Migrate Feature - Repository ✅
+**Started:** 2025-10-21 19:25
+**Completed:** 2025-10-21 19:55
+**Status:** Complete
+
+#### Steps:
+- [x] 7.1: Move types (repo.types.ts → types.ts)
+- [x] 7.2: Move API service (repo.service.ts → repository.service.ts)
+- [x] 7.3: Move query hooks (useRepoQueries.ts → repository.queries.ts)
+- [x] 7.4: Move UI files (5 components)
+- [x] 7.5: Create index files (ui/index.ts, api/index.ts, index.ts)
+- [x] 7.6: Update imports across codebase
+- [x] 7.7: Run tsc --noEmit ✅ PASSED
+
+#### Files Moved:
+- UI: WelcomeView.tsx, NewWorkspaceModal.tsx, CloneRepositoryModal.tsx, RepoGroup.tsx, WorkspaceItem.tsx
+- API: useRepoQueries.ts → repository.queries.ts, repo.service.ts → repository.service.ts
+- Types: repo.types.ts → types.ts (Repo, Stats)
+
+#### Key Fixes:
+- Fixed repository.queries.ts to import from './repository.service' instead of '@/services/repo.service'
+- Fixed repository.service.ts to import types from '../types' instead of '@/shared/types'
+- Fixed RepoGroup.tsx to import workspace types from '@/shared/types'
+- Fixed useWorkspaceQueries.ts to import RepoService from '@/features/repository/api/repository.service'
+- Removed RepoService from services/index.ts
+- Removed duplicate useRepoQueries reference from hooks/queries/index.ts
+- Added re-exports in shared/types/index.ts for backward compatibility: `export type { Repo, Stats } from '@/features/repository'`
+- Added re-export in hooks/queries/index.ts: `export * from '@/features/repository/api'`
+- Updated Dashboard.tsx to import from @/features/repository (but DiffModal and SystemPromptModal still in dashboard/components - TODO for workspace/session features)
+
+#### Notes:
+- Successfully resolved all 11 TypeScript errors
+- TypeScript check passed with 0 errors
+- Ready for Phase 8: Workspace feature migration
 
 ---
 
@@ -140,8 +225,8 @@ None yet.
 
 ## 🎯 CURRENT CONTEXT
 
-**Active Phase:** 1
-**Next Action:** Create directory structure
+**Active Phase:** 7 (Complete) → Moving to Phase 8
+**Next Action:** Migrate workspace feature
 **Blocked?** No
 
 ---
