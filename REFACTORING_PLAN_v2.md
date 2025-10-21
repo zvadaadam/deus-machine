@@ -1,11 +1,22 @@
 # 🏗️ COMPREHENSIVE REFACTORING PLAN v2.0
 
 **Date:** 2025-10-21
+**Last Updated:** 2025-10-21 (integrated external AI feedback)
 **Branch:** zvadaadam/walla-walla → src-structure-refactor
 **Architecture:** Domain-Driven Feature-First (FSD-Lite)
 **Total Files:** 141 files
 **Estimated Time:** 6-8 hours
 **Migration Approach:** Phased, non-breaking, fully reversible
+
+**✅ FEEDBACK INTEGRATED:**
+- Fixed config location (shared/ not app/) to avoid upward dependencies
+- Added explicit uiStore split with code examples
+- Removed non-existent optional components (WorkspaceList, WorkspaceCard, DiffStats)
+- Clarified FileChangesPanel ownership (workspace feature, imported by session)
+- Added SocketService complexity preservation warning
+- Added path aliases update in Phase 1
+- Added dynamic imports check in Phase 14
+- Added Tauri imports validation check
 
 ---
 
@@ -132,6 +143,8 @@ await invoke('get_backend_port')
 - 🔴 Can't test without Tauri runtime
 - 🔴 Hard to swap platforms (e.g., Electron)
 - 🔴 No centralized error handling
+
+⚠️ **Additional Issue:** `src/services/socket.ts` does MORE than invoke Tauri commands - it includes HTTP backend discovery via `getBaseURL()`, localStorage port caching, and browser mode fallbacks. This complex logic must be preserved when moving to platform layer.
 
 ### **Problem 4: Mixed Data Patterns**
 
@@ -300,9 +313,6 @@ src/
 │   │   ├── MainLayout.tsx                 # Main app layout (rename from Dashboard)
 │   │   └── components/
 │   │       └── WorkspaceHeader.tsx        # Extract from Dashboard (Branch + OpenIn)
-│   ├── config/
-│   │   ├── api.config.ts                  # API endpoints + config
-│   │   └── constants.ts                   # Global constants
 │   ├── App.tsx                            # Root component
 │   └── main.tsx                           # Entry point
 │
@@ -324,12 +334,8 @@ src/
 │   │
 │   ├── workspace/                          # Git worktrees + file changes
 │   │   ├── ui/
-│   │   │   ├── WorkspaceList.tsx          # List of workspaces
-│   │   │   ├── WorkspaceCard.tsx          # Workspace card for sidebar
-│   │   │   ├── WorkspaceItem.tsx          # Workspace list item
-│   │   │   ├── FileChangesPanel.tsx       # File changes viewer (right panel)
+│   │   │   ├── FileChangesPanel.tsx       # File changes viewer (right panel) - EXTRACT from Dashboard
 │   │   │   ├── DiffModal.tsx              # Full diff viewer modal
-│   │   │   ├── DiffStats.tsx              # +/- statistics display
 │   │   │   └── index.ts
 │   │   ├── api/
 │   │   │   ├── workspace.service.ts       # HTTP: create, archive, getDiff, getFileChanges
@@ -347,7 +353,6 @@ src/
 │   │   │   ├── MessageInput.tsx           # Message input box
 │   │   │   ├── MessageItem.tsx            # Individual message
 │   │   │   ├── SystemPromptModal.tsx      # Edit CLAUDE.md
-│   │   │   ├── FileChangesPanel.tsx       # File changes in modal view
 │   │   │   ├── message/
 │   │   │   │   ├── MessageItem.tsx
 │   │   │   │   └── index.ts
@@ -467,6 +472,11 @@ src/
 │       └── index.ts
 │
 ├── shared/                                 # 🎯 Truly Shared Code
+│   ├── config/
+│   │   ├── api.config.ts                  # API endpoints + backend port config
+│   │   ├── constants.ts                   # Global constants
+│   │   └── index.ts
+│   │
 │   ├── api/
 │   │   ├── client.ts                      # Base HTTP client (rename from services/api.ts)
 │   │   ├── socket.ts                      # WebSocket/Unix socket abstraction
@@ -583,8 +593,8 @@ src/hooks/                          # moved to shared/hooks/ and features/*/hook
 | `src/App.tsx` | `src/app/App.tsx` | MOVE + REFACTOR<br>• Extract providers to app/providers/<br>• Simplify to just provider composition |
 | `src/main.tsx` | `src/app/main.tsx` | MOVE + UPDATE<br>• Update import: `./App` (no change needed) |
 | `src/Dashboard.tsx` | `src/app/layouts/MainLayout.tsx` | MOVE + RENAME + MAJOR REFACTOR<br>• Extract WorkspaceHeader (lines 499-513)<br>• Update all feature imports to new paths<br>• Simplify to pure composition (~300 lines target) |
-| `src/config/api.config.ts` | `src/app/config/api.config.ts` | MOVE |
-| - | `src/app/config/constants.ts` | CREATE NEW<br>• Extract constants from various files |
+| `src/config/api.config.ts` | `src/shared/config/api.config.ts` | MOVE<br>⚠️ **CRITICAL**: Must be in shared/, not app/, to avoid upward dependencies |
+| - | `src/shared/config/constants.ts` | CREATE NEW<br>• Extract constants from various files |
 | `src/hooks/useTheme.tsx` | `src/app/providers/ThemeProvider.tsx` | MOVE + REFACTOR<br>• Keep ThemeProvider component<br>• Keep useTheme hook<br>• Export both |
 | - | `src/app/providers/QueryClientProvider.tsx` | CREATE NEW<br>• Extract from App.tsx<br>• Wrap QueryClientProvider + DevTools |
 | - | `src/app/providers/index.ts` | CREATE NEW<br>• Export all providers |
@@ -615,15 +625,12 @@ All from `src/features/dashboard/components/`:
 + import { useRepositories } from '../api/repository.queries'
 ```
 
-### **D. FEATURES - WORKSPACE** (20+ files)
+### **D. FEATURES - WORKSPACE** (8 files)
 
 | Current Path | New Path | Reason |
 |--------------|----------|--------|
 | `src/features/dashboard/components/DiffModal.tsx` | `features/workspace/ui/DiffModal.tsx` | Diff viewing is workspace concern |
-| - | `features/workspace/ui/FileChangesPanel.tsx` | CREATE NEW<br>• Extract from Dashboard lines 600-678<br>• Dev servers + file changes |
-| - | `features/workspace/ui/WorkspaceList.tsx` | CREATE NEW (optional)<br>• Extract workspace list logic if needed |
-| - | `features/workspace/ui/WorkspaceCard.tsx` | CREATE NEW (optional)<br>• Extract workspace card if needed |
-| - | `features/workspace/ui/DiffStats.tsx` | CREATE NEW (optional)<br>• Extract diff stats display |
+| - | `features/workspace/ui/FileChangesPanel.tsx` | **CREATE NEW - REQUIRED**<br>• Extract from Dashboard lines 600-678<br>• Dev servers + file changes<br>⚠️ **NOTE**: Session will import this, not duplicate it |
 | - | `features/workspace/ui/index.ts` | CREATE NEW - exports |
 | `src/services/workspace.service.ts` | `features/workspace/api/workspace.service.ts` | MOVE |
 | `src/hooks/queries/useWorkspaceQueries.ts` | `features/workspace/api/workspace.queries.ts` | MOVE + RENAME |
@@ -653,7 +660,6 @@ This is the **largest migration** (chat → session):
 | `src/features/workspace/components/MessageInput.tsx` | `features/session/ui/MessageInput.tsx` | MOVE |
 | `src/features/workspace/components/MessageItem.tsx` | `features/session/ui/MessageItem.tsx` | MOVE |
 | `src/features/dashboard/components/SystemPromptModal.tsx` | `features/session/ui/SystemPromptModal.tsx` | System prompt is session config |
-| `src/features/workspace/components/FileChangesPanel.tsx` | `features/session/ui/FileChangesPanel.tsx` | Used in modal view |
 | `src/features/workspace/components/chat/` | `features/session/ui/` | MOVE entire nested structure |
 | - | `features/session/ui/index.ts` | CREATE NEW - exports |
 | `src/hooks/queries/useSessionQueries.ts` | `features/session/api/session.queries.ts` | MOVE + RENAME |
@@ -998,12 +1004,39 @@ mkdir -p src/platform/tauri/{commands,events,socket}
 mkdir -p src/platform/web
 
 # 1.4: Create shared/ structure
-mkdir -p src/shared/{api,components/error-fallbacks,hooks,lib,types,stores}
+mkdir -p src/shared/{config,api,components/error-fallbacks,hooks,lib,types,stores}
 
 # 1.5: Create styles/
 mkdir -p src/styles
 
-# 1.6: Verify structure
+# 1.6: Update TypeScript and Vite path aliases
+# ⚠️ CRITICAL: Update path aliases NOW so imports work during migration
+
+# Update tsconfig.json - add new paths, keep existing
+cat >> tsconfig.json << 'EOF'
+// Add these to "compilerOptions.paths":
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/app/*": ["./src/app/*"],
+      "@/features/*": ["./src/features/*"],
+      "@/platform/*": ["./src/platform/*"],
+      "@/shared/*": ["./src/shared/*"],
+      "@/components/*": ["./src/components/*"]
+    }
+  }
+}
+EOF
+
+# Update vite.config.ts - add new aliases
+# Edit resolve.alias section to include:
+#   '@/app': '/src/app',
+#   '@/features': '/src/features',
+#   '@/platform': '/src/platform',
+#   '@/shared': '/src/shared',
+
+# 1.7: Verify structure
 tree -L 4 src/ | head -100
 ```
 
@@ -1084,8 +1117,9 @@ mv src/lib/utils.ts src/shared/lib/
 # 2.3: Move utils
 mv src/utils/formatters.ts src/shared/lib/
 
-# 2.4: Move config
-mv src/config/api.config.ts src/app/config/
+# 2.4: Move config ⚠️ CRITICAL: Must go to shared/, not app/
+mkdir -p src/shared/config
+mv src/config/api.config.ts src/shared/config/
 
 # 2.5: Move base API client
 mv src/services/api.ts src/shared/api/client.ts
@@ -1093,7 +1127,9 @@ mv src/services/api.ts src/shared/api/client.ts
 # 2.6: Update imports in moved files
 # In shared/api/client.ts:
 # - import { API_CONFIG } from '../config/api.config'
-# + import { API_CONFIG } from '@/app/config/api.config'
+# + import { API_CONFIG } from '@/shared/config/api.config'
+# OR
+# + import { API_CONFIG } from '../config/api.config'  # relative import works too
 ```
 
 **Test after Phase 2:**
@@ -1491,13 +1527,49 @@ npm run dev:full
 # 10.1: Move sidebar UI
 mv src/components/app-sidebar.tsx src/features/sidebar/ui/AppSidebar.tsx
 
-# 10.2: Extract sidebar state from uiStore
-# Manual step: Create src/features/sidebar/store/sidebarStore.ts
-# Extract collapsedRepos, toggleRepoCollapse from uiStore
+# 10.2: Split uiStore - Create sidebarStore
+# ⚠️ CRITICAL: uiStore currently holds BOTH modal state AND sidebar state
+# We need to:
+#   - Keep modal state in shared/stores/uiStore.ts (used by MainLayout)
+#   - Move sidebar collapse state to features/sidebar/store/sidebarStore.ts
 
-# 10.3: Update uiStore (keep only modal state)
-# Edit src/stores/uiStore.ts - remove sidebar state
-# Move to src/shared/stores/uiStore.ts
+cat > src/features/sidebar/store/sidebarStore.ts << 'EOF'
+import { create } from 'zustand';
+
+interface SidebarState {
+  // Sidebar-specific state
+  collapsedRepos: Set<string>;
+  toggleRepoCollapse: (repoId: string) => void;
+}
+
+export const useSidebarStore = create<SidebarState>((set) => ({
+  collapsedRepos: new Set(),
+  toggleRepoCollapse: (repoId) =>
+    set((state) => {
+      const newCollapsed = new Set(state.collapsedRepos);
+      if (newCollapsed.has(repoId)) {
+        newCollapsed.delete(repoId);
+      } else {
+        newCollapsed.add(repoId);
+      }
+      return { collapsedRepos: newCollapsed };
+    }),
+}));
+EOF
+
+# 10.3: Update shared uiStore (keep ONLY modal state)
+# First, move the file
+mv src/stores/uiStore.ts src/shared/stores/uiStore.ts
+
+# Then edit it to remove sidebar state:
+# Keep ONLY:
+#   - settingsModalOpen / setSettingsModalOpen
+#   - diffModalOpen / setDiffModalOpen
+#   - systemPromptModalOpen / setSystemPromptModalOpen
+#
+# Remove:
+#   - collapsedRepos
+#   - toggleRepoCollapse
 
 # 10.4: Create index files
 cat > src/features/sidebar/ui/index.ts << 'EOF'
@@ -1535,11 +1607,23 @@ npm run dev:full
 
 ```bash
 # 11.1: Create socket wrapper
-# Extract from src/services/socket.ts
+# ⚠️ CRITICAL: src/services/socket.ts does MORE than just invoke Tauri commands!
+#
+# It contains:
+#   - getBaseURL() - HTTP backend discovery via invoke('get_backend_port')
+#   - localStorage port caching
+#   - Browser mode fallbacks (http://localhost:PORT)
+#   - Reconnection logic
+#
+# When creating platform/tauri/socket/, make sure ALL this logic survives!
+# Don't just wrap invoke() calls - preserve the full SocketService behavior.
+
+# Extract FULL logic from src/services/socket.ts
 cat > src/platform/tauri/socket/SocketClient.ts << 'EOF'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
+// TODO: Preserve getBaseURL, localStorage caching, browser fallbacks from original
 export class SocketClient {
   async connect(path: string): Promise<void> {
     return invoke('socket_connect', { path });
@@ -1560,6 +1644,8 @@ export class SocketClient {
   }
 }
 EOF
+
+# After creating the file, manually review src/services/socket.ts and port ALL logic!
 
 # 11.2: Create command wrappers
 cat > src/platform/tauri/commands/pty.ts << 'EOF'
@@ -1786,9 +1872,6 @@ rmdir src/hooks/queries
 rmdir src/hooks/
 rmdir src/features/dashboard/
 rmdir src/features/workspace/
-
-# 13.5: Update vite.config.ts path alias (if needed)
-# Verify resolve.alias or tsconfig.json paths include @/app, @/features, etc.
 ```
 
 ### **PHASE 14: Validation** (30 minutes)
@@ -1806,7 +1889,19 @@ grep -r "@/services/" src/ | grep -v "node_modules" || echo "✅ No old services
 grep -r "@/stores" src/ | grep -v "node_modules" | grep -v "@/shared/stores" || echo "✅ No old stores imports"
 grep -r "@/types" src/ | grep -v "node_modules" | grep -v "@/shared/types" || echo "✅ No old types imports"
 
-# 14.3: Full app testing
+# 14.3: Check for dynamic imports that need updating
+echo "Checking for dynamic imports..."
+grep -r "await import(" src/ | grep -v "node_modules" || echo "✅ No dynamic imports found"
+
+# If found, update paths like:
+# - await import('./services/workspace.service')
+# + await import('@/features/workspace/api/workspace.service')
+
+# 14.4: Check for direct Tauri imports outside platform/
+echo "Checking for Tauri imports outside platform/..."
+grep -r "from '@tauri-apps/api" src/ --exclude-dir=node_modules --exclude-dir=platform | grep -v ".ts:" || echo "✅ No Tauri imports outside platform/"
+
+# 14.5: Full app testing
 npm run dev:full
 
 # Test checklist:
@@ -1826,7 +1921,7 @@ npm run dev:full
 # ✅ Keyboard shortcuts work
 # ✅ No console errors
 
-# 14.4: Production build
+# 14.6: Production build
 npm run build
 npm run preview
 # Test in production build
@@ -1875,12 +1970,17 @@ import type { ApiError } from '@/shared/types'
 import { useUIStore } from '@/shared/stores/uiStore'
 ```
 
+### **Shared Config Imports**
+
+```typescript
+// ✅ Config (MUST be in shared/, not app/, to avoid upward dependencies)
+import { API_CONFIG } from '@/shared/config/api.config'
+import { CONSTANTS } from '@/shared/config/constants'
+```
+
 ### **App Imports**
 
 ```typescript
-// ✅ Config
-import { API_CONFIG } from '@/app/config/api.config'
-
 // ✅ Providers
 import { QueryClientProvider } from '@/app/providers'
 import { ThemeProvider, useTheme } from '@/app/providers'
