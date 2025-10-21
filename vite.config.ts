@@ -10,9 +10,12 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@/app': path.resolve(__dirname, './src/app'),
+      '@/features': path.resolve(__dirname, './src/features'),
+      '@/platform': path.resolve(__dirname, './src/platform'),
+      '@/shared': path.resolve(__dirname, './src/shared'),
       '@/components': path.resolve(__dirname, './src/components'),
       '@/hooks': path.resolve(__dirname, './src/hooks'),
-      '@/features': path.resolve(__dirname, './src/features'),
       '@/services': path.resolve(__dirname, './src/services'),
       '@/types': path.resolve(__dirname, './src/types'),
       '@/config': path.resolve(__dirname, './src/config'),
