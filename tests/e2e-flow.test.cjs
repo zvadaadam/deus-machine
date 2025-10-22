@@ -16,7 +16,7 @@ const http = require('http');
 const Database = require('better-sqlite3');
 
 // Configuration
-const BACKEND_PORT = process.env.BACKEND_PORT || 56178;
+const BACKEND_PORT = process.env.BACKEND_PORT || process.env.VITE_BACKEND_PORT || 60068;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 const SOCKET_URL = `http://localhost:${BACKEND_PORT}`;
 const DB_PATH = require('path').join(process.env.HOME, 'Library/Application Support/com.conductor.app/conductor.db');
