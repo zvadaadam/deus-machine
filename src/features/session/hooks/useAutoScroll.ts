@@ -6,6 +6,10 @@ interface UseAutoScrollOptions {
   sessionStatus: SessionStatus;
   messagesContainerRef: RefObject<HTMLDivElement>;
   messagesEndRef: RefObject<HTMLDivElement>;
+  // Configuration options
+  scrollThreshold?: number; // Distance from bottom to consider "at bottom" (default: 100)
+  inputHeightBuffer?: number; // Buffer for message input height (default: 80)
+  smoothScrollUser?: boolean; // Use smooth scroll for user messages (default: false)
 }
 
 /**
@@ -30,13 +34,17 @@ export function useAutoScroll({
   sessionStatus,
   messagesContainerRef,
   messagesEndRef,
+  scrollThreshold = 100,
+  inputHeightBuffer = 80,
+  smoothScrollUser = false,
 }: UseAutoScrollOptions) {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const lastScrollHeightRef = useRef(0);
+  const lastMessageCountRef = useRef(0);
 
   // Check if user is near bottom (within threshold)
-  const isNearBottom = (threshold = 100) => {
+  const isNearBottom = (threshold = scrollThreshold) => {
     const container = messagesContainerRef.current;
     if (!container) return false;
 
@@ -54,14 +62,20 @@ export function useAutoScroll({
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
-    if (!isUserScrolledUp && messages.length > 0) {
+    // Only auto-scroll if a NEW message was added (not on initial mount)
+    if (messages.length === 0 || messages.length === lastMessageCountRef.current) {
+      lastMessageCountRef.current = messages.length;
+      return;
+    }
+
+    if (!isUserScrolledUp) {
       const lastMessage = messages[messages.length - 1];
 
       if (lastMessage.role === 'user') {
         // USER message: Scroll to TOP of viewport
         // This pushes previous messages up and out of view, focusing on the new user message
         messagesEndRef.current?.scrollIntoView({
-          behavior: 'auto',
+          behavior: smoothScrollUser ? 'smooth' : 'auto',
           block: 'start',
         });
       } else {
@@ -70,7 +84,9 @@ export function useAutoScroll({
         scrollToBottom(false);
       }
     }
-  }, [messages.length, isUserScrolledUp]);
+
+    lastMessageCountRef.current = messages.length;
+  }, [messages.length, isUserScrolledUp, smoothScrollUser]);
 
   // Track user scroll behavior
   useEffect(() => {
@@ -78,7 +94,7 @@ export function useAutoScroll({
     if (!container) return;
 
     const handleScroll = () => {
-      const nearBottom = isNearBottom(100);
+      const nearBottom = isNearBottom();
       setShowScrollButton(!nearBottom);
       setIsUserScrolledUp(!nearBottom);
     };
@@ -109,9 +125,9 @@ export function useAutoScroll({
           const viewportBottom = scrollTop + clientHeight;
 
           // Check if new content would be hidden below viewport
-          // Add small buffer (50px) to account for message input height
+          // Add buffer to account for message input height
           const contentBottom = newHeight;
-          const isContentHidden = contentBottom > viewportBottom + 50;
+          const isContentHidden = contentBottom > viewportBottom + inputHeightBuffer;
 
           // Only scroll if content would be cut off
           if (isContentHidden) {
