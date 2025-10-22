@@ -1,10 +1,11 @@
 import type { Message, SessionStatus } from "@/shared/types";
+import type { ContentBlock } from "@/features/session/types";
 import type { ToolResultMap } from "./chat-types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
-import type { ReactNode, RefObject } from "react";
+import type { RefObject } from "react";
 
 type MessageRole = Message["role"];
 
@@ -57,7 +58,7 @@ interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
-  parseContent: (content: string) => ReactNode;
+  parseContent: (content: string) => (ContentBlock | string)[] | string | null;
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
@@ -104,7 +105,9 @@ export function Chat({
             const onlyToolResults =
               isArray &&
               contentBlocks.length > 0 &&
-              contentBlocks.every((block: any) => typeof block === "object" && block?.type === "tool_result");
+              contentBlocks.every((block: ContentBlock | string) =>
+                typeof block === "object" && block?.type === "tool_result"
+              );
             const isEmpty =
               (isArray && contentBlocks.length === 0) ||
               (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));

@@ -13,7 +13,7 @@ import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 import { Copy, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -28,6 +28,7 @@ interface MessageItemProps {
 
 export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
   const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
 
   // Parse message content
   const contentBlocks = parseContent(message.content);
@@ -51,11 +52,21 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
     try {
       await navigator.clipboard.writeText(extractTextContent());
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+
+      // Clear existing timer before setting new one
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   const handleRevert = () => {
     // TODO: Implement revert functionality
@@ -63,47 +74,27 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   };
 
   /**
-   * MESSAGE FILTERING LOGIC
+   * MESSAGE FILTERING NOTE
    *
-   * This component filters out messages that contain ONLY tool_result blocks.
-   * This is EXPECTED BEHAVIOR and not a bug.
+   * Filtering is now handled in Chat.tsx before messages reach this component.
+   * Messages with only tool_result blocks or empty content are filtered out upstream.
+   * This ensures we don't create wrapper divs with incorrect margins for empty messages.
    *
    * WHY: In Claude's message format, tool_result blocks are not rendered as standalone messages.
    * Instead, they are linked to their corresponding tool_use blocks via the toolResultMap.
-   * See BlockRenderer.tsx:44-49 for how tool_use blocks retrieve and display their results.
-   *
-   * CONSOLE LOGS: You may see thousands of "[MessageItem] Skipping empty message" logs.
-   * These are normal and indicate that the filtering is working correctly. They appear when:
-   * - A message contains only tool_result blocks (will be displayed linked to tool_use)
-   * - A message is truly empty (rare edge case)
+   * See BlockRenderer.tsx for how tool_use blocks retrieve and display their results.
    *
    * ARCHITECTURE: This follows the BlockRenderer pattern where:
    * 1. tool_use blocks are rendered with their input parameters
    * 2. tool_result blocks are fetched via toolResultMap and displayed inline with tool_use
-   * 3. Messages with only tool_result are skipped (their content appears elsewhere)
+   * 3. Messages with only tool_result are filtered in Chat.tsx (won't reach this component)
    *
    * If you see messages not displaying, check:
-   * 1. BlockRenderer.tsx - ensure tool_use blocks fetch results from toolResultMap
-   * 2. session.queries.ts - ensure toolResultMap is built correctly
-   * 3. Backend API - ensure messages have correct content structure
+   * 1. Chat.tsx - ensure filtering logic is correct
+   * 2. BlockRenderer.tsx - ensure tool_use blocks fetch results from toolResultMap
+   * 3. session.queries.ts - ensure toolResultMap is built correctly
+   * 4. Backend API - ensure messages have correct content structure
    */
-  const isArray = Array.isArray(contentBlocks);
-  const onlyToolResults =
-    isArray &&
-    contentBlocks.length > 0 &&
-    contentBlocks.every((block: ContentBlock) => typeof block === 'object' && block?.type === 'tool_result');
-  const isEmpty =
-    (isArray && contentBlocks.length === 0) ||
-    (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
-  const hasRenderableContent = !(onlyToolResults || isEmpty);
-
-  // Skip messages that are empty or contain only tool_result blocks (see comment above)
-  if (!hasRenderableContent) {
-    if (import.meta.env.DEV) {
-      console.log(`[MessageItem] Skipping empty message ${message.id} (${message.role})`);
-    }
-    return null;
-  }
 
   // Determine role-based styling
   const roleStyles = message.role === 'user'
