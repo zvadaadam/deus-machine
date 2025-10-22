@@ -42,7 +42,6 @@ export function useAutoScroll({
 }: UseAutoScrollOptions) {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const lastScrollHeightRef = useRef(0);
   const lastMessageCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false); // Track if we're auto-scrolling
 
@@ -72,63 +71,42 @@ export function useAutoScroll({
     }
 
     const lastMessage = messages[messages.length - 1];
+    const container = messagesContainerRef.current;
 
-    console.log('[useAutoScroll] New message:', {
-      role: lastMessage.role,
-      messageCount: messages.length,
-      isUserScrolledUp,
-      lastMessageRef: lastMessageRef.current,
-      messagesEndRef: messagesEndRef.current
-    });
-
-    if (!isUserScrolledUp) {
-      isAutoScrollingRef.current = true; // Mark that we're auto-scrolling
+    if (!isUserScrolledUp && container) {
+      isAutoScrollingRef.current = true;
 
       if (lastMessage.role === 'user') {
-        // USER message: Scroll to TOP of viewport using lastMessageRef
-        console.log('[useAutoScroll] Scrolling user message to TOP', {
-          refExists: !!lastMessageRef.current,
-          refElement: lastMessageRef.current
-        });
-
-        // Use requestAnimationFrame for better timing
+        // USER message: Scroll marker to TOP of viewport
         requestAnimationFrame(() => {
-          if (lastMessageRef.current) {
-            lastMessageRef.current.scrollIntoView({
-              behavior: smoothScrollUser ? 'smooth' : 'auto',
-              block: 'start',
-            });
-            console.log('[useAutoScroll] User message scrolled');
+          const marker = lastMessageRef.current;
+          if (marker) {
+            // Get marker position relative to container
+            const markerTop = marker.offsetTop;
+            // Scroll container so marker is at the top
+            container.scrollTop = markerTop;
+
+            if (import.meta.env.DEV) {
+              console.log('[useAutoScroll] User message scrolled to top:', markerTop);
+            }
           } else {
             console.error('[useAutoScroll] lastMessageRef is null!');
           }
-          // Reset flag after scroll completes
+
           setTimeout(() => {
             isAutoScrollingRef.current = false;
           }, 100);
         });
       } else {
-        // ASSISTANT message: Scroll to BOTTOM normally
-        console.log('[useAutoScroll] Scrolling assistant message to BOTTOM', {
-          refExists: !!messagesEndRef.current,
-          refElement: messagesEndRef.current
-        });
-
+        // ASSISTANT message: Scroll to BOTTOM
         requestAnimationFrame(() => {
-          if (messagesEndRef.current) {
-            scrollToBottom(false);
-            console.log('[useAutoScroll] Assistant message scrolled');
-          } else {
-            console.error('[useAutoScroll] messagesEndRef is null!');
-          }
-          // Reset flag after scroll completes
+          scrollToBottom(false);
+
           setTimeout(() => {
             isAutoScrollingRef.current = false;
           }, 100);
         });
       }
-    } else {
-      console.log('[useAutoScroll] Skipping auto-scroll - user scrolled up');
     }
 
     lastMessageCountRef.current = messages.length;
@@ -141,13 +119,9 @@ export function useAutoScroll({
 
     const handleScroll = () => {
       // Don't update state if we're auto-scrolling
-      if (isAutoScrollingRef.current) {
-        console.log('[useAutoScroll] Ignoring scroll event (auto-scrolling)');
-        return;
-      }
+      if (isAutoScrollingRef.current) return;
 
       const nearBottom = isNearBottom();
-      console.log('[useAutoScroll] User scroll detected, nearBottom:', nearBottom);
       setShowScrollButton(!nearBottom);
       setIsUserScrolledUp(!nearBottom);
     };
@@ -156,60 +130,33 @@ export function useAutoScroll({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messagesContainerRef]);
 
-  // ResizeObserver: Smart scroll during streaming
-  // Only scrolls if content would overflow viewport (be hidden)
+  // ResizeObserver: Auto-scroll during streaming (when content grows)
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const newHeight = entry.target.scrollHeight;
-        const oldHeight = lastScrollHeightRef.current;
+    const resizeObserver = new ResizeObserver(() => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const viewportBottom = scrollTop + clientHeight;
+      const contentBottom = scrollHeight;
+      const isContentHidden = contentBottom > viewportBottom + inputHeightBuffer;
 
-        // Only proceed if content grew and we're in a working session
-        if (
-          newHeight > oldHeight &&
-          !isUserScrolledUp &&
-          sessionStatus === 'working'
-        ) {
-          // Calculate visible boundaries
-          const { scrollTop, clientHeight } = container;
-          const viewportBottom = scrollTop + clientHeight;
-
-          // Check if new content would be hidden below viewport
-          // Add buffer to account for message input height
-          const contentBottom = newHeight;
-          const isContentHidden = contentBottom > viewportBottom + inputHeightBuffer;
-
-          console.log('[useAutoScroll] ResizeObserver:', {
-            newHeight,
-            oldHeight,
-            viewportBottom,
-            contentBottom,
-            isContentHidden,
-            sessionStatus
-          });
-
-          // Only scroll if content would be cut off
-          if (isContentHidden) {
-            console.log('[useAutoScroll] Content hidden, scrolling to bottom');
-            isAutoScrollingRef.current = true;
-            scrollToBottom(false); // Scroll to reveal hidden content
-            setTimeout(() => {
-              isAutoScrollingRef.current = false;
-            }, 100);
-          }
-          // Otherwise, let content appear naturally without scrolling
-        }
-
-        lastScrollHeightRef.current = newHeight;
+      // Only auto-scroll if:
+      // 1. In working session (streaming)
+      // 2. User hasn't scrolled up
+      // 3. Content would be hidden below viewport
+      if (sessionStatus === 'working' && !isUserScrolledUp && isContentHidden) {
+        isAutoScrollingRef.current = true;
+        scrollToBottom(false);
+        setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, 50);
       }
     });
 
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
-  }, [messagesContainerRef, isUserScrolledUp, sessionStatus]);
+  }, [messagesContainerRef, isUserScrolledUp, sessionStatus, inputHeightBuffer]);
 
   // Manual scroll to bottom (resets user scroll state)
   const handleScrollToBottomClick = () => {
