@@ -55,12 +55,13 @@ export function Chat({
       ) : (
         <>
           <div className="flex flex-col gap-6 pb-8 min-h-0">
-            {messages.map(message => (
+            {messages.map((message, index) => (
               <MessageItem
                 key={message.id}
                 message={message}
                 parseContent={parseContent}
                 toolResultMap={toolResultMap}
+                ref={index === messages.length - 1 ? messagesEndRef : undefined}
               />
             ))}
           </div>
@@ -74,7 +75,6 @@ export function Chat({
               <span>Claude is working...</span>
             </div>
           )}
-          <div ref={messagesEndRef} />
         </>
       )}
       {showScrollButton && (
