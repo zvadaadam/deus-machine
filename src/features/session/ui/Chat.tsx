@@ -64,11 +64,6 @@ export function Chat({
                 marginClass = 'mt-1';
               }
 
-              // DEBUG: Log role and margin class
-              if (import.meta.env.DEV) {
-                console.log(`[Chat] Message ${message.id}: role="${message.role}", marginClass="${marginClass}"`);
-              }
-
               return (
                 <div
                   key={message.id}
