@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/utils";
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
 
-type ParsedContent = ContentBlock[] | string | null;
+type ParsedContent = (ContentBlock | string)[] | string | null;
 
 interface MessageItemProps {
   message: Message;
@@ -71,10 +71,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   }
 
   // Determine role-based styling
-  const isUser = message.role === 'user';
-  const isAssistant = message.role === 'assistant';
-
-  const roleStyles = isUser
+  const roleStyles = message.role === 'user'
     ? chatTheme.message.user
     : chatTheme.message.assistant;
 
@@ -110,9 +107,9 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
           })
         ) : (
           // Fallback for non-array content
-          <pre className="text-sm font-mono whitespace-pre-wrap">
-            {JSON.stringify(contentBlocks, null, 2)}
-          </pre>
+          <div className="text-base leading-relaxed">
+            {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+          </div>
         )}
       </div>
     </div>
