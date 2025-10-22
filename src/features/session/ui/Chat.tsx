@@ -37,7 +37,7 @@ export function Chat({
       id="chat-messages"
       role="log"
       aria-live="polite"
-      className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth min-h-0 px-6 pt-6"
+      className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0 px-6 pt-6"
       ref={messagesContainerRef}
     >
       {loading ? (
@@ -58,16 +58,15 @@ export function Chat({
         <>
           <div className="flex flex-col gap-6 pb-8 min-h-0">
             {messages.map((message, index) => (
-              <div key={message.id}>
+              <div
+                key={message.id}
+                ref={index === messages.length - 1 ? lastMessageRef : undefined}
+              >
                 <MessageItem
                   message={message}
                   parseContent={parseContent}
                   toolResultMap={toolResultMap}
                 />
-                {/* Invisible ref marker - always renders even if MessageItem returns null */}
-                {index === messages.length - 1 && (
-                  <div ref={lastMessageRef} style={{ height: 0, width: 0 }} />
-                )}
               </div>
             ))}
           </div>
@@ -75,9 +74,9 @@ export function Chat({
             <div
               role="status"
               aria-live="polite"
-              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease-in-out_infinite]"
+              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none"
             >
-              <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin flex-shrink-0" aria-hidden="true"></div>
+              <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
               <span>Claude is working...</span>
             </div>
           )}

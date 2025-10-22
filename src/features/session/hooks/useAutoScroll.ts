@@ -84,13 +84,19 @@ export function useAutoScroll({
             // Get marker position relative to container
             const markerTop = marker.offsetTop;
             // Scroll container so marker is at the top
-            container.scrollTop = markerTop;
+            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            container.scrollTo({
+              top: Math.max(0, markerTop),
+              behavior: smoothScrollUser && !prefersReduced ? 'smooth' : 'auto',
+            });
 
             if (import.meta.env.DEV) {
               console.log('[useAutoScroll] User message scrolled to top:', markerTop);
             }
           } else {
-            console.error('[useAutoScroll] lastMessageRef is null!');
+            if (import.meta.env.DEV) {
+              console.warn('[useAutoScroll] lastMessageRef is null!');
+            }
           }
 
           setTimeout(() => {
@@ -133,7 +139,8 @@ export function useAutoScroll({
   // ResizeObserver: Auto-scroll during streaming (when content grows)
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container) return;
+    const target = lastMessageRef.current ?? messagesEndRef.current;
+    if (!container || !target) return;
 
     const resizeObserver = new ResizeObserver(() => {
       const { scrollTop, scrollHeight, clientHeight } = container;
@@ -154,14 +161,15 @@ export function useAutoScroll({
       }
     });
 
-    resizeObserver.observe(container);
+    resizeObserver.observe(target);
     return () => resizeObserver.disconnect();
-  }, [messagesContainerRef, isUserScrolledUp, sessionStatus, inputHeightBuffer]);
+  }, [messagesContainerRef, messagesEndRef, lastMessageRef, isUserScrolledUp, sessionStatus, inputHeightBuffer]);
 
   // Manual scroll to bottom (resets user scroll state)
   const handleScrollToBottomClick = () => {
     setIsUserScrolledUp(false);
-    scrollToBottom(true);
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    scrollToBottom(!prefersReduced);
   };
 
   return {
