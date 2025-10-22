@@ -84,11 +84,11 @@ export function Chat({
         </>
       )}
       {showScrollButton && (
-        <div className="sticky bottom-6 flex justify-end pointer-events-none pb-6">
+        <div className="absolute bottom-6 right-6 pointer-events-auto">
           <Button
             variant="secondary"
             size="icon"
-            className="rounded-full shadow-lg pointer-events-auto"
+            className="rounded-full shadow-lg"
             onClick={() => onScrollToBottom?.()}
             title="Scroll to bottom"
             aria-label="Scroll to bottom"
