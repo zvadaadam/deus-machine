@@ -11,6 +11,9 @@ import type { ToolResultMap } from "./chat-types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
+import { Copy, RotateCcw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useState, useEffect, useRef } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -24,51 +27,74 @@ interface MessageItemProps {
 }
 
 export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
+  // Extract text content for copy functionality
+  const extractTextContent = (): string => {
+    if (typeof message.content === 'string') return message.content;
+    if (Array.isArray(contentBlocks)) {
+      return contentBlocks
+        .map((block: ContentBlock | string) => {
+          if (typeof block === 'string') return block;
+          if (block?.type === 'text') return block.text;
+          return '';
+        })
+        .join('\n');
+    }
+    return String(message.content);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(extractTextContent());
+      setCopied(true);
+
+      // Clear existing timer before setting new one
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  const handleRevert = () => {
+    // TODO: Implement revert functionality
+    console.log('Revert to message:', message.id);
+  };
+
   /**
-   * MESSAGE FILTERING LOGIC
+   * MESSAGE FILTERING NOTE
    *
-   * This component filters out messages that contain ONLY tool_result blocks.
-   * This is EXPECTED BEHAVIOR and not a bug.
+   * Filtering is now handled in Chat.tsx before messages reach this component.
+   * Messages with only tool_result blocks or empty content are filtered out upstream.
+   * This ensures we don't create wrapper divs with incorrect margins for empty messages.
    *
    * WHY: In Claude's message format, tool_result blocks are not rendered as standalone messages.
    * Instead, they are linked to their corresponding tool_use blocks via the toolResultMap.
-   * See BlockRenderer.tsx:44-49 for how tool_use blocks retrieve and display their results.
-   *
-   * CONSOLE LOGS: You may see thousands of "[MessageItem] Skipping empty message" logs.
-   * These are normal and indicate that the filtering is working correctly. They appear when:
-   * - A message contains only tool_result blocks (will be displayed linked to tool_use)
-   * - A message is truly empty (rare edge case)
+   * See BlockRenderer.tsx for how tool_use blocks retrieve and display their results.
    *
    * ARCHITECTURE: This follows the BlockRenderer pattern where:
    * 1. tool_use blocks are rendered with their input parameters
    * 2. tool_result blocks are fetched via toolResultMap and displayed inline with tool_use
-   * 3. Messages with only tool_result are skipped (their content appears elsewhere)
+   * 3. Messages with only tool_result are filtered in Chat.tsx (won't reach this component)
    *
    * If you see messages not displaying, check:
-   * 1. BlockRenderer.tsx - ensure tool_use blocks fetch results from toolResultMap
-   * 2. session.queries.ts - ensure toolResultMap is built correctly
-   * 3. Backend API - ensure messages have correct content structure
+   * 1. Chat.tsx - ensure filtering logic is correct
+   * 2. BlockRenderer.tsx - ensure tool_use blocks fetch results from toolResultMap
+   * 3. session.queries.ts - ensure toolResultMap is built correctly
+   * 4. Backend API - ensure messages have correct content structure
    */
-  const isArray = Array.isArray(contentBlocks);
-  const onlyToolResults =
-    isArray &&
-    contentBlocks.length > 0 &&
-    contentBlocks.every((block: ContentBlock) => typeof block === 'object' && block?.type === 'tool_result');
-  const isEmpty =
-    (isArray && contentBlocks.length === 0) ||
-    (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
-  const hasRenderableContent = !(onlyToolResults || isEmpty);
-
-  // Skip messages that are empty or contain only tool_result blocks (see comment above)
-  if (!hasRenderableContent) {
-    if (import.meta.env.DEV) {
-      console.log(`[MessageItem] Skipping empty message ${message.id} (${message.role})`);
-    }
-    return null;
-  }
 
   // Determine role-based styling
   const roleStyles = message.role === 'user'
@@ -79,27 +105,71 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
     <div
       key={message.id}
       className={cn(
+        'relative group',
         roleStyles.maxWidth,
         roleStyles.container,
-        'rounded-xl p-4 flex flex-col gap-3 shadow-sm overflow-hidden',
+        message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-0',
+        'flex flex-col gap-2 overflow-visible',
         chatTheme.common.transition
       )}
     >
-      {/* Message header */}
-      <div className="flex justify-between items-center gap-3 mb-1">
-        <span className="font-semibold uppercase text-xs text-muted-foreground tracking-wide">
-          {message.role}
-        </span>
-        <span className="text-xs text-muted-foreground/70">
-          {new Date(message.created_at).toLocaleTimeString()}
-        </span>
-      </div>
+      {/* Hover action buttons - only for user messages */}
+      {message.role === 'user' && (
+        <TooltipProvider delayDuration={200}>
+          <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {/* Copy button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleCopy}
+                  className={cn(
+                    'h-7 w-7 flex items-center justify-center rounded-md',
+                    'bg-card hover:bg-muted border border-border shadow-sm',
+                    'text-muted-foreground hover:text-foreground',
+                    'transition-colors duration-200'
+                  )}
+                  aria-label="Copy message"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>{copied ? 'Copied!' : 'Copy Message'}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Revert button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleRevert}
+                  className={cn(
+                    'h-7 w-7 flex items-center justify-center rounded-md',
+                    'bg-card hover:bg-muted border border-border shadow-sm',
+                    'text-muted-foreground hover:text-foreground',
+                    'transition-colors duration-200'
+                  )}
+                  aria-label="Revert to this turn"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Revert to this turn</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
+      )}
 
       {/* Message content - uses BlockRenderer */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: ContentBlock | string, index: number) => {
-            const key = typeof block === 'object' && block?.id ? block.id : `${message.id}:${index}`;
+            // Generate unique key: use tool_use id if available, otherwise fallback to index
+            const key = typeof block === 'object' && block?.type === 'tool_use'
+              ? block.id
+              : `${message.id}:${index}`;
             if (typeof block === 'string') return null;
             return (
               <BlockRenderer key={key} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />

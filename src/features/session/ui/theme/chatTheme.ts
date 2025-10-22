@@ -9,14 +9,14 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      container: 'ml-auto bg-primary/10 border border-primary/30 backdrop-blur-sm',
+      container: 'ml-auto bg-primary/12 border border-primary/20 backdrop-blur-sm w-fit',
       text: 'text-foreground',
       maxWidth: 'max-w-[85%]',
     },
     assistant: {
-      container: 'mr-auto bg-sidebar-accent/40 border border-border/40 backdrop-blur-sm',
+      container: 'mr-auto',
       text: 'text-foreground',
-      maxWidth: 'max-w-[85%]',
+      maxWidth: 'max-w-full',
     },
   },
 
@@ -113,9 +113,12 @@ export const chatTheme = {
 
   // Spacing
   spacing: {
-    messageGap: 'gap-6',
+    messageGap: 'gap-3',
     blockGap: 'gap-2',
-    contentGap: 'gap-3',
+    contentGap: 'gap-2',
+    // Message margin tokens
+    userMessageMargin: 'mb-8',          // 32px spacing below user messages
+    assistantTightMargin: 'mb-1',       // 4px spacing for assistant message clusters
   },
 
   // Common utilities
