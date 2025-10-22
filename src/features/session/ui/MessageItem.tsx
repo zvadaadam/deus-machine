@@ -5,7 +5,6 @@
  * Automatically imports and registers all tool renderers.
  */
 
-import { forwardRef } from "react";
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import type { ToolResultMap } from "./chat-types";
@@ -24,8 +23,7 @@ interface MessageItemProps {
   toolResultMap: ToolResultMap;
 }
 
-export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(
-  ({ message, parseContent, toolResultMap }, ref) => {
+export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
   // Parse message content
   const contentBlocks = parseContent(message.content);
 
@@ -79,7 +77,6 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(
 
   return (
     <div
-      ref={ref}
       key={message.id}
       className={cn(
         roleStyles.maxWidth,
@@ -117,6 +114,4 @@ export const MessageItem = forwardRef<HTMLDivElement, MessageItemProps>(
       </div>
     </div>
   );
-});
-
-MessageItem.displayName = 'MessageItem';
+}
