@@ -166,7 +166,10 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
       <div className="flex flex-col">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: ContentBlock | string, index: number) => {
-            const key = typeof block === 'object' && block?.id ? block.id : `${message.id}:${index}`;
+            // Generate unique key: use tool_use id if available, otherwise fallback to index
+            const key = typeof block === 'object' && block?.type === 'tool_use'
+              ? block.id
+              : `${message.id}:${index}`;
             if (typeof block === 'string') return null;
             return (
               <BlockRenderer key={key} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />

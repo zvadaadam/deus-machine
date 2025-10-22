@@ -116,6 +116,9 @@ export const chatTheme = {
     messageGap: 'gap-3',
     blockGap: 'gap-2',
     contentGap: 'gap-2',
+    // Message margin tokens
+    userMessageMargin: 'mb-8',          // 32px spacing below user messages
+    assistantTightMargin: 'mb-1',       // 4px spacing for assistant message clusters
   },
 
   // Common utilities
