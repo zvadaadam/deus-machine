@@ -50,12 +50,27 @@ export function Chat({
         />
       ) : (
         <>
-          <div className="flex flex-col pb-32 min-h-0 space-y-2">
-            {messages.map((message, index) => (
+          <div className="flex flex-col pb-32 min-h-0">
+            {messages.map((message, index) => {
+              // Add spacing logic: user messages get large margin, assistant messages get minimal margin
+              const prevMessage = index > 0 ? messages[index - 1] : null;
+              const isFirstMessage = index === 0;
+
+              let marginClass = '';
+              if (message.role === 'user') {
+                // User messages: large margin for breathing room
+                marginClass = 'my-8';
+              } else {
+                // Assistant messages: minimal margin
+                // If previous was user message, add small top margin only
+                marginClass = prevMessage?.role === 'user' ? 'mt-1' : 'mt-1';
+              }
+
+              return (
               <div
                 key={message.id}
                 ref={index === messages.length - 1 ? lastMessageRef : undefined}
-                className={message.role === 'user' ? 'mt-8 mb-8' : ''}
+                className={marginClass}
               >
                 <MessageItem
                   message={message}
@@ -63,7 +78,8 @@ export function Chat({
                   toolResultMap={toolResultMap}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
           {sessionStatus === 'working' && (
             <div
