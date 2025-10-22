@@ -125,40 +125,68 @@ async function testHealthCheck() {
   }
 }
 
-async function testUseExistingWorkspace() {
-  logSection('TEST 2: Use Existing Workspace');
+async function testCreateWorkspace() {
+  logSection('TEST 2: Create New Workspace');
 
   try {
-    // Get existing workspaces
-    const response = await request('GET', '/api/workspaces');
+    // Get repository from database
+    const db = new Database(DB_PATH, { readonly: true });
+    const repo = db.prepare("SELECT * FROM repos WHERE name = 'box-ide' LIMIT 1").get();
+    db.close();
 
-    if (!response.body || response.body.length === 0) {
-      logError('No workspaces found');
+    if (!repo) {
+      logError('box-ide repository not found in database');
       return false;
     }
 
-    // Find shanghai workspace or use first ready workspace
-    let workspace = response.body.find(w => w.directory_name === 'shanghai' && w.state === 'ready');
-    if (!workspace) {
-      workspace = response.body.find(w => w.state === 'ready');
-    }
+    logInfo(`Using repository: ${repo.name}`);
+    logInfo(`Repository path: ${repo.root_path}`);
+    logInfo(`Repository ID: ${repo.id}`);
 
-    if (!workspace) {
-      logError('No ready workspaces found');
+    // Create workspace
+    const createResponse = await request('POST', '/api/workspaces', {
+      repository_id: repo.id
+    });
+
+    if (createResponse.status === 201 || createResponse.status === 200) {
+      testWorkspaceId = createResponse.body.id;
+
+      logSuccess(`Workspace created: ${createResponse.body.directory_name}`);
+      logInfo(`Workspace ID: ${testWorkspaceId}`);
+      logInfo(`State: ${createResponse.body.state} (will become 'ready' after git worktree completes)`);
+
+      // Wait for workspace to become ready
+      logInfo('Waiting for workspace initialization...');
+      const maxWait = 15000; // 15 seconds
+      const checkInterval = 1000;
+      let elapsed = 0;
+
+      while (elapsed < maxWait) {
+        await wait(checkInterval);
+        elapsed += checkInterval;
+
+        const wsResponse = await request('GET', `/api/workspaces/${testWorkspaceId}`);
+        if (wsResponse.body.state === 'ready') {
+          testSessionId = wsResponse.body.active_session_id;
+          logSuccess(`Workspace is ready! Session ID: ${testSessionId}`);
+          return true;
+        } else if (wsResponse.body.state === 'error') {
+          logError('Workspace initialization failed');
+          return false;
+        }
+
+        logInfo(`Still initializing... (${elapsed / 1000}s)`);
+      }
+
+      logError('Timeout waiting for workspace to become ready');
+      return false;
+    } else {
+      logError(`Failed to create workspace: ${createResponse.status}`);
+      logError(JSON.stringify(createResponse.body, null, 2));
       return false;
     }
-
-    testWorkspaceId = workspace.id;
-    testSessionId = workspace.active_session_id;
-
-    logSuccess(`Using workspace: ${workspace.directory_name}`);
-    logInfo(`Workspace ID: ${testWorkspaceId}`);
-    logInfo(`Session ID: ${testSessionId}`);
-    logInfo(`State: ${workspace.state}`);
-
-    return true;
   } catch (error) {
-    logError(`Get workspace error: ${error.message}`);
+    logError(`Create workspace error: ${error.message}`);
     return false;
   }
 }
@@ -343,7 +371,17 @@ async function cleanup() {
     logInfo('Socket disconnected');
   }
 
-  logInfo('No cleanup needed (using existing workspace)');
+  // Archive the test workspace
+  if (testWorkspaceId) {
+    try {
+      await request('PATCH', `/api/workspaces/${testWorkspaceId}`, {
+        state: 'archived'
+      });
+      logSuccess('Test workspace archived');
+    } catch (error) {
+      logWarning(`Failed to archive test workspace: ${error.message}`);
+    }
+  }
 }
 
 // Main test runner
@@ -358,7 +396,7 @@ async function runTests() {
   try {
     // Run tests
     results.push({ name: 'Health Check', passed: await testHealthCheck() });
-    results.push({ name: 'Use Existing Workspace', passed: await testUseExistingWorkspace() });
+    results.push({ name: 'Create New Workspace', passed: await testCreateWorkspace() });
 
     if (testWorkspaceId && testSessionId) {
       results.push({ name: 'Socket Connection', passed: await testSocketConnection() });
