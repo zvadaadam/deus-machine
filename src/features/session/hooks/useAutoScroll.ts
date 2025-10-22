@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, RefObject } from "react";
+import { useState, useEffect, useRef, useCallback, RefObject } from "react";
 import type { Message, SessionStatus } from "@/shared/types";
 
 interface UseAutoScrollOptions {
@@ -49,21 +49,21 @@ export function useAutoScroll({
   const isAutoScrollingRef = useRef(false); // Track if we're auto-scrolling
 
   // Check if user is near bottom (within threshold)
-  const isNearBottom = (threshold = scrollThreshold) => {
+  const isNearBottom = useCallback((threshold = scrollThreshold) => {
     const container = messagesContainerRef.current;
     if (!container) return false;
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     return scrollHeight - scrollTop - clientHeight < threshold;
-  };
+  }, [messagesContainerRef, scrollThreshold]);
 
   // Scroll to bottom function
-  const scrollToBottom = (smooth = false) => {
+  const scrollToBottom = useCallback((smooth = false) => {
     messagesEndRef.current?.scrollIntoView({
       behavior: smooth ? 'smooth' : 'auto',
       block: 'end'
     });
-  };
+  }, [messagesEndRef]);
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
@@ -119,7 +119,7 @@ export function useAutoScroll({
     }
 
     lastMessageCountRef.current = messages.length;
-  }, [messages.length, isUserScrolledUp, smoothScrollUser]);
+  }, [messages, isUserScrolledUp, smoothScrollUser, messagesContainerRef, lastMessageRef, scrollToBottom]);
 
   // Track user scroll behavior
   useEffect(() => {
@@ -137,7 +137,7 @@ export function useAutoScroll({
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [messagesContainerRef]);
+  }, [messagesContainerRef, isNearBottom]);
 
   // ResizeObserver: Auto-scroll during streaming (when content grows)
   useEffect(() => {
@@ -145,7 +145,15 @@ export function useAutoScroll({
     const target = lastMessageRef.current ?? messagesEndRef.current;
     if (!container || !target) return;
 
+    // Throttle helper to prevent excessive scroll operations during streaming
+    let lastCall = 0;
+    const throttleDelay = 100; // ms
+
     const resizeObserver = new ResizeObserver(() => {
+      const now = Date.now();
+      if (now - lastCall < throttleDelay) return;
+      lastCall = now;
+
       const { scrollTop, scrollHeight, clientHeight } = container;
       const viewportBottom = scrollTop + clientHeight;
       const contentBottom = scrollHeight;
@@ -166,7 +174,7 @@ export function useAutoScroll({
 
     resizeObserver.observe(target);
     return () => resizeObserver.disconnect();
-  }, [messagesContainerRef, messagesEndRef, lastMessageRef, isUserScrolledUp, sessionStatus, inputHeightBuffer]);
+  }, [messagesContainerRef, messagesEndRef, lastMessageRef, isUserScrolledUp, sessionStatus, inputHeightBuffer, scrollToBottom]);
 
   // Manual scroll to bottom (resets user scroll state)
   const handleScrollToBottomClick = () => {
