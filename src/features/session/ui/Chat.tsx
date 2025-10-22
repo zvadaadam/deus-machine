@@ -52,9 +52,25 @@ export function Chat({
         <>
           <div className="flex flex-col pb-32 min-h-0">
             {messages.map((message, index) => {
-              // Add spacing logic: user messages get large margin, assistant messages get minimal margin
-              const prevMessage = index > 0 ? messages[index - 1] : null;
+              // Filter out empty messages and messages with only tool_result blocks
+              // (This logic matches MessageItem.tsx filtering to prevent empty wrapper divs)
+              const contentBlocks = parseContent(message.content);
+              const isArray = Array.isArray(contentBlocks);
+              const onlyToolResults =
+                isArray &&
+                contentBlocks.length > 0 &&
+                contentBlocks.every((block: any) => typeof block === 'object' && block?.type === 'tool_result');
+              const isEmpty =
+                (isArray && contentBlocks.length === 0) ||
+                (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
+              const hasRenderableContent = !(onlyToolResults || isEmpty);
 
+              // Skip creating wrapper div if message has no renderable content
+              if (!hasRenderableContent) {
+                return null;
+              }
+
+              // Add spacing logic: user messages get large margin, assistant messages get minimal margin
               let marginClass = '';
               if (message.role === 'user') {
                 // User messages: large margin for breathing room
