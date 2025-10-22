@@ -117,6 +117,39 @@ db.exec(`
 console.log('✅ All modules loaded successfully');
 
 //============================================================================
+// GLOBAL ERROR HANDLERS
+//============================================================================
+
+// Handle uncaught exceptions to prevent silent crashes
+process.on('uncaughtException', (error, origin) => {
+  console.error('\n❌ [FATAL] Uncaught Exception:');
+  console.error('Origin:', origin);
+  console.error('Error:', error);
+  console.error('Stack:', error.stack);
+  console.error('Time:', new Date().toISOString());
+  // Don't exit - try to keep server running
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('\n❌ [FATAL] Unhandled Promise Rejection:');
+  console.error('Promise:', promise);
+  console.error('Reason:', reason);
+  if (reason instanceof Error) {
+    console.error('Stack:', reason.stack);
+  }
+  console.error('Time:', new Date().toISOString());
+  // Don't exit - try to keep server running
+});
+
+// Log when server is about to crash for any reason
+process.on('beforeExit', (code) => {
+  console.log(`\n⚠️  Process is about to exit with code: ${code}`);
+});
+
+console.log('✅ Global error handlers installed');
+
+//============================================================================
 // HEALTH & DISCOVERY ENDPOINTS
 //============================================================================
 
@@ -748,37 +781,51 @@ app.get('/api/sessions/:id/messages', (req, res) => {
 });
 
 app.post('/api/sessions/:id/messages', async (req, res) => {
+  const sessionId = req.params.id;
+  console.log(`\n📨 [MESSAGE SEND] Starting for session ${sessionId?.substring(0, 8)}`);
+
   try {
     const { content } = req.body;
-    const sessionId = req.params.id;
+    console.log(`   Content length: ${content?.length || 0} chars`);
 
     if (!content || typeof content !== 'string') {
+      console.log('   ❌ Invalid content');
       return res.status(400).json({ error: 'content is required and must be a string' });
     }
 
+    console.log('   📝 Validating session...');
     const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
     if (!session) {
+      console.log('   ❌ Session not found');
       return res.status(404).json({ error: 'Session not found' });
     }
+    console.log('   ✅ Session found');
 
     const messageId = randomUUID();
     const sentAt = new Date().toISOString();
 
+    console.log('   📝 Getting last assistant message...');
     // Get the most recent assistant message's sdk_message_id for linking
     const lastAssistantMessage = db.prepare(`
       SELECT sdk_message_id FROM session_messages
       WHERE session_id = ? AND role = 'assistant' AND sdk_message_id IS NOT NULL
       ORDER BY created_at DESC LIMIT 1
     `).get(sessionId);
+    console.log(`   ✅ Last assistant message: ${lastAssistantMessage?.sdk_message_id || 'none'}`);
 
+    console.log('   💾 Inserting message into database...');
     db.prepare(`
       INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, last_assistant_message_id)
       VALUES (?, ?, 'user', ?, datetime('now'), ?, 'sonnet', ?)
     `).run(messageId, sessionId, content, sentAt, lastAssistantMessage?.sdk_message_id || null);
+    console.log('   ✅ Message inserted');
 
+    console.log('   📝 Updating session status...');
     db.prepare('UPDATE sessions SET status = \'working\', updated_at = datetime(\'now\') WHERE id = ?')
       .run(sessionId);
+    console.log('   ✅ Session status updated');
 
+    console.log('   📁 Getting workspace info...');
     // Get workspace info to start Claude CLI
     const workspace = db.prepare(`
       SELECT w.*, r.root_path FROM workspaces w
@@ -787,25 +834,37 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
     `).get(sessionId);
 
     if (!workspace || !workspace.root_path || !workspace.directory_name) {
+      console.log('   ❌ Workspace not found');
       return res.status(400).json({ error: 'Workspace not found for session' });
     }
+    console.log(`   ✅ Workspace: ${workspace.directory_name}`);
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
+    console.log(`   📂 Workspace path: ${workspacePath}`);
 
+    console.log('   🚀 Starting Claude session...');
     // Start or get existing Claude CLI session
     startClaudeSession(sessionId, workspacePath);
+    console.log('   ✅ Claude session started/resumed');
 
+    console.log('   📤 Sending message to Claude CLI...');
     // Send the user message to Claude CLI
     const sent = sendToClaudeSession(sessionId, content);
 
     if (!sent) {
-      console.warn('⚠️  Failed to send message to Claude CLI, but message saved to database');
+      console.warn('   ⚠️  Failed to send message to Claude CLI, but message saved to database');
+    } else {
+      console.log('   ✅ Message sent to Claude CLI');
     }
 
+    console.log('   📝 Fetching created message...');
     const createdMessage = db.prepare('SELECT * FROM session_messages WHERE id = ?').get(messageId);
+    console.log('   ✅ [MESSAGE SEND] Complete!\n');
+
     res.json(createdMessage);
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('   ❌ [MESSAGE SEND] Error:', error);
+    console.error('   Stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });

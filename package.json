@@ -24,7 +24,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "//6": "═══════════════════════════════════════════════════════════════",
+    "// TESTING": "",
+    "//7": "═══════════════════════════════════════════════════════════════",
+    "test": "node tests/e2e-flow.test.cjs",
+    "// test": "🧪 Run E2E test suite - requires backend running"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.0.0",
