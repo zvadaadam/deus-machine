@@ -56,7 +56,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
   const onlyToolResults =
     isArray &&
     contentBlocks.length > 0 &&
-    contentBlocks.every((block: any) => block?.type === 'tool_result');
+    contentBlocks.every((block: ContentBlock) => typeof block === 'object' && block?.type === 'tool_result');
   const isEmpty =
     (isArray && contentBlocks.length === 0) ||
     (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
@@ -101,8 +101,9 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
       {/* Message content - uses BlockRenderer */}
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: any, index: number) => {
-            const key = block?.id ?? `${message.id}:${index}`;
+          contentBlocks.map((block: ContentBlock | string, index: number) => {
+            const key = typeof block === 'object' && block?.id ? block.id : `${message.id}:${index}`;
+            if (typeof block === 'string') return null;
             return (
               <BlockRenderer key={key} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />
             );

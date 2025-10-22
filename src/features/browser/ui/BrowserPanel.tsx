@@ -188,7 +188,7 @@ export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
       // Get injection script from dev-browser
       const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}&parentOrigin=${encodeURIComponent(parentOrigin)}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), SCRIPT_FETCH_TIMEOUT_MS);
       const response = await fetch(injectionUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
 
