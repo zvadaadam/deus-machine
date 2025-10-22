@@ -58,13 +58,17 @@ export function Chat({
         <>
           <div className="flex flex-col gap-6 pb-8 min-h-0">
             {messages.map((message, index) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                parseContent={parseContent}
-                toolResultMap={toolResultMap}
-                ref={index === messages.length - 1 ? lastMessageRef : undefined}
-              />
+              <div key={message.id}>
+                <MessageItem
+                  message={message}
+                  parseContent={parseContent}
+                  toolResultMap={toolResultMap}
+                />
+                {/* Invisible ref marker - always renders even if MessageItem returns null */}
+                {index === messages.length - 1 && (
+                  <div ref={lastMessageRef} style={{ height: 0, width: 0 }} />
+                )}
+              </div>
             ))}
           </div>
           {sessionStatus === 'working' && (
