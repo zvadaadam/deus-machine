@@ -43,8 +43,11 @@ export function MessageInput({
   const resizeTextarea = () => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    // Reset to minimum first
+    el.style.height = '40px';
+    // Then expand to fit content, max 200px
+    const newHeight = Math.min(Math.max(el.scrollHeight, 40), 200);
+    el.style.height = newHeight + 'px';
   };
 
   // Auto-resize textarea
@@ -52,8 +55,12 @@ export function MessageInput({
     resizeTextarea();
   }, [messageInput]);
 
+  // Set initial height on mount
   useEffect(() => {
-    resizeTextarea();
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = '40px';
+    }
   }, []);
 
   return (
@@ -86,15 +93,15 @@ export function MessageInput({
             resizeTextarea();
           }}
           onBlur={() => setIsFocused(false)}
+          style={{ height: '40px' }}
           className="
             flex-1 bg-transparent border-none outline-none resize-none
             text-body-lg text-foreground placeholder:text-muted-foreground
-            min-h-[24px] max-h-[200px]
+            max-h-[200px]
             font-sans
             overflow-y-auto
             scrollbar-vibrancy
           "
-          rows={1}
         />
 
         {/* Action Buttons */}
