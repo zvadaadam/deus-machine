@@ -5,12 +5,14 @@ import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
+import { chatTheme } from "./theme";
 import type { RefObject } from "react";
 
 type MessageRole = Message["role"];
 
-const USER_MARGIN_CLASS = "mb-8"; // 32px spacing below user messages
-const TIGHT_MARGIN_CLASS = "mb-1"; // 4px spacing for assistant clusters
+// Pull spacing from theme for consistency
+const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
+const TIGHT_MARGIN_CLASS = chatTheme.spacing.assistantTightMargin;
 
 function getMessageSpacingClasses(
   role: MessageRole,
