@@ -18,7 +18,8 @@ const isTauriMode = () => {
   }
 };
 
-const WEB_HEALTH_URL = 'http://localhost:3000/health';
+const WEB_MODE_PORT = 3000;
+const WEB_HEALTH_URL = `http://localhost:${WEB_MODE_PORT}/health`;
 
 /**
  * Timeout constants for browser operations
@@ -103,12 +104,12 @@ export function useBrowser() {
         if (response.ok) {
           setStatus({
             running: true,
-            port: 3000,
+            port: WEB_MODE_PORT,
             authToken: null, // Auth token not needed for pre-authorized mode
             error: null,
           });
 
-          return { port: 3000, authToken: null };
+          return { port: WEB_MODE_PORT, authToken: null };
         } else {
           throw new Error('MCP server not responding');
         }
@@ -188,7 +189,7 @@ export function useBrowser() {
           if (response.ok) {
             setStatus({
               running: true,
-              port: 3000,
+              port: WEB_MODE_PORT,
               authToken: null,
               error: null,
             });
@@ -205,7 +206,7 @@ export function useBrowser() {
             running: false,
             port: null,
             authToken: null,
-            error: 'MCP server not running on port 3000',
+            error: `MCP server not running on port ${WEB_MODE_PORT}`,
           });
         }
       }
