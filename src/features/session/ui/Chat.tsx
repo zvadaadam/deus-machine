@@ -54,7 +54,6 @@ export function Chat({
             {messages.map((message, index) => {
               // Add spacing logic: user messages get large margin, assistant messages get minimal margin
               const prevMessage = index > 0 ? messages[index - 1] : null;
-              const isFirstMessage = index === 0;
 
               let marginClass = '';
               if (message.role === 'user') {
@@ -62,22 +61,26 @@ export function Chat({
                 marginClass = 'my-8';
               } else {
                 // Assistant messages: minimal margin
-                // If previous was user message, add small top margin only
-                marginClass = prevMessage?.role === 'user' ? 'mt-1' : 'mt-1';
+                marginClass = 'mt-1';
+              }
+
+              // DEBUG: Log role and margin class
+              if (import.meta.env.DEV) {
+                console.log(`[Chat] Message ${message.id}: role="${message.role}", marginClass="${marginClass}"`);
               }
 
               return (
-              <div
-                key={message.id}
-                ref={index === messages.length - 1 ? lastMessageRef : undefined}
-                className={marginClass}
-              >
-                <MessageItem
-                  message={message}
-                  parseContent={parseContent}
-                  toolResultMap={toolResultMap}
-                />
-              </div>
+                <div
+                  key={message.id}
+                  ref={index === messages.length - 1 ? lastMessageRef : undefined}
+                  className={marginClass}
+                >
+                  <MessageItem
+                    message={message}
+                    parseContent={parseContent}
+                    toolResultMap={toolResultMap}
+                  />
+                </div>
               );
             })}
           </div>
