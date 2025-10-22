@@ -9,7 +9,7 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      container: 'ml-auto bg-primary/12 border border-primary/20 backdrop-blur-sm',
+      container: 'ml-auto bg-primary/12 border border-primary/20 backdrop-blur-sm w-fit',
       text: 'text-foreground',
       maxWidth: 'max-w-[85%]',
     },
