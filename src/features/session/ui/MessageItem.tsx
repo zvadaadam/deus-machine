@@ -81,20 +81,11 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
       className={cn(
         roleStyles.maxWidth,
         roleStyles.container,
-        'rounded-xl p-4 flex flex-col gap-3 shadow-sm overflow-hidden',
+        message.role === 'user' ? 'rounded-2xl px-4 py-3' : 'px-0 py-1',
+        'flex flex-col gap-2 overflow-hidden',
         chatTheme.common.transition
       )}
     >
-      {/* Message header */}
-      <div className="flex justify-between items-center gap-3 mb-1">
-        <span className="font-semibold uppercase text-xs text-muted-foreground tracking-wide">
-          {message.role}
-        </span>
-        <span className="text-xs text-muted-foreground/70">
-          {new Date(message.created_at).toLocaleTimeString()}
-        </span>
-      </div>
-
       {/* Message content - uses BlockRenderer */}
       <div className="flex flex-col gap-2">
         {Array.isArray(contentBlocks) ? (
