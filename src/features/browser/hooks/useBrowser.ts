@@ -20,6 +20,16 @@ const isTauriMode = () => {
 
 const WEB_HEALTH_URL = 'http://localhost:3000/health';
 
+/**
+ * Timeout constants for browser operations
+ *
+ * Different timeouts for different contexts:
+ * - STARTUP_TIMEOUT: Used when initially connecting to server (longer timeout for cold start)
+ * - STATUS_CHECK_TIMEOUT: Used for periodic health checks (shorter for faster feedback)
+ */
+const STARTUP_TIMEOUT_MS = 3000;
+const STATUS_CHECK_TIMEOUT_MS = 2000;
+
 export function useBrowser() {
   const [status, setStatus] = useState<BrowserStatus>({
     running: false,
@@ -82,7 +92,7 @@ export function useBrowser() {
       } else {
         // Web mode: check for existing MCP server on port 3000
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), STARTUP_TIMEOUT_MS);
         let response: Response;
         try {
           response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });
@@ -168,7 +178,7 @@ export function useBrowser() {
         // Web mode: check for existing MCP server
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 2000);
+          const timeoutId = setTimeout(() => controller.abort(), STATUS_CHECK_TIMEOUT_MS);
           let response: Response;
           try {
             response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });

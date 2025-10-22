@@ -4,6 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
+/**
+ * Timeout for fetching injection script from dev-browser server
+ * Longer than health check timeouts because script generation may take time
+ */
+const SCRIPT_FETCH_TIMEOUT_MS = 10000;
+
 interface BrowserPanelProps {
   workspaceId: string | null;
 }
