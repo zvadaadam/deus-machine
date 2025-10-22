@@ -251,24 +251,27 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   if (embedded) {
     return (
       <div className="flex flex-col flex-1 min-h-0 w-full relative">
-        <Chat
-          messages={messages}
-          loading={loading}
-          sessionStatus={sessionStatus}
-          parseContent={parseContent}
-          messagesEndRef={messagesEndRef}
-          lastMessageRef={lastMessageRef}
-          messagesContainerRef={messagesContainerRef}
-          toolResultMap={toolResultMap}
-        />
+        {/* Chat wrapper with fade overlay */}
+        <div className="relative flex-1 min-h-0">
+          <Chat
+            messages={messages}
+            loading={loading}
+            sessionStatus={sessionStatus}
+            parseContent={parseContent}
+            messagesEndRef={messagesEndRef}
+            lastMessageRef={lastMessageRef}
+            messagesContainerRef={messagesContainerRef}
+            toolResultMap={toolResultMap}
+          />
 
-        {/* Scroll fade overlay - fades messages above input */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-[5]"
-          style={{
-            background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
-          }}
-        />
+          {/* Scroll fade overlay - overlays bottom of chat */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
+            }}
+          />
+        </div>
 
         {/* Scroll to bottom button */}
         {showScrollButton && (
@@ -347,24 +350,27 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             ) : (
               // Show message timeline - Chat + Input
               <div className="flex flex-col flex-1 min-h-0 relative">
-                <Chat
-                  messages={messages}
-                  loading={loading}
-                  sessionStatus={sessionStatus}
-                  parseContent={parseContent}
-                  messagesEndRef={messagesEndRef}
-                  lastMessageRef={lastMessageRef}
-                  messagesContainerRef={messagesContainerRef}
-                  toolResultMap={toolResultMap}
-                />
+                {/* Chat wrapper with fade overlay */}
+                <div className="relative flex-1 min-h-0">
+                  <Chat
+                    messages={messages}
+                    loading={loading}
+                    sessionStatus={sessionStatus}
+                    parseContent={parseContent}
+                    messagesEndRef={messagesEndRef}
+                    lastMessageRef={lastMessageRef}
+                    messagesContainerRef={messagesContainerRef}
+                    toolResultMap={toolResultMap}
+                  />
 
-                {/* Scroll fade overlay - fades messages above input */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-[5]"
-                  style={{
-                    background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
-                  }}
-                />
+                  {/* Scroll fade overlay - overlays bottom of chat */}
+                  <div
+                    className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-10"
+                    style={{
+                      background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
+                    }}
+                  />
+                </div>
 
                 {/* Scroll to bottom button */}
                 {showScrollButton && (
