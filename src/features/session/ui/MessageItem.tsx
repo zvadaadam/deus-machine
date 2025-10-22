@@ -117,7 +117,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
         'relative group',
         roleStyles.maxWidth,
         roleStyles.container,
-        message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-1',
+        message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-0',
         'flex flex-col gap-2 overflow-visible',
         chatTheme.common.transition
       )}
