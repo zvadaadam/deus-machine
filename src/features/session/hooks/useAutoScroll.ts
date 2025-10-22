@@ -44,10 +44,15 @@ export function useAutoScroll({
     });
   };
 
-  // Auto-scroll when new messages arrive (only if user hasn't scrolled up)
+  // Auto-scroll when new messages arrive - scroll new message to TOP
   useEffect(() => {
-    if (!isUserScrolledUp) {
-      scrollToBottom();
+    if (!isUserScrolledUp && messages.length > 0) {
+      // Scroll the last message to the TOP of the viewport
+      // This pushes previous messages up and out of view
+      messagesEndRef.current?.scrollIntoView({
+        behavior: 'auto',
+        block: 'start', // Changed from 'end' to 'start' - positions at top
+      });
     }
   }, [messages.length, isUserScrolledUp]);
 
@@ -66,7 +71,7 @@ export function useAutoScroll({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messagesContainerRef]);
 
-  // ResizeObserver: Auto-scroll during streaming when content height changes
+  // ResizeObserver: Continuous scroll during streaming
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -76,16 +81,14 @@ export function useAutoScroll({
         const newHeight = entry.target.scrollHeight;
         const oldHeight = lastScrollHeightRef.current;
 
-        // Only auto-scroll if:
-        // 1. Content height increased (new content added)
-        // 2. User is near bottom (hasn't manually scrolled up)
-        // 3. Session is working (streaming in progress)
+        // During streaming, scroll down smoothly as content grows
+        // This keeps the streaming message visible and flowing
         if (
           newHeight > oldHeight &&
           !isUserScrolledUp &&
           sessionStatus === 'working'
         ) {
-          scrollToBottom(false); // Instant scroll for smooth streaming effect
+          scrollToBottom(false); // Keep scrolling down during streaming
         }
 
         lastScrollHeightRef.current = newHeight;
