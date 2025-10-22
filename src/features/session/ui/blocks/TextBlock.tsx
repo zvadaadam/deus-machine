@@ -59,7 +59,7 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
   // User messages: plain text (preserve newlines)
   if (role === 'user') {
     return (
-      <div className={cn(chatTheme.blocks.text.container, 'text-right')}>
+      <div className={chatTheme.blocks.text.container}>
         <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap')}>
           {text}
         </p>
