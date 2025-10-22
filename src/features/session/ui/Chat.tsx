@@ -55,6 +55,7 @@ export function Chat({
               <div
                 key={message.id}
                 ref={index === messages.length - 1 ? lastMessageRef : undefined}
+                className={message.role === 'user' ? 'py-8' : 'py-1'}
               >
                 <MessageItem
                   message={message}
