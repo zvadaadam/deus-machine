@@ -50,12 +50,12 @@ export function Chat({
         />
       ) : (
         <>
-          <div className="flex flex-col pb-32 min-h-0 space-y-1">
+          <div className="flex flex-col pb-32 min-h-0">
             {messages.map((message, index) => (
               <div
                 key={message.id}
                 ref={index === messages.length - 1 ? lastMessageRef : undefined}
-                className={message.role === 'user' ? 'my-8' : ''}
+                className={message.role === 'user' ? 'py-8' : 'py-1'}
               >
                 <MessageItem
                   message={message}
