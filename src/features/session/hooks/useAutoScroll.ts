@@ -42,6 +42,7 @@ export function useAutoScroll({
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const lastScrollHeightRef = useRef(0);
   const lastMessageCountRef = useRef(0);
+  const isAutoScrollingRef = useRef(false); // Track if we're auto-scrolling
 
   // Check if user is near bottom (within threshold)
   const isNearBottom = (threshold = scrollThreshold) => {
@@ -68,20 +69,40 @@ export function useAutoScroll({
       return;
     }
 
+    const lastMessage = messages[messages.length - 1];
+
+    console.log('[useAutoScroll] New message:', {
+      role: lastMessage.role,
+      messageCount: messages.length,
+      isUserScrolledUp
+    });
+
     if (!isUserScrolledUp) {
-      const lastMessage = messages[messages.length - 1];
+      isAutoScrollingRef.current = true; // Mark that we're auto-scrolling
 
       if (lastMessage.role === 'user') {
         // USER message: Scroll to TOP of viewport
-        // This pushes previous messages up and out of view, focusing on the new user message
-        messagesEndRef.current?.scrollIntoView({
-          behavior: smoothScrollUser ? 'smooth' : 'auto',
-          block: 'start',
-        });
+        console.log('[useAutoScroll] Scrolling user message to TOP');
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({
+            behavior: smoothScrollUser ? 'smooth' : 'auto',
+            block: 'start',
+          });
+          // Reset flag after scroll completes
+          setTimeout(() => {
+            isAutoScrollingRef.current = false;
+          }, 100);
+        }, 0);
       } else {
         // ASSISTANT message: Scroll to BOTTOM normally
-        // Keeps the full response visible as it streams
-        scrollToBottom(false);
+        console.log('[useAutoScroll] Scrolling assistant message to BOTTOM');
+        setTimeout(() => {
+          scrollToBottom(false);
+          // Reset flag after scroll completes
+          setTimeout(() => {
+            isAutoScrollingRef.current = false;
+          }, 100);
+        }, 0);
       }
     }
 
@@ -94,7 +115,14 @@ export function useAutoScroll({
     if (!container) return;
 
     const handleScroll = () => {
+      // Don't update state if we're auto-scrolling
+      if (isAutoScrollingRef.current) {
+        console.log('[useAutoScroll] Ignoring scroll event (auto-scrolling)');
+        return;
+      }
+
       const nearBottom = isNearBottom();
+      console.log('[useAutoScroll] User scroll detected, nearBottom:', nearBottom);
       setShowScrollButton(!nearBottom);
       setIsUserScrolledUp(!nearBottom);
     };
@@ -129,9 +157,23 @@ export function useAutoScroll({
           const contentBottom = newHeight;
           const isContentHidden = contentBottom > viewportBottom + inputHeightBuffer;
 
+          console.log('[useAutoScroll] ResizeObserver:', {
+            newHeight,
+            oldHeight,
+            viewportBottom,
+            contentBottom,
+            isContentHidden,
+            sessionStatus
+          });
+
           // Only scroll if content would be cut off
           if (isContentHidden) {
+            console.log('[useAutoScroll] Content hidden, scrolling to bottom');
+            isAutoScrollingRef.current = true;
             scrollToBottom(false); // Scroll to reveal hidden content
+            setTimeout(() => {
+              isAutoScrollingRef.current = false;
+            }, 100);
           }
           // Otherwise, let content appear naturally without scrolling
         }
