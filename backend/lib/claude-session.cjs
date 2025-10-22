@@ -26,7 +26,7 @@ const { prepareMessageContent } = require('./message-sanitizer.cjs');
  * Path to the Claude CLI binary
  * @type {string}
  */
-const CLAUDE_BINARY = '/Users/zvada/conductor/cc/claude';
+const CLAUDE_BINARY = process.env.CLAUDE_CLI_PATH || '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
 
 /**
  * Map of active Claude CLI sessions
@@ -362,9 +362,10 @@ function startClaudeSession(sessionId, workspacePath) {
     console.log(`   Resuming Claude session: ${claudeSessionId}`);
   }
 
-  const claudeProcess = spawn(CLAUDE_BINARY, args, {
+  const claudeProcess = spawn(process.execPath, [CLAUDE_BINARY, ...args], {
     cwd: workspacePath,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: process.env
   });
 
   const sessionInfo = {
