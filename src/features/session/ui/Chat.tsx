@@ -3,7 +3,55 @@ import type { ToolResultMap } from "./chat-types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/shared/lib/utils";
 import type { ReactNode, RefObject } from "react";
+
+type MessageRole = Message["role"];
+
+const USER_MARGIN_CLASS = "mb-8"; // 32px spacing below user messages
+const TIGHT_MARGIN_CLASS = "mb-1"; // 4px spacing for assistant clusters
+
+function getMessageSpacingClasses(
+  role: MessageRole,
+  prevRole: MessageRole | null,
+  nextRole: MessageRole | null,
+  isFirst: boolean,
+): string {
+  const isUser = role === "user";
+
+  const topClass = (() => {
+    if (isUser) {
+      // First user message keeps a generous offset from the top of the log
+      if (isFirst) return "mt-8";
+      // Avoid double stacking when users send multiple messages back to back
+      if (prevRole === "user") return "mt-0";
+      return "mt-8";
+    }
+
+    // Assistant/system/tool style messages stay tight unless they're the very first entry
+    if (isFirst) return "mt-1";
+    // Let the previous bubble control the gap (user messages already add mb-8)
+    return "mt-0";
+  })();
+
+  const bottomClass = (() => {
+    if (isUser) {
+      return USER_MARGIN_CLASS;
+    }
+
+    if (nextRole === "user") {
+      return "mb-0";
+    }
+
+    if (nextRole) {
+      return TIGHT_MARGIN_CLASS;
+    }
+
+    return "mb-0";
+  })();
+
+  return cn(topClass, bottomClass);
+}
 
 interface ChatProps {
   messages: Message[];
@@ -49,67 +97,68 @@ export function Chat({
           animate
         />
       ) : (
-        <>
-          <div className="flex flex-col pb-32 min-h-0">
-            {(() => {
-              // Filter messages first to get renderable messages
-              const renderableMessages = messages
-                .map((message, originalIndex) => ({ message, originalIndex }))
-                .filter(({ message }) => {
-                  const contentBlocks = parseContent(message.content);
-                  const isArray = Array.isArray(contentBlocks);
-                  const onlyToolResults =
-                    isArray &&
-                    contentBlocks.length > 0 &&
-                    contentBlocks.every((block: any) => typeof block === 'object' && block?.type === 'tool_result');
-                  const isEmpty =
-                    (isArray && contentBlocks.length === 0) ||
-                    (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
-                  return !(onlyToolResults || isEmpty);
-                });
+        (() => {
+          const renderableMessages = messages.filter((message) => {
+            const contentBlocks = parseContent(message.content);
+            const isArray = Array.isArray(contentBlocks);
+            const onlyToolResults =
+              isArray &&
+              contentBlocks.length > 0 &&
+              contentBlocks.every((block: any) => typeof block === "object" && block?.type === "tool_result");
+            const isEmpty =
+              (isArray && contentBlocks.length === 0) ||
+              (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
+            return !(onlyToolResults || isEmpty);
+          });
 
-              return renderableMessages.map(({ message, originalIndex }, renderIndex) => {
-                // Add spacing logic: user messages get large TOP margin only, assistant messages get minimal margin
-                let marginClass = '';
-                if (message.role === 'user') {
-                  // User messages: large top margin only (no bottom margin to avoid gap before working indicator)
-                  marginClass = 'mt-8';
-                } else {
-                  // Assistant messages: minimal margin
-                  marginClass = 'mt-1';
-                }
+          const lastRenderableRole = renderableMessages.length
+            ? renderableMessages[renderableMessages.length - 1].role
+            : null;
+          const indicatorMarginClass = lastRenderableRole === "user" ? "mt-0" : "mt-1";
 
-                // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
-                const isLastRendered = renderIndex === renderableMessages.length - 1;
+          return (
+            <>
+              <div className="flex flex-col pb-32 min-h-0">
+                {renderableMessages.map((message, renderIndex) => {
+                  const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
+                  const nextRole = renderIndex < renderableMessages.length - 1 ? renderableMessages[renderIndex + 1].role : null;
+                  const spacingClass = getMessageSpacingClasses(message.role, prevRole, nextRole, renderIndex === 0);
 
-                return (
+                  // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
+                  const isLastRendered = renderIndex === renderableMessages.length - 1;
+
+                  return (
+                    <div
+                      key={message.id}
+                      ref={isLastRendered ? lastMessageRef : undefined}
+                      className={spacingClass}
+                    >
+                      <MessageItem
+                        message={message}
+                        parseContent={parseContent}
+                        toolResultMap={toolResultMap}
+                      />
+                    </div>
+                  );
+                })}
+                {sessionStatus === "working" && (
                   <div
-                    key={message.id}
-                    ref={isLastRendered ? lastMessageRef : undefined}
-                    className={marginClass}
+                    role="status"
+                    aria-live="polite"
+                    className={cn(
+                      "flex items-center gap-2 p-2.5 px-3.5 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
+                      indicatorMarginClass,
+                    )}
                   >
-                    <MessageItem
-                      message={message}
-                      parseContent={parseContent}
-                      toolResultMap={toolResultMap}
-                    />
+                    <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
+                    <span>Claude is working...</span>
                   </div>
-                );
-              });
-            })()}
-          </div>
-          {sessionStatus === 'working' && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex items-center gap-2 p-2.5 px-3.5 mt-2 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none"
-            >
-              <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
-              <span>Claude is working...</span>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </>
+                )}
+              </div>
+              <div ref={messagesEndRef} />
+            </>
+          );
+        })()
       )}
     </div>
   );
