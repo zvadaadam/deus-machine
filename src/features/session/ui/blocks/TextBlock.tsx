@@ -7,7 +7,6 @@
  */
 
 import type { TextBlock as TextBlockType, MessageRole } from '@/shared/types';
-import { chatTheme } from '../theme';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/shared/lib/utils';
@@ -34,9 +33,9 @@ function PreWithCopy({ children, ...props }: any) {
   const codeText = getCodeText(children);
 
   return (
-    <div className={chatTheme.blocks.code.container}>
+    <div className="relative group rounded overflow-hidden">
       {/* Copy button - visible on hover */}
-      <div className={chatTheme.blocks.code.copyButton}>
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <CopyButton text={codeText} label="Copy" size="sm" />
       </div>
 
@@ -59,8 +58,8 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
   // User messages: plain text (preserve newlines)
   if (role === 'user') {
     return (
-      <div className={chatTheme.blocks.text.container}>
-        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap')}>
+      <div className="flex flex-col gap-1.5">
+        <p className="m-0 leading-relaxed text-foreground text-base font-sans break-words whitespace-pre-wrap">
           {text}
         </p>
       </div>
@@ -71,8 +70,8 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
   return (
     <div
       className={cn(
-        chatTheme.blocks.text.container,
-        chatTheme.blocks.text.content,
+        'flex flex-col gap-1.5',
+        'm-0 leading-relaxed text-foreground text-base font-sans break-words',
         'prose prose-sm dark:prose-invert max-w-none',
         // Headings
         'prose-headings:font-semibold prose-headings:tracking-tight',
