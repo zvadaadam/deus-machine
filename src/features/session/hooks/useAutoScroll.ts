@@ -76,7 +76,9 @@ export function useAutoScroll({
     console.log('[useAutoScroll] New message:', {
       role: lastMessage.role,
       messageCount: messages.length,
-      isUserScrolledUp
+      isUserScrolledUp,
+      lastMessageRef: lastMessageRef.current,
+      messagesEndRef: messagesEndRef.current
     });
 
     if (!isUserScrolledUp) {
@@ -84,28 +86,49 @@ export function useAutoScroll({
 
       if (lastMessage.role === 'user') {
         // USER message: Scroll to TOP of viewport using lastMessageRef
-        console.log('[useAutoScroll] Scrolling user message to TOP');
-        setTimeout(() => {
-          lastMessageRef.current?.scrollIntoView({
-            behavior: smoothScrollUser ? 'smooth' : 'auto',
-            block: 'start',
-          });
+        console.log('[useAutoScroll] Scrolling user message to TOP', {
+          refExists: !!lastMessageRef.current,
+          refElement: lastMessageRef.current
+        });
+
+        // Use requestAnimationFrame for better timing
+        requestAnimationFrame(() => {
+          if (lastMessageRef.current) {
+            lastMessageRef.current.scrollIntoView({
+              behavior: smoothScrollUser ? 'smooth' : 'auto',
+              block: 'start',
+            });
+            console.log('[useAutoScroll] User message scrolled');
+          } else {
+            console.error('[useAutoScroll] lastMessageRef is null!');
+          }
           // Reset flag after scroll completes
           setTimeout(() => {
             isAutoScrollingRef.current = false;
           }, 100);
-        }, 0);
+        });
       } else {
         // ASSISTANT message: Scroll to BOTTOM normally
-        console.log('[useAutoScroll] Scrolling assistant message to BOTTOM');
-        setTimeout(() => {
-          scrollToBottom(false);
+        console.log('[useAutoScroll] Scrolling assistant message to BOTTOM', {
+          refExists: !!messagesEndRef.current,
+          refElement: messagesEndRef.current
+        });
+
+        requestAnimationFrame(() => {
+          if (messagesEndRef.current) {
+            scrollToBottom(false);
+            console.log('[useAutoScroll] Assistant message scrolled');
+          } else {
+            console.error('[useAutoScroll] messagesEndRef is null!');
+          }
           // Reset flag after scroll completes
           setTimeout(() => {
             isAutoScrollingRef.current = false;
           }, 100);
-        }, 0);
+        });
       }
+    } else {
+      console.log('[useAutoScroll] Skipping auto-scroll - user scrolled up');
     }
 
     lastMessageCountRef.current = messages.length;
