@@ -20,7 +20,7 @@ import {
   useStopSession,
 } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
-import { X, ArrowLeft } from "lucide-react";
+import { X, ArrowLeft, ChevronDown } from "lucide-react";
 
 interface SessionPanelProps {
   sessionId: string;
@@ -38,7 +38,8 @@ export interface SessionPanelRef {
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
   const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Empty div at end for scrolling to bottom
+  const lastMessageRef = useRef<HTMLDivElement>(null); // Last message element for scrolling to top
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Custom hooks (useSocket manages socket connection lifecycle)
@@ -171,6 +172,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     sessionStatus,
     messagesContainerRef,
     messagesEndRef,
+    lastMessageRef,
   });
 
   // Expose action handlers to parent
@@ -255,11 +257,27 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           sessionStatus={sessionStatus}
           parseContent={parseContent}
           messagesEndRef={messagesEndRef}
+          lastMessageRef={lastMessageRef}
           messagesContainerRef={messagesContainerRef}
-          showScrollButton={showScrollButton}
-          onScrollToBottom={handleScrollToBottomClick}
           toolResultMap={toolResultMap}
         />
+
+        {/* Scroll to bottom button */}
+        {showScrollButton && (
+          <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-full shadow-lg"
+              onClick={handleScrollToBottomClick}
+              title="Scroll to bottom"
+              aria-label="Scroll to bottom"
+              aria-controls="chat-messages"
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+        )}
 
         {/* Message Input - Sticky at bottom */}
         <MessageInput
@@ -320,18 +338,34 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </div>
             ) : (
               // Show message timeline - Chat + Input
-              <>
+              <div className="flex flex-col flex-1 min-h-0 relative">
                 <Chat
                   messages={messages}
                   loading={loading}
                   sessionStatus={sessionStatus}
                   parseContent={parseContent}
                   messagesEndRef={messagesEndRef}
+                  lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}
-                  showScrollButton={showScrollButton}
-                  onScrollToBottom={handleScrollToBottomClick}
                   toolResultMap={toolResultMap}
                 />
+
+                {/* Scroll to bottom button */}
+                {showScrollButton && (
+                  <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="rounded-full shadow-lg"
+                      onClick={handleScrollToBottomClick}
+                      title="Scroll to bottom"
+                      aria-label="Scroll to bottom"
+                      aria-controls="chat-messages"
+                    >
+                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                )}
 
                 {/* Message Input - Sticky at bottom */}
                 <MessageInput
@@ -346,7 +380,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </>
+              </div>
             )}
           </div>
         </div>
