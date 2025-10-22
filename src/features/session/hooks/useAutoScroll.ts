@@ -5,7 +5,8 @@ interface UseAutoScrollOptions {
   messages: Message[];
   sessionStatus: SessionStatus;
   messagesContainerRef: RefObject<HTMLDivElement>;
-  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesEndRef: RefObject<HTMLDivElement>; // Empty div at end of messages
+  lastMessageRef: RefObject<HTMLDivElement>; // Last message element
   // Configuration options
   scrollThreshold?: number; // Distance from bottom to consider "at bottom" (default: 100)
   inputHeightBuffer?: number; // Buffer for message input height (default: 80)
@@ -34,6 +35,7 @@ export function useAutoScroll({
   sessionStatus,
   messagesContainerRef,
   messagesEndRef,
+  lastMessageRef,
   scrollThreshold = 100,
   inputHeightBuffer = 80,
   smoothScrollUser = false,
@@ -81,10 +83,10 @@ export function useAutoScroll({
       isAutoScrollingRef.current = true; // Mark that we're auto-scrolling
 
       if (lastMessage.role === 'user') {
-        // USER message: Scroll to TOP of viewport
+        // USER message: Scroll to TOP of viewport using lastMessageRef
         console.log('[useAutoScroll] Scrolling user message to TOP');
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({
+          lastMessageRef.current?.scrollIntoView({
             behavior: smoothScrollUser ? 'smooth' : 'auto',
             block: 'start',
           });

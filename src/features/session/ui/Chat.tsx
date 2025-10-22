@@ -13,6 +13,7 @@ interface ChatProps {
   sessionStatus: SessionStatus;
   parseContent: (content: string) => ReactNode;
   messagesEndRef: RefObject<HTMLDivElement>;
+  lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
   showScrollButton?: boolean;
   onScrollToBottom?: () => void;
@@ -25,6 +26,7 @@ export function Chat({
   sessionStatus,
   parseContent,
   messagesEndRef,
+  lastMessageRef,
   messagesContainerRef,
   showScrollButton = false,
   onScrollToBottom,
@@ -61,7 +63,7 @@ export function Chat({
                 message={message}
                 parseContent={parseContent}
                 toolResultMap={toolResultMap}
-                ref={index === messages.length - 1 ? messagesEndRef : undefined}
+                ref={index === messages.length - 1 ? lastMessageRef : undefined}
               />
             ))}
           </div>
@@ -75,6 +77,7 @@ export function Chat({
               <span>Claude is working...</span>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </>
       )}
       {showScrollButton && (
