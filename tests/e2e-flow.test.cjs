@@ -68,8 +68,7 @@ function request(method, path, data = null) {
       method,
       headers: {
         'Content-Type': 'application/json'
-      },
-      timeout: 30000 // 30 second timeout
+      }
     };
 
     const req = http.request(url, options, (res) => {
@@ -84,6 +83,9 @@ function request(method, path, data = null) {
         }
       });
     });
+
+    // Set timeout - must be called after http.request()
+    req.setTimeout(30000);
 
     req.on('error', reject);
     req.on('timeout', () => {
