@@ -50,7 +50,7 @@ export function Chat({
         />
       ) : (
         <>
-          <div className="flex flex-col gap-3 pb-8 min-h-0">
+          <div className="flex flex-col pb-32 min-h-0">
             {messages.map((message, index) => (
               <div
                 key={message.id}
