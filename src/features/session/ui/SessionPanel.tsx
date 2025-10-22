@@ -264,7 +264,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
         {/* Scroll to bottom button */}
         {showScrollButton && (
-          <div className="absolute bottom-20 right-6 pointer-events-auto">
+          <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
             <Button
               variant="secondary"
               size="icon"
@@ -352,7 +352,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
                 {/* Scroll to bottom button */}
                 {showScrollButton && (
-                  <div className="absolute bottom-20 right-6 pointer-events-auto z-10">
+                  <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
                     <Button
                       variant="secondary"
                       size="icon"
