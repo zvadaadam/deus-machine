@@ -13,6 +13,9 @@ interface UseAutoScrollOptions {
   smoothScrollUser?: boolean; // Use smooth scroll for user messages (default: false)
 }
 
+// Constants
+const AUTO_SCROLL_RESET_DELAY = 100; // ms - delay before resetting auto-scroll flag
+
 /**
  * Hook to manage auto-scroll behavior and scroll-to-bottom button
  *
@@ -101,7 +104,7 @@ export function useAutoScroll({
 
           setTimeout(() => {
             isAutoScrollingRef.current = false;
-          }, 100);
+          }, AUTO_SCROLL_RESET_DELAY);
         });
       } else {
         // ASSISTANT message: Scroll to BOTTOM
@@ -110,7 +113,7 @@ export function useAutoScroll({
 
           setTimeout(() => {
             isAutoScrollingRef.current = false;
-          }, 100);
+          }, AUTO_SCROLL_RESET_DELAY);
         });
       }
     }
@@ -157,7 +160,7 @@ export function useAutoScroll({
         scrollToBottom(false);
         setTimeout(() => {
           isAutoScrollingRef.current = false;
-        }, 50);
+        }, AUTO_SCROLL_RESET_DELAY);
       }
     });
 
