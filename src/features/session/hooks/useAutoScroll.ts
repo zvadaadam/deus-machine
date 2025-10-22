@@ -44,15 +44,23 @@ export function useAutoScroll({
     });
   };
 
-  // Auto-scroll when new messages arrive - scroll new message to TOP
+  // Auto-scroll when new messages arrive
   useEffect(() => {
     if (!isUserScrolledUp && messages.length > 0) {
-      // Scroll the last message to the TOP of the viewport
-      // This pushes previous messages up and out of view
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'auto',
-        block: 'start', // Changed from 'end' to 'start' - positions at top
-      });
+      const lastMessage = messages[messages.length - 1];
+
+      if (lastMessage.role === 'user') {
+        // USER message: Scroll to TOP of viewport
+        // This pushes previous messages up and out of view, focusing on the new user message
+        messagesEndRef.current?.scrollIntoView({
+          behavior: 'auto',
+          block: 'start',
+        });
+      } else {
+        // ASSISTANT message: Scroll to BOTTOM normally
+        // Keeps the full response visible as it streams
+        scrollToBottom(false);
+      }
     }
   }, [messages.length, isUserScrolledUp]);
 
