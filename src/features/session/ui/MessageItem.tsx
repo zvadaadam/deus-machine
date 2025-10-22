@@ -11,6 +11,9 @@ import type { ToolResultMap } from "./chat-types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
+import { Copy, RotateCcw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useState } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -24,8 +27,40 @@ interface MessageItemProps {
 }
 
 export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
+  const [copied, setCopied] = useState(false);
+
   // Parse message content
   const contentBlocks = parseContent(message.content);
+
+  // Extract text content for copy functionality
+  const extractTextContent = (): string => {
+    if (typeof message.content === 'string') return message.content;
+    if (Array.isArray(contentBlocks)) {
+      return contentBlocks
+        .map((block: ContentBlock | string) => {
+          if (typeof block === 'string') return block;
+          if (block?.type === 'text') return block.text;
+          return '';
+        })
+        .join('\n');
+    }
+    return String(message.content);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(extractTextContent());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleRevert = () => {
+    // TODO: Implement revert functionality
+    console.log('Revert to message:', message.id);
+  };
 
   /**
    * MESSAGE FILTERING LOGIC
@@ -79,15 +114,65 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
     <div
       key={message.id}
       className={cn(
+        'relative group',
         roleStyles.maxWidth,
         roleStyles.container,
-        message.role === 'user' ? 'rounded-2xl px-4 py-3' : 'px-0 py-1',
-        'flex flex-col gap-2 overflow-hidden',
+        message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-1',
+        'flex flex-col gap-2 overflow-visible',
         chatTheme.common.transition
       )}
     >
+      {/* Hover action buttons - only for user messages */}
+      {message.role === 'user' && (
+        <TooltipProvider delayDuration={200}>
+          <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {/* Copy button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleCopy}
+                  className={cn(
+                    'h-7 w-7 flex items-center justify-center rounded-md',
+                    'bg-card hover:bg-muted border border-border shadow-sm',
+                    'text-muted-foreground hover:text-foreground',
+                    'transition-colors duration-200'
+                  )}
+                  aria-label="Copy message"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>{copied ? 'Copied!' : 'Copy Message'}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Revert button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleRevert}
+                  className={cn(
+                    'h-7 w-7 flex items-center justify-center rounded-md',
+                    'bg-card hover:bg-muted border border-border shadow-sm',
+                    'text-muted-foreground hover:text-foreground',
+                    'transition-colors duration-200'
+                  )}
+                  aria-label="Revert to this turn"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Revert to this turn</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
+      )}
+
       {/* Message content - uses BlockRenderer */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: ContentBlock | string, index: number) => {
             const key = typeof block === 'object' && block?.id ? block.id : `${message.id}:${index}`;
