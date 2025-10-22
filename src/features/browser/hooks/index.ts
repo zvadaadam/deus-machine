@@ -1,0 +1,1 @@
+export { useBrowser } from './useBrowser';

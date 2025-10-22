@@ -1,0 +1,232 @@
+import { useState, useEffect, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+
+interface BrowserStatus {
+  running: boolean;
+  port: number | null;
+  authToken: string | null;
+  error: string | null;
+}
+
+// Check if we're running in Tauri or web mode
+const isTauriMode = () => {
+  try {
+    const w = window as any;
+    return !!(w && (w.__TAURI__ || w.__TAURI_IPC__));
+  } catch {
+    return false;
+  }
+};
+
+const WEB_MODE_PORT = 3000;
+const WEB_HEALTH_URL = `http://localhost:${WEB_MODE_PORT}/health`;
+
+/**
+ * Timeout constants for browser operations
+ *
+ * Different timeouts for different contexts:
+ * - STARTUP_TIMEOUT: Used when initially connecting to server (longer timeout for cold start)
+ * - STATUS_CHECK_TIMEOUT: Used for periodic health checks (shorter for faster feedback)
+ */
+const STARTUP_TIMEOUT_MS = 3000;
+const STATUS_CHECK_TIMEOUT_MS = 2000;
+
+export function useBrowser() {
+  const [status, setStatus] = useState<BrowserStatus>({
+    running: false,
+    port: null,
+    authToken: null,
+    error: null,
+  });
+
+  // Start dev-browser server (Tauri mode) or check for existing server (Web mode)
+  const startServer = useCallback(async () => {
+    try {
+      if (isTauriMode()) {
+        // Tauri mode: start server via Rust backend
+        // Use environment variable if available, otherwise use relative path
+        const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH ||
+          "../../../dev-browser";
+
+        if (import.meta.env.DEV) {
+          const displayPath =
+            typeof devBrowserPath === 'string'
+              ? devBrowserPath.split(/[\\/]/).pop()
+              : 'dev-browser';
+          console.log('[useBrowser] Calling start_browser_server. path:', displayPath);
+        }
+        await invoke("start_browser_server", {
+          browserPath: devBrowserPath,
+        });
+        if (import.meta.env.DEV) {
+          console.log('[useBrowser] start_browser_server returned successfully');
+        }
+
+        // Wait for server to start with retry
+        const maxAttempts = 10;
+        const delayMs = 500;
+        let attempt = 0;
+        let serverReady = false;
+
+        while (attempt < maxAttempts && !serverReady) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          serverReady = await invoke<boolean>("is_browser_running");
+          attempt++;
+        }
+
+        if (!serverReady) {
+          throw new Error("Server failed to start within 5 seconds");
+        }
+
+        // Get port and auth token
+        const port = await invoke<number | null>("get_browser_port");
+        const authToken = await invoke<string | null>("get_browser_auth_token");
+
+        setStatus({
+          running: true,
+          port,
+          authToken,
+          error: null,
+        });
+
+        return { port, authToken };
+      } else {
+        // Web mode: check for existing MCP server on port 3000
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), STARTUP_TIMEOUT_MS);
+        let response: Response;
+        try {
+          response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (response.ok) {
+          setStatus({
+            running: true,
+            port: WEB_MODE_PORT,
+            authToken: null, // Auth token not needed for pre-authorized mode
+            error: null,
+          });
+
+          return { port: WEB_MODE_PORT, authToken: null };
+        } else {
+          throw new Error('MCP server not responding');
+        }
+      }
+    } catch (error) {
+      // Avoid serializing arbitrary error objects (may throw on circular refs)
+      const kind = error instanceof Error ? error.name : typeof error;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[useBrowser] Error starting server:', kind, msg);
+      const errorMessage = error instanceof Error ? error.message : "Failed to start browser";
+      setStatus({
+        running: false,
+        port: null,
+        authToken: null,
+        error: errorMessage,
+      });
+      throw error;
+    }
+  }, []);
+
+  // Stop browser server
+  const stopServer = useCallback(async () => {
+    try {
+      if (isTauriMode()) {
+        await invoke("stop_browser_server");
+      }
+      // In web mode, we don't stop the server (it's external)
+      setStatus({
+        running: false,
+        port: null,
+        authToken: null,
+        error: null,
+      });
+    } catch (error) {
+      const kind = error instanceof Error ? error.name : typeof error;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[useBrowser] Error stopping server:', kind, msg);
+    }
+  }, []);
+
+  // Check if server is running
+  const checkStatus = useCallback(async () => {
+    try {
+      if (isTauriMode()) {
+        // Tauri mode: check via Rust backend
+        const running = await invoke<boolean>("is_browser_running");
+
+        if (running) {
+          const port = await invoke<number | null>("get_browser_port");
+          const authToken = await invoke<string | null>("get_browser_auth_token");
+
+          setStatus({
+            running: true,
+            port,
+            authToken,
+            error: null,
+          });
+        } else {
+          setStatus({
+            running: false,
+            port: null,
+            authToken: null,
+            error: null,
+          });
+        }
+      } else {
+        // Web mode: check for existing MCP server
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), STATUS_CHECK_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+          if (response.ok) {
+            setStatus({
+              running: true,
+              port: WEB_MODE_PORT,
+              authToken: null,
+              error: null,
+            });
+          } else {
+            setStatus({
+              running: false,
+              port: null,
+              authToken: null,
+              error: null,
+            });
+          }
+        } catch (e) {
+          setStatus({
+            running: false,
+            port: null,
+            authToken: null,
+            error: `MCP server not running on port ${WEB_MODE_PORT}`,
+          });
+        }
+      }
+    } catch (error) {
+      setStatus(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : "Status check failed",
+      }));
+    }
+  }, []);
+
+  // Auto-start on mount
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  return {
+    status,
+    startServer,
+    stopServer,
+    checkStatus,
+  };
+}

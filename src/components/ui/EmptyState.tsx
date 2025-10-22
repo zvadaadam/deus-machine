@@ -1,10 +1,10 @@
 import { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 import {
   EmptyStateContainer,
   EmptyStateTitle,
   EmptyStateDescription,
-} from "@/components/content/empty-state";
+} from "@/shared/components";
 
 interface EmptyStateProps {
   icon: ReactNode;
@@ -37,7 +37,7 @@ export function EmptyState({
       )}
     >
       {/* Icon with subtle styling */}
-      <div className="w-16 h-16 mb-5 text-muted-foreground/50 transition-all duration-200 hover:scale-105">
+      <div className="w-16 h-16 mb-5 text-muted-foreground/50 [@media(hover:hover)and(pointer:fine)]:transition-all [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:hover:scale-105">
         {icon}
       </div>
 
