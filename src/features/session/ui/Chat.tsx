@@ -51,49 +51,52 @@ export function Chat({
       ) : (
         <>
           <div className="flex flex-col pb-32 min-h-0">
-            {messages.map((message, index) => {
-              // Filter out empty messages and messages with only tool_result blocks
-              // (This logic matches MessageItem.tsx filtering to prevent empty wrapper divs)
-              const contentBlocks = parseContent(message.content);
-              const isArray = Array.isArray(contentBlocks);
-              const onlyToolResults =
-                isArray &&
-                contentBlocks.length > 0 &&
-                contentBlocks.every((block: any) => typeof block === 'object' && block?.type === 'tool_result');
-              const isEmpty =
-                (isArray && contentBlocks.length === 0) ||
-                (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
-              const hasRenderableContent = !(onlyToolResults || isEmpty);
+            {(() => {
+              // Filter messages first to get renderable messages
+              const renderableMessages = messages
+                .map((message, originalIndex) => ({ message, originalIndex }))
+                .filter(({ message }) => {
+                  const contentBlocks = parseContent(message.content);
+                  const isArray = Array.isArray(contentBlocks);
+                  const onlyToolResults =
+                    isArray &&
+                    contentBlocks.length > 0 &&
+                    contentBlocks.every((block: any) => typeof block === 'object' && block?.type === 'tool_result');
+                  const isEmpty =
+                    (isArray && contentBlocks.length === 0) ||
+                    (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ''));
+                  return !(onlyToolResults || isEmpty);
+                });
 
-              // Skip creating wrapper div if message has no renderable content
-              if (!hasRenderableContent) {
-                return null;
-              }
+              return renderableMessages.map(({ message, originalIndex }, renderIndex) => {
+                // Add spacing logic: user messages get large TOP margin only, assistant messages get minimal margin
+                let marginClass = '';
+                if (message.role === 'user') {
+                  // User messages: large top margin only (no bottom margin to avoid gap before working indicator)
+                  marginClass = 'mt-8';
+                } else {
+                  // Assistant messages: minimal margin
+                  marginClass = 'mt-1';
+                }
 
-              // Add spacing logic: user messages get large margin, assistant messages get minimal margin
-              let marginClass = '';
-              if (message.role === 'user') {
-                // User messages: large margin for breathing room
-                marginClass = 'my-8';
-              } else {
-                // Assistant messages: minimal margin
-                marginClass = 'mt-1';
-              }
+                // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
+                const isLastRendered = renderIndex === renderableMessages.length - 1;
 
-              return (
-                <div
-                  key={message.id}
-                  ref={index === messages.length - 1 ? lastMessageRef : undefined}
-                  className={marginClass}
-                >
-                  <MessageItem
-                    message={message}
-                    parseContent={parseContent}
-                    toolResultMap={toolResultMap}
-                  />
-                </div>
-              );
-            })}
+                return (
+                  <div
+                    key={message.id}
+                    ref={isLastRendered ? lastMessageRef : undefined}
+                    className={marginClass}
+                  >
+                    <MessageItem
+                      message={message}
+                      parseContent={parseContent}
+                      toolResultMap={toolResultMap}
+                    />
+                  </div>
+                );
+              });
+            })()}
           </div>
           {sessionStatus === 'working' && (
             <div
