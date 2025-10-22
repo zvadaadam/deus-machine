@@ -1,13 +1,191 @@
 /* Import fonts */
 @import './fonts.css';
 
-/* Tailwind CSS directives */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind CSS v4 imports */
+@import "tailwindcss";
+
+/* Tailwind v4 Theme Configuration */
+@theme {
+  /* Color palette */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  --color-secondary-50: #faf5ff;
+  --color-secondary-100: #f3e8ff;
+  --color-secondary-200: #e9d5ff;
+  --color-secondary-300: #d8b4fe;
+  --color-secondary-400: #c084fc;
+  --color-secondary-500: #a855f7;
+  --color-secondary-600: #9333ea;
+  --color-secondary-700: #7e22ce;
+  --color-secondary-800: #6b21a8;
+  --color-secondary-900: #581c87;
+
+  /* Font families */
+  --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: 'Ioskeley Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+
+  /* Font sizes with line heights */
+  --font-size-display-lg: 48px;
+  --font-line-height-display-lg: 1.1;
+  --font-weight-display-lg: 700;
+  --font-letter-spacing-display-lg: -0.02em;
+
+  --font-size-display: 36px;
+  --font-line-height-display: 1.2;
+  --font-weight-display: 700;
+  --font-letter-spacing-display: -0.01em;
+
+  --font-size-heading-xl: 32px;
+  --font-line-height-heading-xl: 1.2;
+  --font-weight-heading-xl: 600;
+  --font-letter-spacing-heading-xl: -0.01em;
+
+  --font-size-heading-lg: 24px;
+  --font-line-height-heading-lg: 1.3;
+  --font-weight-heading-lg: 600;
+  --font-letter-spacing-heading-lg: -0.005em;
+
+  --font-size-heading: 20px;
+  --font-line-height-heading: 1.4;
+  --font-weight-heading: 600;
+
+  --font-size-heading-sm: 18px;
+  --font-line-height-heading-sm: 1.4;
+  --font-weight-heading-sm: 600;
+
+  --font-size-body-lg: 16px;
+  --font-line-height-body-lg: 1.5;
+
+  --font-size-body: 14px;
+  --font-line-height-body: 1.5;
+
+  --font-size-body-sm: 13px;
+  --font-line-height-body-sm: 1.5;
+
+  --font-size-caption: 12px;
+  --font-line-height-caption: 1.4;
+
+  --font-size-caption-sm: 11px;
+  --font-line-height-caption-sm: 1.4;
+
+  /* Border radius */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Animations */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
+  --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-fade-in-down: fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-slide-in-right: slideInRight 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-slide-in-left: slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-scale-in: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
+  --animate-shimmer: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
 
 /* Design tokens & base styles */
-@layer base {
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -96,18 +274,27 @@
 
   /* Targeted border reset (not global *) */
   :where(button, input, textarea, select, summary) {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   /* Full-screen layout for Tauri desktop app */
   html,
   body {
-    @apply m-0 p-0 w-full h-full overflow-hidden;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
   }
 
   /* App root - transparent to show Tauri window vibrancy effects */
   #root {
-    @apply min-h-screen w-full m-0 p-0 transition-colors duration-200;
+    min-height: 100vh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-duration: 200ms;
     /* Tauri-specific: keep fixed for proper window transparency */
     background: transparent;
     position: fixed;
@@ -116,13 +303,12 @@
   }
 
   body {
-    @apply text-foreground font-sans;
+    color: hsl(var(--foreground));
+    font-family: var(--font-family-sans);
     background: transparent;
   }
-}
 
 /* Custom utilities */
-@layer utilities {
   /* Accessibility: Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -137,7 +323,8 @@
   /* Hover transitions only on hover-capable devices */
   @media (hover: hover) and (pointer: fine) {
     .hover-transition {
-      @apply transition-colors duration-200;
+      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+      transition-duration: 200ms;
       transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
     }
   }
@@ -157,12 +344,18 @@
 
   /* Main container background - for modals, dialogs */
   .vibrancy-bg {
-    @apply bg-background/95 backdrop-blur-xl transition-colors duration-200;
+    background-color: hsl(var(--background) / 0.95);
+    backdrop-filter: blur(24px);
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-duration: 200ms;
   }
 
   /* Subtle panel sections - for headers, dividers */
   .vibrancy-panel {
-    @apply bg-background/30 backdrop-blur-sm transition-colors duration-200;
+    background-color: hsl(var(--background) / 0.3);
+    backdrop-filter: blur(4px);
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-duration: 200ms;
   }
 
   /* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
@@ -237,7 +430,7 @@
   @media (prefers-reduced-motion: reduce) {
     .vibrancy-bg,
     .vibrancy-panel {
-      @apply transition-none;
+      transition: none;
     }
 
     *::-webkit-scrollbar-thumb,
@@ -248,7 +441,7 @@
 
   /* Elevation System - Linear/Vercel inspired */
   .elevation-0 {
-    @apply shadow-none;
+    box-shadow: none;
   }
 
   .elevation-1 {
@@ -275,24 +468,25 @@
 
   /* Consistent Spacing */
   .space-standard {
-    @apply p-4; /* 16px */
+    padding: 1rem; /* 16px */
   }
 
   .space-standard-x {
-    @apply px-4; /* 16px horizontal */
+    padding-left: 1rem; /* 16px horizontal */
+    padding-right: 1rem;
   }
 
   .space-standard-y {
-    @apply py-4; /* 16px vertical */
+    padding-top: 1rem; /* 16px vertical */
+    padding-bottom: 1rem;
   }
 
   .space-tight {
-    @apply p-3; /* 12px */
+    padding: 0.75rem; /* 12px */
   }
 
   .space-loose {
-    @apply p-6; /* 24px */
+    padding: 1.5rem; /* 24px */
   }
 
   /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
-}
