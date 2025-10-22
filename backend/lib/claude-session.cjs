@@ -16,6 +16,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const { randomUUID } = require('crypto');
 const { getDatabase } = require('./database.cjs');
 const { getMcpServers, getAgents } = require('./config.cjs');
@@ -25,7 +26,7 @@ const { prepareMessageContent } = require('./message-sanitizer.cjs');
  * Path to the Claude CLI binary
  * @type {string}
  */
-const CLAUDE_BINARY = '/Users/zvada/conductor/cc/claude';
+const CLAUDE_BINARY = process.env.CLAUDE_CLI_PATH || '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
 
 /**
  * Map of active Claude CLI sessions
@@ -284,6 +285,27 @@ function startClaudeSession(sessionId, workspacePath) {
   console.log(`   Session ID: ${sessionId}`);
   console.log(`   Working directory: ${workspacePath}`);
 
+  // Verify Claude binary exists
+  console.log(`   🔍 Checking Claude binary: ${CLAUDE_BINARY}`);
+  try {
+    if (!fs.existsSync(CLAUDE_BINARY)) {
+      console.error(`   ❌ Claude binary not found at: ${CLAUDE_BINARY}`);
+      throw new Error(`Claude binary not found at ${CLAUDE_BINARY}`);
+    }
+
+    // Check if file is executable
+    try {
+      fs.accessSync(CLAUDE_BINARY, fs.constants.X_OK);
+      console.log(`   ✅ Claude binary exists and is executable`);
+    } catch (error) {
+      console.error(`   ❌ Claude binary is not executable: ${CLAUDE_BINARY}`);
+      throw new Error(`Claude binary is not executable: ${CLAUDE_BINARY}`);
+    }
+  } catch (error) {
+    console.error(`   ❌ Error checking Claude binary:`, error);
+    throw error;
+  }
+
   // Check if claude_session_id exists (for resume)
   const session = db.prepare('SELECT claude_session_id FROM sessions WHERE id = ?').get(sessionId);
   const claudeSessionId = session?.claude_session_id;
@@ -340,9 +362,10 @@ function startClaudeSession(sessionId, workspacePath) {
     console.log(`   Resuming Claude session: ${claudeSessionId}`);
   }
 
-  const claudeProcess = spawn(CLAUDE_BINARY, args, {
+  const claudeProcess = spawn(process.execPath, [CLAUDE_BINARY, ...args], {
     cwd: workspacePath,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: process.env
   });
 
   const sessionInfo = {
@@ -355,23 +378,32 @@ function startClaudeSession(sessionId, workspacePath) {
 
   // Handle stdout (stream-json output)
   claudeProcess.stdout.on('data', (data) => {
-    sessionInfo.buffer += data.toString();
+    try {
+      sessionInfo.buffer += data.toString();
 
-    // Process complete JSON lines
-    const lines = sessionInfo.buffer.split('\n');
-    sessionInfo.buffer = lines.pop() || '';
+      // Process complete JSON lines
+      const lines = sessionInfo.buffer.split('\n');
+      sessionInfo.buffer = lines.pop() || '';
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+      for (const line of lines) {
+        if (!line.trim()) continue;
 
-      try {
-        const message = JSON.parse(line);
-        console.log(`[CLAUDE ${sessionId.substring(0, 8)}]`, JSON.stringify(message).substring(0, 200));
-        handleClaudeMessage(sessionId, message);
-      } catch (error) {
-        console.error('Failed to parse Claude output:', line.substring(0, 100), error);
+        try {
+          const message = JSON.parse(line);
+          console.log(`[CLAUDE ${sessionId.substring(0, 8)}]`, JSON.stringify(message).substring(0, 200));
+          handleClaudeMessage(sessionId, message);
+        } catch (error) {
+          console.error('Failed to parse Claude output:', line.substring(0, 100), error);
+        }
       }
+    } catch (error) {
+      console.error(`[CLAUDE ${sessionId.substring(0, 8)}] Error processing stdout:`, error);
     }
+  });
+
+  // Handle stdout errors
+  claudeProcess.stdout.on('error', (error) => {
+    console.error(`[CLAUDE ${sessionId.substring(0, 8)}] stdout error:`, error);
   });
 
   // Handle stderr (debug output)
@@ -379,9 +411,48 @@ function startClaudeSession(sessionId, workspacePath) {
     console.log(`[CLAUDE STDERR ${sessionId.substring(0, 8)}]`, data.toString().trim().substring(0, 200));
   });
 
-  claudeProcess.on('exit', (code) => {
-    console.log(`   Claude process exited: ${code}`);
+  // Handle stderr errors
+  claudeProcess.stderr.on('error', (error) => {
+    console.error(`[CLAUDE ${sessionId.substring(0, 8)}] stderr error:`, error);
+  });
+
+  // Handle stdin errors
+  claudeProcess.stdin.on('error', (error) => {
+    console.error(`[CLAUDE ${sessionId.substring(0, 8)}] stdin error:`, error);
+  });
+
+  // Handle process errors
+  claudeProcess.on('error', (error) => {
+    console.error(`[CLAUDE ${sessionId.substring(0, 8)}] Process error:`, error);
+    console.error('Error details:', {
+      code: error.code,
+      syscall: error.syscall,
+      path: error.path,
+      stack: error.stack
+    });
+  });
+
+  // Handle process exit
+  claudeProcess.on('exit', (code, signal) => {
+    console.log(`[CLAUDE ${sessionId.substring(0, 8)}] Process exited:`, { code, signal });
     claudeSessions.delete(sessionId);
+
+    // Update session status to idle if process exits unexpectedly
+    const db = getDatabase();
+    try {
+      db.prepare(`
+        UPDATE sessions
+        SET status = 'idle', updated_at = datetime('now')
+        WHERE id = ?
+      `).run(sessionId);
+    } catch (error) {
+      console.error('Failed to update session status after exit:', error);
+    }
+  });
+
+  // Handle process close
+  claudeProcess.on('close', (code, signal) => {
+    console.log(`[CLAUDE ${sessionId.substring(0, 8)}] Process closed:`, { code, signal });
   });
 
   console.log(`   ✅ Claude CLI process started (PID: ${claudeProcess.pid})`);
