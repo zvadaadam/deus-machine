@@ -6,6 +6,7 @@
  */
 
 import type { Message } from "@/shared/types";
+import type { ContentBlock } from "@/features/session/types";
 import type { ToolResultMap } from "./chat-types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
@@ -14,9 +15,11 @@ import { cn } from "@/shared/lib/utils";
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
 
+type ParsedContent = ContentBlock[] | string | null;
+
 interface MessageItemProps {
   message: Message;
-  parseContent: (content: string) => any;
+  parseContent: (content: string) => ParsedContent;
   toolResultMap: ToolResultMap;
 }
 
@@ -90,7 +93,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
         <span className="font-semibold uppercase text-xs text-muted-foreground tracking-wide">
           {message.role}
         </span>
-        <span className="text-[0.7rem] text-muted-foreground/70">
+        <span className="text-xs text-muted-foreground/70">
           {new Date(message.created_at).toLocaleTimeString()}
         </span>
       </div>

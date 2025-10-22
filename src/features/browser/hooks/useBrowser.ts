@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-interface DevBrowserStatus {
+interface BrowserStatus {
   running: boolean;
   port: number | null;
   authToken: string | null;
@@ -18,8 +18,10 @@ const isTauriMode = () => {
   }
 };
 
+const WEB_HEALTH_URL = 'http://localhost:3000/health';
+
 export function useBrowser() {
-  const [status, setStatus] = useState<DevBrowserStatus>({
+  const [status, setStatus] = useState<BrowserStatus>({
     running: false,
     port: null,
     authToken: null,
@@ -35,11 +37,19 @@ export function useBrowser() {
         const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH ||
           "../../../dev-browser";
 
-        console.log('[useBrowser] Calling start_browser_server with path:', devBrowserPath);
+        if (import.meta.env.DEV) {
+          const displayPath =
+            typeof devBrowserPath === 'string'
+              ? devBrowserPath.split(/[\\/]/).pop()
+              : 'dev-browser';
+          console.log('[useBrowser] Calling start_browser_server. path:', displayPath);
+        }
         await invoke("start_browser_server", {
           browserPath: devBrowserPath,
         });
-        console.log('[useBrowser] start_browser_server returned successfully');
+        if (import.meta.env.DEV) {
+          console.log('[useBrowser] start_browser_server returned successfully');
+        }
 
         // Wait for server to start with retry
         const maxAttempts = 10;
@@ -75,14 +85,12 @@ export function useBrowser() {
         const timeoutId = setTimeout(() => controller.abort(), 3000);
         let response: Response;
         try {
-          response = await fetch('http://localhost:3000/health', { signal: controller.signal });
+          response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });
         } finally {
           clearTimeout(timeoutId);
         }
 
         if (response.ok) {
-          await response.json(); // Response checked; details unused
-
           setStatus({
             running: true,
             port: 3000,
@@ -111,7 +119,7 @@ export function useBrowser() {
     }
   }, []);
 
-  // Stop dev-browser server
+  // Stop browser server
   const stopServer = useCallback(async () => {
     try {
       if (isTauriMode()) {
@@ -125,7 +133,9 @@ export function useBrowser() {
         error: null,
       });
     } catch (error) {
-      console.error("Failed to stop dev-browser:", error);
+      const kind = error instanceof Error ? error.name : typeof error;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[useBrowser] Error stopping server:', kind, msg);
     }
   }, []);
 
@@ -161,7 +171,7 @@ export function useBrowser() {
           const timeoutId = setTimeout(() => controller.abort(), 2000);
           let response: Response;
           try {
-            response = await fetch('http://localhost:3000/health', { signal: controller.signal });
+            response = await fetch(WEB_HEALTH_URL, { signal: controller.signal });
           } finally {
             clearTimeout(timeoutId);
           }
