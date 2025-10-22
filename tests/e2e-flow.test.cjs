@@ -18,14 +18,11 @@ const Database = require('better-sqlite3');
 // Configuration
 const BACKEND_PORT = process.env.BACKEND_PORT || process.env.VITE_BACKEND_PORT || 60068;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
-const SOCKET_URL = `http://localhost:${BACKEND_PORT}`;
 const DB_PATH = require('path').join(process.env.HOME, 'Library/Application Support/com.conductor.app/conductor.db');
 
 // Test state
 let testWorkspaceId = null;
 let testSessionId = null;
-let socketEvents = [];
-let socket = null;
 
 // Colors for console output
 const colors = {
@@ -71,7 +68,8 @@ function request(method, path, data = null) {
       method,
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 30000 // 30 second timeout
     };
 
     const req = http.request(url, options, (res) => {
@@ -88,6 +86,10 @@ function request(method, path, data = null) {
     });
 
     req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout after 30s'));
+    });
 
     if (data) {
       req.write(JSON.stringify(data));
@@ -366,11 +368,6 @@ async function testVerifySocketEvents() {
 async function cleanup() {
   logSection('CLEANUP');
 
-  if (socket) {
-    socket.disconnect();
-    logInfo('Socket disconnected');
-  }
-
   // Archive the test workspace
   if (testWorkspaceId) {
     try {
@@ -386,7 +383,10 @@ async function cleanup() {
 
 // Main test runner
 async function runTests() {
-  console.clear();
+  // Don't clear console in CI to preserve logs
+  if (!process.env.CI) {
+    console.clear();
+  }
   log('╔═══════════════════════════════════════════════════════════╗', 'cyan');
   log('║         CONDUCTOR E2E TEST SUITE                          ║', 'cyan');
   log('╚═══════════════════════════════════════════════════════════╝', 'cyan');
