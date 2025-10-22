@@ -56,7 +56,15 @@ export function MessageInput({
   }, [messageInput]);
 
   return (
-    <div className="flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
+    <div className="relative flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
+      {/* Scroll fade overlay - positioned above the input */}
+      <div
+        className="absolute bottom-full left-0 right-0 h-32 pointer-events-none"
+        style={{
+          background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
+        }}
+      />
+
       {/* Glassmorphic ChatBox */}
       <div
         className={`
