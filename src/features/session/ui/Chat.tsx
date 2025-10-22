@@ -3,8 +3,6 @@ import type { ToolResultMap } from "./chat-types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { ChevronDown } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 
 interface ChatProps {
@@ -15,8 +13,6 @@ interface ChatProps {
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
-  showScrollButton?: boolean;
-  onScrollToBottom?: () => void;
   toolResultMap: ToolResultMap;
 }
 
@@ -28,8 +24,6 @@ export function Chat({
   messagesEndRef,
   lastMessageRef,
   messagesContainerRef,
-  showScrollButton = false,
-  onScrollToBottom,
   toolResultMap,
 }: ChatProps) {
   return (
@@ -82,21 +76,6 @@ export function Chat({
           )}
           <div ref={messagesEndRef} />
         </>
-      )}
-      {showScrollButton && (
-        <div className="absolute bottom-6 right-6 pointer-events-auto">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="rounded-full shadow-lg"
-            onClick={() => onScrollToBottom?.()}
-            title="Scroll to bottom"
-            aria-label="Scroll to bottom"
-            aria-controls="chat-messages"
-          >
-            <ChevronDown className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
       )}
     </div>
   );
