@@ -20,7 +20,7 @@ import {
   useStopSession,
 } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
-import { X, ArrowLeft } from "lucide-react";
+import { X, ArrowLeft, ChevronDown } from "lucide-react";
 
 interface SessionPanelProps {
   sessionId: string;
@@ -259,10 +259,25 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           messagesEndRef={messagesEndRef}
           lastMessageRef={lastMessageRef}
           messagesContainerRef={messagesContainerRef}
-          showScrollButton={showScrollButton}
-          onScrollToBottom={handleScrollToBottomClick}
           toolResultMap={toolResultMap}
         />
+
+        {/* Scroll to bottom button */}
+        {showScrollButton && (
+          <div className="absolute bottom-20 right-6 pointer-events-auto">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-full shadow-lg"
+              onClick={handleScrollToBottomClick}
+              title="Scroll to bottom"
+              aria-label="Scroll to bottom"
+              aria-controls="chat-messages"
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+        )}
 
         {/* Message Input - Sticky at bottom */}
         <MessageInput
@@ -323,7 +338,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </div>
             ) : (
               // Show message timeline - Chat + Input
-              <>
+              <div className="flex flex-col flex-1 min-h-0 relative">
                 <Chat
                   messages={messages}
                   loading={loading}
@@ -332,10 +347,25 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   messagesEndRef={messagesEndRef}
                   lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}
-                  showScrollButton={showScrollButton}
-                  onScrollToBottom={handleScrollToBottomClick}
                   toolResultMap={toolResultMap}
                 />
+
+                {/* Scroll to bottom button */}
+                {showScrollButton && (
+                  <div className="absolute bottom-20 right-6 pointer-events-auto z-10">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="rounded-full shadow-lg"
+                      onClick={handleScrollToBottomClick}
+                      title="Scroll to bottom"
+                      aria-label="Scroll to bottom"
+                      aria-controls="chat-messages"
+                    >
+                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                )}
 
                 {/* Message Input - Sticky at bottom */}
                 <MessageInput
@@ -350,7 +380,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </>
+              </div>
             )}
           </div>
         </div>
