@@ -262,6 +262,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           toolResultMap={toolResultMap}
         />
 
+        {/* Scroll fade overlay - fades messages above input */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-[5]"
+          style={{
+            background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
+          }}
+        />
+
         {/* Scroll to bottom button */}
         {showScrollButton && (
           <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
@@ -348,6 +356,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}
                   toolResultMap={toolResultMap}
+                />
+
+                {/* Scroll fade overlay - fades messages above input */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none z-[5]"
+                  style={{
+                    background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
+                  }}
                 />
 
                 {/* Scroll to bottom button */}
