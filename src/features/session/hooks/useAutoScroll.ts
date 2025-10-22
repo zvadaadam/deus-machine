@@ -12,10 +12,18 @@ interface UseAutoScrollOptions {
  * Hook to manage auto-scroll behavior and scroll-to-bottom button
  *
  * Features:
- * - Auto-scrolls when new messages arrive
- * - Continuously scrolls during streaming (when content height changes)
+ * - USER messages: Scroll to top of viewport (push old messages up)
+ * - ASSISTANT messages: Smart overflow detection
+ *   - If there's visible space below → NO scroll (messages appear naturally)
+ *   - If content would be hidden → AUTO scroll (reveal new content)
  * - Shows "scroll to bottom" button when user scrolls up
  * - Respects user intent (doesn't auto-scroll if user manually scrolled up)
+ *
+ * UX Benefits:
+ * - Reduces unnecessary scrolling when viewport has space
+ * - User sees their question + answer simultaneously
+ * - Less jarring, more natural content flow
+ * - Only scrolls when content would actually be cut off
  */
 export function useAutoScroll({
   messages,
@@ -79,7 +87,8 @@ export function useAutoScroll({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messagesContainerRef]);
 
-  // ResizeObserver: Continuous scroll during streaming
+  // ResizeObserver: Smart scroll during streaming
+  // Only scrolls if content would overflow viewport (be hidden)
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -89,14 +98,26 @@ export function useAutoScroll({
         const newHeight = entry.target.scrollHeight;
         const oldHeight = lastScrollHeightRef.current;
 
-        // During streaming, scroll down smoothly as content grows
-        // This keeps the streaming message visible and flowing
+        // Only proceed if content grew and we're in a working session
         if (
           newHeight > oldHeight &&
           !isUserScrolledUp &&
           sessionStatus === 'working'
         ) {
-          scrollToBottom(false); // Keep scrolling down during streaming
+          // Calculate visible boundaries
+          const { scrollTop, clientHeight } = container;
+          const viewportBottom = scrollTop + clientHeight;
+
+          // Check if new content would be hidden below viewport
+          // Add small buffer (50px) to account for message input height
+          const contentBottom = newHeight;
+          const isContentHidden = contentBottom > viewportBottom + 50;
+
+          // Only scroll if content would be cut off
+          if (isContentHidden) {
+            scrollToBottom(false); // Scroll to reveal hidden content
+          }
+          // Otherwise, let content appear naturally without scrolling
         }
 
         lastScrollHeightRef.current = newHeight;
