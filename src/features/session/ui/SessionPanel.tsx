@@ -38,7 +38,8 @@ export interface SessionPanelRef {
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
   const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Empty div at end for scrolling to bottom
+  const lastMessageRef = useRef<HTMLDivElement>(null); // Last message element for scrolling to top
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Custom hooks (useSocket manages socket connection lifecycle)
@@ -171,6 +172,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     sessionStatus,
     messagesContainerRef,
     messagesEndRef,
+    lastMessageRef,
   });
 
   // Expose action handlers to parent
@@ -255,6 +257,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           sessionStatus={sessionStatus}
           parseContent={parseContent}
           messagesEndRef={messagesEndRef}
+          lastMessageRef={lastMessageRef}
           messagesContainerRef={messagesContainerRef}
           showScrollButton={showScrollButton}
           onScrollToBottom={handleScrollToBottomClick}
@@ -327,6 +330,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   sessionStatus={sessionStatus}
                   parseContent={parseContent}
                   messagesEndRef={messagesEndRef}
+                  lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}
                   showScrollButton={showScrollButton}
                   onScrollToBottom={handleScrollToBottomClick}
