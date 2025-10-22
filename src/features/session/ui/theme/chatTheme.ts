@@ -14,7 +14,7 @@ export const chatTheme = {
       maxWidth: 'max-w-[85%]',
     },
     assistant: {
-      container: 'mr-auto bg-muted/60 border border-border/60 backdrop-blur-sm',
+      container: 'mr-auto bg-card border border-border shadow-sm backdrop-blur-sm',
       text: 'text-foreground',
       maxWidth: 'max-w-[85%]',
     },
