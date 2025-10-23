@@ -6,7 +6,10 @@ import type { SidebarHeaderProps } from "../model/types";
  * SidebarHeader Component
  * Displays user profile with settings button
  */
-export function SidebarHeader({ profile, onOpenSettings }: SidebarHeaderProps) {
+export function SidebarHeader({
+  profile = { username: 'User' },
+  onOpenSettings
+}: SidebarHeaderProps) {
   return (
     <SidebarHeaderUI className="p-2">
       <button

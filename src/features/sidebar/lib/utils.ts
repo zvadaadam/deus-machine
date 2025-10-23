@@ -19,15 +19,16 @@ export function getRepoInitials(repoName: string): string {
 /**
  * Get color scheme for repository badge based on name hash
  * @param repoName - Repository name
- * @returns Tailwind bg and text color classes
+ * @returns Semantic design token classes
  */
 export function getRepoColor(repoName: string): { bg: string; text: string } {
   const hash = repoName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const colors = [
-    { bg: "bg-blue-500/10", text: "text-blue-700 dark:text-blue-400" },
-    { bg: "bg-purple-500/10", text: "text-purple-700 dark:text-purple-400" },
-    { bg: "bg-green-500/10", text: "text-green-700 dark:text-green-400" },
-    { bg: "bg-orange-500/10", text: "text-orange-700 dark:text-orange-400" },
+  // Use semantic tokens from design system for theme consistency
+  const schemes = [
+    { bg: "bg-primary/10", text: "text-primary" },
+    { bg: "bg-secondary/10", text: "text-secondary-foreground" },
+    { bg: "bg-accent/10", text: "text-accent-foreground" },
+    { bg: "bg-muted", text: "text-muted-foreground" },
   ];
-  return colors[hash % colors.length];
+  return schemes[hash % schemes.length];
 }

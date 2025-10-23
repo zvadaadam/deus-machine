@@ -37,6 +37,7 @@ export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
           <SidebarMenuButton
             onClick={() => onAddRepository?.()}
             tooltip="Add Repository"
+            aria-label="Add Repository"
           >
             <Plus className="h-4 w-4" />
           </SidebarMenuButton>
