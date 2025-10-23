@@ -1,0 +1,76 @@
+/**
+ * Sidebar feature type definitions
+ * Extracted from AppSidebar.tsx for better organization
+ */
+
+import type { Workspace, DiffStats } from "@/shared/types";
+
+/**
+ * Repository with its workspaces
+ */
+export interface Repository {
+  repo_id: string;
+  repo_name: string;
+  workspaces: Workspace[];
+}
+
+/**
+ * Main AppSidebar component props
+ */
+export interface AppSidebarProps {
+  repositories: Repository[];
+  selectedWorkspaceId: string | null;
+  diffStats: Record<string, DiffStats>;
+  onWorkspaceClick: (workspace: Workspace) => void;
+  onNewWorkspace: (repoId?: string) => void;
+  onAddRepository?: () => void;
+  onArchive?: (workspaceId: string) => void;
+  profile?: {
+    username: string;
+    email?: string;
+  };
+}
+
+/**
+ * RepositoryItem component props
+ */
+export interface RepositoryItemProps {
+  repository: Repository;
+  isCollapsed: boolean;
+  selectedWorkspaceId: string | null;
+  diffStats: Record<string, DiffStats>;
+  onToggleCollapse: () => void;
+  onWorkspaceClick: (workspace: Workspace) => void;
+  onNewWorkspace: (repoId?: string) => void;
+  onArchive?: (workspaceId: string) => void;
+  sidebarExpanded: boolean;
+}
+
+/**
+ * WorkspaceItem component props
+ */
+export interface WorkspaceItemProps {
+  workspace: Workspace;
+  isActive: boolean;
+  diffStats?: DiffStats;
+  onClick: () => void;
+  onArchive?: (workspaceId: string) => void;
+}
+
+/**
+ * SidebarHeader component props
+ */
+export interface SidebarHeaderProps {
+  profile?: {
+    username: string;
+    email?: string;
+  };
+  onOpenSettings: () => void;
+}
+
+/**
+ * SidebarFooter component props
+ */
+export interface SidebarFooterProps {
+  onAddRepository?: () => void;
+}
