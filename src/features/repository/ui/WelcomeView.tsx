@@ -44,7 +44,7 @@ export function WelcomeView({
   const hasMore = recentWorkspaces.length > initialCount;
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Top Section - Fixed */}
       <div className="flex-shrink-0 p-8 max-w-4xl mx-auto w-full">
         {/* Header */}
