@@ -414,7 +414,15 @@ export function MainLayout() {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      variant="inset"
+      style={
+        {
+          "--sidebar-width": "280px",
+          "--sidebar-width-mobile": "280px",
+        } as React.CSSProperties
+      }
+    >
       {/* Inset Sidebar - transparent, sits on top of #root background */}
       {loading ? (
         <div className="p-4 space-y-3">
