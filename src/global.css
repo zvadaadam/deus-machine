@@ -3,6 +3,9 @@
 
 /* Import fonts */
 @import './fonts.css';
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 /* Tailwind v4 Theme Configuration */
 @theme {
@@ -308,7 +311,6 @@
   --sidebar-ring: oklch(0.59 0.24 264);
 }
 
-
 /* Targeted border reset (not global *) */
 :where(button, input, textarea, select, summary) {
   border-color: var(--border);
@@ -527,3 +529,23 @@
   }
 
   /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
+
+  @theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+  @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
