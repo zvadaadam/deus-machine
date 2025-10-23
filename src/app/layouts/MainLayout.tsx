@@ -467,7 +467,7 @@ export function MainLayout() {
         <PanelGroup
           direction="horizontal"
           autoSaveId="conductor-root-layout"
-          className="h-full rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+          className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
         >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
