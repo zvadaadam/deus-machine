@@ -415,7 +415,6 @@ export function MainLayout() {
 
   return (
     <SidebarProvider
-      variant="inset"
       style={
         {
           "--sidebar-width": "280px",
