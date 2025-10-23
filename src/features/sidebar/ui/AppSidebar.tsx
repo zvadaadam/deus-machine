@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -115,24 +114,22 @@ export function AppSidebar({
 
       {/* Repositories List */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
-        <ScrollArea className="flex-1">
-          <SidebarMenu className="py-2 px-2 overflow-visible gap-2">
-            {repositories.map((repo) => (
-              <RepositoryItem
-                key={repo.repo_id}
-                repository={repo}
-                isCollapsed={collapsedRepos.has(repo.repo_id)}
-                selectedWorkspaceId={selectedWorkspaceId}
-                diffStats={diffStats}
-                onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                onWorkspaceClick={onWorkspaceClick}
-                onNewWorkspace={onNewWorkspace}
-                onArchive={onArchive}
-                sidebarExpanded={isExpanded}
-              />
-            ))}
-          </SidebarMenu>
-        </ScrollArea>
+        <SidebarMenu className="p-2 gap-2">
+          {repositories.map((repo) => (
+            <RepositoryItem
+              key={repo.repo_id}
+              repository={repo}
+              isCollapsed={collapsedRepos.has(repo.repo_id)}
+              selectedWorkspaceId={selectedWorkspaceId}
+              diffStats={diffStats}
+              onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+              onWorkspaceClick={onWorkspaceClick}
+              onNewWorkspace={onNewWorkspace}
+              onArchive={onArchive}
+              sidebarExpanded={isExpanded}
+            />
+          ))}
+        </SidebarMenu>
       </SidebarContent>
 
       {/* Footer with Add Repository */}
