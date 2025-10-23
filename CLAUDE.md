@@ -56,9 +56,9 @@ We want to achieve a beautiful aesthetic design of a pro consumer product.
 
 Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 
-
 ## State Managment
 - Using Zustand
+- Follow best practicies of using Zustant state managment
 
 ## Styling
 
@@ -120,6 +120,8 @@ We use **Tailwind CSS v4** which has significant differences from v3:
 - Always use font and color tokens from the Tailwind config
 
 ## Components
+
+Maximize reusing of Shadcn components. If you want to design something new, explore src/components/ui/ to see if you can use something or build it from these components. They're the atomic components of all the design.
 
 ### Shadcn UI - CRITICAL Best Practices
 

@@ -127,8 +127,6 @@ function SheetDescription({
 
 export {
   Sheet,
-  SheetPortal,
-  SheetOverlay,
   SheetTrigger,
   SheetClose,
   SheetContent,
