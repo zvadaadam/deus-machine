@@ -415,6 +415,7 @@ export function MainLayout() {
 
   return (
     <SidebarProvider
+      className="h-screen"
       style={
         {
           "--sidebar-width": "280px",
