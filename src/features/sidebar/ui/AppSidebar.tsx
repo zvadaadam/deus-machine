@@ -133,10 +133,9 @@ export function AppSidebar({
       </SidebarContent>
 
       {/* Footer with Add Repository */}
-      <SidebarFooter className={cn("pb-2 pt-0", isExpanded ? "px-0" : "px-2")}>
+      <SidebarFooter className="p-2 pt-0">
         {isExpanded ? (
-          <div className="p-2 pt-0">
-            <Button
+          <Button
               variant="ghost"
               size="sm"
               onClick={() => onAddRepository?.()}
@@ -151,7 +150,6 @@ export function AppSidebar({
                 <span className="text-sm">Add Repository</span>
               </div>
             </Button>
-          </div>
         ) : (
           <SidebarMenu>
             <SidebarMenuItem>
@@ -217,12 +215,14 @@ function RepositoryItem({
       <SidebarMenuItem className={cn(!sidebarExpanded && "overflow-visible")}>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
-            className={cn("w-full", sidebarExpanded ? "px-3 py-5" : "px-0 py-6 overflow-visible")}
+            className={cn(
+              "w-full flex items-center",
+              sidebarExpanded ? "px-3 py-2 justify-between" : "px-0 py-3 justify-center overflow-visible"
+            )}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
             onClick={!sidebarExpanded ? handleClick : undefined}
           >
-            <div className={cn("flex items-center w-full overflow-visible", sidebarExpanded ? "justify-between" : "justify-center")}>
-              {!sidebarExpanded && (
+            {!sidebarExpanded && (
                 <div className="relative overflow-visible">
                   {(() => {
                     const repoColor = getRepoColor(repository.repo_name);
@@ -258,7 +258,6 @@ function RepositoryItem({
                   )}
                 />
               )}
-            </div>
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -370,10 +369,10 @@ function WorkspaceItem({ workspace, isActive, diffStats, onClick, onArchive }: W
         role="button"
         tabIndex={0}
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 px-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
+          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
           isActive
             ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
-            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent"
+            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-2"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
