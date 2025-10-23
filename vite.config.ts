@@ -1,10 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
 
   // Path aliases - FSD-Lite Architecture
   resolve: {
@@ -15,6 +16,9 @@ export default defineConfig(async () => ({
       '@/platform': path.resolve(__dirname, './src/platform'),
       '@/shared': path.resolve(__dirname, './src/shared'),
       '@/components': path.resolve(__dirname, './src/components'),
+      '@/lib': path.resolve(__dirname, './src/shared/lib'),
+      '@/hooks': path.resolve(__dirname, './src/shared/hooks'),
+      '@/ui': path.resolve(__dirname, './src/components/ui'),
     },
   },
 

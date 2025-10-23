@@ -61,15 +61,162 @@ Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 - Using Zustand
 
 ## Styling
-- Using Tailwind
-- Consistent padings default 16px (this product is more dense)
+
+### Tailwind CSS v4 - IMPORTANT Best Practices
+
+We use **Tailwind CSS v4** which has significant differences from v3:
+
+#### CSS-First Configuration
+- **NO JavaScript config files** - v4 uses CSS-based configuration
+- All configuration lives in `src/global.css` using `@theme` directive
+- Never create or edit `tailwind.config.js` - it doesn't exist in v4
+
+#### Color System - OKLCH Format
+- Use modern **OKLCH color space** instead of HSL/RGB
+- OKLCH provides perceptually uniform colors across all hues
+- Example: `oklch(0.985 0 0)` for light gray, `oklch(0.59 0.24 264)` for primary blue
+- Semantic colors defined in `:root` and `.dark` for theme switching
+
+#### Theme Configuration
+```css
+@theme {
+  /* Semantic colors reference CSS variables for dynamic theming */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+
+  /* Custom design tokens */
+  --font-family-sans: 'Helvetica Neue', -apple-system, ...;
+  --spacing: 0.25rem;
+}
+```
+
+#### What NOT to Do in v4
+- ❌ Don't use `@layer base`, `@layer components`, `@layer utilities` - not supported
+- ❌ Don't use `@apply` directive in custom CSS - use vanilla CSS instead
+- ❌ Don't use `@theme inline` - put everything in main `@theme` block
+- ❌ Don't import packages like `tailwindcss-animate` - animations are built-in
+
+#### Vite Integration
+- Use `@tailwindcss/vite` plugin (NOT `@tailwindcss/postcss`)
+- Import in `global.css`: `@import "tailwindcss";`
+- Vite config: `plugins: [react(), tailwindcss()]`
+
+#### Components.json for shadcn
+```json
+{
+  "tailwind": {
+    "config": "",  // Empty - no JS config in v4
+    "css": "src/global.css",
+    "cssVariables": true
+  }
+}
+```
+
+### General Styling Guidelines
+- Consistent paddings default 16px (this product is more dense)
 - Consistent font sizes
 - Consistent colors (avoid hardcoding colors at all costs)
 - Always use font and color tokens from the Tailwind config
 
 ## Components
-- The base is Shadcn components
-- Split into components
+
+### Shadcn UI - CRITICAL Best Practices
+
+**DO NOT modify core shadcn components directly!** Follow these rules:
+
+#### Never Edit Core Components
+- ❌ **NEVER** modify files in `src/components/ui/` created by shadcn CLI
+- ❌ Don't change the internal logic, props, or structure of shadcn components
+- ❌ Don't add custom functionality directly into shadcn component files
+- These are **library components** - treat them as read-only dependencies
+
+#### How to Customize - The Right Way
+
+**1. Use Component Variants (Preferred)**
+```tsx
+// ✅ CORRECT - Use built-in variants
+<Button variant="destructive" size="lg">Delete</Button>
+<Badge variant="outline">New</Badge>
+
+// ❌ WRONG - Don't modify button.tsx directly
+```
+
+**2. Extend Through Composition**
+```tsx
+// ✅ CORRECT - Create wrapper components
+// src/components/custom/DangerButton.tsx
+export function DangerButton({ children, ...props }) {
+  return (
+    <Button variant="destructive" className="gap-2" {...props}>
+      <AlertTriangle className="size-4" />
+      {children}
+    </Button>
+  )
+}
+```
+
+**3. Use ClassName for Styling**
+```tsx
+// ✅ CORRECT - Add Tailwind classes via className
+<Button className="bg-gradient-to-r from-purple-500 to-pink-500">
+  Gradient Button
+</Button>
+
+// ❌ WRONG - Don't edit button.tsx to add gradients
+```
+
+**4. Create Composite Components**
+```tsx
+// ✅ CORRECT - Compose shadcn components into new ones
+// src/components/custom/ConfirmDialog.tsx
+export function ConfirmDialog({ title, message, onConfirm }) {
+  return (
+    <AlertDialog>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Confirm</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+```
+
+#### When Components Need Updates
+- If shadcn releases updates, reinstall via CLI: `npx shadcn@canary add button --overwrite`
+- Your customizations should live in separate files, so reinstalls are safe
+- Use version control to review changes before overwriting
+
+#### Project Structure
+```
+src/
+├── components/
+│   ├── ui/              ← Shadcn components (DON'T TOUCH)
+│   │   ├── button.tsx
+│   │   ├── dialog.tsx
+│   │   └── ...
+│   └── custom/          ← Your custom components (USE THIS)
+│       ├── DangerButton.tsx
+│       └── ConfirmDialog.tsx
+```
+
+#### Why This Matters
+- Shadcn components are **not a package** - they're source code copied into your project
+- Updates require manual reinstallation via CLI
+- Custom changes get lost when you update components
+- Composition and variants are the shadcn-recommended patterns
+- This approach is from shadcn's official documentation and philosophy
+
+### General Component Guidelines
+- Split functionality into reusable components
+- Follow single responsibility principle
+- Keep component files focused and maintainable
 
 
 ## Animations Guidelines

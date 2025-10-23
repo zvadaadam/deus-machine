@@ -414,7 +414,15 @@ export function MainLayout() {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      className="h-screen"
+      style={
+        {
+          "--sidebar-width": "280px",
+          "--sidebar-width-mobile": "280px",
+        } as React.CSSProperties
+      }
+    >
       {/* Inset Sidebar - transparent, sits on top of #root background */}
       {loading ? (
         <div className="p-4 space-y-3">
@@ -447,7 +455,7 @@ export function MainLayout() {
           diffStats={diffStats}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
-          onAddRepository={() => selectWorkspace(null)}
+          onAddRepository={handleOpenProject}
           onArchive={archiveWorkspace}
           profile={{
             username: username
@@ -455,14 +463,13 @@ export function MainLayout() {
         />
       )}
 
-      {/* Main Content with SidebarInset - tight spacing for modern feel */}
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-        <div className="flex flex-1 flex-col gap-2 pt-2 pr-2 pb-2 min-h-0">
-          <PanelGroup
-            direction="horizontal"
-            autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
-          >
+      {/* Main Content with SidebarInset */}
+      <SidebarInset>
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="conductor-root-layout"
+          className="flex-1 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+        >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <div className="flex-1 flex flex-col min-h-0">
@@ -580,7 +587,6 @@ export function MainLayout() {
         </>
       )}
       </PanelGroup>
-        </div>
       </SidebarInset>
 
       {/* Modals */}
