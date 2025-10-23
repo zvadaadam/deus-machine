@@ -76,7 +76,7 @@ export function RepositoryItem({
                     );
                   })()}
                   {hasRunningWorkspace && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
+                    <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
                       <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                     </span>
