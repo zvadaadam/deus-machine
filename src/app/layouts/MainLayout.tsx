@@ -464,7 +464,7 @@ export function MainLayout() {
 
       {/* Main Content with SidebarInset - tight spacing for modern feel */}
       <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-        <div className="flex flex-1 flex-col gap-2 pt-2 pr-2 pb-2 min-h-0">
+        <div className="flex flex-1 flex-col gap-2 p-2 min-h-0">
           <PanelGroup
             direction="horizontal"
             autoSaveId="conductor-root-layout"
