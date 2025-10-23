@@ -462,14 +462,13 @@ export function MainLayout() {
         />
       )}
 
-      {/* Main Content with SidebarInset - tight spacing for modern feel */}
-      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-        <div className="flex flex-1 flex-col gap-2 p-2 min-h-0">
-          <PanelGroup
-            direction="horizontal"
-            autoSaveId="conductor-root-layout"
-            className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 min-h-0"
-          >
+      {/* Main Content with SidebarInset */}
+      <SidebarInset className="flex flex-col">
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="conductor-root-layout"
+          className="flex-1 rounded-lg bg-white/70 dark:bg-black/60 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+        >
       {/* MAIN CONTENT */}
       <Panel id="center" minSize={30} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
         <div className="flex-1 flex flex-col min-h-0">
@@ -587,7 +586,6 @@ export function MainLayout() {
         </>
       )}
       </PanelGroup>
-        </div>
       </SidebarInset>
 
       {/* Modals */}
