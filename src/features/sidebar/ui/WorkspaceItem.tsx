@@ -85,7 +85,12 @@ export function WorkspaceItem({
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick()}
+        onKeyDown={(e) => {
+          if (e.key === ' ') e.preventDefault(); // prevent page scroll
+        }}
+        onKeyUp={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onClick();
+        }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >

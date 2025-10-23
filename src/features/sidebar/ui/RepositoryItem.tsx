@@ -49,7 +49,7 @@ export function RepositoryItem({
   };
 
   return (
-    <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
+    <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
       <SidebarMenuItem className={cn(!sidebarExpanded && "overflow-visible")}>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
