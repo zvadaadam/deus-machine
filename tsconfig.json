@@ -22,7 +22,10 @@
       "@/features/*": ["src/features/*"],
       "@/platform/*": ["src/platform/*"],
       "@/shared/*": ["src/shared/*"],
-      "@/components/*": ["src/components/*"]
+      "@/components/*": ["src/components/*"],
+      "@/lib/*": ["src/shared/lib/*"],
+      "@/hooks/*": ["src/shared/hooks/*"],
+      "@/ui/*": ["src/components/ui/*"]
     },
 
     /* Linting */

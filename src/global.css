@@ -3,7 +3,6 @@
 
 /* Import fonts */
 @import './fonts.css';
-@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 

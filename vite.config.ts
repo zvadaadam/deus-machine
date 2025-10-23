@@ -16,6 +16,9 @@ export default defineConfig(async () => ({
       '@/platform': path.resolve(__dirname, './src/platform'),
       '@/shared': path.resolve(__dirname, './src/shared'),
       '@/components': path.resolve(__dirname, './src/components'),
+      '@/lib': path.resolve(__dirname, './src/shared/lib'),
+      '@/hooks': path.resolve(__dirname, './src/shared/hooks'),
+      '@/ui': path.resolve(__dirname, './src/components/ui'),
     },
   },
 
