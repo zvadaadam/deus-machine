@@ -1,4 +1,19 @@
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
   Sidebar,
   SidebarContent,
   SidebarMenu,
@@ -7,7 +22,7 @@ import {
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
-import { RepositoryItem } from "./RepositoryItem";
+import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
 
@@ -23,9 +38,51 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { state } = useSidebar();
   const { openSettingsModal } = useUIStore();
-  const { collapsedRepos, toggleRepoCollapse } = useSidebarStore();
+  const {
+    collapsedRepos,
+    toggleRepoCollapse,
+    repositoryOrder,
+    setRepositoryOrder,
+    reorderRepositories,
+  } = useSidebarStore();
 
   const isExpanded = state === "expanded";
+
+  // Apply custom ordering
+  const orderedRepositories = reorderRepositories(repositories);
+
+  // Sensors for drag detection (mouse, touch, keyboard)
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  /**
+   * Handle drag end - reorder repositories
+   */
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = orderedRepositories.findIndex(r => r.repo_id === active.id);
+    const newIndex = orderedRepositories.findIndex(r => r.repo_id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    // Reorder array
+    const reordered = arrayMove(orderedRepositories, oldIndex, newIndex);
+
+    // Save new order to store
+    const newOrder = reordered.map(r => r.repo_id);
+    setRepositoryOrder(newOrder);
+  }
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -33,22 +90,55 @@ export function AppSidebar({
 
       {/* Repositories List */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
-        <SidebarMenu className="p-2 gap-2">
-          {repositories.map((repo) => (
-            <RepositoryItem
-              key={repo.repo_id}
-              repository={repo}
-              isCollapsed={collapsedRepos.has(repo.repo_id)}
-              selectedWorkspaceId={selectedWorkspaceId}
-              diffStats={diffStats}
-              onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-              onWorkspaceClick={onWorkspaceClick}
-              onNewWorkspace={onNewWorkspace}
-              onArchive={onArchive}
-              sidebarExpanded={isExpanded}
-            />
-          ))}
-        </SidebarMenu>
+        {isExpanded ? (
+          // Drag and Drop enabled when sidebar is expanded
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={orderedRepositories.map(r => r.repo_id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <SidebarMenu className="p-2 gap-2">
+                {orderedRepositories.map((repo) => (
+                  <DraggableRepository
+                    key={repo.repo_id}
+                    repository={repo}
+                    isCollapsed={collapsedRepos.has(repo.repo_id)}
+                    selectedWorkspaceId={selectedWorkspaceId}
+                    diffStats={diffStats}
+                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                    onWorkspaceClick={onWorkspaceClick}
+                    onNewWorkspace={onNewWorkspace}
+                    onArchive={onArchive}
+                    sidebarExpanded={isExpanded}
+                  />
+                ))}
+              </SidebarMenu>
+            </SortableContext>
+          </DndContext>
+        ) : (
+          // No drag-drop when sidebar is collapsed (icon mode)
+          <SidebarMenu className="p-2 gap-2">
+            {orderedRepositories.map((repo) => (
+              <DraggableRepository
+                key={repo.repo_id}
+                repository={repo}
+                isCollapsed={collapsedRepos.has(repo.repo_id)}
+                selectedWorkspaceId={selectedWorkspaceId}
+                diffStats={diffStats}
+                onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                onWorkspaceClick={onWorkspaceClick}
+                onNewWorkspace={onNewWorkspace}
+                onArchive={onArchive}
+                sidebarExpanded={isExpanded}
+                dragDisabled={true}
+              />
+            ))}
+          </SidebarMenu>
+        )}
       </SidebarContent>
 
       <SidebarFooter onAddRepository={onAddRepository} />
