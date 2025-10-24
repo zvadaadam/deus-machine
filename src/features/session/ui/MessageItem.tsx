@@ -152,7 +152,6 @@ export function MessageItem({ message }: MessageItemProps) {
             const key = typeof block === 'object' && block?.type === 'tool_use'
               ? block.id
               : `${message.id}:${index}`;
-            if (typeof block === 'string') return null;
             return (
               <BlockRenderer key={key} block={block} index={index} role={message.role} />
             );

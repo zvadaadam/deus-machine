@@ -8,6 +8,7 @@
  * AFTER: ~115 LOC
  */
 
+import { useState } from 'react';
 import { FilePenLine, Copy, Check } from 'lucide-react';
 import { BaseToolRenderer } from '../components';
 import { FilePathDisplay } from '../components/FilePathDisplay';
@@ -25,9 +26,15 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
   const isError = toolResult?.is_error;
   const editCount = edits?.length || 0;
 
-  // Use separate copy hook instances for old and new strings
-  const { copy: copyOld, copied: copiedOld } = useCopyToClipboard();
-  const { copy: copyNew, copied: copiedNew } = useCopyToClipboard();
+  // Single clipboard util + per-item key to localize feedback
+  const { copy } = useCopyToClipboard();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (key: string, text: string) => {
+    copy(text);
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey(null), 1500);
+  };
 
   return (
     <BaseToolRenderer
@@ -77,13 +84,13 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyOld(edit.old_string);
+                          handleCopy(`old-${index}`, edit.old_string);
                         }}
                         className="p-1 hover:bg-destructive/20 rounded transition-colors"
                         title="Copy before"
                         aria-label="Copy before text"
                       >
-                        {copiedOld ? (
+                        {copiedKey === `old-${index}` ? (
                           <Check className="w-3 h-3 text-destructive" />
                         ) : (
                           <Copy className="w-3 h-3 text-destructive" />
@@ -102,13 +109,13 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyNew(edit.new_string);
+                          handleCopy(`new-${index}`, edit.new_string);
                         }}
                         className="p-1 hover:bg-success/20 rounded transition-colors"
                         title="Copy after"
                         aria-label="Copy after text"
                       >
-                        {copiedNew ? (
+                        {copiedKey === `new-${index}` ? (
                           <Check className="w-3 h-3 text-success" />
                         ) : (
                           <Copy className="w-3 h-3 text-success" />
