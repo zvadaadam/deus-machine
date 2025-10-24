@@ -55,7 +55,7 @@ export function RepositoryItem({
       <SidebarMenuItem
         data-state={isCollapsed ? "closed" : "open"}
         className={cn(
-          "group/repository-item flex items-center pl-3 pr-3 py-1",
+          "group/repository-item relative flex items-center pl-3 pr-3 py-1",
           sidebarExpanded && "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
           !sidebarExpanded && "overflow-visible"
         )}
