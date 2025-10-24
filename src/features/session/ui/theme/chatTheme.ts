@@ -3,6 +3,35 @@
  *
  * Centralized theme tokens for consistent styling across chat components.
  * All colors use Tailwind theme tokens - never hardcode colors!
+ *
+ * SPACING SYSTEM DECISION (Phase 2 Architecture Refactor):
+ * ========================================================
+ * We use a HYBRID approach combining bottom margins with component-level spacing:
+ *
+ * 1. **Message-level spacing** (Chat.tsx):
+ *    - Uses `getMessageSpacingClasses()` to add top/bottom margins
+ *    - User messages: `mb-8` (32px gap after)
+ *    - Assistant messages: `mb-1` (4px gap between clustered responses)
+ *    - Rationale: Allows different spacing between user/assistant turns
+ *
+ * 2. **Block-level spacing** (MessageItem.tsx):
+ *    - Uses `gap-2` on flex container for consistent 8px between blocks
+ *    - Rationale: Content blocks should have uniform spacing
+ *
+ * 3. **Why not pure CSS Grid?**
+ *    - Chat messages need ASYMMETRIC spacing (user vs assistant)
+ *    - Grid `gap` applies uniform spacing, which doesn't match our UX needs
+ *    - Our approach: margin-based for messages, gap-based for blocks
+ *
+ * 4. **Why not pure margins everywhere?**
+ *    - Margin collapsing can cause unexpected behavior
+ *    - Hard to reason about when margins stack
+ *    - Gap is cleaner for uniform spacing (blocks within messages)
+ *
+ * 5. **Future refactor considerations:**
+ *    - Could use CSS Grid with `row-gap` if we switch to symmetric spacing
+ *    - Would need to redesign UX to have uniform message spacing
+ *    - Current hybrid approach balances flexibility and maintainability
  */
 
 export const chatTheme = {

@@ -10,19 +10,19 @@
  */
 
 import type { ContentBlock, MessageRole } from '@/shared/types';
-import type { ToolResultMap } from '../chat-types';
 import { TextBlock } from './TextBlock';
 import { ToolUseBlock } from './ToolUseBlock';
 import { ThinkingBlock } from './ThinkingBlock';
+import { useSession } from '../../context';
 
 interface BlockRendererProps {
   block: ContentBlock;
   index: number;
-  toolResultMap: ToolResultMap;
   role?: MessageRole;
 }
 
-export function BlockRenderer({ block, index, toolResultMap, role }: BlockRendererProps) {
+export function BlockRenderer({ block, index, role }: BlockRendererProps) {
+  const { toolResultMap } = useSession();
   // Handle null/undefined blocks gracefully
   if (!block) {
     if (import.meta.env.DEV) {

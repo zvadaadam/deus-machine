@@ -12,20 +12,15 @@ import { chatTheme } from '../../theme';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 import { ToolError } from '../components';
+import { useCopyToClipboard } from '@/shared/hooks';
 
 export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [copiedOld, setCopiedOld] = useState(false);
-  const [copiedNew, setCopiedNew] = useState(false);
+  const { copy: copyOld, copied: copiedOld } = useCopyToClipboard();
+  const { copy: copyNew, copied: copiedNew } = useCopyToClipboard();
 
   const { file_path, old_string, new_string } = toolUse.input;
   const isError = toolResult?.is_error;
-
-  const handleCopy = async (text: string, setter: (v: boolean) => void) => {
-    await navigator.clipboard.writeText(text);
-    setter(true);
-    setTimeout(() => setter(false), 2000);
-  };
 
   return (
     <div
@@ -90,7 +85,7 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCopy(old_string, setCopiedOld);
+                      copyOld(old_string);
                     }}
                     className="text-xs hover:bg-destructive/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
                     title="Copy before"
@@ -122,7 +117,7 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCopy(new_string, setCopiedNew);
+                      copyNew(new_string);
                     }}
                     className="text-xs hover:bg-success/20 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
                     title="Copy after"
