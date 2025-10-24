@@ -28,7 +28,7 @@ export function RepositoryItem({
   onNewWorkspace,
   onArchive,
   sidebarExpanded,
-  showGripIcon = false,
+  dragHandleProps,
 }: RepositoryItemProps) {
   const { toggleSidebar } = useSidebar();
   const hasRunningWorkspace = repository.workspaces.some(
@@ -54,8 +54,11 @@ export function RepositoryItem({
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
       <SidebarMenuItem className={cn(
         !sidebarExpanded && "overflow-visible",
-        sidebarExpanded && "group"
+        sidebarExpanded && "group relative"
       )}>
+        {sidebarExpanded && dragHandleProps && (
+          <DragHandle {...dragHandleProps} />
+        )}
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
             className={cn(
@@ -90,7 +93,6 @@ export function RepositoryItem({
               )}
               {sidebarExpanded && (
                 <>
-                  {showGripIcon && <DragHandle />}
                   <span className="text-sm font-medium truncate">
                     {repository.repo_name}
                   </span>
