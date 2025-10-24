@@ -1,12 +1,12 @@
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
-import type { ToolResultMap } from "./chat-types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import type { RefObject } from "react";
+import { useSession } from "../context";
 
 type MessageRole = Message["role"];
 
@@ -60,23 +60,20 @@ interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
-  parseContent: (content: string) => (ContentBlock | string)[] | string | null;
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
-  toolResultMap: ToolResultMap;
 }
 
 export function Chat({
   messages,
   loading,
   sessionStatus,
-  parseContent,
   messagesEndRef,
   lastMessageRef,
   messagesContainerRef,
-  toolResultMap,
 }: ChatProps) {
+  const { parseContent, toolResultMap } = useSession();
   return (
     <div
       id="chat-messages"
@@ -140,8 +137,6 @@ export function Chat({
                     >
                       <MessageItem
                         message={message}
-                        parseContent={parseContent}
-                        toolResultMap={toolResultMap}
                       />
                     </div>
                   );
