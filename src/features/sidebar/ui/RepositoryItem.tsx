@@ -53,14 +53,16 @@ export function RepositoryItem({
   return (
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
       <SidebarMenuItem className={cn(
-        !sidebarExpanded && "overflow-visible",
-        sidebarExpanded && "group"
+        !sidebarExpanded && "overflow-visible"
       )}>
         {sidebarExpanded ? (
-          <div className={cn(
-            "flex items-center gap-3 py-2",
-            "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
-          )}>
+          <div
+            data-state={isCollapsed ? "closed" : "open"}
+            className={cn(
+              "group flex items-center gap-3 pl-6 pr-3 py-1 -ml-6",
+              "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
+            )}
+          >
             {dragHandleProps && <DragHandle {...dragHandleProps} />}
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
