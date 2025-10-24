@@ -25,6 +25,11 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
           fill: none;
           animation: radiate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
+        @media (prefers-reduced-motion: reduce) {
+          .pulse-ring-active {
+            animation: none;
+          }
+        }
       `}</style>
       <circle cx="16" cy="16" r="4" fill="currentColor" />
       {isActive && (
