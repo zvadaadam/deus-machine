@@ -161,7 +161,7 @@ export function WorkspaceItem({
             title="Archive workspace"
             className="h-7 px-2 text-muted-foreground hover:text-foreground"
           >
-            <Archive className="h-3.5 w-3.5" />
+            <Archive className="h-4 w-4" />
           </Button>
         ) : hasChanges ? (
           <div className="flex items-center gap-1 flex-shrink-0">

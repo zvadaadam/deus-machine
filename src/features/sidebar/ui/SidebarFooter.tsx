@@ -21,7 +21,7 @@ export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
         size="sm"
         onClick={() => onAddRepository?.()}
         className={cn(
-          "w-full h-8 px-2.5 border-l-[3px] border-l-transparent",
+          "w-full h-8 pl-3 pr-3",
           "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
           "transition-colors duration-200 ease-out",
           "group-data-[collapsible=icon]:hidden"
