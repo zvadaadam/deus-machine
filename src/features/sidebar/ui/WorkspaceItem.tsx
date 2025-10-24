@@ -20,6 +20,9 @@ export function WorkspaceItem({
 }: WorkspaceItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
+  // Debug: log workspace status
+  console.log(`Workspace ${workspace.branch}: session_status="${workspace.session_status}"`);
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
