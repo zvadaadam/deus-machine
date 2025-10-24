@@ -113,7 +113,7 @@ export function RepositoryItem({
         )}
       </SidebarMenuItem>
       <CollapsibleContent>
-        <SidebarMenuSub className="border-l-0 mx-0 px-0">
+        <SidebarMenuSub className="border-l-0 mx-0 px-0 translate-x-0">
           {/* New Workspace Button - At Top, Compact Height */}
           {sidebarExpanded && (
             <SidebarMenuSubItem className="mb-0">
