@@ -3,7 +3,7 @@ import { Archive } from "lucide-react";
 import { SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
-import { PulseRadiateIcon } from "@/components/ui/pulse-radiate-icon";
+import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 
