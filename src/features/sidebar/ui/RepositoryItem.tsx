@@ -12,7 +12,6 @@ import { cn } from "@/shared/lib/utils";
 import { getRepoInitials, getRepoColor } from "../lib/utils";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
-import { DragHandle } from "./DragHandle";
 
 /**
  * RepositoryItem Component
@@ -28,7 +27,6 @@ export function RepositoryItem({
   onNewWorkspace,
   onArchive,
   sidebarExpanded,
-  dragHandleProps,
 }: RepositoryItemProps) {
   const { toggleSidebar } = useSidebar();
   const hasRunningWorkspace = repository.workspaces.some(
@@ -87,9 +85,6 @@ export function RepositoryItem({
               )}
               {sidebarExpanded && (
                 <>
-                  {/* Drag handle - only shows on hover */}
-                  {dragHandleProps && <DragHandle {...dragHandleProps} />}
-
                   <span className="text-sm font-medium truncate">
                     {repository.repo_name}
                   </span>

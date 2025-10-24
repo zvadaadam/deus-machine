@@ -4,4 +4,3 @@ export { WorkspaceItem } from './WorkspaceItem';
 export { SidebarHeader } from './SidebarHeader';
 export { SidebarFooter } from './SidebarFooter';
 export { DraggableRepository } from './DraggableRepository';
-export { DragHandle } from './DragHandle';
