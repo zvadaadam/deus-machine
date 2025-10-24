@@ -77,16 +77,24 @@ export function WorkspaceItem({
         role="button"
         tabIndex={0}
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-1 py-2 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
-          isActive
-            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-[12px]"
-            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-[12px]"
+          // Base layout - always consistent
+          "relative flex items-center justify-between gap-3 py-3 pl-3 pr-2.5 min-h-[56px]",
+          "rounded-lg cursor-pointer",
+          "transition-colors duration-200 ease-out",
+
+          // Active indicator (left border via pseudo-element - doesn't affect padding!)
+          "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:rounded-l-lg before:transition-colors",
+          isActive ? "before:bg-primary" : "before:bg-transparent",
+
+          // State-based backgrounds
+          isActive && "bg-primary/10 elevation-2",
+          !isActive && "hover:bg-sidebar-accent/60 hover:elevation-1"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
         onKeyDown={(e) => {
-          if (e.key === ' ') e.preventDefault(); // prevent page scroll
+          if (e.key === ' ') e.preventDefault();
         }}
         onKeyUp={(e) => {
           if (e.key === 'Enter' || e.key === ' ') onClick();
@@ -102,7 +110,7 @@ export function WorkspaceItem({
           ) : (
             <GitBranch
               className={cn(
-                "h-3 w-3 flex-shrink-0",
+                "h-4 w-4 flex-shrink-0",
                 getStatusTextColor(workspace.session_status)
               )}
             />
