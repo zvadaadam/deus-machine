@@ -212,7 +212,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           {fileChange.edits.map((edit: FileEdit, idx: number) => {
             if (edit.tool_name === 'Write') {
               return (
-                <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
+                <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-bg vibrancy-shadow transition-colors duration-200">
                   <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
                     <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-success/20 text-success">New File</span>
                     <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
@@ -224,7 +224,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             // Edit tool with old_string and new_string
             return (
-              <div key={idx} className="border border-border/40 rounded-md overflow-hidden bg-white/70 dark:bg-black/60 backdrop-blur-[20px] vibrancy-shadow transition-colors duration-200">
+              <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-bg vibrancy-shadow transition-colors duration-200">
                 <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
                   <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-info/20 text-info">Edit #{idx + 1}</span>
                   <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
