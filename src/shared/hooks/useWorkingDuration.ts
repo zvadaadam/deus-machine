@@ -1,7 +1,7 @@
 /**
  * useWorkingDuration Hook
  * Tracks the duration of a session while it's in "working" status
- * Uses working_started_at timestamp from backend for persistence
+ * Uses sent_at timestamp from the latest user message for duration tracking
  * Returns formatted duration string (e.g., "2m 34s")
  */
 
@@ -10,7 +10,7 @@ import type { SessionStatus } from '@/features/session/types';
 
 interface UseWorkingDurationOptions {
   status: SessionStatus | null | undefined;
-  workingStartedAt?: string | null; // ISO timestamp from backend
+  latestMessageSentAt?: string | null; // ISO timestamp from latest user message's sent_at
 }
 
 interface UseWorkingDurationReturn {
@@ -43,11 +43,11 @@ export function formatDuration(ms: number): string {
 
 /**
  * Hook to track working duration
- * Uses backend timestamp for accurate, persistent duration tracking
+ * Uses sent_at from latest user message for accurate, persistent duration tracking
  */
 export function useWorkingDuration({
   status,
-  workingStartedAt,
+  latestMessageSentAt,
 }: UseWorkingDurationOptions): UseWorkingDurationReturn {
   const [duration, setDuration] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,8 +56,8 @@ export function useWorkingDuration({
 
   useEffect(() => {
     // Calculate duration if working and have start timestamp
-    if (isWorking && workingStartedAt) {
-      const startTime = new Date(workingStartedAt).getTime();
+    if (isWorking && latestMessageSentAt) {
+      const startTime = new Date(latestMessageSentAt).getTime();
 
       // Calculate initial duration
       const updateDuration = () => {
@@ -85,11 +85,11 @@ export function useWorkingDuration({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isWorking, workingStartedAt]);
+  }, [isWorking, latestMessageSentAt]);
 
   return {
     duration,
     formattedDuration: duration > 0 ? formatDuration(duration) : '',
-    isTracking: isWorking && !!workingStartedAt,
+    isTracking: isWorking && !!latestMessageSentAt,
   };
 }

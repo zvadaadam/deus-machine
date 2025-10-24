@@ -82,12 +82,24 @@ export function useSessionWithMessages(sessionId: string | null) {
     return map;
   }, [messagesQuery.data]);
 
+  // Get latest user message's sent_at for duration tracking
+  const latestMessageSentAt = useMemo(() => {
+    if (!messagesQuery.data || messagesQuery.data.length === 0) return null;
+
+    // Find the latest user message
+    const latestUserMessage = [...messagesQuery.data]
+      .reverse()
+      .find((msg: Message) => msg.role === 'user');
+
+    return latestUserMessage?.sent_at || null;
+  }, [messagesQuery.data]);
+
   return {
     session: sessionQuery.data,
     messages: messagesQuery.data || [],
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || 'idle',
     isCompacting: sessionQuery.data?.is_compacting === 1,
-    workingStartedAt: sessionQuery.data?.working_started_at || null,
+    latestMessageSentAt,
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
     parseContent,

@@ -3,11 +3,13 @@ import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
 import type { RefObject } from "react";
 import { useSession } from "../context";
+import { Square } from "lucide-react";
 
 type MessageRole = Message["role"];
 
@@ -61,27 +63,29 @@ interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
-  workingStartedAt?: string | null;
+  latestMessageSentAt?: string | null;
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
+  onStop?: () => void;  // Callback to stop/cancel the session
 }
 
 export function Chat({
   messages,
   loading,
   sessionStatus,
-  workingStartedAt,
+  latestMessageSentAt,
   messagesEndRef,
   lastMessageRef,
   messagesContainerRef,
+  onStop,
 }: ChatProps) {
   const { parseContent, toolResultMap } = useSession();
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
     status: sessionStatus,
-    workingStartedAt
+    latestMessageSentAt
   });
 
   return (
@@ -167,6 +171,18 @@ export function Chat({
                         <span className="ml-1.5 text-success/80">({formattedDuration})</span>
                       )}
                     </span>
+                    {onStop && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onStop}
+                        className="ml-2 h-6 px-2 text-success/80 hover:text-success hover:bg-success/20"
+                        aria-label="Stop session"
+                        title="Stop Claude"
+                      >
+                        <Square className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

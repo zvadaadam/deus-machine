@@ -20,7 +20,7 @@ export interface Workspace {
   session_status: SessionStatus | null;
   is_compacting: number;
   context_token_count: number;
-  working_started_at: string | null;
+  latest_message_sent_at: string | null;
   created_at: string;
   updated_at: string;
   repo_name: string;
