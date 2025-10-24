@@ -49,6 +49,10 @@ export function AppSidebar({
 
   const isExpanded = state === "expanded";
 
+  // Local state for optimistic navigation (visual only, before content loads)
+  const [navigatingWorkspaceId, setNavigatingWorkspaceId] = React.useState<string | null>(null);
+  const selectWorkspaceTimeout = React.useRef<NodeJS.Timeout>();
+
   // Apply custom ordering - memoized to prevent unnecessary re-sorts
   const orderedRepositories = React.useMemo(
     () => reorderRepositories(repositories),
@@ -87,15 +91,44 @@ export function AppSidebar({
         activeElement.blur();
       }
 
-      const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === selectedWorkspaceId);
-
+      const currentWorkspaceId = navigatingWorkspaceId || selectedWorkspaceId;
       let targetItem;
-      if (e.key === 'ArrowDown') {
-        const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
-        targetItem = allWorkspaces[nextIndex];
+
+      // Cmd/Ctrl + Arrow: Jump between repositories
+      if (e.metaKey || e.ctrlKey) {
+        const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === currentWorkspaceId);
+        const currentRepoId = currentIndex >= 0 ? allWorkspaces[currentIndex].repoId : null;
+
+        if (e.key === 'ArrowDown') {
+          // Find first workspace of next repo
+          const nextRepoIndex = currentIndex >= 0
+            ? allWorkspaces.findIndex((w, i) => i > currentIndex && w.repoId !== currentRepoId)
+            : 0;
+          targetItem = nextRepoIndex >= 0 ? allWorkspaces[nextRepoIndex] : allWorkspaces[0];
+        } else {
+          // Find first workspace of previous repo
+          let prevRepoIndex = -1;
+          for (let i = currentIndex - 1; i >= 0; i--) {
+            if (allWorkspaces[i].repoId !== currentRepoId) {
+              // Found different repo, now find its first workspace
+              const targetRepoId = allWorkspaces[i].repoId;
+              prevRepoIndex = allWorkspaces.findIndex(w => w.repoId === targetRepoId);
+              break;
+            }
+          }
+          targetItem = prevRepoIndex >= 0 ? allWorkspaces[prevRepoIndex] : allWorkspaces[allWorkspaces.length - 1];
+        }
       } else {
-        const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
-        targetItem = allWorkspaces[prevIndex];
+        // Normal arrow: Navigate within all workspaces
+        const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === currentWorkspaceId);
+
+        if (e.key === 'ArrowDown') {
+          const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
+          targetItem = allWorkspaces[nextIndex];
+        } else {
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
+          targetItem = allWorkspaces[prevIndex];
+        }
       }
 
       // If target workspace's repo is collapsed, expand it
@@ -103,21 +136,31 @@ export function AppSidebar({
         toggleRepoCollapse(targetItem.repoId);
       }
 
-      // Select the workspace
-      onWorkspaceClick(targetItem.workspace);
+      // Update visual selection immediately (optimistic)
+      setNavigatingWorkspaceId(targetItem.workspace.id);
 
-      // Scroll to it on next frame (after DOM updates)
+      // Scroll to it on next frame
       requestAnimationFrame(() => {
         const element = document.querySelector(`[data-workspace-id="${targetItem.workspace.id}"]`);
         if (element) {
           element.scrollIntoView({ behavior: 'instant', block: 'nearest' });
         }
       });
+
+      // Debounce actual workspace selection (content loading)
+      clearTimeout(selectWorkspaceTimeout.current);
+      selectWorkspaceTimeout.current = setTimeout(() => {
+        onWorkspaceClick(targetItem.workspace);
+        setNavigatingWorkspaceId(null);
+      }, 150);
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      clearTimeout(selectWorkspaceTimeout.current);
+    };
+  }, [allWorkspaces, selectedWorkspaceId, navigatingWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
 
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
@@ -175,7 +218,7 @@ export function AppSidebar({
                     key={repo.repo_id}
                     repository={repo}
                     isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={selectedWorkspaceId}
+                    selectedWorkspaceId={navigatingWorkspaceId || selectedWorkspaceId}
                     diffStats={diffStats}
                     onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                     onWorkspaceClick={onWorkspaceClick}
@@ -195,7 +238,7 @@ export function AppSidebar({
                 key={repo.repo_id}
                 repository={repo}
                 isCollapsed={collapsedRepos.has(repo.repo_id)}
-                selectedWorkspaceId={selectedWorkspaceId}
+                selectedWorkspaceId={navigatingWorkspaceId || selectedWorkspaceId}
                 diffStats={diffStats}
                 onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                 onWorkspaceClick={onWorkspaceClick}
