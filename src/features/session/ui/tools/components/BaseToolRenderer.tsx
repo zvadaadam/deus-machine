@@ -1,23 +1,19 @@
 /**
- * Base Tool Renderer
+ * Base Tool Renderer (Simplified with backward compatibility)
  *
- * Shared component for all tool renderers. Handles common UI patterns:
- * - Expand/collapse header with animation
+ * Shared component for all tool renderers with consistent UI patterns:
+ * - Expand/collapse with CSS transitions
  * - Status indicators (success/error/pending)
  * - Error display
- * - Consistent styling and accessibility
- *
- * Tool-specific renderers only need to provide unique content via renderContent prop.
+ * - Supports both new (children) and old (render props) APIs
  *
  * Benefits:
  * - Change header design once → affects all 15 tools
- * - Change animations once → affects all 15 tools
- * - Add features (keyboard shortcuts, pinning) once → affects all 15 tools
- * - Guaranteed consistency across all tools
+ * - Consistent animations using CSS (no dependencies)
+ * - Backward compatible with existing tool renderers
  */
 
 import { useState, ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { chatTheme } from '../../theme';
 import { cn } from '@/shared/lib/utils';
@@ -35,20 +31,19 @@ export interface BaseToolRendererProps {
   toolResult?: ToolResult;
 
   // Behavior
-  defaultExpanded?: boolean; // Auto-computed from constants if not provided
+  defaultExpanded?: boolean;
 
   // Styling
   borderColor?: 'default' | 'success' | 'error' | 'info' | 'warning';
-  backgroundColor?: string; // Optional custom background
+  backgroundColor?: string;
 
-  // Content slots
-  renderContent: (props: { toolUse: ToolUse; toolResult?: ToolResult; isExpanded: boolean }) => ReactNode;
-  renderSummary?: (props: { toolUse: ToolUse }) => ReactNode; // Shown when collapsed in header
-  renderMetadata?: (props: { toolUse: ToolUse }) => ReactNode; // Shown below header (e.g., file path)
+  // NEW API: Single children slot
+  children?: ReactNode;
 
-  // Hooks for custom behavior
-  onExpand?: () => void;
-  onCollapse?: () => void;
+  // OLD API: Render props (for backward compatibility)
+  renderContent?: (props: { toolUse: ToolUse; toolResult?: ToolResult; isExpanded: boolean }) => ReactNode;
+  renderSummary?: (props: { toolUse: ToolUse }) => ReactNode;
+  renderMetadata?: (props: { toolUse: ToolUse }) => ReactNode;
 }
 
 export function BaseToolRenderer({
@@ -59,24 +54,16 @@ export function BaseToolRenderer({
   defaultExpanded,
   borderColor = 'default',
   backgroundColor,
+  children,
   renderContent,
   renderSummary,
   renderMetadata,
-  onExpand,
-  onCollapse,
 }: BaseToolRendererProps) {
   // Auto-detect from constants if not provided
   const initialExpanded = defaultExpanded ?? shouldExpandByDefault(toolName);
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
 
   const isError = toolResult?.is_error;
-
-  // Toggle handler
-  const handleToggle = () => {
-    const newState = !isExpanded;
-    setIsExpanded(newState);
-    newState ? onExpand?.() : onCollapse?.();
-  };
 
   // Get border color class
   const getBorderColorClass = () => {
@@ -124,7 +111,7 @@ export function BaseToolRenderer({
       {/* Header - Always Visible */}
       <button
         type="button"
-        onClick={handleToggle}
+        onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           chatTheme.blocks.tool.header,
           'w-full text-left hover:bg-muted/50 p-2 rounded transition-colors justify-between',
@@ -133,7 +120,6 @@ export function BaseToolRenderer({
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${toolName} tool details`}
       >
-        {/* Left side: Icon + Label + Summary */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {/* Chevron */}
           {isExpanded ? (
@@ -150,7 +136,7 @@ export function BaseToolRenderer({
           {/* Tool name */}
           <strong className="font-semibold">{toolName}</strong>
 
-          {/* Summary when collapsed (optional) */}
+          {/* Summary when collapsed (OLD API) */}
           {!isExpanded && renderSummary && (
             <span className="text-xs text-muted-foreground ml-2 truncate">
               {renderSummary({ toolUse })}
@@ -158,7 +144,7 @@ export function BaseToolRenderer({
           )}
         </div>
 
-        {/* Right side: Status indicator */}
+        {/* Status indicator */}
         {status && (
           <span className={status.className}>
             {status.text}
@@ -166,30 +152,30 @@ export function BaseToolRenderer({
         )}
       </button>
 
-      {/* Metadata (file path, pattern, etc.) - Always Visible */}
+      {/* Metadata (file path, pattern, etc.) - OLD API */}
       {renderMetadata && (
         <div className="px-2">
           {renderMetadata({ toolUse })}
         </div>
       )}
 
-      {/* Expandable Content */}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }} // ease-out-cubic
-            className="overflow-hidden"
-          >
-            {/* Tool-specific content */}
-            <div className="px-2 pb-2">
-              {renderContent({ toolUse, toolResult, isExpanded })}
-            </div>
-          </motion.div>
+      {/* Expandable Content - CSS transition */}
+      <div
+        className={cn(
+          'overflow-hidden transition-all duration-200 ease-out',
+          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         )}
-      </AnimatePresence>
+      >
+        {/* NEW API: children */}
+        {children}
+
+        {/* OLD API: renderContent */}
+        {!children && renderContent && (
+          <div className="px-2 pb-2">
+            {renderContent({ toolUse, toolResult, isExpanded })}
+          </div>
+        )}
+      </div>
 
       {/* Error Display - Always Visible When Error */}
       {isError && toolResult && (

@@ -1,27 +1,21 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
-import type {
-  FileChangeGroup,
-  FileEdit,
-} from "@/shared/types";
 import {
   Chat,
   MessageInput,
 } from ".";
-// FileChangesPanel is workspace feature - session doesn't need it
 import {
   useSocket,
 } from "@/shared/hooks";
 import {
   useAutoScroll,
   useSessionActions,
-  useFileChangesExtractor,
 } from "../hooks";
 import { SessionProvider } from '../context';
 import {
   useSessionWithMessages,
 } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
-import { X, ArrowLeft, ChevronDown } from "lucide-react";
+import { X, ChevronDown } from "lucide-react";
 
 interface SessionPanelProps {
   sessionId: string;
@@ -38,7 +32,6 @@ export interface SessionPanelRef {
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
-  const [selectedFile, setSelectedFile] = useState<FileChangeGroup | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Empty div at end for scrolling to bottom
   const lastMessageRef = useRef<HTMLDivElement>(null); // Last message element for scrolling to top
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -69,9 +62,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // Local state for message input
   const [messageInput, setMessageInput] = useState('');
-
-  // Extract file changes from messages using custom hook
-  const fileChanges = useFileChangesExtractor({ messages, parseContent });
 
   // Session actions using custom hook
   const {
@@ -114,60 +104,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       });
     }
   }), [setMessageInput]);
-
-
-  function renderDiff(fileChange: FileChangeGroup) {
-    return (
-      <div className="vibrancy-panel border border-border/40 rounded-lg overflow-hidden">
-        <div className="p-6 vibrancy-panel border-b border-border/40 flex justify-between items-center">
-          <div>
-            <h4 className="m-0 mb-2 text-base text-foreground font-mono font-semibold">{fileChange.file_path}</h4>
-            <div className="text-sm text-muted-foreground font-sans">
-              {fileChange.edits.length} change{fileChange.edits.length > 1 ? 's' : ''} •
-              First: {new Date(fileChange.first_timestamp).toLocaleString()} •
-              Last: {new Date(fileChange.last_timestamp).toLocaleString()}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 p-4">
-          {fileChange.edits.map((edit: FileEdit, idx: number) => {
-            if (edit.tool_name === 'Write') {
-              return (
-                <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-bg vibrancy-shadow transition-colors duration-200">
-                  <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
-                    <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-success/20 text-success">New File</span>
-                    <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.content || ''}</pre>
-                </div>
-              );
-            }
-
-            // Edit tool with old_string and new_string
-            return (
-              <div key={idx} className="border border-border/40 rounded-md overflow-hidden vibrancy-bg vibrancy-shadow transition-colors duration-200">
-                <div className="flex justify-between items-center p-3 vibrancy-panel border-b border-border/40">
-                  <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-info/20 text-info">Edit #{idx + 1}</span>
-                  <span className="text-sm text-muted-foreground">{new Date(edit.timestamp).toLocaleTimeString()}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-px bg-border/40">
-                  <div className="flex flex-col bg-transparent">
-                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-destructive/10 text-destructive">− Removed</div>
-                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-destructive/10 text-destructive-foreground">{edit.old_string || ''}</pre>
-                  </div>
-                  <div className="flex flex-col bg-transparent">
-                    <div className="p-3 font-semibold text-sm border-b border-border/40 bg-success/10 text-success">+ Added</div>
-                    <pre className="p-4 font-mono text-sm leading-relaxed overflow-x-auto m-0 whitespace-pre-wrap break-words bg-success/10 text-success-foreground">{edit.new_string || ''}</pre>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
   // If embedded, render without overlay but with message input
   if (embedded) {
@@ -239,71 +175,51 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Files Changed Sidebar */}
-
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-h-0">
-            {selectedFile ? (
-              // Show diff view when file is selected
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="py-4 border-b border-border/40 mb-6">
+            <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
+              <div className="flex flex-col flex-1 min-h-0 relative">
+                <Chat
+                  messages={messages}
+                  loading={loading}
+                  sessionStatus={sessionStatus}
+                  messagesEndRef={messagesEndRef}
+                  lastMessageRef={lastMessageRef}
+                  messagesContainerRef={messagesContainerRef}
+                />
+
+              {/* Scroll to bottom button */}
+              {showScrollButton && (
+                <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
                   <Button
-                    variant="ghost"
-                    onClick={() => setSelectedFile(null)}
-                    className="gap-2"
+                    variant="secondary"
+                    size="icon"
+                    className="rounded-full shadow-lg"
+                    onClick={handleScrollToBottomClick}
+                    title="Scroll to bottom"
+                    aria-label="Scroll to bottom"
+                    aria-controls="chat-messages"
                   >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Timeline
+                    <ChevronDown className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </div>
-                {renderDiff(selectedFile)}
+              )}
+
+              {/* Message Input - Sticky at bottom */}
+              <MessageInput
+                messageInput={messageInput}
+                sending={sending}
+                isCompacting={isCompacting}
+                sessionStatus={sessionStatus}
+                embedded={false}
+                onMessageChange={setMessageInput}
+                onSend={() => sendMessage()}
+                onCompact={compactConversation}
+                onCreatePR={createPR}
+                onStop={stopSession}
+              />
               </div>
-            ) : (
-              // Show message timeline - Chat + Input
-              <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
-                <div className="flex flex-col flex-1 min-h-0 relative">
-                  <Chat
-                    messages={messages}
-                    loading={loading}
-                    sessionStatus={sessionStatus}
-                    messagesEndRef={messagesEndRef}
-                    lastMessageRef={lastMessageRef}
-                    messagesContainerRef={messagesContainerRef}
-                  />
-
-                {/* Scroll to bottom button */}
-                {showScrollButton && (
-                  <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="rounded-full shadow-lg"
-                      onClick={handleScrollToBottomClick}
-                      title="Scroll to bottom"
-                      aria-label="Scroll to bottom"
-                      aria-controls="chat-messages"
-                    >
-                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  </div>
-                )}
-
-                {/* Message Input - Sticky at bottom */}
-                <MessageInput
-                  messageInput={messageInput}
-                  sending={sending}
-                  isCompacting={isCompacting}
-                  sessionStatus={sessionStatus}
-                  embedded={false}
-                  onMessageChange={setMessageInput}
-                  onSend={() => sendMessage()}
-                  onCompact={compactConversation}
-                  onCreatePR={createPR}
-                  onStop={stopSession}
-                />
-                </div>
-              </SessionProvider>
-            )}
+            </SessionProvider>
           </div>
         </div>
       </div>
