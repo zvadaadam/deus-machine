@@ -55,7 +55,7 @@ export function RepositoryItem({
       <SidebarMenuItem
         data-state={isCollapsed ? "closed" : "open"}
         className={cn(
-          "group flex items-center gap-2 px-2 py-1",
+          "group flex items-center gap-3 px-3 py-1",
           sidebarExpanded && "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
           !sidebarExpanded && "overflow-visible"
         )}
@@ -64,10 +64,10 @@ export function RepositoryItem({
           <>
             {dragHandleProps && <DragHandle {...dragHandleProps} />}
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton
-                className="flex-1 flex items-center justify-between hover:bg-transparent px-0 py-0"
+              <button
+                className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent"
               >
-                <span className="text-sm font-medium truncate">
+                <span className="truncate">
                   {repository.repo_name}
                 </span>
 
@@ -77,7 +77,7 @@ export function RepositoryItem({
                     isCollapsed && "-rotate-90"
                   )}
                 />
-              </SidebarMenuButton>
+              </button>
             </CollapsibleTrigger>
           </>
         ) : (
