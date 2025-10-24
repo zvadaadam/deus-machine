@@ -151,8 +151,11 @@ export function AppSidebar({
       // Debounce workspace selection (50ms feels instant but groups rapid presses)
       clearTimeout(navigationTimeoutRef.current);
       navigationTimeoutRef.current = setTimeout(() => {
-        onWorkspaceClick(targetItem.workspace);
-        lastNavigationRef.current = null; // Clear after selection completes
+        // Wrap in startTransition to keep UI responsive during content loading
+        React.startTransition(() => {
+          onWorkspaceClick(targetItem.workspace);
+          lastNavigationRef.current = null; // Clear after selection completes
+        });
       }, 50);
     };
 
