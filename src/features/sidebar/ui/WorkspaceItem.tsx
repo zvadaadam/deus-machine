@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { GitBranch, Loader2, Archive } from "lucide-react";
+import { Archive } from "lucide-react";
 import { SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { PulseRadiateIcon } from "@/components/ui/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 
@@ -103,18 +104,13 @@ export function WorkspaceItem({
         onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          {workspace.session_status === "working" ? (
-            <Loader2
-              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin motion-reduce:animate-none"
-            />
-          ) : (
-            <GitBranch
-              className={cn(
-                "h-4 w-4 flex-shrink-0",
-                getStatusTextColor(workspace.session_status)
-              )}
-            />
-          )}
+          <PulseRadiateIcon
+            isActive={workspace.session_status === "working"}
+            className={cn(
+              "h-4 w-4 flex-shrink-0",
+              getStatusTextColor(workspace.session_status)
+            )}
+          />
           <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
             <span className="text-sm truncate">
