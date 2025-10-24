@@ -11,6 +11,7 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
 /**
  * Draggable wrapper for RepositoryItem
  * Follows shadcn composition pattern - wraps but doesn't modify
+ * Uses dedicated drag handle instead of making entire item draggable
  */
 export function DraggableRepository({
   repository,
@@ -21,6 +22,7 @@ export function DraggableRepository({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef, // Separate ref for drag handle
     transform,
     transition,
     isDragging,
@@ -38,14 +40,20 @@ export function DraggableRepository({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={cn(
-        isDragging && 'z-50 opacity-50',
-        !dragDisabled && 'cursor-grab active:cursor-grabbing'
+        'group/repo', // Enable group hover for drag handle
+        isDragging && 'z-50 opacity-50'
       )}
     >
-      <RepositoryItem repository={repository} {...props} />
+      <RepositoryItem
+        repository={repository}
+        dragHandleProps={
+          !dragDisabled
+            ? { setActivatorNodeRef, listeners, attributes }
+            : undefined
+        }
+        {...props}
+      />
     </div>
   );
 }
