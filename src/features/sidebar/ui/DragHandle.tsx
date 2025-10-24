@@ -9,8 +9,7 @@ interface DragHandleProps {
 
 /**
  * Drag handle for repository reordering
- * Natural flex child that participates in layout
- * Only visible on hover, automatically centered
+ * Simple flex child with conditional visibility
  */
 export function DragHandle({
   attributes,
@@ -23,9 +22,9 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       className={cn(
-        "flex-shrink-0 -ml-6",
+        "flex-shrink-0",
         "opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100",
-        "transition-opacity duration-200 ease-out",
+        "transition-opacity duration-200",
         "text-sidebar-foreground/30 hover:text-sidebar-foreground/60",
         "cursor-grab active:cursor-grabbing",
         "touch-none"
