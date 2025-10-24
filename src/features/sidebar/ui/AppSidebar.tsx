@@ -49,9 +49,9 @@ export function AppSidebar({
 
   const isExpanded = state === "expanded";
 
-  // Local state for optimistic navigation (visual only, before content loads)
-  const [navigatingWorkspaceId, setNavigatingWorkspaceId] = React.useState<string | null>(null);
-  const selectWorkspaceTimeout = React.useRef<NodeJS.Timeout>();
+  // Debounced navigation ref for keyboard nav
+  const navigationTimeoutRef = React.useRef<NodeJS.Timeout>();
+  const lastNavigationRef = React.useRef<{ workspace: any; repoId: string } | null>(null);
 
   // Apply custom ordering - memoized to prevent unnecessary re-sorts
   const orderedRepositories = React.useMemo(
@@ -91,7 +91,8 @@ export function AppSidebar({
         activeElement.blur();
       }
 
-      const currentWorkspaceId = navigatingWorkspaceId || selectedWorkspaceId;
+      // Use last navigation target if debouncing, otherwise use actual selected
+      const currentWorkspaceId = lastNavigationRef.current?.workspace.id || selectedWorkspaceId;
       let targetItem;
 
       // Cmd/Ctrl + Arrow: Jump between repositories
@@ -131,13 +132,13 @@ export function AppSidebar({
         }
       }
 
-      // If target workspace's repo is collapsed, expand it
+      // Store this navigation for next keypress
+      lastNavigationRef.current = targetItem;
+
+      // If target workspace's repo is collapsed, expand it immediately
       if (collapsedRepos.has(targetItem.repoId)) {
         toggleRepoCollapse(targetItem.repoId);
       }
-
-      // Update visual selection immediately (optimistic)
-      setNavigatingWorkspaceId(targetItem.workspace.id);
 
       // Scroll to it on next frame
       requestAnimationFrame(() => {
@@ -147,20 +148,20 @@ export function AppSidebar({
         }
       });
 
-      // Debounce actual workspace selection (content loading)
-      clearTimeout(selectWorkspaceTimeout.current);
-      selectWorkspaceTimeout.current = setTimeout(() => {
+      // Debounce workspace selection (50ms feels instant but groups rapid presses)
+      clearTimeout(navigationTimeoutRef.current);
+      navigationTimeoutRef.current = setTimeout(() => {
         onWorkspaceClick(targetItem.workspace);
-        setNavigatingWorkspaceId(null);
-      }, 150);
+        lastNavigationRef.current = null; // Clear after selection completes
+      }, 50);
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      clearTimeout(selectWorkspaceTimeout.current);
+      clearTimeout(navigationTimeoutRef.current);
     };
-  }, [allWorkspaces, selectedWorkspaceId, navigatingWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
+  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
 
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
@@ -218,7 +219,7 @@ export function AppSidebar({
                     key={repo.repo_id}
                     repository={repo}
                     isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={navigatingWorkspaceId || selectedWorkspaceId}
+                    selectedWorkspaceId={selectedWorkspaceId}
                     diffStats={diffStats}
                     onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                     onWorkspaceClick={onWorkspaceClick}
@@ -238,7 +239,7 @@ export function AppSidebar({
                 key={repo.repo_id}
                 repository={repo}
                 isCollapsed={collapsedRepos.has(repo.repo_id)}
-                selectedWorkspaceId={navigatingWorkspaceId || selectedWorkspaceId}
+                selectedWorkspaceId={selectedWorkspaceId}
                 diffStats={diffStats}
                 onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                 onWorkspaceClick={onWorkspaceClick}
