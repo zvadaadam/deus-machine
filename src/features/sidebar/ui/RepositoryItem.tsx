@@ -58,13 +58,13 @@ export function RepositoryItem({
       )}>
         {sidebarExpanded ? (
           <div className={cn(
-            "flex items-center gap-2 px-3 py-2",
+            "flex items-center gap-3 py-2",
             "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
           )}>
             {dragHandleProps && <DragHandle {...dragHandleProps} />}
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="flex-1 flex items-center justify-between hover:bg-transparent px-0 py-0"
+                className="flex-1 flex items-center justify-between hover:bg-transparent pl-3 pr-2 py-0"
               >
                 <span className="text-sm font-medium truncate">
                   {repository.repo_name}

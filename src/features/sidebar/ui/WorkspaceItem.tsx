@@ -79,8 +79,8 @@ export function WorkspaceItem({
         className={cn(
           "grid grid-cols-[1fr_auto] items-center gap-2 py-3 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
           isActive
-            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
-            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-2"
+            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-[12px]"
+            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-[12px]"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
