@@ -105,7 +105,7 @@ export function WorkspaceItem({
       >
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <PulseRadiateIcon
-            isActive={workspace.session_status === "working"}
+            isActive={true}
             className={cn(
               "h-4 w-4 flex-shrink-0",
               getStatusTextColor(workspace.session_status)
