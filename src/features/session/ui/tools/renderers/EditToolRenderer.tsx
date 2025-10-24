@@ -11,6 +11,7 @@ import { ChevronDown, ChevronRight, FileEdit, Copy, Check } from 'lucide-react';
 import { chatTheme } from '../../theme';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
+import { ToolError } from '../components';
 
 export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -148,13 +149,7 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
           {/* Error display */}
           {isError && toolResult && (
-            <div className="p-2 mx-2 mb-2 rounded bg-destructive/10 border border-destructive/30">
-              <p className="text-xs text-destructive-foreground font-mono m-0">
-                {typeof toolResult.content === 'object'
-                  ? JSON.stringify(toolResult.content, null, 2)
-                  : toolResult.content}
-              </p>
-            </div>
+            <ToolError content={toolResult.content} />
               )}
             </div>
           </motion.div>

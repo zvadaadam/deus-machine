@@ -27,8 +27,8 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
     <div
       className={cn(
         'rounded-lg border transition-all duration-200',
-        'bg-purple-50/50 dark:bg-purple-950/20',
-        'border-purple-200 dark:border-purple-800/40',
+        'bg-thinking-muted/50',
+        'border-thinking-border/40',
         chatTheme.common.transition
       )}
     >
@@ -37,28 +37,28 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           'w-full flex items-center gap-2 p-3 text-left',
-          'hover:bg-purple-100/50 dark:hover:bg-purple-900/20',
+          'hover:bg-thinking-muted/70',
           'transition-colors duration-200 rounded-lg'
         )}
       >
         {/* Icon */}
-        <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+        <Brain className="w-4 h-4 text-thinking flex-shrink-0" />
 
         {/* Label */}
-        <span className="font-medium text-sm text-purple-700 dark:text-purple-300">
+        <span className="font-medium text-sm text-thinking">
           Thinking
         </span>
 
         {/* Signature indicator */}
         {hasSignature && (
           <div title="Verified signature">
-            <Shield className="w-3 h-3 text-purple-500 dark:text-purple-400 flex-shrink-0" />
+            <Shield className="w-3 h-3 text-thinking flex-shrink-0" />
           </div>
         )}
 
         {/* Preview when collapsed */}
         {!isExpanded && showPreview && (
-          <span className="text-xs text-purple-600/70 dark:text-purple-400/70 truncate flex-1">
+          <span className="text-xs text-thinking/70 truncate flex-1">
             {thinkingPreview}...
           </span>
         )}
@@ -66,9 +66,9 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
         {/* Expand/collapse icon */}
         <div className="ml-auto flex-shrink-0">
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <ChevronDown className="w-4 h-4 text-thinking" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <ChevronRight className="w-4 h-4 text-thinking" />
           )}
         </div>
       </button>
@@ -79,9 +79,9 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
           <div
             className={cn(
               'text-sm leading-relaxed whitespace-pre-wrap',
-              'text-purple-800 dark:text-purple-200',
-              'font-mono bg-purple-50 dark:bg-purple-950/40',
-              'p-3 rounded border border-purple-200/50 dark:border-purple-800/30'
+              'text-thinking-foreground',
+              'font-mono bg-thinking-muted',
+              'p-3 rounded border border-thinking-border/50'
             )}
           >
             {block.thinking}
@@ -89,7 +89,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
 
           {/* Signature info */}
           {hasSignature && (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-purple-600/70 dark:text-purple-400/70">
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-thinking/70">
               <Shield className="w-3 h-3" />
               <span>Verified signature present</span>
             </div>

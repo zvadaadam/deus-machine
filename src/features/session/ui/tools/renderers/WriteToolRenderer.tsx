@@ -7,8 +7,7 @@
 import { useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, FilePlus } from 'lucide-react';
-import { CodeBlock } from '../components/CodeBlock';
-import { FilePathDisplay } from '../components/FilePathDisplay';
+import { CodeBlock, FilePathDisplay, ToolError } from '../components';
 import { chatTheme } from '../../theme';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
@@ -88,13 +87,7 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
               {/* Error display */}
               {isError && toolResult && (
-                <div className="p-2 rounded bg-destructive/10 border border-destructive/30">
-                  <p className="text-xs text-destructive-foreground font-mono m-0">
-                    {typeof toolResult.content === 'object'
-                      ? JSON.stringify(toolResult.content, null, 2)
-                      : toolResult.content}
-                  </p>
-                </div>
+                <ToolError content={toolResult.content} />
               )}
             </div>
           </motion.div>

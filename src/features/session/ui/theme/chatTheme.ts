@@ -121,6 +121,20 @@ export const chatTheme = {
     assistantTightMargin: 'mb-1',       // 4px spacing for assistant message clusters
   },
 
+  // Padding tokens - following CLAUDE.md (default 16px for density)
+  padding: {
+    tight: 'p-2',        // 8px - tool headers, compact UI elements
+    standard: 'p-4',     // 16px - default padding (CLAUDE.md standard)
+    comfortable: 'p-6',  // 24px - main containers, generous spacing
+    // Directional variants
+    xTight: 'px-2',      // 8px horizontal
+    xStandard: 'px-4',   // 16px horizontal
+    xComfortable: 'px-6', // 24px horizontal
+    yTight: 'py-2',      // 8px vertical
+    yStandard: 'py-4',   // 16px vertical
+    yComfortable: 'py-6', // 24px vertical
+  },
+
   // Common utilities
   common: {
     scrollable: 'overflow-y-auto scrollbar-vibrancy',
