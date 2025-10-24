@@ -15,10 +15,10 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
       <defs>
         <style>{`
           @keyframes radiate {
-            0% { r: 3; opacity: 1; }
-            30% { r: 10; opacity: 0.6; }
-            60% { r: 18; opacity: 0.3; }
-            100% { r: 24; opacity: 0; }
+            0% { r: 4; opacity: 1; }
+            30% { r: 12; opacity: 0.6; }
+            60% { r: 22; opacity: 0.3; }
+            100% { r: 30; opacity: 0; }
           }
           .pulse-ring {
             stroke: currentColor;
@@ -28,12 +28,12 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
           }
         `}</style>
       </defs>
-      <circle cx="16" cy="16" r="3" fill="currentColor" />
+      <circle cx="16" cy="16" r="4" fill="currentColor" />
       {isActive && (
         <>
-          <circle className="pulse-ring" cx="16" cy="16" r="3" />
-          <circle className="pulse-ring" cx="16" cy="16" r="3" style={{ animationDelay: "0.4s" }} />
-          <circle className="pulse-ring" cx="16" cy="16" r="3" style={{ animationDelay: "0.8s" }} />
+          <circle className="pulse-ring" cx="16" cy="16" r="4" />
+          <circle className="pulse-ring" cx="16" cy="16" r="4" style={{ animationDelay: "0.4s" }} />
+          <circle className="pulse-ring" cx="16" cy="16" r="4" style={{ animationDelay: "0.8s" }} />
         </>
       )}
     </svg>
