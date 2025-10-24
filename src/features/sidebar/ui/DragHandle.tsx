@@ -9,8 +9,8 @@ interface DragHandleProps {
 
 /**
  * Drag handle for repository reordering
- * Interactive drag activator that doesn't affect text layout
- * Only visible on hover, positioned absolutely
+ * Natural flex child that participates in layout
+ * Only visible on hover, automatically centered
  */
 export function DragHandle({
   attributes,
@@ -23,12 +23,12 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       className={cn(
-        "absolute left-0 top-2",
+        "flex-shrink-0",
         "opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100",
         "transition-opacity duration-200 ease-out",
         "text-sidebar-foreground/30 hover:text-sidebar-foreground/60",
         "cursor-grab active:cursor-grabbing",
-        "touch-none z-10 pointer-events-auto"
+        "touch-none"
       )}
       aria-label="Drag to reorder"
     >
