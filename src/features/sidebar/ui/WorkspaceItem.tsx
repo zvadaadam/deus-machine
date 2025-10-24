@@ -77,16 +77,24 @@ export function WorkspaceItem({
         role="button"
         tabIndex={0}
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
-          isActive
-            ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-2"
-            : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-2"
+          // Base layout - always consistent
+          "relative flex items-center justify-between gap-3 py-3 pl-3 pr-2.5 min-h-[56px]",
+          "rounded-lg cursor-pointer",
+          "transition-colors duration-200 ease-out",
+
+          // Active indicator (left border via pseudo-element - doesn't affect padding!)
+          "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:rounded-l-lg before:transition-colors",
+          isActive ? "before:bg-primary" : "before:bg-transparent",
+
+          // State-based backgrounds
+          isActive && "bg-primary/10 elevation-2",
+          !isActive && "hover:bg-sidebar-accent/60 hover:elevation-1"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
         onKeyDown={(e) => {
-          if (e.key === ' ') e.preventDefault(); // prevent page scroll
+          if (e.key === ' ') e.preventDefault();
         }}
         onKeyUp={(e) => {
           if (e.key === 'Enter' || e.key === ' ') onClick();
@@ -107,17 +115,17 @@ export function WorkspaceItem({
               )}
             />
           )}
-          <div className="flex flex-col min-w-0 gap-0.5">
+          <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
-            <span className="text-sm font-medium truncate">
+            <span className="text-sm truncate">
               {workspace.branch}
             </span>
             {/* Directory name and status on bottom */}
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-0 min-w-0">
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
-              <span className="text-xs text-muted-foreground/70 flex-shrink-0">•</span>
+              <span className="text-xs text-muted-foreground/70 flex-shrink-0">・</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
