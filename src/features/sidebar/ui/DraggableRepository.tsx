@@ -11,7 +11,8 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
 
 /**
  * Draggable wrapper for RepositoryItem
- * Entire repository row is draggable - cleaner UX than dedicated handle
+ * Entire row is draggable with small distance threshold
+ * Grip icon is visual indicator only
  * Auto-collapses on drag start (Linear pattern) for better drag experience
  */
 export function DraggableRepository({
@@ -31,12 +32,9 @@ export function DraggableRepository({
   } = useSortable({
     id: repository.repo_id,
     disabled: dragDisabled,
-    // Require brief hold (150ms) to initiate drag
-    // Instant clicks work normally for collapse/expand
-    // This is the Linear pattern - more intuitive than distance threshold
+    // Small distance threshold: clicks register instantly, drags need 8px movement
     activationConstraint: {
-      delay: 150,
-      tolerance: 5,
+      distance: 8,
     },
   });
 
@@ -63,6 +61,7 @@ export function DraggableRepository({
         repository={repository}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
+        showGripIcon={!dragDisabled}
         {...props}
       />
     </div>
