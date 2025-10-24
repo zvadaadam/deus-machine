@@ -9,7 +9,8 @@ interface DragHandleProps {
 
 /**
  * Drag handle for repository reordering
- * Simple flex child with conditional visibility
+ * Absolutely positioned to not affect text flow
+ * Sits in the padding gutter to the left of content
  */
 export function DragHandle({
   attributes,
@@ -22,9 +23,15 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       className={cn(
-        "flex-shrink-0 -ml-4",
+        // Absolute positioning - doesn't affect sibling layout
+        "absolute left-0 top-1/2 -translate-y-1/2",
+        "flex items-center justify-center",
+
+        // Visibility
         "opacity-0 group-hover/repository-item:opacity-100",
         "transition-opacity duration-200",
+
+        // Visual styling
         "text-sidebar-foreground/30 hover:text-sidebar-foreground/60",
         "cursor-grab active:cursor-grabbing",
         "touch-none"
