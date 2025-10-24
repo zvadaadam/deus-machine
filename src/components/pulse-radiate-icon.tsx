@@ -16,7 +16,7 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
         <style>{`
           @keyframes radiate {
             0% { r: 2; opacity: 1; }
-            100% { r: 7; opacity: 0; }
+            100% { r: 12; opacity: 0; }
           }
           .pulse-ring {
             stroke: currentColor;
