@@ -54,7 +54,11 @@ export function RepositoryItem({
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
       <SidebarMenuItem className={cn(
         !sidebarExpanded && "overflow-visible",
-        sidebarExpanded && "group relative"
+        sidebarExpanded && "group relative",
+        // Add padding for grip icon space (grip is 16px wide + 8px gap)
+        sidebarExpanded && "pl-6",
+        // Unified hover effect for entire row including grip area
+        sidebarExpanded && "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
       )}>
         {sidebarExpanded && dragHandleProps && (
           <DragHandle {...dragHandleProps} />
@@ -63,7 +67,9 @@ export function RepositoryItem({
           <SidebarMenuButton
             className={cn(
               "w-full flex items-center",
-              sidebarExpanded ? "px-3 py-2 justify-between" : "px-0 py-3 justify-center overflow-visible"
+              sidebarExpanded ? "px-3 py-2 justify-between" : "px-0 py-3 justify-center overflow-visible",
+              // Override button's hover to let parent handle unified hover effect
+              sidebarExpanded && "hover:bg-transparent"
             )}
             tooltip={!sidebarExpanded ? repository.repo_name : undefined}
             onClick={!sidebarExpanded ? handleClick : undefined}
