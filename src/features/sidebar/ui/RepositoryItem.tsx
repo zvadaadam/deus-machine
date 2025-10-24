@@ -54,101 +54,98 @@ export function RepositoryItem({
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
       <SidebarMenuItem className={cn(
         !sidebarExpanded && "overflow-visible",
-        sidebarExpanded && "group relative",
-        // Add padding for grip icon space (grip is 16px wide + 8px gap)
-        sidebarExpanded && "pl-6",
-        // Unified hover effect for entire row including grip area
-        sidebarExpanded && "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
+        sidebarExpanded && "group"
       )}>
-        {sidebarExpanded && dragHandleProps && (
-          <DragHandle {...dragHandleProps} />
-        )}
-        <CollapsibleTrigger asChild>
-          <SidebarMenuButton
-            className={cn(
-              "w-full flex items-center",
-              sidebarExpanded ? "px-3 py-2 justify-between" : "px-0 py-3 justify-center overflow-visible",
-              // Override button's hover to let parent handle unified hover effect
-              sidebarExpanded && "hover:bg-transparent"
-            )}
-            tooltip={!sidebarExpanded ? repository.repo_name : undefined}
-            onClick={!sidebarExpanded ? handleClick : undefined}
-          >
-            {!sidebarExpanded && (
-                <div className="relative overflow-visible">
-                  {(() => {
-                    const repoColor = getRepoColor(repository.repo_name);
-                    return (
-                      <div className={cn(
-                        "h-9 w-9 flex items-center justify-center text-xs font-semibold",
-                        "rounded-[8px]",
-                        repoColor.bg,
-                        repoColor.text
-                      )}>
-                        {getRepoInitials(repository.repo_name)}
-                      </div>
-                    );
-                  })()}
-                  {hasRunningWorkspace && (
-                    <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                      <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                    </span>
-                  )}
-                </div>
-              )}
-              {sidebarExpanded && (
-                <>
-                  <span className="text-sm font-medium truncate">
-                    {repository.repo_name}
-                  </span>
+        {sidebarExpanded ? (
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-2",
+            "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200"
+          )}>
+            {dragHandleProps && <DragHandle {...dragHandleProps} />}
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton
+                className="flex-1 flex items-center justify-between hover:bg-transparent px-0 py-0"
+              >
+                <span className="text-sm font-medium truncate">
+                  {repository.repo_name}
+                </span>
 
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
-                      isCollapsed && "-rotate-90"
-                    )}
-                  />
-                </>
-              )}
-          </SidebarMenuButton>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <SidebarMenuSub className="border-l-0 mx-0 px-0">
-            {/* New Workspace Button - At Top, Compact Height */}
-            {sidebarExpanded && (
-              <SidebarMenuSubItem className="mb-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onNewWorkspace(repository.repo_id)}
+                <ChevronDown
                   className={cn(
-                    "w-full h-8 px-3 -translate-x-px",
-                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-                    "transition-colors duration-200 ease-out"
+                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
+                    isCollapsed && "-rotate-90"
                   )}
-                >
-                  <div className="flex items-center gap-3 w-full">
-                    <Plus className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">New Workspace</span>
-                  </div>
-                </Button>
-              </SidebarMenuSubItem>
-            )}
-
-            {repository.workspaces.map((workspace) => (
-              <WorkspaceItem
-                key={workspace.id}
-                workspace={workspace}
-                isActive={workspace.id === selectedWorkspaceId}
-                diffStats={diffStats[workspace.id]}
-                onClick={() => onWorkspaceClick(workspace)}
-                onArchive={onArchive}
-              />
-            ))}
-          </SidebarMenuSub>
-        </CollapsibleContent>
+                />
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+          </div>
+        ) : (
+          <CollapsibleTrigger asChild>
+            <SidebarMenuButton
+              className="w-full flex items-center px-0 py-3 justify-center overflow-visible"
+              tooltip={repository.repo_name}
+              onClick={handleClick}
+            >
+              <div className="relative overflow-visible">
+                {(() => {
+                  const repoColor = getRepoColor(repository.repo_name);
+                  return (
+                    <div className={cn(
+                      "h-9 w-9 flex items-center justify-center text-xs font-semibold",
+                      "rounded-[8px]",
+                      repoColor.bg,
+                      repoColor.text
+                    )}>
+                      {getRepoInitials(repository.repo_name)}
+                    </div>
+                  );
+                })()}
+                {hasRunningWorkspace && (
+                  <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
+                    <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </span>
+                )}
+              </div>
+            </SidebarMenuButton>
+          </CollapsibleTrigger>
+        )}
       </SidebarMenuItem>
+      <CollapsibleContent>
+        <SidebarMenuSub className="border-l-0 mx-0 px-0">
+          {/* New Workspace Button - At Top, Compact Height */}
+          {sidebarExpanded && (
+            <SidebarMenuSubItem className="mb-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onNewWorkspace(repository.repo_id)}
+                className={cn(
+                  "w-full h-8 px-3 -translate-x-px",
+                  "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+                  "transition-colors duration-200 ease-out"
+                )}
+              >
+                <div className="flex items-center gap-3 w-full">
+                  <Plus className="h-4 w-4 flex-shrink-0" />
+                  <span className="text-sm">New Workspace</span>
+                </div>
+              </Button>
+            </SidebarMenuSubItem>
+          )}
+
+          {repository.workspaces.map((workspace) => (
+            <WorkspaceItem
+              key={workspace.id}
+              workspace={workspace}
+              isActive={workspace.id === selectedWorkspaceId}
+              diffStats={diffStats[workspace.id]}
+              onClick={() => onWorkspaceClick(workspace)}
+              onArchive={onArchive}
+            />
+          ))}
+        </SidebarMenuSub>
+      </CollapsibleContent>
     </Collapsible>
   );
 }
