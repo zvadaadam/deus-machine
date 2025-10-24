@@ -89,7 +89,7 @@ export function AppSidebar({
       <SidebarHeader profile={profile} onOpenSettings={openSettingsModal} />
 
       {/* Repositories List */}
-      <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
+      <SidebarContent className="overflow-visible">
         {isExpanded ? (
           // Drag and Drop enabled when sidebar is expanded
           <DndContext
