@@ -1,60 +1,45 @@
-import { useState, useEffect, useRef, useCallback, RefObject } from "react";
+/**
+ * useAutoScroll Hook (Simplified)
+ *
+ * Manages chat auto-scroll behavior with minimal complexity:
+ * - Auto-scrolls to bottom when new messages arrive
+ * - Shows "scroll to bottom" button when user scrolls up
+ * - Respects user intent (doesn't auto-scroll if user manually scrolled up)
+ *
+ * SIMPLIFIED from 191 lines → 85 lines
+ * - Removed ResizeObserver, throttling, complex user intent detection
+ * - Single behavior: scroll to bottom on new messages unless user scrolled up
+ * - Much easier to understand and debug
+ */
+
+import { useState, useEffect, useCallback, RefObject } from "react";
 import type { Message, SessionStatus } from "@/shared/types";
 
 interface UseAutoScrollOptions {
   messages: Message[];
   sessionStatus: SessionStatus;
   messagesContainerRef: RefObject<HTMLDivElement>;
-  messagesEndRef: RefObject<HTMLDivElement>; // Empty div at end of messages
-  lastMessageRef: RefObject<HTMLDivElement>; // Last message element
-  // Configuration options
+  messagesEndRef: RefObject<HTMLDivElement>;
+  lastMessageRef: RefObject<HTMLDivElement>;
   scrollThreshold?: number; // Distance from bottom to consider "at bottom" (default: 100)
-  inputHeightBuffer?: number; // Buffer for message input height (default: 80)
-  smoothScrollUser?: boolean; // Use smooth scroll for user messages (default: false)
 }
 
-// Constants
-const AUTO_SCROLL_RESET_DELAY = 100; // ms - delay before resetting auto-scroll flag
-
-/**
- * Hook to manage auto-scroll behavior and scroll-to-bottom button
- *
- * Features:
- * - USER messages: Scroll to top of viewport (push old messages up)
- * - ASSISTANT messages: Smart overflow detection
- *   - If there's visible space below → NO scroll (messages appear naturally)
- *   - If content would be hidden → AUTO scroll (reveal new content)
- * - Shows "scroll to bottom" button when user scrolls up
- * - Respects user intent (doesn't auto-scroll if user manually scrolled up)
- *
- * UX Benefits:
- * - Reduces unnecessary scrolling when viewport has space
- * - User sees their question + answer simultaneously
- * - Less jarring, more natural content flow
- * - Only scrolls when content would actually be cut off
- */
 export function useAutoScroll({
   messages,
-  sessionStatus,
   messagesContainerRef,
   messagesEndRef,
-  lastMessageRef,
   scrollThreshold = 100,
-  inputHeightBuffer = 80,
-  smoothScrollUser = false,
 }: UseAutoScrollOptions) {
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const lastMessageCountRef = useRef(0);
-  const isAutoScrollingRef = useRef(false); // Track if we're auto-scrolling
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
 
-  // Check if user is near bottom (within threshold)
-  const isNearBottom = useCallback((threshold = scrollThreshold) => {
+  // Check if user is near bottom
+  const isNearBottom = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (!container) return false;
+    if (!container) return true;
 
     const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < threshold;
+    return scrollHeight - scrollTop - clientHeight < scrollThreshold;
   }, [messagesContainerRef, scrollThreshold]);
 
   // Scroll to bottom function
@@ -65,61 +50,15 @@ export function useAutoScroll({
     });
   }, [messagesEndRef]);
 
-  // Auto-scroll when new messages arrive
+  // Auto-scroll when new messages arrive (if user hasn't scrolled up)
   useEffect(() => {
-    // Only auto-scroll if a NEW message was added (not on initial mount)
-    if (messages.length === 0 || messages.length === lastMessageCountRef.current) {
-      lastMessageCountRef.current = messages.length;
-      return;
+    if (!userScrolledUp && messages.length > 0) {
+      // Small delay to ensure DOM has updated
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
     }
-
-    const lastMessage = messages[messages.length - 1];
-    const container = messagesContainerRef.current;
-
-    if (!isUserScrolledUp && container) {
-      isAutoScrollingRef.current = true;
-
-      if (lastMessage.role === 'user') {
-        // USER message: Scroll marker to TOP of viewport
-        requestAnimationFrame(() => {
-          const marker = lastMessageRef.current;
-          if (marker) {
-            // Get marker position relative to container
-            const markerTop = marker.offsetTop;
-            // Scroll container so marker is at the top
-            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            container.scrollTo({
-              top: Math.max(0, markerTop),
-              behavior: smoothScrollUser && !prefersReduced ? 'smooth' : 'auto',
-            });
-
-            if (import.meta.env.DEV) {
-              console.log('[useAutoScroll] User message scrolled to top:', markerTop);
-            }
-          } else {
-            if (import.meta.env.DEV) {
-              console.warn('[useAutoScroll] lastMessageRef is null!');
-            }
-          }
-
-          setTimeout(() => {
-            isAutoScrollingRef.current = false;
-          }, AUTO_SCROLL_RESET_DELAY);
-        });
-      } else {
-        // ASSISTANT message: Scroll to BOTTOM
-        requestAnimationFrame(() => {
-          scrollToBottom(false);
-
-          setTimeout(() => {
-            isAutoScrollingRef.current = false;
-          }, AUTO_SCROLL_RESET_DELAY);
-        });
-      }
-    }
-
-    lastMessageCountRef.current = messages.length;
-  }, [messages, isUserScrolledUp, smoothScrollUser, messagesContainerRef, lastMessageRef, scrollToBottom]);
+  }, [messages.length, userScrolledUp, scrollToBottom]);
 
   // Track user scroll behavior
   useEffect(() => {
@@ -127,61 +66,21 @@ export function useAutoScroll({
     if (!container) return;
 
     const handleScroll = () => {
-      // Don't update state if we're auto-scrolling
-      if (isAutoScrollingRef.current) return;
-
       const nearBottom = isNearBottom();
       setShowScrollButton(!nearBottom);
-      setIsUserScrolledUp(!nearBottom);
+      setUserScrolledUp(!nearBottom);
     };
 
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messagesContainerRef, isNearBottom]);
 
-  // ResizeObserver: Auto-scroll during streaming (when content grows)
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    const target = lastMessageRef.current ?? messagesEndRef.current;
-    if (!container || !target) return;
-
-    // Throttle helper to prevent excessive scroll operations during streaming
-    let lastCall = 0;
-    const throttleDelay = 100; // ms
-
-    const resizeObserver = new ResizeObserver(() => {
-      const now = Date.now();
-      if (now - lastCall < throttleDelay) return;
-      lastCall = now;
-
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const viewportBottom = scrollTop + clientHeight;
-      const contentBottom = scrollHeight;
-      const isContentHidden = contentBottom > viewportBottom + inputHeightBuffer;
-
-      // Only auto-scroll if:
-      // 1. In working session (streaming)
-      // 2. User hasn't scrolled up
-      // 3. Content would be hidden below viewport
-      if (sessionStatus === 'working' && !isUserScrolledUp && isContentHidden) {
-        isAutoScrollingRef.current = true;
-        scrollToBottom(false);
-        setTimeout(() => {
-          isAutoScrollingRef.current = false;
-        }, AUTO_SCROLL_RESET_DELAY);
-      }
-    });
-
-    resizeObserver.observe(target);
-    return () => resizeObserver.disconnect();
-  }, [messagesContainerRef, messagesEndRef, lastMessageRef, isUserScrolledUp, sessionStatus, inputHeightBuffer, scrollToBottom]);
-
   // Manual scroll to bottom (resets user scroll state)
-  const handleScrollToBottomClick = () => {
-    setIsUserScrolledUp(false);
+  const handleScrollToBottomClick = useCallback(() => {
+    setUserScrolledUp(false);
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     scrollToBottom(!prefersReduced);
-  };
+  }, [scrollToBottom]);
 
   return {
     showScrollButton,
