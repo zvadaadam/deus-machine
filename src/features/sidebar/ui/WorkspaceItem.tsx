@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { GitBranch, Loader2, Archive } from "lucide-react";
+import { Archive } from "lucide-react";
 import { SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
 
@@ -76,19 +77,16 @@ export function WorkspaceItem({
       <div
         role="button"
         tabIndex={0}
+        data-workspace-id={workspace.id}
         className={cn(
-          // Base layout - always consistent
-          "relative flex items-center justify-between gap-3 py-3 pl-3 pr-2.5 min-h-[56px]",
+          // Base layout
+          "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",
           "rounded-lg cursor-pointer",
-          "transition-colors duration-200 ease-out",
+          "transition-all duration-200 ease-out",
 
-          // Active indicator (left border via pseudo-element - doesn't affect padding!)
-          "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:rounded-l-lg before:transition-colors",
-          isActive ? "before:bg-primary" : "before:bg-transparent",
-
-          // State-based backgrounds
-          isActive && "bg-primary/10 elevation-2",
-          !isActive && "hover:bg-sidebar-accent/60 hover:elevation-1"
+          // State-based backgrounds - subtle surface elevation
+          isActive && "bg-muted/60",
+          !isActive && "hover:bg-muted/30"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
@@ -102,19 +100,14 @@ export function WorkspaceItem({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          {workspace.session_status === "working" ? (
-            <Loader2
-              className="h-4 w-4 flex-shrink-0 text-primary/80 animate-spin motion-reduce:animate-none"
-            />
-          ) : (
-            <GitBranch
-              className={cn(
-                "h-4 w-4 flex-shrink-0",
-                getStatusTextColor(workspace.session_status)
-              )}
-            />
-          )}
+        <div className="flex items-center gap-3 min-w-0">
+          <PulseRadiateIcon
+            isActive={workspace.session_status === "working"}
+            className={cn(
+              "h-4 w-4 flex-shrink-0",
+              getStatusTextColor(workspace.session_status)
+            )}
+          />
           <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
             <span className="text-sm truncate">
