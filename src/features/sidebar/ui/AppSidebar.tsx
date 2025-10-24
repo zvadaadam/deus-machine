@@ -148,7 +148,7 @@ export function AppSidebar({
         }
       });
 
-      // Debounce workspace selection (50ms feels instant but groups rapid presses)
+      // Debounce workspace selection (150ms captures natural pause between scanning vs arriving)
       clearTimeout(navigationTimeoutRef.current);
       navigationTimeoutRef.current = setTimeout(() => {
         // Wrap in startTransition to keep UI responsive during content loading
@@ -156,7 +156,7 @@ export function AppSidebar({
           onWorkspaceClick(targetItem.workspace);
           lastNavigationRef.current = null; // Clear after selection completes
         });
-      }, 50);
+      }, 150);
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
