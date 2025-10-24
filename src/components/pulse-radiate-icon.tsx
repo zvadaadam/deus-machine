@@ -15,14 +15,21 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
       <defs>
         <style>{`
           @keyframes radiate {
-            0% { r: 1.5; opacity: 0.8; }
-            100% { r: 6; opacity: 0; }
+            0% {
+              transform: scale(1);
+              opacity: 0.8;
+            }
+            100% {
+              transform: scale(4);
+              opacity: 0;
+            }
           }
           .pulse-ring {
             stroke: currentColor;
             stroke-width: 1;
             fill: none;
-            animation: ${isActive ? "radiate 1.2s ease-out infinite" : "none"};
+            transform-origin: center;
+            animation: ${isActive ? "radiate 1.2s cubic-bezier(.215, .61, .355, 1) infinite" : "none"};
           }
         `}</style>
       </defs>
