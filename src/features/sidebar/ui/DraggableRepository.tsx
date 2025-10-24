@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/shared/lib/utils';
@@ -10,11 +11,13 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
 
 /**
  * Draggable wrapper for RepositoryItem
- * Follows shadcn composition pattern - wraps but doesn't modify
- * Uses dedicated drag handle instead of making entire item draggable
+ * Entire repository row is draggable - cleaner UX than dedicated handle
+ * Auto-collapses on drag start (Linear pattern) for better drag experience
  */
 export function DraggableRepository({
   repository,
+  isCollapsed,
+  onToggleCollapse,
   dragDisabled = false,
   ...props
 }: DraggableRepositoryProps) {
@@ -22,14 +25,27 @@ export function DraggableRepository({
     attributes,
     listeners,
     setNodeRef,
-    setActivatorNodeRef, // Separate ref for drag handle
     transform,
     transition,
     isDragging,
   } = useSortable({
     id: repository.repo_id,
     disabled: dragDisabled,
+    // Require brief hold (150ms) to initiate drag
+    // Instant clicks work normally for collapse/expand
+    // This is the Linear pattern - more intuitive than distance threshold
+    activationConstraint: {
+      delay: 150,
+      tolerance: 5,
+    },
   });
+
+  // Auto-collapse when drag starts (prevents huge drag preview with many workspaces)
+  useEffect(() => {
+    if (isDragging && !isCollapsed) {
+      onToggleCollapse();
+    }
+  }, [isDragging, isCollapsed, onToggleCollapse]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -40,18 +56,13 @@ export function DraggableRepository({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(
-        'group/repo', // Enable group hover for drag handle
-        isDragging && 'z-50 opacity-50'
-      )}
+      {...(!dragDisabled ? { ...attributes, ...listeners } : {})}
+      className={cn(isDragging && 'z-50 opacity-50')}
     >
       <RepositoryItem
         repository={repository}
-        dragHandleProps={
-          !dragDisabled
-            ? { setActivatorNodeRef, listeners, attributes }
-            : undefined
-        }
+        isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
         {...props}
       />
     </div>
