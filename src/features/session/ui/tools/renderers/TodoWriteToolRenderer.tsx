@@ -1,14 +1,15 @@
 /**
- * TodoWrite Tool Renderer
+ * TodoWrite Tool Renderer (REFACTORED with BaseToolRenderer)
  *
  * Specialized renderer for the TodoWrite tool (task tracking)
  * Displays todos with status indicators: pending, in_progress, completed
+ *
+ * BEFORE: 177 LOC
+ * AFTER: ~120 LOC
  */
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, ListChecks, Circle, Loader2, CheckCircle2 } from 'lucide-react';
-import { chatTheme } from '../../theme';
+import { ListChecks, Circle, Loader2, CheckCircle2 } from 'lucide-react';
+import { BaseToolRenderer } from '../components';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
@@ -19,10 +20,7 @@ interface Todo {
 }
 
 export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const [isExpanded, setIsExpanded] = useState(true); // Expanded by default for visibility
-
   const todos: Todo[] = toolUse.input.todos || [];
-  const isError = toolResult?.is_error;
 
   // Count todos by status
   const statusCounts = todos.reduce((acc, todo) => {
@@ -54,123 +52,73 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
   };
 
   return (
-    <div
-      className={cn(
-        chatTheme.blocks.tool.container,
-        isError
-          ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/5'
-          : 'border-l-4 border-l-secondary/50 bg-secondary/5'
+    <BaseToolRenderer
+      toolName="Todo List"
+      icon={<ListChecks className="w-4 h-4 text-secondary-foreground" />}
+      toolUse={toolUse}
+      toolResult={toolResult}
+      defaultExpanded={true}
+      borderColor="default"
+      backgroundColor="bg-secondary/5"
+      renderSummary={() => (
+        <span className="text-xs text-muted-foreground ml-2">
+          {statusCounts.completed || 0}/{todos.length} completed
+        </span>
       )}
-    >
-      {/* Header */}
-      <div
-        className={cn(
-          chatTheme.blocks.tool.header,
-          'cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors justify-between'
-        )}
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-1.5">
-          {isExpanded ? (
-            <ChevronDown className="w-3 h-3" aria-hidden="true" />
-          ) : (
-            <ChevronRight className="w-3 h-3" aria-hidden="true" />
-          )}
-          <ListChecks className="w-4 h-4 text-secondary-foreground" aria-hidden="true" />
-          <strong className="font-semibold">Todo List</strong>
+      renderContent={() => (
+        <div className="space-y-1 px-2 pb-2">
+          {todos.map((todo, index) => (
+            <div
+              key={index}
+              className={cn(
+                'flex items-start gap-2 p-2 rounded transition-colors',
+                todo.status === 'in_progress' && 'bg-info/5 border border-info/20',
+                todo.status === 'completed' && 'opacity-60'
+              )}
+            >
+              {/* Status icon */}
+              <div className="mt-0.5 flex-shrink-0">
+                {getStatusIcon(todo.status)}
+              </div>
 
-          {/* Summary when collapsed */}
-          {!isExpanded && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {statusCounts.completed || 0}/{todos.length} completed
-            </span>
-          )}
-        </div>
-
-        {/* Result indicator */}
-        {toolResult && (
-          <span className={isError ? 'text-destructive text-sm' : 'text-success text-sm'}>
-            {isError ? '✗ Failed' : '✓ Updated'}
-          </span>
-        )}
-      </div>
-
-      {/* Expandable todo list */}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="space-y-1 px-2 pb-2">
-              {todos.map((todo, index) => (
-                <div
-                  key={index}
-                  className={cn(
-                    'flex items-start gap-2 p-2 rounded transition-colors',
-                    todo.status === 'in_progress' && 'bg-info/5 border border-info/20',
-                    todo.status === 'completed' && 'opacity-60'
-                  )}
-                >
-                  {/* Status icon */}
-                  <div className="mt-0.5 flex-shrink-0">
-                    {getStatusIcon(todo.status)}
-                  </div>
-
-                  {/* Todo content */}
-                  <div className="flex-1 min-w-0">
-                    <div className={cn(
-                      'text-sm font-medium',
-                      todo.status === 'completed' && 'line-through',
-                      getStatusColor(todo.status)
-                    )}>
-                      {todo.status === 'in_progress' ? todo.activeForm : todo.content}
-                    </div>
-
-                    {/* Show both forms when in progress */}
-                    {todo.status === 'in_progress' && todo.activeForm !== todo.content && (
-                      <div className="text-xs text-muted-foreground mt-0.5 italic">
-                        {todo.content}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Status badge */}
-                  <div className={cn(
-                    'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wide flex-shrink-0',
-                    todo.status === 'completed' && 'bg-success/10 text-success',
-                    todo.status === 'in_progress' && 'bg-info/10 text-info',
-                    todo.status === 'pending' && 'bg-muted text-muted-foreground'
-                  )}>
-                    {todo.status.replace('_', ' ')}
-                  </div>
+              {/* Todo content */}
+              <div className="flex-1 min-w-0">
+                <div className={cn(
+                  'text-sm font-medium',
+                  todo.status === 'completed' && 'line-through',
+                  getStatusColor(todo.status)
+                )}>
+                  {todo.status === 'in_progress' ? todo.activeForm : todo.content}
                 </div>
-              ))}
 
-              {/* Summary footer */}
-              <div className="flex gap-4 pt-2 mt-2 border-t border-border/50 text-xs text-muted-foreground">
-                <span>✓ {statusCounts.completed || 0} completed</span>
-                <span>⏳ {statusCounts.in_progress || 0} in progress</span>
-                <span>○ {statusCounts.pending || 0} pending</span>
+                {/* Show both forms when in progress */}
+                {todo.status === 'in_progress' && todo.activeForm !== todo.content && (
+                  <div className="text-xs text-muted-foreground mt-0.5 italic">
+                    {todo.content}
+                  </div>
+                )}
+              </div>
+
+              {/* Status badge */}
+              <div className={cn(
+                'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wide flex-shrink-0',
+                todo.status === 'completed' && 'bg-success/10 text-success',
+                todo.status === 'in_progress' && 'bg-info/10 text-info',
+                todo.status === 'pending' && 'bg-muted text-muted-foreground'
+              )}>
+                {todo.status.replace('_', ' ')}
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
 
-      {/* Error display */}
-      {isError && toolResult && (
-        <div className="p-2 mx-2 mb-2 rounded bg-destructive/10 border border-destructive/30">
-          <p className="text-xs text-destructive-foreground font-mono m-0">
-            {typeof toolResult.content === 'object'
-              ? JSON.stringify(toolResult.content, null, 2)
-              : toolResult.content}
-          </p>
+          {/* Summary footer */}
+          <div className="flex gap-4 pt-2 mt-2 border-t border-border/50 text-xs text-muted-foreground">
+            <span>✓ {statusCounts.completed || 0} completed</span>
+            <span>⏳ {statusCounts.in_progress || 0} in progress</span>
+            <span>○ {statusCounts.pending || 0} pending</span>
+          </div>
         </div>
       )}
-    </div>
+    />
   );
 }

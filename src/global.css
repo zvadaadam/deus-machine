@@ -55,6 +55,10 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-thinking: var(--thinking);
+  --color-thinking-foreground: var(--thinking-foreground);
+  --color-thinking-muted: var(--thinking-muted);
+  --color-thinking-border: var(--thinking-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -69,7 +73,7 @@
 
   /* Font families */
   --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-family-mono: 'Ioskeley Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+  --font-family-mono: 'Iosevka Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
 
   /* Font sizes with line heights */
   --font-size-display-lg: 48px;
@@ -253,6 +257,12 @@
   --info: oklch(0.65 0.18 220);
   --info-foreground: oklch(1 0 0);
 
+  /* Thinking/reasoning colors (purple theme) */
+  --thinking: oklch(0.70 0.20 303);
+  --thinking-foreground: oklch(1 0 0);
+  --thinking-muted: oklch(0.96 0.05 303);
+  --thinking-border: oklch(0.85 0.10 303);
+
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.59 0.24 264);
@@ -295,6 +305,12 @@
 
   --info: oklch(0.70 0.18 220);
   --info-foreground: oklch(0.30 0.15 220);
+
+  /* Thinking/reasoning colors (purple theme) - optimized for dark mode */
+  --thinking: oklch(0.75 0.22 303);
+  --thinking-foreground: oklch(0.35 0.18 303);
+  --thinking-muted: oklch(0.25 0.08 303);
+  --thinking-border: oklch(0.35 0.12 303);
 
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -382,7 +398,7 @@
 
   /* Main container background - for modals, dialogs */
   .vibrancy-bg {
-    background-color: hsl(var(--background) / 0.95);
+    background-color: color-mix(in oklch, var(--background) 95%, transparent);
     backdrop-filter: blur(24px);
     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
     transition-duration: 200ms;
@@ -390,7 +406,7 @@
 
   /* Subtle panel sections - for headers, dividers */
   .vibrancy-panel {
-    background-color: hsl(var(--background) / 0.3);
+    background-color: color-mix(in oklch, var(--background) 30%, transparent);
     backdrop-filter: blur(4px);
     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
     transition-duration: 200ms;
@@ -406,24 +422,24 @@
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.12);
+    background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
     border-radius: 6px;
     transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.25);
+    background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
   }
 
   .scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
-    background: hsl(var(--muted-foreground) / 0.35);
+    background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
   }
 
   /* Global scrollbar styles - applies to all scrollable elements */
   /* Force custom scrollbars (overrides macOS overlay scrollbars) */
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.15) transparent;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -436,7 +452,7 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.15);
+    background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: padding-box;
@@ -444,13 +460,13 @@
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.28);
+    background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
 
   *::-webkit-scrollbar-thumb:active {
-    background: hsl(var(--muted-foreground) / 0.4);
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
@@ -528,23 +544,3 @@
   }
 
   /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
-
-  @theme inline {
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-}
-
-  @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
