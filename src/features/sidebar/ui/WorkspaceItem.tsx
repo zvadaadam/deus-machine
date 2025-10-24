@@ -117,15 +117,15 @@ export function WorkspaceItem({
           )}
           <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
-            <span className="text-sm font-medium truncate">
+            <span className="text-sm truncate">
               {workspace.branch}
             </span>
             {/* Directory name and status on bottom */}
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-0 min-w-0">
               <span className="text-xs text-muted-foreground truncate">
                 {workspace.directory_name}
               </span>
-              <span className="text-xs text-muted-foreground/70 flex-shrink-0">•</span>
+              <span className="text-xs text-muted-foreground/70 flex-shrink-0">・</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
@@ -161,7 +161,7 @@ export function WorkspaceItem({
             title="Archive workspace"
             className="h-7 px-2 text-muted-foreground hover:text-foreground"
           >
-            <Archive className="h-4 w-4" />
+            <Archive className="h-3.5 w-3.5" />
           </Button>
         ) : hasChanges ? (
           <div className="flex items-center gap-1 flex-shrink-0">

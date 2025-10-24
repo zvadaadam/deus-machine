@@ -23,8 +23,9 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       className={cn(
-        // Absolute positioning - doesn't affect sibling layout
-        "absolute left-0 top-1/2 -translate-y-1/2",
+        // Absolute positioning - centered in the padding gutter
+        // Positioned at visual midpoint between sidebar edge (0px) and text (20px)
+        "absolute -left-1.75 top-1/2 -translate-y-1/2",
         "flex items-center justify-center",
 
         // Visibility
