@@ -22,7 +22,7 @@ export function DragHandle({
       {...attributes}
       {...listeners}
       className={cn(
-        "flex-shrink-0 -ml-1",
+        "flex-shrink-0 -ml-[20px]",
         "opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100",
         "transition-opacity duration-200",
         "text-sidebar-foreground/30 hover:text-sidebar-foreground/60",
