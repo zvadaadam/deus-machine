@@ -44,6 +44,7 @@ export interface RepositoryItemProps {
   onNewWorkspace: (repoId?: string) => void;
   onArchive?: (workspaceId: string) => void;
   sidebarExpanded: boolean;
+  showGripIcon?: boolean;
 }
 
 /**

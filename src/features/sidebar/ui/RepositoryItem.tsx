@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 import { getRepoInitials, getRepoColor } from "../lib/utils";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
+import { DragHandle } from "./DragHandle";
 
 /**
  * RepositoryItem Component
@@ -27,6 +28,7 @@ export function RepositoryItem({
   onNewWorkspace,
   onArchive,
   sidebarExpanded,
+  showGripIcon = false,
 }: RepositoryItemProps) {
   const { toggleSidebar } = useSidebar();
   const hasRunningWorkspace = repository.workspaces.some(
@@ -50,7 +52,10 @@ export function RepositoryItem({
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
-      <SidebarMenuItem className={cn(!sidebarExpanded && "overflow-visible")}>
+      <SidebarMenuItem className={cn(
+        !sidebarExpanded && "overflow-visible",
+        sidebarExpanded && "group"
+      )}>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
             className={cn(
@@ -85,6 +90,7 @@ export function RepositoryItem({
               )}
               {sidebarExpanded && (
                 <>
+                  {showGripIcon && <DragHandle />}
                   <span className="text-sm font-medium truncate">
                     {repository.repo_name}
                   </span>
