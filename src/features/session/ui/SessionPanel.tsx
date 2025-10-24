@@ -81,10 +81,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     handleScrollToBottomClick,
   } = useAutoScroll({
     messages,
-    sessionStatus,
     messagesContainerRef,
     messagesEndRef,
-    lastMessageRef,
   });
 
   // Expose action handlers to parent
@@ -105,6 +103,23 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     }
   }), [setMessageInput]);
 
+  // Scroll to bottom button (shared between embedded and modal views)
+  const scrollToBottomButton = showScrollButton && (
+    <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
+      <Button
+        variant="secondary"
+        size="icon"
+        className="rounded-full shadow-lg"
+        onClick={handleScrollToBottomClick}
+        title="Scroll to bottom"
+        aria-label="Scroll to bottom"
+        aria-controls="chat-messages"
+      >
+        <ChevronDown className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
@@ -120,21 +135,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           />
 
         {/* Scroll to bottom button */}
-        {showScrollButton && (
-          <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="rounded-full shadow-lg"
-              onClick={handleScrollToBottomClick}
-              title="Scroll to bottom"
-              aria-label="Scroll to bottom"
-              aria-controls="chat-messages"
-            >
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
-        )}
+        {scrollToBottomButton}
 
         {/* Message Input - Sticky at bottom */}
         <MessageInput
@@ -189,21 +190,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 />
 
               {/* Scroll to bottom button */}
-              {showScrollButton && (
-                <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="rounded-full shadow-lg"
-                    onClick={handleScrollToBottomClick}
-                    title="Scroll to bottom"
-                    aria-label="Scroll to bottom"
-                    aria-controls="chat-messages"
-                  >
-                    <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              )}
+              {scrollToBottomButton}
 
               {/* Message Input - Sticky at bottom */}
               <MessageInput
