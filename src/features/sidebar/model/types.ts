@@ -44,7 +44,11 @@ export interface RepositoryItemProps {
   onNewWorkspace: (repoId?: string) => void;
   onArchive?: (workspaceId: string) => void;
   sidebarExpanded: boolean;
-  showGripIcon?: boolean;
+  dragHandleProps?: {
+    attributes?: Record<string, any>;
+    listeners?: Record<string, any>;
+    setActivatorNodeRef?: (node: HTMLElement | null) => void;
+  };
 }
 
 /**
