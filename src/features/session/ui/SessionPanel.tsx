@@ -14,6 +14,7 @@ import {
 import {
   useAutoScroll,
 } from "../hooks";
+import { SessionProvider } from '../context';
 import {
   useSessionWithMessages,
   useSendMessage,
@@ -250,17 +251,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   // If embedded, render without overlay but with message input
   if (embedded) {
     return (
-      <div className="flex flex-col flex-1 min-h-0 w-full relative">
-        <Chat
-          messages={messages}
-          loading={loading}
-          sessionStatus={sessionStatus}
-          parseContent={parseContent}
-          messagesEndRef={messagesEndRef}
-          lastMessageRef={lastMessageRef}
-          messagesContainerRef={messagesContainerRef}
-          toolResultMap={toolResultMap}
-        />
+      <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
+        <div className="flex flex-col flex-1 min-h-0 w-full relative">
+          <Chat
+            messages={messages}
+            loading={loading}
+            sessionStatus={sessionStatus}
+            messagesEndRef={messagesEndRef}
+            lastMessageRef={lastMessageRef}
+            messagesContainerRef={messagesContainerRef}
+          />
 
         {/* Scroll to bottom button */}
         {showScrollButton && (
@@ -287,7 +287,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           onMessageChange={setMessageInput}
           onSend={() => sendMessage()}
         />
-      </div>
+        </div>
+      </SessionProvider>
     );
   }
 
@@ -338,17 +339,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </div>
             ) : (
               // Show message timeline - Chat + Input
-              <div className="flex flex-col flex-1 min-h-0 relative">
-                <Chat
-                  messages={messages}
-                  loading={loading}
-                  sessionStatus={sessionStatus}
-                  parseContent={parseContent}
-                  messagesEndRef={messagesEndRef}
-                  lastMessageRef={lastMessageRef}
-                  messagesContainerRef={messagesContainerRef}
-                  toolResultMap={toolResultMap}
-                />
+              <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
+                <div className="flex flex-col flex-1 min-h-0 relative">
+                  <Chat
+                    messages={messages}
+                    loading={loading}
+                    sessionStatus={sessionStatus}
+                    messagesEndRef={messagesEndRef}
+                    lastMessageRef={lastMessageRef}
+                    messagesContainerRef={messagesContainerRef}
+                  />
 
                 {/* Scroll to bottom button */}
                 {showScrollButton && (
@@ -380,7 +380,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   onCreatePR={createPR}
                   onStop={stopSession}
                 />
-              </div>
+                </div>
+              </SessionProvider>
             )}
           </div>
         </div>

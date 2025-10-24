@@ -7,13 +7,13 @@
 
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
-import type { ToolResultMap } from "./chat-types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 import { Copy, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState, useEffect, useRef } from "react";
+import { useCopyToClipboard } from "@/shared/hooks";
+import { useSession } from "../context";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -22,13 +22,11 @@ type ParsedContent = (ContentBlock | string)[] | string | null;
 
 interface MessageItemProps {
   message: Message;
-  parseContent: (content: string) => ParsedContent;
-  toolResultMap: ToolResultMap;
 }
 
-export function MessageItem({ message, parseContent, toolResultMap }: MessageItemProps) {
-  const [copied, setCopied] = useState(false);
-  const resetTimerRef = useRef<number | null>(null);
+export function MessageItem({ message }: MessageItemProps) {
+  const { parseContent, toolResultMap } = useSession();
+  const { copy, copied } = useCopyToClipboard();
 
   // Parse message content
   const contentBlocks = parseContent(message.content);
@@ -48,25 +46,9 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
     return String(message.content);
   };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(extractTextContent());
-      setCopied(true);
-
-      // Clear existing timer before setting new one
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-      resetTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+  const handleCopy = () => {
+    copy(extractTextContent());
   };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-    };
-  }, []);
 
   const handleRevert = () => {
     // TODO: Implement revert functionality
@@ -172,7 +154,7 @@ export function MessageItem({ message, parseContent, toolResultMap }: MessageIte
               : `${message.id}:${index}`;
             if (typeof block === 'string') return null;
             return (
-              <BlockRenderer key={key} block={block} index={index} toolResultMap={toolResultMap} role={message.role} />
+              <BlockRenderer key={key} block={block} index={index} role={message.role} />
             );
           })
         ) : (
