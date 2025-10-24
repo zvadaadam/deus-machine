@@ -55,6 +55,34 @@ export function AppSidebar({
     [repositories, repositoryOrder, reorderRepositories]
   );
 
+  // Flatten all workspaces for keyboard navigation
+  const allWorkspaces = React.useMemo(() => {
+    return orderedRepositories.flatMap(repo => repo.workspaces);
+  }, [orderedRepositories]);
+
+  // Keyboard navigation for workspaces (Up/Down arrows)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (!allWorkspaces.length) return;
+
+      e.preventDefault();
+
+      const currentIndex = allWorkspaces.findIndex(w => w.id === selectedWorkspaceId);
+
+      if (e.key === 'ArrowDown') {
+        const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
+        onWorkspaceClick(allWorkspaces[nextIndex].id);
+      } else if (e.key === 'ArrowUp') {
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
+        onWorkspaceClick(allWorkspaces[prevIndex].id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick]);
+
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
     useSensor(PointerSensor),

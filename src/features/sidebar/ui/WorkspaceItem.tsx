@@ -20,9 +20,6 @@ export function WorkspaceItem({
 }: WorkspaceItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  // Debug: log workspace status
-  console.log(`Workspace ${workspace.branch}: session_status="${workspace.session_status}"`);
-
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -81,18 +78,14 @@ export function WorkspaceItem({
         role="button"
         tabIndex={0}
         className={cn(
-          // Base layout - always consistent
-          "relative flex items-center justify-between gap-3 py-3 pl-3 pr-2.5 min-h-[56px]",
+          // Base layout
+          "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",
           "rounded-lg cursor-pointer",
-          "transition-colors duration-200 ease-out",
-
-          // Active indicator (left border via pseudo-element - doesn't affect padding!)
-          "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:rounded-l-lg before:transition-colors",
-          isActive ? "before:bg-primary" : "before:bg-transparent",
+          "transition-all duration-200 ease-out",
 
           // State-based backgrounds
-          isActive && "bg-primary/10 elevation-2",
-          !isActive && "hover:bg-sidebar-accent/60 hover:elevation-1"
+          isActive && "bg-primary/15 shadow-sm border border-primary/20",
+          !isActive && "hover:bg-sidebar-accent/80 border border-transparent"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}

@@ -6,11 +6,6 @@ interface PulseRadiateIconProps {
 }
 
 export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIconProps) {
-  // Debug: log when active
-  if (isActive) {
-    console.log('PulseRadiateIcon: isActive is TRUE');
-  }
-
   return (
     <svg
       viewBox="0 0 32 32"
