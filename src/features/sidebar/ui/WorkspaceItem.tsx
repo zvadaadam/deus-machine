@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
+import { useWorkingDuration } from "@/shared/hooks";
 import type { WorkspaceItemProps } from "../model/types";
 
 /**
@@ -19,6 +20,11 @@ export function WorkspaceItem({
   onArchive
 }: WorkspaceItemProps) {
   const [isHovered, setIsHovered] = useState(false);
+
+  // Track working duration
+  const { formattedDuration } = useWorkingDuration({
+    status: workspace.session_status,
+  });
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -37,6 +43,12 @@ export function WorkspaceItem({
   const getStatusText = (status: string | null | undefined) => {
     if (!status) return "Archived";
     if (status === "idle") return formatTime(workspace.updated_at);
+
+    // Show duration for working status
+    if (status === "working" && formattedDuration) {
+      return formattedDuration;
+    }
+
     const capitalized = status.charAt(0).toUpperCase() + status.slice(1);
     return shouldShimmer(status) ? `${capitalized}...` : capitalized;
   };
