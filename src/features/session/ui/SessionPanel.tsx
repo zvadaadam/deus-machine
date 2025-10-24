@@ -44,6 +44,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     messages,
     sessionStatus,
     isCompacting,
+    workingStartedAt,
     loading,
     parseContent,
     toolResultMap,
@@ -129,6 +130,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             messages={messages}
             loading={loading}
             sessionStatus={sessionStatus}
+            workingStartedAt={workingStartedAt}
             messagesEndRef={messagesEndRef}
             lastMessageRef={lastMessageRef}
             messagesContainerRef={messagesContainerRef}
@@ -184,6 +186,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   messages={messages}
                   loading={loading}
                   sessionStatus={sessionStatus}
+                  workingStartedAt={workingStartedAt}
                   messagesEndRef={messagesEndRef}
                   lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}

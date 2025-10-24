@@ -24,6 +24,7 @@ export function WorkspaceItem({
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
     status: workspace.session_status,
+    workingStartedAt: workspace.working_started_at,
   });
 
   const formatTime = (timestamp: string) => {

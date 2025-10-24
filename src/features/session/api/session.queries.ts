@@ -87,6 +87,7 @@ export function useSessionWithMessages(sessionId: string | null) {
     messages: messagesQuery.data || [],
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || 'idle',
     isCompacting: sessionQuery.data?.is_compacting === 1,
+    workingStartedAt: sessionQuery.data?.working_started_at || null,
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
     parseContent,

@@ -61,6 +61,7 @@ interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
+  workingStartedAt?: string | null;
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
@@ -70,6 +71,7 @@ export function Chat({
   messages,
   loading,
   sessionStatus,
+  workingStartedAt,
   messagesEndRef,
   lastMessageRef,
   messagesContainerRef,
@@ -77,7 +79,10 @@ export function Chat({
   const { parseContent, toolResultMap } = useSession();
 
   // Track working duration
-  const { formattedDuration } = useWorkingDuration({ status: sessionStatus });
+  const { formattedDuration } = useWorkingDuration({
+    status: sessionStatus,
+    workingStartedAt
+  });
 
   return (
     <div

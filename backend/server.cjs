@@ -347,7 +347,7 @@ app.get('/api/workspaces', (req, res) => {
         w.unread, w.created_at, w.updated_at,
         r.name as repo_name, r.root_path,
         s.status as session_status, s.is_compacting, s.context_token_count,
-        s.unread_count as session_unread
+        s.working_started_at, s.unread_count as session_unread
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -372,7 +372,7 @@ app.get('/api/workspaces/by-repo', (req, res) => {
         w.active_session_id, w.unread, w.created_at, w.updated_at,
         r.name as repo_name, r.display_order as repo_display_order, r.root_path,
         s.status as session_status, s.is_compacting, s.context_token_count,
-        s.unread_count as session_unread
+        s.working_started_at, s.unread_count as session_unread
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -406,7 +406,7 @@ app.get('/api/workspaces/:id', (req, res) => {
   try {
     const workspace = db.prepare(`
       SELECT w.*, r.name as repo_name, r.root_path,
-             s.status as session_status, s.is_compacting, s.context_token_count
+             s.status as session_status, s.is_compacting, s.context_token_count, s.working_started_at
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -821,7 +821,7 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
     console.log('   ✅ Message inserted');
 
     console.log('   📝 Updating session status...');
-    db.prepare('UPDATE sessions SET status = \'working\', updated_at = datetime(\'now\') WHERE id = ?')
+    db.prepare('UPDATE sessions SET status = \'working\', working_started_at = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = ?')
       .run(sessionId);
     console.log('   ✅ Session status updated');
 
