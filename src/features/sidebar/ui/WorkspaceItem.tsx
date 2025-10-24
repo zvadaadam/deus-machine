@@ -83,9 +83,9 @@ export function WorkspaceItem({
           "rounded-lg cursor-pointer",
           "transition-all duration-200 ease-out",
 
-          // State-based backgrounds
-          isActive && "bg-primary/15 shadow-sm border border-primary/20",
-          !isActive && "hover:bg-sidebar-accent/80 border border-transparent"
+          // State-based backgrounds - subtle surface elevation
+          isActive && "bg-muted/60",
+          !isActive && "hover:bg-muted/30"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
