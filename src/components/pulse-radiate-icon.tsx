@@ -8,30 +8,30 @@ interface PulseRadiateIconProps {
 export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIconProps) {
   return (
     <svg
-      viewBox="0 0 16 16"
+      viewBox="0 0 32 32"
       className={cn("inline-block", className)}
-      style={{ width: "1em", height: "1em" }}
+      style={{ width: "1em", height: "1em", overflow: "visible" }}
     >
       <defs>
         <style>{`
           @keyframes radiate {
-            0% { r: 2; opacity: 1; }
-            100% { r: 12; opacity: 0; }
+            0% { r: 3; opacity: 1; }
+            100% { r: 14; opacity: 0; }
           }
           .pulse-ring {
             stroke: currentColor;
-            stroke-width: 0.5;
+            stroke-width: 1;
             fill: none;
             animation: ${isActive ? "radiate 1.2s ease-out infinite" : "none"};
           }
         `}</style>
       </defs>
-      <circle cx="8" cy="8" r="2" fill="currentColor" />
+      <circle cx="16" cy="16" r="3" fill="currentColor" />
       {isActive && (
         <>
-          <circle className="pulse-ring" cx="8" cy="8" r="2" />
-          <circle className="pulse-ring" cx="8" cy="8" r="2" style={{ animationDelay: "0.4s" }} />
-          <circle className="pulse-ring" cx="8" cy="8" r="2" style={{ animationDelay: "0.8s" }} />
+          <circle className="pulse-ring" cx="16" cy="16" r="3" />
+          <circle className="pulse-ring" cx="16" cy="16" r="3" style={{ animationDelay: "0.4s" }} />
+          <circle className="pulse-ring" cx="16" cy="16" r="3" style={{ animationDelay: "0.8s" }} />
         </>
       )}
     </svg>
