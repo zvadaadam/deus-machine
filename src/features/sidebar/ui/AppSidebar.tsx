@@ -63,10 +63,19 @@ export function AppSidebar({
   // Keyboard navigation for workspaces (Up/Down arrows)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if no input/textarea is focused
+      const activeElement = document.activeElement;
+      const isInputFocused =
+        activeElement?.tagName === 'INPUT' ||
+        activeElement?.tagName === 'TEXTAREA' ||
+        activeElement?.getAttribute('contenteditable') === 'true';
+
+      if (isInputFocused) return;
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
       if (!allWorkspaces.length) return;
 
       e.preventDefault();
+      e.stopPropagation();
 
       const currentIndex = allWorkspaces.findIndex(w => w.id === selectedWorkspaceId);
 
@@ -79,8 +88,8 @@ export function AppSidebar({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick]);
 
   // Sensors for drag detection (mouse, touch, keyboard)
