@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 import { getRepoInitials, getRepoColor } from "../lib/utils";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
+import { DragHandle } from "./DragHandle";
 
 /**
  * RepositoryItem Component
@@ -27,6 +28,7 @@ export function RepositoryItem({
   onNewWorkspace,
   onArchive,
   sidebarExpanded,
+  dragHandleProps,
 }: RepositoryItemProps) {
   const { toggleSidebar } = useSidebar();
   const hasRunningWorkspace = repository.workspaces.some(
@@ -84,17 +86,21 @@ export function RepositoryItem({
                 </div>
               )}
               {sidebarExpanded && (
-                <span className="text-sm font-medium truncate">
-                  {repository.repo_name}
-                </span>
-              )}
-              {sidebarExpanded && (
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
-                    isCollapsed && "-rotate-90"
-                  )}
-                />
+                <>
+                  {/* Drag handle - only shows on hover */}
+                  {dragHandleProps && <DragHandle {...dragHandleProps} />}
+
+                  <span className="text-sm font-medium truncate">
+                    {repository.repo_name}
+                  </span>
+
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
+                      isCollapsed && "-rotate-90"
+                    )}
+                  />
+                </>
               )}
           </SidebarMenuButton>
         </CollapsibleTrigger>

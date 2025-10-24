@@ -44,6 +44,11 @@ export interface RepositoryItemProps {
   onNewWorkspace: (repoId?: string) => void;
   onArchive?: (workspaceId: string) => void;
   sidebarExpanded: boolean;
+  dragHandleProps?: {
+    setActivatorNodeRef: (element: HTMLElement | null) => void;
+    listeners: any;
+    attributes: any;
+  };
 }
 
 /**
