@@ -55,7 +55,7 @@ export function RepositoryItem({
       <SidebarMenuItem
         data-state={isCollapsed ? "closed" : "open"}
         className={cn(
-          "group flex items-center gap-1 pl-3 pr-3 py-1",
+          "group/repository-item flex items-center pl-2 pr-2 py-1",
           sidebarExpanded && "hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
           !sidebarExpanded && "overflow-visible"
         )}
@@ -116,13 +116,13 @@ export function RepositoryItem({
         <SidebarMenuSub className="border-l-0 mx-0 px-0">
           {/* New Workspace Button - At Top, Compact Height */}
           {sidebarExpanded && (
-            <SidebarMenuSubItem className="mb-1">
+            <SidebarMenuSubItem className="mb-0">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => onNewWorkspace(repository.repo_id)}
                 className={cn(
-                  "w-full h-8 px-3 -translate-x-px",
+                  "w-full",
                   "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
                   "transition-colors duration-200 ease-out"
                 )}

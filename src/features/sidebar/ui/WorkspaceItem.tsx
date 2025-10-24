@@ -77,7 +77,7 @@ export function WorkspaceItem({
         role="button"
         tabIndex={0}
         className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-2 py-3 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
+          "grid grid-cols-[1fr_auto] items-center gap-1 py-2 pr-2.5 min-h-[56px] rounded-lg cursor-pointer transition-[background-color,border-color] duration-200 ease-out",
           isActive
             ? "bg-primary/10 border-l-[3px] border-l-primary elevation-2 pl-[12px]"
             : "hover:bg-sidebar-accent/60 hover:elevation-1 border-l-[3px] border-l-transparent pl-[12px]"
@@ -102,12 +102,12 @@ export function WorkspaceItem({
           ) : (
             <GitBranch
               className={cn(
-                "h-4 w-4 flex-shrink-0",
+                "h-3 w-3 flex-shrink-0",
                 getStatusTextColor(workspace.session_status)
               )}
             />
           )}
-          <div className="flex flex-col min-w-0 gap-0.5">
+          <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
             <span className="text-sm font-medium truncate">
               {workspace.branch}
