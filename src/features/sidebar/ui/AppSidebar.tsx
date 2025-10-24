@@ -1,3 +1,4 @@
+import * as React from 'react';
 import {
   DndContext,
   closestCenter,
@@ -48,8 +49,11 @@ export function AppSidebar({
 
   const isExpanded = state === "expanded";
 
-  // Apply custom ordering
-  const orderedRepositories = reorderRepositories(repositories);
+  // Apply custom ordering - memoized to prevent unnecessary re-sorts
+  const orderedRepositories = React.useMemo(
+    () => reorderRepositories(repositories),
+    [repositories, repositoryOrder, reorderRepositories]
+  );
 
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
