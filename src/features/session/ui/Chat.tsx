@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
+import { useWorkingDuration } from "@/shared/hooks";
 import type { RefObject } from "react";
 import { useSession } from "../context";
 
@@ -74,6 +75,10 @@ export function Chat({
   messagesContainerRef,
 }: ChatProps) {
   const { parseContent, toolResultMap } = useSession();
+
+  // Track working duration
+  const { formattedDuration } = useWorkingDuration({ status: sessionStatus });
+
   return (
     <div
       id="chat-messages"
@@ -151,7 +156,12 @@ export function Chat({
                     )}
                   >
                     <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
-                    <span>Claude is working...</span>
+                    <span>
+                      Claude is working...
+                      {formattedDuration && (
+                        <span className="ml-1.5 text-success/80">({formattedDuration})</span>
+                      )}
+                    </span>
                   </div>
                 )}
               </div>
