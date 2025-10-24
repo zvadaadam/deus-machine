@@ -55,25 +55,15 @@ export function AppSidebar({
     [repositories, repositoryOrder, reorderRepositories]
   );
 
-  // Flatten all workspaces for keyboard navigation
+  // Flatten all workspaces with repo info for keyboard navigation
   const allWorkspaces = React.useMemo(() => {
-    return orderedRepositories.flatMap(repo => repo.workspaces);
+    return orderedRepositories.flatMap(repo =>
+      repo.workspaces.map(workspace => ({
+        workspace,
+        repoId: repo.repo_id
+      }))
+    );
   }, [orderedRepositories]);
-
-  // Auto-scroll to selected workspace
-  React.useEffect(() => {
-    if (!selectedWorkspaceId) return;
-
-    // Small delay to ensure DOM is updated
-    const timer = setTimeout(() => {
-      const element = document.querySelector(`[data-workspace-id="${selectedWorkspaceId}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [selectedWorkspaceId]);
 
   // Keyboard navigation for workspaces (Up/Down arrows)
   React.useEffect(() => {
@@ -97,20 +87,37 @@ export function AppSidebar({
         activeElement.blur();
       }
 
-      const currentIndex = allWorkspaces.findIndex(w => w.id === selectedWorkspaceId);
+      const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === selectedWorkspaceId);
 
+      let targetItem;
       if (e.key === 'ArrowDown') {
         const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
-        onWorkspaceClick(allWorkspaces[nextIndex]); // Pass full workspace object
-      } else if (e.key === 'ArrowUp') {
+        targetItem = allWorkspaces[nextIndex];
+      } else {
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
-        onWorkspaceClick(allWorkspaces[prevIndex]); // Pass full workspace object
+        targetItem = allWorkspaces[prevIndex];
       }
+
+      // If target workspace's repo is collapsed, expand it
+      if (collapsedRepos.has(targetItem.repoId)) {
+        toggleRepoCollapse(targetItem.repoId);
+      }
+
+      // Select the workspace
+      onWorkspaceClick(targetItem.workspace);
+
+      // Scroll to it on next frame (after DOM updates)
+      requestAnimationFrame(() => {
+        const element = document.querySelector(`[data-workspace-id="${targetItem.workspace.id}"]`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+        }
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick]);
+  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
 
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
