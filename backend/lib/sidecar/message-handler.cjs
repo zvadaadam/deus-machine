@@ -84,7 +84,7 @@ class MessageHandler {
       if (message.stop_reason || message.is_final) {
         this.db.prepare(`
           UPDATE sessions
-          SET status = 'idle', updated_at = datetime('now')
+          SET status = 'idle', working_started_at = NULL, updated_at = datetime('now')
           WHERE id = ?
         `).run(message.session_id);
       }

@@ -1,6 +1,7 @@
 /**
  * useWorkingDuration Hook
  * Tracks the duration of a session while it's in "working" status
+ * Uses working_started_at timestamp from backend for persistence
  * Returns formatted duration string (e.g., "2m 34s")
  */
 
@@ -9,6 +10,7 @@ import type { SessionStatus } from '@/features/session/types';
 
 interface UseWorkingDurationOptions {
   status: SessionStatus | null | undefined;
+  workingStartedAt?: string | null; // ISO timestamp from backend
 }
 
 interface UseWorkingDurationReturn {
@@ -41,50 +43,53 @@ export function formatDuration(ms: number): string {
 
 /**
  * Hook to track working duration
+ * Uses backend timestamp for accurate, persistent duration tracking
  */
 export function useWorkingDuration({
   status,
+  workingStartedAt,
 }: UseWorkingDurationOptions): UseWorkingDurationReturn {
   const [duration, setDuration] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isWorking = status === 'working';
 
   useEffect(() => {
-    // Start tracking when status becomes "working"
-    if (isWorking && !startTimeRef.current) {
-      startTimeRef.current = Date.now();
+    // Calculate duration if working and have start timestamp
+    if (isWorking && workingStartedAt) {
+      const startTime = new Date(workingStartedAt).getTime();
+
+      // Calculate initial duration
+      const updateDuration = () => {
+        const now = Date.now();
+        setDuration(now - startTime);
+      };
+
+      // Update immediately
+      updateDuration();
 
       // Update duration every second
-      intervalRef.current = setInterval(() => {
-        if (startTimeRef.current) {
-          setDuration(Date.now() - startTimeRef.current);
-        }
-      }, 1000);
-    }
-
-    // Stop tracking when status changes from "working" to something else
-    if (!isWorking && startTimeRef.current) {
+      intervalRef.current = setInterval(updateDuration, 1000);
+    } else {
+      // Clear duration when not working
+      setDuration(0);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      startTimeRef.current = null;
-      setDuration(0);
     }
 
-    // Cleanup on unmount
+    // Cleanup on unmount or when dependencies change
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isWorking]);
+  }, [isWorking, workingStartedAt]);
 
   return {
     duration,
     formattedDuration: duration > 0 ? formatDuration(duration) : '',
-    isTracking: isWorking && startTimeRef.current !== null,
+    isTracking: isWorking && !!workingStartedAt,
   };
 }

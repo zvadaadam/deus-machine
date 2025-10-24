@@ -251,7 +251,7 @@ function handleClaudeMessage(sessionId, message) {
     try {
       db.prepare(`
         UPDATE sessions
-        SET status = 'idle', updated_at = datetime('now')
+        SET status = 'idle', working_started_at = NULL, updated_at = datetime('now')
         WHERE id = ?
       `).run(sessionId);
       console.log(`   ✅ Session ${sessionId.substring(0, 8)} set to idle`);
@@ -442,7 +442,7 @@ function startClaudeSession(sessionId, workspacePath) {
     try {
       db.prepare(`
         UPDATE sessions
-        SET status = 'idle', updated_at = datetime('now')
+        SET status = 'idle', working_started_at = NULL, updated_at = datetime('now')
         WHERE id = ?
       `).run(sessionId);
     } catch (error) {

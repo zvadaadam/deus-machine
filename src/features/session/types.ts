@@ -75,6 +75,7 @@ export interface Session {
   workspace_id: string;
   status: SessionStatus;
   is_compacting: number;
+  working_started_at: string | null;
   created_at: string;
   updated_at: string;
 }
