@@ -77,6 +77,7 @@ export function WorkspaceItem({
       <div
         role="button"
         tabIndex={0}
+        data-workspace-id={workspace.id}
         className={cn(
           // Base layout
           "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",

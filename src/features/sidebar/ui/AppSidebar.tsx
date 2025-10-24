@@ -60,6 +60,21 @@ export function AppSidebar({
     return orderedRepositories.flatMap(repo => repo.workspaces);
   }, [orderedRepositories]);
 
+  // Auto-scroll to selected workspace
+  React.useEffect(() => {
+    if (!selectedWorkspaceId) return;
+
+    // Small delay to ensure DOM is updated
+    const timer = setTimeout(() => {
+      const element = document.querySelector(`[data-workspace-id="${selectedWorkspaceId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [selectedWorkspaceId]);
+
   // Keyboard navigation for workspaces (Up/Down arrows)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -77,14 +92,19 @@ export function AppSidebar({
       e.preventDefault();
       e.stopPropagation();
 
+      // Remove focus rings
+      if (activeElement instanceof HTMLElement) {
+        activeElement.blur();
+      }
+
       const currentIndex = allWorkspaces.findIndex(w => w.id === selectedWorkspaceId);
 
       if (e.key === 'ArrowDown') {
         const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
-        onWorkspaceClick(allWorkspaces[nextIndex].id);
+        onWorkspaceClick(allWorkspaces[nextIndex]); // Pass full workspace object
       } else if (e.key === 'ArrowUp') {
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
-        onWorkspaceClick(allWorkspaces[prevIndex].id);
+        onWorkspaceClick(allWorkspaces[prevIndex]); // Pass full workspace object
       }
     };
 
