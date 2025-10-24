@@ -13,14 +13,12 @@
  */
 
 import { useState, useEffect, useCallback, RefObject } from "react";
-import type { Message, SessionStatus } from "@/shared/types";
+import type { Message } from "@/shared/types";
 
 interface UseAutoScrollOptions {
   messages: Message[];
-  sessionStatus: SessionStatus;
   messagesContainerRef: RefObject<HTMLDivElement>;
   messagesEndRef: RefObject<HTMLDivElement>;
-  lastMessageRef: RefObject<HTMLDivElement>;
   scrollThreshold?: number; // Distance from bottom to consider "at bottom" (default: 100)
 }
 
