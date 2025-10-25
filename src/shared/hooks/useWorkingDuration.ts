@@ -24,6 +24,9 @@ interface UseWorkingDurationReturn {
  * Examples: "5s", "1m 23s", "1h 5m", "2h 34m"
  */
 export function formatDuration(ms: number): string {
+  // Guard against negative durations (clock skew, bad data)
+  if (ms < 0) return '0s';
+
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -58,6 +61,12 @@ export function useWorkingDuration({
     // Calculate duration if working and have start timestamp
     if (isWorking && latestMessageSentAt) {
       const startTime = new Date(latestMessageSentAt).getTime();
+
+      // Guard against invalid timestamps (prevents NaN durations)
+      if (isNaN(startTime)) {
+        setDuration(0);
+        return;
+      }
 
       // Calculate initial duration
       const updateDuration = () => {
