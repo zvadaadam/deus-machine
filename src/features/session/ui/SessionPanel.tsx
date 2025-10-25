@@ -76,10 +76,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     console.log('[SessionPanel] Thinking level changed to:', level);
   };
 
-  const handleAttachment = () => {
-    // TODO: Implement attachment functionality
+  const handleAttachmentClick = () => {
+    // TODO: Implement file picker dialog
     console.log('[SessionPanel] Attachment clicked');
   };
+
+  // TODO: Fetch MCP servers from settings/API
+  const mcpServers = [];
+
+  // Show compact button when there are enough messages to benefit from compacting
+  const showCompactButton = messages.length > 10;
 
   // Session actions using custom hook
   const {
@@ -165,12 +171,13 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           embedded={true}
           model={session?.model || undefined}
           thinkingLevel={session?.thinking_level || undefined}
+          mcpServers={mcpServers}
           onMessageChange={setMessageInput}
           onSend={() => sendMessage()}
           onStop={stopSession}
           onModelChange={handleModelChange}
           onThinkingLevelChange={handleThinkingLevelChange}
-          onAttachment={handleAttachment}
+          onAttachmentClick={handleAttachmentClick}
         />
         </div>
       </SessionProvider>
@@ -230,6 +237,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 embedded={false}
                 model={session?.model || undefined}
                 thinkingLevel={session?.thinking_level || undefined}
+                showCompactButton={showCompactButton}
+                mcpServers={mcpServers}
                 onMessageChange={setMessageInput}
                 onSend={() => sendMessage()}
                 onCompact={compactConversation}
@@ -237,7 +246,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 onStop={stopSession}
                 onModelChange={handleModelChange}
                 onThinkingLevelChange={handleThinkingLevelChange}
-                onAttachment={handleAttachment}
+                onAttachmentClick={handleAttachmentClick}
               />
               </div>
             </SessionProvider>
