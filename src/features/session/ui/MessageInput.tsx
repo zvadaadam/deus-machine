@@ -1,6 +1,11 @@
 import type { SessionStatus } from "@/shared/types";
 import { Search, Minimize2, Wrench, ArrowUp, Square } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 
 interface MessageInputProps {
   messageInput: string;
@@ -27,36 +32,17 @@ export function MessageInput({
   onCreatePR,
   onStop,
 }: MessageInputProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      e.stopPropagation();
       if (!sending && messageInput.trim()) {
         onSend();
       }
     }
   };
 
-  const resizeTextarea = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    // Reset to minimum first
-    el.style.height = '40px';
-    // Then expand to fit content, max 200px
-    const newHeight = Math.min(Math.max(el.scrollHeight, 40), 200);
-    el.style.height = newHeight + 'px';
-  };
-
-  // Auto-resize textarea
-  useEffect(() => {
-    resizeTextarea();
-  }, [messageInput]);
-
   return (
-    <div className="relative flex-shrink-0 m-0 px-6 pb-4 z-10 flex flex-col gap-3">
+    <div className="relative flex-shrink-0 m-0 px-6 pb-4 z-10">
       {/* Scroll fade overlay - positioned above the input */}
       <div
         className="absolute bottom-full left-0 right-0 h-32 pointer-events-none"
@@ -65,126 +51,73 @@ export function MessageInput({
         }}
       />
 
-      {/* Glassmorphic ChatBox */}
-      <div
-        className={`
-          relative flex items-center gap-3 px-5 py-4
-          bg-muted/30 backdrop-blur-xl
-          border border-border/50
-          rounded-[24px]
-          shadow-lg
-          transition-all duration-200 ease-out
-          ${isFocused ? 'border-primary/50 shadow-xl' : 'hover:border-border'}
-        `}
-      >
-        {/* Search Icon */}
-        <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+      {/* InputGroup with glassmorphic styling */}
+      <InputGroup className="rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 has-[[data-slot=input-group-control]:focus-visible]:border-primary/50 has-[[data-slot=input-group-control]:focus-visible]:shadow-xl hover:border-border transition-all duration-200">
+        {/* Search icon - inline-start */}
+        <InputGroupAddon align="inline-start">
+          <Search className="w-5 h-5" aria-hidden="true" />
+        </InputGroupAddon>
 
-        {/* Input Field */}
-        <textarea
-          ref={textareaRef}
+        {/* Textarea - auto-resizes via CSS field-sizing-content */}
+        <InputGroupTextarea
           value={messageInput}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Ask Claude Code to make changes, @mention files, run /commands"
           disabled={sending}
           onKeyDown={handleKeyDown}
-          onFocus={() => {
-            setIsFocused(true);
-            resizeTextarea();
-          }}
-          onBlur={() => setIsFocused(false)}
-          style={{ height: '40px' }}
-          className="
-            flex-1 bg-transparent border-none outline-none resize-none
-            text-body-lg text-foreground placeholder:text-muted-foreground
-            max-h-[200px]
-            font-sans
-            overflow-y-auto
-            scrollbar-vibrancy
-          "
+          className="min-h-[40px] max-h-[200px] text-body-lg resize-none overflow-y-auto scrollbar-vibrancy"
         />
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {!embedded && (
-            <>
-              <button
-                type="button"
-                onClick={onCompact}
-                disabled={sending || isCompacting}
-                title="Compact conversation"
-                className="
-                  flex items-center gap-2 px-4 py-2
-                  bg-transparent hover:bg-muted/50
-                  border border-border/50 hover:border-border
-                  rounded-full
-                  text-body-sm text-muted-foreground hover:text-foreground
-                  transition-all duration-200 ease
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                "
+        {/* Action buttons - block-end (bottom alignment for textarea) */}
+        {!embedded && (
+          <InputGroupAddon align="block-end">
+            <InputGroupButton
+              onClick={onCompact}
+              disabled={sending || isCompacting}
+              title="Compact conversation"
+              size="sm"
+            >
+              <Minimize2 className="w-4 h-4" />
+              <span>{isCompacting ? 'Compacting...' : 'Compact'}</span>
+            </InputGroupButton>
+
+            <InputGroupButton
+              onClick={onCreatePR}
+              disabled={sending}
+              title="Create PR"
+              size="sm"
+            >
+              <Wrench className="w-4 h-4" />
+              <span>Create PR</span>
+            </InputGroupButton>
+
+            {sessionStatus === 'working' && (
+              <InputGroupButton
+                onClick={onStop}
+                title="Stop execution"
+                variant="destructive"
+                size="sm"
               >
-                <Minimize2 className="w-4 h-4" aria-hidden="true" />
-                <span>{isCompacting ? 'Compacting...' : 'Compact'}</span>
-              </button>
+                <Square className="w-4 h-4" />
+                <span>Stop</span>
+              </InputGroupButton>
+            )}
+          </InputGroupAddon>
+        )}
 
-              <button
-                type="button"
-                onClick={onCreatePR}
-                disabled={sending}
-                title="Create PR"
-                className="
-                  flex items-center gap-2 px-4 py-2
-                  bg-transparent hover:bg-muted/50
-                  border border-border/50 hover:border-border
-                  rounded-full
-                  text-body-sm text-muted-foreground hover:text-foreground
-                  transition-all duration-200 ease
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                "
-              >
-                <Wrench className="w-4 h-4" aria-hidden="true" />
-                <span>Create PR</span>
-              </button>
-
-              {sessionStatus === 'working' && (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  title="Stop execution"
-                  className="
-                    flex items-center gap-2 px-4 py-2
-                    bg-destructive/10 hover:bg-destructive/20
-                    border border-destructive/50 hover:border-destructive
-                    rounded-full
-                    text-body-sm text-destructive-foreground
-                    transition-all duration-200 ease
-                  "
-                >
-                  <Square className="w-4 h-4" aria-hidden="true" />
-                  <span>Stop</span>
-                </button>
-              )}
-            </>
-          )}
-
-          {/* Send Button */}
-          <button
-            type="button"
+        {/* Send button - inline-end */}
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
             onClick={onSend}
             disabled={sending || !messageInput.trim()}
             title="Send message (⌘ + Enter)"
             aria-label="Send message"
-            className="
-              p-2
-              text-muted-foreground hover:text-foreground
-              transition-colors duration-200 ease
-              disabled:opacity-50 disabled:cursor-not-allowed
-            "
+            size="icon-sm"
           >
-            <ArrowUp className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+            <ArrowUp className="w-5 h-5" />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
     </div>
   );
 }
