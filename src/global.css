@@ -544,3 +544,8 @@
   }
 
   /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
+
+/* Message input fade overlay utility */
+.bg-fade-overlay {
+  background: linear-gradient(to bottom, transparent 0%, var(--background) 100%);
+}

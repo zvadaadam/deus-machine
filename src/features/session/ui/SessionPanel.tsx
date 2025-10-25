@@ -41,6 +41,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // TanStack Query hooks
   const {
+    session,
     messages,
     sessionStatus,
     isCompacting,
@@ -63,6 +64,32 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // Local state for message input
   const [messageInput, setMessageInput] = useState('');
+  const [thinkingLevel, setThinkingLevel] = useState(session?.thinking_level || 'NONE');
+  const [model, setModel] = useState(session?.model || 'sonnet');
+
+  // Handlers for MessageInput controls
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel);
+    // TODO: Implement API call to update session model
+    console.log('[SessionPanel] Model changed to:', newModel);
+  };
+
+  const handleThinkingLevelChange = (level: string) => {
+    setThinkingLevel(level);
+    // TODO: Implement API call to update session thinking level
+    console.log('[SessionPanel] Thinking level changed to:', level);
+  };
+
+  const handleAttachmentClick = () => {
+    // TODO: Implement file picker dialog
+    console.log('[SessionPanel] Attachment clicked');
+  };
+
+  // TODO: Fetch MCP servers from settings/API
+  const mcpServers = [];
+
+  // Show compact button when there are enough messages to benefit from compacting
+  const showCompactButton = messages.length > 10;
 
   // Session actions using custom hook
   const {
@@ -144,9 +171,17 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         <MessageInput
           messageInput={messageInput}
           sending={sending}
+          sessionStatus={sessionStatus}
           embedded={true}
+          model={model}
+          thinkingLevel={thinkingLevel}
+          mcpServers={mcpServers}
           onMessageChange={setMessageInput}
           onSend={() => sendMessage()}
+          onStop={stopSession}
+          onModelChange={handleModelChange}
+          onThinkingLevelChange={handleThinkingLevelChange}
+          onAttachmentClick={handleAttachmentClick}
         />
         </div>
       </SessionProvider>
@@ -204,11 +239,18 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 isCompacting={isCompacting}
                 sessionStatus={sessionStatus}
                 embedded={false}
+                model={model}
+                thinkingLevel={thinkingLevel}
+                showCompactButton={showCompactButton}
+                mcpServers={mcpServers}
                 onMessageChange={setMessageInput}
                 onSend={() => sendMessage()}
                 onCompact={compactConversation}
                 onCreatePR={createPR}
                 onStop={stopSession}
+                onModelChange={handleModelChange}
+                onThinkingLevelChange={handleThinkingLevelChange}
+                onAttachmentClick={handleAttachmentClick}
               />
               </div>
             </SessionProvider>
