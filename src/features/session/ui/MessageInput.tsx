@@ -164,7 +164,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="relative flex-shrink-0 m-0 px-6 pb-4 z-10">
+    <div className="relative flex-shrink-0 m-0 p-4 z-10">
       {/* Scroll fade overlay */}
       <div
         className="absolute bottom-full left-0 right-0 h-32 pointer-events-none"
@@ -172,35 +172,6 @@ export function MessageInput({
           background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
         }}
       />
-
-      {/* Attachment previews */}
-      {attachments.length > 0 && (
-        <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-vibrancy">
-          {attachments.map(attachment => (
-            <div
-              key={attachment.id}
-              className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0"
-            >
-              <img
-                src={attachment.preview}
-                className="w-full h-full object-cover"
-                alt={attachment.file.name}
-              />
-              {/* Remove button */}
-              <button
-                onClick={() => removeAttachment(attachment.id)}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <X className="w-3 h-3 text-white" />
-              </button>
-              {/* File name */}
-              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                {attachment.file.name}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* InputGroup with drag & drop */}
       <InputGroup
@@ -216,6 +187,35 @@ export function MessageInput({
               <Paperclip className="w-8 h-8 text-primary" />
               <p className="text-primary font-medium text-sm">Drop files here</p>
             </div>
+          </div>
+        )}
+
+        {/* Attachment previews - inside InputGroup */}
+        {attachments.length > 0 && (
+          <div className="flex gap-3 p-4 pb-3 overflow-x-auto scrollbar-vibrancy">
+            {attachments.map(attachment => (
+              <div
+                key={attachment.id}
+                className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0"
+              >
+                <img
+                  src={attachment.preview}
+                  className="w-full h-full object-cover"
+                  alt={attachment.file.name}
+                />
+                {/* Remove button */}
+                <button
+                  onClick={() => removeAttachment(attachment.id)}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+                {/* File name */}
+                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                  {attachment.file.name}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

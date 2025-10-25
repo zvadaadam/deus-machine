@@ -64,14 +64,18 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // Local state for message input
   const [messageInput, setMessageInput] = useState('');
+  const [thinkingLevel, setThinkingLevel] = useState(session?.thinking_level || 'NONE');
+  const [model, setModel] = useState(session?.model || 'sonnet');
 
   // Handlers for MessageInput controls
-  const handleModelChange = (model: string) => {
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel);
     // TODO: Implement API call to update session model
-    console.log('[SessionPanel] Model changed to:', model);
+    console.log('[SessionPanel] Model changed to:', newModel);
   };
 
   const handleThinkingLevelChange = (level: string) => {
+    setThinkingLevel(level);
     // TODO: Implement API call to update session thinking level
     console.log('[SessionPanel] Thinking level changed to:', level);
   };
@@ -169,8 +173,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           sending={sending}
           sessionStatus={sessionStatus}
           embedded={true}
-          model={session?.model || undefined}
-          thinkingLevel={session?.thinking_level || undefined}
+          model={model}
+          thinkingLevel={thinkingLevel}
           mcpServers={mcpServers}
           onMessageChange={setMessageInput}
           onSend={() => sendMessage()}
@@ -235,8 +239,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 isCompacting={isCompacting}
                 sessionStatus={sessionStatus}
                 embedded={false}
-                model={session?.model || undefined}
-                thinkingLevel={session?.thinking_level || undefined}
+                model={model}
+                thinkingLevel={thinkingLevel}
                 showCompactButton={showCompactButton}
                 mcpServers={mcpServers}
                 onMessageChange={setMessageInput}
