@@ -175,7 +175,7 @@ export function MessageInput({
 
       {/* InputGroup with drag & drop */}
       <InputGroup
-        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 has-[[data-slot=input-group-control]:focus-visible]:border-primary/50 has-[[data-slot=input-group-control]:focus-visible]:shadow-xl hover:border-border transition-all duration-200"
+        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -349,8 +349,8 @@ export function MessageInput({
                 </InputGroupButton>
               )}
 
-              {/* Send/Stop toggle */}
-              {sessionStatus === 'working' ? (
+              {/* Stop button - shows when session is working */}
+              {sessionStatus === 'working' && (
                 <InputGroupButton
                   onClick={onStop}
                   variant="destructive"
@@ -359,17 +359,19 @@ export function MessageInput({
                 >
                   <Square className="w-5 h-5" />
                 </InputGroupButton>
-              ) : (
-                <InputGroupButton
-                  onClick={onSend}
-                  disabled={sending || !messageInput.trim()}
-                  size="icon-sm"
-                  title="Send message (⌘ + Enter)"
-                  aria-label="Send message"
-                >
-                  <ArrowUp className="w-5 h-5" />
-                </InputGroupButton>
               )}
+
+              {/* Send button - always visible, highlighted when text exists */}
+              <InputGroupButton
+                onClick={onSend}
+                disabled={sending || !messageInput.trim()}
+                variant={messageInput.trim() ? 'default' : 'outline'}
+                size="icon-sm"
+                title="Send message (⌘ + Enter)"
+                aria-label="Send message"
+              >
+                <ArrowUp className="w-5 h-5" />
+              </InputGroupButton>
             </div>
           </div>
         </InputGroupAddon>
