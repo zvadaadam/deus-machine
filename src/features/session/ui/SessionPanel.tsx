@@ -132,12 +132,21 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   }), [setMessageInput]);
 
   // Scroll to bottom button (shared between embedded and modal views)
-  const scrollToBottomButton = showScrollButton && (
-    <div className="absolute bottom-28 right-6 pointer-events-auto z-10">
+  const scrollToBottomButton = (
+    <div
+      className={`absolute bottom-20 right-6 pointer-events-auto z-10 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+        showScrollButton
+          ? 'opacity-100 scale-100'
+          : 'opacity-0 scale-90 pointer-events-none motion-reduce:scale-100'
+      }`}
+      style={{
+        transitionProperty: 'opacity, transform'
+      }}
+    >
       <Button
         variant="secondary"
         size="icon"
-        className="rounded-full shadow-lg"
+        className="rounded-full shadow-lg hover:shadow-xl transition-shadow duration-200 motion-reduce:transition-none"
         onClick={handleScrollToBottomClick}
         title="Scroll to bottom"
         aria-label="Scroll to bottom"
