@@ -41,6 +41,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // TanStack Query hooks
   const {
+    session,
     messages,
     sessionStatus,
     isCompacting,
@@ -63,6 +64,22 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // Local state for message input
   const [messageInput, setMessageInput] = useState('');
+
+  // Handlers for MessageInput controls
+  const handleModelChange = (model: string) => {
+    // TODO: Implement API call to update session model
+    console.log('[SessionPanel] Model changed to:', model);
+  };
+
+  const handleThinkingLevelChange = (level: string) => {
+    // TODO: Implement API call to update session thinking level
+    console.log('[SessionPanel] Thinking level changed to:', level);
+  };
+
+  const handleAttachment = () => {
+    // TODO: Implement attachment functionality
+    console.log('[SessionPanel] Attachment clicked');
+  };
 
   // Session actions using custom hook
   const {
@@ -144,9 +161,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         <MessageInput
           messageInput={messageInput}
           sending={sending}
+          sessionStatus={sessionStatus}
           embedded={true}
+          model={session?.model || undefined}
+          thinkingLevel={session?.thinking_level || undefined}
           onMessageChange={setMessageInput}
           onSend={() => sendMessage()}
+          onStop={stopSession}
+          onModelChange={handleModelChange}
+          onThinkingLevelChange={handleThinkingLevelChange}
+          onAttachment={handleAttachment}
         />
         </div>
       </SessionProvider>
@@ -204,11 +228,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 isCompacting={isCompacting}
                 sessionStatus={sessionStatus}
                 embedded={false}
+                model={session?.model || undefined}
+                thinkingLevel={session?.thinking_level || undefined}
                 onMessageChange={setMessageInput}
                 onSend={() => sendMessage()}
                 onCompact={compactConversation}
                 onCreatePR={createPR}
                 onStop={stopSession}
+                onModelChange={handleModelChange}
+                onThinkingLevelChange={handleThinkingLevelChange}
+                onAttachment={handleAttachment}
               />
               </div>
             </SessionProvider>
