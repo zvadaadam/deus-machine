@@ -98,18 +98,26 @@ export function MessageInput({
     onThinkingLevelChange?.(nextLevel);
   };
 
-  // Thinking dot indicators
+  // Thinking dot indicators - always show 3 dots, fill based on level
   const renderThinkingDots = () => {
     if (thinkingLevel === 'NONE') return null;
 
-    const dotCount =
+    const filledCount =
       thinkingLevel === 'HIGH' ? 3 :
       thinkingLevel === 'MEDIUM' ? 2 : 1;
 
     return (
       <div className="flex flex-col gap-0.5 ml-1">
-        {Array.from({ length: dotCount }).map((_, i) => (
-          <span key={i} className="w-1 h-1 rounded-full bg-primary" />
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className={cn(
+              "w-1 h-1 rounded-full transition-all duration-200",
+              i < filledCount
+                ? "bg-primary"
+                : "border border-primary/40 bg-transparent"
+            )}
+          />
         ))}
       </div>
     );
@@ -175,20 +183,20 @@ export function MessageInput({
   };
 
   return (
-    <div className="relative flex-shrink-0 m-0 p-4 z-10">
+    <div className="relative flex-shrink-0 p-4">
       {/* Scroll fade overlay */}
       <div className="absolute bottom-full left-0 right-0 h-32 pointer-events-none bg-fade-overlay" />
 
       {/* InputGroup with drag & drop */}
       <InputGroup
-        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200 !ring-0 overflow-visible"
+        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200 !ring-0 focus-within:!ring-0 has-[[data-slot=input-group-control]:focus-visible]:!ring-0 has-[[data-slot=input-group-control]:focus-visible]:!border-border overflow-visible"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {/* Drag overlay */}
         {isDragging && (
-          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-[24px] flex flex-col items-center justify-center gap-2 pointer-events-none z-10">
+          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-[24px] flex flex-col items-center justify-center gap-2 pointer-events-none z-1">
             <Paperclip className="w-8 h-8 text-primary" />
             <p className="text-primary font-medium text-sm">Drop files here</p>
           </div>
