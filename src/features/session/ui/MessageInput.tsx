@@ -107,7 +107,7 @@ export function MessageInput({
       thinkingLevel === 'MEDIUM' ? 2 : 1;
 
     return (
-      <div className="flex gap-0.5 ml-1">
+      <div className="flex flex-col gap-0.5 ml-1">
         {Array.from({ length: dotCount }).map((_, i) => (
           <span key={i} className="w-1 h-1 rounded-full bg-primary" />
         ))}
@@ -181,7 +181,7 @@ export function MessageInput({
 
       {/* InputGroup with drag & drop */}
       <InputGroup
-        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200"
+        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200 !ring-0 overflow-visible"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
