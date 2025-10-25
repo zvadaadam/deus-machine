@@ -44,6 +44,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     messages,
     sessionStatus,
     isCompacting,
+    latestMessageSentAt,
     loading,
     parseContent,
     toolResultMap,
@@ -129,9 +130,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             messages={messages}
             loading={loading}
             sessionStatus={sessionStatus}
+            latestMessageSentAt={latestMessageSentAt}
             messagesEndRef={messagesEndRef}
             lastMessageRef={lastMessageRef}
             messagesContainerRef={messagesContainerRef}
+            onStop={stopSession}
           />
 
         {/* Scroll to bottom button */}
@@ -184,9 +187,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   messages={messages}
                   loading={loading}
                   sessionStatus={sessionStatus}
+                  latestMessageSentAt={latestMessageSentAt}
                   messagesEndRef={messagesEndRef}
                   lastMessageRef={lastMessageRef}
                   messagesContainerRef={messagesContainerRef}
+                  onStop={stopSession}
                 />
 
               {/* Scroll to bottom button */}

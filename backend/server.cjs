@@ -17,7 +17,7 @@ const { randomUUID } = require('crypto');
 
 // Import our modular components
 const { initDatabase, getDatabase, closeDatabase, DB_PATH } = require('./lib/database.cjs');
-const { startClaudeSession, sendToClaudeSession, stopAllClaudeSessions } = require('./lib/claude-session.cjs');
+const { startClaudeSession, sendToClaudeSession, stopClaudeSession, stopAllClaudeSessions } = require('./lib/claude-session.cjs');
 const { startSidecar, sendToSidecar, getSidecarStatus, stopSidecar } = require('./lib/sidecar/index.cjs');
 const { getMcpServers, saveMcpServers, getCommands, saveCommand, deleteCommand,
         getAgents, saveAgent, deleteAgent, getHooks, saveHooks } = require('./lib/config.cjs');
@@ -347,7 +347,10 @@ app.get('/api/workspaces', (req, res) => {
         w.unread, w.created_at, w.updated_at,
         r.name as repo_name, r.root_path,
         s.status as session_status, s.is_compacting, s.context_token_count,
-        s.unread_count as session_unread
+        s.unread_count as session_unread,
+        (SELECT sent_at FROM session_messages
+         WHERE session_id = s.id AND role = 'user'
+         ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -372,7 +375,10 @@ app.get('/api/workspaces/by-repo', (req, res) => {
         w.active_session_id, w.unread, w.created_at, w.updated_at,
         r.name as repo_name, r.display_order as repo_display_order, r.root_path,
         s.status as session_status, s.is_compacting, s.context_token_count,
-        s.unread_count as session_unread
+        s.unread_count as session_unread,
+        (SELECT sent_at FROM session_messages
+         WHERE session_id = s.id AND role = 'user'
+         ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -406,7 +412,10 @@ app.get('/api/workspaces/:id', (req, res) => {
   try {
     const workspace = db.prepare(`
       SELECT w.*, r.name as repo_name, r.root_path,
-             s.status as session_status, s.is_compacting, s.context_token_count
+             s.status as session_status, s.is_compacting, s.context_token_count,
+             (SELECT sent_at FROM session_messages
+              WHERE session_id = s.id AND role = 'user'
+              ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
       FROM workspaces w
       LEFT JOIN repos r ON w.repository_id = r.id
       LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -864,6 +873,80 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
     res.json(createdMessage);
   } catch (error) {
     console.error('   ❌ [MESSAGE SEND] Error:', error);
+    console.error('   Stack:', error.stack);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Stop/Cancel a running session
+ * POST /api/sessions/:id/stop
+ *
+ * Sets cancelled_at timestamp on the latest user message and stops the Claude process
+ */
+app.post('/api/sessions/:id/stop', (req, res) => {
+  const { id: sessionId } = req.params;
+
+  console.log(`\n🛑 [SESSION CANCEL] Cancelling session ${sessionId.substring(0, 8)}`);
+
+  try {
+    // Get the session to verify it exists and is working
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+
+    if (!session) {
+      console.log('   ❌ Session not found');
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    console.log(`   📋 Session status: ${session.status}`);
+
+    // Get the latest user message that hasn't been cancelled yet
+    const latestUserMessage = db.prepare(`
+      SELECT * FROM session_messages
+      WHERE session_id = ? AND role = 'user' AND cancelled_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(sessionId);
+
+    if (latestUserMessage) {
+      console.log(`   📝 Marking message ${latestUserMessage.id.substring(0, 8)} as cancelled`);
+      db.prepare(`
+        UPDATE session_messages
+        SET cancelled_at = datetime('now')
+        WHERE id = ?
+      `).run(latestUserMessage.id);
+      console.log('   ✅ Message marked as cancelled');
+    } else {
+      console.log('   ℹ️  No user message to cancel');
+    }
+
+    // Stop the Claude CLI process
+    console.log('   🛑 Stopping Claude CLI process...');
+    const stopped = stopClaudeSession(sessionId);
+    console.log(`   ${stopped ? '✅' : '⚠️ '} Claude process ${stopped ? 'stopped' : 'not found or already stopped'}`);
+
+    // Update session status to idle
+    console.log('   📝 Updating session status to idle...');
+    db.prepare(`
+      UPDATE sessions
+      SET status = 'idle',
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(sessionId);
+    console.log('   ✅ Session status updated');
+
+    // Get updated session
+    const updatedSession = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+
+    console.log('   ✅ [SESSION CANCEL] Complete!\n');
+    res.json({
+      success: true,
+      session: updatedSession,
+      message: latestUserMessage ? 'Session cancelled and message marked' : 'Session cancelled'
+    });
+
+  } catch (error) {
+    console.error('   ❌ [SESSION CANCEL] Error:', error);
     console.error('   Stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
