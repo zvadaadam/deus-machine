@@ -98,11 +98,22 @@ export function MessageInput({
     onThinkingLevelChange?.(nextLevel);
   };
 
-  // Thinking badge number
-  const thinkingBadgeNum =
-    thinkingLevel === 'HIGH' ? '3' :
-    thinkingLevel === 'MEDIUM' ? '2' :
-    thinkingLevel === 'LOW' ? '1' : null;
+  // Thinking dot indicators
+  const renderThinkingDots = () => {
+    if (thinkingLevel === 'NONE') return null;
+
+    const dotCount =
+      thinkingLevel === 'HIGH' ? 3 :
+      thinkingLevel === 'MEDIUM' ? 2 : 1;
+
+    return (
+      <div className="flex gap-0.5 ml-1">
+        {Array.from({ length: dotCount }).map((_, i) => (
+          <span key={i} className="w-1 h-1 rounded-full bg-primary" />
+        ))}
+      </div>
+    );
+  };
 
   // MCP active count
   const activeMCPCount = mcpServers.filter(s => s.active).length;
@@ -245,9 +256,15 @@ export function MessageInput({
 
               {/* Model picker dropdown */}
               <DropdownMenu>
-                <DropdownMenuTrigger className="flex items-center gap-2 px-3 py-1.5 h-8 text-sm rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors" title="Select model">
-                  <Sparkles className="w-4 h-4" />
-                  <span>{modelLabel}</span>
+                <DropdownMenuTrigger asChild>
+                  <InputGroupButton
+                    size="sm"
+                    title="Select model"
+                    aria-label={`Select model, currently ${modelLabel}`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>{modelLabel}</span>
+                  </InputGroupButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem onClick={() => onModelChange?.('sonnet')}>
@@ -264,31 +281,29 @@ export function MessageInput({
 
               {/* Thinking cycle button */}
               <InputGroupButton
-                size="icon-sm"
+                size="sm"
                 onClick={cycleThinkingLevel}
                 title={`Thinking: ${thinkingLevel}`}
+                aria-label={`Thinking level: ${thinkingLevel}`}
                 className={cn(
-                  "relative",
+                  "gap-1",
                   thinkingLevel !== 'NONE' && "text-primary"
                 )}
               >
                 <Brain className="w-4 h-4" />
-                {thinkingBadgeNum && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 text-[9px] font-semibold bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-                    {thinkingBadgeNum}
-                  </span>
-                )}
+                {renderThinkingDots()}
               </InputGroupButton>
 
               {/* MCP Server indicator */}
               <Popover>
-                <PopoverTrigger className="relative flex items-center justify-center w-8 h-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors" title="MCP Servers">
-                  <Hammer className="w-4 h-4" />
-                  {activeMCPCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 text-[9px] font-semibold bg-green-500 text-white rounded-full flex items-center justify-center">
-                      {activeMCPCount}
-                    </span>
-                  )}
+                <PopoverTrigger asChild>
+                  <InputGroupButton
+                    size="icon-sm"
+                    title="MCP Servers"
+                    aria-label="MCP Servers"
+                  >
+                    <Hammer className="w-4 h-4" />
+                  </InputGroupButton>
                 </PopoverTrigger>
                 <PopoverContent className="w-64" align="start" side="top">
                   <div className="space-y-3">
