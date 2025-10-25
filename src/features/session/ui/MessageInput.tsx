@@ -177,12 +177,7 @@ export function MessageInput({
   return (
     <div className="relative flex-shrink-0 m-0 p-4 z-10">
       {/* Scroll fade overlay */}
-      <div
-        className="absolute bottom-full left-0 right-0 h-32 pointer-events-none"
-        style={{
-          background: 'linear-gradient(to bottom, transparent 0%, hsl(var(--background)) 100%)'
-        }}
-      />
+      <div className="absolute bottom-full left-0 right-0 h-32 pointer-events-none bg-fade-overlay" />
 
       {/* InputGroup with drag & drop */}
       <InputGroup
@@ -193,11 +188,9 @@ export function MessageInput({
       >
         {/* Drag overlay */}
         {isDragging && (
-          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-[24px] flex items-center justify-center pointer-events-none z-10">
-            <div className="flex flex-col items-center gap-2">
-              <Paperclip className="w-8 h-8 text-primary" />
-              <p className="text-primary font-medium text-sm">Drop files here</p>
-            </div>
+          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-[24px] flex flex-col items-center justify-center gap-2 pointer-events-none z-10">
+            <Paperclip className="w-8 h-8 text-primary" />
+            <p className="text-primary font-medium text-sm">Drop files here</p>
           </div>
         )}
 
@@ -217,12 +210,13 @@ export function MessageInput({
                 {/* Remove button */}
                 <button
                   onClick={() => removeAttachment(attachment.id)}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  aria-label="Remove attachment"
                 >
-                  <X className="w-3 h-3 text-white" />
+                  <X className="w-3 h-3 text-muted-foreground" />
                 </button>
                 {/* File name */}
-                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 bg-muted text-muted-foreground text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                   {attachment.file.name}
                 </div>
               </div>
@@ -241,10 +235,9 @@ export function MessageInput({
         />
 
         {/* Bottom toolbar */}
-        <InputGroupAddon align="block-end" className="w-full">
-          <div className="flex items-center justify-between w-full gap-4">
-            {/* Controls group (left) */}
-            <div className="flex items-center gap-1.5">
+        <InputGroupAddon align="block-end" className="w-full flex items-center justify-between gap-4">
+          {/* Controls group (left) */}
+          <div className="flex items-center gap-1.5">
               {/* Add attachment button */}
               <InputGroupButton
                 onClick={onAttachmentClick}
@@ -334,10 +327,10 @@ export function MessageInput({
                   </div>
                 </PopoverContent>
               </Popover>
-            </div>
+          </div>
 
-            {/* Actions group (right) */}
-            <div className="flex items-center gap-1.5">
+          {/* Actions group (right) */}
+          <div className="flex items-center gap-1.5">
               {/* Compact button (conditional) */}
               {showCompactButton && !embedded && (
                 <InputGroupButton
@@ -387,7 +380,6 @@ export function MessageInput({
               >
                 <ArrowUp className="w-5 h-5" />
               </InputGroupButton>
-            </div>
           </div>
         </InputGroupAddon>
       </InputGroup>
