@@ -83,11 +83,12 @@ gap-4   // 16px - generous
 
 ✅ **DO:**
 ```tsx
-// Use utility classes
+// Use utility classes (recommended for consistency)
 className="hover-transition"
 className="hover-interactive"
+className="transition-colors-default"  // Standard color transition (24 uses)
 
-// Or inline for custom transitions
+// Or inline Tailwind (acceptable for clarity)
 transition-colors duration-200 ease-out motion-reduce:transition-none
 ```
 
