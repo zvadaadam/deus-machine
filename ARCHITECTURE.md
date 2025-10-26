@@ -306,10 +306,8 @@ curl -X POST http://localhost:{port}/api/sessions/{sessionId}/messages \
 
 ### Issue: Backend silently crashes
 
-**Solution:** Added comprehensive error handling:
-- Global uncaughtException handler
-- Global unhandledRejection handler
-- Child process error handlers
+**Solution:** Comprehensive error handling is in place:
+- Global uncaughtException handler (backend/server.cjs:123-150)
+- Global unhandledRejection handler (backend/server.cjs:123-150)
+- Child process error handlers (backend/lib/claude-session.cjs:381-433)
 - Detailed logging at each step
-
-See: `BACKEND_CRASH_BUG_SOLUTION.md`
