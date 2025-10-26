@@ -401,6 +401,13 @@
     .hover-primary-text:hover {
       color: var(--primary);
     }
+
+    /* Standard color transition (replaces: transition-colors duration-200 ease-out) */
+    .transition-colors-default {
+      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+      transition-duration: 200ms;
+      transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
   }
 
   /* Arc browser-style frosted glass vibrancy */
