@@ -200,6 +200,25 @@ function handleClaudeMessage(sessionId, message) {
       `).run(messageId, sessionId, prepared.content, sentAt, sdkMessageId);
 
       console.log(`   ✅ Saved assistant message for session ${sessionId.substring(0, 8)} (sdk: ${sdkMessageId})`);
+
+      // ✅ NEW: Notify sidecar for real-time frontend update
+      try {
+        const { getSidecarManager } = require('./sidecar/index.cjs');
+        const sidecar = getSidecarManager();
+        sidecar.send({
+          type: 'frontend_event',
+          event: 'session:message',
+          payload: {
+            session_id: sessionId,
+            message_id: messageId,
+            role: 'assistant',
+            sdk_message_id: sdkMessageId
+          }
+        });
+        console.log(`   📢 Emitted session:message event`);
+      } catch (error) {
+        console.error('   ⚠️  Failed to emit event (sidecar not connected):', error.message);
+      }
     } catch (error) {
       console.error('Failed to save assistant message:', error);
     }
