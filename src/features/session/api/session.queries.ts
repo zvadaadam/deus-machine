@@ -11,6 +11,11 @@ import { useMemo } from 'react';
 
 /**
  * Fetch session details with dynamic polling based on status
+ *
+ * NOTE: Polling is kept even on desktop because:
+ * - Only `session:message` events are implemented (not status changes)
+ * - Session status updates (working → idle) still need polling
+ * - Future: Implement session status events to eliminate polling on desktop
  */
 export function useSession(sessionId: string | null) {
   return useQuery({
@@ -18,29 +23,40 @@ export function useSession(sessionId: string | null) {
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
     // Dynamic polling: faster when working, slower when idle
+    // TODO: Disable on desktop once session status events are implemented
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      return session?.status === 'working' ? 1000 : 3000;
+      return session?.status === 'working' ? 2000 : 5000;
     },
-    staleTime: 500,
+    staleTime: 10000, // 10 seconds (was 500ms)
   });
 }
 
 /**
- * Fetch messages for a session with dynamic polling
+ * Fetch messages for a session with smart fallback
+ * - Desktop (Tauri): Real-time events, no polling
+ * - Web (Browser): Smart polling when session is working
  */
-export function useMessages(sessionId: string | null) {
+export function useMessages(sessionId: string | null, sessionStatus?: SessionStatus) {
   return useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ''),
     queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
-    // Dynamic polling based on session status
+    // ✅ Smart fallback: Events in Tauri, polling in browser
     refetchInterval: (query) => {
-      // We need to get session status from the session query
-      // For now, use conservative polling
-      return 2000;
+      // Desktop mode (Tauri): Events handle updates, no polling
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        return false;
+      }
+
+      // Web mode (Browser): Poll only when session is working
+      if (sessionStatus === 'working') {
+        return 2000; // Poll every 2s when Claude is working
+      }
+
+      return false; // Don't poll when idle
     },
-    staleTime: 500,
+    staleTime: 30000, // 30 seconds
   });
 }
 
@@ -50,7 +66,8 @@ export function useMessages(sessionId: string | null) {
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const messagesQuery = useMessages(sessionId);
+  const sessionStatus = (sessionQuery.data?.status as SessionStatus) || 'idle';
+  const messagesQuery = useMessages(sessionId, sessionStatus);
 
   // Parse content helper (from original useMessages)
   const parseContent = (content: string) => {

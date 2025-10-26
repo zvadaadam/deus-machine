@@ -104,6 +104,13 @@ class UnixSocketServer {
       const message = JSON.parse(line);
       console.log('[SOCKET] 📨 Received:', message.command || message.type);
 
+      // ✅ NEW: Handle frontend_event type - broadcast to all clients
+      if (message.type === 'frontend_event') {
+        console.log('[SOCKET] 📢 Broadcasting event:', message.event);
+        this.broadcast(message);
+        return; // Don't send response, just broadcast
+      }
+
       const response = await this.routeMessage(message);
       this.send(socket, response);
     } catch (error) {

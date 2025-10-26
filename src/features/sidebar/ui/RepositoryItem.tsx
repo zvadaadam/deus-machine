@@ -22,7 +22,6 @@ export function RepositoryItem({
   repository,
   isCollapsed,
   selectedWorkspaceId,
-  diffStats,
   onToggleCollapse,
   onWorkspaceClick,
   onNewWorkspace,
@@ -140,7 +139,6 @@ export function RepositoryItem({
               key={workspace.id}
               workspace={workspace}
               isActive={workspace.id === selectedWorkspaceId}
-              diffStats={diffStats[workspace.id]}
               onClick={() => onWorkspaceClick(workspace)}
               onArchive={onArchive}
             />

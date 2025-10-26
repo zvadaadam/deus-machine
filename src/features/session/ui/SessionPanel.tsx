@@ -9,6 +9,7 @@ import {
 import {
   useAutoScroll,
   useSessionActions,
+  useSessionEvents,
 } from "../hooks";
 import { SessionProvider } from '../context';
 import {
@@ -38,6 +39,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
   // Custom hooks (useSocket manages socket connection lifecycle)
   useSocket();
+
+  // ✅ NEW: Listen for real-time session events from Tauri
+  useSessionEvents(sessionId);
 
   // TanStack Query hooks
   const {
