@@ -3,6 +3,20 @@
  *
  * Listens for real-time session events from Tauri and updates React Query cache
  * Only works in Tauri mode (desktop app)
+ *
+ * ARCHITECTURE (Event Flow):
+ * 1. Backend saves message to SQLite
+ * 2. Backend emits event to sidecar via Unix socket
+ * 3. Sidecar broadcasts to all connected clients
+ * 4. Rust background thread reads event
+ * 5. Rust emits Tauri event to frontend
+ * 6. This hook receives event → invalidates React Query cache
+ * 7. UI updates instantly (<100ms latency)
+ *
+ * MEMORY LEAK FIX (2025-10-26):
+ * - Was: Stored unlisten function in variable, race condition if unmount before promise resolves
+ * - Now: Store promise itself, cleanup awaits promise (guaranteed cleanup)
+ * - Prevents orphaned listeners on fast navigation between sessions
  */
 
 import { useEffect } from 'react';

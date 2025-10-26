@@ -289,6 +289,31 @@ src/
 
 Test if the backend or frontend works using the browser tool or running tests.
 
+## Documentation Policy
+
+**CRITICAL:** Documentation lives IN the code, not in separate markdown files!
+
+- ✅ **Add inline comments** for complex logic, architecture decisions, performance optimizations
+- ✅ **Use JSDoc/TSDoc** for function documentation
+- ❌ **NO separate .md files** for technical documentation (they get deleted after PR merge)
+- ❌ **NO architecture/design docs** - put that knowledge in code comments
+- ✅ **Exception:** CLAUDE.md and README.md are permanent
+
+**Why:** Separate docs get outdated. Code comments stay current.
+
+**Example:**
+```typescript
+// ❌ BAD - Don't create ARCHITECTURE.md
+// ✅ GOOD - Document in the code:
+/**
+ * Event Flow: Backend → Unix Socket → Sidecar → Rust → Tauri Events → Frontend
+ * We use Unix socket instead of HTTP SSE because:
+ * - Infrastructure already existed (sidecar communication)
+ * - No HTTP overhead for desktop app
+ * - ~150 lines vs ~200+ for SSE
+ */
+```
+
 ## AVOID AT ALL COST
 - Never edit or even modify outside of your worktree directory — it's STRICTLY prohibited.
 - Never start this app outside of your worktree directory — it's STRICTLY prohibited.
