@@ -20,9 +20,9 @@ export function useSession(sessionId: string | null) {
     // Dynamic polling: faster when working, slower when idle
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      return session?.status === 'working' ? 1000 : 3000;
+      return session?.status === 'working' ? 2000 : 5000;
     },
-    staleTime: 500,
+    staleTime: 10000, // 10 seconds (was 500ms)
   });
 }
 
@@ -31,9 +31,7 @@ export function useSession(sessionId: string | null) {
  * - Desktop (Tauri): Real-time events, no polling
  * - Web (Browser): Smart polling when session is working
  */
-export function useMessages(sessionId: string | null) {
-  const session = useSession(sessionId);
-
+export function useMessages(sessionId: string | null, sessionStatus?: SessionStatus) {
   return useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ''),
     queryFn: () => SessionService.fetchMessages(sessionId!),
@@ -46,8 +44,7 @@ export function useMessages(sessionId: string | null) {
       }
 
       // Web mode (Browser): Poll only when session is working
-      const sessionData = session.data;
-      if (sessionData?.status === 'working') {
+      if (sessionStatus === 'working') {
         return 2000; // Poll every 2s when Claude is working
       }
 
@@ -63,7 +60,8 @@ export function useMessages(sessionId: string | null) {
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const messagesQuery = useMessages(sessionId);
+  const sessionStatus = (sessionQuery.data?.status as SessionStatus) || 'idle';
+  const messagesQuery = useMessages(sessionId, sessionStatus);
 
   // Parse content helper (from original useMessages)
   const parseContent = (content: string) => {
