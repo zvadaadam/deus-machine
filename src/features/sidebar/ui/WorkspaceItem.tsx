@@ -6,6 +6,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration } from "@/shared/hooks";
+import { useDiffStats } from "@/features/workspace/api";
 import type { WorkspaceItemProps } from "../model/types";
 
 /**
@@ -15,7 +16,6 @@ import type { WorkspaceItemProps } from "../model/types";
 export function WorkspaceItem({
   workspace,
   isActive,
-  diffStats,
   onClick,
   onArchive
 }: WorkspaceItemProps) {
@@ -26,6 +26,9 @@ export function WorkspaceItem({
     status: workspace.session_status,
     latestMessageSentAt: workspace.latest_message_sent_at,
   });
+
+  // Fetch diff stats with conditional polling based on session status
+  const { data: diffStats } = useDiffStats(workspace.id, workspace.session_status);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);

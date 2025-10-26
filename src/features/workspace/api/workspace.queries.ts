@@ -38,14 +38,19 @@ export function useStats() {
 
 /**
  * Fetch diff stats for a specific workspace
+ * Conditionally polls only when workspace is actively working
  */
-export function useDiffStats(workspaceId: string | null) {
+export function useDiffStats(
+  workspaceId: string | null,
+  sessionStatus?: string | null
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ''),
     queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
     enabled: !!workspaceId,
-    refetchInterval: API_CONFIG.POLL_INTERVAL,
-    staleTime: 1000,
+    staleTime: 30000, // 30 seconds for idle workspaces
+    // ✅ Poll ONLY when workspace is actively working
+    refetchInterval: sessionStatus === 'working' ? 5000 : false,
   });
 }
 
@@ -122,8 +127,12 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 
 /**
  * Fetch file changes for a workspace
+ * Conditionally polls only when workspace is actively working
  */
-export function useFileChanges(workspaceId: string | null) {
+export function useFileChanges(
+  workspaceId: string | null,
+  sessionStatus?: string | null
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ''),
     queryFn: async () => {
@@ -131,7 +140,9 @@ export function useFileChanges(workspaceId: string | null) {
       return result.files || [];
     },
     enabled: !!workspaceId,
-    staleTime: 5000, // Cache for 5s since file changes are less frequent
+    staleTime: 30000, // 30 seconds for idle workspaces
+    // ✅ Poll ONLY when workspace is actively working
+    refetchInterval: sessionStatus === 'working' ? 5000 : false,
   });
 }
 

@@ -17,8 +17,11 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
   const currentFileRef = useRef<string | null>(null);
   const { openDiffModal } = useUIStore();
 
-  // Query data
-  const { data: fileChanges = [] } = useFileChanges(selectedWorkspace?.id || null);
+  // Query data with conditional polling based on session status
+  const { data: fileChanges = [] } = useFileChanges(
+    selectedWorkspace?.id || null,
+    selectedWorkspace?.session_status
+  );
   const { data: devServers = [] } = useDevServers(selectedWorkspace?.id || null);
 
   /**
