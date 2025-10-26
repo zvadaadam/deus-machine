@@ -27,8 +27,12 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   // Get appropriate renderer from registry
   const ToolRenderer = toolRegistry.getRenderer(block.name);
 
-  // Note: Tool result linking happens automatically via toolResultMap
-  // After memoization fixes, this component only re-renders when block/toolResult actually changes
+  // Debug log to verify memoization is working (should NOT spam on input typing)
+  if (import.meta.env.DEV && toolResult) {
+    console.debug(`[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
+      toolResult.is_error ? '❌ Error' : '✅ Success'
+    );
+  }
 
   return (
     <div className="my-1">
