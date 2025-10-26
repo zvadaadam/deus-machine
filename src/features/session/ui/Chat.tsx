@@ -134,7 +134,7 @@ export function Chat({
 
           return (
             <>
-              <div className="flex flex-col pb-32 min-h-0">
+              <div className="flex flex-col pb-32 min-h-0 min-w-0">
                 {renderableMessages.map((message, renderIndex) => {
                   const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
                   const nextRole = renderIndex < renderableMessages.length - 1 ? renderableMessages[renderIndex + 1].role : null;
@@ -147,7 +147,7 @@ export function Chat({
                     <div
                       key={message.id}
                       ref={isLastRendered ? lastMessageRef : undefined}
-                      className={spacingClass}
+                      className={cn(spacingClass, "min-w-0")}
                     >
                       <MessageItem
                         message={message}
