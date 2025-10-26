@@ -162,7 +162,7 @@ export function BaseToolRenderer({
       {/* Expandable Content - CSS transition */}
       <div
         className={cn(
-          'overflow-hidden transition-all duration-200 ease-out',
+          'overflow-hidden overflow-x-auto min-w-0 transition-all duration-200 ease-out',
           isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         )}
       >
