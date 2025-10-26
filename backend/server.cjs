@@ -463,9 +463,10 @@ app.get('/api/workspaces/:id/diff-stats', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
+    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
 
-    // Get git diff stats comparing against parent branch
+    // Get git diff stats comparing against remote parent branch (origin/main)
+    // This ensures we always compare against the latest remote state, even if local main is outdated
     try {
       const output = execFileSync(
         'git',
@@ -509,7 +510,7 @@ app.get('/api/workspaces/:id/diff-files', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
+    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
 
     try {
       const output = execFileSync(
@@ -566,7 +567,7 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = workspace.parent_branch || workspace.default_branch || 'main';
+    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
 
     try {
       const output = execFileSync(
