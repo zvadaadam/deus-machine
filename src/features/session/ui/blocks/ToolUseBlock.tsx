@@ -27,12 +27,8 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   // Get appropriate renderer from registry
   const ToolRenderer = toolRegistry.getRenderer(block.name);
 
-  // Log linking in dev mode
-  if (import.meta.env.DEV && toolResult) {
-    console.log(`[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
-      toolResult.is_error ? '❌ Error' : '✅ Success'
-    );
-  }
+  // Note: Tool result linking happens automatically via toolResultMap
+  // After memoization fixes, this component only re-renders when block/toolResult actually changes
 
   return (
     <div className="my-1">
