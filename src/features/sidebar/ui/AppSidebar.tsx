@@ -30,7 +30,6 @@ import { SidebarFooter } from "./SidebarFooter";
 export function AppSidebar({
   repositories,
   selectedWorkspaceId,
-  diffStats,
   onWorkspaceClick,
   onNewWorkspace,
   onAddRepository,
@@ -223,7 +222,6 @@ export function AppSidebar({
                     repository={repo}
                     isCollapsed={collapsedRepos.has(repo.repo_id)}
                     selectedWorkspaceId={selectedWorkspaceId}
-                    diffStats={diffStats}
                     onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                     onWorkspaceClick={onWorkspaceClick}
                     onNewWorkspace={onNewWorkspace}
@@ -243,7 +241,6 @@ export function AppSidebar({
                 repository={repo}
                 isCollapsed={collapsedRepos.has(repo.repo_id)}
                 selectedWorkspaceId={selectedWorkspaceId}
-                diffStats={diffStats}
                 onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
                 onWorkspaceClick={onWorkspaceClick}
                 onNewWorkspace={onNewWorkspace}

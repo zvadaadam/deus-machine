@@ -20,7 +20,6 @@ export interface Repository {
 export interface AppSidebarProps {
   repositories: Repository[];
   selectedWorkspaceId: string | null;
-  diffStats: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onAddRepository?: () => void;
@@ -38,7 +37,6 @@ export interface RepositoryItemProps {
   repository: Repository;
   isCollapsed: boolean;
   selectedWorkspaceId: string | null;
-  diffStats: Record<string, DiffStats>;
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
@@ -57,7 +55,6 @@ export interface RepositoryItemProps {
 export interface WorkspaceItemProps {
   workspace: Workspace;
   isActive: boolean;
-  diffStats?: DiffStats;
   onClick: () => void;
   onArchive?: (workspaceId: string) => void;
 }

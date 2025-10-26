@@ -38,14 +38,26 @@ export function useStats() {
 
 /**
  * Fetch diff stats for a specific workspace
+ * Conditionally polls only when workspace is actively working
+ *
+ * NOTE: Polling is kept even on desktop because:
+ * - No events implemented for git diff changes (would require file watching)
+ * - Diff stats badges need updates when Claude edits files
+ * - Polling only happens when workspace is actively working (96-100% reduction)
+ * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useDiffStats(workspaceId: string | null) {
+export function useDiffStats(
+  workspaceId: string | null,
+  sessionStatus?: string | null
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ''),
     queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
     enabled: !!workspaceId,
-    refetchInterval: API_CONFIG.POLL_INTERVAL,
-    staleTime: 1000,
+    staleTime: 30000, // 30 seconds for idle workspaces
+    // ✅ Poll ONLY when workspace is actively working
+    // TODO: Disable on desktop once git diff events are implemented
+    refetchInterval: sessionStatus === 'working' ? 5000 : false,
   });
 }
 
@@ -122,8 +134,18 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 
 /**
  * Fetch file changes for a workspace
+ * Conditionally polls only when workspace is actively working
+ *
+ * NOTE: Polling is kept even on desktop because:
+ * - No events implemented for git file changes (would require file watching)
+ * - File changes panel needs updates when Claude edits files
+ * - Polling only happens when workspace is actively working (96-100% reduction)
+ * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useFileChanges(workspaceId: string | null) {
+export function useFileChanges(
+  workspaceId: string | null,
+  sessionStatus?: string | null
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ''),
     queryFn: async () => {
@@ -131,7 +153,10 @@ export function useFileChanges(workspaceId: string | null) {
       return result.files || [];
     },
     enabled: !!workspaceId,
-    staleTime: 5000, // Cache for 5s since file changes are less frequent
+    staleTime: 30000, // 30 seconds for idle workspaces
+    // ✅ Poll ONLY when workspace is actively working
+    // TODO: Disable on desktop once git file events are implemented
+    refetchInterval: sessionStatus === 'working' ? 5000 : false,
   });
 }
 
