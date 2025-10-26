@@ -39,14 +39,17 @@ npm run dev  # DON'T! This only runs frontend without backend!
 
 ## Troubleshooting
 
-### Port 1420 already in use
+### Frontend port conflict
+Vite will automatically use the next available port if 1420 is taken (e.g., 1421, 1422...).
+
+If you need to kill a specific port:
 ```bash
 lsof -ti:1420 | xargs kill -9
 npm run dev:full
 ```
 
 ### Check what's running
-- Frontend: http://localhost:1420/
+- Frontend: http://localhost:1420/ (or next available port - check Vite output)
 - Backend: Dynamic port (check terminal output for "Backend server started on port XXXXX")
 
 
@@ -295,15 +298,13 @@ Test if the backend or frontend works using the browser tool or running tests.
 
 - ✅ **Add inline comments** for complex logic, architecture decisions, performance optimizations
 - ✅ **Use JSDoc/TSDoc** for function documentation
-- ❌ **NO separate .md files** for technical documentation (they get deleted after PR merge)
-- ❌ **NO architecture/design docs** - put that knowledge in code comments
-- ✅ **Exception:** CLAUDE.md and README.md are permanent
+- ❌ **NO separate .md files** for implementation details (they get outdated quickly)
+- ✅ **Exception:** High-level docs are OK: README.md, ARCHITECTURE.md, CLAUDE.md, DEVELOPMENT.md
 
-**Why:** Separate docs get outdated. Code comments stay current.
+**Why:** Detailed docs get outdated. Code comments stay current.
 
 **Example:**
 ```typescript
-// ❌ BAD - Don't create ARCHITECTURE.md
 // ✅ GOOD - Document in the code:
 /**
  * Event Flow: Backend → Unix Socket → Sidecar → Rust → Tauri Events → Frontend
@@ -313,6 +314,12 @@ Test if the backend or frontend works using the browser tool or running tests.
  * - ~150 lines vs ~200+ for SSE
  */
 ```
+
+**What to document WHERE:**
+- Code comments: Implementation details, why decisions were made, gotchas
+- ARCHITECTURE.md: High-level system design, message flows
+- README.md: Project overview, quick start, tech stack
+- DEVELOPMENT.md: How to run the app, troubleshooting
 
 ## AVOID AT ALL COST
 - Never edit or even modify outside of your worktree directory — it's STRICTLY prohibited.
