@@ -102,13 +102,14 @@ But for normal development, use `tauri:dev` or `dev:full`!
 - Dynamic to avoid conflicts
 
 **Frontend:**
-- Fixed port: `1420` (configured in Tauri)
-- In web mode: Uses Vite default `5173` or `1420`
+- Default port: `1420`
+- Auto-increments to next available port if 1420 is taken (1421, 1422, etc.)
+- Check Vite terminal output to see actual port used
 
 **Backend Discovery:**
 1. **Tauri mode:** `invoke('get_backend_port')` → instant ✅
 2. **Web dev mode:** `VITE_BACKEND_PORT` env var → instant ✅
-3. **Fallback:** Port discovery (36-port scan) → slow ⚠️
+3. **Fallback:** Port discovery (checks localStorage, then scans common ports) → slower ⚠️
 
 The fallback only triggers if you run things incorrectly!
 
