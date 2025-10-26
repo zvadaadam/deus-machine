@@ -91,7 +91,7 @@ export function MessageItem({ message }: MessageItemProps) {
         roleStyles.maxWidth,
         roleStyles.container,
         message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-0',
-        'flex flex-col gap-2 overflow-visible',
+        'flex flex-col gap-2 min-w-0 overflow-x-hidden',
         chatTheme.common.transition
       )}
     >
@@ -145,7 +145,7 @@ export function MessageItem({ message }: MessageItemProps) {
       )}
 
       {/* Message content - uses BlockRenderer */}
-      <div className="flex flex-col">
+      <div className="flex flex-col min-w-0">
         {Array.isArray(contentBlocks) ? (
           contentBlocks.map((block: ContentBlock | string, index: number) => {
             // Generate unique key: use tool_use id if available, otherwise fallback to index

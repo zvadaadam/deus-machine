@@ -165,7 +165,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   if (embedded) {
     return (
       <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
-        <div className="flex flex-col flex-1 min-h-0 w-full relative">
+        <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
           <Chat
             messages={messages}
             loading={loading}
