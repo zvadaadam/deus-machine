@@ -17,7 +17,6 @@ import { useKeyboardShortcuts } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
-  useBulkDiffStats,
   usePRStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
@@ -63,8 +62,6 @@ export function MainLayout() {
   // Zustand stores - Global state
   const selectedWorkspace = useWorkspaceStore((state) => state.selectedWorkspace);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
-  const diffStats = useWorkspaceStore((state) => state.diffStats);
-  const setMultipleDiffStats = useWorkspaceStore((state) => state.setMultipleDiffStats);
 
   const {
     showNewWorkspaceModal,
@@ -83,19 +80,11 @@ export function MainLayout() {
   // TanStack Query hooks - automatic polling and caching
   const workspacesQuery = useWorkspacesByRepo('ready');
   const statsQuery = useStats();
-  const diffStatsQuery = useBulkDiffStats(workspacesQuery.data || []);
 
   const repoGroups = workspacesQuery.data || [];
   const stats = statsQuery.data || null;
   const loading = workspacesQuery.isLoading || statsQuery.isLoading;
   const status = workspacesQuery.isError ? 'Error loading workspaces' : 'Connected';
-
-  // Sync diff stats to store (for compatibility with existing code)
-  useEffect(() => {
-    if (diffStatsQuery.data) {
-      setMultipleDiffStats(diffStatsQuery.data);
-    }
-  }, [diffStatsQuery.data, setMultipleDiffStats]);
 
   // Local component state (not global)
   const [selectedRepoId, setSelectedRepoId] = useState('');
@@ -145,7 +134,6 @@ export function MainLayout() {
     onRefresh: async () => {
       // Refetch all queries
       workspacesQuery.refetch();
-      diffStatsQuery.refetch();
       if (selectedWorkspace) {
         prStatusQuery.refetch();
       }
@@ -452,7 +440,6 @@ export function MainLayout() {
         <AppSidebar
           repositories={repoGroups}
           selectedWorkspaceId={selectedWorkspace?.id || null}
-          diffStats={diffStats}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
           onAddRepository={handleOpenProject}
