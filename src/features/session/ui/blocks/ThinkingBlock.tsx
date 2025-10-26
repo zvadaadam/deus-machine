@@ -75,7 +75,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
 
       {/* Content - Only when expanded */}
       {isExpanded && (
-        <div className="px-3 pb-3 pt-1">
+        <div className="px-3 pb-3 pt-1 min-w-0 overflow-x-auto">
           <div
             className={cn(
               'text-sm leading-relaxed whitespace-pre-wrap',

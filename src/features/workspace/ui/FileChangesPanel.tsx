@@ -55,7 +55,7 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Dev Servers Section */}
       {selectedWorkspace && devServers.length > 0 && (
         <div className="border-b border-border/50 bg-background/30">
@@ -69,14 +69,14 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                 href={server.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group elevation-1 hover:elevation-2 [@media(hover:hover)and(pointer:fine)]:hover:bg-sidebar-accent/60 [@media(hover:hover)and(pointer:fine)]:transition-[background-color,box-shadow] [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:ease-out"
+                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group elevation-1 hover:elevation-2 hover-interactive"
                 title={`Open ${server.name} in browser`}
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
                   <Monitor className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-body-sm font-medium truncate [@media(hover:hover)and(pointer:fine)]:group-hover:text-primary [@media(hover:hover)and(pointer:fine)]:transition-colors [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:ease">{server.name}</div>
+                  <div className="text-body-sm font-medium truncate group-hover:hover-primary-text">{server.name}</div>
                   <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
@@ -87,7 +87,7 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
       )}
 
       {/* File Changes */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-4 py-2.5 sticky top-0 z-10 border-b border-border/50 bg-background/50 backdrop-blur-sm">
           <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">File Changes</h3>
         </div>
@@ -97,12 +97,12 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
               {fileChanges.map((file) => (
                 <div
                   key={file.file}
-                  className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer group elevation-1 hover:elevation-2 [@media(hover:hover)and(pointer:fine)]:hover:bg-sidebar-accent/60 [@media(hover:hover)and(pointer:fine)]:transition-[background-color,box-shadow] [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:ease-out"
+                  className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer group elevation-1 hover:elevation-2 hover-interactive"
                   onClick={() => handleFileClick(file.file)}
                   title="Click to view diff"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-body-sm font-medium truncate [@media(hover:hover)and(pointer:fine)]:group-hover:text-primary [@media(hover:hover)and(pointer:fine)]:transition-colors [@media(hover:hover)and(pointer:fine)]:duration-200 [@media(hover:hover)and(pointer:fine)]:ease">{file.file.split('/').pop()}</div>
+                    <div className="text-body-sm font-medium truncate group-hover:hover-primary-text">{file.file.split('/').pop()}</div>
                     <div className="text-caption text-muted-foreground truncate font-mono">{file.file}</div>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs flex-shrink-0 ml-3">

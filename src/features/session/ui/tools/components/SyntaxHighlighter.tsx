@@ -32,7 +32,7 @@ export function SyntaxHighlighter({
   return (
     <div className={cn('font-mono text-sm', className)}>
       {showLineNumbers ? (
-        <table className="w-full border-collapse">
+        <table className="border-collapse">
           <tbody>
             {lines.map((line, i) => (
               <tr key={i} className="hover:bg-muted/30 transition-colors">
