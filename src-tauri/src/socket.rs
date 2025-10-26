@@ -160,10 +160,13 @@ impl SocketManager {
                             }
                         }
                     }
-                }
 
-                // Wait a bit before checking again
-                thread::sleep(Duration::from_millis(100));
+                    // Wait a bit before checking again
+                    thread::sleep(Duration::from_millis(100));
+                } else {
+                    // No connection - wait longer before retrying to avoid busy-wait
+                    thread::sleep(Duration::from_secs(1));
+                }
             }
         });
     }

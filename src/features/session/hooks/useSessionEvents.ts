@@ -39,10 +39,8 @@ export function useSessionEvents(sessionId: string | null) {
       return;
     }
 
-    let unlistenFn: (() => void) | null = null;
-
-    // Listen for session:message events
-    listen<SessionMessageEvent>('session:message', (event) => {
+    // Store the promise to ensure proper cleanup even if component unmounts quickly
+    const unlistenPromise = listen<SessionMessageEvent>('session:message', (event) => {
       const { session_id, message_id, sdk_message_id } = event.payload;
 
       // Only process events for this session
@@ -63,16 +61,19 @@ export function useSessionEvents(sessionId: string | null) {
           queryKey: queryKeys.sessions.detail(sessionId),
         });
       }
-    }).then((unlisten) => {
-      unlistenFn = unlisten;
+    });
+
+    // Log when listener is ready
+    unlistenPromise.then(() => {
       console.log('[Events] 👂 Listening for session events:', sessionId.substring(0, 8));
     });
 
+    // Cleanup: await the promise to get unlisten function
     return () => {
-      if (unlistenFn) {
-        unlistenFn();
+      unlistenPromise.then((unlisten) => {
+        unlisten();
         console.log('[Events] 🔇 Stopped listening for session events');
-      }
+      });
     };
   }, [sessionId, queryClient]);
 }
