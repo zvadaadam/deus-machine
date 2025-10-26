@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SessionService } from './session.service';
 import { queryKeys } from '@/shared/api/queryKeys';
 import type { Session, Message, SessionStatus } from '../types';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 
 /**
  * Fetch session details with dynamic polling based on status
@@ -70,7 +70,8 @@ export function useSessionWithMessages(sessionId: string | null) {
   const messagesQuery = useMessages(sessionId, sessionStatus);
 
   // Parse content helper (from original useMessages)
-  const parseContent = (content: string) => {
+  // Memoized to prevent Context cascade re-renders
+  const parseContent = useCallback((content: string) => {
     try {
       const parsed = JSON.parse(content);
       return parsed.message?.content || parsed.content || [];
@@ -78,7 +79,7 @@ export function useSessionWithMessages(sessionId: string | null) {
       // If JSON.parse fails, treat it as plain text
       return [{ type: 'text', text: content }];
     }
-  };
+  }, []); // Empty deps - pure function with no external dependencies
 
   // Build tool result map
   const toolResultMap = useMemo(() => {

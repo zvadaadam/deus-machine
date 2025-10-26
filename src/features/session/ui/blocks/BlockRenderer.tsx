@@ -43,8 +43,9 @@ export function BlockRenderer({ block, index, role }: BlockRendererProps) {
 
     case 'tool_result':
       // Don't render tool_result standalone - it's already linked to tool_use
+      // Debug log to verify memoization is working (should NOT spam on input typing)
       if (import.meta.env.DEV) {
-        console.log(`[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`);
+        console.debug(`[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`);
       }
       return null;
 
