@@ -450,6 +450,14 @@ export function useCreateWorkspace() {
 
 ### Option 2: Server-Sent Events (SSE) ⭐ **BEST LONG-TERM**
 
+> **📝 Implementation Note:** This document describes SSE as a potential solution, but the **actual implementation uses Unix Socket + Tauri Events** instead. See `TAURI_EVENTS_SOLUTION.md` for details on the implemented approach. We chose Unix socket because:
+> - Infrastructure already existed (sidecar communication)
+> - Tauri event system proven working (PTY integration)
+> - Desktop-first approach (no HTTP overhead)
+> - ~150 lines of code vs ~200+ for SSE
+>
+> The documented SSE approach remains valid for web-only scenarios or as a future alternative.
+
 **Philosophy:** Backend pushes updates when they happen, frontend listens.
 
 #### 2.1 Backend Changes (Add SSE Endpoint)
