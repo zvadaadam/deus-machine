@@ -137,6 +137,70 @@ PanelGroup (horizontal)
 - Lines changed: 4
 - Impact: Messages with wide content now wrap/scroll within bounds
 
+### Phase 6: The Real Root Cause - w-full Breaking Flexbox (2025-10-26)
+
+⭐ **This was the ACTUAL root cause all along**
+
+- [x] **Removed `w-full` from panel content components**
+  - Files: `BrowserPanel.tsx:448`, `SessionPanel.tsx:168`
+  - **Root Cause**: `w-full` (width: 100%) forces flex parents to expand
+  - **User Clue**: "Even after resizing messages smaller, opening browser breaks layout"
+
+**Why This Was Missed Initially:**
+- Phases 4 & 5 were band-aids treating symptoms, not the cause
+- `w-full` looked innocent but breaks flexbox constraints
+- The issue appeared when switching tabs because different content rendered
+
+**The Architectural Problem:**
+```tsx
+// ❌ WRONG - Forces panel to 100% width
+<Panel id="right" defaultSize={38}>
+  <BrowserPanel>
+    <div className="w-full flex flex-col h-full">
+      // This w-full says: "I must be 100% of viewport width"
+      // Panel has no choice but to expand, pushing center panel
+    </div>
+  </BrowserPanel>
+</Panel>
+
+// ✅ CORRECT - Natural flex sizing
+<Panel id="right" defaultSize={38}>
+  <BrowserPanel>
+    <div className="flex flex-col h-full">
+      // Panel controls width, content adapts
+    </div>
+  </BrowserPanel>
+</Panel>
+```
+
+**How w-full Breaks Flexbox:**
+1. PanelGroup uses `display: flex` for horizontal layout
+2. Panel children have size constraints (defaultSize, minSize, maxSize)
+3. Content inside panels requests `width: 100%` via `w-full`
+4. Browser resolves: "100% of what?" → viewport width
+5. Panel must expand to accommodate content's width request
+6. Panel expansion violates PanelGroup constraints
+7. Other panels get squeezed/pushed
+
+**Critical Rule:**
+```
+In CSS Flexbox Containers:
+- ✅ Use: flex-1, flex-grow (grow to fill available space)
+- ❌ Avoid: w-full, width: 100% (force absolute width, break constraints)
+```
+
+**Phase 6 Stats:**
+- Files modified: 2 (BrowserPanel, SessionPanel)
+- Lines changed: 2
+- Impact: **Layout now stable** - panels maintain proportions on all tab switches
+
+**Key Learning:**
+This is an architectural fix, not a workaround. The previous phases (4 & 5)
+were addressing symptoms. Understanding the flexbox model is critical:
+- Flex children size based on content + flex properties
+- Percentage widths (`w-full`) reference containing block, not flex container
+- This breaks the flex constraint system entirely
+
 ---
 
 ## In Progress 🚧
