@@ -27,16 +27,33 @@ export function useSession(sessionId: string | null) {
 }
 
 /**
- * Fetch messages for a session with dynamic polling
+ * Fetch messages for a session with smart fallback
+ * - Desktop (Tauri): Real-time events, no polling
+ * - Web (Browser): Smart polling when session is working
  */
 export function useMessages(sessionId: string | null) {
+  const session = useSession(sessionId);
+
   return useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ''),
     queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
-    // ✅ NO POLLING - real-time events via Tauri handle updates
-    refetchInterval: false,
-    staleTime: 30000, // 30 seconds (was 500ms)
+    // ✅ Smart fallback: Events in Tauri, polling in browser
+    refetchInterval: (query) => {
+      // Desktop mode (Tauri): Events handle updates, no polling
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        return false;
+      }
+
+      // Web mode (Browser): Poll only when session is working
+      const sessionData = session.data;
+      if (sessionData?.status === 'working') {
+        return 2000; // Poll every 2s when Claude is working
+      }
+
+      return false; // Don't poll when idle
+    },
+    staleTime: 30000, // 30 seconds
   });
 }
 
