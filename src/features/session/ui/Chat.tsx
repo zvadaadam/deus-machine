@@ -10,6 +10,7 @@ import { useWorkingDuration } from "@/shared/hooks";
 import type { RefObject } from "react";
 import { useSession } from "../context";
 import { Square } from "lucide-react";
+import { useMemo } from "react";
 
 type MessageRole = Message["role"];
 
@@ -88,6 +89,32 @@ export function Chat({
     latestMessageSentAt
   });
 
+  // Memoize message filtering to avoid re-parsing JSON on every render
+  const renderableMessages = useMemo(() => {
+    return messages.filter((message) => {
+      const contentBlocks = parseContent(message.content);
+      const isArray = Array.isArray(contentBlocks);
+      const onlyToolResults =
+        isArray &&
+        contentBlocks.length > 0 &&
+        contentBlocks.every((block: ContentBlock | string) =>
+          typeof block === "object" && block?.type === "tool_result"
+        );
+      const isEmpty =
+        (isArray && contentBlocks.length === 0) ||
+        (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
+      return !(onlyToolResults || isEmpty);
+    });
+  }, [messages, parseContent]);
+
+  // Calculate indicator margin based on last message role
+  const indicatorMarginClass = useMemo(() => {
+    const lastRenderableRole = renderableMessages.length
+      ? renderableMessages[renderableMessages.length - 1].role
+      : null;
+    return lastRenderableRole === "user" ? "mt-0" : "mt-1";
+  }, [renderableMessages]);
+
   return (
     <div
       id="chat-messages"
@@ -111,85 +138,61 @@ export function Chat({
           animate
         />
       ) : (
-        (() => {
-          const renderableMessages = messages.filter((message) => {
-            const contentBlocks = parseContent(message.content);
-            const isArray = Array.isArray(contentBlocks);
-            const onlyToolResults =
-              isArray &&
-              contentBlocks.length > 0 &&
-              contentBlocks.every((block: ContentBlock | string) =>
-                typeof block === "object" && block?.type === "tool_result"
+        <>
+          <div className="flex flex-col pb-32 min-h-0 min-w-0">
+            {renderableMessages.map((message, renderIndex) => {
+              const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
+              const nextRole = renderIndex < renderableMessages.length - 1 ? renderableMessages[renderIndex + 1].role : null;
+              const spacingClass = getMessageSpacingClasses(message.role, prevRole, nextRole, renderIndex === 0);
+
+              // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
+              const isLastRendered = renderIndex === renderableMessages.length - 1;
+
+              return (
+                <div
+                  key={message.id}
+                  ref={isLastRendered ? lastMessageRef : undefined}
+                  className={cn(spacingClass, "min-w-0")}
+                >
+                  <MessageItem
+                    message={message}
+                  />
+                </div>
               );
-            const isEmpty =
-              (isArray && contentBlocks.length === 0) ||
-              (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
-            return !(onlyToolResults || isEmpty);
-          });
-
-          const lastRenderableRole = renderableMessages.length
-            ? renderableMessages[renderableMessages.length - 1].role
-            : null;
-          const indicatorMarginClass = lastRenderableRole === "user" ? "mt-0" : "mt-1";
-
-          return (
-            <>
-              <div className="flex flex-col pb-32 min-h-0 min-w-0">
-                {renderableMessages.map((message, renderIndex) => {
-                  const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
-                  const nextRole = renderIndex < renderableMessages.length - 1 ? renderableMessages[renderIndex + 1].role : null;
-                  const spacingClass = getMessageSpacingClasses(message.role, prevRole, nextRole, renderIndex === 0);
-
-                  // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
-                  const isLastRendered = renderIndex === renderableMessages.length - 1;
-
-                  return (
-                    <div
-                      key={message.id}
-                      ref={isLastRendered ? lastMessageRef : undefined}
-                      className={cn(spacingClass, "min-w-0")}
-                    >
-                      <MessageItem
-                        message={message}
-                      />
-                    </div>
-                  );
-                })}
-                {sessionStatus === "working" && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className={cn(
-                      "flex items-center gap-2 p-2.5 px-3.5 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
-                      indicatorMarginClass,
-                    )}
+            })}
+            {sessionStatus === "working" && (
+              <div
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  "flex items-center gap-2 p-2.5 px-3.5 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
+                  indicatorMarginClass,
+                )}
+              >
+                <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
+                <span>
+                  Claude is working...
+                  {formattedDuration && (
+                    <span className="ml-1.5 text-success/80">({formattedDuration})</span>
+                  )}
+                </span>
+                {onStop && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onStop}
+                    className="ml-2 h-6 px-2 text-success/80 hover:text-success hover:bg-success/20"
+                    aria-label="Stop session"
+                    title="Stop Claude"
                   >
-                    <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
-                    <span>
-                      Claude is working...
-                      {formattedDuration && (
-                        <span className="ml-1.5 text-success/80">({formattedDuration})</span>
-                      )}
-                    </span>
-                    {onStop && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onStop}
-                        className="ml-2 h-6 px-2 text-success/80 hover:text-success hover:bg-success/20"
-                        aria-label="Stop session"
-                        title="Stop Claude"
-                      >
-                        <Square className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
+                    <Square className="h-3 w-3" />
+                  </Button>
                 )}
               </div>
-              <div ref={messagesEndRef} />
-            </>
-          );
-        })()
+            )}
+          </div>
+          <div ref={messagesEndRef} />
+        </>
       )}
     </div>
   );

@@ -13,7 +13,7 @@
  *   const { parseContent, toolResultMap } = useSession();
  */
 
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, ReactNode, useMemo } from 'react';
 import type { ContentBlock } from '../types';
 import type { ToolResultMap } from '../ui/chat-types';
 
@@ -35,8 +35,15 @@ export function SessionProvider({
   toolResultMap,
   children,
 }: SessionProviderProps) {
+  // Memoize context value to prevent unnecessary re-renders
+  // React uses Object.is() to compare values, so new object {} !== {} even if contents are same
+  const value = useMemo(
+    () => ({ parseContent, toolResultMap }),
+    [parseContent, toolResultMap]
+  );
+
   return (
-    <SessionContext.Provider value={{ parseContent, toolResultMap }}>
+    <SessionContext.Provider value={value}>
       {children}
     </SessionContext.Provider>
   );

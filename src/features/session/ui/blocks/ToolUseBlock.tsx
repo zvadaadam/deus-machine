@@ -27,9 +27,9 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   // Get appropriate renderer from registry
   const ToolRenderer = toolRegistry.getRenderer(block.name);
 
-  // Log linking in dev mode
+  // Debug log to verify memoization is working (should NOT spam on input typing)
   if (import.meta.env.DEV && toolResult) {
-    console.log(`[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
+    console.debug(`[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
       toolResult.is_error ? '❌ Error' : '✅ Success'
     );
   }
