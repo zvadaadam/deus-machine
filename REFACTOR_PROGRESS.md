@@ -97,6 +97,46 @@ PanelGroup (horizontal)
 - Panel distribution: 62% chat | 38% tools (was 85% | 15%)
 - User action needed: Clear localStorage 'conductor-root-layout' for reset
 
+### Phase 5: Message Content Overflow Fix (2025-10-26)
+
+- [x] **Prevented message content from breaking panel layout**
+  - Files: `MessageItem.tsx:94,148`, `Chat.tsx:137,150`
+  - **Root Cause**: Wide content (code, tools) pushed panels beyond constraints
+  - **Symptom**: When messages loaded, right panel got squeezed/overflowed
+
+**The Problem:**
+```tsx
+// BEFORE - Content could overflow horizontally
+<MessageItem className="overflow-visible" />  ❌
+<div className="flex flex-col pb-32 min-h-0">  ❌ Missing min-w-0
+  <div className={spacingClass}>  ❌ Missing min-w-0
+    <MessageItem />
+  </div>
+</div>
+```
+
+**The Fix:**
+```tsx
+// AFTER - Content constrained within panel bounds
+<MessageItem className="overflow-x-hidden min-w-0" />  ✅
+<div className="flex flex-col pb-32 min-h-0 min-w-0">  ✅
+  <div className={cn(spacingClass, "min-w-0")}>  ✅
+    <MessageItem />
+  </div>
+</div>
+```
+
+**Key Insights:**
+1. `overflow-visible` allows content to escape container bounds
+2. Flex children need `min-w-0` to shrink below content size
+3. Width constraints must propagate through entire hierarchy
+4. Vertical overflow OK (for hover buttons), horizontal must be hidden
+
+**Phase 5 Stats:**
+- Files modified: 2 (Chat.tsx, MessageItem.tsx)
+- Lines changed: 4
+- Impact: Messages with wide content now wrap/scroll within bounds
+
 ---
 
 ## In Progress 🚧
