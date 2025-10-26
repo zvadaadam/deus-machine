@@ -1,7 +1,7 @@
 # Styling Refactor Progress
 
 **Started:** 2025-10-26
-**Status:** Phase 3 Complete + Tested ✅
+**Status:** Phase 4 Complete + Ready for Testing ✅
 
 ---
 
@@ -67,6 +67,35 @@ Focused refactor to fix bugs, eliminate redundancy, and improve maintainability.
 - Characters saved: ~384
 - New utilities: 1
 - Pattern standardization: 24 potential uses
+
+### Phase 4: Panel Layout Fix (2025-10-26)
+
+- [x] **Fixed horizontal panel imbalance** - Added missing defaultSize props
+  - File: `src/app/layouts/MainLayout.tsx:461, 500`
+  - **Root Cause**: Center panel had no `defaultSize`, taking all remaining space
+  - **Visual Impact**: Chat panel was 85%, right panel only 15%
+  - **Fix**: Center `defaultSize={62}`, Right `defaultSize={38}`
+
+**Component Hierarchy Analysis:**
+```
+PanelGroup (horizontal)
+├── Panel id="center" ❌ BEFORE: minSize={30} only
+│   └── SessionPanel → Chat + MessageInput
+└── Panel id="right" ✅ Had: defaultSize={23}
+    └── Tabs → Browser/Changes/Terminal
+```
+
+**After Fix:**
+```
+PanelGroup (horizontal)
+├── Panel id="center" ✅ NOW: defaultSize={62} minSize={30} maxSize={75}
+└── Panel id="right" ✅ NOW: defaultSize={38} minSize={25} maxSize={70}
+```
+
+**Phase 4 Stats:**
+- Layout issue: Fixed horizontal imbalance
+- Panel distribution: 62% chat | 38% tools (was 85% | 15%)
+- User action needed: Clear localStorage 'conductor-root-layout' for reset
 
 ---
 
