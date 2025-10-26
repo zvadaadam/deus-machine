@@ -73,7 +73,7 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
       className={cn(
         chatTheme.blocks.text.container,
         chatTheme.blocks.text.content,
-        'prose prose-sm dark:prose-invert max-w-none',
+        'prose prose-sm dark:prose-invert max-w-full min-w-0 overflow-x-auto',
         // Headings
         'prose-headings:font-semibold prose-headings:tracking-tight',
         'prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg',
