@@ -26,7 +26,8 @@ export default defineConfig(async () => ({
   clearScreen: false,
   server: {
     port: 1420,
-    strictPort: true,
+    // Auto-increment to next available port if 1420 is taken (like Next.js)
+    // This allows running multiple dev instances simultaneously
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

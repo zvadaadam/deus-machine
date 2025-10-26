@@ -75,7 +75,7 @@ Content-Type: application/json
 ### 3. Backend Processes Request
 
 ```javascript
-// backend/server.cjs:783
+// backend/server.cjs
 app.post('/api/sessions/:id/messages', async (req, res) => {
   // 1. Validate session exists
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
@@ -104,7 +104,7 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
 ### 4. Backend → Claude CLI
 
 ```javascript
-// backend/lib/claude-session.cjs:401
+// backend/lib/claude-session.cjs
 function sendToClaudeSession(sessionId, content) {
   const message = {
     type: 'user',
@@ -134,7 +134,7 @@ Backend captures stdout and parses JSON
 ### 6. Backend Saves Assistant Response
 
 ```javascript
-// backend/lib/claude-session.cjs:171
+// backend/lib/claude-session.cjs
 claudeProcess.stdout.on('data', (data) => {
   // Parse stream-json lines
   const message = JSON.parse(line);
@@ -144,6 +144,9 @@ claudeProcess.stdout.on('data', (data) => {
     db.prepare(`INSERT INTO session_messages (id, session_id, role, content, ...)
       VALUES (?, ?, 'assistant', ?, ...)`)
       .run(messageId, sessionId, prepared.content, sentAt, sdkMessageId);
+
+    // Emit event to sidecar for real-time updates (desktop mode)
+    emitToSidecar('assistant_message', { sessionId, messageId });
   }
 
   if (message.type === 'result' && message.subtype === 'success') {
@@ -153,21 +156,46 @@ claudeProcess.stdout.on('data', (data) => {
 });
 ```
 
-### 7. Frontend Polls for Updates
+### 7. Frontend Gets Updates (Two Modes)
 
+#### Desktop Mode (Real-time Events - Preferred)
+```
+Claude responds → Backend saves to DB → Backend emits to Sidecar
+  ↓
+Sidecar broadcasts via Unix socket → Rust socket.rs listener
+  ↓
+Rust emits Tauri event → Frontend React hook invalidates cache
+  ↓
+UI updates instantly (<100ms latency)
+```
+
+**Event Flow Implementation:**
+```rust
+// src-tauri/src/socket.rs
+// Listens to Unix socket and emits Tauri events
+handle.emit("assistant_message", payload)
+  ↓
+// Frontend receives event and invalidates query cache
+queryClient.invalidateQueries(['session', 'messages', sessionId])
+```
+
+#### Web Mode (HTTP Polling - Fallback)
 ```typescript
-// Frontend uses TanStack Query for polling
 // src/features/session/api/session.queries.ts
 useQuery({
   queryKey: ['session', 'messages', sessionId],
   queryFn: () => SessionService.fetchMessages(sessionId),
-  refetchInterval: 2000, // Poll every 2 seconds
+  // Dynamic polling: 2s when working, 5s when idle
+  refetchInterval: (query) => {
+    const session = query.state.data;
+    return session?.status === 'working' ? 2000 : 5000;
+  }
 })
 ```
 
 Frontend polls:
 ```
-GET /api/sessions/{id}/messages every 2 seconds
+GET /api/sessions/{id}/messages every 2-5 seconds
   ↓
 Backend returns all messages from database
   ↓
@@ -176,29 +204,44 @@ Frontend diffs and displays new messages
 
 ## Error Handling
 
-### Global Error Handlers (Added)
+### Global Error Handlers
 
 ```javascript
-// backend/server.cjs:123-150
+// backend/server.cjs
 process.on('uncaughtException', (error, origin) => {
+  console.error('Uncaught Exception:', error);
   // Log error and continue running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection:', reason);
   // Log promise rejection and continue running
 });
 ```
 
-### Claude CLI Error Handlers (Added)
+### Claude CLI Error Handlers
 
 ```javascript
-// backend/lib/claude-session.cjs:381-433
-claudeProcess.stdout.on('error', ...);
-claudeProcess.stderr.on('error', ...);
-claudeProcess.stdin.on('error', ...);
-claudeProcess.on('error', ...);
+// backend/lib/claude-session.cjs
+claudeProcess.stdout.on('error', (err) => {
+  console.error('Claude stdout error:', err);
+});
+
+claudeProcess.stderr.on('error', (err) => {
+  console.error('Claude stderr error:', err);
+});
+
+claudeProcess.stdin.on('error', (err) => {
+  console.error('Claude stdin error:', err);
+});
+
+claudeProcess.on('error', (err) => {
+  console.error('Claude process error:', err);
+});
+
 claudeProcess.on('exit', (code, signal) => {
   // Clean up session and update database
+  db.prepare('UPDATE sessions SET status = \'idle\' WHERE id = ?').run(sessionId);
 });
 ```
 
@@ -267,6 +310,9 @@ CREATE TABLE session_messages (
 ### Rust/Tauri
 - `src-tauri/src/backend.rs` - Backend process manager
 - `src-tauri/src/commands.rs` - Tauri commands (RPC)
+- `src-tauri/src/socket.rs` - Unix socket listener & event emitter
+- `src-tauri/src/pty.rs` - PTY terminal manager
+- `src-tauri/src/browser.rs` - Browser integration
 - `src-tauri/src/lib.rs` - Main Tauri app
 
 ### Scripts
@@ -306,10 +352,8 @@ curl -X POST http://localhost:{port}/api/sessions/{sessionId}/messages \
 
 ### Issue: Backend silently crashes
 
-**Solution:** Added comprehensive error handling:
-- Global uncaughtException handler
-- Global unhandledRejection handler
-- Child process error handlers
+**Solution:** Comprehensive error handling is in place:
+- Global uncaughtException handler (backend/server.cjs)
+- Global unhandledRejection handler (backend/server.cjs)
+- Child process error handlers (backend/lib/claude-session.cjs)
 - Detailed logging at each step
-
-See: `BACKEND_CRASH_BUG_SOLUTION.md`
