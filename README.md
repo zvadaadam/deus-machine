@@ -94,8 +94,8 @@ npm run tauri:build     # Desktop app
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and message flow
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guide and best practices
 - **[CLAUDE.md](CLAUDE.md)** - Project instructions and guidelines
-- **[COLOR_SYSTEM_GUIDE.md](COLOR_SYSTEM_GUIDE.md)** - Design system color guidelines
-- **[TYPOGRAPHY.md](TYPOGRAPHY.md)** - Typography system reference
+
+**Note:** Color system and typography are defined in `src/global.css` using Tailwind CSS v4's `@theme` directive.
 
 ## 🎨 Design Principles
 
