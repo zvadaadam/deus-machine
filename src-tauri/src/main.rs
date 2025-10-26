@@ -29,6 +29,12 @@ fn main() {
             let pty_manager: tauri::State<PtyManager> = app.state();
             pty_manager.set_app_handle(app.handle().clone());
 
+            // Set app handle for Socket manager so it can emit events
+            let socket_manager: tauri::State<SocketManager> = app.state();
+            socket_manager.set_app_handle(app.handle().clone());
+            socket_manager.start_event_listener();
+            println!("[TAURI] ✅ Socket event listener started");
+
             // Start backend server
             let backend_manager: tauri::State<BackendManager> = app.state();
 

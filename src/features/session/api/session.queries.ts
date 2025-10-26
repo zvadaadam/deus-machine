@@ -34,13 +34,9 @@ export function useMessages(sessionId: string | null) {
     queryKey: queryKeys.sessions.messages(sessionId || ''),
     queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
-    // Dynamic polling based on session status
-    refetchInterval: (query) => {
-      // We need to get session status from the session query
-      // For now, use conservative polling
-      return 2000;
-    },
-    staleTime: 500,
+    // ✅ NO POLLING - real-time events via Tauri handle updates
+    refetchInterval: false,
+    staleTime: 30000, // 30 seconds (was 500ms)
   });
 }
 

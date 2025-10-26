@@ -11,7 +11,11 @@
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter};
+use serde_json::Value;
 
 /**
  * Socket Manager State
@@ -21,6 +25,7 @@ use std::sync::Mutex;
 pub struct SocketManager {
     socket_path: Mutex<Option<PathBuf>>,
     stream: Mutex<Option<UnixStream>>,
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
 }
 
 impl SocketManager {
@@ -28,7 +33,15 @@ impl SocketManager {
         SocketManager {
             socket_path: Mutex::new(None),
             stream: Mutex::new(None),
+            app_handle: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /**
+     * Set app handle for emitting Tauri events
+     */
+    pub fn set_app_handle(&self, handle: AppHandle) {
+        *self.app_handle.lock().unwrap() = Some(handle);
     }
 
     /**
@@ -93,6 +106,66 @@ impl SocketManager {
             }
             None => Err("Not connected to socket".to_string()),
         }
+    }
+
+    /**
+     * Start listening for broadcast events from sidecar
+     * Runs in background thread and emits Tauri events to frontend
+     */
+    pub fn start_event_listener(&self) {
+        let stream = Arc::clone(&self.stream);
+        let app_handle = Arc::clone(&self.app_handle);
+
+        thread::spawn(move || {
+            println!("[SOCKET] 📡 Event listener started");
+
+            loop {
+                // Check if we have a connection
+                let socket_opt = {
+                    let stream_guard = stream.lock().unwrap();
+                    stream_guard.as_ref().and_then(|s| s.try_clone().ok())
+                };
+
+                if let Some(socket) = socket_opt {
+                    let reader = BufReader::new(&socket);
+
+                    for line in reader.lines() {
+                        match line {
+                            Ok(line) => {
+                                // Try to parse as JSON event
+                                if let Ok(event) = serde_json::from_str::<Value>(&line) {
+                                    // Check if it's a frontend_event type
+                                    if event.get("type").and_then(|v| v.as_str()) == Some("frontend_event") {
+                                        let event_name = event.get("event")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("unknown");
+
+                                        let payload = event.get("payload").cloned()
+                                            .unwrap_or(Value::Null);
+
+                                        println!("[SOCKET] 📢 Received event: {}", event_name);
+
+                                        // Emit to frontend via Tauri
+                                        if let Some(handle) = app_handle.lock().unwrap().as_ref() {
+                                            if let Err(e) = handle.emit(event_name, payload) {
+                                                eprintln!("[SOCKET] ❌ Failed to emit event: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("[SOCKET] ❌ Error reading line: {}", e);
+                                break; // Connection lost, exit loop
+                            }
+                        }
+                    }
+                }
+
+                // Wait a bit before checking again
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
     }
 
     /**
