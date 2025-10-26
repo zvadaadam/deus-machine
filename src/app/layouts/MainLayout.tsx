@@ -92,6 +92,9 @@ export function MainLayout() {
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [cloning, setCloning] = useState(false);
 
+  // View mode: 'chat' shows chat + changes/terminal, 'browser' shows full-screen browser
+  const [viewMode, setViewMode] = useState<'chat' | 'browser'>('chat');
+
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
 
@@ -447,128 +450,150 @@ export function MainLayout() {
 
       {/* Main Content with SidebarInset */}
       <SidebarInset className="min-w-0">
-        <PanelGroup
-          direction="horizontal"
-          autoSaveId="conductor-root-layout"
-          className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
-        >
-      {/* MAIN CONTENT */}
-      <Panel id="center" defaultSize={62} minSize={30} maxSize={75} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        {selectedWorkspace ? (
-          <>
-            {/* Workspace Header */}
-            <WorkspaceHeader
-              branch={selectedWorkspace.branch}
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-            />
-
-            {/* Messages take full area */}
-            <div className="flex-1 flex flex-col min-h-0 min-w-0">
-              {selectedWorkspace.active_session_id && (
-                <SessionPanel
-                  ref={workspaceChatPanelRef}
-                  sessionId={selectedWorkspace.active_session_id}
-                  embedded={true}
-                />
-              )}
+        <div className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200 flex flex-col">
+          {/* View Mode Toggle - Only show when workspace is selected */}
+          {selectedWorkspace && (
+            <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
+              <div className="flex items-center px-3 py-1.5 gap-1">
+                <Button
+                  variant={viewMode === 'chat' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('chat')}
+                  className={`h-8 transition-all duration-200 ${
+                    viewMode === 'chat'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  <span className="font-medium">Chat</span>
+                </Button>
+                <Button
+                  variant={viewMode === 'browser' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('browser')}
+                  className={`h-8 transition-all duration-200 ${
+                    viewMode === 'browser'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <Monitor className="h-4 w-4 mr-2" />
+                  <span className="font-medium">Browser</span>
+                </Button>
+              </div>
             </div>
-          </>
-        ) : (
-          <WelcomeView
-            recentWorkspaces={recentWorkspaces}
-            onCreateWorkspace={handleCreateWorkspace}
-            onOpenProject={handleOpenProject}
-            onCloneRepository={handleOpenCloneModal}
-            onWorkspaceClick={handleWorkspaceClick}
-          />
-        )}
-        </div>
-      </Panel>
+          )}
 
-      {/* Only show right panel when workspace is selected */}
-      {selectedWorkspace && (
-        <>
-          <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
-
-          {/* RIGHT PANEL - Browser, File Changes & Terminal */}
-          <Panel id="right" defaultSize={38} minSize={25} maxSize={70} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
-        <Tabs defaultValue="browser" className="h-full min-h-0 flex flex-col overflow-hidden">
-          <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
-            <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
-              <TabsTrigger
-                value="browser"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-              >
-                <Globe className="h-4 w-4 mr-2" />
-                <span className="text-body-sm font-medium">Browser</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="changes"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                <span className="text-body-sm font-medium">Changes</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="terminal"
-                className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-              >
-                <TerminalIcon className="h-4 w-4 mr-2" />
-                <span className="text-body-sm font-medium">Terminal</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          {/* Browser Tab */}
-          <TabsContent
-            value="browser"
-            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-          >
-            {selectedWorkspace ? (
+          {/* Full-screen Browser View */}
+          {viewMode === 'browser' && selectedWorkspace && (
+            <div className="flex-1 flex flex-col min-h-0">
               <BrowserPanel workspaceId={selectedWorkspace.id} />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <EmptyState
-                  icon={<Globe  />}
-                  description="Select a workspace to use the browser"
-                />
-              </div>
-            )}
-          </TabsContent>
+            </div>
+          )}
 
-          {/* File Changes Tab */}
-          <TabsContent
-            value="changes"
-            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-          >
-            <FileChangesPanel selectedWorkspace={selectedWorkspace} />
-          </TabsContent>
+          {/* Chat View - Split Layout */}
+          {viewMode === 'chat' && (
+            <PanelGroup
+              direction="horizontal"
+              autoSaveId="conductor-root-layout"
+              className="flex-1 min-w-0 overflow-hidden"
+            >
+              {/* MAIN CONTENT */}
+              <Panel id="center" defaultSize={62} minSize={30} maxSize={75} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+                <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                {selectedWorkspace ? (
+                  <>
+                    {/* Workspace Header */}
+                    <WorkspaceHeader
+                      branch={selectedWorkspace.branch}
+                      workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                    />
 
-          {/* Terminal Tab */}
-          <TabsContent
-            value="terminal"
-            className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-          >
-            {selectedWorkspace ? (
-              <TerminalPanel
-                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                workspaceName={selectedWorkspace.directory_name}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <EmptyState
-                  icon={<TerminalIcon  />}
-                  description="Select a workspace to use the terminal"
-                />
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-          </Panel>
-        </>
-      )}
-      </PanelGroup>
+                    {/* Messages take full area */}
+                    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                      {selectedWorkspace.active_session_id && (
+                        <SessionPanel
+                          ref={workspaceChatPanelRef}
+                          sessionId={selectedWorkspace.active_session_id}
+                          embedded={true}
+                        />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <WelcomeView
+                    recentWorkspaces={recentWorkspaces}
+                    onCreateWorkspace={handleCreateWorkspace}
+                    onOpenProject={handleOpenProject}
+                    onCloneRepository={handleOpenCloneModal}
+                    onWorkspaceClick={handleWorkspaceClick}
+                  />
+                )}
+                </div>
+              </Panel>
+
+              {/* Only show right panel when workspace is selected */}
+              {selectedWorkspace && (
+                <>
+                  <PanelResizeHandle className="relative z-10 w-1.5 h-full flex-none cursor-col-resize select-none touch-none before:content-[''] before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 before:bg-border before:transition-colors before:duration-150 hover:before:bg-primary data-[resize-handle-active]:before:bg-primary" />
+
+                  {/* RIGHT PANEL - File Changes & Terminal */}
+                  <Panel id="right" defaultSize={38} minSize={25} maxSize={70} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+                    <Tabs defaultValue="changes" className="h-full min-h-0 flex flex-col overflow-hidden">
+                      <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
+                        <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
+                          <TabsTrigger
+                            value="changes"
+                            className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            <span className="text-body-sm font-medium">Changes</span>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="terminal"
+                            className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                          >
+                            <TerminalIcon className="h-4 w-4 mr-2" />
+                            <span className="text-body-sm font-medium">Terminal</span>
+                          </TabsTrigger>
+                        </TabsList>
+                      </div>
+
+                      {/* File Changes Tab */}
+                      <TabsContent
+                        value="changes"
+                        className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                      >
+                        <FileChangesPanel selectedWorkspace={selectedWorkspace} />
+                      </TabsContent>
+
+                      {/* Terminal Tab */}
+                      <TabsContent
+                        value="terminal"
+                        className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                      >
+                        {selectedWorkspace ? (
+                          <TerminalPanel
+                            workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                            workspaceName={selectedWorkspace.directory_name}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center">
+                            <EmptyState
+                              icon={<TerminalIcon  />}
+                              description="Select a workspace to use the terminal"
+                            />
+                          </div>
+                        )}
+                      </TabsContent>
+                    </Tabs>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          )}
+        </div>
       </SidebarInset>
 
       {/* Modals */}
