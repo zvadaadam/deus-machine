@@ -459,7 +459,7 @@ export function MainLayout() {
         >
       {/* MAIN CONTENT */}
       <Panel id="center" defaultSize={62} minSize={30} maxSize={75} className="flex flex-col min-h-0 min-w-0 overflow-x-hidden">
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {selectedWorkspace ? (
           <>
             {/* Workspace Header */}
@@ -469,7 +469,7 @@ export function MainLayout() {
             />
 
             {/* Messages take full area */}
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0">
               {selectedWorkspace.active_session_id && (
                 <SessionPanel
                   ref={workspaceChatPanelRef}
