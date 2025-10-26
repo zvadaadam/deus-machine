@@ -14,6 +14,7 @@ import { Copy, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
+import { useMemo, memo } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -24,12 +25,15 @@ interface MessageItemProps {
   message: Message;
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message }: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
 
-  // Parse message content
-  const contentBlocks = parseContent(message.content);
+  // Parse message content (memoized to avoid re-parsing JSON on every render)
+  const contentBlocks = useMemo(
+    () => parseContent(message.content),
+    [message.content, parseContent]
+  );
 
   // Extract text content for copy functionality
   const extractTextContent = (): string => {
@@ -165,4 +169,4 @@ export function MessageItem({ message }: MessageItemProps) {
       </div>
     </div>
   );
-}
+});

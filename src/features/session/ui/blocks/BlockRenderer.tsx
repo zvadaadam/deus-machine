@@ -43,9 +43,7 @@ export function BlockRenderer({ block, index, role }: BlockRendererProps) {
 
     case 'tool_result':
       // Don't render tool_result standalone - it's already linked to tool_use
-      if (import.meta.env.DEV) {
-        console.log(`[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`);
-      }
+      // Note: This should rarely log after memoization fixes prevent unnecessary re-renders
       return null;
 
     case 'thinking':
