@@ -30,8 +30,13 @@ function getFileIconConfig(filename: string): { icon: typeof File; color: string
     return { icon: FileCode, color: 'text-blue-500' };
   }
 
+  // Rust (check before Data to prioritize .toml for Rust projects)
+  if (['rs', 'toml'].includes(ext)) {
+    return { icon: FileCode, color: 'text-orange-600' };
+  }
+
   // Markup/Data
-  if (['json', 'yaml', 'yml', 'toml', 'xml'].includes(ext)) {
+  if (['json', 'yaml', 'yml', 'xml'].includes(ext)) {
     return { icon: FileJson, color: 'text-yellow-500' };
   }
 
@@ -46,18 +51,13 @@ function getFileIconConfig(filename: string): { icon: typeof File; color: string
   }
 
   // HTML
-  if (['html', 'htm', 'xml', 'svg'].includes(ext)) {
+  if (['html', 'htm'].includes(ext)) {
     return { icon: FileCode, color: 'text-orange-500' };
   }
 
-  // Images
+  // Images (includes svg since they're primarily used as images)
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'].includes(ext)) {
     return { icon: FileImage, color: 'text-pink-500' };
-  }
-
-  // Rust
-  if (['rs', 'toml'].includes(ext)) {
-    return { icon: FileCode, color: 'text-orange-600' };
   }
 
   // Config files

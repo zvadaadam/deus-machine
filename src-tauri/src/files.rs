@@ -167,7 +167,11 @@ impl FileScanner {
     /// assert!(result.total_files > 0);
     /// ```
     pub fn scan_workspace(&self, workspace_path: impl AsRef<Path>) -> Result<FileTreeResponse> {
-        let workspace_path = workspace_path.as_ref().to_path_buf();
+        let input_path = workspace_path.as_ref();
+
+        // Canonicalize path for consistent cache keys (handles /var -> /private/var symlinks on macOS)
+        let workspace_path = fs::canonicalize(input_path)
+            .unwrap_or_else(|_| input_path.to_path_buf());
 
         // Check cache first
         {
@@ -419,8 +423,14 @@ impl FileScanner {
 
     /// Clear cache for a specific workspace
     pub fn invalidate_cache(&self, workspace_path: impl AsRef<Path>) {
+        let input_path = workspace_path.as_ref();
+
+        // Canonicalize path to match cache key (same logic as scan_workspace)
+        let canonical_path = fs::canonicalize(input_path)
+            .unwrap_or_else(|_| input_path.to_path_buf());
+
         let mut cache = self.cache.write();
-        cache.remove(workspace_path.as_ref());
+        cache.remove(&canonical_path);
     }
 
     /// Clear entire cache
