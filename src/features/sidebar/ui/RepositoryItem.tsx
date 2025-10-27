@@ -150,7 +150,7 @@ export function RepositoryItem({
               onClick={handleClick}
             >
               <div className="relative overflow-visible flex items-center justify-center">
-                {/* Spinner ring for working state - subtle rotating arc */}
+                {/* Spinner ring for working state - visible rotating arc shows progress */}
                 {workingCount > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <svg
@@ -165,10 +165,10 @@ export function RepositoryItem({
                         r="20"
                         stroke="currentColor"
                         strokeWidth="1.5"
-                        strokeDasharray="40 85"
+                        strokeDasharray="50 75"
                         strokeLinecap="round"
                         className={cn(
-                          "opacity-30 transition-opacity",
+                          "opacity-55 transition-opacity",
                           ringColor === 'working' && "text-green-500 dark:text-green-400",
                           ringColor === 'unread' && "text-amber-500 dark:text-amber-400",
                           ringColor === 'error' && "text-red-500 dark:text-red-400"
@@ -186,7 +186,6 @@ export function RepositoryItem({
                   // Active repos: Full brightness with status ring
                   isActive && [
                     "bg-sidebar-accent",
-                    "text-sidebar-foreground",
                     "border-2",
                     // Ring color hierarchy: error > unread > working
                     ringColor === 'error' && [
@@ -198,8 +197,11 @@ export function RepositoryItem({
                       "shadow-[0_0_6px_rgba(245,158,11,0.35)] dark:shadow-[0_0_6px_rgba(251,191,36,0.25)]"
                     ],
                     ringColor === 'working' && [
-                      "border-green-500/60 dark:border-green-400/60",
-                      "shadow-[0_0_4px_rgba(34,197,94,0.2)] dark:shadow-[0_0_4px_rgba(74,222,128,0.15)]"
+                      "border-green-500/70 dark:border-green-400/70",
+                      // Breathing glow animation for working state
+                      workingCount > 0
+                        ? "shadow-[0_0_6px_rgba(34,197,94,0.4)] dark:shadow-[0_0_6px_rgba(74,222,128,0.3)] animate-[breathing-glow_2.5s_ease-in-out_infinite] motion-reduce:animate-none motion-reduce:shadow-[0_0_4px_rgba(34,197,94,0.2)]"
+                        : "shadow-[0_0_4px_rgba(34,197,94,0.2)] dark:shadow-[0_0_4px_rgba(74,222,128,0.15)]"
                     ],
                     // Enhanced shadow on hover
                     "group-hover/badge:shadow-lg motion-reduce:transition-none"
@@ -213,11 +215,17 @@ export function RepositoryItem({
                 )}>
                   {/* Center content: working count OR initials */}
                   {workingCount > 0 ? (
-                    <span className="text-[11px] font-bold tabular-nums">
+                    <span className={cn(
+                      "text-[11px] font-bold tabular-nums",
+                      // Number color matches ring color for visual unity
+                      ringColor === 'working' && "text-green-600 dark:text-green-400",
+                      ringColor === 'unread' && "text-amber-600 dark:text-amber-400",
+                      ringColor === 'error' && "text-red-600 dark:text-red-400"
+                    )}>
                       {workingCount}
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold">
+                    <span className="text-xs font-semibold text-sidebar-foreground">
                       {getRepoInitials(repository.repo_name)}
                     </span>
                   )}
