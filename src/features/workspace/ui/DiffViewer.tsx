@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileCode, Copy, Check } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 
@@ -13,18 +13,18 @@ interface DiffViewerProps {
 /**
  * DiffViewer - Inline git diff viewer component
  *
- * Renders file diffs inline within the main content area as a tab.
- * Features:
- * - Clean header with file path and change statistics
- * - Syntax-highlighted unified diff format (+ green, - red)
- * - Copy diff button for easy sharing
- * - Smooth scrolling with native CSS overflow
+ * Design Philosophy (Jony Ive principles):
+ * - Relentless simplicity: No decorative elements
+ * - Functional beauty: Every pixel serves the user
+ * - Restraint: Information hierarchy through subtlety, not emphasis
+ * - Craftsmanship: Typography and spacing create rhythm
  *
- * Design: Minimalist, inspired by Linear/Stripe/GitHub
- *
- * Scrolling: Uses native overflow-y-auto instead of ScrollArea component
- * because flex-1 layouts require explicit heights for Radix ScrollArea,
- * but native overflow works seamlessly with flex constraints.
+ * What's been removed:
+ * - Icon box (decorative, no purpose)
+ * - Verbose labels ("additions", "deletions")
+ * - Always-visible copy button (appears on hover)
+ * - Strong background colors (subtle left border instead)
+ * - Backdrop blur (unnecessary effect)
  */
 export function DiffViewer({
   filePath = '',
@@ -33,6 +33,7 @@ export function DiffViewer({
   deletions = 0,
 }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
 
   /**
    * Extract filename and path context from full file path
@@ -76,17 +77,26 @@ export function DiffViewer({
 
   /**
    * Render individual diff line with appropriate styling
+   * Design: Subtle left border (no background) + colored text
+   * Inspired by GitHub's refined approach
    */
   const renderDiffLine = (line: string, index: number) => {
     const { type, content } = parseDiffLine(line);
 
     const lineClasses = cn(
-      'font-mono text-xs leading-relaxed px-4 py-0.5',
+      'relative font-mono text-xs leading-relaxed pl-4 pr-4 py-0.5',
       {
-        'bg-success/10 text-success-foreground': type === 'addition',
-        'bg-destructive/10 text-destructive-foreground': type === 'deletion',
-        'bg-muted/30 text-muted-foreground font-semibold': type === 'header',
-        'text-foreground/80': type === 'context',
+        // Additions: subtle left border + green text
+        'text-success/90 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-success/30': type === 'addition',
+
+        // Deletions: subtle left border + red text
+        'text-destructive/90 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-destructive/30': type === 'deletion',
+
+        // Headers: muted with subtle background
+        'text-muted-foreground bg-muted/20': type === 'header',
+
+        // Context: quiet, unobtrusive
+        'text-foreground/70': type === 'context',
       }
     );
 
@@ -103,100 +113,81 @@ export function DiffViewer({
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      {/* Header - Fixed at top */}
-      <div className="flex-shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm">
-        {/* File path and filename */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 mt-0.5">
-              <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
-                <FileCode className="w-4 h-4 text-primary" />
-              </div>
-            </div>
-            <div className="flex-1 min-w-0">
-              {pathContext && (
-                <div className="text-xs text-muted-foreground/60 font-mono truncate">
-                  {pathContext}
-                </div>
-              )}
-              <div className="text-sm font-semibold text-foreground truncate">
-                {filename || 'Untitled'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats and actions */}
-        <div className="px-4 pb-3 flex items-center justify-between gap-4">
-          {/* Change statistics */}
-          <div className="flex items-center gap-3 font-mono text-xs">
-            {additions > 0 && (
-              <span className="text-success font-semibold">
-                +{additions} {additions === 1 ? 'addition' : 'additions'}
+      {/* Header - Fixed at top, clean and purposeful */}
+      <div
+        className="flex-shrink-0 border-b border-border"
+        onMouseEnter={() => setIsHeaderHovered(true)}
+        onMouseLeave={() => setIsHeaderHovered(false)}
+      >
+        {/* File path - single line, no icon clutter */}
+        <div className="px-4 py-3 flex items-center justify-between gap-4">
+          {/* Left: File path hierarchy */}
+          <div className="flex-1 min-w-0 font-mono text-sm">
+            {pathContext && (
+              <span className="text-muted-foreground/50">
+                {pathContext}
               </span>
             )}
-            {deletions > 0 && (
-              <span className="text-destructive font-semibold">
-                -{deletions} {deletions === 1 ? 'deletion' : 'deletions'}
-              </span>
-            )}
-            {additions === 0 && deletions === 0 && !isLoading && (
-              <span className="text-muted-foreground">No changes</span>
-            )}
+            <span className="text-foreground">
+              {filename || 'Untitled'}
+            </span>
           </div>
 
-          {/* Copy button */}
-          {!isLoading && !hasError && diff.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopyDiff}
-              className="h-7 px-2 text-xs gap-1.5"
-            >
-              {copied ? (
-                <>
+          {/* Right: Stats + Copy button (appears on hover) */}
+          <div className="flex items-center gap-4">
+            {/* Stats: Just numbers, no labels */}
+            {(additions > 0 || deletions > 0) && (
+              <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                {additions > 0 && (
+                  <span className="text-success/80">+{additions}</span>
+                )}
+                {deletions > 0 && (
+                  <span className="text-destructive/80">−{deletions}</span>
+                )}
+              </div>
+            )}
+
+            {/* Copy button: Icon only, appears on hover */}
+            {!isLoading && !hasError && diff.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleCopyDiff}
+                className={cn(
+                  'h-6 w-6 transition-opacity duration-200',
+                  isHeaderHovered || copied ? 'opacity-100' : 'opacity-0'
+                )}
+                title="Copy diff"
+              >
+                {copied ? (
                   <Check className="w-3.5 h-3.5" />
-                  Copied
-                </>
-              ) : (
-                <>
+                ) : (
                   <Copy className="w-3.5 h-3.5" />
-                  Copy Diff
-                </>
-              )}
-            </Button>
-          )}
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Diff content - Scrollable with native overflow
-          Using flex-1 + overflow-y-auto + min-h-0 pattern (same as Chat.tsx)
-          This allows proper scrolling in flex layouts without requiring explicit height
-      */}
+      {/* Diff content - Scrollable with native overflow */}
       <div className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64 text-muted-foreground">
+          <div className="flex items-center justify-center h-64 text-muted-foreground/60">
             <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-muted-foreground/20 border-t-muted-foreground/60" />
               <span className="text-sm">Loading diff...</span>
             </div>
           </div>
         ) : hasError ? (
-          <div className="flex items-center justify-center h-64 text-muted-foreground">
+          <div className="flex items-center justify-center h-64 text-muted-foreground/60">
             <div className="flex flex-col items-center gap-2 text-center max-w-sm">
-              <FileCode className="w-12 h-12 text-muted-foreground/40" />
-              <p className="text-sm font-medium">{diff}</p>
-              <p className="text-xs text-muted-foreground/60">
-                The diff for this file could not be loaded
-              </p>
+              <p className="text-sm">{diff}</p>
             </div>
           </div>
         ) : diff.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-muted-foreground">
-            <div className="flex flex-col items-center gap-2">
-              <FileCode className="w-12 h-12 text-muted-foreground/40" />
-              <p className="text-sm">No diff content available</p>
-            </div>
+          <div className="flex items-center justify-center h-64 text-muted-foreground/60">
+            <p className="text-sm">No changes</p>
           </div>
         ) : (
           <div className="py-2">
