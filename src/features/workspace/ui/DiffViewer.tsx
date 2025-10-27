@@ -76,7 +76,10 @@ export function DiffViewer({
 
   /**
    * Parse and highlight diff with syntax highlighting + word-level highlights
-   * Runs when diff or filePath changes
+   * Optimized for performance:
+   * - Only compute word diff for adjacent deletion-addition pairs
+   * - Skip word diff for very long lines (>200 chars)
+   * - Process in batches to avoid blocking
    */
   useEffect(() => {
     const highlightDiff = async () => {
@@ -103,31 +106,57 @@ export function DiffViewer({
           }))
         );
 
-        // Second pass: apply word-level highlights to addition/deletion pairs
+        // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
+        let wordDiffCache = new Map<number, { oldRanges: any[], newRanges: any[] }>();
+
         for (let i = 0; i < syntaxHighlighted.length; i++) {
           const line = syntaxHighlighted[i];
           let finalHtml = line.syntaxHtml;
 
-          // Look for deletion-addition pairs for word-level diff
-          if (line.type === 'deletion') {
-            // Find next addition (if any)
-            const nextAddition = syntaxHighlighted.slice(i + 1).find(l => l.type === 'addition');
-            if (nextAddition) {
-              // Compute word-level diff
-              const { oldRanges, newRanges } = computeWordDiff(line.content, nextAddition.content);
+          // Only compute word diff for adjacent pairs and short lines
+          const MAX_LINE_LENGTH = 200;
 
-              // Apply word highlights to deletion
-              finalHtml = applyWordHighlights(line.syntaxHtml, line.content, oldRanges, 'deletion');
+          if (line.type === 'deletion' && i + 1 < syntaxHighlighted.length) {
+            const nextLine = syntaxHighlighted[i + 1];
+
+            // Only if next line is an addition AND both lines are reasonably short
+            if (
+              nextLine.type === 'addition' &&
+              line.content.length < MAX_LINE_LENGTH &&
+              nextLine.content.length < MAX_LINE_LENGTH
+            ) {
+              // Compute word diff once and cache it
+              if (!wordDiffCache.has(i)) {
+                const diffResult = computeWordDiff(line.content, nextLine.content);
+                wordDiffCache.set(i, diffResult);
+              }
+
+              const { oldRanges } = wordDiffCache.get(i)!;
+
+              // Apply highlights only if there are meaningful differences
+              if (oldRanges.length > 0 && oldRanges.length < 10) {
+                finalHtml = applyWordHighlights(line.syntaxHtml, line.content, oldRanges, 'deletion');
+              }
             }
-          } else if (line.type === 'addition') {
-            // Find previous deletion (if any)
-            const prevDeletion = syntaxHighlighted.slice(0, i).reverse().find(l => l.type === 'deletion');
-            if (prevDeletion) {
-              // Compute word-level diff
-              const { newRanges } = computeWordDiff(prevDeletion.content, line.content);
+          } else if (line.type === 'addition' && i > 0) {
+            const prevLine = syntaxHighlighted[i - 1];
 
-              // Apply word highlights to addition
-              finalHtml = applyWordHighlights(line.syntaxHtml, line.content, newRanges, 'addition');
+            // Only if previous line is a deletion AND both lines are reasonably short
+            if (
+              prevLine.type === 'deletion' &&
+              line.content.length < MAX_LINE_LENGTH &&
+              prevLine.content.length < MAX_LINE_LENGTH
+            ) {
+              // Use cached result from deletion
+              const cached = wordDiffCache.get(i - 1);
+              if (cached) {
+                const { newRanges } = cached;
+
+                // Apply highlights only if there are meaningful differences
+                if (newRanges.length > 0 && newRanges.length < 10) {
+                  finalHtml = applyWordHighlights(line.syntaxHtml, line.content, newRanges, 'addition');
+                }
+              }
             }
           }
 
@@ -202,9 +231,9 @@ export function DiffViewer({
           {lineNum}
         </span>
 
-        {/* Code content - syntax highlighted */}
+        {/* Code content - syntax highlighted with preserved whitespace */}
         <span
-          className={cn('flex-1 pr-4 py-0.5', {
+          className={cn('flex-1 pr-4 py-0.5 whitespace-pre', {
             'text-foreground': type === 'addition' || type === 'deletion',
             'text-foreground/80': type === 'context',
           })}
