@@ -35,14 +35,35 @@ export function RepositoryItem({
     (ws) => ws.session_status === "working"
   );
 
-  // Calculate unread count and priority status for badges
-  const unreadCount = getRepoUnreadCount(repository.workspaces);
+  // Calculate state counts for collapsed badge system
+  const errorCount = repository.workspaces.filter(ws =>
+    ws.session_status === 'error' ||
+    (ws.last_tool_result?.is_error === true)
+  ).length;
+
+  const unreadCount = repository.workspaces.filter(ws =>
+    (ws.unread && ws.unread > 0) ||
+    (ws.session_unread && ws.session_unread > 0)
+  ).length;
+
+  const workingCount = repository.workspaces.filter(ws =>
+    ws.session_status === 'working'
+  ).length;
+
+  // Determine ring color based on hierarchy: error > unread > working
+  let ringColor: 'error' | 'unread' | 'working' | 'idle';
+  if (errorCount > 0) ringColor = 'error';
+  else if (unreadCount > 0) ringColor = 'unread';
+  else if (workingCount > 0) ringColor = 'working';
+  else ringColor = 'idle';
+
+  // Active = any state that needs attention or monitoring
+  const isActive = errorCount > 0 || unreadCount > 0 || workingCount > 0;
+  const isIdle = !isActive;
+
+  // For expanded state, keep existing priority status logic
   const priorityStatus = getRepoPriorityStatus(repository.workspaces);
   const statusConfig = STATUS_CONFIG[priorityStatus];
-
-  // Determine if repo is active (needs attention) or idle in collapsed state
-  const isActive = priorityStatus === 'unread' || priorityStatus === 'error' || priorityStatus === 'working';
-  const isIdle = !isActive;
 
   const handleClick = (e: React.MouseEvent) => {
     if (!sidebarExpanded) {
@@ -108,38 +129,75 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
-                "w-full flex items-center px-0 py-3 justify-center overflow-visible",
+                "w-full flex items-center px-0 py-3 justify-center overflow-visible relative",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
                 isIdle && "hover:opacity-60"
               )}
-              tooltip={repository.repo_name}
+              tooltip={(() => {
+                // Rich tooltip showing full breakdown
+                const parts: string[] = [];
+                if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
+                if (unreadCount > 0) parts.push(`${unreadCount} unread`);
+                if (workingCount > 0) parts.push(`${workingCount} working`);
+                const idleCount = repository.workspaces.length - errorCount - unreadCount - workingCount;
+                if (idleCount > 0) parts.push(`${idleCount} idle`);
+                return `${repository.repo_name}${parts.length > 0 ? '\n' + parts.join(' • ') : ''}`;
+              })()}
               onClick={handleClick}
             >
-              <div className="relative overflow-visible">
-                {/* Main repository badge */}
+              <div className="relative overflow-visible flex items-center justify-center">
+                {/* Spinner ring for working state - subtle rotating arc */}
+                {workingCount > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <svg
+                      className="absolute w-[44px] h-[44px] animate-[subtle-spin_2s_linear_infinite] motion-reduce:animate-none"
+                      viewBox="0 0 44 44"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <circle
+                        cx="22"
+                        cy="22"
+                        r="20"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeDasharray="40 85"
+                        strokeLinecap="round"
+                        className={cn(
+                          "opacity-30 transition-opacity",
+                          ringColor === 'working' && "text-green-500 dark:text-green-400",
+                          ringColor === 'unread' && "text-amber-500 dark:text-amber-400",
+                          ringColor === 'error' && "text-red-500 dark:text-red-400"
+                        )}
+                      />
+                    </svg>
+                  </div>
+                )}
+
+                {/* Main repository badge with ring */}
                 <div className={cn(
-                  "h-10 w-10 flex items-center justify-center text-xs font-semibold",
+                  "relative h-10 w-10 flex items-center justify-center text-xs font-semibold",
                   "rounded-[8px]",
                   "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                  // Active repos: Full brightness with status ring and shadow
+                  // Active repos: Full brightness with status ring
                   isActive && [
                     "bg-sidebar-accent",
                     "text-sidebar-foreground",
                     "border-2",
-                    // Status-based ring color with glow
-                    priorityStatus === 'error' && [
+                    // Ring color hierarchy: error > unread > working
+                    ringColor === 'error' && [
                       "border-red-500 dark:border-red-400",
-                      "shadow-[0_0_4px_rgba(239,68,68,0.4)] dark:shadow-[0_0_4px_rgba(248,113,113,0.3)]"
+                      "shadow-[0_0_6px_rgba(239,68,68,0.35)] dark:shadow-[0_0_6px_rgba(248,113,113,0.25)]"
                     ],
-                    priorityStatus === 'unread' && [
+                    ringColor === 'unread' && [
                       "border-amber-500 dark:border-amber-400",
-                      "shadow-[0_0_4px_rgba(245,158,11,0.4)] dark:shadow-[0_0_4px_rgba(251,191,36,0.3)]"
+                      "shadow-[0_0_6px_rgba(245,158,11,0.35)] dark:shadow-[0_0_6px_rgba(251,191,36,0.25)]"
                     ],
-                    priorityStatus === 'working' && [
-                      "border-green-500 dark:border-green-400",
-                      "shadow-[0_0_4px_rgba(34,197,94,0.4)] dark:shadow-[0_0_4px_rgba(74,222,128,0.3)]"
+                    ringColor === 'working' && [
+                      "border-green-500/60 dark:border-green-400/60",
+                      "shadow-[0_0_4px_rgba(34,197,94,0.2)] dark:shadow-[0_0_4px_rgba(74,222,128,0.15)]"
                     ],
                     // Enhanced shadow on hover
                     "group-hover/badge:shadow-lg motion-reduce:transition-none"
@@ -151,47 +209,35 @@ export function RepositoryItem({
                     "transition-opacity"
                   ]
                 )}>
-                  {getRepoInitials(repository.repo_name)}
+                  {/* Center content: working count OR initials */}
+                  {workingCount > 0 ? (
+                    <span className="text-[11px] font-bold tabular-nums">
+                      {workingCount}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold">
+                      {getRepoInitials(repository.repo_name)}
+                    </span>
+                  )}
                 </div>
 
-                {/* Notification badges - iOS style */}
-                {/* Error/Unread count badge */}
-                {(priorityStatus === 'error' || priorityStatus === 'unread') && unreadCount > 0 && (
+                {/* Corner badge for unread (Slack-style notification) */}
+                {unreadCount > 0 && (
                   <span
                     className={cn(
                       "absolute -top-1 -right-1",
-                      "flex h-4 min-w-4 items-center justify-center",
-                      "rounded-full text-[10px] font-semibold px-1",
-                      "z-20 border-2 border-sidebar",
+                      "flex h-[18px] min-w-[18px] items-center justify-center",
+                      "rounded-full text-[10px] font-bold px-1",
+                      "z-20 border-[2px] border-sidebar",
                       "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                       "animate-in zoom-in-50",
-                      priorityStatus === 'error' && "bg-red-500 text-white",
-                      priorityStatus === 'unread' && "bg-amber-500 text-white",
-                      // Subtle glow
-                      priorityStatus === 'error' && "shadow-[0_0_6px_rgba(239,68,68,0.5)]",
-                      priorityStatus === 'unread' && "shadow-[0_0_6px_rgba(245,158,11,0.5)]"
+                      "bg-amber-500 dark:bg-amber-600 text-white",
+                      "shadow-[0_2px_8px_rgba(245,158,11,0.3)]"
                     )}
-                    aria-label={`${unreadCount} ${priorityStatus === 'error' ? 'errors' : 'unread'}`}
+                    aria-label={`${unreadCount} unread workspace${unreadCount > 1 ? 's' : ''}`}
                   >
                     {unreadCount}
                   </span>
-                )}
-
-                {/* Working indicator - simple green dot badge */}
-                {priorityStatus === 'working' && (
-                  <span
-                    className={cn(
-                      "absolute -top-0.5 -right-0.5",
-                      "flex h-3 w-3",
-                      "rounded-full",
-                      "bg-green-500 dark:bg-green-400",
-                      "border-2 border-sidebar",
-                      "z-20",
-                      "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                      "animate-in zoom-in-50"
-                    )}
-                    aria-label="Working"
-                  />
                 )}
               </div>
             </SidebarMenuButton>
