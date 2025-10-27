@@ -53,15 +53,17 @@ export const chatTheme = {
   blocks: {
     // Tool blocks (tool_use, tool_result)
     tool: {
-      container: 'bg-sidebar-accent/30 rounded-md border border-border/40 backdrop-blur-sm',
-      header: 'flex items-center gap-1.5 mb-1.5 font-semibold text-xs text-foreground',
-      content: 'p-2 rounded font-mono text-xs leading-snug overflow-x-auto whitespace-pre-wrap break-words',
-      icon: 'text-sm inline-flex items-center flex-shrink-0',
+      container: 'bg-transparent rounded-md border border-border/40 backdrop-blur-sm',
+      header: 'flex items-center gap-1.5 font-semibold text-[13px] text-foreground',
+      content: 'p-2 rounded font-mono text-[12px] leading-relaxed overflow-x-auto whitespace-pre-wrap break-words',
+      icon: 'w-4 h-4 inline-flex items-center flex-shrink-0',
       borderLeft: {
-        default: 'border-l-2 border-l-primary',
+        default: 'border-l-2 border-l-border',
+        primary: 'border-l-2 border-l-primary',
         success: 'border-l-2 border-l-success',
         error: 'border-l-2 border-l-destructive',
         info: 'border-l-2 border-l-info',
+        warning: 'border-l-2 border-l-warning',
       },
     },
 
