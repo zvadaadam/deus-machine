@@ -28,12 +28,17 @@ import { generateToolSummary } from '../utils/toolCategories';
 import { cn } from '@/shared/lib/utils';
 
 interface AssistantTurnProps {
-  contentBlocks: ContentBlock[];
+  contentBlocks: (ContentBlock | string)[];
   messageId: string;
   isLatest: boolean;
 }
 
 export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantTurnProps) {
+  // Debug log
+  if (import.meta.env.DEV) {
+    console.log('[AssistantTurn] Rendering turn:', { messageId, isLatest, blockCount: contentBlocks.length });
+  }
+
   // Expanded by default if latest turn
   const [isExpanded, setIsExpanded] = useState(isLatest);
 
