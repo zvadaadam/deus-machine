@@ -221,57 +221,43 @@ export function AppSidebar({
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader profile={profile} onOpenSettings={openSettingsModal} />
 
-      {/* Repositories List */}
+      {/* Repositories List - Single tree for smooth animations */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
-        {isExpanded ? (
-          // Drag and Drop enabled when sidebar is expanded
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={orderedRepositories.map(r => r.repo_id)}
+            strategy={verticalListSortingStrategy}
           >
-            <SortableContext
-              items={orderedRepositories.map(r => r.repo_id)}
-              strategy={verticalListSortingStrategy}
+            <SidebarMenu
+              className={cn(
+                "gap-2",
+                // Expanded: padding for drag handles and workspace content
+                "p-2",
+                // Collapsed: no horizontal padding, items center themselves
+                "group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2"
+              )}
             >
-              <SidebarMenu className={cn("gap-2", "p-2")}>
-                {orderedRepositories.map((repo) => (
-                  <DraggableRepository
-                    key={repo.repo_id}
-                    repository={repo}
-                    isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={selectedWorkspaceId}
-                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                    onWorkspaceClick={onWorkspaceClick}
-                    onNewWorkspace={onNewWorkspace}
-                    onArchive={onArchive}
-                    sidebarExpanded={isExpanded}
-                  />
-                ))}
-              </SidebarMenu>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          // No drag-drop when sidebar is collapsed (icon mode)
-          // Show all repos - opacity hierarchy handles active vs idle distinction
-          // No horizontal padding - items center themselves
-          <SidebarMenu className={cn("gap-2", "py-2 px-0")}>
-            {orderedRepositories.map((repo) => (
-              <DraggableRepository
-                key={repo.repo_id}
-                repository={repo}
-                isCollapsed={collapsedRepos.has(repo.repo_id)}
-                selectedWorkspaceId={selectedWorkspaceId}
-                onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                onWorkspaceClick={onWorkspaceClick}
-                onNewWorkspace={onNewWorkspace}
-                onArchive={onArchive}
-                sidebarExpanded={isExpanded}
-                dragDisabled={true}
-              />
-            ))}
-          </SidebarMenu>
-        )}
+              {orderedRepositories.map((repo) => (
+                <DraggableRepository
+                  key={repo.repo_id}
+                  repository={repo}
+                  isCollapsed={collapsedRepos.has(repo.repo_id)}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                  onWorkspaceClick={onWorkspaceClick}
+                  onNewWorkspace={onNewWorkspace}
+                  onArchive={onArchive}
+                  sidebarExpanded={isExpanded}
+                  dragDisabled={!isExpanded}
+                />
+              ))}
+            </SidebarMenu>
+          </SortableContext>
+        </DndContext>
       </SidebarContent>
 
       <SidebarFooter onAddRepository={onAddRepository} />

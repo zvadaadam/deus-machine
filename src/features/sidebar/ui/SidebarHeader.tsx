@@ -18,16 +18,32 @@ export function SidebarHeader({
         aria-label="Open settings"
         onClick={onOpenSettings}
         className={cn(
-          "flex items-center gap-3 rounded-lg",
+          "flex items-center gap-3",
+          // Expanded: full width with padding, rounded-lg container, hover background
+          "w-full text-left min-w-0 flex-1 p-2 rounded-lg",
           "transition-colors duration-200 ease-out hover:bg-sidebar-accent/60",
-          // Expanded: full width with padding
-          "w-full text-left min-w-0 flex-1 p-2",
-          // Collapsed: centered, no padding, no flex-1
-          "group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:mx-auto"
+          // Collapsed: centered, no padding, no flex-1, no hover background (avatar handles its own hover)
+          "group-data-[collapsible=icon]:w-auto",
+          "group-data-[collapsible=icon]:flex-none",
+          "group-data-[collapsible=icon]:p-0",
+          "group-data-[collapsible=icon]:mx-auto",
+          "group-data-[collapsible=icon]:rounded-none",
+          "group-data-[collapsible=icon]:hover:bg-transparent"
         )}
       >
-        <Avatar className="h-8 w-8 flex-shrink-0 transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]">
-          <AvatarFallback className="text-caption">
+        <Avatar className={cn(
+          "h-8 w-8 flex-shrink-0",
+          "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+          // Override shadcn's rounded-full to match badge design language
+          "rounded-[8px]",
+          // Collapsed: subtle hover lift effect like repository badges
+          "group-data-[collapsible=icon]:hover:scale-105 group-data-[collapsible=icon]:hover:shadow-sm"
+        )}>
+          <AvatarFallback className={cn(
+            "text-caption",
+            // Override shadcn's rounded-full to match badge design
+            "rounded-[8px]"
+          )}>
             {profile.username.slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
