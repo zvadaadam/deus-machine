@@ -29,38 +29,38 @@ export function ThinkingPreview({ block, defaultExpanded = false }: ThinkingPrev
 
   return (
     <div className="w-full">
-      {/* Inline Preview - Always shows first line */}
+      {/* Inline Preview - minimal, like a list item */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-1.5',
-          'rounded-md border border-border/20 border-l-2 border-l-purple-500/30',
-          'bg-transparent hover:bg-muted/20',
-          'transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]',
-          'text-left group'
+          'w-full flex items-center gap-2 px-2 py-1',
+          'hover:bg-muted/10',
+          'transition-colors duration-150',
+          'text-left group',
+          'rounded'
         )}
         aria-expanded={isExpanded}
       >
-        {/* Expand/Collapse Icon */}
-        <div className="flex-shrink-0 w-4 h-4 text-muted-foreground">
+        {/* Chevron - subtle, small */}
+        <div className="flex-shrink-0 w-3 h-3 text-muted-foreground/60">
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4" />
+            <ChevronDown className="w-3 h-3" />
           ) : (
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3 h-3" />
           )}
         </div>
 
         {/* Brain Icon */}
         <div className="flex-shrink-0">
-          <Brain className="w-4 h-4 text-purple-500" />
+          <Brain className="w-3.5 h-3.5 text-purple-600/70" />
         </div>
 
-        {/* "Thinking" + Preview */}
-        <div className="flex-1 flex items-center gap-2 min-w-0">
-          <span className="text-[13px] font-medium text-foreground">
+        {/* "Thinking" + Preview - flowing inline */}
+        <div className="flex-1 flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[13px] text-foreground/90">
             Thinking
           </span>
-          <span className="text-[12px] text-muted-foreground truncate">
+          <span className="text-[12px] text-muted-foreground/80 truncate italic">
             {preview}
           </span>
         </div>
@@ -70,10 +70,10 @@ export function ThinkingPreview({ block, defaultExpanded = false }: ThinkingPrev
       {isExpanded && (
         <div
           className={cn(
-            'mt-1 p-3 rounded-md border border-border/40 bg-card',
+            'mt-1 ml-5 p-3 rounded border border-border/30 bg-card/50',
             'text-[13px] leading-relaxed text-muted-foreground',
             'whitespace-pre-wrap',
-            'animate-in slide-in-from-top-2 duration-200'
+            'animate-in slide-in-from-top-1 duration-150'
           )}
         >
           {thinkingText}

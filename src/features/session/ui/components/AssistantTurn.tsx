@@ -39,7 +39,8 @@ interface ProcessedBlock {
 
 export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantTurnProps) {
   const { toolResultMap } = useSession();
-  const [isExpanded, setIsExpanded] = useState(isLatest);
+  // All turns collapsed by default - let user expand what they need
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Process blocks in order, maintaining chronological sequence
   const { processedBlocks, toolCount, finalSummary } = useMemo(() => {
@@ -110,11 +111,11 @@ export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantT
     );
   }
 
-  // COLLAPSED STATE (previous turns)
-  if (!isLatest && !isExpanded) {
+  // COLLAPSED STATE (all turns with tools)
+  if (!isExpanded) {
     return (
       <div className="flex flex-col">
-        {/* Collapsed Header */}
+        {/* Collapsed Header - inline, minimal */}
         <button
           onClick={() => setIsExpanded(true)}
           className={cn(
@@ -148,10 +149,10 @@ export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantT
   // EXPANDED STATE (show all content)
   return (
     <div className="flex flex-col gap-1">
-      {/* Optional: Collapse button for latest turn */}
-      {isLatest && toolCount > 0 && (
+      {/* Collapse button */}
+      {toolCount > 0 && (
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => setIsExpanded(false)}
           className={cn(
             'flex items-center gap-2 px-2 py-1',
             'rounded-md',
@@ -161,17 +162,8 @@ export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantT
             '-mb-1'
           )}
         >
-          {isExpanded ? (
-            <>
-              <ChevronDown className="w-3 h-3" />
-              Hide actions
-            </>
-          ) : (
-            <>
-              <ChevronRight className="w-3 h-3" />
-              Show actions
-            </>
-          )}
+          <ChevronDown className="w-3 h-3" />
+          <span>Hide actions</span>
         </button>
       )}
 
