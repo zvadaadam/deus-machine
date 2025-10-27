@@ -254,22 +254,15 @@ function ThinkingCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const fullText = thinkingBlock.thinking || '';
 
-  // Extract first sentence for preview
-  const getFirstSentence = (text: string): string => {
-    const match = text.match(/^[^.!?]+[.!?]/);
-    if (match) {
-      const sentence = match[0].trim();
-      return sentence.length > 80 ? sentence.substring(0, 80) + '...' : sentence;
-    }
-    // Fallback: use first 80 chars
-    return text.length > 80 ? text.substring(0, 80) + '...' : text;
-  };
-
-  const firstSentence = getFirstSentence(fullText);
+  // Width-based preview: show first ~120 characters
+  const PREVIEW_CHAR_LIMIT = 120;
+  const preview = fullText.length > PREVIEW_CHAR_LIMIT
+    ? fullText.substring(0, PREVIEW_CHAR_LIMIT) + '...'
+    : fullText;
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Collapsible header with first sentence preview (only when collapsed) - clean, no background */}
+      {/* Collapsible header with width-based preview (only when collapsed) - clean, no background */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -288,7 +281,7 @@ function ThinkingCard({
         <span className="font-medium">Thinking</span>
         {!isExpanded && (
           <span className="text-muted-foreground italic truncate text-[12px]">
-            {firstSentence}
+            {preview}
           </span>
         )}
       </button>
