@@ -134,26 +134,26 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                 return (
                   <div
                     key={file.file}
-                    className="flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer group hover:bg-muted/30 transition-colors duration-200"
+                    className="flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group hover:bg-muted/20 transition-colors duration-200"
                     onClick={() => handleFileClick(file.file)}
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">
-                      <span className="text-xs text-muted-foreground/60">
+                      <span className="text-[11px] text-muted-foreground/50">
                         {displayPath}
                       </span>
-                      <span className="text-xs text-foreground group-hover:text-primary transition-colors duration-200">
+                      <span className="text-[11px] text-foreground/90 group-hover:text-foreground transition-colors duration-200">
                         {filename}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 font-mono">
+                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-3 font-mono">
                       {file.additions > 0 && (
-                        <span className="text-[10px] font-medium text-success">
+                        <span className="text-[10px] font-semibold text-success/90 tracking-tight">
                           +{file.additions}
                         </span>
                       )}
                       {file.deletions > 0 && (
-                        <span className="text-[10px] font-medium text-destructive">
+                        <span className="text-[10px] font-semibold text-destructive/90 tracking-tight">
                           -{file.deletions}
                         </span>
                       )}

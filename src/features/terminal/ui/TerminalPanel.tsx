@@ -109,18 +109,18 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
   }
 
   return (
-    <div className="flex flex-col h-full bg-background border-t border-border">
-      <div className="flex items-center justify-between vibrancy-panel border-b border-border h-[35px] flex-shrink-0">
-        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-1">
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex items-center vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-background text-foreground rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none font-medium">
+            <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-[11px] whitespace-nowrap select-none font-medium">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none transition-colors duration-200 ease-out ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-t cursor-pointer text-[11px] whitespace-nowrap select-none transition-colors duration-200 ease-out ${
                 activeTabId === tab.id
                   ? 'bg-background text-foreground font-medium'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -132,7 +132,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             >
               <span>{tab.title}</span>
               <button
-                className="bg-transparent border-none text-muted-foreground text-lg leading-none p-0 w-4 h-4 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+                className="bg-transparent border-none text-muted-foreground text-sm leading-none p-0 w-3 h-3 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -143,20 +143,13 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             </div>
           ))}
           <button
-            className="bg-transparent border-none text-muted-foreground text-lg px-2 py-1 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+            className="bg-transparent border-none text-muted-foreground text-sm px-1.5 py-0.5 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
             onClick={addTerminal}
             title="New terminal"
           >
             +
           </button>
         </div>
-        <button
-          className="flex items-center gap-1 bg-transparent border-none text-muted-foreground px-3 py-1.5 mr-2 cursor-pointer text-[13px] rounded transition-colors duration-200 ease-out whitespace-nowrap hover:bg-muted/80 hover:text-foreground"
-          onClick={handleRunWorkspace}
-          title="Run workspace (⌘R)"
-        >
-          ▶ Run <span className="opacity-60 text-[11px]">⌘R</span>
-        </button>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
