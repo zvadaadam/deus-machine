@@ -224,17 +224,26 @@ impl FileScanner {
     /// Returns None if not in a git repository or if the file is unmodified.
     /// This is lightweight - only checks status, doesn't read file contents.
     fn get_git_status(&self, repo: &Repository, path: &Path) -> Option<GitStatus> {
-        // Get relative path from repo root
+        // Get repo root (canonicalize to handle /var -> /private/var symlinks on macOS)
         let repo_root = repo.workdir()?;
-        let relative_path = path.strip_prefix(repo_root).ok()?;
+        let canonical_repo_root = fs::canonicalize(repo_root).ok()?;
+        let canonical_path = fs::canonicalize(path).ok()?;
+
+        // Get relative path from repo root
+        let relative_path = canonical_path.strip_prefix(&canonical_repo_root).ok()?;
 
         // Check file status
         let file_status = repo.status_file(relative_path).ok()?;
 
         // Map git2::Status to our GitStatus enum
-        if file_status.contains(Status::WT_NEW) || file_status.contains(Status::INDEX_NEW) {
+        // Check WT (working tree) status first, then INDEX status
+        if file_status.contains(Status::WT_NEW) {
+            Some(GitStatus::Untracked)
+        } else if file_status.contains(Status::INDEX_NEW) {
             Some(GitStatus::Added)
-        } else if file_status.contains(Status::WT_MODIFIED) || file_status.contains(Status::INDEX_MODIFIED) {
+        } else if file_status.contains(Status::WT_MODIFIED) {
+            Some(GitStatus::Modified)
+        } else if file_status.contains(Status::INDEX_MODIFIED) {
             Some(GitStatus::Modified)
         } else if file_status.contains(Status::WT_DELETED) || file_status.contains(Status::INDEX_DELETED) {
             Some(GitStatus::Deleted)
@@ -251,9 +260,6 @@ impl FileScanner {
 
         // Try to open git repository (optional - workspace might not be a git repo)
         let git_repo = Repository::discover(root_path).ok();
-        if git_repo.is_none() {
-            println!("[FileScanner] No git repository found at {:?}, git status disabled", root_path);
-        }
 
         // Use ignore crate for .gitignore-aware traversal
         // Build the full tree in one pass (don't manually recurse)
@@ -467,6 +473,73 @@ mod tests {
         let result = scanner.scan_workspace(temp_dir.path()).unwrap();
         assert_eq!(result.total_files, 3); // 3 files total
         assert_eq!(result.files.len(), 3); // 2 files + 1 directory at root level
+    }
+
+    #[test]
+    fn test_git_status_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let scanner = FileScanner::new();
+
+        // Initialize git repo
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to init git repo");
+
+        // Create a file and commit it
+        fs::write(temp_dir.path().join("committed.txt"), "committed content").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to git add");
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(temp_dir.path())
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "initial"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to git commit");
+
+        // Create modified file
+        fs::write(temp_dir.path().join("committed.txt"), "modified content").unwrap();
+
+        // Create new untracked file
+        fs::write(temp_dir.path().join("new.txt"), "new content").unwrap();
+
+        // Scan and check git status
+        let result = scanner.scan_workspace(temp_dir.path()).unwrap();
+
+        println!("=== Git Status Test Results ===");
+        for file in &result.files {
+            println!("File: {} | Status: {:?}", file.name, file.git_status);
+        }
+
+        // Find files
+        let modified_file = result.files.iter().find(|f| f.name == "committed.txt");
+        let new_file = result.files.iter().find(|f| f.name == "new.txt");
+
+        assert!(modified_file.is_some(), "committed.txt should be found");
+        assert!(new_file.is_some(), "new.txt should be found");
+
+        // Check git status is populated
+        let modified_status = &modified_file.unwrap().git_status;
+        let new_status = &new_file.unwrap().git_status;
+
+        println!("Modified file status: {:?}", modified_status);
+        println!("New file status: {:?}", new_status);
+
+        assert!(modified_status.is_some(), "Modified file should have git status");
+        assert!(new_status.is_some(), "New file should have git status");
     }
 
     #[test]
