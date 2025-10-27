@@ -138,6 +138,7 @@
   --animate-scale-in: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-shimmer: shimmer 2s ease-in-out infinite;
   --animate-subtle-spin: subtle-spin 2s linear infinite;
+  --animate-breathing-glow: breathing-glow 2.5s ease-in-out infinite;
 }
 
 @keyframes accordion-down {
@@ -247,6 +248,16 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Breathing glow for working badges - gentle pulse like heartbeat */
+@keyframes breathing-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 
