@@ -34,12 +34,13 @@ export function WelcomeView({
   const hasMore = recentWorkspaces.length > initialCount;
 
   return (
-    <div className="flex flex-col items-center flex-1 min-h-0 py-16">
-      {/* Everything on the same visual spine - unified max-w-2xl */}
-      <div className="w-full max-w-2xl px-6 space-y-12">
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+      {/* Scrollable container with centered content */}
+      <div className="flex-1 flex flex-col items-center py-16">
+        <div className="w-full max-w-2xl px-6 space-y-12">
 
-        {/* Action cards - clean, simple, no decorative title */}
-        <div className="grid grid-cols-2 gap-3">
+          {/* Action cards - clean, simple, breathing room */}
+          <div className="grid grid-cols-2 gap-4">
           <Card
             role="button"
             tabIndex={0}
@@ -73,25 +74,24 @@ export function WelcomeView({
           </Card>
         </div>
 
-        {/* Recent Workspaces - no border, trust the space */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Recent</h2>
-            {recentWorkspaces.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onCreateWorkspace}
-                className="h-6 px-2 text-xs hover:bg-sidebar-accent/40"
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                New
-              </Button>
-            )}
-          </div>
+          {/* Recent Workspaces - no border, trust the space */}
+          <div className="space-y-4">
+            <div className="flex items-baseline justify-between px-2">
+              <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Recent Workspaces</h2>
+              {recentWorkspaces.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCreateWorkspace}
+                  className="hover:bg-sidebar-accent/40 -mr-2"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
 
-          {/* Workspace items - clean, minimal, subtle state */}
-          {isLoading ? (
+            {/* Workspace items - clean, minimal, subtle state */}
+            {isLoading ? (
             <div className="space-y-0.5">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center justify-between px-2 py-2.5">
@@ -163,7 +163,8 @@ export function WelcomeView({
                 Create Workspace
               </Button>
             </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
