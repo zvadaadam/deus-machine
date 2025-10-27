@@ -1,6 +1,9 @@
 /**
  * Sidebar utility functions
  * Extracted from AppSidebar.tsx for better organization
+ *
+ * For status-related utilities (colors, priorities, sorting),
+ * @see status.ts
  */
 
 /**
