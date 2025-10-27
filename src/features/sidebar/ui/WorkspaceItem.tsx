@@ -98,7 +98,7 @@ export function WorkspaceItem({
           // Base layout
           "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",
           "rounded-lg cursor-pointer",
-          "transition-all duration-200 ease-out",
+          "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
 
           // State-based backgrounds - subtle surface elevation
           isActive && "bg-muted/60",

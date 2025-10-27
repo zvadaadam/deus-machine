@@ -803,6 +803,8 @@ export function MainLayout() {
         {
           "--sidebar-width": "280px",
           "--sidebar-width-mobile": "280px",
+          // Keep default 3rem (48px) - works with shadcn's size-8 (32px) button design
+          "--sidebar-width-icon": "3rem",
         } as React.CSSProperties
       }
     >
