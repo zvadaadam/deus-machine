@@ -127,7 +127,12 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
  * @returns Derived display status for UI rendering
  */
 export function getDisplayStatus(workspace: Workspace): DisplayStatus {
-  // Check for unread messages (highest non-error priority)
+  // 1) Error status (highest priority)
+  if (workspace.session_status === 'error') {
+    return 'error';
+  }
+
+  // 2) Check for unread messages (highest non-error priority)
   const hasUnread = (workspace.unread && workspace.unread > 0) ||
                     (workspace.session_unread && workspace.session_unread > 0);
 
@@ -135,7 +140,7 @@ export function getDisplayStatus(workspace: Workspace): DisplayStatus {
     return 'unread';
   }
 
-  // Default to session status
+  // 3) Default to session status
   return workspace.session_status || 'idle';
 }
 
