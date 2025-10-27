@@ -101,9 +101,9 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                 const pathParts = file.file.split('/').filter(part => part.length > 0);
                 const filename = pathParts.pop() || file.file;
 
-                // Additional guard: if filename is empty or just special chars
-                if (!filename || filename.trim() === '') {
-                  console.warn('Invalid filename detected:', file.file);
+                // Additional guard: if filename is empty, just special chars, or suspiciously short
+                if (!filename || filename.trim() === '' || filename.trim().length < 2 || filename === '-') {
+                  console.warn('Invalid or suspicious filename detected:', file.file);
                   return null;
                 }
 
@@ -146,14 +146,14 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                         {filename}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-3 font-mono">
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3 font-mono tabular-nums min-w-[60px] justify-end">
                       {file.additions > 0 && (
-                        <span className="text-[10px] font-semibold text-success/90 tracking-tight">
+                        <span className="text-[10px] font-semibold text-success/90">
                           +{file.additions}
                         </span>
                       )}
                       {file.deletions > 0 && (
-                        <span className="text-[10px] font-semibold text-destructive/90 tracking-tight">
+                        <span className="text-[10px] font-semibold text-destructive/90">
                           -{file.deletions}
                         </span>
                       )}
