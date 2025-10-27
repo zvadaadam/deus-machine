@@ -8,7 +8,7 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-import { DiffModal, FileChangesPanel, BrowserOverlay } from "@/features/workspace";
+import { DiffModal, FileChangesPanel, BrowserOverlay, MainContentTabBar } from "@/features/workspace";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
 import { useKeyboardShortcuts } from "@/shared/hooks";
@@ -46,7 +46,7 @@ import { FileText, Package, GitPullRequest, Archive, Square, Terminal as Termina
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
-import { MainContentTabs, type Tab } from "@/features/workspace/ui/MainContentTabs";
+import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 import type {
   Workspace,
   Repo,
@@ -145,47 +145,45 @@ function MainContent({
         }}
       >
         {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
-        <div className="flex flex-col min-h-0 min-w-0 overflow-hidden border-r border-border/40">
-          {selectedWorkspace ? (
-            <MainContentTabs
+        {selectedWorkspace ? (
+          <div className="flex flex-col h-full overflow-hidden border-r border-border/40">
+            {/* Tab Bar - Fixed height */}
+            <MainContentTabBar
               tabs={mainTabs}
               activeTabId={activeMainTabId}
               onTabChange={handleMainTabChange}
               onTabClose={handleMainTabClose}
               onTabAdd={handleMainTabAdd}
-            >
-              {/* Render active tab content */}
-              <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                {/* Workspace Header */}
-                <WorkspaceHeader
-                  branch={selectedWorkspace.branch}
-                  workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                  onBrowserToggle={handleBrowserToggle}
-                  showBrowserButton={true}
-                />
-
-                {/* Active tab content */}
-                <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                  {selectedWorkspace.active_session_id && (
-                    <SessionPanel
-                      ref={workspaceChatPanelRef}
-                      sessionId={selectedWorkspace.active_session_id}
-                      embedded={true}
-                    />
-                  )}
-                </div>
-              </div>
-            </MainContentTabs>
-          ) : (
-            <WelcomeView
-              recentWorkspaces={recentWorkspaces}
-              onCreateWorkspace={onCreateWorkspace}
-              onOpenProject={onOpenProject}
-              onCloneRepository={onCloneRepository}
-              onWorkspaceClick={onWorkspaceClick}
             />
-          )}
-        </div>
+
+            {/* Workspace Header - Fixed height */}
+            <WorkspaceHeader
+              branch={selectedWorkspace.branch}
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+              onBrowserToggle={handleBrowserToggle}
+              showBrowserButton={true}
+            />
+
+            {/* Tab Content - Flexible height, scrollable */}
+            <div className="flex-1 overflow-hidden">
+              {selectedWorkspace.active_session_id && (
+                <SessionPanel
+                  ref={workspaceChatPanelRef}
+                  sessionId={selectedWorkspace.active_session_id}
+                  embedded={true}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <WelcomeView
+            recentWorkspaces={recentWorkspaces}
+            onCreateWorkspace={onCreateWorkspace}
+            onOpenProject={onOpenProject}
+            onCloneRepository={onCloneRepository}
+            onWorkspaceClick={onWorkspaceClick}
+          />
+        )}
 
         {/* RIGHT PANEL - Changes & Terminal (permanent, always visible when workspace selected) */}
         {selectedWorkspace && (
