@@ -137,6 +137,7 @@
   --animate-slide-in-left: slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-scale-in: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-shimmer: shimmer 2s ease-in-out infinite;
+  --animate-subtle-spin: subtle-spin 2s linear infinite;
 }
 
 @keyframes accordion-down {
@@ -236,6 +237,16 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+/* Subtle spinner for working state - 120° arc rotating smoothly */
+@keyframes subtle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
