@@ -141,9 +141,17 @@ function MainContent({
        * CSS Grid Layout: Main Content | Right Panel/Browser
        *
        * Architecture:
-       * - When browser closed: Main (flex) | Right Panel (400px)
-       * - When browser open: Main (flex, shrunk) | Browser (400px)
-       * - Browser replaces right panel in the grid to naturally shrink main content
+       * - When browser closed: Main (flex, min 500px) | Right Panel (fixed 400px)
+       * - When browser open: Main (flex, min 350px, 1fr) | Browser (min 700px, 2fr)
+       *
+       * Why browser gets more space:
+       * - Web pages need significant horizontal space (700-800px+)
+       * - Chat works well in narrower space (vertical scrolling)
+       * - 2fr growth factor: browser gets 2x extra space as viewport grows
+       *
+       * Example with 1200px total:
+       * - Main: ~400px (min 350px + some flex)
+       * - Browser: ~800px (min 700px + 2x flex)
        */}
       <div
         className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
@@ -151,7 +159,7 @@ function MainContent({
           display: 'grid',
           gridTemplateColumns: selectedWorkspace
             ? isBrowserOpen
-              ? 'minmax(400px, 1fr) 400px'  // Main (shrunk) | Browser
+              ? 'minmax(350px, 1fr) minmax(700px, 2fr)'  // Main (smaller) | Browser (LARGER, grows 2x faster)
               : 'minmax(500px, 1fr) 400px'   // Main | Right Panel
             : '1fr',
           height: '100%',
