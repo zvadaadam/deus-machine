@@ -96,42 +96,42 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Search Bar + Refresh */}
-      <div className="px-3 py-2 border-b border-border/30 flex items-center gap-2 flex-shrink-0">
+      <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2 flex-shrink-0">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
           <Input
             type="text"
             placeholder="Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 pl-8 text-sm"
+            className="h-9 pl-7 text-xs placeholder:text-muted-foreground/50"
           />
         </div>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-9 w-9"
           onClick={handleRefresh}
           title="Refresh files"
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* File Count */}
-      <div className="px-3 py-1.5 border-b border-border/20 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs text-muted-foreground/70">
+      {/* File Count Stats */}
+      <div className="px-3 py-2 border-b border-border/20 flex items-center justify-between flex-shrink-0">
+        <span className="text-xs font-medium text-muted-foreground/60">
           {data?.totalFiles || 0} files
         </span>
         {data?.totalSize && (
-          <span className="text-xs text-muted-foreground/50 font-mono tabular-nums">
+          <span className="text-xs text-muted-foreground/40 font-mono tabular-nums">
             {formatTotalSize(data.totalSize)}
           </span>
         )}
       </div>
 
       {/* File Tree */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto scrollbar-vibrancy p-2">
         {filteredFiles.length > 0 ? (
           <FileTree nodes={filteredFiles} onFileClick={handleFileClick} />
         ) : (
