@@ -53,7 +53,7 @@ const getToolIcon = (toolName: string) => {
 };
 
 // Get concise preview for collapsed state
-const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): string => {
+const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: string; isPath?: boolean } => {
   const input = toolBlock.input as any;
 
   switch (toolBlock.name) {
@@ -66,37 +66,54 @@ const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): string => {
         const content = Array.isArray(toolResult.content) ? toolResult.content[0]?.text : toolResult.content;
         if (typeof content === 'string') {
           const lineCount = content.split('\n').length;
-          return `${fileName} • ${lineCount} lines`;
+          return { text: `${fileName} • ${lineCount} lines`, isPath: true };
         }
       }
-      return fileName;
+      return { text: fileName, isPath: true };
     }
 
-    case 'Edit': {
+    case 'Edit':
+    case 'Write':
+    case 'MultiEdit': {
       const filePath = input?.file_path || '';
       const fileName = filePath.split('/').pop() || filePath;
-      return fileName;
+
+      // Calculate diff stats for Edit
+      if (toolBlock.name === 'Edit' && input?.old_string && input?.new_string) {
+        const oldLines = input.old_string.split('\n').length;
+        const newLines = input.new_string.split('\n').length;
+        const added = Math.max(0, newLines - oldLines);
+        const removed = Math.max(0, oldLines - newLines);
+
+        if (added > 0 || removed > 0) {
+          return { text: `${fileName} • +${added} -${removed}`, isPath: true };
+        }
+      }
+
+      return { text: fileName, isPath: true };
     }
 
-    case 'Bash': {
+    case 'Bash':
+    case 'BashOutput': {
       const command = input?.command || '';
-      const shortCmd = command.length > 40 ? command.substring(0, 40) + '...' : command;
-      return shortCmd;
+      // Show command but keep it readable
+      const shortCmd = command.length > 50 ? command.substring(0, 50) + '...' : command;
+      return { text: shortCmd };
     }
 
     case 'Grep':
     case 'Glob': {
       const pattern = input?.pattern || '';
-      return `"${pattern}"`;
+      return { text: `"${pattern}"` };
     }
 
     case 'TodoWrite': {
       const todos = input?.todos || [];
-      return `${todos.length} items`;
+      return { text: `${todos.length} items` };
     }
 
     default:
-      return '';
+      return { text: '' };
   }
 };
 
@@ -162,8 +179,13 @@ function ToolPreviewCard({
           isError ? "text-destructive" : "text-muted-foreground/70"
         )} />
         <span className="font-medium">{toolBlock.name}</span>
-        {preview && (
-          <span className="text-muted-foreground truncate text-[12px]">{preview}</span>
+        {preview.text && (
+          <span className={cn(
+            "truncate text-[12px]",
+            preview.isPath ? "font-mono text-muted-foreground" : "text-muted-foreground"
+          )}>
+            {preview.text}
+          </span>
         )}
       </button>
 
@@ -195,11 +217,34 @@ function ThinkingCard({
   thinkingBlock: ThinkingBlockType;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const text = thinkingBlock.thinking || '';
+  const fullText = thinkingBlock.thinking || '';
+
+  // Extract first sentence for preview
+  const getFirstSentence = (text: string): string => {
+    const match = text.match(/^[^.!?]+[.!?]/);
+    if (match) {
+      const sentence = match[0].trim();
+      return sentence.length > 80 ? sentence.substring(0, 80) + '...' : sentence;
+    }
+    // Fallback: use first 80 chars
+    return text.length > 80 ? text.substring(0, 80) + '...' : text;
+  };
+
+  // Get text after first sentence for detail view
+  const getDetailText = (text: string): string => {
+    const match = text.match(/^[^.!?]+[.!?]\s*/);
+    if (match) {
+      return text.substring(match[0].length).trim();
+    }
+    return text;
+  };
+
+  const firstSentence = getFirstSentence(fullText);
+  const detailText = getDetailText(fullText);
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Collapsible header */}
+      {/* Collapsible header with first sentence preview */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -216,12 +261,15 @@ function ThinkingCard({
         />
         <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
         <span className="font-medium">Thinking</span>
+        <span className="text-muted-foreground italic truncate text-[12px]">
+          {firstSentence}
+        </span>
       </button>
 
-      {/* Expanded full thinking text */}
-      {isExpanded && (
+      {/* Expanded detail text (without repeating first sentence) */}
+      {isExpanded && detailText && (
         <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
-          {text}
+          {detailText}
         </div>
       )}
     </div>
