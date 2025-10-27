@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FileText, FileCode, FileJson, FileImage, FileType } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, FileText, FileCode, FileJson, FileImage, FileType } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
 interface FileTreeNode {
@@ -120,24 +120,22 @@ function TreeNode({
           }
         }}
       >
-        {/* Expand/Collapse Icon (directories only) */}
-        {isDirectory && (
-          <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-            {hasChildren && (
-              isExpanded
-                ? <ChevronDown className="w-4 h-4 text-muted-foreground/60" />
-                : <ChevronRight className="w-4 h-4 text-muted-foreground/60" />
-            )}
-          </div>
-        )}
-
-        {/* File/Folder Icon */}
-        <div className="flex-shrink-0">
+        {/* Single Icon Column - Chevron for folders, File icon for files */}
+        <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
           {isDirectory ? (
-            isExpanded
-              ? <FolderOpen className="w-4 h-4 text-primary/70" />
-              : <Folder className="w-4 h-4 text-primary/50" />
+            // Folders: Show chevron only
+            hasChildren ? (
+              isExpanded ? (
+                <ChevronDown className="w-4 h-4 text-foreground/60" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-foreground/60" />
+              )
+            ) : (
+              // Empty folder - show faint chevron
+              <ChevronRight className="w-4 h-4 text-muted-foreground/20" />
+            )
           ) : FileIcon ? (
+            // Files: Show colored icon
             <FileIcon className={cn('w-4 h-4', fileConfig?.color)} />
           ) : (
             <File className="w-4 h-4 text-muted-foreground/40" />
