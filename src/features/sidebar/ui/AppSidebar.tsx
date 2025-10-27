@@ -254,8 +254,8 @@ export function AppSidebar({
         ) : (
           // No drag-drop when sidebar is collapsed (icon mode)
           // Show all repos - opacity hierarchy handles active vs idle distinction
-          // px-1 (4px) centers 40px badges in 48px sidebar: (48-40)/2 = 4px
-          <SidebarMenu className={cn("gap-2", "py-2 px-1")}>
+          // No horizontal padding - items center themselves
+          <SidebarMenu className={cn("gap-2", "py-2 px-0")}>
             {orderedRepositories.map((repo) => (
               <DraggableRepository
                 key={repo.repo_id}

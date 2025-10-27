@@ -131,7 +131,9 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
-                "w-full flex items-center px-0 py-3 justify-center overflow-visible relative",
+                "w-full flex items-center justify-center overflow-visible relative",
+                // !important to override SidebarMenuButton's group-data-[collapsible=icon]:p-2!
+                "!p-0 py-3",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
@@ -225,7 +227,11 @@ export function RepositoryItem({
                       {workingCount}
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold text-sidebar-foreground">
+                    <span className={cn(
+                      "text-xs font-semibold",
+                      // Inherit parent opacity for idle repos, full brightness for active
+                      isIdle ? "text-sidebar-foreground/40" : "text-sidebar-foreground"
+                    )}>
                       {getRepoInitials(repository.repo_name)}
                     </span>
                   )}
