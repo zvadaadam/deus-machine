@@ -5,12 +5,34 @@ import { cn } from '@/shared/lib/utils';
 
 /**
  * Tab data structure
+ * Supports multiple content types: chat sessions, diffs, and full files
  */
 export interface Tab {
   id: string;
   label: string;
-  type: 'chat' | 'files';
+  type: 'chat' | 'diff' | 'file';
   closeable?: boolean;
+
+  /**
+   * Type-specific data payload
+   * - For 'diff' tabs: file path, diff content, and change stats
+   * - For 'file' tabs: file content and language (future)
+   * - For 'chat' tabs: session ID
+   */
+  data?: {
+    // For 'diff' tabs
+    filePath?: string;
+    diff?: string;
+    additions?: number;
+    deletions?: number;
+
+    // For 'file' tabs (future feature)
+    fileContent?: string;
+    language?: string;
+
+    // For 'chat' tabs
+    sessionId?: string;
+  };
 }
 
 /**
@@ -28,16 +50,21 @@ interface MainContentTabsProps {
 /**
  * MainContentTabBar - Browser-style tab bar for main content area
  *
- * Design Philosophy:
- * - Just renders the tab bar UI (no content wrapping)
- * - Parent component controls layout and content rendering
- * - Clean separation of concerns: tabs UI vs content layout
+ * Design Philosophy (Jony Ive Refinements):
+ * - Restraint: Subtle borders, no decorative effects
+ * - Consistency: Unified opacity scale (/60 muted, /20 subtle)
+ * - Lightness: Regular font weight, minimal hover states
+ * - Clarity: Active state through color only, no background jumps
  *
- * Features:
- * - Multiple chat sessions
- * - Files view
- * - Add/close tabs
- * - Active state highlighting
+ * Changes from previous version:
+ * - Removed backdrop-blur (decorative, serves no purpose)
+ * - Border opacity: /60 → full (confident, visible)
+ * - Background: /80 → full (no semi-transparency)
+ * - Font weight: medium → normal (lighter feel)
+ * - Padding: py-2.5 → py-2 (tighter, less chunky)
+ * - Hover: bg-muted/50 → bg-muted/10 (subtle)
+ * - Active: bg-background → no background (color only)
+ * - Border dividers: /40 → /20 (more subtle)
  */
 export function MainContentTabBar({
   tabs,
@@ -62,7 +89,7 @@ export function MainContentTabBar({
   };
 
   return (
-    <div className="flex items-center border-b border-border/60 bg-background/80 backdrop-blur-sm flex-shrink-0">
+    <div className="flex items-center border-b border-border bg-background flex-shrink-0">
       <div className="flex items-center flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -75,25 +102,24 @@ export function MainContentTabBar({
               onMouseEnter={() => setHoveredTabId(tab.id)}
               onMouseLeave={() => setHoveredTabId(null)}
               className={cn(
-                'group relative flex items-center gap-2 px-4 py-2.5 min-w-[120px] max-w-[200px]',
-                'border-r border-border/40',
+                'group relative flex items-center gap-2 px-3 py-2 min-w-[100px] max-w-[180px]',
+                'border-r border-border/20',
                 'transition-colors duration-200',
-                'hover:bg-muted/50',
-                isActive && 'bg-background text-foreground',
-                !isActive && 'text-muted-foreground'
+                'hover:bg-muted/10',
+                isActive ? 'text-foreground' : 'text-muted-foreground/60'
               )}
             >
-              {/* Active indicator */}
+              {/* Active indicator - subtle top border */}
               {isActive && (
-                <div className="absolute inset-x-0 top-0 h-0.5 bg-primary" />
+                <div className="absolute inset-x-0 top-0 h-[2px] bg-primary" />
               )}
 
-              {/* Tab label */}
-              <span className="flex-1 text-sm font-medium truncate">
+              {/* Tab label - regular font weight for lightness */}
+              <span className="flex-1 text-sm truncate">
                 {tab.label}
               </span>
 
-              {/* Close button */}
+              {/* Close button - appears on hover */}
               {tab.closeable !== false && (
                 <button
                   type="button"
@@ -119,7 +145,7 @@ export function MainContentTabBar({
             variant="ghost"
             size="sm"
             onClick={handleAddTab}
-            className="h-9 px-3 shrink-0 border-r border-border/40"
+            className="h-8 px-2 shrink-0 border-r border-border/20"
           >
             <Plus className="w-4 h-4" />
           </Button>
