@@ -181,22 +181,19 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             />
           </div>
         ) : showRun && tabs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full bg-background">
+          <div className="flex flex-col items-center justify-center h-full bg-background px-6">
             <button
-              className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group flex items-center gap-2 bg-transparent border border-border/40 rounded-lg px-4 py-2.5 cursor-pointer transition-all duration-200 ease-out hover:border-foreground/40 hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
-              <div className="text-5xl text-muted-foreground mb-2 transition-colors duration-200 ease-out group-hover:text-primary">
+              <div className="text-base text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
                 ▶
               </div>
-              <div className="text-base font-semibold text-muted-foreground mb-1">
+              <div className="text-sm font-medium text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
                 {detectingServer ? 'Detecting server...' : 'Run workspace'}
               </div>
             </button>
-            <div className="mt-4 text-[13px] text-muted-foreground">
-              Test your changes here.
-            </div>
           </div>
         ) : (
           tabs.map((tab) => (
