@@ -8,7 +8,8 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-import { DiffModal, FileChangesPanel, BrowserOverlay, MainContentTabBar } from "@/features/workspace";
+import { DiffModal, FileChangesPanel, MainContentTabBar } from "@/features/workspace";
+import { BrowserPanel } from "@/features/browser";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
 import { useKeyboardShortcuts } from "@/shared/hooks";
@@ -42,7 +43,7 @@ import {
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor, X } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
@@ -88,13 +89,12 @@ function MainContent({
   // State for browser overlay
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
 
-  // Auto-collapse sidebar when browser opens, restore when closes
+  // Collapse sidebar when browser opens (but allow manual toggle)
   useEffect(() => {
     if (isBrowserOpen) {
       setSidebarOpen(false);
-    } else {
-      setSidebarOpen(true);
     }
+    // Don't auto-restore sidebar when browser closes - let user control it
   }, [isBrowserOpen, setSidebarOpen]);
 
   // Handle browser toggle
@@ -132,13 +132,22 @@ function MainContent({
 
   return (
     <SidebarInset className="min-w-0">
-      {/* CSS Grid Layout: Main Content | Right Panel */}
+      {/**
+       * CSS Grid Layout: Main Content | Right Panel/Browser
+       *
+       * Architecture:
+       * - When browser closed: Main (flex) | Right Panel (400px)
+       * - When browser open: Main (flex, shrunk) | Browser (400px)
+       * - Browser replaces right panel in the grid to naturally shrink main content
+       */}
       <div
         className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
         style={{
           display: 'grid',
           gridTemplateColumns: selectedWorkspace
-            ? 'minmax(500px, 1fr) 400px'
+            ? isBrowserOpen
+              ? 'minmax(400px, 1fr) 400px'  // Main (shrunk) | Browser
+              : 'minmax(500px, 1fr) 400px'   // Main | Right Panel
             : '1fr',
           height: '100%',
           gap: '0',
@@ -147,7 +156,15 @@ function MainContent({
         {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
         {selectedWorkspace ? (
           <div className="flex flex-col h-full overflow-hidden border-r border-border/40">
-            {/* Tab Bar - Fixed height */}
+            {/* 1. Workspace Header - Fixed height (branch name, browser button) */}
+            <WorkspaceHeader
+              branch={selectedWorkspace.branch}
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+              onBrowserToggle={handleBrowserToggle}
+              showBrowserButton={true}
+            />
+
+            {/* 2. Tab Bar - Fixed height (Chat #1, Chat #2, +) */}
             <MainContentTabBar
               tabs={mainTabs}
               activeTabId={activeMainTabId}
@@ -156,16 +173,8 @@ function MainContent({
               onTabAdd={handleMainTabAdd}
             />
 
-            {/* Workspace Header - Fixed height */}
-            <WorkspaceHeader
-              branch={selectedWorkspace.branch}
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              onBrowserToggle={handleBrowserToggle}
-              showBrowserButton={true}
-            />
-
-            {/* Tab Content - Flexible height, scrollable */}
-            <div className="flex-1 overflow-hidden">
+            {/* 3. Tab Content - Flexible height, scrollable (SessionPanel) */}
+            <div className="flex-1 min-h-0 overflow-hidden">
               {selectedWorkspace.active_session_id && (
                 <SessionPanel
                   ref={workspaceChatPanelRef}
@@ -185,60 +194,81 @@ function MainContent({
           />
         )}
 
-        {/* RIGHT PANEL - Changes & Terminal (permanent, always visible when workspace selected) */}
+        {/* RIGHT PANEL OR BROWSER - Mutually exclusive in grid */}
         {selectedWorkspace && (
-          <div className="flex flex-col min-h-0 min-w-0 overflow-hidden">
-            <Tabs value={rightPanelTab} onValueChange={(v) => onRightPanelTabChange(v as any)} className="h-full min-h-0 flex flex-col overflow-hidden">
-              <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm">
-                <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
-                  <TabsTrigger
-                    value="changes"
-                    className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    <span className="text-body-sm font-medium">Changes</span>
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="terminal"
-                    className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-                  >
-                    <TerminalIcon className="h-4 w-4 mr-2" />
-                    <span className="text-body-sm font-medium">Terminal</span>
-                  </TabsTrigger>
-                </TabsList>
+          isBrowserOpen ? (
+            /* BROWSER - Slides in with animation, replaces right panel in grid */
+            <div
+              className="flex flex-col h-full overflow-hidden bg-background border-l border-border/40 animate-in slide-in-from-right duration-300"
+              style={{
+                animation: 'slideInFromRight 300ms cubic-bezier(0.23, 1, 0.32, 1)'
+              }}
+            >
+              {/* Browser Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
+                <h2 className="text-lg font-semibold text-foreground">Browser</h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsBrowserOpen(false)}
+                  className="h-8 w-8"
+                  title="Close browser"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
-              {/* File Changes Tab */}
-              <TabsContent
-                value="changes"
-                className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-              >
-                <FileChangesPanel selectedWorkspace={selectedWorkspace} />
-              </TabsContent>
+              {/* Browser Content */}
+              <div className="flex-1 overflow-hidden">
+                <BrowserPanel workspaceId={selectedWorkspace.id} />
+              </div>
+            </div>
+          ) : (
+            /* RIGHT PANEL - Changes & Terminal */
+            <div className="flex flex-col h-full overflow-hidden">
+              <Tabs value={rightPanelTab} onValueChange={(v) => onRightPanelTabChange(v as any)} className="h-full flex flex-col overflow-hidden">
+                <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
+                  <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
+                    <TabsTrigger
+                      value="changes"
+                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      <span className="text-body-sm font-medium">Changes</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="terminal"
+                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                    >
+                      <TerminalIcon className="h-4 w-4 mr-2" />
+                      <span className="text-body-sm font-medium">Terminal</span>
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
 
-              {/* Terminal Tab */}
-              <TabsContent
-                value="terminal"
-                className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-              >
-                <TerminalPanel
-                  workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                  workspaceName={selectedWorkspace.directory_name}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
+                {/* File Changes Tab */}
+                <TabsContent
+                  value="changes"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                >
+                  <FileChangesPanel selectedWorkspace={selectedWorkspace} />
+                </TabsContent>
+
+                {/* Terminal Tab */}
+                <TabsContent
+                  value="terminal"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                >
+                  <TerminalPanel
+                    workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                    workspaceName={selectedWorkspace.directory_name}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          )
         )}
       </div>
-
-      {/* Browser Overlay - Portal that slides in from right */}
-      {selectedWorkspace && (
-        <BrowserOverlay
-          isOpen={isBrowserOpen}
-          workspaceId={selectedWorkspace.id}
-          onClose={() => setIsBrowserOpen(false)}
-        />
-      )}
     </SidebarInset>
   );
 }
