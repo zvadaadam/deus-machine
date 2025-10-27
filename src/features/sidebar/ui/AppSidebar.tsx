@@ -26,6 +26,7 @@ import type { AppSidebarProps } from "../model/types";
 import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
+import { getRepoPriorityStatus, STATUS_CONFIG } from "../lib/status";
 
 export function AppSidebar({
   repositories,
@@ -52,11 +53,28 @@ export function AppSidebar({
   const navigationTimeoutRef = React.useRef<NodeJS.Timeout>();
   const lastNavigationRef = React.useRef<{ workspace: any; repoId: string } | null>(null);
 
-  // Apply custom ordering - memoized to prevent unnecessary re-sorts
-  const orderedRepositories = React.useMemo(
-    () => reorderRepositories(repositories),
-    [repositories, repositoryOrder, reorderRepositories]
-  );
+  // Apply priority-based sorting, then custom ordering
+  // Priority logic: unread/error → working → idle, then user's manual order within each priority
+  const orderedRepositories = React.useMemo(() => {
+    // First, apply user's custom drag-drop ordering
+    const customOrdered = reorderRepositories(repositories);
+
+    // Then sort by status priority (higher priority repos float to top)
+    return [...customOrdered].sort((a, b) => {
+      const statusA = getRepoPriorityStatus(a.workspaces);
+      const statusB = getRepoPriorityStatus(b.workspaces);
+      const priorityA = STATUS_CONFIG[statusA].priority;
+      const priorityB = STATUS_CONFIG[statusB].priority;
+
+      // Higher priority first
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA;
+      }
+
+      // Same priority: preserve user's custom order
+      return 0;
+    });
+  }, [repositories, repositoryOrder, reorderRepositories]);
 
   // Flatten all workspaces with repo info for keyboard navigation
   const allWorkspaces = React.useMemo(() => {

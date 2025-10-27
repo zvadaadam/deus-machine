@@ -4,7 +4,17 @@
  */
 
 export type MessageRole = 'user' | 'assistant';
-export type SessionStatus = 'idle' | 'working' | 'compacting';
+
+/**
+ * Session status indicating current agent state
+ *
+ * TODO: Backend support for 'error' status
+ * Currently 'error' is derived in frontend by checking tool_result.is_error
+ * Backend should update session.status to 'error' when tool execution fails
+ *
+ * @see src/features/sidebar/lib/status.ts for status derivation logic
+ */
+export type SessionStatus = 'idle' | 'working' | 'compacting' | 'error';
 
 /**
  * Base message entity
