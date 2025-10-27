@@ -10,6 +10,11 @@ interface SidebarState {
   repositoryOrder: string[];
   setRepositoryOrder: (order: string[]) => void;
   reorderRepositories: <T extends { repo_id: string }>(repos: T[]) => T[];
+
+  // Smart collapse for idle repos (collapsed sidebar mode)
+  showIdleRepos: boolean;
+  setShowIdleRepos: (show: boolean) => void;
+  toggleIdleRepos: () => void;
 }
 
 export const useSidebarStore = create<SidebarState>()(
@@ -52,6 +57,11 @@ export const useSidebarStore = create<SidebarState>()(
           return indexA - indexB;
         });
       },
+
+      // Smart collapse state for idle repos
+      showIdleRepos: false,
+      setShowIdleRepos: (show) => set({ showIdleRepos: show }),
+      toggleIdleRepos: () => set((state) => ({ showIdleRepos: !state.showIdleRepos })),
     }),
     {
       name: 'sidebar-storage',
@@ -59,11 +69,13 @@ export const useSidebarStore = create<SidebarState>()(
       partialize: (state) => ({
         collapsedRepos: Array.from(state.collapsedRepos),
         repositoryOrder: state.repositoryOrder,
+        showIdleRepos: state.showIdleRepos,
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,
         collapsedRepos: new Set(persistedState?.collapsedRepos || []),
         repositoryOrder: persistedState?.repositoryOrder || [],
+        showIdleRepos: persistedState?.showIdleRepos ?? false,
       }),
     }
   )
