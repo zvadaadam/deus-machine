@@ -1,99 +1,108 @@
 /**
  * Simple Assistant Message
  *
- * Ultra-minimal design inspired by pure text interfaces.
- * No icons, no colors, no decoration - just facts.
- *
- * Design: List of tools + text blocks, click to expand
+ * Scannable list of tools with icons for visual hierarchy.
+ * Shows all tools directly - no collapsing, just pure display.
  */
 
-import { useState } from 'react';
 import type { ContentBlock, ToolUseBlock, TextBlock as TextBlockType, ThinkingBlock as ThinkingBlockType } from '@/shared/types';
 import { BlockRenderer } from '../blocks';
 import { useSession } from '../../context';
-import { cn } from '@/shared/lib/utils';
+import { FileText, Pencil, Terminal, Search, FolderOpen, CheckSquare, Brain, Globe, ExternalLink, Zap } from 'lucide-react';
 
 interface SimpleAssistantMessageProps {
   contentBlocks: (ContentBlock | string)[];
   messageId: string;
 }
 
+// Map tool names to icons
+const getToolIcon = (toolName: string) => {
+  switch (toolName) {
+    case 'Read':
+      return FileText;
+    case 'Edit':
+    case 'Write':
+    case 'MultiEdit':
+      return Pencil;
+    case 'Bash':
+    case 'BashOutput':
+    case 'KillShell':
+      return Terminal;
+    case 'Grep':
+    case 'WebSearch':
+      return Search;
+    case 'Glob':
+      return FolderOpen;
+    case 'TodoWrite':
+      return CheckSquare;
+    case 'WebFetch':
+      return Globe;
+    case 'Task':
+      return Zap;
+    default:
+      return ExternalLink;
+  }
+};
+
+// Get one-line preview for each tool
+const getToolPreview = (block: ToolUseBlock, toolResultMap: Map<string, any>): string => {
+  const toolName = block.name;
+  const input = block.input as any;
+
+  switch (toolName) {
+    case 'Read':
+      const readPath = input?.file_path || '';
+      const fileName = readPath.split('/').pop() || readPath;
+      const toolResult = toolResultMap.get(block.id);
+      let lineCount = 0;
+      if (Array.isArray(toolResult?.content) && toolResult.content[0]?.type === 'text') {
+        const textContent = toolResult.content[0] as any;
+        const text = textContent.text;
+        if (typeof text === 'string') {
+          lineCount = text.split('\n').length;
+        }
+      }
+      return `${lineCount} lines ${fileName}`;
+
+    case 'Edit':
+      const editPath = input?.file_path || '';
+      const editFileName = editPath.split('/').pop() || editPath;
+      return editFileName;
+
+    case 'Bash':
+      const command = input?.command || '';
+      const shortCmd = command.length > 50 ? command.substring(0, 50) + '...' : command;
+      return shortCmd;
+
+    case 'Grep':
+    case 'Glob':
+      const pattern = input?.pattern || '';
+      return `"${pattern}"`;
+
+    case 'TodoWrite':
+      const todos = input?.todos || [];
+      return `${todos.length} items`;
+
+    case 'Thinking':
+      return '';
+
+    default:
+      return '';
+  }
+};
+
 export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssistantMessageProps) {
   const { toolResultMap } = useSession();
-  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-
-  const toggleTool = (toolId: string) => {
-    setExpandedTools(prev => {
-      const next = new Set(prev);
-      if (next.has(toolId)) {
-        next.delete(toolId);
-      } else {
-        next.add(toolId);
-      }
-      return next;
-    });
-  };
-
-  // Extract one-line preview for each tool
-  const getToolPreview = (block: ToolUseBlock): string => {
-    const toolName = block.name;
-    const input = block.input as any;
-
-    switch (toolName) {
-      case 'Read':
-        const readPath = input?.file_path || '';
-        const fileName = readPath.split('/').pop() || readPath;
-        const toolResult = toolResultMap.get(block.id);
-        let lineCount = 0;
-        if (Array.isArray(toolResult?.content) && toolResult.content[0]?.type === 'text') {
-          const textContent = toolResult.content[0] as any;
-          const text = textContent.text;
-          if (typeof text === 'string') {
-            lineCount = text.split('\n').length;
-          }
-        }
-        return `${toolName} ${lineCount} lines ${fileName}`;
-
-      case 'Edit':
-        const editPath = input?.file_path || '';
-        const editFileName = editPath.split('/').pop() || editPath;
-        // Try to get diff stats from result
-        return `${toolName} ${editFileName}`;
-
-      case 'Bash':
-        const command = input?.command || '';
-        const shortCmd = command.length > 40 ? command.substring(0, 40) + '...' : command;
-        return `${toolName} ${shortCmd}`;
-
-      case 'Grep':
-      case 'Glob':
-        const pattern = input?.pattern || '';
-        return `${toolName} "${pattern}"`;
-
-      case 'TodoWrite':
-        const todos = input?.todos || [];
-        return `${toolName} ${todos.length} items`;
-
-      default:
-        return toolName;
-    }
-  };
-
-  const getThinkingPreview = (block: ThinkingBlockType): string => {
-    const text = block.thinking || '';
-    const firstLine = text.split('\n')[0];
-    const preview = firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
-    return `Thinking ${preview}`;
-  };
 
   let toolIndex = 0;
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex flex-col gap-2">
       {contentBlocks.map((block, index) => {
+        // String or text block
         if (typeof block === 'string') {
           return (
-            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed py-2">
+            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed">
               {block}
             </div>
           );
@@ -102,69 +111,67 @@ export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssis
         if (block.type === 'text') {
           const textBlock = block as TextBlockType;
           return (
-            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed py-2">
+            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed">
               {textBlock.text}
             </div>
           );
         }
 
+        // Tool use - show with icon and preview
         if (block.type === 'tool_use') {
           toolIndex++;
           const currentIndex = toolIndex;
           const toolBlock = block as ToolUseBlock;
-          const isExpanded = expandedTools.has(toolBlock.id);
-          const preview = getToolPreview(toolBlock);
+          const Icon = getToolIcon(toolBlock.name);
+          const preview = getToolPreview(toolBlock, toolResultMap);
 
           return (
-            <div key={`${messageId}:${index}`} className="py-0.5">
-              <button
-                onClick={() => toggleTool(toolBlock.id)}
-                className={cn(
-                  'text-left w-full text-[13px] text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-150',
-                  'font-mono'
+            <div key={`${messageId}:${index}`} className="flex flex-col gap-1">
+              {/* Tool header - number + icon + name + preview */}
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="text-muted-foreground/60 font-mono">{currentIndex}.</span>
+                <Icon className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
+                <span className="text-foreground font-medium">{toolBlock.name}</span>
+                {preview && (
+                  <span className="text-muted-foreground truncate">{preview}</span>
                 )}
-              >
-                {currentIndex}. {preview}
-              </button>
-              {isExpanded && (
-                <div className="ml-4 mt-1 mb-2">
-                  <BlockRenderer
-                    block={toolBlock}
-                    index={index}
-                    role="assistant"
-                  />
-                </div>
-              )}
+              </div>
+
+              {/* Full tool content */}
+              <div className="ml-7">
+                <BlockRenderer
+                  block={toolBlock}
+                  index={index}
+                  role="assistant"
+                />
+              </div>
             </div>
           );
         }
 
+        // Thinking block
         if (block.type === 'thinking') {
           toolIndex++;
           const currentIndex = toolIndex;
           const thinkingBlock = block as ThinkingBlockType;
-          const thinkingId = `thinking-${index}`;
-          const isExpanded = expandedTools.has(thinkingId);
-          const preview = getThinkingPreview(thinkingBlock);
+          const text = thinkingBlock.thinking || '';
+          const firstLine = text.split('\n')[0];
+          const preview = firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
 
           return (
-            <div key={`${messageId}:${index}`} className="py-0.5">
-              <button
-                onClick={() => toggleTool(thinkingId)}
-                className={cn(
-                  'text-left w-full text-[13px] text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-150',
-                  'font-mono italic'
-                )}
-              >
-                {currentIndex}. {preview}
-              </button>
-              {isExpanded && (
-                <div className="ml-4 mt-1 mb-2 text-[13px] text-muted-foreground whitespace-pre-wrap">
-                  {thinkingBlock.thinking}
-                </div>
-              )}
+            <div key={`${messageId}:${index}`} className="flex flex-col gap-1">
+              {/* Thinking header */}
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="text-muted-foreground/60 font-mono">{currentIndex}.</span>
+                <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
+                <span className="text-foreground font-medium">Thinking</span>
+                <span className="text-muted-foreground italic truncate">{preview}</span>
+              </div>
+
+              {/* Full thinking text */}
+              <div className="ml-7 text-[13px] text-muted-foreground whitespace-pre-wrap">
+                {text}
+              </div>
             </div>
           );
         }
