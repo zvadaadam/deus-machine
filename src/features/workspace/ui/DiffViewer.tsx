@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
+import { highlightDiffLine } from '@/shared/lib/syntaxHighlighter';
+import { detectLanguageFromPath } from '@/features/session/ui/tools/utils/detectLanguage';
 
 interface DiffViewerProps {
   filePath?: string;
@@ -26,6 +28,13 @@ interface DiffViewerProps {
  * - Strong background colors (subtle left border instead)
  * - Backdrop blur (unnecessary effect)
  */
+interface HighlightedLine {
+  marker: string;
+  highlightedCode: string;
+  type: 'addition' | 'deletion' | 'context' | 'header';
+  originalLine: string;
+}
+
 export function DiffViewer({
   filePath = '',
   diff = '',
@@ -34,6 +43,8 @@ export function DiffViewer({
 }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [highlightedLines, setHighlightedLines] = useState<HighlightedLine[]>([]);
+  const [isHighlighting, setIsHighlighting] = useState(false);
 
   /**
    * Extract filename and path context from full file path
@@ -44,6 +55,40 @@ export function DiffViewer({
   const pathParts = filePath.split('/').filter(part => part.length > 0);
   const filename = pathParts.pop() || filePath;
   const pathContext = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
+
+  /**
+   * Detect programming language from file extension
+   * Used for syntax highlighting
+   */
+  const language = filePath ? detectLanguageFromPath(filePath) : 'text';
+
+  /**
+   * Highlight diff lines with syntax highlighting
+   * Runs when diff or filePath changes
+   */
+  useEffect(() => {
+    const highlightDiff = async () => {
+      if (!diff || diff === 'Loading diff...' || diff.includes('Error loading diff')) {
+        setHighlightedLines([]);
+        return;
+      }
+
+      setIsHighlighting(true);
+      const lines = diff.split('\n');
+      const highlighted: HighlightedLine[] = [];
+
+      // Highlight all lines
+      for (const line of lines) {
+        const result = await highlightDiffLine(line, language);
+        highlighted.push(result);
+      }
+
+      setHighlightedLines(highlighted);
+      setIsHighlighting(false);
+    };
+
+    highlightDiff();
+  }, [diff, language]);
 
   /**
    * Copy diff content to clipboard
@@ -59,56 +104,50 @@ export function DiffViewer({
   };
 
   /**
-   * Parse diff line to determine type and styling
-   * Returns: { type: 'addition' | 'deletion' | 'context' | 'header', content: string }
+   * Render highlighted diff line with syntax highlighting
+   * Design: Subtle left border (no background) + syntax colors
    */
-  const parseDiffLine = (line: string) => {
-    if (line.startsWith('+') && !line.startsWith('+++')) {
-      return { type: 'addition' as const, content: line };
-    }
-    if (line.startsWith('-') && !line.startsWith('---')) {
-      return { type: 'deletion' as const, content: line };
-    }
-    if (line.startsWith('@@')) {
-      return { type: 'header' as const, content: line };
-    }
-    return { type: 'context' as const, content: line };
-  };
-
-  /**
-   * Render individual diff line with appropriate styling
-   * Design: Subtle left border (no background) + colored text
-   * Inspired by GitHub's refined approach
-   */
-  const renderDiffLine = (line: string, index: number) => {
-    const { type, content } = parseDiffLine(line);
+  const renderHighlightedDiffLine = (line: HighlightedLine, index: number) => {
+    const { type, marker, highlightedCode } = line;
 
     const lineClasses = cn(
-      'relative font-mono text-xs leading-relaxed pl-4 pr-4 py-0.5',
+      'relative font-mono text-xs leading-relaxed pl-4 pr-4 py-0.5 flex items-start gap-2',
       {
-        // Additions: subtle left border + green text
-        'text-success/90 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-success/30': type === 'addition',
+        // Additions: subtle left border + green tint
+        'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-success/30': type === 'addition',
 
-        // Deletions: subtle left border + red text
-        'text-destructive/90 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-destructive/30': type === 'deletion',
+        // Deletions: subtle left border + red tint
+        'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-destructive/30': type === 'deletion',
 
         // Headers: muted with subtle background
         'text-muted-foreground bg-muted/20': type === 'header',
-
-        // Context: quiet, unobtrusive
-        'text-foreground/70': type === 'context',
       }
     );
 
     return (
       <div key={index} className={lineClasses}>
-        {content}
+        {/* Diff marker (+/-) with color */}
+        {marker && (
+          <span
+            className={cn('flex-shrink-0 select-none', {
+              'text-success/80': type === 'addition',
+              'text-destructive/80': type === 'deletion',
+            })}
+          >
+            {marker}
+          </span>
+        )}
+
+        {/* Syntax-highlighted code */}
+        <span
+          className="flex-1 min-w-0"
+          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+        />
       </div>
     );
   };
 
-  const diffLines = diff.split('\n');
-  const isLoading = diff === 'Loading diff...';
+  const isLoading = diff === 'Loading diff...' || isHighlighting;
   const hasError = diff.includes('Error loading diff') || diff === 'No diff available';
 
   return (
@@ -191,7 +230,7 @@ export function DiffViewer({
           </div>
         ) : (
           <div className="py-2">
-            {diffLines.map((line, index) => renderDiffLine(line, index))}
+            {highlightedLines.map((line, index) => renderHighlightedDiffLine(line, index))}
           </div>
         )}
       </div>
