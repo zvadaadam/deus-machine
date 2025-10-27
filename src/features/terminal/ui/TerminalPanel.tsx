@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Terminal } from './Terminal';
 
 interface DevServer {
@@ -16,9 +18,10 @@ interface TerminalTab {
 interface TerminalPanelProps {
   workspacePath: string;
   workspaceName: string;
+  onCollapse?: () => void;
 }
 
-export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelProps) {
+export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [showRun, setShowRun] = useState(true);
@@ -109,18 +112,18 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
   }
 
   return (
-    <div className="flex flex-col h-full bg-background border-t border-border">
-      <div className="flex items-center justify-between vibrancy-panel border-b border-border h-[35px] flex-shrink-0">
-        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-1">
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex items-center justify-between vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-background text-foreground rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none font-medium">
+            <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-[11px] whitespace-nowrap select-none font-medium">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer text-[13px] whitespace-nowrap select-none transition-colors duration-200 ease-out ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-t cursor-pointer text-[11px] whitespace-nowrap select-none transition-colors duration-200 ease-out ${
                 activeTabId === tab.id
                   ? 'bg-background text-foreground font-medium'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -132,7 +135,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             >
               <span>{tab.title}</span>
               <button
-                className="bg-transparent border-none text-muted-foreground text-lg leading-none p-0 w-4 h-4 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+                className="bg-transparent border-none text-muted-foreground text-sm leading-none p-0 w-3 h-3 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -143,20 +146,26 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             </div>
           ))}
           <button
-            className="bg-transparent border-none text-muted-foreground text-lg px-2 py-1 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+            className="bg-transparent border-none text-muted-foreground text-sm px-1.5 py-0.5 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
             onClick={addTerminal}
             title="New terminal"
           >
             +
           </button>
         </div>
-        <button
-          className="flex items-center gap-1 bg-transparent border-none text-muted-foreground px-3 py-1.5 mr-2 cursor-pointer text-[13px] rounded transition-colors duration-200 ease-out whitespace-nowrap hover:bg-muted/80 hover:text-foreground"
-          onClick={handleRunWorkspace}
-          title="Run workspace (⌘R)"
-        >
-          ▶ Run <span className="opacity-60 text-[11px]">⌘R</span>
-        </button>
+
+        {/* Collapse button on same line as tabs */}
+        {onCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCollapse}
+            className="h-5 w-5 mr-2"
+            title="Collapse terminal"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
@@ -188,22 +197,19 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             />
           </div>
         ) : showRun && tabs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full bg-background">
+          <div className="flex flex-col items-center justify-center h-full bg-background px-6">
             <button
-              className="group flex flex-col items-center justify-center bg-transparent border-2 border-dashed border-border rounded-xl px-12 py-8 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group flex items-center gap-2 bg-transparent border border-border/40 rounded-lg px-4 py-2.5 cursor-pointer transition-all duration-200 ease-out hover:border-foreground/40 hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
-              <div className="text-5xl text-muted-foreground mb-2 transition-colors duration-200 ease-out group-hover:text-primary">
+              <div className="text-base text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
                 ▶
               </div>
-              <div className="text-base font-semibold text-muted-foreground mb-1">
+              <div className="text-sm font-medium text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
                 {detectingServer ? 'Detecting server...' : 'Run workspace'}
               </div>
             </button>
-            <div className="mt-4 text-[13px] text-muted-foreground">
-              Test your changes here.
-            </div>
           </div>
         ) : (
           tabs.map((tab) => (
