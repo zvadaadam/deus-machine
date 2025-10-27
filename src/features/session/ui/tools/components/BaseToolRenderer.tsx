@@ -17,7 +17,7 @@ import { useState, ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { chatTheme } from '../../theme';
 import { cn } from '@/shared/lib/utils';
-import type { ToolUse, ToolResult } from '@/shared/types';
+import type { ToolUseBlock, ToolResultBlock } from '@/shared/types';
 import { ToolError } from './ToolError';
 import { shouldExpandByDefault } from '../constants';
 import { getToolMetadata } from '../../utils/toolCategories';
@@ -28,8 +28,8 @@ export interface BaseToolRendererProps {
   icon: ReactNode;
 
   // Data
-  toolUse: ToolUse;
-  toolResult?: ToolResult;
+  toolUse: ToolUseBlock;
+  toolResult?: ToolResultBlock;
 
   // Behavior
   defaultExpanded?: boolean;
@@ -42,9 +42,9 @@ export interface BaseToolRendererProps {
   children?: ReactNode;
 
   // OLD API: Render props (for backward compatibility)
-  renderContent?: (props: { toolUse: ToolUse; toolResult?: ToolResult; isExpanded: boolean }) => ReactNode;
-  renderSummary?: (props: { toolUse: ToolUse }) => ReactNode;
-  renderMetadata?: (props: { toolUse: ToolUse }) => ReactNode;
+  renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock; isExpanded: boolean }) => ReactNode;
+  renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode;
+  renderMetadata?: (props: { toolUse: ToolUseBlock }) => ReactNode;
 }
 
 export function BaseToolRenderer({
