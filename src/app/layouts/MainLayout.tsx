@@ -174,7 +174,7 @@ function MainContent({
             />
 
             {/* 3. Tab Content - Flexible height, scrollable (SessionPanel) */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               {selectedWorkspace.active_session_id && (
                 <SessionPanel
                   ref={workspaceChatPanelRef}
