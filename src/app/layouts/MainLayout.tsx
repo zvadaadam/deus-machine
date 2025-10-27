@@ -43,7 +43,7 @@ import {
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, FolderOpen, Sparkles, FileCode, Monitor, X } from "lucide-react";
+import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
@@ -269,21 +269,19 @@ function MainContent({
             <div className="flex flex-col h-full overflow-hidden">
               {/* Top Section: Files/Changes Tabs */}
               <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-                <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
-                  <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
+                <div className="border-b border-border/60 flex-shrink-0">
+                  <TabsList className="h-8 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-0.5">
                     <TabsTrigger
                       value="files"
-                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                      className="relative rounded-none border-b-2 border-b-transparent data-[state=active]:border-b-foreground px-3 py-1.5 transition-[border-color] duration-200 ease-out"
                     >
-                      <FolderOpen className="h-4 w-4 mr-2" />
-                      <span className="text-body-sm font-medium">Files</span>
+                      <span className="text-xs font-medium">Files</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="changes"
-                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                      className="relative rounded-none border-b-2 border-b-transparent data-[state=active]:border-b-foreground px-3 py-1.5 transition-[border-color] duration-200 ease-out"
                     >
-                      <FileText className="h-4 w-4 mr-2" />
-                      <span className="text-body-sm font-medium">Changes</span>
+                      <span className="text-xs font-medium">Changes</span>
                     </TabsTrigger>
                   </TabsList>
                 </div>
