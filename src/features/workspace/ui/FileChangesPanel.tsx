@@ -88,33 +88,44 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
 
       {/* File Changes */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-4 py-2.5 sticky top-0 z-10 border-b border-border/50 bg-background/50 backdrop-blur-sm">
-          <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">File Changes</h3>
-        </div>
-        <div className="p-3">
+        <div className="p-2">
           {selectedWorkspace && fileChanges.length > 0 ? (
-            <div className="space-y-1">
-              {fileChanges.map((file) => (
-                <div
-                  key={file.file}
-                  className="flex items-center justify-between p-2.5 rounded-lg cursor-pointer group elevation-1 hover:elevation-2 hover-interactive"
-                  onClick={() => handleFileClick(file.file)}
-                  title="Click to view diff"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-body-sm font-medium truncate group-hover:hover-primary-text">{file.file.split('/').pop()}</div>
-                    <div className="text-caption text-muted-foreground truncate font-mono">{file.file}</div>
+            <div className="space-y-0.5">
+              {fileChanges.map((file) => {
+                const pathParts = file.file.split('/');
+                const filename = pathParts.pop() || file.file;
+                const directory = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
+
+                return (
+                  <div
+                    key={file.file}
+                    className="flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer group hover:bg-muted/30 transition-colors duration-200"
+                    onClick={() => handleFileClick(file.file)}
+                    title={file.file}
+                  >
+                    <div className="flex-1 min-w-0 font-mono">
+                      <span className="text-xs text-muted-foreground/60 truncate">
+                        {directory}
+                      </span>
+                      <span className="text-xs text-foreground group-hover:text-primary transition-colors duration-200">
+                        {filename}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      {file.additions > 0 && (
+                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success">
+                          +{file.additions}
+                        </span>
+                      )}
+                      {file.deletions > 0 && (
+                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive">
+                          -{file.deletions}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs flex-shrink-0 ml-3">
-                    {file.additions > 0 && (
-                      <span className="text-success font-semibold px-1.5 py-0.5 bg-success/10 rounded">+{file.additions}</span>
-                    )}
-                    {file.deletions > 0 && (
-                      <span className="text-destructive font-semibold px-1.5 py-0.5 bg-destructive/10 rounded">-{file.deletions}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : selectedWorkspace ? (
             <div className="p-8">
