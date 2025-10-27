@@ -77,24 +77,31 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
           <CopyButton text={pattern} label="Copy pattern" size="sm" />
         </div>
       )}
-      renderContent={({ toolResult }) => (
-        <div className="space-y-1 px-2 pb-2">
-          <div className="text-xs text-muted-foreground">Results:</div>
-          <pre
-            className={cn(
-              chatTheme.blocks.tool.content,
-              'max-h-[300px] overflow-y-auto scrollbar-vibrancy',
-              isError
-                ? 'bg-destructive/10 text-destructive border border-destructive/30'
-                : 'bg-sidebar-accent/40 text-foreground border border-border/40'
-            )}
-          >
-            {typeof toolResult.content === 'object'
-              ? JSON.stringify(toolResult.content, null, 2)
-              : toolResult.content}
-          </pre>
-        </div>
-      )}
+      renderContent={({ toolResult }) => {
+        // Guard against undefined toolResult
+        if (!toolResult || !toolResult.content) {
+          return null;
+        }
+
+        return (
+          <div className="space-y-1 px-2 pb-2">
+            <div className="text-xs text-muted-foreground">Results:</div>
+            <pre
+              className={cn(
+                chatTheme.blocks.tool.content,
+                'max-h-[300px] overflow-y-auto scrollbar-vibrancy',
+                isError
+                  ? 'bg-destructive/10 text-destructive border border-destructive/30'
+                  : 'bg-sidebar-accent/40 text-foreground border border-border/40'
+              )}
+            >
+              {typeof toolResult.content === 'object'
+                ? JSON.stringify(toolResult.content, null, 2)
+                : toolResult.content}
+            </pre>
+          </div>
+        );
+      }}
     />
   );
 }
