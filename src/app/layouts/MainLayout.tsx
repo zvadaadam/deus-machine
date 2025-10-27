@@ -78,7 +78,7 @@ function MainContent({
   onCloneRepository: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
 }) {
-  const { setOpen: setSidebarOpen } = useSidebar();
+  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
   // State for main content tabs (chat sessions)
   const [mainTabs, setMainTabs] = useState<Tab[]>([
@@ -89,18 +89,47 @@ function MainContent({
   // State for browser overlay
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
 
-  // Track previous browser state to detect transitions
+  /**
+   * Sidebar Auto-Management for Browser
+   *
+   * UX Goal: Maximize browser space when it opens, restore user's workspace when it closes
+   *
+   * Behavior:
+   * 1. Browser opens → save sidebar state, auto-close if open (give browser max space)
+   * 2. User manually opens sidebar while browser is active → respect their choice
+   * 3. Browser closes:
+   *    - If user never reopened sidebar → restore to saved state
+   *    - If user reopened sidebar → keep it open (respect their intent)
+   */
+  const [sidebarWasOpenBeforeBrowser, setSidebarWasOpenBeforeBrowser] = useState(false);
   const prevBrowserOpenRef = useRef(isBrowserOpen);
 
-  // Auto-collapse sidebar ONCE when browser opens (allow manual toggle after)
   useEffect(() => {
-    // Only collapse when browser transitions from closed → open
-    if (isBrowserOpen && !prevBrowserOpenRef.current) {
-      setSidebarOpen(false);
+    const browserJustOpened = isBrowserOpen && !prevBrowserOpenRef.current;
+    const browserJustClosed = !isBrowserOpen && prevBrowserOpenRef.current;
+
+    if (browserJustOpened) {
+      // Save current state before making changes
+      setSidebarWasOpenBeforeBrowser(sidebarOpen);
+      // Auto-close sidebar to give browser maximum space
+      if (sidebarOpen) {
+        setSidebarOpen(false);
+      }
     }
-    // Update ref for next render
+
+    if (browserJustClosed) {
+      // Restore sidebar only if user never reopened it while browser was active
+      // Logic: If sidebar is still closed AND it was open before → restore it
+      if (!sidebarOpen && sidebarWasOpenBeforeBrowser) {
+        setSidebarOpen(true);
+      }
+      // Reset saved state
+      setSidebarWasOpenBeforeBrowser(false);
+    }
+
+    // Track current browser state for next render
     prevBrowserOpenRef.current = isBrowserOpen;
-  }, [isBrowserOpen, setSidebarOpen]);
+  }, [isBrowserOpen, sidebarOpen, setSidebarOpen]);
 
   // Handle browser toggle
   const handleBrowserToggle = () => {
