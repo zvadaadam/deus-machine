@@ -45,46 +45,52 @@ export function WelcomeView({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 transition-colors duration-200">
-      {/* Centered action cards - more compact and dense */}
-      <div className="flex items-center justify-center flex-1 p-6">
-        <div className="grid grid-cols-2 gap-3 max-w-2xl w-full">
-          <Card
-            role="button"
-            tabIndex={0}
-            className="p-3 flex items-center gap-3 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
-            onClick={onOpenProject}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
-          >
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out flex-shrink-0">
-              <FolderPlus className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-foreground text-sm mb-0.5">Open Project</h3>
-              <p className="text-xs text-muted-foreground">From your local machine</p>
-            </div>
-          </Card>
+      {/* Centered action cards with title */}
+      <div className="flex items-center justify-center flex-1 px-6 pt-6 pb-4">
+        <div className="w-full max-w-2xl">
+          {/* Centered title */}
+          <h2 className="text-sm font-semibold text-center text-foreground mb-4">Get started</h2>
 
-          <Card
-            role="button"
-            tabIndex={0}
-            className="p-3 flex items-center gap-3 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
-            onClick={onCloneRepository}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
-          >
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out flex-shrink-0">
-              <Github className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-foreground text-sm mb-0.5">Clone Repository</h3>
-              <p className="text-xs text-muted-foreground">From GitHub</p>
-            </div>
-          </Card>
+          {/* Action cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card
+              role="button"
+              tabIndex={0}
+              className="p-4 flex flex-col items-center text-center gap-3 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
+              onClick={onOpenProject}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out">
+                <FolderPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground text-sm mb-0.5">Open Project</h3>
+                <p className="text-xs text-muted-foreground">From your local machine</p>
+              </div>
+            </Card>
+
+            <Card
+              role="button"
+              tabIndex={0}
+              className="p-4 flex flex-col items-center text-center gap-3 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
+              onClick={onCloneRepository}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-200 ease-out">
+                <Github className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground text-sm mb-0.5">Clone Repository</h3>
+                <p className="text-xs text-muted-foreground">From GitHub</p>
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
 
-      {/* Recent Workspaces Header - Compact */}
+      {/* Recent Workspaces Header - Ultra Compact */}
       <div className="flex-shrink-0 border-t border-border/40 transition-colors duration-200">
-        <div className="max-w-4xl mx-auto px-6 py-3">
+        <div className="max-w-4xl mx-auto px-6 py-2">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recent Workspaces</h2>
             {recentWorkspaces.length > 0 && (
@@ -102,16 +108,16 @@ export function WelcomeView({
         </div>
       </div>
 
-      {/* Workspace Items - Scrollable, More Compact */}
+      {/* Workspace Items - Scrollable, Ultra Compact */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-4xl mx-auto px-6 pb-6">
+        <div className="max-w-4xl mx-auto px-6 pb-4">
           {recentWorkspaces.length > 0 ? (
             <>
-              <div className="space-y-0.5">
+              <div className="space-y-0">
                 {displayedWorkspaces.map((workspace) => (
                   <div
                     key={workspace.id}
-                    className="flex items-center justify-between p-2 rounded-md hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,color] duration-200 ease-out group"
+                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,color] duration-200 ease-out group"
                     onClick={() => onWorkspaceClick?.(workspace)}
                   >
                     <div className="flex-1 min-w-0">
