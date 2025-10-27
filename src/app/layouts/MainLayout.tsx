@@ -803,10 +803,8 @@ export function MainLayout() {
         {
           "--sidebar-width": "280px",
           "--sidebar-width-mobile": "280px",
-          // Collapsed sidebar width: 56px base allows 40px badges with proper spacing
-          // Formula: 56px + spacing(4)=16px + 2px = 74px container
-          // With p-2 (16px padding): 74px - 16px = 58px content → 40px badge + 9px margins
-          "--sidebar-width-icon": "3.5rem", // 56px
+          // Keep default 3rem (48px) - works with shadcn's size-8 (32px) button design
+          "--sidebar-width-icon": "3rem",
         } as React.CSSProperties
       }
     >
