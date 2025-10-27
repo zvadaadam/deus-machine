@@ -26,31 +26,16 @@ export function CollapsibleTerminalPanel({
   const [isExpanded, setIsExpanded] = useState(true);
 
   return isExpanded ? (
-    // Expanded: Full terminal with collapse button
+    // Expanded: Full terminal (collapse button integrated into TerminalPanel header)
     <div
       className="flex flex-col border-t-2 border-border transition-[height] duration-300 ease-out overflow-hidden"
       style={{ height: `${defaultHeight}px` }}
     >
-      {/* Header with collapse button - minimal, no label needed */}
-      <div className="flex items-center justify-end px-2 py-1 bg-background/50 backdrop-blur-sm border-b border-border/40 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsExpanded(false)}
-          className="h-6 w-6"
-          title="Collapse terminal"
-        >
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </div>
-
-      {/* Terminal content */}
-      <div className="flex-1 overflow-hidden">
-        <TerminalPanel
-          workspacePath={workspacePath}
-          workspaceName={workspaceName}
-        />
-      </div>
+      <TerminalPanel
+        workspacePath={workspacePath}
+        workspaceName={workspaceName}
+        onCollapse={() => setIsExpanded(false)}
+      />
     </div>
   ) : (
     // Collapsed: Terminal bar at bottom

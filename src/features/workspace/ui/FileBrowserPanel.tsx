@@ -1,5 +1,4 @@
 import { FolderOpen } from 'lucide-react';
-import { EmptyState } from '@/components/ui';
 import type { Workspace } from '@/shared/types';
 
 interface FileBrowserPanelProps {
@@ -17,19 +16,12 @@ interface FileBrowserPanelProps {
  */
 export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center p-8">
-        {selectedWorkspace ? (
-          <EmptyState
-            icon={<FolderOpen />}
-            description="File browser coming soon"
-          />
-        ) : (
-          <EmptyState
-            icon={<FolderOpen />}
-            description="Select a workspace to browse files"
-          />
-        )}
+    <div className="h-full flex flex-col items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-2">
+        <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-xs text-muted-foreground/60">
+          {selectedWorkspace ? 'File browser' : 'No workspace selected'}
+        </p>
       </div>
     </div>
   );

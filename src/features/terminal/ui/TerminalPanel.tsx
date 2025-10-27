@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Terminal } from './Terminal';
 
 interface DevServer {
@@ -16,9 +18,10 @@ interface TerminalTab {
 interface TerminalPanelProps {
   workspacePath: string;
   workspaceName: string;
+  onCollapse?: () => void;
 }
 
-export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelProps) {
+export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [showRun, setShowRun] = useState(true);
@@ -110,7 +113,7 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="flex items-center vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
+      <div className="flex items-center justify-between vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
         <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
             <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-[11px] whitespace-nowrap select-none font-medium">
@@ -150,6 +153,19 @@ export function TerminalPanel({ workspacePath, workspaceName }: TerminalPanelPro
             +
           </button>
         </div>
+
+        {/* Collapse button on same line as tabs */}
+        {onCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCollapse}
+            className="h-5 w-5 mr-2"
+            title="Collapse terminal"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
