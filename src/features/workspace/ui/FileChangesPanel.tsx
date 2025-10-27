@@ -90,10 +90,22 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-2">
           {selectedWorkspace && fileChanges.length > 0 ? (
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {fileChanges.map((file) => {
-                const pathParts = file.file.split('/');
+                // Guard against invalid file paths
+                if (!file.file || file.file.trim() === '') {
+                  console.warn('Invalid file path detected:', file);
+                  return null;
+                }
+
+                const pathParts = file.file.split('/').filter(part => part.length > 0);
                 const filename = pathParts.pop() || file.file;
+
+                // Additional guard: if filename is empty or just special chars
+                if (!filename || filename.trim() === '') {
+                  console.warn('Invalid filename detected:', file.file);
+                  return null;
+                }
 
                 /**
                  * Smart path truncation with context
@@ -148,7 +160,7 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                     </div>
                   </div>
                 );
-              })}
+              }).filter(Boolean)}
             </div>
           ) : selectedWorkspace ? (
             <div className="p-8">
