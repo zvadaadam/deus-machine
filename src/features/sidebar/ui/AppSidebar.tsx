@@ -45,8 +45,6 @@ export function AppSidebar({
     repositoryOrder,
     setRepositoryOrder,
     reorderRepositories,
-    showIdleRepos,
-    toggleIdleRepos,
   } = useSidebarStore();
 
   const isExpanded = state === "expanded";
@@ -77,25 +75,6 @@ export function AppSidebar({
       return 0;
     });
   }, [repositories, repositoryOrder, reorderRepositories]);
-
-  // Separate active vs idle repos when collapsed (smart collapse)
-  // Active = repos with unread, error, or working workspaces
-  // Idle = repos with only idle or compacting workspaces
-  const { activeRepos, idleRepos } = React.useMemo(() => {
-    if (isExpanded) return { activeRepos: orderedRepositories, idleRepos: [] };
-
-    const active = orderedRepositories.filter(repo => {
-      const status = getRepoPriorityStatus(repo.workspaces);
-      return status === 'unread' || status === 'error' || status === 'working';
-    });
-
-    const idle = orderedRepositories.filter(repo => {
-      const status = getRepoPriorityStatus(repo.workspaces);
-      return status === 'idle' || status === 'compacting';
-    });
-
-    return { activeRepos: active, idleRepos: idle };
-  }, [orderedRepositories, isExpanded]);
 
   // Flatten all workspaces with repo info for keyboard navigation
   const allWorkspaces = React.useMemo(() => {
@@ -273,10 +252,9 @@ export function AppSidebar({
           </DndContext>
         ) : (
           // No drag-drop when sidebar is collapsed (icon mode)
-          // Smart collapse: Show active repos (unread/working/error) first, idle repos collapsible
+          // Show all repos - opacity hierarchy handles active vs idle distinction
           <SidebarMenu className="p-2 gap-2">
-            {/* Active repos - always visible */}
-            {activeRepos.map((repo) => (
+            {orderedRepositories.map((repo) => (
               <DraggableRepository
                 key={repo.repo_id}
                 repository={repo}
@@ -290,38 +268,6 @@ export function AppSidebar({
                 dragDisabled={true}
               />
             ))}
-
-            {/* Idle repos - collapsible to reduce visual noise */}
-            {idleRepos.length > 0 && (
-              <>
-                <button
-                  onClick={toggleIdleRepos}
-                  className="w-full h-9 flex items-center justify-center text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 rounded-md hover:bg-sidebar-accent"
-                  aria-label={showIdleRepos ? `Hide ${idleRepos.length} idle repos` : `Show ${idleRepos.length} more repos`}
-                >
-                  <span className="flex items-center gap-1">
-                    <span className="transition-transform duration-200" style={{ transform: showIdleRepos ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                      ▼
-                    </span>
-                    <span>{idleRepos.length}</span>
-                  </span>
-                </button>
-                {showIdleRepos && idleRepos.map((repo) => (
-                  <DraggableRepository
-                    key={repo.repo_id}
-                    repository={repo}
-                    isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={selectedWorkspaceId}
-                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                    onWorkspaceClick={onWorkspaceClick}
-                    onNewWorkspace={onNewWorkspace}
-                    onArchive={onArchive}
-                    sidebarExpanded={isExpanded}
-                    dragDisabled={true}
-                  />
-                ))}
-              </>
-            )}
           </SidebarMenu>
         )}
       </SidebarContent>
