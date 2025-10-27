@@ -36,8 +36,10 @@ interface DiffViewerProps {
  *    - Clean typography maintains readability
  *    - Everything else supports this primary purpose
  *
- * Future enhancement: Word-level highlighting (saturated backgrounds for exact changes)
- * This would show WHAT changed within a line, not just which lines changed.
+ * Implementation:
+ * - Two-pass rendering: syntax highlighting (Shiki) + word-level diff overlays
+ * - Word-level highlights show exact changes within lines (saturated backgrounds)
+ * - Performance optimized: O(n) greedy word matching, smart caching
  */
 interface HighlightedDiffLine extends DiffLine {
   highlightedCode: string;
@@ -57,6 +59,30 @@ export function DiffViewer({
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const [highlightedHunks, setHighlightedHunks] = useState<HighlightedHunk[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
+  const [theme, setTheme] = useState<'github-dark' | 'github-light'>('github-dark');
+
+  /**
+   * Detect current theme from document.documentElement.classList
+   * Watches for theme changes via MutationObserver
+   */
+  useEffect(() => {
+    const detectTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setTheme(isDark ? 'github-dark' : 'github-light');
+    };
+
+    // Initial detection
+    detectTheme();
+
+    // Watch for theme changes
+    const observer = new MutationObserver(detectTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   /**
    * Extract filename and path context from full file path
@@ -98,11 +124,11 @@ export function DiffViewer({
       for (const hunk of hunks) {
         const highlightedLines: HighlightedDiffLine[] = [];
 
-        // First pass: syntax highlight all lines
+        // First pass: syntax highlight all lines with current theme
         const syntaxHighlighted = await Promise.all(
           hunk.lines.map(async (line) => ({
             ...line,
-            syntaxHtml: await highlightDiffLine(line.content, language),
+            syntaxHtml: await highlightDiffLine(line.content, language, theme),
           }))
         );
 
@@ -177,7 +203,7 @@ export function DiffViewer({
     };
 
     highlightDiff();
-  }, [diff, language]);
+  }, [diff, language, theme]);
 
   /**
    * Copy diff content to clipboard

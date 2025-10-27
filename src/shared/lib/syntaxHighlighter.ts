@@ -8,17 +8,27 @@
 import { createHighlighter, type Highlighter } from 'shiki';
 
 let highlighterInstance: Highlighter | null = null;
+let highlighterPromise: Promise<Highlighter> | null = null;
 
 /**
  * Initialize or get cached Shiki highlighter instance
  * Uses GitHub Dark theme to match our dark UI
+ *
+ * Race condition prevention: Multiple concurrent calls share the same promise
+ * to avoid creating duplicate highlighter instances
  */
 export async function getHighlighter(): Promise<Highlighter> {
   if (highlighterInstance) {
     return highlighterInstance;
   }
 
-  highlighterInstance = await createHighlighter({
+  // If already initializing, return the pending promise
+  if (highlighterPromise) {
+    return highlighterPromise;
+  }
+
+  // Start initialization and cache the promise
+  highlighterPromise = createHighlighter({
     themes: ['github-dark', 'github-light'],
     langs: [
       'typescript', 'javascript', 'tsx', 'jsx',
@@ -26,9 +36,12 @@ export async function getHighlighter(): Promise<Highlighter> {
       'html', 'css', 'json', 'yaml',
       'bash', 'sql', 'markdown',
     ],
+  }).then(highlighter => {
+    highlighterInstance = highlighter;
+    return highlighter;
   });
 
-  return highlighterInstance;
+  return highlighterPromise;
 }
 
 /**
@@ -49,7 +62,7 @@ export async function highlightCode(
 
     // Check if language is supported, fallback to plaintext
     const supportedLangs = highlighter.getLoadedLanguages();
-    const lang = supportedLangs.includes(language as any) ? language : 'text';
+    const lang = (supportedLangs as string[]).includes(language) ? language : 'text';
 
     const html = highlighter.codeToHtml(code, {
       lang,
@@ -209,7 +222,7 @@ export async function highlightDiffLine(
   try {
     const highlighter = await getHighlighter();
     const supportedLangs = highlighter.getLoadedLanguages();
-    const lang = supportedLangs.includes(language as any) ? language : 'text';
+    const lang = (supportedLangs as string[]).includes(language) ? language : 'text';
 
     const html = highlighter.codeToHtml(content, {
       lang,
