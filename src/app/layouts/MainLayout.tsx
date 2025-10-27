@@ -89,12 +89,17 @@ function MainContent({
   // State for browser overlay
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
 
-  // Collapse sidebar when browser opens (but allow manual toggle)
+  // Track previous browser state to detect transitions
+  const prevBrowserOpenRef = useRef(isBrowserOpen);
+
+  // Auto-collapse sidebar ONCE when browser opens (allow manual toggle after)
   useEffect(() => {
-    if (isBrowserOpen) {
+    // Only collapse when browser transitions from closed → open
+    if (isBrowserOpen && !prevBrowserOpenRef.current) {
       setSidebarOpen(false);
     }
-    // Don't auto-restore sidebar when browser closes - let user control it
+    // Update ref for next render
+    prevBrowserOpenRef.current = isBrowserOpen;
   }, [isBrowserOpen, setSidebarOpen]);
 
   // Handle browser toggle
