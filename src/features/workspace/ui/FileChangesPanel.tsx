@@ -95,7 +95,16 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                 const pathParts = file.file.split('/');
                 const filename = pathParts.pop() || file.file;
 
-                // Smart path truncation: show …/parent/filename for long paths
+                /**
+                 * Smart path truncation with context
+                 *
+                 * Strategy: Show first folder (src/tests/docs) + last parent + filename
+                 * - Root files: filename.ext
+                 * - 1 level: src/filename.ext
+                 * - 2+ levels: src/…/parent/filename.ext
+                 *
+                 * Why: First folder gives critical context (source vs tests vs config)
+                 */
                 let displayPath = '';
                 if (pathParts.length === 0) {
                   // No directory (root file)
@@ -104,9 +113,10 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                   // One level deep (e.g., src/file.tsx)
                   displayPath = pathParts[0] + '/';
                 } else {
-                  // Multiple levels: show …/lastParent/
+                  // Multiple levels: show firstFolder/…/lastParent/
+                  const firstFolder = pathParts[0];
                   const lastParent = pathParts[pathParts.length - 1];
-                  displayPath = `…/${lastParent}/`;
+                  displayPath = `${firstFolder}/…/${lastParent}/`;
                 }
 
                 return (
@@ -124,14 +134,14 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                         {filename}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 font-mono">
                       {file.additions > 0 && (
-                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success">
+                        <span className="text-[10px] font-medium text-success">
                           +{file.additions}
                         </span>
                       )}
                       {file.deletions > 0 && (
-                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive">
+                        <span className="text-[10px] font-medium text-destructive">
                           -{file.deletions}
                         </span>
                       )}
