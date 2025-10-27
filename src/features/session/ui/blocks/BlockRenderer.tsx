@@ -16,7 +16,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { useSession } from '../../context';
 
 interface BlockRendererProps {
-  block: ContentBlock;
+  block: ContentBlock | string;
   index: number;
   role?: MessageRole;
 }
@@ -29,6 +29,11 @@ export function BlockRenderer({ block, index, role }: BlockRendererProps) {
       console.warn('[BlockRenderer] Received null/undefined block at index:', index);
     }
     return null;
+  }
+
+  // Handle string blocks (convert to text block)
+  if (typeof block === 'string') {
+    return <TextBlock block={{ type: 'text', text: block }} role={role} />;
   }
 
   // Dispatch based on block type
@@ -57,12 +62,6 @@ export function BlockRenderer({ block, index, role }: BlockRendererProps) {
       if (import.meta.env.DEV) {
         console.warn('[BlockRenderer] Unknown block type:', (block as any).type, block);
       }
-
-      // Try to render as text if it's a string
-      if (typeof block === 'string') {
-        return <TextBlock block={{ type: 'text', text: block }} role={role} />;
-      }
-
       return null;
   }
 }
