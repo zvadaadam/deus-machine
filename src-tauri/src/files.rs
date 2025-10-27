@@ -41,7 +41,8 @@ use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use anyhow::{Result, Context};
+use anyhow::Result;
+use git2::{Repository, Status};
 
 //============================================================================
 // TYPE DEFINITIONS (Match Frontend TypeScript)
@@ -218,9 +219,41 @@ impl FileScanner {
         Ok(tree)
     }
 
+    /// Get git status for a file
+    ///
+    /// Returns None if not in a git repository or if the file is unmodified.
+    /// This is lightweight - only checks status, doesn't read file contents.
+    fn get_git_status(&self, repo: &Repository, path: &Path) -> Option<GitStatus> {
+        // Get relative path from repo root
+        let repo_root = repo.workdir()?;
+        let relative_path = path.strip_prefix(repo_root).ok()?;
+
+        // Check file status
+        let file_status = repo.status_file(relative_path).ok()?;
+
+        // Map git2::Status to our GitStatus enum
+        if file_status.contains(Status::WT_NEW) || file_status.contains(Status::INDEX_NEW) {
+            Some(GitStatus::Added)
+        } else if file_status.contains(Status::WT_MODIFIED) || file_status.contains(Status::INDEX_MODIFIED) {
+            Some(GitStatus::Modified)
+        } else if file_status.contains(Status::WT_DELETED) || file_status.contains(Status::INDEX_DELETED) {
+            Some(GitStatus::Deleted)
+        } else if file_status.contains(Status::WT_RENAMED) || file_status.contains(Status::INDEX_RENAMED) {
+            Some(GitStatus::Modified) // Treat renames as modified
+        } else {
+            None // Unmodified or ignored
+        }
+    }
+
     /// Build file tree recursively with .gitignore filtering
     fn build_tree(&self, root_path: &Path) -> Result<Vec<FileNode>> {
         use std::collections::HashMap;
+
+        // Try to open git repository (optional - workspace might not be a git repo)
+        let git_repo = Repository::discover(root_path).ok();
+        if git_repo.is_none() {
+            println!("[FileScanner] No git repository found at {:?}, git status disabled", root_path);
+        }
 
         // Use ignore crate for .gitignore-aware traversal
         // Build the full tree in one pass (don't manually recurse)
@@ -277,6 +310,11 @@ impl FileScanner {
                 .to_string_lossy()
                 .to_string();
 
+            // Check git status for this file/folder (if in a git repo)
+            let git_status = git_repo.as_ref().and_then(|repo| {
+                self.get_git_status(repo, path)
+            });
+
             let node = if metadata.is_file() {
                 // File node with metadata
                 let size = metadata.len();
@@ -295,7 +333,7 @@ impl FileScanner {
                     size: Some(size),
                     modified,
                     children: None,
-                    git_status: None,
+                    git_status,
                 }
             } else if metadata.is_dir() {
                 // Directory node (children will be added later)
@@ -306,7 +344,7 @@ impl FileScanner {
                     size: None,
                     modified: None,
                     children: Some(Vec::new()),
-                    git_status: None,
+                    git_status: None, // Folders don't get git status (only files)
                 }
             } else {
                 // Skip symlinks, sockets, etc.

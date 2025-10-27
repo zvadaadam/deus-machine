@@ -9,6 +9,7 @@ interface FileTreeNode {
   size?: number;
   modified?: string;
   children?: FileTreeNode[];
+  git_status?: 'modified' | 'added' | 'deleted' | 'untracked';
 }
 
 interface FileTreeProps {
@@ -68,6 +69,39 @@ function getFileIconConfig(filename: string): { icon: typeof File; color: string
   return { icon: File, color: 'text-muted-foreground/40' };
 }
 
+/**
+ * Get subtle color accent for git status
+ * Subtle hints, not overwhelming - this is a secondary feature
+ */
+function getGitStatusColor(gitStatus?: 'modified' | 'added' | 'deleted' | 'untracked'): string {
+  if (!gitStatus) return '';
+
+  switch (gitStatus) {
+    case 'modified':
+      return 'text-warning'; // Amber/orange
+    case 'added':
+      return 'text-success'; // Green
+    case 'deleted':
+      return 'text-destructive/60 line-through'; // Red with strikethrough
+    case 'untracked':
+      return 'text-info'; // Blue
+    default:
+      return '';
+  }
+}
+
+/**
+ * Check if a folder contains any changed files (recursively)
+ */
+function hasChanges(node: FileTreeNode): boolean {
+  if (node.type === 'file') {
+    return !!node.git_status;
+  }
+
+  // Check if any children have changes
+  return node.children?.some(child => hasChanges(child)) || false;
+}
+
 export function FileTree({ nodes, onFileClick, level = 0 }: FileTreeProps) {
   return (
     <div className="space-y-0.5">
@@ -92,7 +126,12 @@ function TreeNode({
   level: number;
   onFileClick?: (path: string) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(level < 2); // Auto-expand first 2 levels
+  // Auto-expand:
+  // 1. First 2 levels always expanded
+  // 2. Folders containing changes auto-expanded
+  const shouldAutoExpand = level < 2 || (node.type === 'directory' && hasChanges(node));
+  const [isExpanded, setIsExpanded] = useState(shouldAutoExpand);
+
   const isDirectory = node.type === 'directory';
   const hasChildren = node.children && node.children.length > 0;
 
@@ -101,6 +140,10 @@ function TreeNode({
   // Get file-specific icon and color
   const fileConfig = !isDirectory ? getFileIconConfig(node.name) : null;
   const FileIcon = fileConfig?.icon;
+
+  // Get git status color (subtle accent for changed files)
+  const gitStatusColor = !isDirectory ? getGitStatusColor(node.git_status) : '';
+  const folderHasChanges = isDirectory && hasChanges(node);
 
   return (
     <div>
@@ -145,9 +188,16 @@ function TreeNode({
         {/* File/Folder Name */}
         <span className={cn(
           'text-[13px] truncate flex-1',
-          isDirectory ? 'font-normal text-foreground' : 'font-normal text-foreground/90'
+          // Base styles
+          isDirectory ? 'font-normal text-foreground' : 'font-normal text-foreground/90',
+          // Git status color (subtle accent - files only)
+          gitStatusColor
         )}>
           {node.name}
+          {/* Folder with changes indicator (subtle dot) */}
+          {folderHasChanges && (
+            <span className="ml-1.5 inline-block w-1 h-1 rounded-full bg-warning" title="Contains changes" />
+          )}
         </span>
 
         {/* File Size (files only) */}
