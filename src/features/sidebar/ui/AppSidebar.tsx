@@ -20,6 +20,7 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
