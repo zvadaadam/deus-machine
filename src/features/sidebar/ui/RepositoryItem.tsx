@@ -131,9 +131,10 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
-                "w-full flex items-center justify-center overflow-visible relative",
-                // !important to override SidebarMenuButton's group-data-[collapsible=icon]:p-2!
-                "!p-0 py-3",
+                "flex items-center justify-center overflow-visible relative",
+                // Override SidebarMenuButton's forced sizing in collapsed mode
+                // size-8! forces 32px, we need auto to fit our 40px badge
+                "!w-full !h-auto !p-0 py-3",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
