@@ -8,7 +8,7 @@
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
-import { AssistantTurn } from "./components/AssistantTurn";
+import { SimpleAssistantMessage } from "./components/SimpleAssistantMessage";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 import { Copy, RotateCcw } from "lucide-react";
@@ -89,7 +89,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     ? chatTheme.message.user
     : chatTheme.message.assistant;
 
-  // Assistant messages use AssistantTurn component
+  // Assistant messages - simple list
   if (message.role === 'assistant') {
     return (
       <div
@@ -98,15 +98,14 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           'relative group',
           roleStyles.maxWidth,
           roleStyles.container,
-          'flex flex-col gap-2 min-w-0 overflow-x-hidden',
+          'flex flex-col min-w-0 overflow-x-hidden',
           chatTheme.common.transition
         )}
       >
         {Array.isArray(contentBlocks) ? (
-          <AssistantTurn
+          <SimpleAssistantMessage
             contentBlocks={contentBlocks}
             messageId={message.id}
-            isLatest={isLatestAssistant}
           />
         ) : (
           // Fallback for non-array content
