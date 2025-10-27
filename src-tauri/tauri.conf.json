@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "identifier": "com.conductor.app",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "npm run dev:full",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"

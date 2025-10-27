@@ -349,7 +349,7 @@
   border-color: var(--border);
 }
 
-  /* Full-screen layout for Tauri desktop app */
+  /* Base layout - applies to both web and desktop */
   html,
   body {
     margin: 0;
@@ -359,7 +359,12 @@
     overflow: hidden;
   }
 
-  /* App root - transparent to show Tauri window vibrancy effects */
+  body {
+    color: var(--foreground);
+    font-family: var(--font-family-sans);
+    background: var(--background); /* Web: solid background */
+  }
+
   #root {
     min-height: 100vh;
     width: 100%;
@@ -367,17 +372,18 @@
     padding: 0;
     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
     transition-duration: 200ms;
-    /* Tauri-specific: keep fixed for proper window transparency */
+  }
+
+  /* Tauri desktop-only styles - transparent backgrounds for window vibrancy */
+  .tauri body {
+    background: transparent;
+  }
+
+  .tauri #root {
     background: transparent;
     position: fixed;
     inset: 0;
     max-width: none;
-  }
-
-  body {
-    color: var(--foreground);
-    font-family: var(--font-family-sans);
-    background: transparent;
   }
 
 /* Custom utilities */
