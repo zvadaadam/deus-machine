@@ -5,12 +5,34 @@ import { cn } from '@/shared/lib/utils';
 
 /**
  * Tab data structure
+ * Supports multiple content types: chat sessions, diffs, and full files
  */
 export interface Tab {
   id: string;
   label: string;
-  type: 'chat' | 'files';
+  type: 'chat' | 'diff' | 'file';
   closeable?: boolean;
+
+  /**
+   * Type-specific data payload
+   * - For 'diff' tabs: file path, diff content, and change stats
+   * - For 'file' tabs: file content and language (future)
+   * - For 'chat' tabs: session ID
+   */
+  data?: {
+    // For 'diff' tabs
+    filePath?: string;
+    diff?: string;
+    additions?: number;
+    deletions?: number;
+
+    // For 'file' tabs (future feature)
+    fileContent?: string;
+    language?: string;
+
+    // For 'chat' tabs
+    sessionId?: string;
+  };
 }
 
 /**

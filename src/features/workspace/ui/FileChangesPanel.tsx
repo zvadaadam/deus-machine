@@ -7,15 +7,21 @@ import type { Workspace } from "@/shared/types";
 
 interface FileChangesPanelProps {
   selectedWorkspace: Workspace | null;
+  onOpenDiffTab?: (data: { file: string; diff: string; additions: number; deletions: number }) => void;
+  onUpdateDiffTab?: (filePath: string, updates: { diff?: string; additions?: number; deletions?: number }) => void;
 }
 
 /**
  * File Changes Panel
  * Shows dev servers and file changes for the selected workspace
  */
-export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
+export function FileChangesPanel({
+  selectedWorkspace,
+  onOpenDiffTab,
+  onUpdateDiffTab,
+}: FileChangesPanelProps) {
   const currentFileRef = useRef<string | null>(null);
-  const { openDiffModal } = useUIStore();
+  const { openDiffModal } = useUIStore(); // Keep for backward compatibility during migration
 
   // Query data with conditional polling based on session status
   const { data: fileChanges = [] } = useFileChanges(
@@ -28,29 +34,65 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
    * Load and display diff for a specific file
    * Prevents race conditions by tracking the current file being loaded
    */
-  async function handleFileClick(file: string) {
+  async function handleFileClick(file: string, additions: number, deletions: number) {
     if (!selectedWorkspace) return;
 
     // Track this file as the current one being loaded
     currentFileRef.current = file;
 
-    openDiffModal(file, 'Loading diff...'); // Open with loading message
+    // Use new tab-based approach if callbacks are provided
+    if (onOpenDiffTab && onUpdateDiffTab) {
+      // Open tab with loading message
+      onOpenDiffTab({
+        file,
+        diff: 'Loading diff...',
+        additions: 0,
+        deletions: 0,
+      });
 
-    try {
-      const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
-      const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
+      try {
+        const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
+        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
 
-      // Ignore stale responses - only update if this is still the current file
-      if (currentFileRef.current !== file) return;
+        // Ignore stale responses - only update if this is still the current file
+        if (currentFileRef.current !== file) return;
 
-      openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
-    } catch (error) {
-      console.error('Failed to load diff:', error);
+        // Update tab with actual diff data
+        onUpdateDiffTab(file, {
+          diff: data.diff || 'No diff available',
+          additions,
+          deletions,
+        });
+      } catch (error) {
+        console.error('Failed to load diff:', error);
 
-      // Ignore stale errors
-      if (currentFileRef.current !== file) return;
+        // Ignore stale errors
+        if (currentFileRef.current !== file) return;
 
-      openDiffModal(file, 'Error loading diff');
+        onUpdateDiffTab(file, {
+          diff: 'Error loading diff',
+        });
+      }
+    } else {
+      // Fallback to old modal approach
+      openDiffModal(file, 'Loading diff...'); // Open with loading message
+
+      try {
+        const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
+        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
+
+        // Ignore stale responses - only update if this is still the current file
+        if (currentFileRef.current !== file) return;
+
+        openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
+      } catch (error) {
+        console.error('Failed to load diff:', error);
+
+        // Ignore stale errors
+        if (currentFileRef.current !== file) return;
+
+        openDiffModal(file, 'Error loading diff');
+      }
     }
   }
 
@@ -135,7 +177,7 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                   <div
                     key={file.file}
                     className="flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group hover:bg-muted/20 transition-colors duration-200"
-                    onClick={() => handleFileClick(file.file)}
+                    onClick={() => handleFileClick(file.file, file.additions, file.deletions)}
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">

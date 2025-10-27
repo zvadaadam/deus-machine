@@ -8,7 +8,7 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-import { DiffModal, FileChangesPanel, FileBrowserPanel, MainContentTabBar } from "@/features/workspace";
+import { DiffModal, DiffViewer, FileChangesPanel, FileBrowserPanel, MainContentTabBar } from "@/features/workspace";
 import { BrowserPanel } from "@/features/browser";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
@@ -165,6 +165,110 @@ function MainContent({
     setActiveMainTabId(newId);
   };
 
+  /**
+   * Open a diff as a new tab (or switch to existing)
+   *
+   * Behavior:
+   * - If tab already exists for this file → switch to it and update content
+   * - If tab doesn't exist → create new tab after current active tab
+   * - Tab label shows filename only (truncated if needed)
+   *
+   * @param fileData - File path, diff content, and change statistics
+   */
+  const handleOpenDiffTab = (fileData: {
+    file: string;
+    diff: string;
+    additions: number;
+    deletions: number;
+  }) => {
+    const fileName = fileData.file.split('/').pop() || fileData.file;
+
+    // Check if tab already exists for this file
+    const existingTabIndex = mainTabs.findIndex(
+      t => t.type === 'diff' && t.data?.filePath === fileData.file
+    );
+
+    if (existingTabIndex !== -1) {
+      // Tab exists - switch to it and update content
+      const existingTab = mainTabs[existingTabIndex];
+      setActiveMainTabId(existingTab.id);
+
+      // Update diff content
+      setMainTabs(tabs =>
+        tabs.map((t, i) =>
+          i === existingTabIndex
+            ? {
+                ...t,
+                data: {
+                  ...t.data,
+                  diff: fileData.diff,
+                  additions: fileData.additions,
+                  deletions: fileData.deletions,
+                },
+              }
+            : t
+        )
+      );
+    } else {
+      // Create new tab
+      const newTab: Tab = {
+        id: `diff-${Date.now()}`,
+        label: fileName,
+        type: 'diff',
+        closeable: true,
+        data: {
+          filePath: fileData.file,
+          diff: fileData.diff,
+          additions: fileData.additions,
+          deletions: fileData.deletions,
+        },
+      };
+
+      // Insert after current active tab
+      const activeIndex = mainTabs.findIndex(t => t.id === activeMainTabId);
+      const insertIndex = activeIndex >= 0 ? activeIndex + 1 : mainTabs.length;
+
+      const newTabs = [
+        ...mainTabs.slice(0, insertIndex),
+        newTab,
+        ...mainTabs.slice(insertIndex),
+      ];
+
+      setMainTabs(newTabs);
+      setActiveMainTabId(newTab.id);
+    }
+  };
+
+  /**
+   * Update an existing diff tab with new data
+   *
+   * Used for async diff loading:
+   * 1. Tab opens with "Loading..." message
+   * 2. API fetches actual diff
+   * 3. This function updates the tab with real data
+   *
+   * @param filePath - File path to identify which tab to update
+   * @param updates - Partial updates to tab data (diff, additions, deletions)
+   */
+  const handleUpdateDiffTab = (
+    filePath: string,
+    updates: { diff?: string; additions?: number; deletions?: number }
+  ) => {
+    setMainTabs(tabs =>
+      tabs.map(t =>
+        t.type === 'diff' && t.data?.filePath === filePath
+          ? {
+              ...t,
+              data: {
+                ...t.data,
+                ...updates,
+              },
+            }
+          : t
+      )
+    );
+  };
+
   return (
     <SidebarInset className="min-w-0">
       {/**
@@ -216,15 +320,45 @@ function MainContent({
               onTabAdd={handleMainTabAdd}
             />
 
-            {/* 3. Tab Content - Flexible height, scrollable (SessionPanel) */}
+            {/* 3. Tab Content - Flexible height, scrollable (renders based on active tab type) */}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              {selectedWorkspace.active_session_id && (
-                <SessionPanel
-                  ref={workspaceChatPanelRef}
-                  sessionId={selectedWorkspace.active_session_id}
-                  embedded={true}
-                />
-              )}
+              {(() => {
+                // Find the active tab
+                const activeTab = mainTabs.find(t => t.id === activeMainTabId);
+
+                // Render content based on tab type
+                if (activeTab?.type === 'chat') {
+                  // Chat tab - show SessionPanel
+                  return selectedWorkspace.active_session_id ? (
+                    <SessionPanel
+                      ref={workspaceChatPanelRef}
+                      sessionId={selectedWorkspace.active_session_id}
+                      embedded={true}
+                    />
+                  ) : null;
+                }
+
+                if (activeTab?.type === 'diff') {
+                  // Diff tab - show DiffViewer
+                  return (
+                    <DiffViewer
+                      filePath={activeTab.data?.filePath}
+                      diff={activeTab.data?.diff}
+                      additions={activeTab.data?.additions}
+                      deletions={activeTab.data?.deletions}
+                    />
+                  );
+                }
+
+                // Future: 'file' type for full file viewer
+                if (activeTab?.type === 'file') {
+                  // TODO: Implement FileViewer component
+                  return null;
+                }
+
+                // Fallback - no active tab or unknown type
+                return null;
+              })()}
             </div>
           </div>
         ) : (
@@ -298,7 +432,11 @@ function MainContent({
                   value="changes"
                   className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
                 >
-                  <FileChangesPanel selectedWorkspace={selectedWorkspace} />
+                  <FileChangesPanel
+                    selectedWorkspace={selectedWorkspace}
+                    onOpenDiffTab={handleOpenDiffTab}
+                    onUpdateDiffTab={handleUpdateDiffTab}
+                  />
                 </TabsContent>
               </Tabs>
 
