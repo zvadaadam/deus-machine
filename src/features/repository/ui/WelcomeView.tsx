@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FolderPlus, Github, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,18 +29,60 @@ export function WelcomeView({
   onWorkspaceClick,
 }: WelcomeViewProps) {
   const [showAll, setShowAll] = useState(false);
+  const [showTopFade, setShowTopFade] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const initialCount = 6;
   const displayedWorkspaces = showAll ? recentWorkspaces : recentWorkspaces.slice(0, initialCount);
   const hasMore = recentWorkspaces.length > initialCount;
+  const isEmpty = recentWorkspaces.length === 0;
+
+  // Detect scroll to show/hide top fade gradient
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || isEmpty) return;
+
+    const handleScroll = () => {
+      const scrolled = scrollContainer.scrollTop > 100;
+      setShowTopFade(scrolled);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [isEmpty]);
 
   return (
     <div className="relative flex flex-col flex-1 min-h-0">
       {/* Unified scroll - everything flows together */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="flex flex-col items-center py-16">
-          <div className="w-full max-w-2xl px-6 space-y-12">
-            {/* Action cards - clean, simple, breathing room */}
-            <div className="grid grid-cols-2 gap-4">
+          <div className="w-full max-w-2xl px-6">
+
+            {/* Empty state: First-time welcome */}
+            {isEmpty && (
+              <div className="flex flex-col items-center text-center mb-12">
+                <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mb-4">
+                  <div className="text-2xl font-semibold text-foreground/80">BOX</div>
+                </div>
+                <h1 className="text-lg font-semibold text-foreground mb-2">Welcome to BOX</h1>
+                <p className="text-sm text-muted-foreground/70 max-w-md">
+                  Manage multiple AI coding agents in parallel across your projects.
+                </p>
+              </div>
+            )}
+
+            {/* Filled state: Subtle section label */}
+            {!isEmpty && (
+              <div className="mb-4">
+                <h2 className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wider px-2">
+                  Add Repository
+                </h2>
+              </div>
+            )}
+
+            {/* Action cards */}
+            <div className={isEmpty ? "space-y-12" : ""}>
+              <div className="grid grid-cols-2 gap-4">
           <Card
             role="button"
             tabIndex={0}
@@ -53,7 +95,9 @@ export function WelcomeView({
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Open Project</h3>
-              <p className="text-xs text-muted-foreground/70">From your local machine</p>
+              <p className="text-xs text-muted-foreground/70">
+                {isEmpty ? "Work with a local repository" : "From your local machine"}
+              </p>
             </div>
           </Card>
 
@@ -69,13 +113,17 @@ export function WelcomeView({
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Clone Repository</h3>
-              <p className="text-xs text-muted-foreground/70">From GitHub</p>
+              <p className="text-xs text-muted-foreground/70">
+                {isEmpty ? "Start from GitHub" : "From GitHub"}
+              </p>
             </div>
           </Card>
         </div>
+            </div>
 
-            {/* Recent Workspaces - no border, trust the space */}
-            <div className="space-y-4">
+            {/* Recent Workspaces - only show when not empty */}
+            {!isEmpty && (
+              <div className="mt-12 space-y-4">
             <div className="flex items-baseline justify-between px-2">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Recent Workspaces</h2>
               {recentWorkspaces.length > 0 && (
@@ -164,13 +212,26 @@ export function WelcomeView({
               </Button>
               </div>
             )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Subtle fade gradient at bottom - whispers "there's more" */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent opacity-60" />
+      {/* Subtle fade gradient at bottom - whispers "there's more" (only when has content) */}
+      {!isEmpty && (
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent opacity-60" />
+      )}
+
+      {/* Top fade gradient when scrolled - whispers "there's more above" */}
+      {!isEmpty && (
+        <div
+          className={cn(
+            "pointer-events-none absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-background to-transparent transition-opacity duration-300",
+            showTopFade ? "opacity-60" : "opacity-0"
+          )}
+        />
+      )}
     </div>
   );
 }
