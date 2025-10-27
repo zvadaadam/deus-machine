@@ -101,8 +101,8 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                 const pathParts = file.file.split('/').filter(part => part.length > 0);
                 const filename = pathParts.pop() || file.file;
 
-                // Additional guard: if filename is empty, just special chars, or suspiciously short
-                if (!filename || filename.trim() === '' || filename.trim().length < 2 || filename === '-') {
+                // Additional guard: if filename is empty or whitespace-only
+                if (!filename || filename.trim() === '') {
                   console.warn('Invalid or suspicious filename detected:', file.file);
                   return null;
                 }

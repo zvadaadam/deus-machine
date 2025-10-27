@@ -43,7 +43,7 @@ import {
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X } from "lucide-react";
+import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
@@ -128,7 +128,7 @@ function MainContent({
 
     // Track current browser state for next render
     prevBrowserOpenRef.current = isBrowserOpen;
-  }, [isBrowserOpen, sidebarOpen, setSidebarOpen]);
+  }, [isBrowserOpen, sidebarOpen, setSidebarOpen, sidebarWasOpenBeforeBrowser]);
 
   // Handle browser toggle
   const handleBrowserToggle = () => {
