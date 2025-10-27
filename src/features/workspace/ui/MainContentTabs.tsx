@@ -95,7 +95,8 @@ export function MainContentTabBar({
 
               {/* Close button */}
               {tab.closeable !== false && (
-                <div
+                <button
+                  type="button"
                   onClick={(e) => handleTabClose(e, tab.id)}
                   className={cn(
                     'flex items-center justify-center w-4 h-4 rounded-sm',
@@ -103,9 +104,10 @@ export function MainContentTabBar({
                     'hover:bg-muted-foreground/20',
                     isActive || isHovered ? 'opacity-100' : 'opacity-0'
                   )}
+                  aria-label={`Close ${tab.label} tab`}
                 >
                   <X className="w-3 h-3" />
-                </div>
+                </button>
               )}
             </button>
           );
