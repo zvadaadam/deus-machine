@@ -269,17 +269,17 @@ function MainContent({
             <div className="flex flex-col h-full overflow-hidden">
               {/* Top Section: Files/Changes Tabs */}
               <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-                <div className="border-b border-border/60 flex-shrink-0">
-                  <TabsList className="h-8 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-0.5">
+                <div className="border-b border-border/40 flex-shrink-0">
+                  <TabsList className="h-8 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-0">
                     <TabsTrigger
                       value="files"
-                      className="relative rounded-none border-b-2 border-b-transparent data-[state=active]:border-b-foreground px-3 py-1.5 transition-[border-color] duration-200 ease-out"
+                      className="relative rounded-none border-b border-b-transparent data-[state=active]:border-b-foreground data-[state=inactive]:text-muted-foreground/60 px-3 py-1.5 transition-[border-color,color] duration-200 ease-out"
                     >
                       <span className="text-xs font-medium">Files</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="changes"
-                      className="relative rounded-none border-b-2 border-b-transparent data-[state=active]:border-b-foreground px-3 py-1.5 transition-[border-color] duration-200 ease-out"
+                      className="relative rounded-none border-b border-b-transparent data-[state=active]:border-b-foreground data-[state=inactive]:text-muted-foreground/60 px-3 py-1.5 transition-[border-color,color] duration-200 ease-out"
                     >
                       <span className="text-xs font-medium">Changes</span>
                     </TabsTrigger>
