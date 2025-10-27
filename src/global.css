@@ -127,9 +127,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  /* Animations */
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
+  /* Animations - Choreographed timing: content exits fast, container follows smooth */
+  --animate-accordion-down: accordion-down 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
+  --animate-accordion-up: accordion-up 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
   --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
   --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-fade-in-down: fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1);
@@ -137,23 +137,35 @@
   --animate-slide-in-left: slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-scale-in: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-shimmer: shimmer 2s ease-in-out infinite;
+  --animate-subtle-spin: subtle-spin 2s linear infinite;
+  --animate-breathing-glow: breathing-glow 2.5s ease-in-out infinite;
 }
 
+/* GPU-accelerated accordion: use transform + opacity instead of height */
+/* Height animations cause layout recalculation every frame - very expensive */
 @keyframes accordion-down {
   from {
     height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
   }
   to {
     height: var(--radix-accordion-content-height);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 @keyframes accordion-up {
   from {
     height: var(--radix-accordion-content-height);
+    opacity: 1;
+    transform: translateY(0);
   }
   to {
     height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
   }
 }
 
@@ -231,6 +243,26 @@
 }
 
 @keyframes shimmer {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Subtle spinner for working state - 120° arc rotating smoothly */
+@keyframes subtle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Breathing glow for working badges - gentle pulse like heartbeat */
+@keyframes breathing-glow {
   0%, 100% {
     opacity: 1;
   }
@@ -639,4 +671,17 @@ mark.diff-word-deletion {
   color: inherit;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* Collapsible sidebar animation - GPU-accelerated (uses keyframes defined at top of file) */
+[data-radix-collapsible-content] {
+  overflow: hidden;
+}
+
+[data-radix-collapsible-content][data-state="open"] {
+  animation: accordion-down 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+[data-radix-collapsible-content][data-state="closed"] {
+  animation: accordion-up 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
 }

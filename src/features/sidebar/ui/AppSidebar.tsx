@@ -20,12 +20,14 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
 import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
+import { getRepoPriorityStatus, STATUS_CONFIG } from "../lib/status";
 
 export function AppSidebar({
   repositories,
@@ -52,11 +54,28 @@ export function AppSidebar({
   const navigationTimeoutRef = React.useRef<NodeJS.Timeout>();
   const lastNavigationRef = React.useRef<{ workspace: any; repoId: string } | null>(null);
 
-  // Apply custom ordering - memoized to prevent unnecessary re-sorts
-  const orderedRepositories = React.useMemo(
-    () => reorderRepositories(repositories),
-    [repositories, repositoryOrder, reorderRepositories]
-  );
+  // Apply priority-based sorting, then custom ordering
+  // Priority logic: unread/error → working → idle, then user's manual order within each priority
+  const orderedRepositories = React.useMemo(() => {
+    // First, apply user's custom drag-drop ordering
+    const customOrdered = reorderRepositories(repositories);
+
+    // Then sort by status priority (higher priority repos float to top)
+    return [...customOrdered].sort((a, b) => {
+      const statusA = getRepoPriorityStatus(a.workspaces);
+      const statusB = getRepoPriorityStatus(b.workspaces);
+      const priorityA = STATUS_CONFIG[statusA].priority;
+      const priorityB = STATUS_CONFIG[statusB].priority;
+
+      // Higher priority first
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA;
+      }
+
+      // Same priority: preserve user's custom order
+      return 0;
+    });
+  }, [repositories, repositoryOrder, reorderRepositories]);
 
   // Flatten all workspaces with repo info for keyboard navigation
   const allWorkspaces = React.useMemo(() => {
@@ -202,55 +221,43 @@ export function AppSidebar({
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader profile={profile} onOpenSettings={openSettingsModal} />
 
-      {/* Repositories List */}
+      {/* Repositories List - Single tree for smooth animations */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
-        {isExpanded ? (
-          // Drag and Drop enabled when sidebar is expanded
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={orderedRepositories.map(r => r.repo_id)}
+            strategy={verticalListSortingStrategy}
           >
-            <SortableContext
-              items={orderedRepositories.map(r => r.repo_id)}
-              strategy={verticalListSortingStrategy}
+            <SidebarMenu
+              className={cn(
+                "gap-2",
+                // Expanded: padding for drag handles and workspace content
+                "p-2",
+                // Collapsed: no horizontal padding, items center themselves
+                "group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2"
+              )}
             >
-              <SidebarMenu className="p-2 gap-2">
-                {orderedRepositories.map((repo) => (
-                  <DraggableRepository
-                    key={repo.repo_id}
-                    repository={repo}
-                    isCollapsed={collapsedRepos.has(repo.repo_id)}
-                    selectedWorkspaceId={selectedWorkspaceId}
-                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                    onWorkspaceClick={onWorkspaceClick}
-                    onNewWorkspace={onNewWorkspace}
-                    onArchive={onArchive}
-                    sidebarExpanded={isExpanded}
-                  />
-                ))}
-              </SidebarMenu>
-            </SortableContext>
-          </DndContext>
-        ) : (
-          // No drag-drop when sidebar is collapsed (icon mode)
-          <SidebarMenu className="p-2 gap-2">
-            {orderedRepositories.map((repo) => (
-              <DraggableRepository
-                key={repo.repo_id}
-                repository={repo}
-                isCollapsed={collapsedRepos.has(repo.repo_id)}
-                selectedWorkspaceId={selectedWorkspaceId}
-                onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                onWorkspaceClick={onWorkspaceClick}
-                onNewWorkspace={onNewWorkspace}
-                onArchive={onArchive}
-                sidebarExpanded={isExpanded}
-                dragDisabled={true}
-              />
-            ))}
-          </SidebarMenu>
-        )}
+              {orderedRepositories.map((repo) => (
+                <DraggableRepository
+                  key={repo.repo_id}
+                  repository={repo}
+                  isCollapsed={collapsedRepos.has(repo.repo_id)}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                  onWorkspaceClick={onWorkspaceClick}
+                  onNewWorkspace={onNewWorkspace}
+                  onArchive={onArchive}
+                  sidebarExpanded={isExpanded}
+                  dragDisabled={!isExpanded}
+                />
+              ))}
+            </SidebarMenu>
+          </SortableContext>
+        </DndContext>
       </SidebarContent>
 
       <SidebarFooter onAddRepository={onAddRepository} />
