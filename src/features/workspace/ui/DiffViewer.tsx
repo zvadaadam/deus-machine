@@ -108,13 +108,15 @@ export function DiffViewer({
    * - Process in batches to avoid blocking
    */
   useEffect(() => {
+    let cancelled = false;
+
     const highlightDiff = async () => {
       if (!diff || diff === 'Loading diff...' || diff.includes('Error loading diff')) {
-        setHighlightedHunks([]);
+        if (!cancelled) setHighlightedHunks([]);
         return;
       }
 
-      setIsHighlighting(true);
+      if (!cancelled) setIsHighlighting(true);
 
       // Parse diff to extract code hunks (removes git metadata)
       const hunks = parseDiff(diff);
@@ -198,11 +200,14 @@ export function DiffViewer({
         });
       }
 
-      setHighlightedHunks(highlighted);
-      setIsHighlighting(false);
+      if (!cancelled) {
+        setHighlightedHunks(highlighted);
+        setIsHighlighting(false);
+      }
     };
 
     highlightDiff();
+    return () => { cancelled = true; };
   }, [diff, language, theme]);
 
   /**
