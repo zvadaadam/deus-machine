@@ -1,9 +1,16 @@
 /**
  * Text Block
  *
- * Renders text content blocks from messages.
+ * Renders text content blocks from messages with semantic weight.
  * - Assistant messages: Rendered as markdown (Claude uses markdown)
  * - User messages: Rendered as plain text (user input)
+ *
+ * Weight variants:
+ * - 'muted': Transitional text between actions (13px, opacity 0.7)
+ * - 'normal': Regular text (15px, normal opacity)
+ * - 'hero': Final summary text (16px, prominent, with top border)
+ *
+ * Design reference: CHAT_REDESIGN.md - Text Block Visual Weight
  */
 
 import type { TextBlock as TextBlockType, MessageRole } from '@/shared/types';
@@ -13,9 +20,12 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/shared/lib/utils';
 import { CopyButton } from '../tools/components/CopyButton';
 
+export type TextWeight = 'muted' | 'normal' | 'hero';
+
 interface TextBlockProps {
   block: TextBlockType | string;
   role?: MessageRole;
+  weight?: TextWeight;
 }
 
 /**
@@ -48,7 +58,7 @@ function PreWithCopy({ children, ...props }: any) {
   );
 }
 
-export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
+export function TextBlock({ block, role = 'assistant', weight = 'normal' }: TextBlockProps) {
   // Handle both TextBlock objects and plain strings
   const text = typeof block === 'string' ? block : block.text;
 
@@ -56,11 +66,18 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
     return null;
   }
 
+  // Weight-based styling
+  const weightStyles = {
+    muted: 'text-[13px] leading-[1.5] text-muted-foreground opacity-70 py-1',
+    normal: 'text-[15px] leading-relaxed',
+    hero: 'text-[16px] leading-[1.7] py-4 mt-3 border-t border-border/20',
+  };
+
   // User messages: plain text (preserve newlines)
   if (role === 'user') {
     return (
       <div className={chatTheme.blocks.text.container}>
-        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap')}>
+        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap', weightStyles[weight])}>
           {text}
         </p>
       </div>
@@ -73,6 +90,7 @@ export function TextBlock({ block, role = 'assistant' }: TextBlockProps) {
       className={cn(
         chatTheme.blocks.text.container,
         chatTheme.blocks.text.content,
+        weightStyles[weight],
         'prose prose-sm dark:prose-invert max-w-full min-w-0 overflow-x-auto',
         // Headings
         'prose-headings:font-semibold prose-headings:tracking-tight',

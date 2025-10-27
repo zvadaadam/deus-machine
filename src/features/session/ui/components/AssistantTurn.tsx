@@ -1,31 +1,29 @@
 /**
- * Assistant Turn Component
+ * Assistant Turn Component - Redesigned for Scannability
  *
- * Wraps an assistant's response with collapsible tool section + summary.
+ * Displays assistant's work as a scannable timeline of actions + text.
  *
- * Structure:
- * ┌─────────────────────────────────────┐
- * │ ▾ Read 3 files, Edited 2 files      │ ← TurnHeader (collapsible)
- * │                                     │
- * │ [Tool blocks when expanded]         │ ← Tool section
- * │ ─────────────────────────────────── │ ← TurnDivider
- * │ [Summary text - always visible]     │ ← Summary section
- * └─────────────────────────────────────┘
+ * NEW Design Paradigm:
+ * - Tool calls render as compact preview cards (icon + verb + preview)
+ * - Text blocks have semantic weight (muted transitional, hero summary)
+ * - Previous turns collapse to show only summary + action count
+ * - Latest turn shows all actions expanded
  *
- * Behavior:
- * - Latest turn: Expanded by default
- * - Previous turns: Collapsed by default
- * - User can manually toggle any turn
- * - When new user message sent, previous turn auto-collapses
+ * Design reference: CHAT_REDESIGN.md
  */
 
 import { useState, useMemo } from 'react';
-import type { ContentBlock, ToolUseBlock, TextBlock as TextBlockType } from '@/shared/types';
-import { TurnHeader } from './TurnHeader';
-import { TurnDivider } from './TurnDivider';
-import { BlockRenderer } from '../blocks';
-import { generateToolSummary } from '../utils/toolCategories';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { ContentBlock, ToolUseBlock, TextBlock as TextBlockType, ThinkingBlock as ThinkingBlockType } from '@/shared/types';
+import { ToolPreview } from './ToolPreview';
+import { ThinkingPreview } from './ThinkingPreview';
+import { TextBlock, type TextWeight } from '../blocks/TextBlock';
+import { getToolPreviewData } from '../utils/toolPreviewExtractors';
+import { useSession } from '../../context';
 import { cn } from '@/shared/lib/utils';
+
+// Import existing tool renderers for full content
+import { ToolUseBlock as ToolUseBlockRenderer } from '../blocks/ToolUseBlock';
 
 interface AssistantTurnProps {
   contentBlocks: (ContentBlock | string)[];
@@ -33,136 +31,201 @@ interface AssistantTurnProps {
   isLatest: boolean;
 }
 
-export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantTurnProps) {
-  // Debug log
-  if (import.meta.env.DEV) {
-    console.log('[AssistantTurn] Rendering turn:', { messageId, isLatest, blockCount: contentBlocks.length });
-  }
+interface ProcessedBlock {
+  type: 'tool' | 'text' | 'thinking';
+  index: number;
+  data: any;
+}
 
-  // Expanded by default if latest turn
+export function AssistantTurn({ contentBlocks, messageId, isLatest }: AssistantTurnProps) {
+  const { toolResultMap } = useSession();
   const [isExpanded, setIsExpanded] = useState(isLatest);
 
-  // Separate tool blocks from text blocks
-  const { toolBlocks, textBlocks, hasThinking } = useMemo(() => {
-    const tools: ToolUseBlock[] = [];
-    const texts: TextBlockType[] = [];
-    let thinking = false;
+  // Process blocks in order, maintaining chronological sequence
+  const { processedBlocks, toolCount, finalSummary } = useMemo(() => {
+    const blocks: ProcessedBlock[] = [];
+    let tools = 0;
+    let lastTextBlock: TextBlockType | null = null;
 
-    contentBlocks.forEach(block => {
+    contentBlocks.forEach((block, index) => {
       if (typeof block === 'object') {
         if (block.type === 'tool_use') {
-          tools.push(block as ToolUseBlock);
+          blocks.push({ type: 'tool', index, data: block as ToolUseBlock });
+          tools++;
         } else if (block.type === 'text') {
-          texts.push(block as TextBlockType);
+          blocks.push({ type: 'text', index, data: block as TextBlockType });
+          lastTextBlock = block as TextBlockType;
         } else if (block.type === 'thinking') {
-          thinking = true;
+          blocks.push({ type: 'thinking', index, data: block as ThinkingBlockType });
         }
+      } else if (typeof block === 'string') {
+        const textBlock: TextBlockType = { type: 'text', text: block };
+        blocks.push({ type: 'text', index, data: textBlock });
+        lastTextBlock = textBlock;
       }
     });
 
     return {
-      toolBlocks: tools,
-      textBlocks: texts,
-      hasThinking: thinking,
+      processedBlocks: blocks,
+      toolCount: tools,
+      finalSummary: lastTextBlock,
     };
   }, [contentBlocks]);
 
-  // Generate summary text for header
-  const toolSummary = useMemo(() => {
-    return generateToolSummary(toolBlocks);
-  }, [toolBlocks]);
+  // Detect text weight based on position
+  const getTextWeight = (block: ProcessedBlock, blockIndex: number): TextWeight => {
+    // Last text block = hero
+    if (block.data === finalSummary) {
+      return 'hero';
+    }
 
-  // If no tools, render as simple message (no turn header)
-  if (toolBlocks.length === 0) {
+    // Text between tools = muted
+    const prevBlock = processedBlocks[blockIndex - 1];
+    const nextBlock = processedBlocks[blockIndex + 1];
+
+    if (
+      (prevBlock?.type === 'tool' || prevBlock?.type === 'thinking') &&
+      (nextBlock?.type === 'tool' || nextBlock?.type === 'thinking')
+    ) {
+      return 'muted';
+    }
+
+    // Otherwise normal
+    return 'normal';
+  };
+
+  // If no tools/thinking, render as simple message
+  if (toolCount === 0 && !processedBlocks.some(b => b.type === 'thinking')) {
     return (
       <div className="flex flex-col gap-2">
-        {contentBlocks.map((block, index) => {
-          const key = typeof block === 'object' && block.type === 'tool_use'
-            ? block.id
-            : `${messageId}:${index}`;
-          return (
-            <BlockRenderer
-              key={key}
-              block={block}
-              index={index}
-              role="assistant"
-            />
-          );
-        })}
+        {processedBlocks.map((block, idx) => (
+          <TextBlock
+            key={`${messageId}:${block.index}`}
+            block={block.data}
+            role="assistant"
+            weight="normal"
+          />
+        ))}
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col">
-      {/* Turn Header - Collapsible summary */}
-      <TurnHeader
-        summary={toolSummary}
-        expanded={isExpanded}
-        onToggle={() => setIsExpanded(!isExpanded)}
-        toolCount={toolBlocks.length}
-      />
-
-      {/* Tool Section - Expandable */}
-      <div
-        className={cn(
-          'overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)]',
-          'motion-reduce:transition-none',
-          isExpanded
-            ? 'max-h-[10000px] opacity-100 mt-2'
-            : 'max-h-0 opacity-0 mt-0'
-        )}
-      >
-        {/* Tool blocks */}
-        <div className="flex flex-col gap-1">
-          {toolBlocks.map((block, index) => (
-            <BlockRenderer
-              key={block.id}
-              block={block}
-              index={index}
-              role="assistant"
-            />
-          ))}
-        </div>
-
-        {/* Divider between tools and summary (only if both exist) */}
-        {textBlocks.length > 0 && <TurnDivider />}
-      </div>
-
-      {/* Summary Section - Always visible */}
-      {textBlocks.length > 0 && (
-        <div
+  // COLLAPSED STATE (previous turns)
+  if (!isLatest && !isExpanded) {
+    return (
+      <div className="flex flex-col">
+        {/* Collapsed Header */}
+        <button
+          onClick={() => setIsExpanded(true)}
           className={cn(
-            'flex flex-col gap-2',
-            // Add spacing when tools are collapsed (header exists)
-            isExpanded ? 'mt-0' : 'mt-2',
-            // Larger text and padding for summary (hero content)
-            'text-[16px] leading-relaxed py-5'
+            'flex items-center gap-2 px-3 py-2',
+            'rounded-md border border-border/20',
+            'bg-transparent hover:bg-muted/20',
+            'transition-all duration-150',
+            'text-left w-full'
           )}
         >
-          {textBlocks.map((block, index) => (
-            <BlockRenderer
-              key={`text-${messageId}:${index}`}
-              block={block}
-              index={index}
+          <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-[13px] text-muted-foreground">
+            {toolCount} {toolCount === 1 ? 'action' : 'actions'}
+          </span>
+        </button>
+
+        {/* Show only final summary */}
+        {finalSummary && (
+          <div className="mt-2">
+            <TextBlock
+              block={finalSummary}
               role="assistant"
+              weight="hero"
             />
-          ))}
-        </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // EXPANDED STATE (show all content)
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Optional: Collapse button for latest turn */}
+      {isLatest && toolCount > 0 && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={cn(
+            'flex items-center gap-2 px-2 py-1',
+            'rounded-md',
+            'text-[12px] text-muted-foreground hover:text-foreground',
+            'transition-colors duration-150',
+            'self-start',
+            '-mb-1'
+          )}
+        >
+          {isExpanded ? (
+            <>
+              <ChevronDown className="w-3 h-3" />
+              Hide actions
+            </>
+          ) : (
+            <>
+              <ChevronRight className="w-3 h-3" />
+              Show actions
+            </>
+          )}
+        </button>
       )}
 
-      {/* Render thinking blocks (if any) */}
-      {hasThinking && contentBlocks.map((block, index) => {
-        if (typeof block === 'object' && block.type === 'thinking') {
+      {/* Render blocks in chronological order */}
+      {processedBlocks.map((block, blockIndex) => {
+        const key = `${messageId}:${block.index}`;
+
+        if (block.type === 'tool') {
+          const toolUse = block.data as ToolUseBlock;
+          const toolResult = toolResultMap.get(toolUse.id);
+          const previewData = getToolPreviewData(toolUse, toolResult);
+
           return (
-            <BlockRenderer
-              key={`thinking-${messageId}:${index}`}
-              block={block}
-              index={index}
-              role="assistant"
+            <ToolPreview
+              key={key}
+              toolUse={toolUse}
+              toolResult={toolResult}
+              previewData={previewData}
+              defaultExpanded={false}
+              fullContent={
+                <ToolUseBlockRenderer
+                  block={toolUse}
+                  toolResult={toolResult}
+                />
+              }
             />
           );
         }
+
+        if (block.type === 'thinking') {
+          const thinkingBlock = block.data as ThinkingBlockType;
+          return (
+            <ThinkingPreview
+              key={key}
+              block={thinkingBlock}
+              defaultExpanded={false}
+            />
+          );
+        }
+
+        if (block.type === 'text') {
+          const textBlock = block.data as TextBlockType;
+          const weight = getTextWeight(block, blockIndex);
+
+          return (
+            <TextBlock
+              key={key}
+              block={textBlock}
+              role="assistant"
+              weight={weight}
+            />
+          );
+        }
+
         return null;
       })}
     </div>
