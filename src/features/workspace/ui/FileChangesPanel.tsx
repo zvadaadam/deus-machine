@@ -94,7 +94,20 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
               {fileChanges.map((file) => {
                 const pathParts = file.file.split('/');
                 const filename = pathParts.pop() || file.file;
-                const directory = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
+
+                // Smart path truncation: show …/parent/filename for long paths
+                let displayPath = '';
+                if (pathParts.length === 0) {
+                  // No directory (root file)
+                  displayPath = '';
+                } else if (pathParts.length === 1) {
+                  // One level deep (e.g., src/file.tsx)
+                  displayPath = pathParts[0] + '/';
+                } else {
+                  // Multiple levels: show …/lastParent/
+                  const lastParent = pathParts[pathParts.length - 1];
+                  displayPath = `…/${lastParent}/`;
+                }
 
                 return (
                   <div
@@ -104,8 +117,8 @@ export function FileChangesPanel({ selectedWorkspace }: FileChangesPanelProps) {
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">
-                      <span className="text-xs text-muted-foreground/60 truncate">
-                        {directory}
+                      <span className="text-xs text-muted-foreground/60">
+                        {displayPath}
                       </span>
                       <span className="text-xs text-foreground group-hover:text-primary transition-colors duration-200">
                         {filename}
