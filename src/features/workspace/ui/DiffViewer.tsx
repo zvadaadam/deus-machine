@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { FileCode, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/shared/lib/utils';
 
 interface DiffViewerProps {
@@ -19,9 +18,13 @@ interface DiffViewerProps {
  * - Clean header with file path and change statistics
  * - Syntax-highlighted unified diff format (+ green, - red)
  * - Copy diff button for easy sharing
- * - Smooth scrolling with ScrollArea
+ * - Smooth scrolling with native CSS overflow
  *
  * Design: Minimalist, inspired by Linear/Stripe/GitHub
+ *
+ * Scrolling: Uses native overflow-y-auto instead of ScrollArea component
+ * because flex-1 layouts require explicit heights for Radix ScrollArea,
+ * but native overflow works seamlessly with flex constraints.
  */
 export function DiffViewer({
   filePath = '',
@@ -166,40 +169,41 @@ export function DiffViewer({
         </div>
       </div>
 
-      {/* Diff content - Scrollable */}
-      <ScrollArea className="flex-1">
-        <div className="min-h-full">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="text-sm">Loading diff...</span>
-              </div>
+      {/* Diff content - Scrollable with native overflow
+          Using flex-1 + overflow-y-auto + min-h-0 pattern (same as Chat.tsx)
+          This allows proper scrolling in flex layouts without requiring explicit height
+      */}
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              <span className="text-sm">Loading diff...</span>
             </div>
-          ) : hasError ? (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
-              <div className="flex flex-col items-center gap-2 text-center max-w-sm">
-                <FileCode className="w-12 h-12 text-muted-foreground/40" />
-                <p className="text-sm font-medium">{diff}</p>
-                <p className="text-xs text-muted-foreground/60">
-                  The diff for this file could not be loaded
-                </p>
-              </div>
+          </div>
+        ) : hasError ? (
+          <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 text-center max-w-sm">
+              <FileCode className="w-12 h-12 text-muted-foreground/40" />
+              <p className="text-sm font-medium">{diff}</p>
+              <p className="text-xs text-muted-foreground/60">
+                The diff for this file could not be loaded
+              </p>
             </div>
-          ) : diff.length === 0 ? (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
-              <div className="flex flex-col items-center gap-2">
-                <FileCode className="w-12 h-12 text-muted-foreground/40" />
-                <p className="text-sm">No diff content available</p>
-              </div>
+          </div>
+        ) : diff.length === 0 ? (
+          <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="flex flex-col items-center gap-2">
+              <FileCode className="w-12 h-12 text-muted-foreground/40" />
+              <p className="text-sm">No diff content available</p>
             </div>
-          ) : (
-            <div className="py-2">
-              {diffLines.map((line, index) => renderDiffLine(line, index))}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+          </div>
+        ) : (
+          <div className="py-2">
+            {diffLines.map((line, index) => renderDiffLine(line, index))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

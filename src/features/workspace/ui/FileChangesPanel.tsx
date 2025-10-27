@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
-import { useUIStore } from "@/shared/stores/uiStore";
 import type { Workspace } from "@/shared/types";
 
 interface FileChangesPanelProps {
@@ -21,7 +20,6 @@ export function FileChangesPanel({
   onUpdateDiffTab,
 }: FileChangesPanelProps) {
   const currentFileRef = useRef<string | null>(null);
-  const { openDiffModal } = useUIStore(); // Keep for backward compatibility during migration
 
   // Query data with conditional polling based on session status
   const { data: fileChanges = [] } = useFileChanges(
@@ -31,68 +29,45 @@ export function FileChangesPanel({
   const { data: devServers = [] } = useDevServers(selectedWorkspace?.id || null);
 
   /**
-   * Load and display diff for a specific file
+   * Load and display diff for a specific file as an inline tab
    * Prevents race conditions by tracking the current file being loaded
    */
   async function handleFileClick(file: string, additions: number, deletions: number) {
-    if (!selectedWorkspace) return;
+    if (!selectedWorkspace || !onOpenDiffTab || !onUpdateDiffTab) return;
 
     // Track this file as the current one being loaded
     currentFileRef.current = file;
 
-    // Use new tab-based approach if callbacks are provided
-    if (onOpenDiffTab && onUpdateDiffTab) {
-      // Open tab with loading message
-      onOpenDiffTab({
-        file,
-        diff: 'Loading diff...',
-        additions: 0,
-        deletions: 0,
+    // Open tab with loading message
+    onOpenDiffTab({
+      file,
+      diff: 'Loading diff...',
+      additions: 0,
+      deletions: 0,
+    });
+
+    try {
+      const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
+      const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
+
+      // Ignore stale responses - only update if this is still the current file
+      if (currentFileRef.current !== file) return;
+
+      // Update tab with actual diff data
+      onUpdateDiffTab(file, {
+        diff: data.diff || 'No diff available',
+        additions,
+        deletions,
       });
+    } catch (error) {
+      console.error('Failed to load diff:', error);
 
-      try {
-        const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
-        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
+      // Ignore stale errors
+      if (currentFileRef.current !== file) return;
 
-        // Ignore stale responses - only update if this is still the current file
-        if (currentFileRef.current !== file) return;
-
-        // Update tab with actual diff data
-        onUpdateDiffTab(file, {
-          diff: data.diff || 'No diff available',
-          additions,
-          deletions,
-        });
-      } catch (error) {
-        console.error('Failed to load diff:', error);
-
-        // Ignore stale errors
-        if (currentFileRef.current !== file) return;
-
-        onUpdateDiffTab(file, {
-          diff: 'Error loading diff',
-        });
-      }
-    } else {
-      // Fallback to old modal approach
-      openDiffModal(file, 'Loading diff...'); // Open with loading message
-
-      try {
-        const { WorkspaceService } = await import('@/features/workspace/api/workspace.service');
-        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, file);
-
-        // Ignore stale responses - only update if this is still the current file
-        if (currentFileRef.current !== file) return;
-
-        openDiffModal(file, data.diff || 'No diff available'); // Update with actual diff
-      } catch (error) {
-        console.error('Failed to load diff:', error);
-
-        // Ignore stale errors
-        if (currentFileRef.current !== file) return;
-
-        openDiffModal(file, 'Error loading diff');
-      }
+      onUpdateDiffTab(file, {
+        diff: 'Error loading diff',
+      });
     }
   }
 
