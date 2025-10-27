@@ -158,7 +158,9 @@ export function RepositoryItem({
                 if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
                 if (unreadCount > 0) parts.push(`${unreadCount} unread`);
                 if (workingCount > 0) parts.push(`${workingCount} working`);
-                const idleCount = repository.workspaces.length - errorCount - unreadCount - workingCount;
+                const compactingCount = repository.workspaces.filter(ws => ws.session_status === 'compacting').length;
+                if (compactingCount > 0) parts.push(`${compactingCount} compacting`);
+                const idleCount = repository.workspaces.length - errorCount - unreadCount - workingCount - compactingCount;
                 if (idleCount > 0) parts.push(`${idleCount} idle`);
                 return `${repository.repo_name}${parts.length > 0 ? '\n' + parts.join(' • ') : ''}`;
               })()}
@@ -330,7 +332,7 @@ export function RepositoryItem({
                     <div key={status} className="mb-3">
                       {/* Section Header */}
                       <div className="px-3 py-2 flex items-center gap-2">
-                        <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: `var(--${status}-color, currentColor)` }}>
+                        <span className="text-[10px] font-bold tracking-wider uppercase">
                           <span className={cn("mr-1", sectionConfig.text)}>{emoji}</span>
                           <span className={sectionConfig.text}>{label}</span>
                         </span>
