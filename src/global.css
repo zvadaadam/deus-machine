@@ -127,9 +127,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  /* Animations */
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
+  /* Animations - Apple-style timing for ultra-responsive feel */
+  --animate-accordion-down: accordion-down 0.15s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-accordion-up: accordion-up 0.15s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
   --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-fade-in-down: fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1);
@@ -639,4 +639,17 @@ mark.diff-word-deletion {
   color: inherit;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* Collapsible sidebar animation - GPU-accelerated (uses keyframes defined at top of file) */
+[data-radix-collapsible-content] {
+  overflow: hidden;
+}
+
+[data-radix-collapsible-content][data-state="open"] {
+  animation: accordion-down 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+[data-radix-collapsible-content][data-state="closed"] {
+  animation: accordion-up 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
 }

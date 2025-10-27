@@ -66,13 +66,13 @@ export function RepositoryItem({
               <button
                 className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent"
               >
-                <span className="truncate">
+                <span className="truncate transition-opacity duration-100 ease-[cubic-bezier(0.32,0.72,0,1)]">
                   {repository.repo_name}
                 </span>
 
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-200 ease-out flex-shrink-0 motion-reduce:transition-none",
+                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-150 ease-[cubic-bezier(0.32,0.72,0,1)] flex-shrink-0 motion-reduce:transition-none",
                     isCollapsed && "-rotate-90"
                   )}
                 />
@@ -92,7 +92,7 @@ export function RepositoryItem({
                   return (
                     <div className={cn(
                       "h-9 w-9 flex items-center justify-center text-xs font-semibold",
-                      "rounded-[8px]",
+                      "rounded-[8px] transition-transform duration-150 ease-[cubic-bezier(0.32,0.72,0,1)]",
                       repoColor.bg,
                       repoColor.text
                     )}>
