@@ -1,14 +1,16 @@
 /**
  * Simple Assistant Message
  *
- * Scannable list of tools with icons for visual hierarchy.
- * Shows all tools directly - no collapsing, just pure display.
+ * Displays tool calls as collapsible cards with icon + preview.
+ * Click any tool card to expand and see full details.
  */
 
+import { useState } from 'react';
 import type { ContentBlock, ToolUseBlock, TextBlock as TextBlockType, ThinkingBlock as ThinkingBlockType } from '@/shared/types';
 import { BlockRenderer } from '../blocks';
 import { useSession } from '../../context';
-import { FileText, Pencil, Terminal, Search, FolderOpen, CheckSquare, Brain, Globe, ExternalLink, Zap } from 'lucide-react';
+import { FileText, Pencil, Terminal, Search, FolderOpen, CheckSquare, Brain, Globe, ExternalLink, Zap, ChevronRight } from 'lucide-react';
+import { cn } from '@/shared/lib/utils';
 
 interface SimpleAssistantMessageProps {
   contentBlocks: (ContentBlock | string)[];
@@ -91,10 +93,105 @@ const getToolPreview = (block: ToolUseBlock, toolResultMap: Map<string, any>): s
   }
 };
 
+// Collapsible Tool Card Component
+function ToolCard({
+  toolBlock,
+  index,
+  toolResultMap
+}: {
+  toolBlock: ToolUseBlock;
+  index: number;
+  toolResultMap: Map<string, any>;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const Icon = getToolIcon(toolBlock.name);
+  const preview = getToolPreview(toolBlock, toolResultMap);
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Clickable tool preview card */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={cn(
+          "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
+          "bg-muted/5 hover:bg-muted/10 transition-colors",
+          "text-left w-full cursor-pointer"
+        )}
+      >
+        <ChevronRight
+          className={cn(
+            "w-3 h-3 text-muted-foreground/50 transition-transform flex-shrink-0",
+            isExpanded && "rotate-90"
+          )}
+        />
+        <Icon className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
+        <span className="text-foreground font-medium">{toolBlock.name}</span>
+        {preview && (
+          <span className="text-muted-foreground truncate">{preview}</span>
+        )}
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="ml-5 mt-1">
+          <BlockRenderer
+            block={toolBlock}
+            index={index}
+            role="assistant"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsible Thinking Card Component
+function ThinkingCard({
+  thinkingBlock,
+  blockIndex
+}: {
+  thinkingBlock: ThinkingBlockType;
+  blockIndex: number;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const text = thinkingBlock.thinking || '';
+  const firstLine = text.split('\n')[0];
+  const preview = firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Clickable thinking preview card */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={cn(
+          "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
+          "bg-muted/5 hover:bg-muted/10 transition-colors",
+          "text-left w-full cursor-pointer"
+        )}
+      >
+        <ChevronRight
+          className={cn(
+            "w-3 h-3 text-muted-foreground/50 transition-transform flex-shrink-0",
+            isExpanded && "rotate-90"
+          )}
+        />
+        <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
+        <span className="text-foreground font-medium">Thinking</span>
+        <span className="text-muted-foreground italic truncate">{preview}</span>
+      </button>
+
+      {/* Expanded thinking text */}
+      {isExpanded && (
+        <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap">
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssistantMessageProps) {
   const { toolResultMap } = useSession();
-
-  let toolIndex = 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -117,62 +214,28 @@ export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssis
           );
         }
 
-        // Tool use - show with icon and preview
+        // Tool use - show as collapsible card
         if (block.type === 'tool_use') {
-          toolIndex++;
-          const currentIndex = toolIndex;
           const toolBlock = block as ToolUseBlock;
-          const Icon = getToolIcon(toolBlock.name);
-          const preview = getToolPreview(toolBlock, toolResultMap);
-
           return (
-            <div key={`${messageId}:${index}`} className="flex flex-col gap-1">
-              {/* Tool header - number + icon + name + preview */}
-              <div className="flex items-center gap-2 text-[13px]">
-                <span className="text-muted-foreground/60 font-mono">{currentIndex}.</span>
-                <Icon className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
-                <span className="text-foreground font-medium">{toolBlock.name}</span>
-                {preview && (
-                  <span className="text-muted-foreground truncate">{preview}</span>
-                )}
-              </div>
-
-              {/* Full tool content */}
-              <div className="ml-7">
-                <BlockRenderer
-                  block={toolBlock}
-                  index={index}
-                  role="assistant"
-                />
-              </div>
-            </div>
+            <ToolCard
+              key={`${messageId}:${index}`}
+              toolBlock={toolBlock}
+              index={index}
+              toolResultMap={toolResultMap}
+            />
           );
         }
 
-        // Thinking block
+        // Thinking block - show as collapsible card
         if (block.type === 'thinking') {
-          toolIndex++;
-          const currentIndex = toolIndex;
           const thinkingBlock = block as ThinkingBlockType;
-          const text = thinkingBlock.thinking || '';
-          const firstLine = text.split('\n')[0];
-          const preview = firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
-
           return (
-            <div key={`${messageId}:${index}`} className="flex flex-col gap-1">
-              {/* Thinking header */}
-              <div className="flex items-center gap-2 text-[13px]">
-                <span className="text-muted-foreground/60 font-mono">{currentIndex}.</span>
-                <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
-                <span className="text-foreground font-medium">Thinking</span>
-                <span className="text-muted-foreground italic truncate">{preview}</span>
-              </div>
-
-              {/* Full thinking text */}
-              <div className="ml-7 text-[13px] text-muted-foreground whitespace-pre-wrap">
-                {text}
-              </div>
-            </div>
+            <ThinkingCard
+              key={`${messageId}:${index}`}
+              thinkingBlock={thinkingBlock}
+              blockIndex={index}
+            />
           );
         }
 
