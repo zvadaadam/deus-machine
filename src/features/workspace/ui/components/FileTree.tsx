@@ -145,7 +145,7 @@ function TreeNode({
         {/* File/Folder Name */}
         <span className={cn(
           'text-[13px] truncate flex-1',
-          isDirectory ? 'font-semibold text-foreground' : 'font-medium text-foreground'
+          isDirectory ? 'font-normal text-foreground' : 'font-normal text-foreground/90'
         )}>
           {node.name}
         </span>
