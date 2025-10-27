@@ -37,7 +37,7 @@ use serde_json::Value;
  */
 pub struct SocketManager {
     socket_path: Mutex<Option<PathBuf>>,
-    stream: Mutex<Option<UnixStream>>,
+    stream: Arc<Mutex<Option<UnixStream>>>,
     app_handle: Arc<Mutex<Option<AppHandle>>>,
 }
 
@@ -45,7 +45,7 @@ impl SocketManager {
     pub fn new() -> Self {
         SocketManager {
             socket_path: Mutex::new(None),
-            stream: Mutex::new(None),
+            stream: Arc::new(Mutex::new(None)),
             app_handle: Arc::new(Mutex::new(None)),
         }
     }
