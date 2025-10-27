@@ -34,11 +34,10 @@ export function WelcomeView({
   const hasMore = recentWorkspaces.length > initialCount;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
-      {/* Scrollable container with centered content */}
-      <div className="flex-1 flex flex-col items-center py-16">
-        <div className="w-full max-w-2xl px-6 space-y-12">
-
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Fixed action cards at top - no scroll */}
+      <div className="flex-shrink-0 flex flex-col items-center pt-16 pb-8">
+        <div className="w-full max-w-2xl px-6">
           {/* Action cards - clean, simple, breathing room */}
           <div className="grid grid-cols-2 gap-4">
           <Card
@@ -73,9 +72,15 @@ export function WelcomeView({
             </div>
           </Card>
         </div>
+        </div>
+      </div>
 
-          {/* Recent Workspaces - no border, trust the space */}
-          <div className="space-y-4">
+      {/* Scrollable Recent Workspaces section */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex flex-col items-center pb-6">
+          <div className="w-full max-w-2xl px-6">
+            {/* Recent Workspaces - no border, trust the space */}
+            <div className="space-y-4">
             <div className="flex items-baseline justify-between px-2">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Recent Workspaces</h2>
               {recentWorkspaces.length > 0 && (
@@ -162,8 +167,9 @@ export function WelcomeView({
                 <Plus className="w-3.5 h-3.5" />
                 Create Workspace
               </Button>
-            </div>
+              </div>
             )}
+            </div>
           </div>
         </div>
       </div>
