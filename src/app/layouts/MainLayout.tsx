@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
-import { TerminalPanel } from "@/features/terminal";
+import { CollapsibleTerminalPanel } from "@/features/terminal";
 import {
   NewWorkspaceModal,
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-import { DiffModal, FileChangesPanel, MainContentTabBar } from "@/features/workspace";
+import { DiffModal, FileChangesPanel, FileBrowserPanel, MainContentTabBar } from "@/features/workspace";
 import { BrowserPanel } from "@/features/browser";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
@@ -43,7 +43,7 @@ import {
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Package, GitPullRequest, Archive, Square, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor, X } from "lucide-react";
+import { FileText, Package, GitPullRequest, Archive, Square, FolderOpen, Sparkles, FileCode, Monitor, X } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
@@ -61,8 +61,6 @@ function MainContent({
   selectedWorkspace,
   workspaceChatPanelRef,
   recentWorkspaces,
-  rightPanelTab,
-  onRightPanelTabChange,
   onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
@@ -71,14 +69,15 @@ function MainContent({
   selectedWorkspace: Workspace | null;
   workspaceChatPanelRef: React.RefObject<SessionPanelRef | null>;
   recentWorkspaces: Workspace[];
-  rightPanelTab: 'changes' | 'terminal';
-  onRightPanelTabChange: (tab: 'changes' | 'terminal') => void;
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
   onCloneRepository: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
 }) {
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+
+  // Right panel view tab (Files or Changes)
+  const [rightPanelViewTab, setRightPanelViewTab] = useState<'files' | 'changes'>('changes');
 
   // State for main content tabs (chat sessions)
   const [mainTabs, setMainTabs] = useState<Tab[]>([
@@ -266,11 +265,19 @@ function MainContent({
               </div>
             </div>
           ) : (
-            /* RIGHT PANEL - Changes & Terminal */
+            /* RIGHT PANEL - Files/Changes tabs at top + Collapsible Terminal at bottom */
             <div className="flex flex-col h-full overflow-hidden">
-              <Tabs value={rightPanelTab} onValueChange={(v) => onRightPanelTabChange(v as any)} className="h-full flex flex-col overflow-hidden">
+              {/* Top Section: Files/Changes Tabs */}
+              <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div className="border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
                   <TabsList className="h-11 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-1">
+                    <TabsTrigger
+                      value="files"
+                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
+                    >
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      <span className="text-body-sm font-medium">Files</span>
+                    </TabsTrigger>
                     <TabsTrigger
                       value="changes"
                       className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
@@ -278,35 +285,31 @@ function MainContent({
                       <FileText className="h-4 w-4 mr-2" />
                       <span className="text-body-sm font-medium">Changes</span>
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="terminal"
-                      className="relative rounded-t-md rounded-b-none border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:bg-primary/5 px-3 py-2 transition-[background-color,border-color] duration-200 ease-out"
-                    >
-                      <TerminalIcon className="h-4 w-4 mr-2" />
-                      <span className="text-body-sm font-medium">Terminal</span>
-                    </TabsTrigger>
                   </TabsList>
                 </div>
 
-                {/* File Changes Tab */}
+                {/* Files Tab */}
+                <TabsContent
+                  value="files"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                >
+                  <FileBrowserPanel selectedWorkspace={selectedWorkspace} />
+                </TabsContent>
+
+                {/* Changes Tab */}
                 <TabsContent
                   value="changes"
                   className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
                 >
                   <FileChangesPanel selectedWorkspace={selectedWorkspace} />
                 </TabsContent>
-
-                {/* Terminal Tab */}
-                <TabsContent
-                  value="terminal"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-                >
-                  <TerminalPanel
-                    workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                    workspaceName={selectedWorkspace.directory_name}
-                  />
-                </TabsContent>
               </Tabs>
+
+              {/* Bottom Section: Collapsible Terminal */}
+              <CollapsibleTerminalPanel
+                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                workspaceName={selectedWorkspace.directory_name}
+              />
             </div>
           )
         )}
@@ -355,8 +358,6 @@ export function MainLayout() {
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [cloning, setCloning] = useState(false);
 
-  // Right panel active tab (Changes or Terminal only - Browser is now a separate overlay)
-  const [rightPanelTab, setRightPanelTab] = useState<'changes' | 'terminal'>('changes');
 
   // Ref to Workspace chat panel for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
@@ -716,8 +717,6 @@ export function MainLayout() {
         selectedWorkspace={selectedWorkspace}
         workspaceChatPanelRef={workspaceChatPanelRef}
         recentWorkspaces={recentWorkspaces}
-        rightPanelTab={rightPanelTab}
-        onRightPanelTabChange={setRightPanelTab}
         onCreateWorkspace={handleCreateWorkspace}
         onOpenProject={handleOpenProject}
         onCloneRepository={handleOpenCloneModal}
