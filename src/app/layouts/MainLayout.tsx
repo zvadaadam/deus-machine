@@ -142,11 +142,13 @@ function MainContent({
 
   // Handle tab close
   const handleMainTabClose = (tabId: string) => {
+    const currentIndex = mainTabs.findIndex(t => t.id === tabId);
     const newTabs = mainTabs.filter(t => t.id !== tabId);
     setMainTabs(newTabs);
-    // If closing active tab, switch to first tab
+    // If closing active tab, switch to previous tab (or next if closing first tab)
     if (tabId === activeMainTabId && newTabs.length > 0) {
-      setActiveMainTabId(newTabs[0].id);
+      const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+      setActiveMainTabId(newTabs[targetIndex].id);
     }
   };
 
@@ -241,9 +243,6 @@ function MainContent({
             /* BROWSER - Slides in with animation, replaces right panel in grid */
             <div
               className="flex flex-col h-full overflow-hidden bg-background border-l border-border/40 animate-in slide-in-from-right duration-300"
-              style={{
-                animation: 'slideInFromRight 300ms cubic-bezier(0.23, 1, 0.32, 1)'
-              }}
             >
               {/* Browser Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
