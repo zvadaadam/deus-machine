@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import { parseDiff, highlightDiffLine, calculateSkippedLines, type DiffHunk, type DiffLine } from '@/shared/lib/syntaxHighlighter';
 import { detectLanguageFromPath } from '@/features/session/ui/tools/utils/detectLanguage';
+import { computeWordDiff, applyWordHighlights } from '@/shared/lib/wordDiff';
 
 interface DiffViewerProps {
   filePath?: string;
@@ -74,7 +75,7 @@ export function DiffViewer({
   const language = filePath ? detectLanguageFromPath(filePath) : 'text';
 
   /**
-   * Parse and highlight diff with syntax highlighting
+   * Parse and highlight diff with syntax highlighting + word-level highlights
    * Runs when diff or filePath changes
    */
   useEffect(() => {
@@ -90,15 +91,49 @@ export function DiffViewer({
       const hunks = parseDiff(diff);
       const highlighted: HighlightedHunk[] = [];
 
-      // Highlight each hunk's lines
+      // Highlight each hunk's lines with word-level precision
       for (const hunk of hunks) {
         const highlightedLines: HighlightedDiffLine[] = [];
 
-        for (const line of hunk.lines) {
-          const highlightedCode = await highlightDiffLine(line.content, language);
+        // First pass: syntax highlight all lines
+        const syntaxHighlighted = await Promise.all(
+          hunk.lines.map(async (line) => ({
+            ...line,
+            syntaxHtml: await highlightDiffLine(line.content, language),
+          }))
+        );
+
+        // Second pass: apply word-level highlights to addition/deletion pairs
+        for (let i = 0; i < syntaxHighlighted.length; i++) {
+          const line = syntaxHighlighted[i];
+          let finalHtml = line.syntaxHtml;
+
+          // Look for deletion-addition pairs for word-level diff
+          if (line.type === 'deletion') {
+            // Find next addition (if any)
+            const nextAddition = syntaxHighlighted.slice(i + 1).find(l => l.type === 'addition');
+            if (nextAddition) {
+              // Compute word-level diff
+              const { oldRanges, newRanges } = computeWordDiff(line.content, nextAddition.content);
+
+              // Apply word highlights to deletion
+              finalHtml = applyWordHighlights(line.syntaxHtml, line.content, oldRanges, 'deletion');
+            }
+          } else if (line.type === 'addition') {
+            // Find previous deletion (if any)
+            const prevDeletion = syntaxHighlighted.slice(0, i).reverse().find(l => l.type === 'deletion');
+            if (prevDeletion) {
+              // Compute word-level diff
+              const { newRanges } = computeWordDiff(prevDeletion.content, line.content);
+
+              // Apply word highlights to addition
+              finalHtml = applyWordHighlights(line.syntaxHtml, line.content, newRanges, 'addition');
+            }
+          }
+
           highlightedLines.push({
             ...line,
-            highlightedCode,
+            highlightedCode: finalHtml,
           });
         }
 
@@ -130,9 +165,9 @@ export function DiffViewer({
 
   /**
    * Render a single diff line with line numbers
-   * GitHub-inspired design:
-   * - Light backgrounds for changed lines (#e6ffec / #ffebe9)
-   * - Line numbers on the left
+   * GitHub-inspired design using CSS variables:
+   * - Theme-aware backgrounds (--diff-addition-bg / --diff-deletion-bg)
+   * - Line numbers with gutter colors
    * - Syntax-highlighted code
    */
   const renderDiffLine = (line: HighlightedDiffLine, index: number) => {
@@ -147,9 +182,9 @@ export function DiffViewer({
         className={cn(
           'relative flex items-start font-mono text-xs leading-relaxed',
           {
-            // GitHub-style backgrounds for changed lines
-            'bg-[oklch(0.96_0.03_145)]': type === 'addition',   // Light mint green
-            'bg-[oklch(0.96_0.03_25)]': type === 'deletion',     // Light rose
+            // Theme-aware backgrounds using CSS variables
+            'bg-[var(--diff-addition-bg)]': type === 'addition',
+            'bg-[var(--diff-deletion-bg)]': type === 'deletion',
           }
         )}
       >
@@ -158,9 +193,9 @@ export function DiffViewer({
           className={cn(
             'flex-shrink-0 w-12 pr-4 text-right select-none',
             {
-              'text-[oklch(0.45_0.12_145)] bg-[oklch(0.92_0.04_145)]': type === 'addition',
-              'text-[oklch(0.45_0.12_25)] bg-[oklch(0.92_0.04_25)]': type === 'deletion',
-              'text-muted-foreground/40': type === 'context',
+              'bg-[var(--diff-addition-gutter)] text-[var(--diff-addition-text)]': type === 'addition',
+              'bg-[var(--diff-deletion-gutter)] text-[var(--diff-deletion-text)]': type === 'deletion',
+              'bg-[var(--diff-line-number-bg)] text-[var(--diff-line-number)]': type === 'context',
             }
           )}
         >
