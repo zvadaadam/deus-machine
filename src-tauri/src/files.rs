@@ -157,8 +157,8 @@ impl FileScanner {
     /// - .gitignore parsing: Pre-compiled regex (100x faster than JS)
     ///
     /// # Git Requirements
-    /// **IMPORTANT**: Requires `git init` in workspace for .gitignore to work.
-    /// The `ignore` crate only respects .gitignore in git repositories.
+    /// Note: `.gitignore` files are honored even outside a git repo.
+    /// Repo context additionally enables `.git/info/exclude` and global excludes.
     ///
     /// # Example
     /// ```rust
@@ -260,8 +260,6 @@ impl FileScanner {
 
     /// Build file tree recursively with .gitignore filtering
     fn build_tree(&self, root_path: &Path) -> Result<Vec<FileNode>> {
-        use std::collections::HashMap;
-
         // Try to open git repository (optional - workspace might not be a git repo)
         let git_repo = Repository::discover(root_path).ok();
 
@@ -320,11 +318,6 @@ impl FileScanner {
                 .to_string_lossy()
                 .to_string();
 
-            // Check git status for this file/folder (if in a git repo)
-            let git_status = git_repo.as_ref().and_then(|repo| {
-                self.get_git_status(repo, path)
-            });
-
             let node = if metadata.is_file() {
                 // File node with metadata
                 let size = metadata.len();
@@ -335,6 +328,11 @@ impl FileScanner {
                         let datetime: DateTime<Utc> = t.into();
                         Some(datetime.to_rfc3339())
                     });
+
+                // Check git status only for files (not directories)
+                let git_status = git_repo.as_ref().and_then(|repo| {
+                    self.get_git_status(repo, path)
+                });
 
                 FileNode {
                     name,
@@ -491,34 +489,42 @@ mod tests {
         let scanner = FileScanner::new();
 
         // Initialize git repo
-        std::process::Command::new("git")
+        let output = std::process::Command::new("git")
             .args(["init"])
             .current_dir(temp_dir.path())
             .output()
-            .expect("Failed to init git repo");
+            .expect("Failed to spawn git init");
+        assert!(output.status.success(), "git init failed: {:?}", output);
 
         // Create a file and commit it
         fs::write(temp_dir.path().join("committed.txt"), "committed content").unwrap();
-        std::process::Command::new("git")
+        let output = std::process::Command::new("git")
             .args(["add", "."])
             .current_dir(temp_dir.path())
             .output()
-            .expect("Failed to git add");
-        std::process::Command::new("git")
+            .expect("Failed to spawn git add");
+        assert!(output.status.success(), "git add failed: {:?}", output);
+
+        let output = std::process::Command::new("git")
             .args(["config", "user.email", "test@test.com"])
             .current_dir(temp_dir.path())
             .output()
-            .unwrap();
-        std::process::Command::new("git")
+            .expect("Failed to spawn git config");
+        assert!(output.status.success(), "git config email failed: {:?}", output);
+
+        let output = std::process::Command::new("git")
             .args(["config", "user.name", "Test"])
             .current_dir(temp_dir.path())
             .output()
-            .unwrap();
-        std::process::Command::new("git")
+            .expect("Failed to spawn git config");
+        assert!(output.status.success(), "git config name failed: {:?}", output);
+
+        let output = std::process::Command::new("git")
             .args(["commit", "-m", "initial"])
             .current_dir(temp_dir.path())
             .output()
-            .expect("Failed to git commit");
+            .expect("Failed to spawn git commit");
+        assert!(output.status.success(), "git commit failed: {:?}", output);
 
         // Create modified file
         fs::write(temp_dir.path().join("committed.txt"), "modified content").unwrap();
@@ -557,12 +563,13 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let scanner = FileScanner::new();
 
-        // Initialize git repo (required for ignore crate to read .gitignore)
-        std::process::Command::new("git")
+        // Initialize git repo (enables .git/info/exclude and global excludes)
+        let output = std::process::Command::new("git")
             .args(["init"])
             .current_dir(temp_dir.path())
             .output()
-            .expect("Failed to init git repo");
+            .expect("Failed to spawn git init");
+        assert!(output.status.success(), "git init failed: {:?}", output);
 
         // Create .gitignore
         fs::write(temp_dir.path().join(".gitignore"), "ignored/\n*.log\n").unwrap();

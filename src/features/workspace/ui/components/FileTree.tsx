@@ -1,16 +1,8 @@
 import { useState } from 'react';
 import { ChevronRight, ChevronDown, File, FileText, FileCode, FileJson, FileImage, FileType } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-
-interface FileTreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modified?: string;
-  children?: FileTreeNode[];
-  git_status?: 'modified' | 'added' | 'deleted' | 'untracked';
-}
+import { formatFileSize } from '@/shared/lib/formatters';
+import type { FileTreeNode } from '../../api/useFilesRust';
 
 interface FileTreeProps {
   nodes: FileTreeNode[];
@@ -218,11 +210,4 @@ function TreeNode({
       )}
     </div>
   );
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
