@@ -92,53 +92,67 @@ export function RepositoryItem({
           !sidebarExpanded && "px-0 overflow-visible justify-center"
         )}
       >
-        {sidebarExpanded ? (
-          <>
-            {dragHandleProps && <DragHandle {...dragHandleProps} />}
-            <CollapsibleTrigger asChild>
-              <button
-                className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent gap-2"
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {(() => {
-                    const repoColor = getRepoColor(repository.repo_name);
-                    return (
-                      <div className={cn(
-                        "h-6 w-6 flex items-center justify-center text-[10px] font-semibold flex-shrink-0",
-                        "rounded-md transition-transform duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                        repoColor.bg,
-                        repoColor.text
-                      )}>
-                        {getRepoInitials(repository.repo_name)}
-                      </div>
-                    );
-                  })()}
-                  <span className="truncate transition-opacity duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]">
-                    {getCleanRepoName(repository.repo_name)}
-                  </span>
-                </div>
+        {/* Expanded view: Repository name with drag handle */}
+        {dragHandleProps && (
+          <div className={cn(
+            "transition-opacity duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+            "group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden"
+          )}>
+            <DragHandle {...dragHandleProps} />
+          </div>
+        )}
 
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-[180ms] delay-[60ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] flex-shrink-0 motion-reduce:transition-none",
-                    isCollapsed && "-rotate-90"
-                  )}
-                />
-              </button>
-            </CollapsibleTrigger>
-          </>
-        ) : (
-          <CollapsibleTrigger asChild>
+        <CollapsibleTrigger asChild>
+          <button
+            className={cn(
+              "flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent gap-2",
+              "transition-opacity duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+              "group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:absolute"
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {(() => {
+                const repoColor = getRepoColor(repository.repo_name);
+                return (
+                  <div className={cn(
+                    "h-6 w-6 flex items-center justify-center text-[10px] font-semibold flex-shrink-0",
+                    "rounded-md",
+                    repoColor.bg,
+                    repoColor.text
+                  )}>
+                    {getRepoInitials(repository.repo_name)}
+                  </div>
+                );
+              })()}
+              <span className="truncate">
+                {getCleanRepoName(repository.repo_name)}
+              </span>
+            </div>
+
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-[180ms] delay-[60ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] flex-shrink-0 motion-reduce:transition-none",
+                isCollapsed && "-rotate-90"
+              )}
+            />
+          </button>
+        </CollapsibleTrigger>
+
+        {/* Collapsed view: Icon badge only */}
+        <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
                 // Work WITH shadcn design: let their responsive system work
-                // Only override what's necessary in collapsed mode
                 "flex items-center justify-center overflow-visible relative",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                 // Collapsed mode: remove padding and let button shrink to content
                 "group-data-[collapsible=icon]:!w-auto",
                 "group-data-[collapsible=icon]:!h-auto",
                 "group-data-[collapsible=icon]:!p-0",
+                // Choreographed fade-in: hidden in expanded, fades in after sidebar shrinks
+                "opacity-0 invisible absolute",
+                "group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:visible group-data-[collapsible=icon]:relative",
+                "transition-opacity duration-200 delay-[180ms]",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
                 isIdle && "hover:opacity-60"
@@ -262,7 +276,6 @@ export function RepositoryItem({
               </div>
             </SidebarMenuButton>
           </CollapsibleTrigger>
-        )}
       </SidebarMenuItem>
       <CollapsibleContent>
         <SidebarMenuSub className="border-l-0 mx-0 px-0 translate-x-0">
