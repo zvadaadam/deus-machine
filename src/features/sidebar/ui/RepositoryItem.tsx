@@ -37,8 +37,7 @@ export function RepositoryItem({
 
   // Calculate state counts for collapsed badge system
   const errorCount = repository.workspaces.filter(ws =>
-    ws.session_status === 'error' ||
-    (ws.last_tool_result?.is_error === true)
+    ws.session_status === 'error'
   ).length;
 
   const unreadCount = repository.workspaces.filter(ws =>

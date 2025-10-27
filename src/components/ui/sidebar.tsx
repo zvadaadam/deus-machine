@@ -1,3 +1,16 @@
+/**
+ * GUIDELINE EXCEPTION: This shadcn component has been modified for global animation timing.
+ *
+ * Normally we don't modify shadcn components, but animation timing affects internal primitives
+ * (sidebar-gap, sidebar-container, SidebarRail, SidebarGroupLabel) that can't be overridden
+ * via className from consuming components.
+ *
+ * Changes: Updated transition durations to 180ms/80ms with ease-out cubic-bezier for smooth,
+ * macOS-style animations. This is a global timing update, not a feature-specific customization.
+ *
+ * If shadcn updates this component, carefully preserve these timing changes during reinstall.
+ */
+
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
