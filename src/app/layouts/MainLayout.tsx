@@ -8,7 +8,7 @@ import {
   WelcomeView,
   CloneRepositoryModal,
 } from "@/features/repository";
-import { DiffModal, DiffViewer, FileChangesPanel, FileBrowserPanel, MainContentTabBar } from "@/features/workspace";
+import { DiffViewer, FileChangesPanel, FileBrowserPanel, MainContentTabBar } from "@/features/workspace";
 import { BrowserPanel } from "@/features/browser";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
@@ -468,14 +468,11 @@ export function MainLayout() {
     showNewWorkspaceModal,
     showSystemPromptModal,
     showSettingsModal,
-    diffModal,
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
     openSystemPromptModal,
     closeSystemPromptModal,
     closeSettingsModal,
-    openDiffModal,
-    closeDiffModal,
   } = useUIStore();
 
   // TanStack Query hooks - automatic polling and caching
@@ -490,7 +487,6 @@ export function MainLayout() {
   // Local component state (not global)
   const [selectedRepoId, setSelectedRepoId] = useState('');
   const [creating, setCreating] = useState(false);
-  const [loadingDiff, setLoadingDiff] = useState(false);
   const [cloning, setCloning] = useState(false);
 
 
@@ -543,8 +539,6 @@ export function MainLayout() {
     onEscape: () => {
       if (showNewWorkspaceModal) {
         closeNewWorkspaceModal();
-      } else if (diffModal) {
-        closeDiffModal();
       } else if (showSystemPromptModal) {
         closeSystemPromptModal();
       }
@@ -552,7 +546,6 @@ export function MainLayout() {
     selectedWorkspace,
     modalStates: {
       showNewWorkspaceModal,
-      selectedFile: diffModal?.file || null,
       showSystemPromptModal,
     },
   });
@@ -867,13 +860,6 @@ export function MainLayout() {
         onClose={() => closeNewWorkspaceModal()}
         onRepoChange={setSelectedRepoId}
         onCreate={createWorkspace}
-      />
-
-      <DiffModal
-        selectedFile={diffModal?.file || null}
-        fileDiff={diffModal?.diff || ''}
-        loading={loadingDiff}
-        onClose={closeDiffModal}
       />
 
       <SystemPromptModal
