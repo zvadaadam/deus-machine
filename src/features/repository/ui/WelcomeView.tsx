@@ -3,10 +3,12 @@ import { FolderPlus, Github, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Workspace } from "@/shared/types";
 
 interface WelcomeViewProps {
   recentWorkspaces?: Workspace[];
+  isLoading?: boolean;
   onCreateWorkspace?: () => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
@@ -33,6 +35,7 @@ function getStateBadgeVariant(state: string): "ready" | "working" | "secondary" 
  */
 export function WelcomeView({
   recentWorkspaces = [],
+  isLoading = false,
   onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
@@ -46,7 +49,7 @@ export function WelcomeView({
   return (
     <div className="flex flex-col flex-1 min-h-0 transition-colors duration-200">
       {/* Centered action cards with title - better proportions */}
-      <div className="flex items-center justify-center px-6 py-8">
+      <div className="flex items-center justify-center px-6 pt-16 pb-8">
         <div className="w-full max-w-md">
           {/* More prominent centered title */}
           <h2 className="text-base font-semibold text-center text-foreground mb-6">Get started</h2>
@@ -90,7 +93,7 @@ export function WelcomeView({
 
       {/* Recent Workspaces Header - Better spacing */}
       <div className="flex-shrink-0 border-t border-border/40 transition-colors duration-200">
-        <div className="max-w-4xl mx-auto px-6 py-3">
+        <div className="max-w-4xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recent Workspaces</h2>
             {recentWorkspaces.length > 0 && (
@@ -111,13 +114,25 @@ export function WelcomeView({
       {/* Workspace Items - Better balanced spacing */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-4xl mx-auto px-6 pb-6">
-          {recentWorkspaces.length > 0 ? (
+          {isLoading ? (
+            <div className="space-y-px">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between px-2 py-1.5">
+                  <div className="flex-1 min-w-0">
+                    <Skeleton className="h-4 w-48 mb-2" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <Skeleton className="h-5 w-16 ml-2 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : recentWorkspaces.length > 0 ? (
             <>
               <div className="space-y-px">
                 {displayedWorkspaces.map((workspace) => (
                   <div
                     key={workspace.id}
-                    className="flex items-center justify-between px-2 py-2 rounded-md hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,color] duration-200 ease-out group"
+                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-sidebar-accent/60 cursor-pointer transition-[background-color,color] duration-200 ease-out group"
                     onClick={() => onWorkspaceClick?.(workspace)}
                   >
                     <div className="flex-1 min-w-0">
