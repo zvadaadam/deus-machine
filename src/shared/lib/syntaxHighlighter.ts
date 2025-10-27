@@ -39,6 +39,10 @@ export async function getHighlighter(): Promise<Highlighter> {
   }).then(highlighter => {
     highlighterInstance = highlighter;
     return highlighter;
+  }).catch(err => {
+    // Reset promise on failure to allow retry
+    highlighterPromise = null;
+    throw err;
   });
 
   return highlighterPromise;
