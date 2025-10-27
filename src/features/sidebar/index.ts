@@ -1,3 +1,3 @@
 // Sidebar Feature
-export { AppSidebar } from './ui';
+export { AppSidebar, SidebarSkeleton } from './ui';
 export { useSidebarStore } from './store';

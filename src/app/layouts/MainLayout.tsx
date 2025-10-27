@@ -40,7 +40,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui";
-import { AppSidebar } from "@/features/sidebar";
+import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Package, GitPullRequest, Archive, Square, Globe, Terminal as TerminalIcon, FolderOpen, Sparkles, FileCode, Monitor } from "lucide-react";
@@ -413,12 +413,7 @@ export function MainLayout() {
     >
       {/* Inset Sidebar - transparent, sits on top of #root background */}
       {loading ? (
-        <div className="p-4 space-y-3">
-          <Skeleton className="h-6 w-full" />
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-[90%]" />
-          <Skeleton className="h-4 w-3/4" />
-        </div>
+        <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
         <div className="space-standard">
           <EmptyState

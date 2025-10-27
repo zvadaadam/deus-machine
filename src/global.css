@@ -315,7 +315,7 @@
   --thinking-muted: oklch(0.25 0.08 303);
   --thinking-border: oklch(0.35 0.12 303);
 
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.59 0.24 264);
 
@@ -325,11 +325,17 @@
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.59 0.24 264);
 }
 
-/* Targeted border reset (not global *) */
+/* Apply semantic border color to all elements with border utilities */
+/* Using :where() for zero specificity - easily overridable */
+:where([class~="border"]) {
+  border-color: var(--border);
+}
+
+/* Legacy: Targeted border reset for form elements */
 :where(button, input, textarea, select, summary) {
   border-color: var(--border);
 }
