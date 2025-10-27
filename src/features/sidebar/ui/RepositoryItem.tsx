@@ -87,9 +87,9 @@ export function RepositoryItem({
         className={cn(
           "group/repository-item relative flex items-center py-1",
           // Expanded: pl-3 pr-3 for spacing
-          // Collapsed: px-0 to avoid padding conflicts (parent SidebarMenu handles centering)
+          // Collapsed: px-0 with justify-center to center the badge
           sidebarExpanded && "pl-3 pr-3 hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
-          !sidebarExpanded && "px-0 overflow-visible"
+          !sidebarExpanded && "px-0 overflow-visible justify-center"
         )}
       >
         {sidebarExpanded ? (
@@ -131,10 +131,10 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
+                // Work WITH shadcn design: size-8 (32px) is perfect for collapsed mode
+                // Remove all padding, let the badge center naturally
+                "!p-0",
                 "flex items-center justify-center overflow-visible relative",
-                // Override SidebarMenuButton's forced sizing in collapsed mode
-                // size-8! forces 32px, we need auto to fit our 40px badge
-                "!w-full !h-auto !p-0 py-3",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
@@ -157,18 +157,18 @@ export function RepositoryItem({
                 {workingCount > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <svg
-                      className="absolute w-[44px] h-[44px] animate-[subtle-spin_2s_linear_infinite] motion-reduce:animate-none"
-                      viewBox="0 0 44 44"
+                      className="absolute w-[36px] h-[36px] animate-[subtle-spin_2s_linear_infinite] motion-reduce:animate-none"
+                      viewBox="0 0 36 36"
                       fill="none"
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <circle
-                        cx="22"
-                        cy="22"
-                        r="20"
+                        cx="18"
+                        cy="18"
+                        r="16"
                         stroke="currentColor"
                         strokeWidth="1.5"
-                        strokeDasharray="50 75"
+                        strokeDasharray="40 60"
                         strokeLinecap="round"
                         className={cn(
                           "opacity-55 transition-opacity",
@@ -181,9 +181,9 @@ export function RepositoryItem({
                   </div>
                 )}
 
-                {/* Main repository badge with ring */}
+                {/* Main repository badge with ring - 32px (size-8) matches shadcn design */}
                 <div className={cn(
-                  "relative h-10 w-10 flex items-center justify-center text-xs font-semibold",
+                  "relative h-8 w-8 flex items-center justify-center text-xs font-semibold",
                   "rounded-[8px]",
                   "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                   // Active repos: Full brightness with status ring
