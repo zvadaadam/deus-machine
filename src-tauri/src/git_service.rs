@@ -25,10 +25,10 @@ use axum::{
 use git2::{DiffFormat, DiffOptions, Repository};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 /**
  * Git Service State
@@ -121,6 +121,33 @@ impl From<git2::Error> for GitServiceError {
 }
 
 /**
+ * Validate that file_path is relative and safe (no path traversal)
+ *
+ * SECURITY: Prevents path traversal attacks like "../../../etc/passwd"
+ */
+fn validate_relative_file_path(file_path: &str) -> Result<(), GitServiceError> {
+    let path = Path::new(file_path);
+
+    // Reject absolute paths
+    if path.is_absolute() {
+        return Err(GitServiceError::InvalidPath(format!(
+            "Absolute paths not allowed: {}",
+            file_path
+        )));
+    }
+
+    // Reject paths with parent directory components (..)
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err(GitServiceError::InvalidPath(format!(
+            "Parent directory segments (..) not allowed: {}",
+            file_path
+        )));
+    }
+
+    Ok(())
+}
+
+/**
  * Get diff for a specific file
  *
  * HTTP endpoint: GET /diff/file
@@ -132,10 +159,13 @@ async fn handle_file_diff(
 ) -> Result<Json<FileDiffResponse>, GitServiceError> {
     let workspace_path = PathBuf::from(&params.workspace_path);
 
-    // Validate paths
-    if !workspace_path.exists() {
+    // Validate workspace path exists and is a directory
+    if !workspace_path.exists() || !workspace_path.is_dir() {
         return Err(GitServiceError::RepositoryNotFound(params.workspace_path));
     }
+
+    // Validate file path is relative and safe (prevent path traversal)
+    validate_relative_file_path(&params.file_path)?;
 
     // Get file diff using git2
     let diff_text = get_file_diff_internal(&workspace_path, &params.file_path, &params.parent_branch)?;
@@ -194,13 +224,16 @@ fn get_file_diff_internal(
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&head_tree), Some(&mut diff_opts))?;
 
     // Format as unified diff patch
-    let mut patch_text = String::new();
+    // Build patch as bytes first, then decode lossily to handle binary/invalid UTF-8
+    // This prevents binary patches from becoming empty/incorrect
+    let mut patch_bytes: Vec<u8> = Vec::new();
     diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
-        // Accumulate diff output
-        let content = std::str::from_utf8(line.content()).unwrap_or("");
-        patch_text.push_str(content);
+        patch_bytes.extend_from_slice(line.content());
         true // Continue processing
     })?;
+
+    // Convert to String, replacing invalid UTF-8 with replacement characters
+    let patch_text = String::from_utf8_lossy(&patch_bytes).into_owned();
 
     Ok(patch_text)
 }
@@ -218,14 +251,30 @@ async fn handle_health() -> impl IntoResponse {
 
 /**
  * Create and configure the Axum router
+ *
+ * SECURITY: CORS restricted to localhost and Tauri origins only
+ * Prevents malicious sites from exfiltrating diff data
  */
 fn create_router(state: GitServiceState) -> Router {
+    // Restrict CORS to trusted origins only
+    let allowed_origins = AllowOrigin::predicate(|origin, _| {
+        let origin_bytes = origin.as_bytes();
+        // Allow Tauri protocol
+        origin_bytes == b"tauri://localhost"
+            // Allow localhost on any port (dev server)
+            || origin_bytes.starts_with(b"http://localhost:")
+            || origin_bytes.starts_with(b"https://localhost:")
+            // Allow 127.0.0.1 variants
+            || origin_bytes.starts_with(b"http://127.0.0.1:")
+            || origin_bytes.starts_with(b"https://127.0.0.1:")
+    });
+
     Router::new()
         .route("/health", get(handle_health))
         .route("/diff/file", get(handle_file_diff))
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
+                .allow_origin(allowed_origins)
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
