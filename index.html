@@ -9,6 +9,32 @@
     />
     <meta name="color-scheme" content="light dark" />
     <title>OpenDevs</title>
+
+    <!-- Apply theme before first render to prevent flash -->
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem('theme');
+          let theme = 'system';
+
+          if (stored === 'light' || stored === 'dark' || stored === 'system') {
+            theme = stored;
+          }
+
+          let resolved;
+          if (theme === 'system') {
+            resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          } else {
+            resolved = theme;
+          }
+
+          document.documentElement.classList.add(resolved);
+        } catch (e) {
+          // Fallback to light mode on error
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
