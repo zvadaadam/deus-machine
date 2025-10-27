@@ -53,7 +53,7 @@ const getToolIcon = (toolName: string) => {
 };
 
 // Get concise preview for collapsed state
-const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: string; isPath?: boolean } => {
+const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: string; isPath?: boolean; diffStats?: { added: number; removed: number } } => {
   const input = toolBlock.input as any;
 
   switch (toolBlock.name) {
@@ -78,7 +78,7 @@ const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: strin
       const filePath = input?.file_path || '';
       const fileName = filePath.split('/').pop() || filePath;
 
-      // Calculate diff stats for Edit
+      // Calculate diff stats for Edit (will be colored in render)
       if (toolBlock.name === 'Edit' && input?.old_string && input?.new_string) {
         const oldLines = input.old_string.split('\n').length;
         const newLines = input.new_string.split('\n').length;
@@ -86,7 +86,7 @@ const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: strin
         const removed = Math.max(0, oldLines - newLines);
 
         if (added > 0 || removed > 0) {
-          return { text: `${fileName} • +${added} -${removed}`, isPath: true };
+          return { text: `${fileName} • `, isPath: true, diffStats: { added, removed } };
         }
       }
 
@@ -183,14 +183,13 @@ function ToolPreviewCard({
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Collapsible header */}
+      {/* Collapsible header - clean, no background */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
-          "bg-muted/5 hover:bg-muted/10 transition-colors duration-200",
+          "flex items-center gap-2 px-2 py-1.5 text-[13px]",
           "text-left w-full cursor-pointer",
-          isError && "bg-destructive/5"
+          "transition-opacity duration-200 hover:opacity-80"
         )}
       >
         <ChevronRight
@@ -204,12 +203,23 @@ function ToolPreviewCard({
           isError ? "text-destructive" : "text-muted-foreground/70"
         )} />
         <span className="font-medium">{toolBlock.name}</span>
+        {isError && (
+          <span className="text-destructive text-[11px] font-medium">✗ Error</span>
+        )}
         {preview.text && (
           <span className={cn(
             "truncate text-[12px]",
             preview.isPath ? "font-mono text-muted-foreground" : "text-muted-foreground"
           )}>
             {preview.text}
+            {/* Colored diff stats */}
+            {preview.diffStats && (
+              <>
+                <span className="text-green-600">+{preview.diffStats.added}</span>
+                {' '}
+                <span className="text-red-600">-{preview.diffStats.removed}</span>
+              </>
+            )}
           </span>
         )}
       </button>
@@ -259,13 +269,13 @@ function ThinkingCard({
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Collapsible header with first sentence preview (only when collapsed) */}
+      {/* Collapsible header with first sentence preview (only when collapsed) - clean, no background */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
-          "bg-purple-500/5 hover:bg-purple-500/10 transition-colors duration-200",
-          "text-left w-full cursor-pointer"
+          "flex items-center gap-2 px-2 py-1.5 text-[13px]",
+          "text-left w-full cursor-pointer",
+          "transition-opacity duration-200 hover:opacity-80"
         )}
       >
         <ChevronRight
