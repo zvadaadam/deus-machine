@@ -20,6 +20,7 @@ import { cn } from '@/shared/lib/utils';
 import type { ToolUse, ToolResult } from '@/shared/types';
 import { ToolError } from './ToolError';
 import { shouldExpandByDefault } from '../constants';
+import { getToolMetadata } from '../../utils/toolCategories';
 
 export interface BaseToolRendererProps {
   // Identity
@@ -33,8 +34,8 @@ export interface BaseToolRendererProps {
   // Behavior
   defaultExpanded?: boolean;
 
-  // Styling
-  borderColor?: 'default' | 'success' | 'error' | 'info' | 'warning';
+  // Styling (optional overrides)
+  borderColor?: 'default' | 'primary' | 'success' | 'error' | 'info' | 'warning';
   backgroundColor?: string;
 
   // NEW API: Single children slot
@@ -52,24 +53,31 @@ export function BaseToolRenderer({
   toolUse,
   toolResult,
   defaultExpanded,
-  borderColor = 'default',
+  borderColor,
   backgroundColor,
   children,
   renderContent,
   renderSummary,
   renderMetadata,
 }: BaseToolRendererProps) {
-  // Auto-detect from constants if not provided
-  const initialExpanded = defaultExpanded ?? shouldExpandByDefault(toolName);
+  // Get tool metadata for smart defaults
+  const toolMetadata = getToolMetadata(toolUse.name);
+
+  // Auto-detect from constants or tool metadata if not provided
+  const initialExpanded = defaultExpanded ?? toolMetadata.defaultExpanded;
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
 
   const isError = toolResult?.is_error;
 
-  // Get border color class
+  // Get border color class (prioritize explicit prop, then tool metadata, then fallback)
   const getBorderColorClass = () => {
     if (isError) return chatTheme.blocks.tool.borderLeft.error;
 
-    switch (borderColor) {
+    const colorToUse = borderColor || toolMetadata.borderColor;
+
+    switch (colorToUse) {
+      case 'primary':
+        return chatTheme.blocks.tool.borderLeft.primary;
       case 'success':
         return chatTheme.blocks.tool.borderLeft.success;
       case 'error':
@@ -77,7 +85,7 @@ export function BaseToolRenderer({
       case 'info':
         return chatTheme.blocks.tool.borderLeft.info;
       case 'warning':
-        return chatTheme.blocks.tool.borderLeft.error; // Use destructive for warning
+        return chatTheme.blocks.tool.borderLeft.warning;
       default:
         return chatTheme.blocks.tool.borderLeft.default;
     }

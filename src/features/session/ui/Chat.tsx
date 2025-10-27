@@ -107,6 +107,16 @@ export function Chat({
     });
   }, [messages, parseContent]);
 
+  // Find index of latest assistant message (for auto-expanding turns)
+  const latestAssistantIndex = useMemo(() => {
+    for (let i = renderableMessages.length - 1; i >= 0; i--) {
+      if (renderableMessages[i].role === 'assistant') {
+        return i;
+      }
+    }
+    return -1;
+  }, [renderableMessages]);
+
   // Calculate indicator margin based on last message role
   const indicatorMarginClass = useMemo(() => {
     const lastRenderableRole = renderableMessages.length
@@ -148,6 +158,9 @@ export function Chat({
               // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
               const isLastRendered = renderIndex === renderableMessages.length - 1;
 
+              // Check if this is the latest assistant message (for auto-expanding)
+              const isLatestAssistant = message.role === 'assistant' && renderIndex === latestAssistantIndex;
+
               return (
                 <div
                   key={message.id}
@@ -156,6 +169,7 @@ export function Chat({
                 >
                   <MessageItem
                     message={message}
+                    isLatestAssistant={isLatestAssistant}
                   />
                 </div>
               );
@@ -165,12 +179,18 @@ export function Chat({
                 role="status"
                 aria-live="polite"
                 className={cn(
-                  "flex items-center gap-2 p-2.5 px-3.5 mr-auto max-w-[85%] bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl text-success font-medium text-[0.85rem] shadow-sm animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
+                  "flex items-center gap-2 py-2.5 px-3.5 mr-auto max-w-[85%]",
+                  "bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl",
+                  "text-success font-medium text-[13px] shadow-sm",
+                  "animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
                   indicatorMarginClass,
                 )}
               >
-                <div className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true"></div>
-                <span>
+                <div
+                  className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">
                   Claude is working...
                   {formattedDuration && (
                     <span className="ml-1.5 text-success/80">({formattedDuration})</span>
@@ -181,7 +201,7 @@ export function Chat({
                     variant="ghost"
                     size="sm"
                     onClick={onStop}
-                    className="ml-2 h-6 px-2 text-success/80 hover:text-success hover:bg-success/20"
+                    className="ml-auto h-6 px-2 text-success/80 hover:text-success hover:bg-success/20 transition-colors duration-200"
                     aria-label="Stop session"
                     title="Stop Claude"
                   >
