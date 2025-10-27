@@ -44,23 +44,23 @@ export function WelcomeView({
   const hasMore = recentWorkspaces.length > initialCount;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 transition-colors duration-200">
       {/* Top Section - Fixed */}
       <div className="flex-shrink-0 p-8 max-w-4xl mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground mb-1">Welcome to Conductor</h1>
-          <p className="text-body-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Welcome to Conductor</h1>
+          <p className="text-sm text-muted-foreground">
             Get started by opening a project or cloning a repository
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-4 mb-10">
+        <div className="grid grid-cols-2 gap-4 mb-8">
         <Card
           role="button"
           tabIndex={0}
-          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out border-2 hover:border-primary/20 group"
+          className="p-4 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
           onClick={onOpenProject}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
         >
@@ -68,15 +68,15 @@ export function WelcomeView({
             <FolderPlus className="w-6 h-6" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground mb-0.5">Open Project</h3>
-            <p className="text-body-sm text-muted-foreground">From your local machine</p>
+            <h3 className="font-semibold text-foreground mb-1">Open Project</h3>
+            <p className="text-sm text-muted-foreground">From your local machine</p>
           </div>
         </Card>
 
         <Card
           role="button"
           tabIndex={0}
-          className="p-5 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out border-2 hover:border-primary/20 group"
+          className="p-4 flex items-center gap-4 hover:bg-sidebar-accent/40 cursor-pointer transition-[background-color,border-color] duration-200 ease-out hover:border-primary/20 group"
           onClick={onCloneRepository}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
         >
@@ -84,18 +84,18 @@ export function WelcomeView({
             <Github className="w-6 h-6" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground mb-0.5">Clone Repository</h3>
-            <p className="text-body-sm text-muted-foreground">From GitHub</p>
+            <h3 className="font-semibold text-foreground mb-1">Clone Repository</h3>
+            <p className="text-sm text-muted-foreground">From GitHub</p>
           </div>
         </Card>
       </div>
       </div>
 
       {/* Recent Workspaces Header - Fixed */}
-      <div className="flex-shrink-0 border-t border-border/40">
+      <div className="flex-shrink-0 border-t border-border/40 transition-colors duration-200">
         <div className="max-w-4xl mx-auto px-8 py-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-body font-semibold text-muted-foreground">Recent Workspaces</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground">Recent Workspaces</h2>
             {recentWorkspaces.length > 0 && (
               <Button
                 variant="ghost"
@@ -127,7 +127,7 @@ export function WelcomeView({
                       <div className="font-medium text-foreground group-hover:text-primary transition-colors duration-200 ease-out">
                         {workspace.branch || workspace.directory_name}
                       </div>
-                      <div className="text-body-sm text-muted-foreground truncate">
+                      <div className="text-sm text-muted-foreground truncate">
                         {workspace.repo_name || 'Unknown Repository'}
                       </div>
                     </div>
@@ -156,7 +156,7 @@ export function WelcomeView({
               <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mb-4">
                 <FolderPlus className="w-8 h-8 text-muted-foreground/50" />
               </div>
-              <p className="text-body text-muted-foreground mb-4">No workspaces yet</p>
+              <p className="text-sm text-muted-foreground mb-4">No workspaces yet</p>
               <Button
                 variant="default"
                 onClick={onCreateWorkspace}
