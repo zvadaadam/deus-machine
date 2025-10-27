@@ -95,8 +95,14 @@ const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): { text: strin
 
     case 'Bash':
     case 'BashOutput': {
+      // Use description if available (e.g., "Delete TurnHeader.tsx (dead code)")
+      const description = input?.description || '';
+      if (description) {
+        return { text: description };
+      }
+
+      // Fallback to command if no description
       const command = input?.command || '';
-      // Show command but keep it readable
       const shortCmd = command.length > 50 ? command.substring(0, 50) + '...' : command;
       return { text: shortCmd };
     }
@@ -123,7 +129,26 @@ const getToolContent = (toolBlock: ToolUseBlock, toolResult: any): string | null
     return toolResult?.error || 'Error occurred';
   }
 
-  // Handle different content formats
+  // Special handling for Bash: show command + output
+  if (toolBlock.name === 'Bash') {
+    const command = (toolBlock.input as any)?.command || '';
+    let output = '';
+
+    // Extract output from result
+    if (Array.isArray(toolResult.content)) {
+      const firstContent = toolResult.content[0];
+      if (firstContent?.type === 'text') {
+        output = firstContent.text;
+      }
+    } else if (typeof toolResult.content === 'string') {
+      output = toolResult.content;
+    }
+
+    // Format as: $ command\n\noutput
+    return `$ ${command}\n\n${output}`;
+  }
+
+  // Handle different content formats for other tools
   if (Array.isArray(toolResult.content)) {
     const firstContent = toolResult.content[0];
     if (firstContent?.type === 'text') {
@@ -230,21 +255,11 @@ function ThinkingCard({
     return text.length > 80 ? text.substring(0, 80) + '...' : text;
   };
 
-  // Get text after first sentence for detail view
-  const getDetailText = (text: string): string => {
-    const match = text.match(/^[^.!?]+[.!?]\s*/);
-    if (match) {
-      return text.substring(match[0].length).trim();
-    }
-    return text;
-  };
-
   const firstSentence = getFirstSentence(fullText);
-  const detailText = getDetailText(fullText);
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Collapsible header with first sentence preview */}
+      {/* Collapsible header with first sentence preview (only when collapsed) */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -261,15 +276,17 @@ function ThinkingCard({
         />
         <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
         <span className="font-medium">Thinking</span>
-        <span className="text-muted-foreground italic truncate text-[12px]">
-          {firstSentence}
-        </span>
+        {!isExpanded && (
+          <span className="text-muted-foreground italic truncate text-[12px]">
+            {firstSentence}
+          </span>
+        )}
       </button>
 
-      {/* Expanded detail text (without repeating first sentence) */}
-      {isExpanded && detailText && (
+      {/* Expanded: show FULL thinking text */}
+      {isExpanded && (
         <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
-          {detailText}
+          {fullText}
         </div>
       )}
     </div>
@@ -279,16 +296,26 @@ function ThinkingCard({
 export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssistantMessageProps) {
   const { toolResultMap } = useSession();
 
+  // Find the index of the last text block for proper weight
+  const lastTextBlockIndex = [...contentBlocks].reverse().findIndex(
+    (block) => typeof block === 'string' || (typeof block === 'object' && block?.type === 'text')
+  );
+  const actualLastTextBlockIndex = lastTextBlockIndex !== -1
+    ? contentBlocks.length - 1 - lastTextBlockIndex
+    : -1;
+
   return (
     <div className="flex flex-col gap-2">
       {contentBlocks.map((block, index) => {
         // String blocks - render as text with markdown
         if (typeof block === 'string') {
+          const isLastTextBlock = index === actualLastTextBlockIndex;
           return (
             <TextBlock
               key={`${messageId}:${index}`}
               block={block}
               role="assistant"
+              weight={isLastTextBlock ? 'normal' : 'muted'}
             />
           );
         }
@@ -296,11 +323,13 @@ export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssis
         // Text blocks - render with markdown
         if (block.type === 'text') {
           const textBlock = block as TextBlockType;
+          const isLastTextBlock = index === actualLastTextBlockIndex;
           return (
             <TextBlock
               key={`${messageId}:${index}`}
               block={textBlock}
               role="assistant"
+              weight={isLastTextBlock ? 'normal' : 'muted'}
             />
           );
         }
