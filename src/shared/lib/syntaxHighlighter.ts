@@ -83,12 +83,17 @@ export interface DiffLine {
   newLineNum?: number;
 }
 
+export interface HunkGap {
+  skippedLines: number;
+}
+
 export function parseDiff(diffText: string): DiffHunk[] {
   const lines = diffText.split('\n');
   const hunks: DiffHunk[] = [];
   let currentHunk: DiffHunk | null = null;
   let oldLineNum = 0;
   let newLineNum = 0;
+  let lastHunkEndLine = 0;
 
   for (const line of lines) {
     // Skip git metadata - everything that's not actual code
@@ -134,6 +139,7 @@ export function parseDiff(diffText: string): DiffHunk[] {
 
         oldLineNum = oldStart;
         newLineNum = newStart;
+        lastHunkEndLine = newStart + newLines;
       }
       continue;
     }
@@ -170,6 +176,20 @@ export function parseDiff(diffText: string): DiffHunk[] {
   }
 
   return hunks;
+}
+
+/**
+ * Calculate skipped lines between hunks
+ * Returns number of lines hidden between two hunks
+ */
+export function calculateSkippedLines(prevHunk: DiffHunk, nextHunk: DiffHunk): number {
+  // Calculate where previous hunk ended
+  const prevEnd = prevHunk.newStart + prevHunk.newLines;
+
+  // Gap is the difference between where prev ended and where next starts
+  const gap = nextHunk.newStart - prevEnd;
+
+  return Math.max(0, gap);
 }
 
 /**

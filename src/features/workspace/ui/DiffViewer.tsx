@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
-import { parseDiff, highlightDiffLine, type DiffHunk, type DiffLine } from '@/shared/lib/syntaxHighlighter';
+import { parseDiff, highlightDiffLine, calculateSkippedLines, type DiffHunk, type DiffLine } from '@/shared/lib/syntaxHighlighter';
 import { detectLanguageFromPath } from '@/features/session/ui/tools/utils/detectLanguage';
 
 interface DiffViewerProps {
@@ -15,18 +15,28 @@ interface DiffViewerProps {
 /**
  * DiffViewer - Inline git diff viewer component
  *
- * Design Philosophy (Jony Ive principles):
- * - Relentless simplicity: No decorative elements
- * - Functional beauty: Every pixel serves the user
- * - Restraint: Information hierarchy through subtlety, not emphasis
- * - Craftsmanship: Typography and spacing create rhythm
+ * Design Philosophy (Jony Ive principles applied to diffs):
+ * 1. **Hierarchy through contrast** - Changed content must announce itself
+ *    - Light backgrounds for changed lines (GitHub pattern) - essential, not decorative
+ *    - Context lines remain quiet and unobtrusive
  *
- * What's been removed:
- * - Icon box (decorative, no purpose)
- * - Verbose labels ("additions", "deletions")
- * - Always-visible copy button (appears on hover)
- * - Strong background colors (subtle left border instead)
- * - Backdrop blur (unnecessary effect)
+ * 2. **Visual structure serves navigation**
+ *    - Gap indicators show hidden code sections
+ *    - Line numbers provide orientation
+ *    - Syntax highlighting reveals code structure
+ *
+ * 3. **Confident design choices**
+ *    - Full-strength backgrounds where they matter (additions/deletions)
+ *    - No timid opacity on critical elements
+ *    - Backgrounds ARE appropriate when they create essential hierarchy
+ *
+ * 4. **What the code changed is the hero**
+ *    - Syntax highlighting shows structure
+ *    - Clean typography maintains readability
+ *    - Everything else supports this primary purpose
+ *
+ * Future enhancement: Word-level highlighting (saturated backgrounds for exact changes)
+ * This would show WHAT changed within a line, not just which lines changed.
  */
 interface HighlightedDiffLine extends DiffLine {
   highlightedCode: string;
@@ -120,8 +130,10 @@ export function DiffViewer({
 
   /**
    * Render a single diff line with line numbers
-   * Design: Line number (left) | Code (syntax highlighted)
-   * Subtle 2px left border for additions/deletions
+   * GitHub-inspired design:
+   * - Light backgrounds for changed lines (#e6ffec / #ffebe9)
+   * - Line numbers on the left
+   * - Syntax-highlighted code
    */
   const renderDiffLine = (line: HighlightedDiffLine, index: number) => {
     const { type, highlightedCode, oldLineNum, newLineNum } = line;
@@ -135,26 +147,55 @@ export function DiffViewer({
         className={cn(
           'relative flex items-start font-mono text-xs leading-relaxed',
           {
-            // Subtle left border for additions/deletions
-            'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-success/30': type === 'addition',
-            'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-destructive/30': type === 'deletion',
+            // GitHub-style backgrounds for changed lines
+            'bg-[oklch(0.96_0.03_145)]': type === 'addition',   // Light mint green
+            'bg-[oklch(0.96_0.03_25)]': type === 'deletion',     // Light rose
           }
         )}
       >
         {/* Line number - right-aligned, muted */}
-        <span className="flex-shrink-0 w-12 pr-4 text-right text-muted-foreground/50 select-none">
+        <span
+          className={cn(
+            'flex-shrink-0 w-12 pr-4 text-right select-none',
+            {
+              'text-[oklch(0.45_0.12_145)] bg-[oklch(0.92_0.04_145)]': type === 'addition',
+              'text-[oklch(0.45_0.12_25)] bg-[oklch(0.92_0.04_25)]': type === 'deletion',
+              'text-muted-foreground/40': type === 'context',
+            }
+          )}
+        >
           {lineNum}
         </span>
 
         {/* Code content - syntax highlighted */}
         <span
-          className={cn('flex-1 pr-4', {
-            'text-success/90': type === 'addition',
-            'text-destructive/90': type === 'deletion',
+          className={cn('flex-1 pr-4 py-0.5', {
+            'text-foreground': type === 'addition' || type === 'deletion',
             'text-foreground/80': type === 'context',
           })}
           dangerouslySetInnerHTML={{ __html: highlightedCode }}
         />
+      </div>
+    );
+  };
+
+  /**
+   * Render gap indicator between hunks
+   * Shows how many lines are hidden
+   */
+  const renderGapIndicator = (skippedLines: number, key: string) => {
+    if (skippedLines === 0) return null;
+
+    return (
+      <div
+        key={key}
+        className="flex items-center gap-3 py-3 px-4 my-2 text-xs text-muted-foreground/60 bg-muted/20 border-y border-border/20"
+      >
+        <div className="flex-1 h-px bg-border/20" />
+        <span className="font-mono">
+          {skippedLines} unchanged line{skippedLines !== 1 ? 's' : ''}
+        </span>
+        <div className="flex-1 h-px bg-border/20" />
       </div>
     );
   };
@@ -241,12 +282,25 @@ export function DiffViewer({
             <p className="text-sm">No changes</p>
           </div>
         ) : (
-          <div className="py-2">
-            {highlightedHunks.map((hunk, hunkIndex) => (
-              <div key={hunkIndex} className="mb-4">
-                {hunk.lines.map((line, lineIndex) => renderDiffLine(line, lineIndex))}
-              </div>
-            ))}
+          <div>
+            {highlightedHunks.map((hunk, hunkIndex) => {
+              // Calculate skipped lines between this and previous hunk
+              const skippedLines = hunkIndex > 0
+                ? calculateSkippedLines(highlightedHunks[hunkIndex - 1], hunk)
+                : 0;
+
+              return (
+                <div key={hunkIndex}>
+                  {/* Gap indicator if there are skipped lines */}
+                  {skippedLines > 0 && renderGapIndicator(skippedLines, `gap-${hunkIndex}`)}
+
+                  {/* Hunk lines */}
+                  <div>
+                    {hunk.lines.map((line, lineIndex) => renderDiffLine(line, lineIndex))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
