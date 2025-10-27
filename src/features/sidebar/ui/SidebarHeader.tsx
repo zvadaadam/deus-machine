@@ -16,9 +16,9 @@ export function SidebarHeader({
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="group-data-[collapsible=icon]:mx-auto flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg transition-colors duration-200 ease-out hover:bg-sidebar-accent/60 text-left w-full"
+        className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:justify-center flex items-center gap-3 min-w-0 flex-1 p-2 rounded-lg transition-colors duration-200 ease-out hover:bg-sidebar-accent/60 text-left w-full"
       >
-        <Avatar className="h-8 w-8 flex-shrink-0 transition-transform duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] group-data-[collapsible=icon]:scale-95">
+        <Avatar className="h-8 w-8 flex-shrink-0 transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]">
           <AvatarFallback className="text-caption">
             {profile.username.slice(0, 2).toUpperCase()}
           </AvatarFallback>

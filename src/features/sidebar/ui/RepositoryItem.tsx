@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
-import { getRepoInitials, getRepoColor } from "../lib/utils";
+import { getRepoInitials, getRepoColor, getCleanRepoName } from "../lib/utils";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { DragHandle } from "./DragHandle";
@@ -64,11 +64,26 @@ export function RepositoryItem({
             {dragHandleProps && <DragHandle {...dragHandleProps} />}
             <CollapsibleTrigger asChild>
               <button
-                className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent"
+                className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent gap-2"
               >
-                <span className="truncate transition-opacity duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]">
-                  {repository.repo_name}
-                </span>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {(() => {
+                    const repoColor = getRepoColor(repository.repo_name);
+                    return (
+                      <div className={cn(
+                        "h-6 w-6 flex items-center justify-center text-[10px] font-semibold flex-shrink-0",
+                        "rounded-md transition-transform duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                        repoColor.bg,
+                        repoColor.text
+                      )}>
+                        {getRepoInitials(repository.repo_name)}
+                      </div>
+                    );
+                  })()}
+                  <span className="truncate transition-opacity duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]">
+                    {getCleanRepoName(repository.repo_name)}
+                  </span>
+                </div>
 
                 <ChevronDown
                   className={cn(
@@ -100,10 +115,17 @@ export function RepositoryItem({
                     </div>
                   );
                 })()}
+                {/* Running workspace indicator (pulsing dot) */}
                 {hasRunningWorkspace && (
                   <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
                     <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </span>
+                )}
+                {/* Workspace count badge */}
+                {repository.workspaces.length > 1 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-muted text-muted-foreground text-[9px] font-semibold px-1 z-10">
+                    {repository.workspaces.length}
                   </span>
                 )}
               </div>
