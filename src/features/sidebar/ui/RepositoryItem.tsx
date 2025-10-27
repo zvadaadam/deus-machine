@@ -131,11 +131,14 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               className={cn(
-                // Work WITH shadcn design: size-8 (32px) is perfect for collapsed mode
-                // Remove all padding, let the badge center naturally
-                "!p-0",
+                // Work WITH shadcn design: let their responsive system work
+                // Only override what's necessary in collapsed mode
                 "flex items-center justify-center overflow-visible relative",
                 "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                // Collapsed mode: remove padding and let button shrink to content
+                "group-data-[collapsible=icon]:!w-auto",
+                "group-data-[collapsible=icon]:!h-auto",
+                "group-data-[collapsible=icon]:!p-0",
                 // Hover states: lift for active, opacity for idle
                 isActive && "hover:translate-y-[-2px]",
                 isIdle && "hover:opacity-60"
