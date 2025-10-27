@@ -218,7 +218,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon">
+    <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader profile={profile} onOpenSettings={openSettingsModal} />
 
       {/* Repositories List */}
