@@ -233,7 +233,7 @@ export function AppSidebar({
               items={orderedRepositories.map(r => r.repo_id)}
               strategy={verticalListSortingStrategy}
             >
-              <SidebarMenu className="p-2 gap-2">
+              <SidebarMenu className={cn("gap-2", "p-2")}>
                 {orderedRepositories.map((repo) => (
                   <DraggableRepository
                     key={repo.repo_id}
@@ -253,7 +253,8 @@ export function AppSidebar({
         ) : (
           // No drag-drop when sidebar is collapsed (icon mode)
           // Show all repos - opacity hierarchy handles active vs idle distinction
-          <SidebarMenu className="p-2 gap-2">
+          // px-1 (4px) centers 40px badges in 48px sidebar: (48-40)/2 = 4px
+          <SidebarMenu className={cn("gap-2", "py-2 px-1")}>
             {orderedRepositories.map((repo) => (
               <DraggableRepository
                 key={repo.repo_id}
