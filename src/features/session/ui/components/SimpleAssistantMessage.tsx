@@ -1,16 +1,22 @@
 /**
  * Simple Assistant Message
  *
- * Displays tool calls as collapsible cards with icon + preview.
- * Click any tool card to expand and see full details.
+ * Clean, scannable display of assistant actions.
+ * - Text blocks: Markdown rendered
+ * - Tool calls: Collapsible preview cards
+ * - Thinking: Expandable full text
+ *
+ * Design: No duplication, show preview collapsed, content expanded.
  */
 
 import { useState } from 'react';
 import type { ContentBlock, ToolUseBlock, TextBlock as TextBlockType, ThinkingBlock as ThinkingBlockType } from '@/shared/types';
-import { BlockRenderer } from '../blocks';
 import { useSession } from '../../context';
 import { FileText, Pencil, Terminal, Search, FolderOpen, CheckSquare, Brain, Globe, ExternalLink, Zap, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { TextBlock } from '../blocks/TextBlock';
+import { CodeBlock } from '../tools/components/CodeBlock';
+import { detectLanguageFromPath } from '../tools/utils/detectLanguage';
 
 interface SimpleAssistantMessageProps {
   contentBlocks: (ContentBlock | string)[];
@@ -46,143 +52,175 @@ const getToolIcon = (toolName: string) => {
   }
 };
 
-// Get one-line preview for each tool
-const getToolPreview = (block: ToolUseBlock, toolResultMap: Map<string, any>): string => {
-  const toolName = block.name;
-  const input = block.input as any;
+// Get concise preview for collapsed state
+const getToolPreview = (toolBlock: ToolUseBlock, toolResult: any): string => {
+  const input = toolBlock.input as any;
 
-  switch (toolName) {
-    case 'Read':
-      const readPath = input?.file_path || '';
-      const fileName = readPath.split('/').pop() || readPath;
-      const toolResult = toolResultMap.get(block.id);
-      let lineCount = 0;
-      if (Array.isArray(toolResult?.content) && toolResult.content[0]?.type === 'text') {
-        const textContent = toolResult.content[0] as any;
-        const text = textContent.text;
-        if (typeof text === 'string') {
-          lineCount = text.split('\n').length;
+  switch (toolBlock.name) {
+    case 'Read': {
+      const filePath = input?.file_path || '';
+      const fileName = filePath.split('/').pop() || filePath;
+
+      // Count lines from result
+      if (toolResult?.content) {
+        const content = Array.isArray(toolResult.content) ? toolResult.content[0]?.text : toolResult.content;
+        if (typeof content === 'string') {
+          const lineCount = content.split('\n').length;
+          return `${fileName} • ${lineCount} lines`;
         }
       }
-      return `${lineCount} lines ${fileName}`;
+      return fileName;
+    }
 
-    case 'Edit':
-      const editPath = input?.file_path || '';
-      const editFileName = editPath.split('/').pop() || editPath;
-      return editFileName;
+    case 'Edit': {
+      const filePath = input?.file_path || '';
+      const fileName = filePath.split('/').pop() || filePath;
+      return fileName;
+    }
 
-    case 'Bash':
+    case 'Bash': {
       const command = input?.command || '';
-      const shortCmd = command.length > 50 ? command.substring(0, 50) + '...' : command;
+      const shortCmd = command.length > 40 ? command.substring(0, 40) + '...' : command;
       return shortCmd;
+    }
 
     case 'Grep':
-    case 'Glob':
+    case 'Glob': {
       const pattern = input?.pattern || '';
       return `"${pattern}"`;
+    }
 
-    case 'TodoWrite':
+    case 'TodoWrite': {
       const todos = input?.todos || [];
       return `${todos.length} items`;
-
-    case 'Thinking':
-      return '';
+    }
 
     default:
       return '';
   }
 };
 
-// Collapsible Tool Card Component
-function ToolCard({
+// Extract actual content from tool result for expanded state
+const getToolContent = (toolBlock: ToolUseBlock, toolResult: any): string | null => {
+  if (!toolResult || toolResult.is_error) {
+    return toolResult?.error || 'Error occurred';
+  }
+
+  // Handle different content formats
+  if (Array.isArray(toolResult.content)) {
+    const firstContent = toolResult.content[0];
+    if (firstContent?.type === 'text') {
+      return firstContent.text;
+    }
+  }
+
+  if (typeof toolResult.content === 'string') {
+    return toolResult.content;
+  }
+
+  if (typeof toolResult.content === 'object') {
+    return JSON.stringify(toolResult.content, null, 2);
+  }
+
+  return null;
+};
+
+// Tool Preview Card Component
+function ToolPreviewCard({
   toolBlock,
-  index,
-  toolResultMap
+  toolResult
 }: {
   toolBlock: ToolUseBlock;
-  index: number;
-  toolResultMap: Map<string, any>;
+  toolResult: any;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const Icon = getToolIcon(toolBlock.name);
-  const preview = getToolPreview(toolBlock, toolResultMap);
+  const preview = getToolPreview(toolBlock, toolResult);
+  const content = getToolContent(toolBlock, toolResult);
+  const isError = toolResult?.is_error;
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Clickable tool preview card */}
+      {/* Collapsible header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
-          "bg-muted/5 hover:bg-muted/10 transition-colors",
-          "text-left w-full cursor-pointer"
+          "bg-muted/5 hover:bg-muted/10 transition-colors duration-200",
+          "text-left w-full cursor-pointer",
+          isError && "bg-destructive/5"
         )}
       >
         <ChevronRight
           className={cn(
-            "w-3 h-3 text-muted-foreground/50 transition-transform flex-shrink-0",
+            "w-3 h-3 text-muted-foreground/50 transition-transform duration-200 flex-shrink-0",
             isExpanded && "rotate-90"
           )}
         />
-        <Icon className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
-        <span className="text-foreground font-medium">{toolBlock.name}</span>
+        <Icon className={cn(
+          "w-4 h-4 flex-shrink-0",
+          isError ? "text-destructive" : "text-muted-foreground/70"
+        )} />
+        <span className="font-medium">{toolBlock.name}</span>
         {preview && (
-          <span className="text-muted-foreground truncate">{preview}</span>
+          <span className="text-muted-foreground truncate text-[12px]">{preview}</span>
         )}
       </button>
 
-      {/* Expanded content */}
-      {isExpanded && (
+      {/* Expanded content - ONLY the actual content, no duplicate header */}
+      {isExpanded && content && (
         <div className="ml-5 mt-1">
-          <BlockRenderer
-            block={toolBlock}
-            index={index}
-            role="assistant"
-          />
+          {isError ? (
+            <div className="text-[13px] text-destructive bg-destructive/5 p-2 rounded border border-destructive/20">
+              {content}
+            </div>
+          ) : (
+            <CodeBlock
+              code={content}
+              language={toolBlock.name === 'Read' ? detectLanguageFromPath(String((toolBlock.input as any)?.file_path || '')) : undefined}
+              showLineNumbers={toolBlock.name === 'Read'}
+              maxHeight="400px"
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// Collapsible Thinking Card Component
+// Thinking Card Component
 function ThinkingCard({
-  thinkingBlock,
-  blockIndex
+  thinkingBlock
 }: {
   thinkingBlock: ThinkingBlockType;
-  blockIndex: number;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const text = thinkingBlock.thinking || '';
-  const firstLine = text.split('\n')[0];
-  const preview = firstLine.length > 60 ? firstLine.substring(0, 60) + '...' : firstLine;
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Clickable thinking preview card */}
+      {/* Collapsible header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           "flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px]",
-          "bg-muted/5 hover:bg-muted/10 transition-colors",
+          "bg-purple-500/5 hover:bg-purple-500/10 transition-colors duration-200",
           "text-left w-full cursor-pointer"
         )}
       >
         <ChevronRight
           className={cn(
-            "w-3 h-3 text-muted-foreground/50 transition-transform flex-shrink-0",
+            "w-3 h-3 text-muted-foreground/50 transition-transform duration-200 flex-shrink-0",
             isExpanded && "rotate-90"
           )}
         />
         <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
-        <span className="text-foreground font-medium">Thinking</span>
-        <span className="text-muted-foreground italic truncate">{preview}</span>
+        <span className="font-medium">Thinking</span>
       </button>
 
-      {/* Expanded thinking text */}
+      {/* Expanded full thinking text */}
       {isExpanded && (
-        <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap">
+        <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
           {text}
         </div>
       )}
@@ -196,45 +234,50 @@ export function SimpleAssistantMessage({ contentBlocks, messageId }: SimpleAssis
   return (
     <div className="flex flex-col gap-2">
       {contentBlocks.map((block, index) => {
-        // String or text block
+        // String blocks - render as text with markdown
         if (typeof block === 'string') {
           return (
-            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed">
-              {block}
-            </div>
-          );
-        }
-
-        if (block.type === 'text') {
-          const textBlock = block as TextBlockType;
-          return (
-            <div key={`${messageId}:${index}`} className="text-[15px] leading-relaxed">
-              {textBlock.text}
-            </div>
-          );
-        }
-
-        // Tool use - show as collapsible card
-        if (block.type === 'tool_use') {
-          const toolBlock = block as ToolUseBlock;
-          return (
-            <ToolCard
+            <TextBlock
               key={`${messageId}:${index}`}
-              toolBlock={toolBlock}
-              index={index}
-              toolResultMap={toolResultMap}
+              block={block}
+              role="assistant"
             />
           );
         }
 
-        // Thinking block - show as collapsible card
+        // Text blocks - render with markdown
+        if (block.type === 'text') {
+          const textBlock = block as TextBlockType;
+          return (
+            <TextBlock
+              key={`${messageId}:${index}`}
+              block={textBlock}
+              role="assistant"
+            />
+          );
+        }
+
+        // Tool use blocks - render as collapsible preview cards
+        if (block.type === 'tool_use') {
+          const toolBlock = block as ToolUseBlock;
+          const toolResult = toolResultMap.get(toolBlock.id);
+
+          return (
+            <ToolPreviewCard
+              key={`${messageId}:${index}`}
+              toolBlock={toolBlock}
+              toolResult={toolResult}
+            />
+          );
+        }
+
+        // Thinking blocks - render as expandable cards
         if (block.type === 'thinking') {
           const thinkingBlock = block as ThinkingBlockType;
           return (
             <ThinkingCard
               key={`${messageId}:${index}`}
               thinkingBlock={thinkingBlock}
-              blockIndex={index}
             />
           );
         }
