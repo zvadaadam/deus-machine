@@ -40,6 +40,10 @@ export function RepositoryItem({
   const priorityStatus = getRepoPriorityStatus(repository.workspaces);
   const statusConfig = STATUS_CONFIG[priorityStatus];
 
+  // Determine if repo is active (needs attention) or idle in collapsed state
+  const isActive = priorityStatus === 'unread' || priorityStatus === 'error' || priorityStatus === 'working';
+  const isIdle = !isActive;
+
   const handleClick = (e: React.MouseEvent) => {
     if (!sidebarExpanded) {
       // When sidebar is collapsed, expand it and open the repository
@@ -103,47 +107,91 @@ export function RepositoryItem({
         ) : (
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
-              className="w-full flex items-center px-0 py-3 justify-center overflow-visible"
+              className={cn(
+                "w-full flex items-center px-0 py-3 justify-center overflow-visible",
+                "group/badge transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                // Hover states: lift for active, opacity for idle
+                isActive && "hover:translate-y-[-2px]",
+                isIdle && "hover:opacity-60"
+              )}
               tooltip={repository.repo_name}
               onClick={handleClick}
             >
               <div className="relative overflow-visible">
-                {(() => {
-                  const repoColor = getRepoColor(repository.repo_name);
-                  return (
-                    <div className={cn(
-                      "h-9 w-9 flex items-center justify-center text-xs font-semibold",
-                      "rounded-[8px] transition-all duration-[180ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                      "border-2",
-                      repoColor.bg,
-                      repoColor.text,
-                      // Status-based border color (visual priority indicator)
-                      statusConfig.border,
-                      // Pulse effect for active states
-                      statusConfig.pulse && "animate-pulse"
-                    )}>
-                      {getRepoInitials(repository.repo_name)}
-                    </div>
-                  );
-                })()}
-                {/* Unread badge - highest priority indicator */}
-                {unreadCount > 0 && (
+                {/* Main repository badge */}
+                <div className={cn(
+                  "h-10 w-10 flex items-center justify-center text-xs font-semibold",
+                  "rounded-[8px]",
+                  "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                  // Active repos: Full brightness with status ring and shadow
+                  isActive && [
+                    "bg-sidebar-accent",
+                    "text-sidebar-foreground",
+                    "border-2",
+                    // Status-based ring color with glow
+                    priorityStatus === 'error' && [
+                      "border-red-500 dark:border-red-400",
+                      "shadow-[0_0_4px_rgba(239,68,68,0.4)] dark:shadow-[0_0_4px_rgba(248,113,113,0.3)]"
+                    ],
+                    priorityStatus === 'unread' && [
+                      "border-amber-500 dark:border-amber-400",
+                      "shadow-[0_0_4px_rgba(245,158,11,0.4)] dark:shadow-[0_0_4px_rgba(251,191,36,0.3)]"
+                    ],
+                    priorityStatus === 'working' && [
+                      "border-green-500 dark:border-green-400",
+                      "shadow-[0_0_4px_rgba(34,197,94,0.4)] dark:shadow-[0_0_4px_rgba(74,222,128,0.3)]"
+                    ],
+                    // Enhanced shadow on hover
+                    "group-hover/badge:shadow-lg motion-reduce:transition-none"
+                  ],
+                  // Idle repos: Reduced presence, no ring
+                  isIdle && [
+                    "bg-sidebar",
+                    "text-sidebar-foreground/40",
+                    "transition-opacity"
+                  ]
+                )}>
+                  {getRepoInitials(repository.repo_name)}
+                </div>
+
+                {/* Notification badges - iOS style */}
+                {/* Error/Unread count badge */}
+                {(priorityStatus === 'error' || priorityStatus === 'unread') && unreadCount > 0 && (
                   <span
                     className={cn(
-                      "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-semibold px-1.5 z-20 border-2 border-sidebar",
-                      statusConfig.badge
+                      "absolute -top-1 -right-1",
+                      "flex h-4 min-w-4 items-center justify-center",
+                      "rounded-full text-[10px] font-semibold px-1",
+                      "z-20 border-2 border-sidebar",
+                      "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                      "animate-in zoom-in-50",
+                      priorityStatus === 'error' && "bg-red-500 text-white",
+                      priorityStatus === 'unread' && "bg-amber-500 text-white",
+                      // Subtle glow
+                      priorityStatus === 'error' && "shadow-[0_0_6px_rgba(239,68,68,0.5)]",
+                      priorityStatus === 'unread' && "shadow-[0_0_6px_rgba(245,158,11,0.5)]"
                     )}
-                    aria-label={`${unreadCount} unread`}
+                    aria-label={`${unreadCount} ${priorityStatus === 'error' ? 'errors' : 'unread'}`}
                   >
                     {unreadCount}
                   </span>
                 )}
-                {/* Running workspace indicator (pulsing dot) - secondary indicator */}
-                {hasRunningWorkspace && unreadCount === 0 && (
-                  <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 z-10">
-                    <span className="animate-ping motion-reduce:hidden absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                  </span>
+
+                {/* Working indicator - simple green dot badge */}
+                {priorityStatus === 'working' && (
+                  <span
+                    className={cn(
+                      "absolute -top-0.5 -right-0.5",
+                      "flex h-3 w-3",
+                      "rounded-full",
+                      "bg-green-500 dark:bg-green-400",
+                      "border-2 border-sidebar",
+                      "z-20",
+                      "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                      "animate-in zoom-in-50"
+                    )}
+                    aria-label="Working"
+                  />
                 )}
               </div>
             </SidebarMenuButton>
