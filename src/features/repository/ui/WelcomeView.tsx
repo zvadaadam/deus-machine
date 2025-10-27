@@ -60,13 +60,16 @@ export function WelcomeView({
 
             {/* Empty state: First-time welcome */}
             {isEmpty && (
-              <div className="flex flex-col items-center text-center mb-12">
+              <div className="flex flex-col items-center text-center mb-8">
                 <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mb-4">
                   <div className="text-2xl font-semibold text-foreground/80">BOX</div>
                 </div>
                 <h1 className="text-lg font-semibold text-foreground mb-2">Welcome to BOX</h1>
                 <p className="text-sm text-muted-foreground/70 max-w-md">
-                  Manage multiple AI coding agents in parallel across your projects.
+                  Run multiple coding tasks at once.
+                </p>
+                <p className="text-xs text-muted-foreground/60 max-w-md mt-1">
+                  Let AI handle the details while you focus on what matters.
                 </p>
               </div>
             )}
@@ -74,7 +77,7 @@ export function WelcomeView({
             {/* Filled state: Subtle section label */}
             {!isEmpty && (
               <div className="mb-4">
-                <h2 className="text-xs font-medium text-muted-foreground/60 uppercase tracking-wider px-2">
+                <h2 className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider px-2">
                   Add Repository
                 </h2>
               </div>
@@ -96,7 +99,7 @@ export function WelcomeView({
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Open Project</h3>
               <p className="text-xs text-muted-foreground/70">
-                {isEmpty ? "Work with a local repository" : "From your local machine"}
+                Work with a local repository
               </p>
             </div>
           </Card>
@@ -114,7 +117,7 @@ export function WelcomeView({
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Clone Repository</h3>
               <p className="text-xs text-muted-foreground/70">
-                {isEmpty ? "Start from GitHub" : "From GitHub"}
+                Start from GitHub
               </p>
             </div>
           </Card>
