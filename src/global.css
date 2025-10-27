@@ -315,7 +315,7 @@
   --thinking-muted: oklch(0.25 0.08 303);
   --thinking-border: oklch(0.35 0.12 303);
 
-  --border: oklch(0.3 0 0 / 40%);
+  --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.59 0.24 264);
 
@@ -325,7 +325,7 @@
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.3 0 0 / 40%);
+  --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.59 0.24 264);
 }
 
