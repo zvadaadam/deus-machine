@@ -109,6 +109,9 @@ fn main() {
             commands::get_browser_port,
             commands::get_browser_auth_token,
             commands::is_browser_running,
+            commands::scan_workspace_files,
+            commands::invalidate_file_cache,
+            commands::clear_file_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -29,6 +29,11 @@
           }
 
           document.documentElement.classList.add(resolved);
+
+          // Detect Tauri environment and add class for desktop-specific styles
+          if (window.__TAURI__) {
+            document.documentElement.classList.add('tauri');
+          }
         } catch (e) {
           // Fallback to light mode on error
           document.documentElement.classList.add('light');
