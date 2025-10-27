@@ -35,7 +35,7 @@ export function WelcomeView({
   const initialCount = 6;
   const displayedWorkspaces = showAll ? recentWorkspaces : recentWorkspaces.slice(0, initialCount);
   const hasMore = recentWorkspaces.length > initialCount;
-  const isEmpty = recentWorkspaces.length === 0;
+  const isEmpty = !isLoading && recentWorkspaces.length === 0;
 
   // Detect scroll to show/hide top fade gradient
   useEffect(() => {
@@ -94,7 +94,7 @@ export function WelcomeView({
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
           >
             <div className="w-9 h-9 rounded-lg bg-foreground/5 flex items-center justify-center text-foreground/80">
-              <FolderPlus className="w-4.5 h-4.5" />
+              <FolderPlus className="w-[18px] h-[18px]" />
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Open Project</h3>
@@ -112,7 +112,7 @@ export function WelcomeView({
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
           >
             <div className="w-9 h-9 rounded-lg bg-foreground/5 flex items-center justify-center text-foreground/80">
-              <Github className="w-4.5 h-4.5" />
+              <Github className="w-[18px] h-[18px]" />
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Clone Repository</h3>
