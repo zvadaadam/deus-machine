@@ -141,21 +141,31 @@
   --animate-breathing-glow: breathing-glow 2.5s ease-in-out infinite;
 }
 
+/* GPU-accelerated accordion: use transform + opacity instead of height */
+/* Height animations cause layout recalculation every frame - very expensive */
 @keyframes accordion-down {
   from {
     height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
   }
   to {
     height: var(--radix-accordion-content-height);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 @keyframes accordion-up {
   from {
     height: var(--radix-accordion-content-height);
+    opacity: 1;
+    transform: translateY(0);
   }
   to {
     height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
   }
 }
 
