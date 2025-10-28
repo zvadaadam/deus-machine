@@ -1,36 +1,31 @@
 /**
- * MarkdownRenderer - Secure, reusable markdown component
+ * MarkdownRenderer - Fast, secure markdown component for chat
  *
  * Features:
- * - Shiki syntax highlighting (dual light/dark themes)
+ * - INSTANT rendering (synchronous, no async plugins)
  * - Security: Sanitizes HTML (rehype-sanitize)
  * - Copy button on code blocks
  * - Configurable typography
  * - GFM support (tables, task lists, strikethrough)
  *
- * Implementation:
- * Uses MarkdownHooks (not MarkdownAsync) because:
- * - MarkdownHooks: Client-side async plugins via React hooks (useEffect/useState)
- * - MarkdownAsync: Server-side async via async/await (returns Promise<ReactElement>)
- * Since this is a Tauri/Vite client app, MarkdownHooks is correct.
+ * Performance Philosophy:
+ * - Uses synchronous Markdown (not MarkdownHooks/Async)
+ * - NO syntax highlighting for chat (Shiki is slow, adds 200ms+ delay)
+ * - Basic code styling via CSS (instant, good enough for chat)
+ * - Save Shiki for file viewer where syntax highlighting matters
  *
  * Usage:
  * ```tsx
  * <MarkdownRenderer>{markdownString}</MarkdownRenderer>
- * <MarkdownRenderer allowHtml sanitize>{unsafeMarkdown}</MarkdownRenderer>
+ * <MarkdownRenderer allowHtml>{unsafeMarkdown}</MarkdownRenderer>
  * ```
  */
 
 import { useRef, useState } from 'react';
-import { MarkdownHooks } from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import rehypeShiki from '@shikijs/rehype';
-import {
-  transformerNotationDiff,
-  transformerNotationHighlight,
-} from '@shikijs/transformers';
 import { cn } from '@/shared/lib/utils';
 
 interface MarkdownRendererProps {
@@ -84,37 +79,21 @@ export function MarkdownRenderer({
   allowHtml = false,
   proseClassName,
 }: MarkdownRendererProps) {
-  // Build rehype pipeline
-  const rehypePlugins: any[] = [
-    // Shiki syntax highlighting with dual themes
-    [
-      rehypeShiki,
-      {
-        themes: {
-          light: 'github-light',
-          dark: 'github-dark',
-        },
-        transformers: [
-          transformerNotationDiff(),      // [!code ++] / [!code --]
-          transformerNotationHighlight(), // [!code highlight]
-        ],
-      },
-    ],
-  ];
+  // Build rehype pipeline - NO ASYNC PLUGINS for performance
+  const rehypePlugins: any[] = [];
 
   // Security: Only allow raw HTML if explicitly enabled, and sanitize it
   if (allowHtml) {
-    rehypePlugins.unshift(rehypeRaw);
+    rehypePlugins.push(rehypeRaw);
     rehypePlugins.push([
       rehypeSanitize,
       {
         ...defaultSchema,
-        // Allow Shiki's styling on code blocks
+        // Allow basic code styling
         attributes: {
           ...defaultSchema.attributes,
-          pre: [['className'], ['style']],
+          pre: [['className']],
           code: [['className']],
-          span: [['style'], ['className']],
         },
       },
     ]);
@@ -136,22 +115,16 @@ export function MarkdownRenderer({
     },
   };
 
-  // Use MarkdownHooks for client-side async plugins (Shiki)
-  // Fallback prevents flash during async processing
+  // Use synchronous Markdown - INSTANT rendering (no async delay)
   return (
     <article className={cn(proseClassName, className)}>
-      <MarkdownHooks
+      <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
         components={components}
-        fallback={
-          <div className="text-muted-foreground/60 text-sm animate-pulse">
-            {children}
-          </div>
-        }
       >
         {children}
-      </MarkdownHooks>
+      </ReactMarkdown>
     </article>
   );
 }
