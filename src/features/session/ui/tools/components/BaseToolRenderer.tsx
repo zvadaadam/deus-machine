@@ -69,125 +69,74 @@ export function BaseToolRenderer({
 
   const isError = toolResult?.is_error;
 
-  // Get border color class (prioritize explicit prop, then tool metadata, then fallback)
-  const getBorderColorClass = () => {
-    if (isError) return chatTheme.blocks.tool.borderLeft.error;
-
-    const colorToUse = borderColor || toolMetadata.borderColor;
-
-    switch (colorToUse) {
-      case 'primary':
-        return chatTheme.blocks.tool.borderLeft.primary;
-      case 'success':
-        return chatTheme.blocks.tool.borderLeft.success;
-      case 'error':
-        return chatTheme.blocks.tool.borderLeft.error;
-      case 'info':
-        return chatTheme.blocks.tool.borderLeft.info;
-      case 'warning':
-        return chatTheme.blocks.tool.borderLeft.warning;
-      default:
-        return chatTheme.blocks.tool.borderLeft.default;
-    }
-  };
-
-  // Get background color
-  const getBackgroundColor = () => {
-    if (backgroundColor) return backgroundColor;
-    if (isError) return 'bg-destructive/5';
-    if (borderColor === 'success') return 'bg-success/5';
-    return '';
-  };
-
-  // Get status text
-  const getStatusText = () => {
-    if (!toolResult) return null;
-    if (isError) return { text: '✗ Failed', className: 'text-destructive text-sm' };
-    return { text: '✓ Done', className: 'text-success text-sm' };
-  };
-
-  const status = getStatusText();
+  // Minimal design: Error-only status (assume success by default)
+  const status = isError
+    ? { text: '✗ Error', className: 'text-destructive text-[11px] font-medium' }
+    : null;
 
   return (
-    <div
-      className={cn(
-        chatTheme.blocks.tool.container,
-        getBorderColorClass(),
-        getBackgroundColor()
-      )}
-    >
-      {/* Header - Always Visible */}
+    <div className="flex flex-col gap-1">
+      {/* Header - Minimal, clean */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          chatTheme.blocks.tool.header,
-          'w-full text-left hover:bg-muted/50 p-2 rounded transition-colors justify-between',
+          'flex items-center gap-2 px-2 py-1.5 text-[13px]',
+          'text-left w-full cursor-pointer',
+          'transition-opacity duration-200 hover:opacity-80',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${toolName} tool details`}
       >
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          {/* Chevron */}
-          {isExpanded ? (
-            <ChevronDown className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-          ) : (
-            <ChevronRight className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-          )}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Chevron - subtle and small */}
+          <ChevronRight
+            className={cn(
+              'w-3 h-3 text-muted-foreground/50 transition-transform duration-200 flex-shrink-0',
+              isExpanded && 'rotate-90'
+            )}
+            aria-hidden="true"
+          />
 
           {/* Tool icon */}
-          <div className={chatTheme.blocks.tool.icon}>
-            {icon}
-          </div>
+          {icon}
 
           {/* Tool name */}
-          <strong className="font-semibold">{toolName}</strong>
+          <span className="font-medium">{toolName}</span>
 
-          {/* Summary when collapsed (OLD API) */}
+          {/* Status indicator (error only) */}
+          {status && (
+            <span className={status.className}>
+              {status.text}
+            </span>
+          )}
+
+          {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="text-xs text-muted-foreground ml-2 truncate">
+            <span className="truncate text-[12px] text-muted-foreground">
               {renderSummary({ toolUse })}
             </span>
           )}
         </div>
-
-        {/* Status indicator */}
-        {status && (
-          <span className={status.className}>
-            {status.text}
-          </span>
-        )}
       </button>
 
-      {/* Metadata (file path, pattern, etc.) - OLD API */}
-      {renderMetadata && (
-        <div className="px-2">
-          {renderMetadata({ toolUse })}
+      {/* Expanded content - indented, no duplication */}
+      {isExpanded && (
+        <div className="ml-5 mt-1">
+          {/* NEW API: children */}
+          {children}
+
+          {/* OLD API: renderContent */}
+          {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
         </div>
       )}
 
-      {/* Expandable Content - CSS transition */}
-      <div
-        className={cn(
-          'overflow-hidden overflow-x-auto min-w-0 transition-all duration-200 ease-out',
-          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        )}
-      >
-        {/* NEW API: children */}
-        {children}
-
-        {/* OLD API: renderContent */}
-        {!children && renderContent && (
-          <div className="px-2 pb-2">
-            {renderContent({ toolUse, toolResult, isExpanded })}
-          </div>
-        )}
-      </div>
-
       {/* Error Display - Always Visible When Error */}
       {isError && toolResult && (
-        <ToolError content={toolResult.content} />
+        <div className="ml-5 mt-1">
+          <ToolError content={toolResult.content} />
+        </div>
       )}
     </div>
   );

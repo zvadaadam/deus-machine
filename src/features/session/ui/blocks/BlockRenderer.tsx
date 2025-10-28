@@ -19,9 +19,10 @@ interface BlockRendererProps {
   block: ContentBlock | string;
   index: number;
   role?: MessageRole;
+  isLastTextBlock?: boolean; // For text weight (muted vs normal)
 }
 
-export function BlockRenderer({ block, index, role }: BlockRendererProps) {
+export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRendererProps) {
   const { toolResultMap } = useSession();
   // Handle null/undefined blocks gracefully
   if (!block) {
@@ -31,15 +32,18 @@ export function BlockRenderer({ block, index, role }: BlockRendererProps) {
     return null;
   }
 
+  // Determine text weight: last text block is 'normal', others are 'muted'
+  const weight = isLastTextBlock ? 'normal' : 'muted';
+
   // Handle string blocks (convert to text block)
   if (typeof block === 'string') {
-    return <TextBlock block={{ type: 'text', text: block }} role={role} />;
+    return <TextBlock block={{ type: 'text', text: block }} role={role} weight={weight} />;
   }
 
   // Dispatch based on block type
   switch (block.type) {
     case 'text':
-      return <TextBlock block={block} role={role} />;
+      return <TextBlock block={block} role={role} weight={weight} />;
 
     case 'tool_use':
       // Link tool_use with its corresponding tool_result

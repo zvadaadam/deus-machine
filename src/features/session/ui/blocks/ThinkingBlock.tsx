@@ -20,80 +20,57 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const hasSignature = !!block.signature;
-  const thinkingPreview = block.thinking.slice(0, 80);
-  const showPreview = block.thinking.length > 80;
+
+  // Width-based preview: 120 chars
+  const PREVIEW_CHAR_LIMIT = 120;
+  const preview = block.thinking.length > PREVIEW_CHAR_LIMIT
+    ? block.thinking.substring(0, PREVIEW_CHAR_LIMIT) + '...'
+    : block.thinking;
 
   return (
-    <div
-      className={cn(
-        'rounded-lg border transition-all duration-200',
-        'bg-thinking-muted/50',
-        'border-thinking-border/40',
-        chatTheme.common.transition
-      )}
-    >
-      {/* Header - Always visible */}
+    <div className="flex flex-col gap-1">
+      {/* Header - Minimal, clean */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'w-full flex items-center gap-2 p-3 text-left',
-          'hover:bg-thinking-muted/70',
-          'transition-colors duration-200 rounded-lg'
+          'flex items-center gap-2 px-2 py-1.5 text-[13px]',
+          'text-left w-full cursor-pointer',
+          'transition-opacity duration-200 hover:opacity-80',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
       >
-        {/* Icon */}
-        <Brain className="w-4 h-4 text-thinking flex-shrink-0" />
+        {/* Chevron - subtle and small */}
+        <ChevronRight
+          className={cn(
+            'w-3 h-3 text-muted-foreground/50 transition-transform duration-200 flex-shrink-0',
+            isExpanded && 'rotate-90'
+          )}
+          aria-hidden="true"
+        />
+
+        {/* Icon - purple for thinking */}
+        <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
 
         {/* Label */}
-        <span className="font-medium text-sm text-thinking">
-          Thinking
-        </span>
+        <span className="font-medium">Thinking</span>
 
         {/* Signature indicator */}
         {hasSignature && (
-          <div title="Verified signature">
-            <Shield className="w-3 h-3 text-thinking flex-shrink-0" />
-          </div>
+          <Shield className="w-3 h-3 text-purple-600/70 flex-shrink-0" title="Verified signature" />
         )}
 
-        {/* Preview when collapsed */}
-        {!isExpanded && showPreview && (
-          <span className="text-xs text-thinking/70 truncate flex-1">
-            {thinkingPreview}...
+        {/* Preview when collapsed only */}
+        {!isExpanded && (
+          <span className="text-muted-foreground italic truncate text-[12px]">
+            {preview}
           </span>
         )}
-
-        {/* Expand/collapse icon */}
-        <div className="ml-auto flex-shrink-0">
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-thinking" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-thinking" />
-          )}
-        </div>
       </button>
 
-      {/* Content - Only when expanded */}
+      {/* Expanded: show FULL thinking text */}
       {isExpanded && (
-        <div className="px-3 pb-3 pt-1 min-w-0 overflow-x-auto">
-          <div
-            className={cn(
-              'text-sm leading-relaxed whitespace-pre-wrap',
-              'text-thinking-foreground',
-              'font-mono bg-thinking-muted',
-              'p-3 rounded border border-thinking-border/50'
-            )}
-          >
-            {block.thinking}
-          </div>
-
-          {/* Signature info */}
-          {hasSignature && (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-thinking/70">
-              <Shield className="w-3 h-3" />
-              <span>Verified signature present</span>
-            </div>
-          )}
+        <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
+          {block.thinking}
         </div>
       )}
     </div>
