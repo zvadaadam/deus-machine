@@ -24,62 +24,27 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
 
   const hasResult = result && result.trim().length > 0;
 
-  // Render URL with external link support
-  const renderUrl = () => {
-    if (!url) return null;
-
+  // Extract domain from URL for preview
+  const getDomain = () => {
+    if (!url) return '';
     try {
       const u = new URL(url);
-      const safe = u.protocol === 'http:' || u.protocol === 'https:';
-      return safe ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-mono truncate flex items-center gap-1"
-        >
-          {url}
-          <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-        </a>
-      ) : (
-        <span className="text-xs font-mono truncate text-muted-foreground">{url}</span>
-      );
+      return u.hostname.replace('www.', '');
     } catch {
-      return <span className="text-xs font-mono truncate text-muted-foreground">{url}</span>;
+      return url;
     }
   };
 
   return (
     <BaseToolRenderer
       toolName="Web Fetch"
-      icon={<Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+      icon={<Globe className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor={isError ? 'error' : 'default'}
-      backgroundColor={isError ? 'bg-destructive/5' : 'bg-blue-50/20 dark:bg-blue-950/10'}
       renderSummary={() => (
-        url && (
-          <span className="text-xs text-muted-foreground ml-2 truncate max-w-xs">
-            {url}
-          </span>
-        )
-      )}
-      renderMetadata={() => (
-        <div className="px-2 pb-1 space-y-1">
-          {url && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">URL:</span>
-              {renderUrl()}
-            </div>
-          )}
-          {prompt && (
-            <div className="flex items-start gap-2 text-sm">
-              <span className="text-muted-foreground flex-shrink-0">Task:</span>
-              <span className="text-xs italic text-muted-foreground">{prompt}</span>
-            </div>
-          )}
-        </div>
+        <span className="font-mono text-[12px] text-muted-foreground truncate">
+          {getDomain()}
+        </span>
       )}
       renderContent={() => {
         // No result message

@@ -16,8 +16,11 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { command, description } = toolUse.input;
   const isError = toolResult?.is_error;
 
-  // Use description if available, otherwise truncate command
-  const preview = description || (command.length > 50 ? command.substring(0, 50) + '...' : command);
+  // Show command, optionally prefixed by description
+  const commandPreview = command.length > 60 ? command.substring(0, 60) + '...' : command;
+  const preview = description
+    ? `${description} → ${commandPreview}`
+    : commandPreview;
 
   return (
     <BaseToolRenderer
@@ -25,7 +28,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       icon={<Terminal className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => <span>{preview}</span>}
+      renderSummary={() => <span className="font-mono text-[12px]">{preview}</span>}
       renderContent={({ toolResult }) => {
         if (!toolResult) return null;
 
