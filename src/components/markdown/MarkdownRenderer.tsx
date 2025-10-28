@@ -8,6 +8,12 @@
  * - Configurable typography
  * - GFM support (tables, task lists, strikethrough)
  *
+ * Implementation:
+ * Uses MarkdownHooks (not MarkdownAsync) because:
+ * - MarkdownHooks: Client-side async plugins via React hooks (useEffect/useState)
+ * - MarkdownAsync: Server-side async via async/await (returns Promise<ReactElement>)
+ * Since this is a Tauri/Vite client app, MarkdownHooks is correct.
+ *
  * Usage:
  * ```tsx
  * <MarkdownRenderer>{markdownString}</MarkdownRenderer>
@@ -16,7 +22,7 @@
  */
 
 import { useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { MarkdownHooks } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -130,15 +136,16 @@ export function MarkdownRenderer({
     },
   };
 
+  // Use MarkdownHooks for client-side async plugins (Shiki)
   return (
     <article className={cn(proseClassName, className)}>
-      <ReactMarkdown
+      <MarkdownHooks
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
         components={components}
       >
         {children}
-      </ReactMarkdown>
+      </MarkdownHooks>
     </article>
   );
 }
