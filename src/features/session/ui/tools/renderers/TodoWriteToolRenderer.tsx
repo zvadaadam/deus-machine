@@ -54,12 +54,9 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Todo List"
-      icon={<ListChecks className="w-4 h-4 text-secondary-foreground" />}
+      icon={<ListChecks className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor="default"
-      backgroundColor="bg-secondary/5"
       renderSummary={() => (
         <span className="text-xs text-muted-foreground ml-2">
           {statusCounts.completed || 0}/{todos.length} completed

@@ -25,7 +25,6 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       icon={<Terminal className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
       renderSummary={() => <span>{preview}</span>}
       renderContent={({ toolResult }) => {
         if (!toolResult) return null;
