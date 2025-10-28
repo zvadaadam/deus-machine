@@ -37,11 +37,11 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Grep Search"
-      icon={<Search className="w-4 h-4 text-muted-foreground/70" />}
+      icon={<Search className="w-4 h-4 text-info/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] text-muted-foreground">
+        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
           {pattern} in {glob || fileType || pathPreview}{matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
         </span>
       )}

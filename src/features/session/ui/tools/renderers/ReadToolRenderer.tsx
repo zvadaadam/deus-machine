@@ -34,12 +34,12 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Read"
-      icon={<FileText className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
+      icon={<FileText className="w-4 h-4 text-info/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
       defaultExpanded={false}
       renderSummary={() => (
-        <span className="font-mono">
+        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
           {fileName}
           {lineCount && ` • ${lineCount} lines`}
         </span>
