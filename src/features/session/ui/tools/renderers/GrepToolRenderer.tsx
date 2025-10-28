@@ -18,64 +18,33 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { pattern, path, output_mode, glob, type: fileType } = toolUse.input;
   const isError = toolResult?.is_error;
 
+  // Count matches from result
+  const getMatchCount = () => {
+    if (!toolResult || toolResult.is_error) return null;
+    const content = typeof toolResult.content === 'string' ? toolResult.content : '';
+    if (!content) return 0;
+    // For files_with_matches mode, count lines (each line is a file)
+    if (output_mode === 'files_with_matches') {
+      return content.trim().split('\n').filter(line => line.trim()).length;
+    }
+    // For content mode, count non-empty lines
+    return content.trim().split('\n').filter(line => line.trim()).length;
+  };
+
+  const matchCount = getMatchCount();
+  const pathPreview = path ? path.split('/').pop() || path : 'all files';
+
   return (
     <BaseToolRenderer
       toolName="Grep Search"
-      icon={<Search className="w-4 h-4 text-info" />}
+      icon={<Search className="w-4 h-4 text-info/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor={isError ? 'error' : 'info'}
-      backgroundColor={isError ? 'bg-destructive/5' : undefined}
-      renderMetadata={() => (
-        <div className="px-2 py-1 flex items-start justify-between gap-2">
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Pattern:</span>
-              <code className="text-xs font-mono bg-info/10 text-info px-1.5 py-0.5 rounded">
-                {pattern}
-              </code>
-            </div>
-
-            {path && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Path:</span>
-                <code className="text-xs font-mono text-muted-foreground">
-                  {path}
-                </code>
-              </div>
-            )}
-
-            {glob && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Glob:</span>
-                <code className="text-xs font-mono text-muted-foreground">
-                  {glob}
-                </code>
-              </div>
-            )}
-
-            {fileType && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Type:</span>
-                <code className="text-xs font-mono text-muted-foreground">
-                  {fileType}
-                </code>
-              </div>
-            )}
-
-            {output_mode && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Mode:</span>
-                <code className="text-xs font-mono text-muted-foreground">
-                  {output_mode}
-                </code>
-              </div>
-            )}
-          </div>
-
-          <CopyButton text={pattern} label="Copy pattern" size="sm" />
-        </div>
+      renderSummary={() => (
+        <span className="font-mono">
+          {pattern} in {glob || fileType || pathPreview}
+          {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
+        </span>
       )}
       renderContent={({ toolResult }) => {
         // Guard against undefined toolResult

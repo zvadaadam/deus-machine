@@ -37,7 +37,6 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       icon={<FileEdit className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
       renderSummary={() => (
         <span className="font-mono">
           {fileName} •{' '}

@@ -28,31 +28,13 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
   return (
     <BaseToolRenderer
       toolName="Background Process Output"
-      icon={<Activity className="w-4 h-4 text-info" />}
+      icon={<Activity className="w-4 h-4 text-info/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor={isError ? 'error' : 'info'}
-      backgroundColor={isError ? 'bg-destructive/5' : 'bg-info/5'}
       renderSummary={() => (
-        <span className="text-xs text-muted-foreground ml-2">
-          {hasOutput ? `${lineCount} line${lineCount !== 1 ? 's' : ''}` : 'No output'}
+        <span className="font-mono">
+          shell {bash_id.substring(0, 6)}{filter ? ` • filtered` : ''} • {hasOutput ? `${lineCount} line${lineCount !== 1 ? 's' : ''}` : 'no output'}
         </span>
-      )}
-      renderMetadata={() => (
-        <div className="px-2 pb-1 space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <Terminal className="w-3 h-3 text-info" aria-hidden="true" />
-            <span className="text-muted-foreground">Shell ID:</span>
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{bash_id}</code>
-          </div>
-          {filter && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Filter:</span>
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{filter}</code>
-            </div>
-          )}
-        </div>
       )}
       renderContent={() => {
         // No output message
