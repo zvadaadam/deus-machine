@@ -75,8 +75,8 @@ export const chatTheme = {
 
     // Code blocks
     code: {
-      container: 'relative group rounded overflow-hidden',
-      pre: 'bg-sidebar-accent/40 p-3 rounded overflow-x-auto m-0 font-mono text-sm',
+      container: 'relative group rounded-lg overflow-hidden border border-border/60',
+      pre: 'bg-muted/70 p-4 rounded-lg overflow-x-auto m-0 font-mono text-sm',
       lineNumbers: 'text-muted-foreground select-none pr-4 border-r border-border/40',
       copyButton: 'absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
     },

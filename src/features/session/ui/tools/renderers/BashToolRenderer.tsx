@@ -25,10 +25,14 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={<Terminal className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
+      icon={<Terminal className="w-4 h-4 text-primary/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => <span className="font-mono text-[12px]">{preview}</span>}
+      renderSummary={() => (
+        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
+          {preview}
+        </span>
+      )}
       renderContent={({ toolResult }) => {
         if (!toolResult) return null;
 
@@ -40,14 +44,14 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         return (
           <pre
             className={cn(
-              'p-3 rounded-lg font-mono text-[13px] overflow-x-auto whitespace-pre-wrap',
-              'max-h-[400px] overflow-y-auto',
+              'p-4 rounded-lg font-mono text-[13px] overflow-x-auto whitespace-pre-wrap',
+              'max-h-[400px] overflow-y-auto border',
               isError
-                ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                : 'bg-muted/30 text-foreground'
+                ? 'bg-destructive/15 text-destructive-foreground border-destructive/30'
+                : 'bg-muted/80 text-foreground border-border/60'
             )}
           >
-            <div className="text-green-600">$ {command}</div>
+            <div className="text-success font-semibold">$ {command}</div>
             {'\n'}
             {output}
           </pre>

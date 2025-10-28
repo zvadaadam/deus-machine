@@ -55,9 +55,14 @@ export function FilePathDisplay({ path, className }: FilePathDisplayProps) {
   };
 
   return (
-    <div className={cn('flex items-center gap-2 px-2 py-1.5', className)}>
+    <div className={cn(
+      'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg',
+      'bg-muted/60 border border-border/60',
+      'transition-colors duration-200 ease-out',
+      className
+    )}>
       {getFileIcon(path)}
-      <span className="text-xs font-mono text-muted-foreground break-all">
+      <span className="text-xs font-mono text-foreground/80 break-all font-medium">
         {path}
       </span>
     </div>
