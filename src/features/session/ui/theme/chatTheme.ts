@@ -67,9 +67,9 @@ export const chatTheme = {
       },
     },
 
-    // Text blocks
+    // Text blocks (px-2 to align with tool call headers)
     text: {
-      container: 'flex flex-col gap-1.5',
+      container: 'flex flex-col gap-1.5 px-2',
       content: 'm-0 leading-relaxed text-foreground text-base font-sans break-words',
     },
 
