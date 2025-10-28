@@ -57,16 +57,15 @@ export function BaseToolRenderer({
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Header - Clean with left accent border only */}
+      {/* Header - Minimal, no borders or backgrounds */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 text-[13px]',
-          'border-l-2 border-l-primary/60',
+          'flex items-center gap-2 px-2 py-1.5 text-[13px]',
           'text-left w-full cursor-pointer',
-          'transition-all duration-200 ease-out',
-          'hover:border-l-primary',
+          'transition-opacity duration-200 ease-out',
+          'hover:opacity-70',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
         aria-expanded={isExpanded}
