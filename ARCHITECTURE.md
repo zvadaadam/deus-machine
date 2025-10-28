@@ -357,3 +357,55 @@ curl -X POST http://localhost:{port}/api/sessions/{sessionId}/messages \
 - Global unhandledRejection handler (backend/server.cjs)
 - Child process error handlers (backend/lib/claude-session.cjs)
 - Detailed logging at each step
+
+## Chat UI Architecture
+
+### Design Philosophy
+
+**Mental Model:** Claude is a coworker showing their work. Each tool call should instantly answer: "What did Claude do, and what was the impact?"
+
+**Core Principles:**
+1. **Pure Content** - Remove decoration; no backgrounds/borders unless meaningful
+2. **Semantic Color** - Color conveys meaning (green = added, red = removed/error), never decoration
+3. **Assume Success** - Only show errors; success is the default, silence is confirmation
+4. **No Duplication** - Preview disappears when expanded
+5. **Typography Hierarchy** - Weight, size, and opacity create structure, not boxes
+6. **Inevitable Interaction** - Subtle, responsive, natural (opacity, not backgrounds)
+
+### Component Hierarchy
+
+```
+MessageItem.tsx
+├─ User messages: BlockRenderer
+└─ Assistant messages: BlockRenderer
+    ├─ TextBlock (weight: 'muted' | 'normal')
+    ├─ ToolUseBlock → ToolRegistry → Specific Renderer
+    │   └─ BaseToolRenderer (shared infrastructure)
+    │       ├─ ReadToolRenderer
+    │       ├─ EditToolRenderer
+    │       ├─ BashToolRenderer
+    │       └─ 12+ other renderers
+    └─ ThinkingBlock (special renderer)
+```
+
+### Key Components
+
+**BlockRenderer** (`src/features/session/ui/blocks/BlockRenderer.tsx`)
+- Dispatches content blocks to appropriate renderers
+- Routes `text` → TextBlock, `tool_use` → ToolRegistry, `thinking` → ThinkingBlock
+
+**TextBlock** (`src/features/session/ui/blocks/TextBlock.tsx`)
+- Renders markdown with ChatMarkdown component
+- Weight variants: `'muted'` (transitional text, 13px) or `'normal'` (final summary, 15px)
+- Uses CSS-based syntax highlighting for instant rendering (no async Shiki)
+
+**BaseToolRenderer** (`src/features/session/ui/tools/components/BaseToolRenderer.tsx`)
+- Shared infrastructure for all tool renderers
+- Provides expand/collapse, error-only status, consistent styling
+- Render props API: `renderSummary`, `renderContent`
+- Single source of truth → affects all 15+ tools
+
+**ToolRegistry** (`src/features/session/ui/tools/ToolRegistry.ts`)
+- Maps tool names → specific renderers
+- Auto-registers on startup
+- Fallback to DefaultToolRenderer for unknown tools

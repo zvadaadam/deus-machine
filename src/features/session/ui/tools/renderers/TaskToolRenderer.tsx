@@ -8,9 +8,8 @@
  * AFTER: ~85 LOC
  */
 
-import { Cpu, Sparkles } from 'lucide-react';
+import { Cpu } from 'lucide-react';
 import { BaseToolRenderer } from '../components';
-import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
 export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
@@ -47,7 +46,7 @@ export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
           {/* Agent result */}
           {hasResult && (
             <div className="text-xs bg-muted/50 border border-border rounded p-2 max-h-60 overflow-y-auto mt-2">
-              <pre className="whitespace-pre-wrap break-words m-0">{result}</pre>
+              <pre className="whitespace-pre-wrap break-words m-0 font-mono">{result}</pre>
             </div>
           )}
         </div>
