@@ -61,7 +61,9 @@ function CopyButton({ getText }: { getText: () => string }) {
       type="button"
       onClick={handleCopy}
       className={cn(
-        'absolute top-2 right-2',
+        // Proper alignment: pre has 8px top + 12px right padding
+        // Button positioned at: 12px top (8+4 breathing), 16px right (12+4 breathing)
+        'absolute top-3 right-4',
         'p-1.5 rounded',
         'text-muted-foreground hover:text-foreground',
         'hover:bg-muted/50',
