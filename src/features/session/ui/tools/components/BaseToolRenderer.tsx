@@ -1,26 +1,23 @@
 /**
- * Base Tool Renderer (Simplified with backward compatibility)
+ * Base Tool Renderer (Pure & Minimal)
  *
  * Shared component for all tool renderers with consistent UI patterns:
- * - Expand/collapse with CSS transitions
- * - Status indicators (success/error/pending)
- * - Error display
+ * - Expand/collapse with smooth transitions
+ * - Error-only status (assume success by default)
+ * - Clean, transparent design (no backgrounds or borders)
  * - Supports both new (children) and old (render props) APIs
  *
  * Benefits:
  * - Change header design once → affects all 15 tools
- * - Consistent animations using CSS (no dependencies)
+ * - Minimal, content-first aesthetic
  * - Backward compatible with existing tool renderers
  */
 
 import { useState, ReactNode } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { chatTheme } from '../../theme';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import type { ToolUseBlock, ToolResultBlock } from '@/shared/types';
 import { ToolError } from './ToolError';
-import { shouldExpandByDefault } from '../constants';
-import { getToolMetadata } from '../../utils/toolCategories';
 
 export interface BaseToolRendererProps {
   // Identity
@@ -34,17 +31,10 @@ export interface BaseToolRendererProps {
   // Behavior
   defaultExpanded?: boolean;
 
-  // Styling (optional overrides)
-  borderColor?: 'default' | 'primary' | 'success' | 'error' | 'info' | 'warning';
-  backgroundColor?: string;
-
-  // NEW API: Single children slot
-  children?: ReactNode;
-
-  // OLD API: Render props (for backward compatibility)
-  renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock; isExpanded: boolean }) => ReactNode;
-  renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode;
-  renderMetadata?: (props: { toolUse: ToolUseBlock }) => ReactNode;
+  // Content rendering (choose one)
+  children?: ReactNode; // NEW API: Single children slot
+  renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock; isExpanded: boolean }) => ReactNode; // OLD API
+  renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode; // Preview when collapsed
 }
 
 export function BaseToolRenderer({
@@ -52,21 +42,12 @@ export function BaseToolRenderer({
   icon,
   toolUse,
   toolResult,
-  defaultExpanded,
-  borderColor,
-  backgroundColor,
+  defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
   children,
   renderContent,
   renderSummary,
-  renderMetadata,
 }: BaseToolRendererProps) {
-  // Get tool metadata for smart defaults
-  const toolMetadata = getToolMetadata(toolUse.name);
-
-  // Auto-detect from constants or tool metadata if not provided
-  const initialExpanded = defaultExpanded ?? toolMetadata.defaultExpanded;
-  const [isExpanded, setIsExpanded] = useState(initialExpanded);
-
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const isError = toolResult?.is_error;
 
   // Minimal design: Error-only status (assume success by default)
