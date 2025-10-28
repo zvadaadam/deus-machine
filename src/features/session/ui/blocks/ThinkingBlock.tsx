@@ -8,7 +8,7 @@
 
 import type { ThinkingBlock as ThinkingBlockType } from '@/shared/types';
 import { useState } from 'react';
-import { Brain, ChevronDown, ChevronRight, Shield } from 'lucide-react';
+import { Brain, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { chatTheme } from '../theme';
 
@@ -18,8 +18,6 @@ interface ThinkingBlockProps {
 
 export function ThinkingBlock({ block }: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-
-  const hasSignature = !!block.signature;
 
   // Width-based preview: 120 chars
   const PREVIEW_CHAR_LIMIT = 120;
@@ -48,16 +46,11 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
           aria-hidden="true"
         />
 
-        {/* Icon - purple for thinking */}
-        <Brain className="w-4 h-4 text-purple-600/70 flex-shrink-0" />
+        {/* Icon - consistent gray */}
+        <Brain className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />
 
         {/* Label */}
         <span className="font-medium">Thinking</span>
-
-        {/* Signature indicator */}
-        {hasSignature && (
-          <Shield className="w-3 h-3 text-purple-600/70 flex-shrink-0" title="Verified signature" />
-        )}
 
         {/* Preview when collapsed only */}
         {!isExpanded && (
