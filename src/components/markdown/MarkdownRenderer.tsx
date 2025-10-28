@@ -38,7 +38,7 @@ interface MarkdownRendererProps {
 }
 
 /**
- * Copy button for code blocks
+ * Copy button for code blocks - Icon-only, subtle, Jony Ive style
  */
 function CopyButton({ getText }: { getText: () => string }) {
   const [copied, setCopied] = useState(false);
@@ -61,14 +61,28 @@ function CopyButton({ getText }: { getText: () => string }) {
       type="button"
       onClick={handleCopy}
       className={cn(
-        'absolute top-2 right-2 px-2 py-1 rounded text-xs',
-        'bg-background/80 border border-border',
-        'hover:bg-background transition-colors duration-200',
-        'opacity-0 group-hover:opacity-100'
+        'absolute top-2 right-2',
+        'p-1.5 rounded',
+        'text-muted-foreground hover:text-foreground',
+        'hover:bg-muted/50',
+        'transition-all duration-200 ease-out',
+        'opacity-0 group-hover:opacity-100',
+        copied && 'text-success'
       )}
       aria-label="Copy code"
     >
-      {copied ? '✓ Copied' : 'Copy'}
+      {copied ? (
+        // Check icon (copied state)
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        // Copy icon (default state)
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
     </button>
   );
 }
