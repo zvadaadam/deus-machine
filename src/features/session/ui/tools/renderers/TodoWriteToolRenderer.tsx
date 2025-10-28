@@ -22,6 +22,15 @@ interface Todo {
 export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const todos: Todo[] = toolUse.input.todos || [];
 
+  // Find current or next task
+  const inProgressTask = todos.find(t => t.status === 'in_progress');
+  const nextPendingTask = todos.find(t => t.status === 'pending');
+  const allCompleted = todos.every(t => t.status === 'completed');
+
+  const currentTaskText = allCompleted
+    ? 'All tasks completed'
+    : inProgressTask?.activeForm || nextPendingTask?.content || 'No tasks';
+
   // Count todos by status
   const statusCounts = todos.reduce((acc, todo) => {
     acc[todo.status] = (acc[todo.status] || 0) + 1;
@@ -54,15 +63,12 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Todo List"
-      icon={<ListChecks className="w-4 h-4 text-secondary-foreground" />}
+      icon={<ListChecks className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor="default"
-      backgroundColor="bg-secondary/5"
       renderSummary={() => (
-        <span className="text-xs text-muted-foreground ml-2">
-          {statusCounts.completed || 0}/{todos.length} completed
+        <span className="text-[12px] text-muted-foreground">
+          {currentTaskText}
         </span>
       )}
       renderContent={() => (

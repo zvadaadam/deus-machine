@@ -10,7 +10,6 @@
 
 import { FileSearch } from 'lucide-react';
 import { BaseToolRenderer } from '../components';
-import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
 export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
@@ -32,49 +31,16 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const hasResults = files.length > 0;
   const resultCount = files.length;
 
-  // Determine border color based on results
-  const getBorderColor = () => {
-    if (isError) return 'error';
-    if (hasResults) return 'success';
-    return 'default';
-  };
-
-  const getBackgroundColor = () => {
-    if (isError) return 'bg-destructive/5';
-    if (hasResults) return 'bg-success/5';
-    return 'bg-muted/5';
-  };
-
   return (
     <BaseToolRenderer
       toolName="File Search (Glob)"
-      icon={<FileSearch className="w-4 h-4 text-info" />}
+      icon={<FileSearch className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor={getBorderColor()}
-      backgroundColor={getBackgroundColor()}
       renderSummary={() => (
-        <span className={cn(
-          'text-xs ml-2',
-          hasResults ? 'text-success' : 'text-muted-foreground'
-        )}>
-          {hasResults ? `${resultCount} file${resultCount !== 1 ? 's' : ''} found` : 'No files found'}
+        <span className="font-mono text-[12px] text-muted-foreground">
+          {pattern} {path && `in ${path}`} • {hasResults ? `${resultCount} file${resultCount !== 1 ? 's' : ''}` : 'no files'}
         </span>
-      )}
-      renderMetadata={() => (
-        <div className="px-2 pb-1 space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Pattern:</span>
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{pattern}</code>
-          </div>
-          {path && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Path:</span>
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{path}</code>
-            </div>
-          )}
-        </div>
       )}
       renderContent={() => {
         // No results message

@@ -35,27 +35,19 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   // Determine if item is likely a directory (ends with /)
   const isDirectory = (item: string) => item.endsWith('/');
 
+  // Extract directory name from path
+  const dirName = path.split('/').pop() || path;
+
   return (
     <BaseToolRenderer
       toolName="List Directory"
-      icon={<FolderOpen className="w-4 h-4 text-info" />}
+      icon={<FolderOpen className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor={isError ? 'error' : 'info'}
-      backgroundColor={isError ? 'bg-destructive/5' : 'bg-info/5'}
       renderSummary={() => (
-        <span className="text-xs text-muted-foreground ml-2">
-          {hasListings ? `${itemCount} item${itemCount !== 1 ? 's' : ''}` : 'Empty'}
+        <span className="font-mono text-[12px] text-muted-foreground">
+          {dirName} • {hasListings ? `${itemCount} item${itemCount !== 1 ? 's' : ''}` : 'empty'}
         </span>
-      )}
-      renderMetadata={() => (
-        <div className="px-2 pb-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Path:</span>
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono break-all">{path}</code>
-          </div>
-        </div>
       )}
       renderContent={() => {
         // Empty directory message

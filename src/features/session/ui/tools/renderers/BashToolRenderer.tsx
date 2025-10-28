@@ -8,7 +8,7 @@
  */
 
 import { Terminal } from 'lucide-react';
-import { BaseToolRenderer, CopyButton } from '../components';
+import { BaseToolRenderer } from '../components';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
@@ -16,47 +16,47 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { command, description } = toolUse.input;
   const isError = toolResult?.is_error;
 
+  // Show command, optionally prefixed by description
+  const commandPreview = command.length > 60 ? command.substring(0, 60) + '...' : command;
+
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={<Terminal className="w-4 h-4 text-info" />}
+      icon={<Terminal className="w-4 h-4 text-primary/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor="info"
-      renderMetadata={() => (
-        <div className="px-2 py-1 flex items-start justify-between gap-2">
-          <div className="flex-1">
-            {description && (
-              <div className="text-xs text-muted-foreground mb-1">{description}</div>
-            )}
-            <code className="text-xs font-mono bg-muted/30 text-success px-2 py-1 rounded block">
-              $ {command}
-            </code>
-          </div>
-          <CopyButton text={command} label="Copy" size="sm" />
-        </div>
+      renderSummary={() => (
+        <>
+          {description && <span className="text-[12px] text-muted-foreground">{description} → </span>}
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-primary/15 text-primary rounded font-medium">
+            {commandPreview}
+          </span>
+        </>
       )}
       renderContent={({ toolResult }) => {
         if (!toolResult) return null;
 
+        // Extract output content
+        const output = typeof toolResult.content === 'object'
+          ? JSON.stringify(toolResult.content, null, 2)
+          : toolResult.content;
+
         return (
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Output:</div>
-            <pre
-              className={cn(
-                'p-2 rounded font-mono text-xs overflow-x-auto scrollbar-vibrancy',
-                'max-h-[200px] overflow-y-auto',
-                isError
-                  ? 'bg-destructive/10 text-destructive border border-destructive/30'
-                  : 'bg-muted/30 text-success border border-border/40'
-              )}
-            >
-              {typeof toolResult.content === 'object'
-                ? JSON.stringify(toolResult.content, null, 2)
-                : toolResult.content}
-            </pre>
-          </div>
+          <pre
+            className={cn(
+              'p-4 rounded-lg font-mono text-[13px] overflow-x-auto whitespace-pre-wrap',
+              'max-h-[400px] overflow-y-auto border',
+              isError
+                ? 'bg-destructive/15 text-destructive-foreground border-destructive/30'
+                : 'bg-muted/80 text-foreground border-border/60'
+            )}
+          >
+            <code>
+              <span className="text-success font-semibold">$ {command}</span>
+              {'\n'}
+              {output}
+            </code>
+          </pre>
         );
       }}
     />

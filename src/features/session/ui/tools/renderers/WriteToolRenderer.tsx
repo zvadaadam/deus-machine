@@ -14,27 +14,30 @@ import { detectLanguageFromPath } from '../utils/detectLanguage';
 
 export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, content } = toolUse.input;
+  const fileName = file_path.split('/').pop() || file_path;
+  const lineCount = content.split('\n').length;
 
   return (
     <BaseToolRenderer
       toolName="Write File"
-      icon={<FilePlus className="w-4 h-4 text-success" />}
+      icon={<FilePlus className="w-4 h-4 text-success/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor="success"
-      backgroundColor="bg-success/5"
-      renderMetadata={() => <FilePathDisplay path={file_path} />}
+      renderSummary={() => (
+        <>
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/60 rounded font-medium">
+            {fileName}
+          </span>
+          <span className="text-[12px] text-muted-foreground"> • {lineCount} lines</span>
+        </>
+      )}
       renderContent={() => (
-        <div>
-          <div className="text-xs text-muted-foreground mb-1">Content:</div>
-          <CodeBlock
-            code={content}
-            language={detectLanguageFromPath(file_path)}
-            showLineNumbers={true}
-            maxHeight="300px"
-          />
-        </div>
+        <CodeBlock
+          code={content}
+          language={detectLanguageFromPath(file_path)}
+          showLineNumbers={true}
+          maxHeight="300px"
+        />
       )}
     />
   );

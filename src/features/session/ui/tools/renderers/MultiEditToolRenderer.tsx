@@ -23,8 +23,8 @@ interface Edit {
 
 export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, edits } = toolUse.input;
-  const isError = toolResult?.is_error;
   const editCount = edits?.length || 0;
+  const fileName = file_path.split('/').pop() || file_path;
 
   // Single clipboard util + per-item key to localize feedback
   const { copy } = useCopyToClipboard();
@@ -39,18 +39,14 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Multi Edit"
-      icon={<FilePenLine className="w-4 h-4 text-success" />}
+      icon={<FilePenLine className="w-4 h-4 text-success/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor={isError ? 'error' : 'success'}
-      backgroundColor={isError ? 'bg-destructive/5' : undefined}
       renderSummary={() => (
-        <span className="text-xs text-muted-foreground ml-2">
-          {editCount} edit{editCount !== 1 ? 's' : ''}
+        <span className="font-mono">
+          {fileName} • {editCount} edit{editCount !== 1 ? 's' : ''}
         </span>
       )}
-      renderMetadata={() => <FilePathDisplay path={file_path} />}
       renderContent={() => {
         if (!edits || edits.length === 0) {
           return (
