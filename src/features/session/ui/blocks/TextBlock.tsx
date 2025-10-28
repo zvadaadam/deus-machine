@@ -98,9 +98,9 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
         // Links
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
         // Code
-        'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:before:content-none prose-code:after:content-none',
+        'prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:font-medium prose-code:before:content-none prose-code:after:content-none',
         // Code blocks
-        'prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:p-0 prose-pre:m-0',
+        'prose-pre:bg-muted/70 prose-pre:border prose-pre:border-border/60 prose-pre:rounded-lg prose-pre:p-0 prose-pre:m-0',
         // Lists
         'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
         // Blockquotes
