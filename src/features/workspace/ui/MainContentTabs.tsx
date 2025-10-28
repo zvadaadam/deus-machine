@@ -1,6 +1,14 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { BranchName, OpenInDropdown } from '@/shared/components';
 import { cn } from '@/shared/lib/utils';
 
 /**
@@ -45,6 +53,11 @@ interface MainContentTabsProps {
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
   children: React.ReactNode;
+  // Workspace context (merged from WorkspaceHeader)
+  branch?: string;
+  workspacePath?: string;
+  isBrowserOpen?: boolean;
+  onBrowserToggle?: () => void;
 }
 
 /**
@@ -72,6 +85,10 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  branch,
+  workspacePath,
+  isBrowserOpen,
+  onBrowserToggle,
 }: Omit<MainContentTabsProps, 'children'>) {
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
 
@@ -89,8 +106,17 @@ export function MainContentTabBar({
   };
 
   return (
-    <div className="flex items-center border-b border-border bg-background flex-shrink-0">
-      <div className="flex items-center flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+    <div className="flex items-center border-b border-border/50 bg-background flex-shrink-0 px-4 py-2 gap-4">
+      {/* LEFT: Sidebar trigger + Branch name */}
+      {branch && (
+        <div className="flex items-center gap-2">
+          <SidebarTrigger />
+          <BranchName branch={branch} compact />
+        </div>
+      )}
+
+      {/* MIDDLE: Tabs */}
+      <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isHovered = tab.id === hoveredTabId;
@@ -151,6 +177,30 @@ export function MainContentTabBar({
           </Button>
         )}
       </div>
+
+      {/* RIGHT: Action buttons */}
+      <div className="flex items-center gap-1">
+        {onBrowserToggle && (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isBrowserOpen ? "default" : "ghost"}
+                  size="icon"
+                  onClick={onBrowserToggle}
+                  className="transition-colors duration-200"
+                >
+                  <Globe className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">{isBrowserOpen ? 'Close browser' : 'Open browser'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
+      </div>
     </div>
   );
 }
@@ -166,6 +216,10 @@ export function MainContentTabs({
   onTabClose,
   onTabAdd,
   children,
+  branch,
+  workspacePath,
+  isBrowserOpen,
+  onBrowserToggle,
 }: MainContentTabsProps) {
   return (
     <div className="flex flex-col h-full">
@@ -175,6 +229,10 @@ export function MainContentTabs({
         onTabChange={onTabChange}
         onTabClose={onTabClose}
         onTabAdd={onTabAdd}
+        branch={branch}
+        workspacePath={workspacePath}
+        isBrowserOpen={isBrowserOpen}
+        onBrowserToggle={onBrowserToggle}
       />
       <div className="flex-1 min-h-0 overflow-hidden">
         {children}

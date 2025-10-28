@@ -7,6 +7,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ExternalLink, ChevronRight } from "lucide-react";
 
 interface InstalledApp {
@@ -17,9 +23,10 @@ interface InstalledApp {
 
 interface OpenInDropdownProps {
   workspacePath: string;
+  iconOnly?: boolean;
 }
 
-export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
+export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdownProps) {
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -81,23 +88,27 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
     return null;
   }
 
-  return (
+  const dropdownMenu = (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 px-3"
+          variant={iconOnly ? "ghost" : "outline"}
+          size={iconOnly ? "icon" : "sm"}
+          className={iconOnly ? "" : "gap-2 px-3"}
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
           <ExternalLink className="h-4 w-4" />
-          <span className="text-sm">Open in</span>
-          <ChevronRight
-            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ease-out ${
-              open ? 'rotate-90' : 'rotate-0'
-            }`}
-          />
+          {!iconOnly && (
+            <>
+              <span className="text-sm">Open in</span>
+              <ChevronRight
+                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ease-out ${
+                  open ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
+            </>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -119,4 +130,21 @@ export function OpenInDropdown({ workspacePath }: OpenInDropdownProps) {
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  if (iconOnly) {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {dropdownMenu}
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">Open in VSCode, Cursor...</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return dropdownMenu;
 }

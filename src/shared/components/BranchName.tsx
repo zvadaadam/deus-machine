@@ -9,9 +9,10 @@ import {
 
 interface BranchNameProps {
   branch: string;
+  compact?: boolean;
 }
 
-export function BranchName({ branch }: BranchNameProps) {
+export function BranchName({ branch, compact = false }: BranchNameProps) {
   const [copied, setCopied] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -54,14 +55,16 @@ export function BranchName({ branch }: BranchNameProps) {
               onClick={handleCopy}
               onPointerEnter={() => !copied && setTooltipOpen(true)}
               onPointerLeave={() => !copied && setTooltipOpen(false)}
-              className="flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 -ml-2 transition-colors duration-200"
+              className={`flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md transition-colors duration-200 ${
+                compact ? 'px-2 py-1' : 'px-2 py-1 -ml-2'
+              }`}
             >
               {copied ? (
-                <Check className="h-4 w-4 text-success transition-colors duration-200" />
+                <Check className={`text-success transition-colors duration-200 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
               ) : (
-                <GitBranch className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors duration-200" />
+                <GitBranch className={`text-muted-foreground group-hover:text-foreground transition-colors duration-200 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
               )}
-              <span className="text-base font-mono font-semibold">{branch}</span>
+              <span className={`font-mono font-semibold ${compact ? 'text-sm' : 'text-base'}`}>{branch}</span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -69,16 +72,18 @@ export function BranchName({ branch }: BranchNameProps) {
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
-              Isolated
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[240px]">
-            <p className="text-xs">This is an isolated Git worktree. Safe to experiment. Changes won't affect your main branch.</p>
-          </TooltipContent>
-        </Tooltip>
+        {!compact && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded-md cursor-default">
+                Isolated
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[240px]">
+              <p className="text-xs">This is an isolated Git worktree. Safe to experiment. Changes won't affect your main branch.</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   );
