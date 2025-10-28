@@ -46,7 +46,6 @@ import { Separator } from "@/components/ui/separator";
 import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 import type {
   Workspace,
@@ -303,21 +302,17 @@ function MainContent({
         {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
         {selectedWorkspace ? (
           <div className="flex flex-col h-full overflow-hidden border-r border-border/40">
-            {/* 1. Workspace Header - Fixed height (branch name, browser button) */}
-            <WorkspaceHeader
-              branch={selectedWorkspace.branch}
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              onBrowserToggle={handleBrowserToggle}
-              showBrowserButton={true}
-            />
-
-            {/* 2. Tab Bar - Fixed height (Chat #1, Chat #2, +) */}
+            {/* Tab Bar with integrated workspace header (branch name, browser button, tabs) */}
             <MainContentTabBar
               tabs={mainTabs}
               activeTabId={activeMainTabId}
               onTabChange={handleMainTabChange}
               onTabClose={handleMainTabClose}
               onTabAdd={handleMainTabAdd}
+              branch={selectedWorkspace.branch}
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+              isBrowserOpen={isBrowserOpen}
+              onBrowserToggle={handleBrowserToggle}
             />
 
             {/* 3. Tab Content - Flexible height, scrollable (renders based on active tab type) */}
