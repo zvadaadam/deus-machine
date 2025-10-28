@@ -137,12 +137,18 @@ export function MarkdownRenderer({
   };
 
   // Use MarkdownHooks for client-side async plugins (Shiki)
+  // Fallback prevents flash during async processing
   return (
     <article className={cn(proseClassName, className)}>
       <MarkdownHooks
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
         components={components}
+        fallback={
+          <div className="text-muted-foreground/60 text-sm animate-pulse">
+            {children}
+          </div>
+        }
       >
         {children}
       </MarkdownHooks>
