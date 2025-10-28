@@ -34,17 +34,17 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Edit"
-      icon={<FileEdit className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
+      icon={<FileEdit className="w-4 h-4 text-warning/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono">
+        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
           {fileName} •{' '}
           {(added > 0 || removed > 0) && (
             <>
-              <span className="text-green-600">+{added}</span>
+              <span className="text-success font-semibold">+{added}</span>
               {' '}
-              <span className="text-red-600">-{removed}</span>
+              <span className="text-destructive font-semibold">-{removed}</span>
             </>
           )}
         </span>
