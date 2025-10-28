@@ -38,16 +38,19 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
-          {fileName} •{' '}
+        <>
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/60 rounded font-medium">
+            {fileName}
+          </span>
           {(added > 0 || removed > 0) && (
-            <>
+            <span className="text-[12px]">
+              {' • '}
               <span className="text-success font-semibold">+{added}</span>
               {' '}
               <span className="text-destructive font-semibold">-{removed}</span>
-            </>
+            </span>
           )}
-        </span>
+        </>
       )}
       renderContent={() => (
         <div className="space-y-2">

@@ -18,9 +18,6 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   // Show command, optionally prefixed by description
   const commandPreview = command.length > 60 ? command.substring(0, 60) + '...' : command;
-  const preview = description
-    ? `${description} → ${commandPreview}`
-    : commandPreview;
 
   return (
     <BaseToolRenderer
@@ -29,9 +26,12 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
-          {preview}
-        </span>
+        <>
+          {description && <span className="text-[12px] text-muted-foreground">{description} → </span>}
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-primary/15 text-primary rounded font-medium">
+            {commandPreview}
+          </span>
+        </>
       )}
       renderContent={({ toolResult }) => {
         if (!toolResult) return null;
