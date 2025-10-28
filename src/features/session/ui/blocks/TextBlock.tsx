@@ -2,7 +2,7 @@
  * Text Block
  *
  * Renders text content blocks from messages with semantic weight.
- * - Assistant messages: Rendered as markdown (secure, Shiki-highlighted)
+ * - Assistant messages: Rendered as markdown (secure, CSS-highlighted for speed)
  * - User messages: Rendered as plain text (user input)
  *
  * Weight variants:
@@ -11,7 +11,7 @@
  * - 'hero': Final summary text (15px, prominent, with top border)
  *
  * Now uses ChatMarkdown component for secure, beautiful rendering with:
- * - Shiki syntax highlighting
+ * - CSS-based syntax highlighting (instant rendering)
  * - Sanitized HTML (security)
  * - Copy buttons on code blocks
  * - Dense IDE-friendly typography

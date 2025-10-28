@@ -783,12 +783,24 @@ mark.diff-word-deletion {
   text-decoration: underline;
   text-decoration-color: color-mix(in oklch, var(--primary) 40%, transparent);
   text-underline-offset: 2px;
-  transition: opacity 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-.markdown-content a:hover {
-  opacity: 0.7;
-  text-decoration-color: var(--primary);
+/* Hover effects only on devices with hover capability (not touch screens) */
+@media (hover: hover) and (pointer: fine) {
+  .markdown-content a {
+    transition: opacity 200ms ease;
+  }
+  .markdown-content a:hover {
+    opacity: 0.7;
+    text-decoration-color: var(--primary);
+  }
+}
+
+/* Disable transitions for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .markdown-content a {
+    transition: none;
+  }
 }
 
 /* Lists - Compact with visible bullets */

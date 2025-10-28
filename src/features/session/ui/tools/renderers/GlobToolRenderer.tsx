@@ -10,7 +10,6 @@
 
 import { FileSearch } from 'lucide-react';
 import { BaseToolRenderer } from '../components';
-import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
 export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {

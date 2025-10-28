@@ -8,7 +8,7 @@
  */
 
 import { Terminal } from 'lucide-react';
-import { BaseToolRenderer, CopyButton } from '../components';
+import { BaseToolRenderer } from '../components';
 import { cn } from '@/shared/lib/utils';
 import type { ToolRendererProps } from '../../chat-types';
 
@@ -51,9 +51,11 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                 : 'bg-muted/80 text-foreground border-border/60'
             )}
           >
-            <div className="text-success font-semibold">$ {command}</div>
-            {'\n'}
-            {output}
+            <code>
+              <span className="text-success font-semibold">$ {command}</span>
+              {'\n'}
+              {output}
+            </code>
           </pre>
         );
       }}

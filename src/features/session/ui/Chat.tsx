@@ -81,7 +81,7 @@ export function Chat({
   messagesContainerRef,
   onStop,
 }: ChatProps) {
-  const { parseContent, toolResultMap } = useSession();
+  const { parseContent } = useSession();
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
