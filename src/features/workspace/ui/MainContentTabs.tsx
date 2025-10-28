@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
@@ -106,13 +107,16 @@ export function MainContentTabBar({
   };
 
   return (
-    <div className="flex items-center border-b border-border/50 bg-background flex-shrink-0 px-4 py-2 gap-4">
+    <div className="flex items-center border-b border-border/50 bg-background flex-shrink-0 px-4 py-2.5 gap-5">
       {/* LEFT: Sidebar trigger + Branch name */}
       {branch && (
-        <div className="flex items-center gap-2">
-          <SidebarTrigger />
-          <BranchName branch={branch} compact />
-        </div>
+        <>
+          <div className="flex items-center gap-2.5">
+            <SidebarTrigger />
+            <BranchName branch={branch} compact />
+          </div>
+          <Separator orientation="vertical" className="h-5 bg-border/30" />
+        </>
       )}
 
       {/* MIDDLE: Tabs */}
@@ -128,11 +132,11 @@ export function MainContentTabBar({
               onMouseEnter={() => setHoveredTabId(tab.id)}
               onMouseLeave={() => setHoveredTabId(null)}
               className={cn(
-                'group relative flex items-center gap-2 px-3 py-2 min-w-[100px] max-w-[180px]',
+                'group relative flex items-center gap-2 px-4 py-2.5 min-w-[100px] max-w-[180px]',
                 'border-r border-border/20',
                 'transition-colors duration-200',
                 'hover:bg-muted/10',
-                isActive ? 'text-foreground' : 'text-muted-foreground/60'
+                isActive ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground/80'
               )}
             >
               {/* Active indicator - subtle top border */}
@@ -169,9 +173,9 @@ export function MainContentTabBar({
         {onTabAdd && (
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={handleAddTab}
-            className="h-8 px-2 shrink-0 border-r border-border/20"
+            className="h-9 w-9 shrink-0"
           >
             <Plus className="w-4 h-4" />
           </Button>
@@ -179,7 +183,7 @@ export function MainContentTabBar({
       </div>
 
       {/* RIGHT: Action buttons */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         {onBrowserToggle && (
           <TooltipProvider delayDuration={200}>
             <Tooltip>
@@ -188,7 +192,10 @@ export function MainContentTabBar({
                   variant={isBrowserOpen ? "default" : "ghost"}
                   size="icon"
                   onClick={onBrowserToggle}
-                  className="transition-colors duration-200"
+                  className={cn(
+                    "h-8 w-8 transition-all duration-200",
+                    !isBrowserOpen && "text-muted-foreground/70 hover:text-foreground"
+                  )}
                 >
                   <Globe className="h-4 w-4" />
                 </Button>

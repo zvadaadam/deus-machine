@@ -55,16 +55,16 @@ export function BranchName({ branch, compact = false }: BranchNameProps) {
               onClick={handleCopy}
               onPointerEnter={() => !copied && setTooltipOpen(true)}
               onPointerLeave={() => !copied && setTooltipOpen(false)}
-              className={`flex items-center gap-2 group hover:bg-accent hover:text-accent-foreground rounded-md transition-colors duration-200 ${
-                compact ? 'px-2 py-1' : 'px-2 py-1 -ml-2'
+              className={`flex items-center group hover:bg-accent hover:text-accent-foreground rounded-md transition-colors duration-200 ${
+                compact ? 'gap-1.5 px-2 py-1' : 'gap-2 px-2 py-1 -ml-2'
               }`}
             >
               {copied ? (
                 <Check className={`text-success transition-colors duration-200 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
               ) : (
-                <GitBranch className={`text-muted-foreground group-hover:text-foreground transition-colors duration-200 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+                <GitBranch className={`transition-colors duration-200 ${compact ? 'h-3.5 w-3.5 text-muted-foreground/70' : 'h-4 w-4 text-muted-foreground'} group-hover:text-foreground`} />
               )}
-              <span className={`font-mono font-semibold ${compact ? 'text-sm' : 'text-base'}`}>{branch}</span>
+              <span className={`font-mono ${compact ? 'text-sm font-medium text-muted-foreground/90' : 'text-base font-semibold'}`}>{branch}</span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
