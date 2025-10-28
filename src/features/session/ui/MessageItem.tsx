@@ -23,9 +23,10 @@ type ParsedContent = (ContentBlock | string)[] | string | null;
 
 interface MessageItemProps {
   message: Message;
+  isLatestAssistant?: boolean; // Whether this is the latest assistant message
 }
 
-export const MessageItem = memo(function MessageItem({ message }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, isLatestAssistant = false }: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
 
@@ -87,6 +88,65 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
     ? chatTheme.message.user
     : chatTheme.message.assistant;
 
+  // Find last text block index for weight (assistant messages only)
+  const findLastTextBlockIndex = (blocks: (ContentBlock | string)[]) => {
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const block = blocks[i];
+      if (typeof block === 'string' || (typeof block === 'object' && block?.type === 'text')) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const lastTextBlockIndex = Array.isArray(contentBlocks) && message.role === 'assistant'
+    ? findLastTextBlockIndex(contentBlocks as (ContentBlock | string)[])
+    : -1;
+
+  // Assistant messages - use BlockRenderer with weight
+  if (message.role === 'assistant') {
+    return (
+      <div
+        key={message.id}
+        className={cn(
+          'relative group',
+          roleStyles.maxWidth,
+          roleStyles.container,
+          'flex flex-col gap-2 min-w-0 overflow-x-hidden',
+          chatTheme.common.transition
+        )}
+      >
+        {Array.isArray(contentBlocks) ? (
+          contentBlocks.map((block: ContentBlock | string, index: number) => {
+            // Generate unique key: use tool_use id if available, otherwise fallback to index
+            const key = typeof block === 'object' && block?.type === 'tool_use'
+              ? block.id
+              : `${message.id}:${index}`;
+
+            // Determine if this is the last text block (for weight)
+            const isLastTextBlock = index === lastTextBlockIndex;
+
+            return (
+              <BlockRenderer
+                key={key}
+                block={block}
+                index={index}
+                role={message.role}
+                isLastTextBlock={isLastTextBlock}
+              />
+            );
+          })
+        ) : (
+          // Fallback for non-array content
+          <div className="text-base leading-relaxed">
+            {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // User messages (original rendering)
   return (
     <div
       key={message.id}
@@ -94,59 +154,57 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
         'relative group',
         roleStyles.maxWidth,
         roleStyles.container,
-        message.role === 'user' ? 'rounded-3xl px-4 py-4' : 'px-0 py-0',
+        'rounded-3xl px-4 py-4',
         'flex flex-col gap-2 min-w-0 overflow-x-hidden',
         chatTheme.common.transition
       )}
     >
       {/* Hover action buttons - only for user messages */}
-      {message.role === 'user' && (
-        <TooltipProvider delayDuration={200}>
-          <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            {/* Copy button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleCopy}
-                  className={cn(
-                    'h-7 w-7 flex items-center justify-center rounded-md',
-                    'bg-card hover:bg-muted border border-border shadow-sm',
-                    'text-muted-foreground hover:text-foreground',
-                    'transition-colors duration-200'
-                  )}
-                  aria-label="Copy message"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>{copied ? 'Copied!' : 'Copy Message'}</p>
-              </TooltipContent>
-            </Tooltip>
+      <TooltipProvider delayDuration={200}>
+        <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          {/* Copy button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  'h-7 w-7 flex items-center justify-center rounded-md',
+                  'bg-card hover:bg-muted border border-border shadow-sm',
+                  'text-muted-foreground hover:text-foreground',
+                  'transition-colors duration-200'
+                )}
+                aria-label="Copy message"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{copied ? 'Copied!' : 'Copy Message'}</p>
+            </TooltipContent>
+          </Tooltip>
 
-            {/* Revert button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleRevert}
-                  className={cn(
-                    'h-7 w-7 flex items-center justify-center rounded-md',
-                    'bg-card hover:bg-muted border border-border shadow-sm',
-                    'text-muted-foreground hover:text-foreground',
-                    'transition-colors duration-200'
-                  )}
-                  aria-label="Revert to this turn"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>Revert to this turn</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-      )}
+          {/* Revert button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleRevert}
+                className={cn(
+                  'h-7 w-7 flex items-center justify-center rounded-md',
+                  'bg-card hover:bg-muted border border-border shadow-sm',
+                  'text-muted-foreground hover:text-foreground',
+                  'transition-colors duration-200'
+                )}
+                aria-label="Revert to this turn"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>Revert to this turn</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
 
       {/* Message content - uses BlockRenderer */}
       <div className="flex flex-col min-w-0">

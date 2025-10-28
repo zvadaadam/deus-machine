@@ -22,15 +22,36 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   const { file_path, old_string, new_string } = toolUse.input;
 
+  // Extract filename
+  const fileName = file_path.split('/').pop() || file_path;
+
+  // Calculate diff stats
+  const oldLines = old_string.split('\n').length;
+  const newLines = new_string.split('\n').length;
+  const added = Math.max(0, newLines - oldLines);
+  const removed = Math.max(0, oldLines - newLines);
+
   return (
     <BaseToolRenderer
       toolName="Edit"
-      icon={<FileEdit className="w-4 h-4 text-primary" />}
+      icon={<FileEdit className="w-4 h-4 text-warning/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={true}
-      borderColor="info"
-      renderMetadata={() => <FilePathDisplay path={file_path} />}
+      renderSummary={() => (
+        <>
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/60 rounded font-medium">
+            {fileName}
+          </span>
+          {(added > 0 || removed > 0) && (
+            <span className="text-[12px]">
+              {' • '}
+              <span className="text-success font-semibold">+{added}</span>
+              {' '}
+              <span className="text-destructive font-semibold">-{removed}</span>
+            </span>
+          )}
+        </>
+      )}
       renderContent={() => (
         <div className="space-y-2">
           {/* Diff View */}

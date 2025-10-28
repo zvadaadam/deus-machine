@@ -53,28 +53,30 @@ export const chatTheme = {
   blocks: {
     // Tool blocks (tool_use, tool_result)
     tool: {
-      container: 'bg-sidebar-accent/30 rounded-md border border-border/40 backdrop-blur-sm',
-      header: 'flex items-center gap-1.5 mb-1.5 font-semibold text-xs text-foreground',
-      content: 'p-2 rounded font-mono text-xs leading-snug overflow-x-auto whitespace-pre-wrap break-words',
-      icon: 'text-sm inline-flex items-center flex-shrink-0',
+      container: 'bg-transparent rounded-md border border-border/40 backdrop-blur-sm',
+      header: 'flex items-center gap-1.5 font-semibold text-[13px] text-foreground',
+      content: 'p-2 rounded font-mono text-[12px] leading-relaxed overflow-x-auto whitespace-pre-wrap break-words',
+      icon: 'w-4 h-4 inline-flex items-center flex-shrink-0',
       borderLeft: {
-        default: 'border-l-2 border-l-primary',
+        default: 'border-l-2 border-l-border',
+        primary: 'border-l-2 border-l-primary',
         success: 'border-l-2 border-l-success',
         error: 'border-l-2 border-l-destructive',
         info: 'border-l-2 border-l-info',
+        warning: 'border-l-2 border-l-warning',
       },
     },
 
-    // Text blocks
+    // Text blocks (px-2 to align with tool call headers)
     text: {
-      container: 'flex flex-col gap-1.5',
+      container: 'flex flex-col gap-1.5 px-2',
       content: 'm-0 leading-relaxed text-foreground text-base font-sans break-words',
     },
 
     // Code blocks
     code: {
-      container: 'relative group rounded overflow-hidden',
-      pre: 'bg-sidebar-accent/40 p-3 rounded overflow-x-auto m-0 font-mono text-sm',
+      container: 'relative group rounded-lg overflow-hidden border border-border/60',
+      pre: 'bg-muted/70 p-4 rounded-lg overflow-x-auto m-0 font-mono text-sm',
       lineNumbers: 'text-muted-foreground select-none pr-4 border-r border-border/40',
       copyButton: 'absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
     },
