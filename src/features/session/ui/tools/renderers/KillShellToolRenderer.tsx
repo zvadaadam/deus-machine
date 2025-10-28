@@ -19,20 +19,13 @@ export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Kill Background Process"
-      icon={<XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />}
+      icon={<XCircle className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor={isError ? 'error' : 'warning'}
-      backgroundColor="bg-destructive/5"
-      renderMetadata={() => (
-        <div className="px-2 pb-1 space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <Terminal className="w-3 h-3 text-red-600 dark:text-red-400" aria-hidden="true" />
-            <span className="text-muted-foreground">Shell ID:</span>
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{shell_id}</code>
-          </div>
-        </div>
+      renderSummary={() => (
+        <span className="font-mono text-[12px] text-muted-foreground">
+          shell {shell_id.substring(0, 6)}
+        </span>
       )}
       renderContent={() => {
         if (!toolResult) return null;

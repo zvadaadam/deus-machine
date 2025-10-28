@@ -37,13 +37,12 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Grep Search"
-      icon={<Search className="w-4 h-4 text-info/70" />}
+      icon={<Search className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono">
-          {pattern} in {glob || fileType || pathPreview}
-          {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
+        <span className="font-mono text-[12px] text-muted-foreground">
+          {pattern} in {glob || fileType || pathPreview}{matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
         </span>
       )}
       renderContent={({ toolResult }) => {
@@ -53,15 +52,14 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         }
 
         return (
-          <div className="space-y-1 px-2 pb-2">
-            <div className="text-xs text-muted-foreground">Results:</div>
+          <div className="px-2 pb-2">
             <pre
               className={cn(
                 chatTheme.blocks.tool.content,
                 'max-h-[300px] overflow-y-auto scrollbar-vibrancy',
                 isError
                   ? 'bg-destructive/10 text-destructive border border-destructive/30'
-                  : 'bg-sidebar-accent/40 text-foreground border border-border/40'
+                  : 'bg-muted/50 text-foreground border border-border'
               )}
             >
               {typeof toolResult.content === 'object'

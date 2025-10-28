@@ -29,15 +29,12 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         </span>
       )}
       renderContent={() => (
-        <div>
-          <div className="text-xs text-muted-foreground mb-1">Content:</div>
-          <CodeBlock
-            code={content}
-            language={detectLanguageFromPath(file_path)}
-            showLineNumbers={true}
-            maxHeight="300px"
-          />
-        </div>
+        <CodeBlock
+          code={content}
+          language={detectLanguageFromPath(file_path)}
+          showLineNumbers={true}
+          maxHeight="300px"
+        />
       )}
     />
   );

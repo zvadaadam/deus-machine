@@ -24,57 +24,22 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
 
   const hasResult = result && result.trim().length > 0;
 
+  // Build filter info for preview
+  const filterInfo = [];
+  if (allowed_domains?.length) filterInfo.push(`only: ${allowed_domains.join(', ')}`);
+  if (blocked_domains?.length) filterInfo.push(`exclude: ${blocked_domains.join(', ')}`);
+  const filterText = filterInfo.length ? ` • ${filterInfo.join(' • ')}` : '';
+
   return (
     <BaseToolRenderer
       toolName="Web Search"
-      icon={<Search className="w-4 h-4 text-info-foreground" />}
+      icon={<Search className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor={isError ? 'error' : 'info'}
-      backgroundColor={isError ? 'bg-destructive/5' : 'bg-info/5'}
       renderSummary={() => (
-        query && (
-          <span className="text-xs text-muted-foreground ml-2 truncate">
-            "{query}"
-          </span>
-        )
-      )}
-      renderMetadata={() => (
-        <div className="px-2 pb-1 space-y-1">
-          {query && (
-            <div className="flex items-start gap-2 text-sm">
-              <Search className="w-3 h-3 text-info-foreground mt-0.5 flex-shrink-0" aria-hidden="true" />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-info-foreground break-words">
-                  "{query}"
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Domain filters */}
-          {(allowed_domains || blocked_domains) && (
-            <div className="text-xs space-y-0.5">
-              {allowed_domains && allowed_domains.length > 0 && (
-                <div className="flex items-start gap-1.5">
-                  <span className="text-muted-foreground">Only:</span>
-                  <span className="text-success font-mono">
-                    {allowed_domains.join(', ')}
-                  </span>
-                </div>
-              )}
-              {blocked_domains && blocked_domains.length > 0 && (
-                <div className="flex items-start gap-1.5">
-                  <span className="text-muted-foreground">Exclude:</span>
-                  <span className="text-destructive font-mono">
-                    {blocked_domains.join(', ')}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <span className="text-[12px] text-muted-foreground truncate">
+          "{query}"{filterText}
+        </span>
       )}
       renderContent={() => {
         // No result message
@@ -89,7 +54,6 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
         // Result display
         return (
           <div className="px-2 pb-2">
-            <div className="text-xs text-muted-foreground mb-1">Search Results:</div>
             <div
               className={cn(
                 'p-3 rounded overflow-x-auto',
