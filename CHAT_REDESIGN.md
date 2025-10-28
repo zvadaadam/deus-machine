@@ -1,233 +1,303 @@
 # Chat Interface Redesign: Scannable Action Timeline
 
-## Design Philosophy
+## Design Philosophy (Jony Ive Principles)
 
 **Mental Model:** Claude is a coworker showing you their work. Each tool call is a moment in Claude's work that should be instantly readable, answering: "What did Claude do, and what was the impact?"
 
+**Core Philosophy:**
+> "Simplicity is not the absence of clutter... it's about bringing order to complexity."
+> — Jony Ive
+
+We create clarity through **subtraction**, not addition. Every element must earn its place by serving the content.
+
 ## Core Principles
 
-1. **Instant Scannability** - User should understand what happened in 5 seconds
-2. **Visual Language** - Icons + verbs + previews = self-explanatory actions
-3. **Progressive Disclosure** - More detail only when needed
-4. **Semantic Weight** - Important content (final summary) stands out, transitional content recedes
+1. **Pure Content** - Remove all decoration. No backgrounds, no borders unless meaningful
+2. **Semantic Color** - Color conveys meaning (green = added, red = removed/error), never decoration
+3. **Assume Success** - Only show errors. Success is the default, silence is confirmation
+4. **No Duplication** - Preview disappears when expanded. Don't repeat information
+5. **Typography Hierarchy** - Weight, size, and opacity create structure, not boxes
+6. **Inevitable Interaction** - Subtle, responsive, feels natural (opacity not backgrounds)
 
 ## Tool Call Card Anatomy
 
-### Level 1: Inline Preview (Default State)
+### Collapsed (Default State)
 
-Every tool renders as a single-line preview card:
+Every tool renders as a minimal single line:
 
 ```
-[📄] Read auth.ts • 45 lines
-[✏️] Edit login.tsx • +12 -3
-[🧠] Thinking • "First I need to check..."
-[⚙️] Run npm test • ✓ 4 passed
+> [📄] Read • auth.ts • 45 lines
+> [✏️] Edit • login.tsx • +12 -3
+> [🧠] Thinking • "I need to check the authentication flow and understand how the current..."
+> [⚙️] Bash • Run tests
 ```
 
 **Design Specs:**
-- Height: ~32px with padding
-- Background: transparent or bg-muted/10
-- Border: 1px border-border/20
-- Border-left: 2px colored (semantic)
-- Icon: 16px, left side
-- Text: 13px medium
-- Preview: 12px regular, text-muted-foreground
-- Padding: 6px 12px
-- Hover: bg-muted/20
-- Cursor: pointer
+- **Background:** Transparent (no decoration)
+- **Border:** None (pure content)
+- **Icon:** 16px, muted color (text-muted-foreground/70)
+- **Chevron:** 12px, muted (text-muted-foreground/50), rotates on expand
+- **Name:** 13px font-medium
+- **Preview:** 12px, text-muted-foreground, monospace for paths
+- **Status:** Only shown for errors (`✗ Error` in destructive red)
+- **Padding:** 6px 8px (minimal)
+- **Hover:** opacity-80 (200ms transition, subtle feedback)
+- **Cursor:** pointer
 
-### Level 2: Compact Expanded (On Click)
+**Color Rules:**
+- Icon: Muted gray (text-muted-foreground/70) or error red for failures
+- Preview text: text-muted-foreground
+- File paths: font-mono (distinguishes paths from descriptions)
+- Diff stats: Green (+12) and red (-3) for semantic meaning
+- Error indicator: text-destructive
 
-Shows content preview (max 200px, then scroll or "show more")
+### Expanded (On Click)
 
-### Level 3: Fully Expanded
+Shows **only the content**, preview disappears (no duplication):
 
-Full content, no truncation
+```
+> [📄] Read • auth.ts • 45 lines
+
+    [CODE BLOCK with syntax highlighting]
+    import { OAuth } from './oauth';
+    ...
+```
+
+**Content Display:**
+- Indented 20px from left (ml-5)
+- CodeBlock with syntax highlighting (for Read)
+- Diff view with ± lines (for Edit)
+- Command + output (for Bash: `$ command\n\noutput`)
+- Full thinking text (for Thinking)
+- Max height 400px with scroll for long content
 
 ## Tool-Specific Preview Rules
 
 ### Read Tool
 ```
-Icon: FileText (lucide-react)
-Verb: "Read"
-Preview: "{filename} • {lineCount} lines" OR "{filename} • Lines {start}-{end}"
-Border: primary (blue)
+Icon: FileText (text-muted-foreground/70)
+Name: "Read"
+Preview: "{filename} • {lineCount} lines" (font-mono)
+Expanded: Full file content with syntax highlighting + line numbers
+Error: Show error message in destructive color
 ```
+
+**Example:**
+- Collapsed: `> 📄 Read • auth.ts • 45 lines`
+- Expanded: Shows CodeBlock with syntax highlighting, no repeated header
 
 ### Edit/MultiEdit Tool
 ```
-Icon: Pencil (lucide-react)
-Verb: "Edit"
-Preview: "{filename} • +{additions} -{deletions}"
-Border: success (green)
+Icon: Pencil (text-muted-foreground/70)
+Name: "Edit"
+Preview: "{filename} • +{added} -{removed}" (font-mono, colored stats)
+Expanded: Diff view (before/after) with copy buttons
+Error: Show error message in destructive color
 ```
+
+**Example:**
+- Collapsed: `> ✏️ Edit • login.tsx • +12 -3` (green/red numbers)
+- Expanded: Shows before/after diff, no repeated header
 
 ### Bash Tool
 ```
-Icon: Terminal (lucide-react)
-Verb: "Run"
-Preview: "{command} • {✓/✗} {exitCode}"
-Border: warning (amber)
+Icon: Terminal (text-muted-foreground/70)
+Name: "Bash"
+Preview: {description} OR first 50 chars of {command}
+Expanded: $ {command}\n\n{output}
+Error: Output in destructive color with border
 ```
+
+**Example:**
+- Collapsed: `> ⚙️ Bash • Run tests` (uses description field)
+- Expanded: Shows command + output, no repeated header
 
 ### Grep/Glob Tool
 ```
-Icon: Search (lucide-react)
-Verb: "Search"
-Preview: "{pattern} • {resultCount} matches"
-Border: primary (blue)
-```
-
-### TodoWrite Tool
-```
-Icon: CheckSquare (lucide-react)
-Verb: "Updated todos"
-Preview: "{completedCount}/{totalCount} complete • Working on: {currentTodo}"
-Border: primary (blue)
+Icon: Search (text-muted-foreground/70)
+Name: "Grep" or "Glob"
+Preview: "{pattern}"
+Expanded: Matching files/lines
 ```
 
 ### Thinking Tool
 ```
-Icon: Brain (lucide-react)
-Verb: "Thinking"
-Preview: First sentence (max 60 chars) + "..."
-Border: purple
-Special: Distinct color to show it's mental process, not action
+Icon: Brain (text-purple-600/70) — special color for reasoning
+Name: "Thinking"
+Preview: First 120 chars (width-based, not sentence-based)
+Expanded: Full thinking text (preview disappears!)
 ```
 
-### Task/Agent Tool
-```
-Icon: Bot (lucide-react)
-Verb: "Started agent"
-Preview: "{agentType} • {status}"
-Border: primary (blue)
-```
+**Example:**
+- Collapsed: `> 🧠 Thinking • "I need to check the authentication flow and understand how the current session..."`
+- Expanded: Shows full thinking text, preview is hidden (no duplication)
 
-### Unknown/MCP Tools
+### Other Tools (TodoWrite, Task, WebFetch, etc.)
 ```
-Icon: Wrench (lucide-react)
-Verb: Tool name
-Preview: "View details →"
-Border: muted
+Icon: Appropriate icon (text-muted-foreground/70)
+Name: Tool name
+Preview: Contextual summary from tool input
+Expanded: Tool-specific content
 ```
 
 ## Text Block Visual Weight
 
-### Muted Text (Between Tools)
+Text blocks use **typography hierarchy** (not boxes) to show importance.
+
+### Muted Text (Transitional Commentary)
 ```
-Purpose: Transitional commentary
-Font size: 13px
-Line height: 1.5
+Purpose: Between-tool explanations ("Let me check the auth flow...")
 Color: text-muted-foreground
 Opacity: 0.7
-Padding: 4px 0
+Font size: 13px (prose-sm)
+Line height: 1.5
+Weight: 'muted' prop
 ```
 
-### Hero Text (Final Summary)
+**Why muted:** This text bridges actions but isn't the main message.
+
+### Normal Text (Final Summary)
 ```
-Purpose: Conclusion/explanation
-Font size: 16px
+Purpose: Conclusion/explanation ("I've updated the authentication...")
+Color: text-foreground (full brightness)
+Opacity: 1.0
+Font size: 15px (prose-base)
 Line height: 1.7
-Color: text-foreground
-Padding: 16px 0
-Border-top: 1px border-border/20
-Margin-top: 12px
+Weight: 'normal' prop (default)
 ```
 
-## Turn Structure
+**Why normal:** This is the key takeaway — what Claude accomplished and why it matters.
 
-### Latest Turn (Active)
+**Implementation:** TextBlock component detects if it's the last text block in the message and applies the appropriate weight.
+
+## Turn Structure (Pure Content)
+
+All messages render as a clean, flat list — no cards, no wrapper decorations.
+
+### Assistant Message Layout
 ```
-┌─────────────────────────────────────────────────────┐
-│ Assistant                                           │
-│                                                     │
-│ [📄] Read auth.ts • 45 lines                       │ ← Tool previews
-│ [📄] Read login.tsx • 67 lines                     │
-│ [🧠] Thinking • "First I need to check the..."    │
-│                                                     │
-│ Let me update the authentication flow...           │ ← Muted text
-│                                                     │
-│ [✏️] Edit auth.ts • +23 -5                         │
-│ [⚙️] Run npm test • ✓ 4 passed                     │
-│                                                     │
-│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
-│                                                     │
-│ I've successfully updated the authentication       │ ← Hero summary
-│ flow to use OAuth 2.0. All tests are passing.     │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+> 📄 Read • auth.ts • 45 lines
+> 📄 Read • login.tsx • 67 lines
+> 🧠 Thinking • "I need to check the authentication flow..."
+
+Let me update the authentication flow to use OAuth 2.0.
+
+> ✏️ Edit • auth.ts • +23 -5
+> ⚙️ Bash • Run tests
+
+I've successfully updated the authentication flow. All tests are passing.
 ```
 
-### Previous Turn (Collapsed Default)
+**Visual Hierarchy:**
+1. Tool calls (collapsed): Single lines with chevron + icon + preview
+2. Transitional text: Muted gray, smaller (13px)
+3. Final summary: Full brightness, normal size (15px)
+
+**Spacing:**
+- Gap between blocks: 8px (gap-2)
+- No card wrappers
+- No background colors
+- No borders (except for error states)
+
+## Implementation Architecture
+
+### Component Hierarchy
 ```
-┌─────────────────────────────────────────────────────┐
-│ Assistant • 5 actions ▾                            │
-│                                                     │
-│ I've successfully updated the authentication       │ ← Only summary
-│ flow to use OAuth 2.0. All tests are passing.     │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+MessageItem.tsx
+├─ User messages: BlockRenderer
+└─ Assistant messages: BlockRenderer (same!)
+    ├─ TextBlock (with weight: 'muted' | 'normal')
+    ├─ ToolUseBlock → ToolRegistry → Specific Renderer
+    │   └─ BaseToolRenderer (shared infrastructure)
+    │       ├─ ReadToolRenderer (syntax highlighting)
+    │       ├─ EditToolRenderer (diff view)
+    │       ├─ BashToolRenderer (command + output)
+    │       └─ 12+ other renderers
+    └─ ThinkingBlock (special renderer for reasoning)
 ```
 
-## Implementation Components
+### Key Components
 
-### 1. ToolPreview Component
-Single-line preview card that expands on click
+**1. BlockRenderer** (`src/features/session/ui/blocks/BlockRenderer.tsx`)
+- Dispatches content blocks to appropriate renderers
+- Routes `text` → TextBlock
+- Routes `tool_use` → ToolUseBlock → toolRegistry
+- Routes `thinking` → ThinkingBlock
+- Links tool results via toolResultMap
 
-### 2. Tool Preview Data Interface
-```typescript
-interface ToolPreviewData {
-  icon: React.ComponentType;
-  verb: string;
-  preview: string;
-  stats?: string;
-  borderColor: 'primary' | 'warning' | 'success' | 'muted' | 'purple';
-}
-```
+**2. TextBlock** (`src/features/session/ui/blocks/TextBlock.tsx`)
+- Renders markdown with ReactMarkdown
+- Accepts `weight` prop: `'muted'` (transitional) or `'normal'` (final)
+- Weight is auto-detected: last text block = normal, others = muted
 
-### 3. TextBlock with Weight Variants
-Renders text with appropriate visual weight based on semantic position
+**3. BaseToolRenderer** (`src/features/session/ui/tools/components/BaseToolRenderer.tsx`)
+- Shared infrastructure for all tool renderers
+- Provides: expand/collapse, status (error-only), consistent styling
+- Uses render props API: `renderSummary`, `renderMetadata`, `renderContent`
+- Change once → affects all 15 tools!
 
-### 4. AssistantTurn Rebuilt
-- No more "Read 3 files" summary header
-- Shows tool previews in chronological order
-- Muted transitional text
-- Hero final summary
-- Collapsible for previous turns (shows only summary + action count)
+**4. Tool-Specific Renderers** (`src/features/session/ui/tools/renderers/*.tsx`)
+- ReadToolRenderer: File content with syntax highlighting
+- EditToolRenderer: Diff view (before/after)
+- BashToolRenderer: Command + output
+- 12+ more specialized renderers
 
-## Design Tokens
+**5. ThinkingBlock** (`src/features/session/ui/blocks/ThinkingBlock.tsx`)
+- Special renderer for Claude's reasoning
+- Width-based preview (120 chars)
+- Preview hidden when expanded (no duplication)
 
+**6. ToolRegistry** (`src/features/session/ui/tools/ToolRegistry.ts`)
+- Maps tool names → renderers
+- Auto-registers all tools on startup
+- Fallback to DefaultToolRenderer for unknown tools
+
+## Styling Guide
+
+### Colors (Semantic Only)
 ```css
-/* Tool Preview */
---tool-preview-height: 32px;
---tool-preview-padding: 6px 12px;
---tool-preview-border-radius: 6px;
---tool-preview-icon-size: 16px;
+/* Icons */
+--tool-icon-muted: text-muted-foreground/70  /* default tool icons */
+--tool-icon-thinking: text-purple-600/70     /* special: thinking */
+--tool-icon-error: text-destructive          /* errors only */
 
-/* Border Colors */
---tool-border-read: oklch(0.59 0.24 264) / 0.3;      /* primary/30% */
---tool-border-write: oklch(0.65 0.20 145) / 0.3;     /* success/30% */
---tool-border-execute: oklch(0.75 0.15 70) / 0.3;    /* warning/30% */
---tool-border-think: oklch(0.60 0.25 300) / 0.3;     /* purple/30% */
---tool-border-default: var(--border) / 0.2;
+/* Text */
+--preview-text: text-muted-foreground        /* previews, 12px */
+--text-muted: text-muted-foreground          /* transitional, 13px, opacity-70 */
+--text-normal: text-foreground               /* final summary, 15px */
 
-/* Text Weights */
---text-muted-size: 13px;
---text-normal-size: 15px;
---text-hero-size: 16px;
---text-hero-padding: 16px 0;
+/* Semantic colors (meaningful only) */
+--diff-added: text-green-600                 /* +12 lines */
+--diff-removed: text-red-600                 /* -3 lines */
+--error: text-destructive                    /* ✗ Error */
+```
+
+### Spacing & Sizing
+```css
+--tool-icon-size: 16px
+--chevron-size: 12px
+--tool-padding: 6px 8px
+--tool-gap: 8px (gap-2)
+--content-indent: 20px (ml-5)
+--content-max-height: 400px
+```
+
+### Interactions
+```css
+/* Hover: Subtle opacity change (not background) */
+hover:opacity-80
+transition-opacity duration-200
+
+/* Expand/collapse: Smooth rotation */
+transition-transform duration-200
+rotate-90 (when expanded)
 ```
 
 ## Success Criteria
 
-✅ **5-second scan test:** User can scan a turn in 5 seconds and know what happened
-✅ **No mental translation:** Icons + verbs + previews are self-explanatory
-✅ **Progressive disclosure:** User gets more detail only when needed
-✅ **Visual rhythm:** Eye moves smoothly from tools → text → summary
-✅ **Feels alive:** Animations and interactions feel responsive and intentional
-
-## Animation Specs
-
-- Tool preview hover: 150ms cubic-bezier(0.23, 1, 0.32, 1)
-- Expand/collapse: 200ms cubic-bezier(0.23, 1, 0.32, 1)
-- Smooth height transitions with `transition: all 200ms ease-out`
+✅ **5-second scan:** Instantly understand what Claude did
+✅ **No duplication:** Preview → expanded shows content only
+✅ **Semantic color:** Green/red convey meaning, not decoration
+✅ **Assume success:** Silence = success, only show errors
+✅ **Pure content:** No backgrounds, no decorative borders
+✅ **Consistent:** Change BaseToolRenderer once → affects all tools

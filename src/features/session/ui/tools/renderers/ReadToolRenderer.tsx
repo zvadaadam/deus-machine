@@ -15,45 +15,49 @@ import { detectLanguageFromPath } from '../utils/detectLanguage';
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, offset, limit } = toolUse.input;
 
+  // Extract filename from path
+  const fileName = file_path.split('/').pop() || file_path;
+
+  // Count lines from result content
+  const getLineCount = () => {
+    if (!toolResult || toolResult.is_error) return null;
+
+    const content = typeof toolResult.content === 'string'
+      ? toolResult.content
+      : JSON.stringify(toolResult.content, null, 2);
+
+    return content.split('\n').length;
+  };
+
+  const lineCount = getLineCount();
+
   return (
     <BaseToolRenderer
-      toolName="Read File"
-      icon={<FileText className="w-4 h-4 text-info" />}
+      toolName="Read"
+      icon={<FileText className="w-4 h-4 text-muted-foreground/70 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false} // Collapsed by default for Read
-      borderColor="info"
-      renderMetadata={() => (
-        <div className="space-y-1">
-          <FilePathDisplay path={file_path} />
-          {/* Range info */}
-          {(offset !== undefined || limit !== undefined) && (
-            <div className="px-2 text-xs text-muted-foreground">
-              {offset !== undefined && `Offset: ${offset}`}
-              {offset !== undefined && limit !== undefined && ' • '}
-              {limit !== undefined && `Limit: ${limit} ${Number(limit) === 1 ? 'line' : 'lines'}`}
-            </div>
-          )}
-        </div>
+      defaultExpanded={false}
+      renderSummary={() => (
+        <span className="font-mono">
+          {fileName}
+          {lineCount && ` • ${lineCount} lines`}
+        </span>
       )}
-      renderSummary={() => <span>{file_path}</span>}
       renderContent={({ toolResult }) => {
         if (!toolResult || toolResult.is_error) return null;
 
         return (
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Content:</div>
-            <CodeBlock
-              code={
-                typeof toolResult.content === 'object'
-                  ? JSON.stringify(toolResult.content, null, 2)
-                  : toolResult.content
-              }
-              language={detectLanguageFromPath(file_path)}
-              showLineNumbers={true}
-              maxHeight="400px"
-            />
-          </div>
+          <CodeBlock
+            code={
+              typeof toolResult.content === 'object'
+                ? JSON.stringify(toolResult.content, null, 2)
+                : toolResult.content
+            }
+            language={detectLanguageFromPath(file_path)}
+            showLineNumbers={true}
+            maxHeight="400px"
+          />
         );
       }}
     />

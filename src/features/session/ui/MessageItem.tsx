@@ -8,7 +8,6 @@
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
-import { SimpleAssistantMessage } from "./components/SimpleAssistantMessage";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 import { Copy, RotateCcw } from "lucide-react";
@@ -89,7 +88,22 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     ? chatTheme.message.user
     : chatTheme.message.assistant;
 
-  // Assistant messages - simple list
+  // Find last text block index for weight (assistant messages only)
+  const findLastTextBlockIndex = (blocks: (ContentBlock | string)[]) => {
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const block = blocks[i];
+      if (typeof block === 'string' || (typeof block === 'object' && block?.type === 'text')) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const lastTextBlockIndex = Array.isArray(contentBlocks) && message.role === 'assistant'
+    ? findLastTextBlockIndex(contentBlocks as (ContentBlock | string)[])
+    : -1;
+
+  // Assistant messages - use BlockRenderer with weight
   if (message.role === 'assistant') {
     return (
       <div
@@ -98,15 +112,30 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           'relative group',
           roleStyles.maxWidth,
           roleStyles.container,
-          'flex flex-col min-w-0 overflow-x-hidden',
+          'flex flex-col gap-2 min-w-0 overflow-x-hidden',
           chatTheme.common.transition
         )}
       >
         {Array.isArray(contentBlocks) ? (
-          <SimpleAssistantMessage
-            contentBlocks={contentBlocks}
-            messageId={message.id}
-          />
+          contentBlocks.map((block: ContentBlock | string, index: number) => {
+            // Generate unique key: use tool_use id if available, otherwise fallback to index
+            const key = typeof block === 'object' && block?.type === 'tool_use'
+              ? block.id
+              : `${message.id}:${index}`;
+
+            // Determine if this is the last text block (for weight)
+            const isLastTextBlock = index === lastTextBlockIndex;
+
+            return (
+              <BlockRenderer
+                key={key}
+                block={block}
+                index={index}
+                role={message.role}
+                isLastTextBlock={isLastTextBlock}
+              />
+            );
+          })
         ) : (
           // Fallback for non-array content
           <div className="text-base leading-relaxed">
