@@ -12,18 +12,22 @@ import { BaseToolRenderer } from '../components';
 import type { ToolRendererProps } from '../../chat-types';
 
 export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+  // Extract first input value as preview (if available)
+  const firstInputKey = Object.keys(toolUse.input || {})[0];
+  const firstInputValue = firstInputKey ? String(toolUse.input[firstInputKey]).substring(0, 40) : '';
+
   return (
     <BaseToolRenderer
       toolName={toolUse.name || 'Unknown Tool'}
-      icon={<Wrench className="w-4 h-4 text-muted-foreground" />}
+      icon={<Wrench className="w-4 h-4 text-muted-foreground/70" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      defaultExpanded={false}
-      borderColor="default"
-      renderMetadata={() => (
-        <div className="px-2 text-xs text-muted-foreground">
-          Tool: {toolUse.name}
-        </div>
+      renderSummary={() => (
+        firstInputValue ? (
+          <span className="font-mono text-[12px] text-muted-foreground truncate">
+            {firstInputValue}
+          </span>
+        ) : undefined
       )}
       renderContent={({ toolResult }) => {
         if (!toolResult) return <div className="text-xs text-muted-foreground">No result yet</div>;
