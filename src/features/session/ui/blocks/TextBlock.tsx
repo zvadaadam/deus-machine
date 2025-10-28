@@ -96,11 +96,11 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
         // Paragraphs - breathing room between blocks
         'prose-p:my-3 prose-p:leading-[1.6]',
 
-        // Headings - section separation with top margin
-        'prose-headings:font-semibold prose-headings:tracking-tight',
-        'prose-h1:text-xl prose-h1:mt-6 prose-h1:mb-3',
-        'prose-h2:text-lg prose-h2:mt-5 prose-h2:mb-2',
-        'prose-h3:text-base prose-h3:mt-4 prose-h3:mb-2',
+        // Headings - STRONG hierarchy with color + weight
+        'prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground',
+        'prose-h1:text-[20px] prose-h1:mt-6 prose-h1:mb-3',
+        'prose-h2:text-[18px] prose-h2:mt-5 prose-h2:mb-2',
+        'prose-h3:text-[16px] prose-h3:mt-4 prose-h3:mb-2',
 
         // Links
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
@@ -111,12 +111,14 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
         // Code blocks
         'prose-pre:bg-muted/70 prose-pre:border prose-pre:border-border/60 prose-pre:rounded-lg prose-pre:p-0 prose-pre:my-4',
 
-        // Lists - scannable with clear items
-        'prose-ul:my-3 prose-ol:my-3',
+        // Lists - VISIBLE bullets and clear hierarchy
+        'prose-ul:my-3 prose-ul:list-disc prose-ul:pl-5',
+        'prose-ol:my-3 prose-ol:list-decimal prose-ol:pl-5',
         'prose-li:my-1.5 prose-li:leading-[1.6]',
+        'marker:text-foreground/60',
 
-        // Strong/Bold - make it actually bold
-        'prose-strong:font-semibold prose-strong:text-foreground',
+        // Strong/Bold - make it ACTUALLY BOLD
+        'prose-strong:font-bold prose-strong:text-foreground',
 
         // Blockquotes
         'prose-blockquote:border-l-2 prose-blockquote:border-l-primary prose-blockquote:bg-muted/30 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:my-3',
