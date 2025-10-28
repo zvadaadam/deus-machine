@@ -85,8 +85,8 @@ export function BaseToolRenderer({
           {/* Tool icon */}
           {icon}
 
-          {/* Tool name */}
-          <span className="font-medium">{toolName}</span>
+          {/* Tool name - truncate if too long */}
+          <span className="font-medium truncate">{toolName}</span>
 
           {/* Status indicator (error only) */}
           {status && (

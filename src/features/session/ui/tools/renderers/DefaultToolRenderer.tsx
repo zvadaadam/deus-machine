@@ -29,15 +29,29 @@ export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) 
           </span>
         ) : undefined
       )}
-      renderContent={({ toolResult }) => {
-        if (!toolResult) return <div className="text-xs text-muted-foreground">No result yet</div>;
-
+      renderContent={({ toolUse, toolResult }) => {
         return (
-          <pre className="p-2 rounded font-mono text-xs bg-muted/30 overflow-x-auto max-h-[200px] overflow-y-auto">
-            {typeof toolResult.content === 'object'
-              ? JSON.stringify(toolResult.content, null, 2)
-              : toolResult.content}
-          </pre>
+          <div className="space-y-3 px-2 pb-2">
+            {/* Input */}
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground mb-1">Input:</div>
+              <pre className="p-3 rounded-lg font-mono text-xs bg-muted/60 overflow-x-auto max-h-[200px] overflow-y-auto border border-border/60">
+                {JSON.stringify(toolUse.input, null, 2)}
+              </pre>
+            </div>
+
+            {/* Output */}
+            {toolResult && (
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground mb-1">Output:</div>
+                <pre className="p-3 rounded-lg font-mono text-xs bg-muted/60 overflow-x-auto max-h-[200px] overflow-y-auto border border-border/60">
+                  {typeof toolResult.content === 'object'
+                    ? JSON.stringify(toolResult.content, null, 2)
+                    : toolResult.content}
+                </pre>
+              </div>
+            )}
+          </div>
         );
       }}
     />
