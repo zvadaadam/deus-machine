@@ -41,9 +41,15 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
-          {pattern} in {glob || fileType || pathPreview}{matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
-        </span>
+        <>
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-info/15 text-info rounded font-medium">
+            {pattern}
+          </span>
+          <span className="text-[12px] text-muted-foreground">
+            {' '}in {glob || fileType || pathPreview}
+            {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
+          </span>
+        </>
       )}
       renderContent={({ toolResult }) => {
         // Guard against undefined toolResult

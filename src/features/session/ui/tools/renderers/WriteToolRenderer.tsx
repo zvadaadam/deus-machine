@@ -24,9 +24,12 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/50 rounded">
-          {fileName} • {lineCount} lines
-        </span>
+        <>
+          <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/60 rounded font-medium">
+            {fileName}
+          </span>
+          <span className="text-[12px] text-muted-foreground"> • {lineCount} lines</span>
+        </>
       )}
       renderContent={() => (
         <CodeBlock
