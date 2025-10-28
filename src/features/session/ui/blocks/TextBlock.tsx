@@ -66,11 +66,11 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
     return null;
   }
 
-  // Weight-based styling
+  // Weight-based styling - compact for IDE density
   const weightStyles = {
     muted: 'text-[13px] leading-[1.5] text-muted-foreground opacity-70 py-1',
-    normal: 'text-[15px] leading-relaxed',
-    hero: 'text-[16px] leading-[1.7] py-4 mt-3 border-t border-border/20',
+    normal: 'text-[14px] leading-[1.6]',
+    hero: 'text-[15px] leading-[1.65] py-3 mt-2 border-t border-border/20',
   };
 
   // User messages: plain text (preserve newlines)
@@ -92,21 +92,37 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
         chatTheme.blocks.text.content,
         weightStyles[weight],
         'prose prose-sm dark:prose-invert max-w-full min-w-0 overflow-x-auto',
-        // Headings
+
+        // Paragraphs - breathing room between blocks
+        'prose-p:my-3 prose-p:leading-[1.6]',
+
+        // Headings - section separation with top margin
         'prose-headings:font-semibold prose-headings:tracking-tight',
-        'prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg',
+        'prose-h1:text-xl prose-h1:mt-6 prose-h1:mb-3',
+        'prose-h2:text-lg prose-h2:mt-5 prose-h2:mb-2',
+        'prose-h3:text-base prose-h3:mt-4 prose-h3:mb-2',
+
         // Links
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
-        // Code
-        'prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:font-medium prose-code:before:content-none prose-code:after:content-none',
+
+        // Inline code
+        'prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:font-mono prose-code:font-medium prose-code:before:content-none prose-code:after:content-none',
+
         // Code blocks
-        'prose-pre:bg-muted/70 prose-pre:border prose-pre:border-border/60 prose-pre:rounded-lg prose-pre:p-0 prose-pre:m-0',
-        // Lists
-        'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
+        'prose-pre:bg-muted/70 prose-pre:border prose-pre:border-border/60 prose-pre:rounded-lg prose-pre:p-0 prose-pre:my-4',
+
+        // Lists - scannable with clear items
+        'prose-ul:my-3 prose-ol:my-3',
+        'prose-li:my-1.5 prose-li:leading-[1.6]',
+
+        // Strong/Bold - make it actually bold
+        'prose-strong:font-semibold prose-strong:text-foreground',
+
         // Blockquotes
-        'prose-blockquote:border-l-primary prose-blockquote:bg-muted/30 prose-blockquote:py-1',
+        'prose-blockquote:border-l-2 prose-blockquote:border-l-primary prose-blockquote:bg-muted/30 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:my-3',
+
         // Tables
-        'prose-table:border prose-table:border-border',
+        'prose-table:border prose-table:border-border prose-table:my-4',
         'prose-th:bg-muted prose-th:border prose-th:border-border prose-th:p-2',
         'prose-td:border prose-td:border-border prose-td:p-2'
       )}
