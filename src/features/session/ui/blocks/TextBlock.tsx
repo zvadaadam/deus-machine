@@ -46,7 +46,7 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
   };
 
   // User messages: plain text (preserve newlines)
-  // Bright, immediately readable - full foreground color, normal weight
+  // Maximum readability - pure white text, unambiguously clear
   if (role === 'user') {
     return (
       <p className={cn(
