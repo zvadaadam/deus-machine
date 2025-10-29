@@ -134,6 +134,17 @@ function MainContent({
     setIsBrowserOpen(prev => !prev);
   };
 
+  // Handle branch rename
+  const handleBranchRename = (newName: string) => {
+    // TODO: Implement backend call to rename branch via git
+    console.log('Branch rename requested:', selectedWorkspace?.branch, '→', newName);
+    // For now, just log. Full implementation would:
+    // 1. Validate branch name (git rules)
+    // 2. Call backend API to rename branch
+    // 3. Update workspace state
+    // 4. Handle errors gracefully
+  };
+
   // Handle tab changes
   const handleMainTabChange = (tabId: string) => {
     setActiveMainTabId(tabId);
@@ -336,6 +347,7 @@ function MainContent({
               workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
               isBrowserOpen={isBrowserOpen}
               onBrowserToggle={handleBrowserToggle}
+              onBranchRename={handleBranchRename}
             />
 
             {/* 3. Tab Content - Flexible height, scrollable (renders based on active tab type) */}

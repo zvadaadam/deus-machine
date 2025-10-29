@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -59,6 +59,7 @@ interface MainContentTabsProps {
   workspacePath?: string;
   isBrowserOpen?: boolean;
   onBrowserToggle?: () => void;
+  onBranchRename?: (newName: string) => void;
 }
 
 // Tab styling constants for easier maintenance
@@ -89,7 +90,21 @@ export function MainContentTabBar({
   workspacePath,
   isBrowserOpen,
   onBrowserToggle,
+  onBranchRename,
 }: Omit<MainContentTabsProps, 'children'>) {
+  // Branch editing state
+  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [branchInputValue, setBranchInputValue] = useState('');
+  const branchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when editing starts
+  useEffect(() => {
+    if (isEditingBranch && branchInputRef.current) {
+      branchInputRef.current.focus();
+      branchInputRef.current.select();
+    }
+  }, [isEditingBranch]);
+
   const handleTabClick = (tabId: string) => {
     onTabChange(tabId);
   };
@@ -101,6 +116,37 @@ export function MainContentTabBar({
 
   const handleAddTab = () => {
     onTabAdd?.();
+  };
+
+  // Branch editing handlers
+  const startEditingBranch = () => {
+    if (branch && onBranchRename) {
+      setBranchInputValue(branch);
+      setIsEditingBranch(true);
+    }
+  };
+
+  const saveBranchName = () => {
+    const trimmed = branchInputValue.trim();
+    if (trimmed && trimmed !== branch && onBranchRename) {
+      onBranchRename(trimmed);
+    }
+    setIsEditingBranch(false);
+  };
+
+  const cancelEditingBranch = () => {
+    setIsEditingBranch(false);
+    setBranchInputValue('');
+  };
+
+  const handleBranchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveBranchName();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditingBranch();
+    }
   };
 
   // Get icon for tab type - Sparkles for chat (AI), FileCode for files
@@ -140,19 +186,47 @@ export function MainContentTabBar({
                 </>
               )}
 
-              <button
-                className={cn(
-                  'font-mono text-sm font-medium text-foreground/90',
-                  'hover:text-foreground',
-                  'transition-colors duration-150 ease-out',
-                  'cursor-text'
-                )}
-                title="Click to edit branch name"
-              >
-                {branch}
-              </button>
+              {/* Branch name - inline editing */}
+              {isEditingBranch ? (
+                <input
+                  ref={branchInputRef}
+                  type="text"
+                  value={branchInputValue}
+                  onChange={(e) => setBranchInputValue(e.target.value)}
+                  onKeyDown={handleBranchKeyDown}
+                  onBlur={saveBranchName}
+                  className={cn(
+                    'font-mono text-sm font-medium text-foreground',
+                    'bg-transparent border-none outline-none',
+                    'focus:ring-1 focus:ring-primary rounded px-1 -mx-1',
+                    'min-w-[100px]'
+                  )}
+                />
+              ) : (
+                <button
+                  onClick={startEditingBranch}
+                  disabled={!onBranchRename}
+                  className={cn(
+                    'font-mono text-sm font-medium text-foreground/90',
+                    'hover:text-foreground',
+                    'transition-colors duration-150 ease-out',
+                    onBranchRename && 'cursor-text'
+                  )}
+                  title={onBranchRename ? "Click to edit branch name" : undefined}
+                >
+                  {branch}
+                </button>
+              )}
 
-              <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+              {/* Edit pencil icon - only show when not editing and onBranchRename is provided */}
+              {!isEditingBranch && onBranchRename && (
+                <button
+                  onClick={startEditingBranch}
+                  className="flex items-center justify-center"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                </button>
+              )}
             </div>
           )}
 
@@ -293,6 +367,7 @@ export function MainContentTabs({
   workspacePath,
   isBrowserOpen,
   onBrowserToggle,
+  onBranchRename,
 }: MainContentTabsProps) {
   return (
     <div className="flex flex-col h-full">
@@ -307,6 +382,7 @@ export function MainContentTabs({
         workspacePath={workspacePath}
         isBrowserOpen={isBrowserOpen}
         onBrowserToggle={onBrowserToggle}
+        onBranchRename={onBranchRename}
       />
       <div className="flex-1 min-h-0 overflow-hidden">
         {children}
