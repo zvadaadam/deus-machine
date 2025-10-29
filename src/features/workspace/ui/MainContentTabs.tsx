@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Globe, FolderGit, Pencil } from 'lucide-react';
+import { X, Plus, Globe, FolderGit, Pencil, MessageSquare, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
@@ -201,7 +201,7 @@ export function MainContentTabBar({
                 onMouseLeave={() => setHoveredTabId(null)}
                 className={cn(
                   'group relative flex items-center gap-2',
-                  'px-6 h-11 min-w-[100px] max-w-[180px]',
+                  'pl-4 pr-10 h-11 min-w-[120px] max-w-[220px]',
                   'text-sm font-normal',
                   'transition-colors duration-200 ease-out',
                   isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
@@ -212,21 +212,39 @@ export function MainContentTabBar({
                   <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
                 )}
 
-                {/* Tab label */}
-                <span className="flex-1 truncate">
-                  {tab.label}
-                </span>
+                {/* Tab type icon */}
+                {tab.type === 'chat' && (
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+                )}
+                {(tab.type === 'diff' || tab.type === 'file') && (
+                  <FileCode className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+                )}
 
-                {/* Close button */}
+                {/* Tab label with gradient fade */}
+                <div className="relative flex-1 min-w-0">
+                  <span className="block truncate">
+                    {tab.label}
+                  </span>
+
+                  {/* Gradient fade overlay - appears on hover to create space for close button */}
+                  <div className={cn(
+                    'absolute inset-y-0 right-0 w-8 pointer-events-none',
+                    'bg-gradient-to-l from-background to-transparent',
+                    'opacity-0 transition-opacity duration-150 ease-out',
+                    'group-hover:opacity-100'
+                  )} />
+                </div>
+
+                {/* Close button - absolutely positioned on right edge, appears on hover only */}
                 {tab.closeable !== false && (
                   <button
                     type="button"
                     onClick={(e) => handleTabClose(e, tab.id)}
                     className={cn(
-                      'flex items-center justify-center w-4 h-4 rounded-sm',
+                      'absolute right-2 flex items-center justify-center w-4 h-4 rounded-sm',
                       'transition-all duration-150 ease-out',
                       'hover:bg-muted-foreground/20',
-                      isActive || isHovered ? 'opacity-100' : 'opacity-0'
+                      'opacity-0 group-hover:opacity-100'
                     )}
                     aria-label={`Close ${tab.label} tab`}
                   >
