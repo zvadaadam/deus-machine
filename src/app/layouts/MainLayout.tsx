@@ -46,7 +46,6 @@ import { Separator } from "@/components/ui/separator";
 import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 import type {
   Workspace,
@@ -135,6 +134,17 @@ function MainContent({
     setIsBrowserOpen(prev => !prev);
   };
 
+  // Handle branch rename
+  const handleBranchRename = (newName: string) => {
+    // TODO: Implement backend call to rename branch via git
+    console.log('Branch rename requested:', selectedWorkspace?.branch, '→', newName);
+    // For now, just log. Full implementation would:
+    // 1. Validate branch name (git rules)
+    // 2. Call backend API to rename branch
+    // 3. Update workspace state
+    // 4. Handle errors gracefully
+  };
+
   // Handle tab changes
   const handleMainTabChange = (tabId: string) => {
     setActiveMainTabId(tabId);
@@ -152,18 +162,46 @@ function MainContent({
     }
   };
 
+  // Monotonic chat index to avoid ID collisions after closes
+  const nextChatIndexRef = useRef(2); // chat-1 exists by default
+
   // Handle add new tab
   const handleMainTabAdd = () => {
-    const newId = `chat-${mainTabs.length + 1}`;
+    const idx = nextChatIndexRef.current++;
+    const newId = `chat-${idx}`;
     const newTab: Tab = {
       id: newId,
-      label: `Chat #${mainTabs.length + 1}`,
+      label: `Chat #${idx}`,
       type: 'chat',
       closeable: true
     };
-    setMainTabs([...mainTabs, newTab]);
+    setMainTabs(prevTabs => [...prevTabs, newTab]);
     setActiveMainTabId(newId);
   };
+
+  // Keyboard shortcut: Cmd+T to open new chat tab
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // ⌘T or Ctrl+T - New chat tab
+      if ((e.metaKey || e.ctrlKey) && e.key === 't' && selectedWorkspace) {
+        // Ignore when typing in inputs/textarea/contenteditable
+        const ae = document.activeElement as HTMLElement | null;
+        const isTextField =
+          !!ae &&
+          (ae.tagName === 'INPUT' ||
+            ae.tagName === 'TEXTAREA' ||
+            ae.isContentEditable ||
+            ae.getAttribute('role') === 'textbox');
+        if (isTextField) return;
+
+        e.preventDefault(); // Prevent browser's "new tab" action
+        handleMainTabAdd();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedWorkspace]);
 
   /**
    * Open a diff as a new tab (or switch to existing)
@@ -303,21 +341,19 @@ function MainContent({
         {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
         {selectedWorkspace ? (
           <div className="flex flex-col h-full overflow-hidden border-r border-border/40">
-            {/* 1. Workspace Header - Fixed height (branch name, browser button) */}
-            <WorkspaceHeader
-              branch={selectedWorkspace.branch}
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              onBrowserToggle={handleBrowserToggle}
-              showBrowserButton={true}
-            />
-
-            {/* 2. Tab Bar - Fixed height (Chat #1, Chat #2, +) */}
+            {/* Tab Bar with integrated workspace header (branch name, browser button, tabs) */}
             <MainContentTabBar
               tabs={mainTabs}
               activeTabId={activeMainTabId}
               onTabChange={handleMainTabChange}
               onTabClose={handleMainTabClose}
               onTabAdd={handleMainTabAdd}
+              repositoryName={selectedWorkspace.root_path.split('/').filter(Boolean).pop()}
+              branch={selectedWorkspace.branch}
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+              isBrowserOpen={isBrowserOpen}
+              onBrowserToggle={handleBrowserToggle}
+              onBranchRename={handleBranchRename}
             />
 
             {/* 3. Tab Content - Flexible height, scrollable (renders based on active tab type) */}

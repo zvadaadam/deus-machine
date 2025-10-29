@@ -1,6 +1,14 @@
-import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { OpenInDropdown } from '@/shared/components';
 import { cn } from '@/shared/lib/utils';
 
 /**
@@ -45,7 +53,21 @@ interface MainContentTabsProps {
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
   children: React.ReactNode;
+  // Workspace context (merged from WorkspaceHeader)
+  repositoryName?: string;
+  branch?: string;
+  workspacePath?: string;
+  isBrowserOpen?: boolean;
+  onBrowserToggle?: () => void;
+  onBranchRename?: (newName: string) => void;
 }
+
+// Tab styling constants for easier maintenance
+const TAB_STYLES = {
+  ICON_SIZE: 'w-3.5 h-3.5',
+  GRADIENT_WIDTH: 'w-12',
+  CLOSE_BUTTON_OFFSET: 'right-2',
+} as const;
 
 /**
  * MainContentTabBar - Browser-style tab bar for main content area
@@ -55,16 +77,7 @@ interface MainContentTabsProps {
  * - Consistency: Unified opacity scale (/60 muted, /20 subtle)
  * - Lightness: Regular font weight, minimal hover states
  * - Clarity: Active state through color only, no background jumps
- *
- * Changes from previous version:
- * - Removed backdrop-blur (decorative, serves no purpose)
- * - Border opacity: /60 → full (confident, visible)
- * - Background: /80 → full (no semi-transparency)
- * - Font weight: medium → normal (lighter feel)
- * - Padding: py-2.5 → py-2 (tighter, less chunky)
- * - Hover: bg-muted/50 → bg-muted/10 (subtle)
- * - Active: bg-background → no background (color only)
- * - Border dividers: /40 → /20 (more subtle)
+ * - One signal: Bottom indicator for active state
  */
 export function MainContentTabBar({
   tabs,
@@ -72,8 +85,25 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  repositoryName,
+  branch,
+  workspacePath,
+  isBrowserOpen,
+  onBrowserToggle,
+  onBranchRename,
 }: Omit<MainContentTabsProps, 'children'>) {
-  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  // Branch editing state
+  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [branchInputValue, setBranchInputValue] = useState('');
+  const branchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when editing starts
+  useEffect(() => {
+    if (isEditingBranch && branchInputRef.current) {
+      branchInputRef.current.focus();
+      branchInputRef.current.select();
+    }
+  }, [isEditingBranch]);
 
   const handleTabClick = (tabId: string) => {
     onTabChange(tabId);
@@ -88,70 +118,254 @@ export function MainContentTabBar({
     onTabAdd?.();
   };
 
+  // Branch editing handlers
+  const startEditingBranch = () => {
+    if (branch && onBranchRename) {
+      setBranchInputValue(branch);
+      setIsEditingBranch(true);
+    }
+  };
+
+  const saveBranchName = () => {
+    const trimmed = branchInputValue.trim();
+    if (trimmed && trimmed !== branch && onBranchRename) {
+      onBranchRename(trimmed);
+    }
+    setIsEditingBranch(false);
+  };
+
+  const cancelEditingBranch = () => {
+    setIsEditingBranch(false);
+    setBranchInputValue('');
+  };
+
+  const handleBranchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveBranchName();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditingBranch();
+    }
+  };
+
+  // Get icon for tab type - Sparkles for chat (AI), FileCode for files
+  const getTabIcon = (type: Tab['type']) => {
+    const iconClass = cn(TAB_STYLES.ICON_SIZE, 'flex-shrink-0 opacity-60');
+    return type === 'chat'
+      ? <Sparkles className={iconClass} />
+      : <FileCode className={iconClass} />;
+  };
+
   return (
-    <div className="flex items-center border-b border-border bg-background flex-shrink-0">
-      <div className="flex items-center flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          const isHovered = tab.id === hoveredTabId;
-
-          return (
-            <button
-              key={tab.id}
-              onClick={() => handleTabClick(tab.id)}
-              onMouseEnter={() => setHoveredTabId(tab.id)}
-              onMouseLeave={() => setHoveredTabId(null)}
-              className={cn(
-                'group relative flex items-center gap-2 px-3 py-2 min-w-[100px] max-w-[180px]',
-                'border-r border-border/20',
-                'transition-colors duration-200',
-                'hover:bg-muted/10',
-                isActive ? 'text-foreground' : 'text-muted-foreground/60'
-              )}
-            >
-              {/* Active indicator - subtle top border */}
-              {isActive && (
-                <div className="absolute inset-x-0 top-0 h-[2px] bg-primary" />
-              )}
-
-              {/* Tab label - regular font weight for lightness */}
-              <span className="flex-1 text-sm truncate">
-                {tab.label}
-              </span>
-
-              {/* Close button - appears on hover */}
-              {tab.closeable !== false && (
-                <button
-                  type="button"
-                  onClick={(e) => handleTabClose(e, tab.id)}
-                  className={cn(
-                    'flex items-center justify-center w-4 h-4 rounded-sm',
-                    'transition-opacity duration-150',
-                    'hover:bg-muted-foreground/20',
-                    isActive || isHovered ? 'opacity-100' : 'opacity-0'
-                  )}
-                  aria-label={`Close ${tab.label} tab`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Add tab button */}
-        {onTabAdd && (
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col flex-shrink-0">
+        {/* ROW 1: Context Bar - Who & Where (48px) */}
+        <div className="flex items-center justify-between h-12 px-5 border-b border-border/50 bg-background/50 backdrop-blur-sm">
+          {/* Left: Sidebar Trigger */}
           <Button
             variant="ghost"
-            size="sm"
-            onClick={handleAddTab}
-            className="h-8 px-2 shrink-0 border-r border-border/20"
+            size="icon"
+            className="h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200"
+            asChild
           >
-            <Plus className="w-4 h-4" />
+            <SidebarTrigger />
           </Button>
-        )}
+
+          {/* Center: Breadcrumb - Repository / Branch (Editable) */}
+          {branch && (
+            <div className="group flex-1 flex items-center justify-center gap-2 px-6">
+              <FolderGit className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
+
+              {repositoryName && (
+                <>
+                  <span className="font-mono text-sm text-muted-foreground/60 flex-shrink-0">
+                    {repositoryName}
+                  </span>
+                  <span className="text-muted-foreground/40 select-none">/</span>
+                </>
+              )}
+
+              {/* Branch name - inline editing */}
+              {isEditingBranch ? (
+                <input
+                  ref={branchInputRef}
+                  type="text"
+                  aria-label="Edit branch name"
+                  value={branchInputValue}
+                  onChange={(e) => setBranchInputValue(e.target.value)}
+                  onKeyDown={handleBranchKeyDown}
+                  onBlur={saveBranchName}
+                  className={cn(
+                    'font-mono text-sm font-medium text-foreground',
+                    'bg-transparent border-none outline-none',
+                    'focus:ring-1 focus:ring-primary rounded px-1 -mx-1',
+                    'min-w-[100px]'
+                  )}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={startEditingBranch}
+                  disabled={!onBranchRename}
+                  className={cn(
+                    'font-mono text-sm font-medium text-foreground/90',
+                    'hover:text-foreground',
+                    'transition-colors duration-150 ease-out',
+                    onBranchRename && 'cursor-text'
+                  )}
+                  title={onBranchRename ? "Click to edit branch name" : undefined}
+                >
+                  {branch}
+                </button>
+              )}
+
+              {/* Edit pencil icon - only show when not editing and onBranchRename is provided */}
+              {!isEditingBranch && onBranchRename && (
+                <button
+                  type="button"
+                  aria-label="Rename branch"
+                  onClick={startEditingBranch}
+                  className="flex items-center justify-center"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Right: Meta Actions */}
+          <div className="flex items-center gap-2">
+            {onBrowserToggle && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-pressed={!!isBrowserOpen}
+                    aria-label={isBrowserOpen ? 'Close browser' : 'Open browser'}
+                    onClick={onBrowserToggle}
+                    className={cn(
+                      "h-9 w-9 rounded-lg flex items-center justify-center",
+                      "transition-all duration-200 ease-out",
+                      isBrowserOpen
+                        ? "bg-primary/15 text-primary border border-primary/30 hover:bg-primary/20"
+                        : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10"
+                    )}
+                  >
+                    <Globe className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">{isBrowserOpen ? 'Close browser' : 'Open browser'}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
+          </div>
+        </div>
+
+        {/* ROW 2: Navigation Bar - What (44px) */}
+        <div className="flex items-center h-11 px-5 border-b border-border/60 bg-background">
+          <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+
+              return (
+                <div
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={0}
+                  onClick={() => handleTabClick(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTabClick(tab.id);
+                    }
+                  }}
+                  className={cn(
+                    'group relative flex items-center gap-1.5',
+                    'px-4 h-11 min-w-[120px] max-w-[200px]',
+                    'text-sm font-normal cursor-pointer',
+                    'transition-colors duration-200 ease-out',
+                    isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
+                  )}
+                >
+                  {/* Active indicator - bottom border */}
+                  {isActive && (
+                    <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
+                  )}
+
+                  {/* Tab type icon */}
+                  {getTabIcon(tab.type)}
+
+                  {/* Tab label with gradient fade */}
+                  <div className="relative flex-1 min-w-0">
+                    <span className="block truncate">
+                      {tab.label}
+                    </span>
+
+                    {/* Gradient fade overlay - only for closeable tabs */}
+                    {tab.closeable !== false && (
+                      <div className={cn(
+                        'absolute inset-y-0 right-0 pointer-events-none',
+                        TAB_STYLES.GRADIENT_WIDTH,
+                        'bg-gradient-to-l from-background via-background/90 to-transparent',
+                        'opacity-0 transition-opacity duration-150 ease-out',
+                        'group-hover:opacity-100'
+                      )} />
+                    )}
+                  </div>
+
+                  {/* Close button - absolutely positioned on right edge */}
+                  {tab.closeable !== false && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleTabClose(e, tab.id)}
+                      className={cn(
+                        'absolute flex items-center justify-center w-4 h-4 rounded-sm',
+                        TAB_STYLES.CLOSE_BUTTON_OFFSET,
+                        'transition-all duration-150 ease-out',
+                        'hover:bg-muted-foreground/20',
+                        'opacity-0 group-hover:opacity-100'
+                      )}
+                      aria-label={`Close ${tab.label} tab`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Add tab button */}
+            {onTabAdd && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="New chat tab"
+                    onClick={handleAddTab}
+                    className={cn(
+                      'flex items-center justify-center',
+                      'px-4 h-11 flex-shrink-0',
+                      'text-muted-foreground/60 hover:text-muted-foreground',
+                      'hover:bg-muted/10',
+                      'transition-all duration-200 ease-out'
+                    )}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">New chat (⌘T)</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -166,6 +380,12 @@ export function MainContentTabs({
   onTabClose,
   onTabAdd,
   children,
+  repositoryName,
+  branch,
+  workspacePath,
+  isBrowserOpen,
+  onBrowserToggle,
+  onBranchRename,
 }: MainContentTabsProps) {
   return (
     <div className="flex flex-col h-full">
@@ -175,6 +395,12 @@ export function MainContentTabs({
         onTabChange={onTabChange}
         onTabClose={onTabClose}
         onTabAdd={onTabAdd}
+        repositoryName={repositoryName}
+        branch={branch}
+        workspacePath={workspacePath}
+        isBrowserOpen={isBrowserOpen}
+        onBrowserToggle={onBrowserToggle}
+        onBranchRename={onBranchRename}
       />
       <div className="flex-1 min-h-0 overflow-hidden">
         {children}
