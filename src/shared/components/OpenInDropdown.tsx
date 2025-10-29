@@ -94,7 +94,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
         <Button
           variant={iconOnly ? "ghost" : "outline"}
           size={iconOnly ? "icon" : "sm"}
-          className={iconOnly ? "h-8 w-8 text-muted-foreground/70 hover:text-foreground" : "gap-2 px-3"}
+          className={iconOnly ? "h-8 w-8 text-muted-foreground/90 hover:text-foreground" : "gap-2 px-3"}
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
