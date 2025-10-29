@@ -175,7 +175,7 @@ function MainContent({
       type: 'chat',
       closeable: true
     };
-    setMainTabs([...mainTabs, newTab]);
+    setMainTabs(prevTabs => [...prevTabs, newTab]);
     setActiveMainTabId(newId);
   };
 
