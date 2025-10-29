@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Globe, FolderGit, Pencil, MessageSquare, FileCode } from 'lucide-react';
+import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
@@ -61,6 +61,13 @@ interface MainContentTabsProps {
   onBrowserToggle?: () => void;
 }
 
+// Tab styling constants for easier maintenance
+const TAB_STYLES = {
+  ICON_SIZE: 'w-3.5 h-3.5',
+  GRADIENT_WIDTH: 'w-12',
+  CLOSE_BUTTON_OFFSET: 'right-2',
+} as const;
+
 /**
  * MainContentTabBar - Browser-style tab bar for main content area
  *
@@ -69,16 +76,7 @@ interface MainContentTabsProps {
  * - Consistency: Unified opacity scale (/60 muted, /20 subtle)
  * - Lightness: Regular font weight, minimal hover states
  * - Clarity: Active state through color only, no background jumps
- *
- * Changes from previous version:
- * - Removed backdrop-blur (decorative, serves no purpose)
- * - Border opacity: /60 → full (confident, visible)
- * - Background: /80 → full (no semi-transparency)
- * - Font weight: medium → normal (lighter feel)
- * - Padding: py-2.5 → py-2 (tighter, less chunky)
- * - Hover: bg-muted/50 → bg-muted/10 (subtle)
- * - Active: bg-background → no background (color only)
- * - Border dividers: /40 → /20 (more subtle)
+ * - One signal: Bottom indicator for active state
  */
 export function MainContentTabBar({
   tabs,
@@ -92,8 +90,6 @@ export function MainContentTabBar({
   isBrowserOpen,
   onBrowserToggle,
 }: Omit<MainContentTabsProps, 'children'>) {
-  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
-
   const handleTabClick = (tabId: string) => {
     onTabChange(tabId);
   };
@@ -107,60 +103,62 @@ export function MainContentTabBar({
     onTabAdd?.();
   };
 
+  // Get icon for tab type - Sparkles for chat (AI), FileCode for files
+  const getTabIcon = (type: Tab['type']) => {
+    const iconClass = cn(TAB_STYLES.ICON_SIZE, 'flex-shrink-0 opacity-60');
+    return type === 'chat'
+      ? <Sparkles className={iconClass} />
+      : <FileCode className={iconClass} />;
+  };
+
   return (
-    <div className="flex flex-col flex-shrink-0">
-      {/* ROW 1: Context Bar - Who & Where (48px) */}
-      <div className="flex items-center justify-between h-12 px-5 border-b border-border/50 bg-background/50 backdrop-blur-sm">
-        {/* Left: Sidebar Trigger */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200"
-          asChild
-        >
-          <SidebarTrigger />
-        </Button>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col flex-shrink-0">
+        {/* ROW 1: Context Bar - Who & Where (48px) */}
+        <div className="flex items-center justify-between h-12 px-5 border-b border-border/50 bg-background/50 backdrop-blur-sm">
+          {/* Left: Sidebar Trigger */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200"
+            asChild
+          >
+            <SidebarTrigger />
+          </Button>
 
-        {/* Center: Breadcrumb - Repository / Branch (Editable) */}
-        {branch && (
-          <div className="group flex-1 flex items-center justify-center gap-2 px-6">
-            {/* Folder/Git Icon */}
-            <FolderGit className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
+          {/* Center: Breadcrumb - Repository / Branch (Editable) */}
+          {branch && (
+            <div className="group flex-1 flex items-center justify-center gap-2 px-6">
+              <FolderGit className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
 
-            {/* Repository Name (read-only, secondary) */}
-            {repositoryName && (
-              <>
-                <span className="font-mono text-sm text-muted-foreground/60 flex-shrink-0">
-                  {repositoryName}
-                </span>
-
-                {/* Separator */}
-                <span className="text-muted-foreground/40 select-none">/</span>
-              </>
-            )}
-
-            {/* Branch Name Button (editable, primary) */}
-            <button
-              className={cn(
-                'font-mono text-sm font-medium text-foreground/90',
-                'hover:text-foreground',
-                'transition-colors duration-150 ease-out',
-                'cursor-text'
+              {repositoryName && (
+                <>
+                  <span className="font-mono text-sm text-muted-foreground/60 flex-shrink-0">
+                    {repositoryName}
+                  </span>
+                  <span className="text-muted-foreground/40 select-none">/</span>
+                </>
               )}
-              title="Click to edit branch name"
-            >
-              {branch}
-            </button>
 
-            {/* Edit Pencil Icon (shows on hover) */}
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
-          </div>
-        )}
+              <button
+                className={cn(
+                  'font-mono text-sm font-medium text-foreground/90',
+                  'hover:text-foreground',
+                  'transition-colors duration-150 ease-out',
+                  'cursor-text'
+                )}
+                title="Click to edit branch name"
+              >
+                {branch}
+              </button>
 
-        {/* Right: Meta Actions */}
-        <div className="flex items-center gap-2">
-          {onBrowserToggle && (
-            <TooltipProvider delayDuration={200}>
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+            </div>
+          )}
+
+          {/* Right: Meta Actions */}
+          <div className="flex items-center gap-2">
+            {onBrowserToggle && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -180,86 +178,78 @@ export function MainContentTabBar({
                   <p className="text-xs">{isBrowserOpen ? 'Close browser' : 'Open browser'}</p>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          )}
-          {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
+            )}
+            {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
+          </div>
         </div>
-      </div>
 
-      {/* ROW 2: Navigation Bar - What (44px) */}
-      <div className="flex items-center h-11 px-5 border-b border-border/60 bg-background">
-        <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const isHovered = tab.id === hoveredTabId;
+        {/* ROW 2: Navigation Bar - What (44px) */}
+        <div className="flex items-center h-11 px-5 border-b border-border/60 bg-background">
+          <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
 
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabClick(tab.id)}
-                onMouseEnter={() => setHoveredTabId(tab.id)}
-                onMouseLeave={() => setHoveredTabId(null)}
-                className={cn(
-                  'group relative flex items-center gap-1.5',
-                  'px-4 h-11 min-w-[120px] max-w-[200px]',
-                  'text-sm font-normal',
-                  'transition-colors duration-200 ease-out',
-                  isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
-                )}
-              >
-                {/* Active indicator - bottom border */}
-                {isActive && (
-                  <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
-                )}
-
-                {/* Tab type icon */}
-                {tab.type === 'chat' && (
-                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-                )}
-                {(tab.type === 'diff' || tab.type === 'file') && (
-                  <FileCode className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-                )}
-
-                {/* Tab label with gradient fade */}
-                <div className="relative flex-1 min-w-0">
-                  <span className="block truncate">
-                    {tab.label}
-                  </span>
-
-                  {/* Gradient fade overlay - appears on hover to create space for close button (only for closeable tabs) */}
-                  {tab.closeable !== false && (
-                    <div className={cn(
-                      'absolute inset-y-0 right-0 w-12 pointer-events-none',
-                      'bg-gradient-to-l from-background via-background/90 to-transparent',
-                      'opacity-0 transition-opacity duration-150 ease-out',
-                      'group-hover:opacity-100'
-                    )} />
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  className={cn(
+                    'group relative flex items-center gap-1.5',
+                    'px-4 h-11 min-w-[120px] max-w-[200px]',
+                    'text-sm font-normal',
+                    'transition-colors duration-200 ease-out',
+                    isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
                   )}
-                </div>
+                >
+                  {/* Active indicator - bottom border */}
+                  {isActive && (
+                    <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
+                  )}
 
-                {/* Close button - absolutely positioned on right edge, appears on hover only */}
-                {tab.closeable !== false && (
-                  <button
-                    type="button"
-                    onClick={(e) => handleTabClose(e, tab.id)}
-                    className={cn(
-                      'absolute right-2 flex items-center justify-center w-4 h-4 rounded-sm',
-                      'transition-all duration-150 ease-out',
-                      'hover:bg-muted-foreground/20',
-                      'opacity-0 group-hover:opacity-100'
+                  {/* Tab type icon */}
+                  {getTabIcon(tab.type)}
+
+                  {/* Tab label with gradient fade */}
+                  <div className="relative flex-1 min-w-0">
+                    <span className="block truncate">
+                      {tab.label}
+                    </span>
+
+                    {/* Gradient fade overlay - only for closeable tabs */}
+                    {tab.closeable !== false && (
+                      <div className={cn(
+                        'absolute inset-y-0 right-0 pointer-events-none',
+                        TAB_STYLES.GRADIENT_WIDTH,
+                        'bg-gradient-to-l from-background via-background/90 to-transparent',
+                        'opacity-0 transition-opacity duration-150 ease-out',
+                        'group-hover:opacity-100'
+                      )} />
                     )}
-                    aria-label={`Close ${tab.label} tab`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </button>
-            );
-          })}
+                  </div>
 
-          {/* Add tab button */}
-          {onTabAdd && (
-            <TooltipProvider delayDuration={200}>
+                  {/* Close button - absolutely positioned on right edge */}
+                  {tab.closeable !== false && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleTabClose(e, tab.id)}
+                      className={cn(
+                        'absolute flex items-center justify-center w-4 h-4 rounded-sm',
+                        TAB_STYLES.CLOSE_BUTTON_OFFSET,
+                        'transition-all duration-150 ease-out',
+                        'hover:bg-muted-foreground/20',
+                        'opacity-0 group-hover:opacity-100'
+                      )}
+                      aria-label={`Close ${tab.label} tab`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Add tab button */}
+            {onTabAdd && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -279,11 +269,11 @@ export function MainContentTabBar({
                   <p className="text-xs">New chat (⌘T)</p>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
