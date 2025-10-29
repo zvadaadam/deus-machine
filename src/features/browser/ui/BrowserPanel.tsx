@@ -447,11 +447,11 @@ _You can ask me to modify this element, debug it, or help with related styling._
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-4 border-b border-border flex-shrink-0">
+      <div className="flex items-center gap-2 p-2 border-b border-border flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={goBack}
           disabled={loading || historyIndex <= 0}
           title="Go back"
@@ -462,7 +462,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={goForward}
           disabled={loading || historyIndex >= history.length - 1}
           title="Go forward"
@@ -473,7 +473,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={reload}
           disabled={loading || !currentUrl}
           title="Reload"
@@ -481,22 +481,32 @@ _You can ask me to modify this element, debug it, or help with related styling._
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
 
-        <div className="flex-1">
+        <div className="flex-1 relative">
           <Input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Enter URL and press Enter..."
-            className="h-8 text-sm"
+            className="h-7 text-sm pr-8"
             disabled={loading}
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 absolute right-0.5 top-0.5"
+            onClick={openInExternalBrowser}
+            disabled={!currentUrl}
+            title="Open in external browser"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={injectAutomation}
           disabled={!currentUrl || !devBrowserStatus.running || injected}
           title={injected ? "Automation active" : "Inject automation"}
@@ -507,7 +517,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={toggleElementSelector}
           disabled={!currentUrl || !injected || isCrossOrigin}
           aria-pressed={selectorActive}
@@ -519,18 +529,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
-          onClick={openInExternalBrowser}
-          disabled={!currentUrl}
-          title="Open in external browser"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => setShowConsole(!showConsole)}
           title={showConsole ? "Hide console" : "Show console"}
         >

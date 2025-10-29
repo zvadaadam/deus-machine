@@ -53,18 +53,16 @@ export function BrowserOverlay({ isOpen, workspaceId, onClose }: BrowserOverlayP
         isOpen ? 'translate-x-0' : 'translate-x-full'
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-end p-4 border-b border-border bg-background/50 backdrop-blur-sm">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="h-8 w-8"
-          title="Close browser"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Floating close button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onClose}
+        className="absolute top-2 right-2 h-7 w-7 z-10"
+        title="Close browser"
+      >
+        <X className="h-4 w-4" />
+      </Button>
 
       {/* Browser Panel Content */}
       <div className="flex-1 overflow-hidden">
