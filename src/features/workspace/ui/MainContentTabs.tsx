@@ -191,6 +191,7 @@ export function MainContentTabBar({
                 <input
                   ref={branchInputRef}
                   type="text"
+                  aria-label="Edit branch name"
                   value={branchInputValue}
                   onChange={(e) => setBranchInputValue(e.target.value)}
                   onKeyDown={handleBranchKeyDown}
@@ -204,6 +205,7 @@ export function MainContentTabBar({
                 />
               ) : (
                 <button
+                  type="button"
                   onClick={startEditingBranch}
                   disabled={!onBranchRename}
                   className={cn(
@@ -221,6 +223,8 @@ export function MainContentTabBar({
               {/* Edit pencil icon - only show when not editing and onBranchRename is provided */}
               {!isEditingBranch && onBranchRename && (
                 <button
+                  type="button"
+                  aria-label="Rename branch"
                   onClick={startEditingBranch}
                   className="flex items-center justify-center"
                 >
@@ -236,6 +240,9 @@ export function MainContentTabBar({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
+                    aria-pressed={!!isBrowserOpen}
+                    aria-label={isBrowserOpen ? 'Close browser' : 'Open browser'}
                     onClick={onBrowserToggle}
                     className={cn(
                       "h-9 w-9 rounded-lg flex items-center justify-center",
@@ -264,13 +271,22 @@ export function MainContentTabBar({
               const isActive = tab.id === activeTabId;
 
               return (
-                <button
+                <div
                   key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={0}
                   onClick={() => handleTabClick(tab.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTabClick(tab.id);
+                    }
+                  }}
                   className={cn(
                     'group relative flex items-center gap-1.5',
                     'px-4 h-11 min-w-[120px] max-w-[200px]',
-                    'text-sm font-normal',
+                    'text-sm font-normal cursor-pointer',
                     'transition-colors duration-200 ease-out',
                     isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
                   )}
@@ -318,7 +334,7 @@ export function MainContentTabBar({
                       <X className="w-3 h-3" />
                     </button>
                   )}
-                </button>
+                </div>
               );
             })}
 
@@ -327,6 +343,8 @@ export function MainContentTabBar({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
+                    aria-label="New chat tab"
                     onClick={handleAddTab}
                     className={cn(
                       'flex items-center justify-center',
