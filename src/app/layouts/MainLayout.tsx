@@ -164,6 +164,28 @@ function MainContent({
     setActiveMainTabId(newId);
   };
 
+  // Keyboard shortcut: Cmd+T to open new chat tab
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // ⌘T or Ctrl+T - New chat tab
+      if ((e.metaKey || e.ctrlKey) && e.key === 't' && selectedWorkspace) {
+        e.preventDefault(); // Prevent browser's "new tab" action
+        const newId = `chat-${mainTabs.length + 1}`;
+        const newTab: Tab = {
+          id: newId,
+          label: `Chat #${mainTabs.length + 1}`,
+          type: 'chat',
+          closeable: true
+        };
+        setMainTabs([...mainTabs, newTab]);
+        setActiveMainTabId(newId);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mainTabs, selectedWorkspace]);
+
   /**
    * Open a diff as a new tab (or switch to existing)
    *
