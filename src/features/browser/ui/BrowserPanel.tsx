@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, Info, Target } from "lucide-react";
+import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
 /**
@@ -489,7 +489,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Enter URL and press Enter..."
-            className="h-7 text-sm pr-8"
+            className="h-7 text-sm pr-8 focus-visible:ring-0 focus-visible:border-border"
             disabled={loading}
           />
           <Button
