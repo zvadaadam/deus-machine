@@ -45,7 +45,7 @@ export function BrowserOverlay({ isOpen, workspaceId, onClose }: BrowserOverlayP
         'fixed top-0 right-0 bottom-0 z-50',
         'w-[400px]',
         'bg-background/95 backdrop-blur-xl',
-        'border-l border-border/40',
+        'border-l border-border',
         'shadow-[-20px_0_60px_rgba(0,0,0,0.3)]',
         'flex flex-col',
         'transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]',
@@ -54,8 +54,7 @@ export function BrowserOverlay({ isOpen, workspaceId, onClose }: BrowserOverlayP
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background/50 backdrop-blur-sm">
-        <h2 className="text-lg font-semibold text-foreground">Browser</h2>
+      <div className="flex items-center justify-end p-4 border-b border-border bg-background/50 backdrop-blur-sm">
         <Button
           variant="ghost"
           size="icon"
