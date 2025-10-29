@@ -200,7 +200,7 @@ export function MainContentTabBar({
                 onMouseEnter={() => setHoveredTabId(tab.id)}
                 onMouseLeave={() => setHoveredTabId(null)}
                 className={cn(
-                  'group relative flex items-center gap-2',
+                  'group relative flex items-center gap-1.5',
                   'px-4 h-11 min-w-[120px] max-w-[200px]',
                   'text-sm font-normal',
                   'transition-colors duration-200 ease-out',
