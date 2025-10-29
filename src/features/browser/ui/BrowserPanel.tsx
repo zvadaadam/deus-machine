@@ -12,6 +12,7 @@ const SCRIPT_FETCH_TIMEOUT_MS = 10000;
 
 interface BrowserPanelProps {
   workspaceId: string | null;
+  onClose?: () => void;
 }
 
 interface ConsoleLog {
@@ -20,7 +21,7 @@ interface ConsoleLog {
   message: string;
 }
 
-export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
+export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   const [url, setUrl] = useState("https://example.com");
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -535,6 +536,18 @@ _You can ask me to modify this element, debug it, or help with related styling._
         >
           <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
         </Button>
+
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onClose}
+            title="Close browser"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { BrowserPanel } from '@/features/browser';
 import { cn } from '@/shared/lib/utils';
 
@@ -53,21 +51,7 @@ export function BrowserOverlay({ isOpen, workspaceId, onClose }: BrowserOverlayP
         isOpen ? 'translate-x-0' : 'translate-x-full'
       )}
     >
-      {/* Floating close button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onClose}
-        className="absolute top-2 right-2 h-7 w-7 z-10"
-        title="Close browser"
-      >
-        <X className="h-4 w-4" />
-      </Button>
-
-      {/* Browser Panel Content */}
-      <div className="flex-1 overflow-hidden">
-        <BrowserPanel workspaceId={workspaceId} />
-      </div>
+      <BrowserPanel workspaceId={workspaceId} onClose={onClose} />
     </div>
   );
 
