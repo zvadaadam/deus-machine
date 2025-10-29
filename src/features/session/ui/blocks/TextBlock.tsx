@@ -46,13 +46,25 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
   };
 
   // User messages: plain text (preserve newlines)
+  // Maximum readability - theme-based bright text color
+  // Color applied LAST to ensure proper CSS specificity (no !important needed)
   if (role === 'user') {
+    // Remove text color from weightStyles for user messages to avoid conflicts
+    const userWeightStyle = weight === 'muted'
+      ? 'text-[13px] leading-[1.5] opacity-70 py-1'  // Removed text-muted-foreground
+      : weightStyles[weight];
+
     return (
-      <div className={chatTheme.blocks.text.container}>
-        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap text-[14px] leading-[1.6]', weightStyles[weight])}>
-          {text}
-        </p>
-      </div>
+      <p className={cn(
+        'whitespace-pre-wrap',
+        'text-[14px] leading-[1.5]',
+        chatTheme.message.user.text,
+        userWeightStyle,
+        // Theme color applied last - proper CSS specificity, extensible
+        chatTheme.message.user.textColor
+      )}>
+        {text}
+      </p>
     );
   }
 

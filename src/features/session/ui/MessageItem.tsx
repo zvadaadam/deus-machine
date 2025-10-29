@@ -10,11 +10,11 @@ import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
-import { Copy, RotateCcw } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Copy, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
-import { useMemo, memo } from "react";
+import { useMemo, memo, useState, useRef, useEffect } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -29,12 +29,23 @@ interface MessageItemProps {
 export const MessageItem = memo(function MessageItem({ message, isLatestAssistant = false }: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [shouldCollapse, setShouldCollapse] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Parse message content (memoized to avoid re-parsing JSON on every render)
   const contentBlocks = useMemo(
     () => parseContent(message.content),
     [message.content, parseContent]
   );
+
+  // Check if content should be collapsible (user messages only, uses theme constants)
+  useEffect(() => {
+    if (message.role === 'user' && contentRef.current) {
+      const actualHeight = contentRef.current.scrollHeight;
+      setShouldCollapse(actualHeight > chatTheme.collapse.maxHeight);
+    }
+  }, [message.role, contentBlocks]);
 
   // Extract text content for copy functionality
   const extractTextContent = (): string => {
@@ -58,6 +69,29 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
   const handleRevert = () => {
     // TODO: Implement revert functionality
     console.log('Revert to message:', message.id);
+  };
+
+  // Helper: Render content blocks with proper keys (DRY - used for both user/assistant)
+  const renderContentBlocks = (blocks: (ContentBlock | string)[]) => {
+    return blocks.map((block: ContentBlock | string, index: number) => {
+      // Generate unique key: use tool_use id if available, otherwise fallback to index
+      const key = typeof block === 'object' && block?.type === 'tool_use'
+        ? block.id
+        : `${message.id}:${index}`;
+
+      // Determine if this is the last text block (for assistant weight styling)
+      const isLastTextBlock = message.role === 'assistant' && index === lastTextBlockIndex;
+
+      return (
+        <BlockRenderer
+          key={key}
+          block={block}
+          index={index}
+          role={message.role}
+          isLastTextBlock={isLastTextBlock}
+        />
+      );
+    });
   };
 
   /**
@@ -117,25 +151,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         )}
       >
         {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: ContentBlock | string, index: number) => {
-            // Generate unique key: use tool_use id if available, otherwise fallback to index
-            const key = typeof block === 'object' && block?.type === 'tool_use'
-              ? block.id
-              : `${message.id}:${index}`;
-
-            // Determine if this is the last text block (for weight)
-            const isLastTextBlock = index === lastTextBlockIndex;
-
-            return (
-              <BlockRenderer
-                key={key}
-                block={block}
-                index={index}
-                role={message.role}
-                isLastTextBlock={isLastTextBlock}
-              />
-            );
-          })
+          renderContentBlocks(contentBlocks as (ContentBlock | string)[])
         ) : (
           // Fallback for non-array content
           <div className="text-base leading-relaxed">
@@ -146,84 +162,82 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     );
   }
 
-  // User messages (original rendering)
+  // User messages - refined design with absolutely positioned actions
   return (
-    <div
-      key={message.id}
-      className={cn(
-        'relative group',
-        roleStyles.maxWidth,
-        roleStyles.container,
-        'rounded-3xl px-4 py-4',
-        'flex flex-col gap-2 min-w-0 overflow-x-hidden',
-        chatTheme.common.transition
-      )}
-    >
-      {/* Hover action buttons - only for user messages */}
-      <TooltipProvider delayDuration={200}>
-        <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {/* Copy button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'h-7 w-7 flex items-center justify-center rounded-md',
-                  'bg-card hover:bg-muted border border-border shadow-sm',
-                  'text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-200'
-                )}
-                aria-label="Copy message"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{copied ? 'Copied!' : 'Copy Message'}</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Revert button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleRevert}
-                className={cn(
-                  'h-7 w-7 flex items-center justify-center rounded-md',
-                  'bg-card hover:bg-muted border border-border shadow-sm',
-                  'text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-200'
-                )}
-                aria-label="Revert to this turn"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>Revert to this turn</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </TooltipProvider>
-
-      {/* Message content - uses BlockRenderer */}
-      <div className="flex flex-col min-w-0">
-        {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: ContentBlock | string, index: number) => {
-            // Generate unique key: use tool_use id if available, otherwise fallback to index
-            const key = typeof block === 'object' && block?.type === 'tool_use'
-              ? block.id
-              : `${message.id}:${index}`;
-            return (
-              <BlockRenderer key={key} block={block} index={index} role={message.role} />
-            );
-          })
-        ) : (
-          // Fallback for non-array content
-          <div className="text-base leading-relaxed">
-            {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
-          </div>
+    <div key={message.id} className="relative group flex flex-col items-end mb-8">
+      {/* Message card */}
+      <div
+        className={cn(
+          roleStyles.maxWidth,
+          roleStyles.container,
+          chatTheme.message.user.shape,
+          chatTheme.message.user.padding,
+          'min-w-0'
         )}
+      >
+        {/* Message content */}
+        <div
+          ref={contentRef}
+          id={`message-content-${message.id}`}
+          className={cn(
+            'min-w-0',
+            // Collapse long messages (using theme constant)
+            shouldCollapse && !isExpanded && 'max-h-[168px] overflow-hidden relative'
+          )}
+        >
+          {Array.isArray(contentBlocks) ? (
+            renderContentBlocks(contentBlocks as (ContentBlock | string)[])
+          ) : (
+            // Fallback for non-array content
+            <div className={cn('text-[14px] leading-[1.6]', roleStyles.text)}>
+              {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+            </div>
+          )}
+
+          {/* Fade overlay for collapsed state - subtle gradient */}
+          {shouldCollapse && !isExpanded && (
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted via-muted/60 to-transparent pointer-events-none" />
+          )}
+        </div>
+
+        {/* Show more/less button */}
+        {shouldCollapse && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={chatTheme.expandToggle.button}
+            aria-expanded={isExpanded}
+            aria-controls={`message-content-${message.id}`}
+          >
+            {isExpanded ? (
+              <>
+                Show less
+                <ChevronUp className={chatTheme.expandToggle.icon} />
+              </>
+            ) : (
+              <>
+                Show more
+                <ChevronDown className={chatTheme.expandToggle.icon} />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Action buttons - below the card */}
+      <div className={chatTheme.userActions.container}>
+        <ActionButton
+          icon={Copy}
+          label={copied ? 'Copied' : 'Copy'}
+          onClick={handleCopy}
+          active={copied}
+        />
+        {/* TODO: Enable Revert button when functionality is implemented */}
+        {/* <ActionButton
+          icon={RotateCcw}
+          label="Revert"
+          onClick={handleRevert}
+        /> */}
       </div>
     </div>
   );

@@ -38,15 +38,42 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      container: 'ml-auto bg-primary/12 border border-primary/20 backdrop-blur-sm w-fit',
-      text: 'text-foreground',
+      // Maximum Readability: Lighter background stands out + bright theme-aware text
+      // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
+      container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
+      text: 'font-normal', // Font weight only - color applied separately for proper specificity
+      textColor: 'text-gray-950 dark:text-white', // Theme-aware: very dark in light mode, pure white in dark mode
       maxWidth: 'max-w-[85%]',
+      shape: 'rounded-xl', // 12px - tighter than before
+      padding: 'px-3 py-2', // Tight, dense padding
     },
     assistant: {
       container: 'mr-auto',
       text: 'text-foreground',
       maxWidth: 'max-w-full',
     },
+  },
+
+  // User message action buttons (ghost style - positioned absolutely to not affect spacing)
+  userActions: {
+    container: 'absolute -bottom-8 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
+    button: 'h-6 px-2 rounded-md flex items-center gap-1.5 hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-all duration-200 ease text-xs',
+    buttonActive: 'text-success hover:bg-success/10',
+    icon: 'w-3 h-3',
+  },
+
+  // Show more/less for long messages (subtle, not prominent)
+  expandToggle: {
+    button: 'text-xs text-muted-foreground hover:text-foreground font-normal mt-2 flex items-center gap-1 transition-colors duration-200',
+    icon: 'w-3 h-3',
+  },
+
+  // Collapse constants for long messages
+  collapse: {
+    lineHeight: 21,      // 14px * 1.5 (text-[14px] * leading-[1.5])
+    maxLines: 8,         // Number of lines before collapse
+    maxHeight: 168,      // 21 * 8 = 168px
+    fadeHeight: 48,      // h-12 in pixels (3rem = 48px) - subtle fade per user feedback
   },
 
   // Content block styles
