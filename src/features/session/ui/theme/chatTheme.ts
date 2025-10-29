@@ -38,10 +38,11 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      // Clean & Simple: Solid background, no border, tight padding
-      // Bright, immediately readable text - maximum contrast
-      container: 'ml-auto w-fit bg-muted/80 hover:bg-muted backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
-      text: 'text-foreground font-normal', // Normal weight, full brightness for immediate readability
+      // Maximum Readability: Lighter background stands out + bright white text
+      // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
+      // Using full opacity muted (lighter than card) with explicit bright text
+      container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
+      text: 'text-white font-normal', // Pure white text for maximum contrast and readability
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
