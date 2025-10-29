@@ -226,13 +226,15 @@ export function MainContentTabBar({
                     {tab.label}
                   </span>
 
-                  {/* Gradient fade overlay - appears on hover to create space for close button */}
-                  <div className={cn(
-                    'absolute inset-y-0 right-0 w-8 pointer-events-none',
-                    'bg-gradient-to-l from-background to-transparent',
-                    'opacity-0 transition-opacity duration-150 ease-out',
-                    'group-hover:opacity-100'
-                  )} />
+                  {/* Gradient fade overlay - appears on hover to create space for close button (only for closeable tabs) */}
+                  {tab.closeable !== false && (
+                    <div className={cn(
+                      'absolute inset-y-0 right-0 w-8 pointer-events-none',
+                      'bg-gradient-to-l from-background to-transparent',
+                      'opacity-0 transition-opacity duration-150 ease-out',
+                      'group-hover:opacity-100'
+                    )} />
+                  )}
                 </div>
 
                 {/* Close button - absolutely positioned on right edge, appears on hover only */}
@@ -257,19 +259,27 @@ export function MainContentTabBar({
 
           {/* Add tab button */}
           {onTabAdd && (
-            <button
-              onClick={handleAddTab}
-              className={cn(
-                'flex items-center justify-center',
-                'px-4 h-11 flex-shrink-0',
-                'text-muted-foreground/60 hover:text-muted-foreground',
-                'hover:bg-muted/10',
-                'transition-all duration-200 ease-out'
-              )}
-              title="Add new chat"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleAddTab}
+                    className={cn(
+                      'flex items-center justify-center',
+                      'px-4 h-11 flex-shrink-0',
+                      'text-muted-foreground/60 hover:text-muted-foreground',
+                      'hover:bg-muted/10',
+                      'transition-all duration-200 ease-out'
+                    )}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">New chat (⌘T)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
