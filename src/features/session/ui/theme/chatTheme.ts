@@ -42,7 +42,7 @@ export const chatTheme = {
       // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
       container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
       text: 'font-normal', // Font weight only - color applied separately for proper specificity
-      textColor: 'text-gray-900 dark:text-white/95', // Theme-aware: dark text in light mode, bright white in dark mode
+      textColor: 'text-gray-950 dark:text-white', // Theme-aware: very dark in light mode, pure white in dark mode
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
@@ -62,9 +62,9 @@ export const chatTheme = {
     icon: 'w-3 h-3',
   },
 
-  // Show more/less for long messages
+  // Show more/less for long messages (subtle, not prominent)
   expandToggle: {
-    button: 'text-xs text-primary hover:text-primary/80 font-medium mt-2 flex items-center gap-1 transition-colors duration-200',
+    button: 'text-xs text-muted-foreground hover:text-foreground font-normal mt-2 flex items-center gap-1 transition-colors duration-200',
     icon: 'w-3 h-3',
   },
 
