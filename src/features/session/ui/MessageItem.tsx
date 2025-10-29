@@ -39,14 +39,11 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     [message.content, parseContent]
   );
 
-  // Check if content should be collapsible (user messages only, over 8 lines)
+  // Check if content should be collapsible (user messages only, uses theme constants)
   useEffect(() => {
     if (message.role === 'user' && contentRef.current) {
-      const lineHeight = 22.4; // 1.6 * 14px
-      const maxLines = 8;
-      const maxHeight = lineHeight * maxLines;
       const actualHeight = contentRef.current.scrollHeight;
-      setShouldCollapse(actualHeight > maxHeight);
+      setShouldCollapse(actualHeight > chatTheme.collapse.maxHeight);
     }
   }, [message.role, contentBlocks]);
 
@@ -72,6 +69,29 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
   const handleRevert = () => {
     // TODO: Implement revert functionality
     console.log('Revert to message:', message.id);
+  };
+
+  // Helper: Render content blocks with proper keys (DRY - used for both user/assistant)
+  const renderContentBlocks = (blocks: (ContentBlock | string)[]) => {
+    return blocks.map((block: ContentBlock | string, index: number) => {
+      // Generate unique key: use tool_use id if available, otherwise fallback to index
+      const key = typeof block === 'object' && block?.type === 'tool_use'
+        ? block.id
+        : `${message.id}:${index}`;
+
+      // Determine if this is the last text block (for assistant weight styling)
+      const isLastTextBlock = message.role === 'assistant' && index === lastTextBlockIndex;
+
+      return (
+        <BlockRenderer
+          key={key}
+          block={block}
+          index={index}
+          role={message.role}
+          isLastTextBlock={isLastTextBlock}
+        />
+      );
+    });
   };
 
   /**
@@ -131,25 +151,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         )}
       >
         {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: ContentBlock | string, index: number) => {
-            // Generate unique key: use tool_use id if available, otherwise fallback to index
-            const key = typeof block === 'object' && block?.type === 'tool_use'
-              ? block.id
-              : `${message.id}:${index}`;
-
-            // Determine if this is the last text block (for weight)
-            const isLastTextBlock = index === lastTextBlockIndex;
-
-            return (
-              <BlockRenderer
-                key={key}
-                block={block}
-                index={index}
-                role={message.role}
-                isLastTextBlock={isLastTextBlock}
-              />
-            );
-          })
+          renderContentBlocks(contentBlocks as (ContentBlock | string)[])
         ) : (
           // Fallback for non-array content
           <div className="text-base leading-relaxed">
@@ -178,20 +180,12 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           ref={contentRef}
           className={cn(
             'min-w-0',
-            // Collapse long messages
+            // Collapse long messages (using theme constant)
             shouldCollapse && !isExpanded && 'max-h-[180px] overflow-hidden relative'
           )}
         >
           {Array.isArray(contentBlocks) ? (
-            contentBlocks.map((block: ContentBlock | string, index: number) => {
-              // Generate unique key: use tool_use id if available, otherwise fallback to index
-              const key = typeof block === 'object' && block?.type === 'tool_use'
-                ? block.id
-                : `${message.id}:${index}`;
-              return (
-                <BlockRenderer key={key} block={block} index={index} role={message.role} />
-              );
-            })
+            renderContentBlocks(contentBlocks as (ContentBlock | string)[])
           ) : (
             // Fallback for non-array content
             <div className={cn('text-[14px] leading-[1.6]', roleStyles.text)}>
@@ -199,7 +193,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
             </div>
           )}
 
-          {/* Fade overlay for collapsed state */}
+          {/* Fade overlay for collapsed state (using theme constant for height) */}
           {shouldCollapse && !isExpanded && (
             <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-muted to-transparent pointer-events-none" />
           )}

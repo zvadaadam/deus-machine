@@ -40,9 +40,9 @@ export const chatTheme = {
     user: {
       // Maximum Readability: Lighter background stands out + bright white text
       // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
-      // Using full opacity muted (lighter than card) with explicit bright text
       container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
-      text: 'font-normal', // Font weight only - color applied separately in TextBlock for proper specificity
+      text: 'font-normal', // Font weight only - color applied separately for proper specificity
+      textColor: 'text-white', // Bright white for maximum readability (dark mode optimized)
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
@@ -66,6 +66,14 @@ export const chatTheme = {
   expandToggle: {
     button: 'text-xs text-primary hover:text-primary/80 font-medium mt-2 flex items-center gap-1 transition-colors duration-200',
     icon: 'w-3 h-3',
+  },
+
+  // Collapse constants for long messages
+  collapse: {
+    lineHeight: 22.4,    // 1.5 * 14px (text-[14px] * leading-[1.5])
+    maxLines: 8,         // Number of lines before collapse
+    maxHeight: 179.2,    // 22.4 * 8 = 179.2px (used for max-h-[180px])
+    fadeHeight: 64,      // h-16 in pixels (4rem = 64px)
   },
 
   // Content block styles

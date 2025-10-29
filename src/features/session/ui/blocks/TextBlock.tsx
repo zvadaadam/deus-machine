@@ -46,7 +46,7 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
   };
 
   // User messages: plain text (preserve newlines)
-  // Maximum readability - explicit bright white text
+  // Maximum readability - theme-based bright text color
   // Color applied LAST to ensure proper CSS specificity (no !important needed)
   if (role === 'user') {
     // Remove text color from weightStyles for user messages to avoid conflicts
@@ -60,8 +60,8 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
         'text-[14px] leading-[1.5]',
         chatTheme.message.user.text,
         userWeightStyle,
-        // Bright white applied last - proper CSS specificity, no hacks
-        'text-white'
+        // Theme color applied last - proper CSS specificity, extensible
+        chatTheme.message.user.textColor
       )}>
         {text}
       </p>
