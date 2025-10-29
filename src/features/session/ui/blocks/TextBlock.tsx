@@ -46,13 +46,16 @@ export function TextBlock({ block, role = 'assistant', weight = 'normal' }: Text
   };
 
   // User messages: plain text (preserve newlines)
+  // Uses refined styling: text-foreground/90 for subtle hierarchy
   if (role === 'user') {
     return (
-      <div className={chatTheme.blocks.text.container}>
-        <p className={cn(chatTheme.blocks.text.content, 'whitespace-pre-wrap text-[14px] leading-[1.6]', weightStyles[weight])}>
-          {text}
-        </p>
-      </div>
+      <p className={cn(
+        chatTheme.message.user.text,
+        'whitespace-pre-wrap text-[14px] leading-[1.6]',
+        weightStyles[weight]
+      )}>
+        {text}
+      </p>
     );
   }
 
