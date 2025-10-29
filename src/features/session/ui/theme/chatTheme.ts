@@ -38,13 +38,13 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      // Refined & Visible: Subtle background that's clearly distinguishable
-      // Elegant but scannable - user can spot their messages instantly
-      container: 'ml-auto w-fit bg-primary/8 hover:bg-primary/12 border border-primary/20 hover:border-primary/30 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 ease-out motion-reduce:transition-none',
-      text: 'text-foreground font-normal', // Full opacity for readability
+      // Clean & Simple: Solid background, no border, tight padding
+      // Dense, scannable design with prominent text
+      container: 'ml-auto w-fit bg-muted/80 hover:bg-muted backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
+      text: 'text-foreground font-medium', // Medium weight for prominence
       maxWidth: 'max-w-[85%]',
-      shape: 'rounded-2xl', // More refined than rounded-3xl (16px vs 24px)
-      padding: 'px-5 py-3.5', // Wider, shorter - card-like proportions
+      shape: 'rounded-xl', // 12px - tighter than before
+      padding: 'px-3 py-2', // Tight, dense padding
     },
     assistant: {
       container: 'mr-auto',
