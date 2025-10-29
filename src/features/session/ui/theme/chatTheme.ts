@@ -38,15 +38,27 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      container: 'ml-auto bg-primary/12 border border-primary/20 backdrop-blur-sm w-fit',
-      text: 'text-foreground',
+      // Jony Ive inspired: "Invisible until necessary"
+      // User messages recede, allowing assistant responses to shine
+      container: 'ml-auto w-fit bg-transparent hover:bg-muted/40 border border-border/30 hover:border-border/60 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 ease-out hover:translate-y-[-1px] motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+      text: 'text-foreground/90 font-normal', // Slightly muted - 90% opacity
       maxWidth: 'max-w-[85%]',
+      shape: 'rounded-2xl', // More refined than rounded-3xl (16px vs 24px)
+      padding: 'px-5 py-3.5', // Wider, shorter - card-like proportions
     },
     assistant: {
       container: 'mr-auto',
       text: 'text-foreground',
       maxWidth: 'max-w-full',
     },
+  },
+
+  // User message action buttons (integrated design)
+  userActions: {
+    container: 'flex gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
+    button: 'w-7 h-7 rounded-lg flex items-center justify-center bg-transparent hover:bg-muted/60 text-muted-foreground/60 hover:text-foreground border border-transparent hover:border-border/40 transition-all duration-200 ease',
+    buttonActive: 'bg-success/10 text-success border-success/30',
+    icon: 'w-3.5 h-3.5',
   },
 
   // Content block styles

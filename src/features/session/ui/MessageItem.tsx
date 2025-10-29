@@ -11,7 +11,7 @@ import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 import { Copy, RotateCcw } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
 import { useMemo, memo } from "react";
@@ -146,7 +146,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     );
   }
 
-  // User messages (original rendering)
+  // User messages - refined, integrated design
   return (
     <div
       key={message.id}
@@ -154,76 +154,47 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         'relative group',
         roleStyles.maxWidth,
         roleStyles.container,
-        'rounded-3xl px-4 py-4',
-        'flex flex-col gap-2 min-w-0 overflow-x-hidden',
-        chatTheme.common.transition
+        chatTheme.message.user.shape,
+        chatTheme.message.user.padding,
+        'min-w-0'
       )}
     >
-      {/* Hover action buttons - only for user messages */}
-      <TooltipProvider delayDuration={200}>
-        <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {/* Copy button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'h-7 w-7 flex items-center justify-center rounded-md',
-                  'bg-card hover:bg-muted border border-border shadow-sm',
-                  'text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-200'
-                )}
-                aria-label="Copy message"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{copied ? 'Copied!' : 'Copy Message'}</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Revert button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleRevert}
-                className={cn(
-                  'h-7 w-7 flex items-center justify-center rounded-md',
-                  'bg-card hover:bg-muted border border-border shadow-sm',
-                  'text-muted-foreground hover:text-foreground',
-                  'transition-colors duration-200'
-                )}
-                aria-label="Revert to this turn"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>Revert to this turn</p>
-            </TooltipContent>
-          </Tooltip>
+      {/* Integrated layout: content + actions */}
+      <div className="flex items-end gap-3">
+        {/* Message content - main focus */}
+        <div className="flex-1 min-w-0">
+          {Array.isArray(contentBlocks) ? (
+            contentBlocks.map((block: ContentBlock | string, index: number) => {
+              // Generate unique key: use tool_use id if available, otherwise fallback to index
+              const key = typeof block === 'object' && block?.type === 'tool_use'
+                ? block.id
+                : `${message.id}:${index}`;
+              return (
+                <BlockRenderer key={key} block={block} index={index} role={message.role} />
+              );
+            })
+          ) : (
+            // Fallback for non-array content
+            <div className={cn('text-[14px] leading-[1.6]', roleStyles.text)}>
+              {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+            </div>
+          )}
         </div>
-      </TooltipProvider>
 
-      {/* Message content - uses BlockRenderer */}
-      <div className="flex flex-col min-w-0">
-        {Array.isArray(contentBlocks) ? (
-          contentBlocks.map((block: ContentBlock | string, index: number) => {
-            // Generate unique key: use tool_use id if available, otherwise fallback to index
-            const key = typeof block === 'object' && block?.type === 'tool_use'
-              ? block.id
-              : `${message.id}:${index}`;
-            return (
-              <BlockRenderer key={key} block={block} index={index} role={message.role} />
-            );
-          })
-        ) : (
-          // Fallback for non-array content
-          <div className="text-base leading-relaxed">
-            {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
-          </div>
-        )}
+        {/* Action buttons - integrated, not floating */}
+        <div className={chatTheme.userActions.container}>
+          <ActionButton
+            icon={Copy}
+            label={copied ? 'Copied!' : 'Copy Message'}
+            onClick={handleCopy}
+            active={copied}
+          />
+          <ActionButton
+            icon={RotateCcw}
+            label="Revert to this turn"
+            onClick={handleRevert}
+          />
+        </div>
       </div>
     </div>
   );
