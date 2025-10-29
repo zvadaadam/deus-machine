@@ -214,8 +214,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         className="vibrancy-bg border border-border/20 rounded-xl w-[90%] max-w-[1200px] h-[90vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-border/40 flex justify-between items-center">
-          <h2 id="workspace-activity-title" className="m-0 text-2xl text-foreground">Workspace Activity</h2>
+        <div className="p-4 border-b border-border/60 flex justify-between items-center">
+          <h2 id="workspace-activity-title" className="m-0 text-lg font-medium text-foreground">Workspace Activity</h2>
           <Button
             variant="ghost"
             size="icon"
