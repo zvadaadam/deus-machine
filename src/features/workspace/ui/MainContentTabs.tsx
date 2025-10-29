@@ -229,8 +229,8 @@ export function MainContentTabBar({
                   {/* Gradient fade overlay - appears on hover to create space for close button (only for closeable tabs) */}
                   {tab.closeable !== false && (
                     <div className={cn(
-                      'absolute inset-y-0 right-0 w-8 pointer-events-none',
-                      'bg-gradient-to-l from-background to-transparent',
+                      'absolute inset-y-0 right-0 w-12 pointer-events-none',
+                      'bg-gradient-to-l from-background via-background/90 to-transparent',
                       'opacity-0 transition-opacity duration-150 ease-out',
                       'group-hover:opacity-100'
                     )} />
