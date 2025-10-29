@@ -42,7 +42,7 @@ export const chatTheme = {
       // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
       // Using full opacity muted (lighter than card) with explicit bright text
       container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
-      text: 'text-white font-normal', // Pure white text for maximum contrast and readability
+      text: '!text-white font-normal', // Pure white text with !important for maximum contrast
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
