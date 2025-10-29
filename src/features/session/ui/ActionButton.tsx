@@ -28,6 +28,7 @@ export function ActionButton({
 }: ActionButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         chatTheme.userActions.button,
@@ -35,6 +36,7 @@ export function ActionButton({
         className
       )}
       aria-label={label}
+      aria-pressed={active}
     >
       <Icon className={chatTheme.userActions.icon} />
       {showLabel && <span>{label}</span>}

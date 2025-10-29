@@ -178,10 +178,11 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         {/* Message content */}
         <div
           ref={contentRef}
+          id={`message-content-${message.id}`}
           className={cn(
             'min-w-0',
             // Collapse long messages (using theme constant)
-            shouldCollapse && !isExpanded && 'max-h-[180px] overflow-hidden relative'
+            shouldCollapse && !isExpanded && 'max-h-[168px] overflow-hidden relative'
           )}
         >
           {Array.isArray(contentBlocks) ? (
@@ -202,8 +203,11 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         {/* Show more/less button */}
         {shouldCollapse && (
           <button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
             className={chatTheme.expandToggle.button}
+            aria-expanded={isExpanded}
+            aria-controls={`message-content-${message.id}`}
           >
             {isExpanded ? (
               <>
@@ -228,11 +232,12 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           onClick={handleCopy}
           active={copied}
         />
-        <ActionButton
+        {/* TODO: Enable Revert button when functionality is implemented */}
+        {/* <ActionButton
           icon={RotateCcw}
           label="Revert"
           onClick={handleRevert}
-        />
+        /> */}
       </div>
     </div>
   );
