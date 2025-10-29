@@ -162,12 +162,16 @@ function MainContent({
     }
   };
 
+  // Monotonic chat index to avoid ID collisions after closes
+  const nextChatIndexRef = useRef(2); // chat-1 exists by default
+
   // Handle add new tab
   const handleMainTabAdd = () => {
-    const newId = `chat-${mainTabs.length + 1}`;
+    const idx = nextChatIndexRef.current++;
+    const newId = `chat-${idx}`;
     const newTab: Tab = {
       id: newId,
-      label: `Chat #${mainTabs.length + 1}`,
+      label: `Chat #${idx}`,
       type: 'chat',
       closeable: true
     };
@@ -180,22 +184,24 @@ function MainContent({
     function handleKeyDown(e: KeyboardEvent) {
       // ⌘T or Ctrl+T - New chat tab
       if ((e.metaKey || e.ctrlKey) && e.key === 't' && selectedWorkspace) {
+        // Ignore when typing in inputs/textarea/contenteditable
+        const ae = document.activeElement as HTMLElement | null;
+        const isTextField =
+          !!ae &&
+          (ae.tagName === 'INPUT' ||
+            ae.tagName === 'TEXTAREA' ||
+            ae.isContentEditable ||
+            ae.getAttribute('role') === 'textbox');
+        if (isTextField) return;
+
         e.preventDefault(); // Prevent browser's "new tab" action
-        const newId = `chat-${mainTabs.length + 1}`;
-        const newTab: Tab = {
-          id: newId,
-          label: `Chat #${mainTabs.length + 1}`,
-          type: 'chat',
-          closeable: true
-        };
-        setMainTabs([...mainTabs, newTab]);
-        setActiveMainTabId(newId);
+        handleMainTabAdd();
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mainTabs, selectedWorkspace]);
+  }, [selectedWorkspace]);
 
   /**
    * Open a diff as a new tab (or switch to existing)
