@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
+import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, Info, Target } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
 /**
@@ -545,7 +545,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
             onClick={onClose}
             title="Close browser"
           >
-            <X className="h-4 w-4" />
+            <ChevronsRight className="h-4 w-4" />
           </Button>
         )}
       </div>
