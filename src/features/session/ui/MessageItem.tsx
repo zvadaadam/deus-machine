@@ -10,11 +10,11 @@ import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
-import { Copy, RotateCcw } from "lucide-react";
+import { Copy, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
-import { useMemo, memo } from "react";
+import { useMemo, memo, useState, useRef, useEffect } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -29,12 +29,26 @@ interface MessageItemProps {
 export const MessageItem = memo(function MessageItem({ message, isLatestAssistant = false }: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [shouldCollapse, setShouldCollapse] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Parse message content (memoized to avoid re-parsing JSON on every render)
   const contentBlocks = useMemo(
     () => parseContent(message.content),
     [message.content, parseContent]
   );
+
+  // Check if content should be collapsible (user messages only, over 8 lines)
+  useEffect(() => {
+    if (message.role === 'user' && contentRef.current) {
+      const lineHeight = 22.4; // 1.6 * 14px
+      const maxLines = 8;
+      const maxHeight = lineHeight * maxLines;
+      const actualHeight = contentRef.current.scrollHeight;
+      setShouldCollapse(actualHeight > maxHeight);
+    }
+  }, [message.role, contentBlocks]);
 
   // Extract text content for copy functionality
   const extractTextContent = (): string => {
@@ -146,23 +160,28 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     );
   }
 
-  // User messages - refined, integrated design
+  // User messages - refined design with actions below
   return (
-    <div
-      key={message.id}
-      className={cn(
-        'relative group',
-        roleStyles.maxWidth,
-        roleStyles.container,
-        chatTheme.message.user.shape,
-        chatTheme.message.user.padding,
-        'min-w-0'
-      )}
-    >
-      {/* Integrated layout: content + actions */}
-      <div className="flex items-end gap-3">
-        {/* Message content - main focus */}
-        <div className="flex-1 min-w-0">
+    <div key={message.id} className="relative group flex flex-col items-end">
+      {/* Message card */}
+      <div
+        className={cn(
+          roleStyles.maxWidth,
+          roleStyles.container,
+          chatTheme.message.user.shape,
+          chatTheme.message.user.padding,
+          'min-w-0'
+        )}
+      >
+        {/* Message content */}
+        <div
+          ref={contentRef}
+          className={cn(
+            'min-w-0',
+            // Collapse long messages
+            shouldCollapse && !isExpanded && 'max-h-[180px] overflow-hidden relative'
+          )}
+        >
           {Array.isArray(contentBlocks) ? (
             contentBlocks.map((block: ContentBlock | string, index: number) => {
               // Generate unique key: use tool_use id if available, otherwise fallback to index
@@ -179,22 +198,47 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
               {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
             </div>
           )}
+
+          {/* Fade overlay for collapsed state */}
+          {shouldCollapse && !isExpanded && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-primary/8 to-transparent pointer-events-none" />
+          )}
         </div>
 
-        {/* Action buttons - integrated, not floating */}
-        <div className={chatTheme.userActions.container}>
-          <ActionButton
-            icon={Copy}
-            label={copied ? 'Copied!' : 'Copy Message'}
-            onClick={handleCopy}
-            active={copied}
-          />
-          <ActionButton
-            icon={RotateCcw}
-            label="Revert to this turn"
-            onClick={handleRevert}
-          />
-        </div>
+        {/* Show more/less button */}
+        {shouldCollapse && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={chatTheme.expandToggle.button}
+          >
+            {isExpanded ? (
+              <>
+                Show less
+                <ChevronUp className={chatTheme.expandToggle.icon} />
+              </>
+            ) : (
+              <>
+                Show more
+                <ChevronDown className={chatTheme.expandToggle.icon} />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Action buttons - below the card */}
+      <div className={chatTheme.userActions.container}>
+        <ActionButton
+          icon={Copy}
+          label={copied ? 'Copied' : 'Copy'}
+          onClick={handleCopy}
+          active={copied}
+        />
+        <ActionButton
+          icon={RotateCcw}
+          label="Revert"
+          onClick={handleRevert}
+        />
       </div>
     </div>
   );

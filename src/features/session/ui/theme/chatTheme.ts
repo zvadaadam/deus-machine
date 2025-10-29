@@ -38,10 +38,10 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      // Jony Ive inspired: "Invisible until necessary"
-      // User messages recede, allowing assistant responses to shine
-      container: 'ml-auto w-fit bg-transparent hover:bg-muted/40 border border-border/30 hover:border-border/60 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 ease-out hover:translate-y-[-1px] motion-reduce:transition-none motion-reduce:hover:translate-y-0',
-      text: 'text-foreground/90 font-normal', // Slightly muted - 90% opacity
+      // Refined & Visible: Subtle background that's clearly distinguishable
+      // Elegant but scannable - user can spot their messages instantly
+      container: 'ml-auto w-fit bg-primary/8 hover:bg-primary/12 border border-primary/20 hover:border-primary/30 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 ease-out motion-reduce:transition-none',
+      text: 'text-foreground font-normal', // Full opacity for readability
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-2xl', // More refined than rounded-3xl (16px vs 24px)
       padding: 'px-5 py-3.5', // Wider, shorter - card-like proportions
@@ -53,12 +53,18 @@ export const chatTheme = {
     },
   },
 
-  // User message action buttons (integrated design)
+  // User message action buttons (below card design)
   userActions: {
-    container: 'flex gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
-    button: 'w-7 h-7 rounded-lg flex items-center justify-center bg-transparent hover:bg-muted/60 text-muted-foreground/60 hover:text-foreground border border-transparent hover:border-border/40 transition-all duration-200 ease',
+    container: 'flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1.5',
+    button: 'h-6 px-2 rounded-md flex items-center gap-1.5 bg-muted/60 hover:bg-muted border border-border/40 hover:border-border text-muted-foreground hover:text-foreground transition-all duration-200 ease text-xs',
     buttonActive: 'bg-success/10 text-success border-success/30',
-    icon: 'w-3.5 h-3.5',
+    icon: 'w-3 h-3',
+  },
+
+  // Show more/less for long messages
+  expandToggle: {
+    button: 'text-xs text-primary hover:text-primary/80 font-medium mt-2 flex items-center gap-1 transition-colors duration-200',
+    icon: 'w-3 h-3',
   },
 
   // Content block styles
