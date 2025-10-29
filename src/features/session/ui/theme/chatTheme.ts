@@ -39,9 +39,9 @@ export const chatTheme = {
   message: {
     user: {
       // Clean & Simple: Solid background, no border, tight padding
-      // Dense, scannable design with prominent text
+      // Bright, immediately readable text - maximum contrast
       container: 'ml-auto w-fit bg-muted/80 hover:bg-muted backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
-      text: 'text-foreground font-medium', // Medium weight for prominence
+      text: 'text-foreground font-normal', // Normal weight, full brightness for immediate readability
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
@@ -53,11 +53,11 @@ export const chatTheme = {
     },
   },
 
-  // User message action buttons (below card design)
+  // User message action buttons (ghost style - subtle, no fill, no stroke)
   userActions: {
     container: 'flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1.5',
-    button: 'h-6 px-2 rounded-md flex items-center gap-1.5 bg-muted/60 hover:bg-muted border border-border/40 hover:border-border text-muted-foreground hover:text-foreground transition-all duration-200 ease text-xs',
-    buttonActive: 'bg-success/10 text-success border-success/30',
+    button: 'h-6 px-2 rounded-md flex items-center gap-1.5 hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-all duration-200 ease text-xs',
+    buttonActive: 'text-success hover:bg-success/10',
     icon: 'w-3 h-3',
   },
 
