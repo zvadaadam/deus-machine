@@ -193,9 +193,9 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
             </div>
           )}
 
-          {/* Fade overlay for collapsed state (using theme constant for height) */}
+          {/* Fade overlay for collapsed state - subtle gradient */}
           {shouldCollapse && !isExpanded && (
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-muted to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted via-muted/60 to-transparent pointer-events-none" />
           )}
         </div>
 
