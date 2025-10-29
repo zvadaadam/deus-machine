@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { X, Plus, Globe } from 'lucide-react';
+import { X, Plus, Globe, GitBranch, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { BranchName, OpenInDropdown } from '@/shared/components';
+import { OpenInDropdown } from '@/shared/components';
 import { cn } from '@/shared/lib/utils';
 
 /**
@@ -108,55 +107,63 @@ export function MainContentTabBar({
 
   return (
     <div className="flex flex-col flex-shrink-0">
-      {/* ROW 1: Context Bar - Who & Where (36px) */}
-      <div className="flex items-center justify-between h-9 px-4 border-b border-border/40 bg-background/50 backdrop-blur-sm">
+      {/* ROW 1: Context Bar - Who & Where (48px) */}
+      <div className="flex items-center justify-between h-12 px-5 border-b border-border/50 bg-background/50 backdrop-blur-sm">
         {/* Left: Sidebar Trigger */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-colors duration-200"
+          className="h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200"
           asChild
         >
           <SidebarTrigger />
         </Button>
 
-        {/* Center: Branch Name (Editable) */}
+        {/* Center: Branch Name Container (Editable) */}
         {branch && (
-          <button
-            className={cn(
-              'flex-1 flex items-center justify-center',
-              'px-3 py-1 mx-4 rounded-md',
-              'font-mono text-[13px] font-medium leading-tight',
-              'text-foreground/90',
-              'hover:bg-muted/20 hover:text-foreground',
-              'transition-all duration-200',
-              'cursor-text'
-            )}
-            title="Click to edit workspace name"
-          >
-            {branch}
-          </button>
+          <div className="group flex-1 flex items-center justify-center gap-2 px-6">
+            {/* Branch Icon */}
+            <GitBranch className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
+
+            {/* Branch Name Button */}
+            <button
+              className={cn(
+                'flex items-center gap-2',
+                'px-3 py-1.5 rounded-md',
+                'font-mono text-sm font-medium leading-tight tracking-tight',
+                'text-foreground/90',
+                'hover:bg-muted/20 hover:text-foreground',
+                'transition-all duration-150 ease-out',
+                'cursor-text'
+              )}
+              title="Click to edit workspace name"
+            >
+              {branch}
+            </button>
+
+            {/* Edit Pencil Icon (shows on hover) */}
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+          </div>
         )}
 
         {/* Right: Meta Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           {onBrowserToggle && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant={isBrowserOpen ? "default" : "ghost"}
-                    size="icon"
+                  <button
                     onClick={onBrowserToggle}
                     className={cn(
-                      "h-8 w-8 rounded-md transition-all duration-200",
+                      "h-9 w-9 rounded-lg flex items-center justify-center",
+                      "transition-all duration-200 ease-out",
                       isBrowserOpen
-                        ? "shadow-sm hover:bg-primary/90"
+                        ? "bg-primary/15 text-primary border border-primary/30 hover:bg-primary/20"
                         : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10"
                     )}
                   >
                     <Globe className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
                   <p className="text-xs">{isBrowserOpen ? 'Close browser' : 'Open browser'}</p>
@@ -168,8 +175,8 @@ export function MainContentTabBar({
         </div>
       </div>
 
-      {/* ROW 2: Navigation Bar - What (40px) */}
-      <div className="flex items-center h-10 px-4 border-b border-border/50 bg-background">
+      {/* ROW 2: Navigation Bar - What (44px) */}
+      <div className="flex items-center h-11 px-5 border-b border-border/60 bg-background">
         <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
@@ -183,10 +190,10 @@ export function MainContentTabBar({
                 onMouseLeave={() => setHoveredTabId(null)}
                 className={cn(
                   'group relative flex items-center gap-2',
-                  'px-4 h-10 min-w-[100px] max-w-[180px]',
+                  'px-4 h-11 min-w-[100px] max-w-[180px]',
                   'border-r border-border/20',
-                  'text-[13px] font-normal',
-                  'transition-all duration-200',
+                  'text-sm font-normal',
+                  'transition-all duration-200 ease-out',
                   'hover:bg-muted/10',
                   isActive ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground/80'
                 )}
@@ -208,7 +215,7 @@ export function MainContentTabBar({
                     onClick={(e) => handleTabClose(e, tab.id)}
                     className={cn(
                       'flex items-center justify-center w-4 h-4 rounded-sm',
-                      'transition-opacity duration-150',
+                      'transition-all duration-150 ease-out',
                       'hover:bg-muted-foreground/20',
                       isActive || isHovered ? 'opacity-100' : 'opacity-0'
                     )}
@@ -227,10 +234,10 @@ export function MainContentTabBar({
               onClick={handleAddTab}
               className={cn(
                 'flex items-center justify-center',
-                'px-4 h-10 flex-shrink-0',
+                'px-4 h-11 flex-shrink-0',
                 'text-muted-foreground/60 hover:text-muted-foreground',
                 'hover:bg-muted/10',
-                'transition-all duration-200'
+                'transition-all duration-200 ease-out'
               )}
               title="Add new chat"
             >
