@@ -171,14 +171,18 @@ export function MainContentTabBar({
 
         {/* Add tab button */}
         {onTabAdd && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
             onClick={handleAddTab}
-            className="h-9 w-9 shrink-0"
+            className={cn(
+              'flex items-center justify-center px-4 py-2.5 shrink-0',
+              'text-muted-foreground/60 hover:text-muted-foreground',
+              'hover:bg-muted/10',
+              'transition-colors duration-200'
+            )}
+            title="Add new chat"
           >
             <Plus className="w-4 h-4" />
-          </Button>
+          </button>
         )}
       </div>
 
@@ -194,7 +198,9 @@ export function MainContentTabBar({
                   onClick={onBrowserToggle}
                   className={cn(
                     "h-8 w-8 transition-all duration-200",
-                    !isBrowserOpen && "text-muted-foreground/70 hover:text-foreground"
+                    isBrowserOpen
+                      ? "shadow-sm hover:bg-primary/90"
+                      : "text-muted-foreground/90 hover:text-foreground"
                   )}
                 >
                   <Globe className="h-4 w-4" />
