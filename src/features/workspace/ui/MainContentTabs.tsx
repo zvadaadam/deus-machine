@@ -143,9 +143,8 @@ export function MainContentTabBar({
             <button
               className={cn(
                 'font-mono text-sm font-medium text-foreground/90',
-                'px-2 py-1 rounded-md',
-                'hover:bg-muted/20 hover:text-foreground',
-                'transition-all duration-150 ease-out',
+                'hover:text-foreground',
+                'transition-colors duration-150 ease-out',
                 'cursor-text'
               )}
               title="Click to edit branch name"
@@ -202,17 +201,15 @@ export function MainContentTabBar({
                 onMouseLeave={() => setHoveredTabId(null)}
                 className={cn(
                   'group relative flex items-center gap-2',
-                  'px-4 h-11 min-w-[100px] max-w-[180px]',
-                  'border-r border-border/20',
+                  'px-6 h-11 min-w-[100px] max-w-[180px]',
                   'text-sm font-normal',
-                  'transition-all duration-200 ease-out',
-                  'hover:bg-muted/10',
-                  isActive ? 'text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground/80'
+                  'transition-colors duration-200 ease-out',
+                  isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
                 )}
               >
-                {/* Active indicator - top border */}
+                {/* Active indicator - bottom border */}
                 {isActive && (
-                  <div className="absolute inset-x-0 top-0 h-[2px] bg-primary" />
+                  <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
                 )}
 
                 {/* Tab label */}
