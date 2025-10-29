@@ -162,9 +162,9 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
     );
   }
 
-  // User messages - refined design with actions below
+  // User messages - refined design with absolutely positioned actions
   return (
-    <div key={message.id} className="relative group flex flex-col items-end">
+    <div key={message.id} className="relative group flex flex-col items-end mb-8">
       {/* Message card */}
       <div
         className={cn(
