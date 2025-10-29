@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
@@ -447,7 +447,8 @@ _You can ask me to modify this element, debug it, or help with related styling._
   // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col h-full overflow-hidden">
       {/* Browser Controls */}
       <div className="flex items-center gap-2 p-2 border-b border-border flex-shrink-0">
         <Button
@@ -721,6 +722,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
