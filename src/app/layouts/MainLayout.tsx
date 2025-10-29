@@ -412,21 +412,18 @@ function MainContent({
           isBrowserOpen ? (
             /* BROWSER - Slides in with animation, replaces right panel in grid */
             <div
-              className="flex flex-col h-full overflow-hidden bg-background border-l border-border/40 animate-in slide-in-from-right duration-300"
+              className="relative flex flex-col h-full overflow-hidden bg-background border-l border-border animate-in slide-in-from-right duration-300"
             >
-              {/* Browser Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
-                <h2 className="text-lg font-semibold text-foreground">Browser</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsBrowserOpen(false)}
-                  className="h-8 w-8"
-                  title="Close browser"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* Floating close button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsBrowserOpen(false)}
+                className="absolute top-2 right-2 h-7 w-7 z-10"
+                title="Close browser"
+              >
+                <X className="h-4 w-4" />
+              </Button>
 
               {/* Browser Content */}
               <div className="flex-1 overflow-hidden">
