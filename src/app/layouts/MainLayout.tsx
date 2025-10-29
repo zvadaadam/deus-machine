@@ -407,21 +407,11 @@ function MainContent({
           />
         )}
 
-        {/* RIGHT PANEL OR BROWSER - Mutually exclusive in grid */}
+        {/* RIGHT PANEL OR BROWSER - Layered with transforms */}
         {selectedWorkspace && (
-          isBrowserOpen ? (
-            /* BROWSER - Slides in with animation, replaces right panel in grid */
-            <div
-              className="flex flex-col h-full overflow-hidden bg-background border-l border-border animate-in slide-in-from-right duration-300"
-            >
-              <BrowserPanel
-                workspaceId={selectedWorkspace.id}
-                onClose={() => setIsBrowserOpen(false)}
-              />
-            </div>
-          ) : (
-            /* RIGHT PANEL - Files/Changes tabs at top + Collapsible Terminal at bottom */
-            <div className="flex flex-col h-full overflow-hidden">
+          <div className="relative h-full overflow-hidden">
+            {/* RIGHT PANEL - Always rendered, hidden when browser open */}
+            <div className={`flex flex-col h-full overflow-hidden transition-opacity duration-300 ${isBrowserOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
               {/* Top Section: Files/Changes Tabs */}
               <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div className="border-b border-border/40 flex-shrink-0">
@@ -468,7 +458,19 @@ function MainContent({
                 workspaceName={selectedWorkspace.directory_name}
               />
             </div>
-          )
+
+            {/* BROWSER - Slides in from right, overlays right panel */}
+            <div
+              className={`absolute inset-0 flex flex-col h-full overflow-hidden bg-background border-l border-border transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                isBrowserOpen ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <BrowserPanel
+                workspaceId={selectedWorkspace.id}
+                onClose={() => setIsBrowserOpen(false)}
+              />
+            </div>
+          </div>
         )}
       </div>
     </SidebarInset>
