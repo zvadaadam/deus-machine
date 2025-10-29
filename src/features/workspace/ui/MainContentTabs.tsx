@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Globe, GitBranch, Pencil } from 'lucide-react';
+import { X, Plus, Globe, FolderGit, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
@@ -54,6 +54,7 @@ interface MainContentTabsProps {
   onTabAdd?: () => void;
   children: React.ReactNode;
   // Workspace context (merged from WorkspaceHeader)
+  repositoryName?: string;
   branch?: string;
   workspacePath?: string;
   isBrowserOpen?: boolean;
@@ -85,6 +86,7 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  repositoryName,
   branch,
   workspacePath,
   isBrowserOpen,
@@ -119,24 +121,34 @@ export function MainContentTabBar({
           <SidebarTrigger />
         </Button>
 
-        {/* Center: Branch Name Container (Editable) */}
+        {/* Center: Breadcrumb - Repository / Branch (Editable) */}
         {branch && (
           <div className="group flex-1 flex items-center justify-center gap-2 px-6">
-            {/* Branch Icon */}
-            <GitBranch className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
+            {/* Folder/Git Icon */}
+            <FolderGit className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
 
-            {/* Branch Name Button */}
+            {/* Repository Name (read-only, secondary) */}
+            {repositoryName && (
+              <>
+                <span className="font-mono text-sm text-muted-foreground/60 flex-shrink-0">
+                  {repositoryName}
+                </span>
+
+                {/* Separator */}
+                <span className="text-muted-foreground/40 select-none">/</span>
+              </>
+            )}
+
+            {/* Branch Name Button (editable, primary) */}
             <button
               className={cn(
-                'flex items-center gap-2',
-                'px-3 py-1.5 rounded-md',
-                'font-mono text-sm font-medium leading-tight tracking-tight',
-                'text-foreground/90',
+                'font-mono text-sm font-medium text-foreground/90',
+                'px-2 py-1 rounded-md',
                 'hover:bg-muted/20 hover:text-foreground',
                 'transition-all duration-150 ease-out',
                 'cursor-text'
               )}
-              title="Click to edit workspace name"
+              title="Click to edit branch name"
             >
               {branch}
             </button>
@@ -261,6 +273,7 @@ export function MainContentTabs({
   onTabClose,
   onTabAdd,
   children,
+  repositoryName,
   branch,
   workspacePath,
   isBrowserOpen,
@@ -274,6 +287,7 @@ export function MainContentTabs({
         onTabChange={onTabChange}
         onTabClose={onTabClose}
         onTabAdd={onTabAdd}
+        repositoryName={repositoryName}
         branch={branch}
         workspacePath={workspacePath}
         isBrowserOpen={isBrowserOpen}
