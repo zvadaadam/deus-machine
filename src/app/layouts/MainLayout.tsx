@@ -309,6 +309,7 @@ function MainContent({
               onTabChange={handleMainTabChange}
               onTabClose={handleMainTabClose}
               onTabAdd={handleMainTabAdd}
+              repositoryName={selectedWorkspace.root_path.split('/').filter(Boolean).pop()}
               branch={selectedWorkspace.branch}
               workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
               isBrowserOpen={isBrowserOpen}
