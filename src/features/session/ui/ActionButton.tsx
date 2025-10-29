@@ -1,8 +1,8 @@
 /**
  * ActionButton - Refined button for user message actions
  *
- * Minimal, icon-only design that integrates seamlessly with user messages.
- * Follows Jony Ive philosophy: purposeful, refined, invisible until needed.
+ * Compact button with icon and optional label text.
+ * Designed to sit below user messages, visible on hover.
  */
 
 import { type LucideIcon } from 'lucide-react';
@@ -14,6 +14,7 @@ interface ActionButtonProps {
   label: string;
   onClick: () => void;
   active?: boolean;
+  showLabel?: boolean;
   className?: string;
 }
 
@@ -22,6 +23,7 @@ export function ActionButton({
   label,
   onClick,
   active = false,
+  showLabel = true,
   className
 }: ActionButtonProps) {
   return (
@@ -33,9 +35,9 @@ export function ActionButton({
         className
       )}
       aria-label={label}
-      title={label} // Native tooltip, simpler than Tooltip component
     >
       <Icon className={chatTheme.userActions.icon} />
+      {showLabel && <span>{label}</span>}
     </button>
   );
 }
