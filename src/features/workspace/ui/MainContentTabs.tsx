@@ -201,7 +201,7 @@ export function MainContentTabBar({
                 onMouseLeave={() => setHoveredTabId(null)}
                 className={cn(
                   'group relative flex items-center gap-2',
-                  'pl-4 pr-10 h-11 min-w-[120px] max-w-[220px]',
+                  'px-4 h-11 min-w-[120px] max-w-[200px]',
                   'text-sm font-normal',
                   'transition-colors duration-200 ease-out',
                   isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
