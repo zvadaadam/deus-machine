@@ -13,43 +13,44 @@ interface FileTreeProps {
 /**
  * Get file icon and color based on file extension
  * Inspired by VS Code's icon theme
+ * Uses semantic color variables from global.css for consistency
  */
 function getFileIconConfig(filename: string): { icon: typeof File; color: string } {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
 
   // TypeScript/JavaScript
   if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
-    return { icon: FileCode, color: 'text-blue-500' };
+    return { icon: FileCode, color: 'text-file-typescript' };
   }
 
   // Rust (check before Data to prioritize .toml for Rust projects)
   if (['rs', 'toml'].includes(ext)) {
-    return { icon: FileCode, color: 'text-orange-600' };
+    return { icon: FileCode, color: 'text-file-rust' };
   }
 
   // Markup/Data
   if (['json', 'yaml', 'yml', 'xml'].includes(ext)) {
-    return { icon: FileJson, color: 'text-yellow-500' };
+    return { icon: FileJson, color: 'text-file-data' };
   }
 
   // Documentation
   if (['md', 'mdx', 'txt', 'rst'].includes(ext)) {
-    return { icon: FileText, color: 'text-green-500' };
+    return { icon: FileText, color: 'text-file-docs' };
   }
 
   // Styles
   if (['css', 'scss', 'sass', 'less'].includes(ext)) {
-    return { icon: FileCode, color: 'text-purple-500' };
+    return { icon: FileCode, color: 'text-file-styles' };
   }
 
   // HTML
   if (['html', 'htm'].includes(ext)) {
-    return { icon: FileCode, color: 'text-orange-500' };
+    return { icon: FileCode, color: 'text-file-markup' };
   }
 
   // Images (includes svg since they're primarily used as images)
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'].includes(ext)) {
-    return { icon: FileImage, color: 'text-pink-500' };
+    return { icon: FileImage, color: 'text-file-image' };
   }
 
   // Config files

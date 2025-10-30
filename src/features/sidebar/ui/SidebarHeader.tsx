@@ -31,19 +31,16 @@ export function SidebarHeader({
           "group-data-[collapsible=icon]:hover:bg-transparent"
         )}
       >
-        <Avatar className={cn(
-          "h-8 w-8 flex-shrink-0",
-          "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-          // Override shadcn's rounded-full to match badge design language
-          "rounded-[8px]",
-          // Collapsed: subtle hover lift effect like repository badges
-          "group-data-[collapsible=icon]:hover:scale-105 group-data-[collapsible=icon]:hover:shadow-sm"
-        )}>
-          <AvatarFallback className={cn(
-            "text-caption",
-            // Override shadcn's rounded-full to match badge design
-            "rounded-[8px]"
-          )}>
+        <Avatar
+          shape="square"
+          className={cn(
+            "h-8 w-8 flex-shrink-0",
+            "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+            // Collapsed: subtle hover lift effect like repository badges
+            "group-data-[collapsible=icon]:hover:scale-105 group-data-[collapsible=icon]:hover:shadow-sm"
+          )}
+        >
+          <AvatarFallback shape="square" className="text-caption">
             {profile.username.slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
