@@ -23,8 +23,33 @@
   font-display: swap;
 }
 
-/* Ioskeley Mono font family */
+/* Suisse Intl Mono font family */
 @font-face {
+  font-family: 'Suisse Intl Mono';
+  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Mono';
+  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Mono';
+  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* OLD: Ioskeley Mono font family (commented out, keeping as reference) */
+/* @font-face {
   font-family: 'Ioskeley Mono';
   src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Regular.woff2') format('woff2');
   font-weight: 400;
@@ -46,4 +71,4 @@
   font-weight: 600;
   font-style: normal;
   font-display: swap;
-}
+} */
