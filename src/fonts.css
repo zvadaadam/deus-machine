@@ -23,10 +23,11 @@
   font-display: swap;
 }
 
-/* Suisse Intl Mono font family */
+/* Suisse Intl Mono font family - WOFF2 optimized for web */
 @font-face {
   font-family: 'Suisse Intl Mono';
-  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  src: url('/fonts/suisse-intl-mono/suisse-intl-mono.woff2') format('woff2'),
+       url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -34,7 +35,8 @@
 
 @font-face {
   font-family: 'Suisse Intl Mono';
-  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  src: url('/fonts/suisse-intl-mono/suisse-intl-medium.woff2') format('woff2'),
+       url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -42,7 +44,8 @@
 
 @font-face {
   font-family: 'Suisse Intl Mono';
-  src: url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf') format('truetype');
+  src: url('/fonts/suisse-intl-mono/suisse-intl-bold.woff2') format('woff2'),
+       url('/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Bold.ttf') format('truetype');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
