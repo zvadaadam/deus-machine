@@ -635,7 +635,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
           <Empty className="h-full border-0">
             <EmptyHeader>
               <EmptyMedia>
-                <Globe className="h-16 w-16 text-muted-foreground/40" strokeWidth={1.5} />
+                <Globe className="h-16 w-16 text-muted-foreground/40" strokeWidth={1.5} aria-hidden="true" />
               </EmptyMedia>
               <EmptyTitle>Browser</EmptyTitle>
               <EmptyDescription>

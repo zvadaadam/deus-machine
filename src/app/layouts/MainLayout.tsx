@@ -411,7 +411,11 @@ function MainContent({
         {selectedWorkspace && (
           <div className="relative h-full overflow-hidden">
             {/* RIGHT PANEL - Always rendered, hidden when browser open */}
-            <div className={`flex flex-col h-full overflow-hidden transition-opacity duration-300 ${isBrowserOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            <div
+              className={`flex flex-col h-full overflow-hidden transition-opacity duration-300 ${isBrowserOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              aria-hidden={isBrowserOpen}
+              inert={isBrowserOpen ? (true as any) : undefined}
+            >
               {/* Top Section: Files/Changes Tabs */}
               <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div className="border-b border-border/40 flex-shrink-0">
@@ -840,7 +844,7 @@ export function MainLayout() {
           <Empty className="border-0">
             <EmptyHeader>
               <EmptyMedia>
-                <FolderOpen className="h-16 w-16 text-muted-foreground/40" />
+                <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
               </EmptyMedia>
               <EmptyTitle>No Workspaces</EmptyTitle>
               <EmptyDescription>
