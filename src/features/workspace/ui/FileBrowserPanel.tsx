@@ -68,7 +68,7 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <FolderOpen className="h-16 w-16 text-muted-foreground/40" />
+              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
             </EmptyMedia>
             <EmptyDescription>
               No workspace selected
@@ -94,7 +94,7 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <FolderOpen className="h-16 w-16 text-muted-foreground/40" />
+              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
             </EmptyMedia>
             <EmptyDescription>
               Error: {error instanceof Error ? error.message : 'Unknown error'}
@@ -151,7 +151,7 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
             <Empty className="border-0">
               <EmptyHeader>
                 <EmptyMedia>
-                  <FolderOpen className="h-16 w-16 text-muted-foreground/40" />
+                  <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
                 </EmptyMedia>
                 <EmptyDescription>
                   {searchQuery ? "No files match your search" : "No files found"}

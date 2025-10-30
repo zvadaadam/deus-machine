@@ -144,7 +144,7 @@ export function Chat({
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <div className="text-4xl">💬</div>
+              <div className="text-4xl" aria-hidden="true">💬</div>
             </EmptyMedia>
             <EmptyTitle>No messages yet</EmptyTitle>
             <EmptyDescription>

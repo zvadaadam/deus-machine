@@ -184,7 +184,7 @@ export function FileChangesPanel({
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>
-                    <Sparkles className="h-16 w-16 text-muted-foreground/40" />
+                    <Sparkles className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
                   </EmptyMedia>
                   <EmptyDescription>
                     No file changes detected
@@ -197,7 +197,7 @@ export function FileChangesPanel({
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>
-                    <FileCode className="h-16 w-16 text-muted-foreground/40" />
+                    <FileCode className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
                   </EmptyMedia>
                   <EmptyDescription>
                     Select a workspace to view file changes
