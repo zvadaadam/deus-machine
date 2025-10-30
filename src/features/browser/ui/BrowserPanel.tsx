@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target, Globe } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * Timeout for fetching injection script from dev-browser server
@@ -632,12 +632,17 @@ _You can ask me to modify this element, debug it, or help with related styling._
             )}
           </>
         ) : (
-          <EmptyState
-            icon={<Globe className="w-full h-full" strokeWidth={1.5} />}
-            title="Browser"
-            description="Enter a URL above, or instruct the Agent to navigate and use the browser"
-            className="h-full border-0"
-          />
+          <Empty className="h-full border-0">
+            <EmptyHeader>
+              <EmptyMedia>
+                <Globe className="h-16 w-16 text-muted-foreground/40" strokeWidth={1.5} />
+              </EmptyMedia>
+              <EmptyTitle>Browser</EmptyTitle>
+              <EmptyDescription>
+                Enter a URL above, or instruct the Agent to navigate and use the browser
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
 
         {/* Loading overlay */}
