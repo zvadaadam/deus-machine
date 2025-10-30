@@ -42,7 +42,7 @@ export const chatTheme = {
       // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
       container: 'ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none',
       text: 'font-normal', // Font weight only - color applied separately for proper specificity
-      textColor: 'text-gray-950 dark:text-white', // Theme-aware: very dark in light mode, pure white in dark mode
+      textColor: 'text-foreground', // Uses semantic foreground color from global.css (theme-aware)
       maxWidth: 'max-w-[85%]',
       shape: 'rounded-xl', // 12px - tighter than before
       padding: 'px-3 py-2', // Tight, dense padding
