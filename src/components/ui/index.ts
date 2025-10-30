@@ -68,6 +68,3 @@ export {
   DropdownMenuSub,
   DropdownMenuRadioGroup,
 } from './dropdown-menu';
-
-// Custom components (not shadcn)
-export { EmptyState } from './EmptyState';

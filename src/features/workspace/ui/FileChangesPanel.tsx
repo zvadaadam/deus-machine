@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
 import type { Workspace } from "@/shared/types";
 
@@ -181,17 +181,29 @@ export function FileChangesPanel({
             </div>
           ) : selectedWorkspace ? (
             <div className="p-8">
-              <EmptyState
-                icon={<Sparkles  />}
-                description="No file changes detected"
-              />
+              <Empty className="border-0">
+                <EmptyHeader>
+                  <EmptyMedia>
+                    <Sparkles className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyDescription>
+                    No file changes detected
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             </div>
           ) : (
             <div className="p-8">
-              <EmptyState
-                icon={<FileCode  />}
-                description="Select a workspace to view file changes"
-              />
+              <Empty className="border-0">
+                <EmptyHeader>
+                  <EmptyMedia>
+                    <FileCode className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyDescription>
+                    Select a workspace to view file changes
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             </div>
           )}
         </div>
