@@ -1,14 +1,11 @@
 /**
- * GUIDELINE EXCEPTION: This shadcn component has been modified for global animation timing.
+ * Sidebar Component - Customized animation timing
  *
- * Normally we don't modify shadcn components, but animation timing affects internal primitives
- * (sidebar-gap, sidebar-container, SidebarRail, SidebarGroupLabel) that can't be overridden
- * via className from consuming components.
+ * Modified from shadcn default to use 180ms/80ms transitions with ease-out cubic-bezier
+ * for smooth, macOS-style animations. These timing changes affect internal primitives
+ * (sidebar-gap, sidebar-container, SidebarRail, SidebarGroupLabel) globally.
  *
- * Changes: Updated transition durations to 180ms/80ms with ease-out cubic-bezier for smooth,
- * macOS-style animations. This is a global timing update, not a feature-specific customization.
- *
- * If shadcn updates this component, carefully preserve these timing changes during reinstall.
+ * When updating from shadcn upstream, preserve these timing customizations.
  */
 
 import * as React from "react"
