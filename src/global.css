@@ -100,8 +100,13 @@
   --z-notification: var(--z-notification);
 
   /* Font families - Using Suisse Intl for both sans and mono */
-  --font-family-sans: 'Suisse Intl', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-family-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+  /* Tailwind v4 utilities (font-sans, font-mono) use these variables */
+  --font-sans: 'Suisse Intl', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+
+  /* Legacy aliases for backward compatibility */
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   /* Font sizes with line heights */
   --font-size-display-lg: 48px;
