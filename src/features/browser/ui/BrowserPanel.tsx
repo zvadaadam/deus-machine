@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronDown, Terminal, X, Info, Target } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target, Globe } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
 /**
@@ -12,6 +14,7 @@ const SCRIPT_FETCH_TIMEOUT_MS = 10000;
 
 interface BrowserPanelProps {
   workspaceId: string | null;
+  onClose?: () => void;
 }
 
 interface ConsoleLog {
@@ -20,7 +23,7 @@ interface ConsoleLog {
   message: string;
 }
 
-export function BrowserPanel({ workspaceId }: BrowserPanelProps) {
+export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   const [url, setUrl] = useState("https://example.com");
   const [currentUrl, setCurrentUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -447,11 +450,11 @@ _You can ask me to modify this element, debug it, or help with related styling._
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-2 border-b border-border/40 flex-shrink-0">
+      <div className="flex items-center gap-2 p-2 border-b border-border flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={goBack}
           disabled={loading || historyIndex <= 0}
           title="Go back"
@@ -462,7 +465,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={goForward}
           disabled={loading || historyIndex >= history.length - 1}
           title="Go forward"
@@ -473,7 +476,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={reload}
           disabled={loading || !currentUrl}
           title="Reload"
@@ -481,72 +484,96 @@ _You can ask me to modify this element, debug it, or help with related styling._
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
 
-        <div className="flex-1 flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <div className="flex-1 relative">
           <Input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter URL..."
-            className="h-8 text-sm"
+            placeholder="Enter URL and press Enter..."
+            className="h-7 text-sm pr-8 focus-visible:ring-0 focus-visible:border-border"
             disabled={loading}
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 absolute right-0.5 top-0.5"
+            onClick={openInExternalBrowser}
+            disabled={!currentUrl}
+            title="Open in external browser"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={injectAutomation}
-          disabled={!currentUrl || !devBrowserStatus.running || injected}
-          title={injected ? "Automation active" : "Inject automation"}
-        >
-          <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={injectAutomation}
+              disabled={!currentUrl || !devBrowserStatus.running || injected}
+            >
+              <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">{injected ? "Automation active" : "Inject automation"}</p>
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={toggleElementSelector}
-          disabled={!currentUrl || !injected || isCrossOrigin}
-          aria-pressed={selectorActive}
-          title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
-        >
-          <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={toggleElementSelector}
+              disabled={!currentUrl || !injected || isCrossOrigin}
+              aria-pressed={selectorActive}
+            >
+              <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">{selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}</p>
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={openInExternalBrowser}
-          disabled={!currentUrl}
-          title="Open in external browser"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setShowConsole(!showConsole)}
+            >
+              <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-xs">{showConsole ? "Hide console" : "Show console"}</p>
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => setShowConsole(!showConsole)}
-          title={showConsole ? "Hide console" : "Show console"}
-        >
-          <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
-        </Button>
-
-        <Button
-          size="sm"
-          onClick={() => navigateToUrl()}
-          disabled={loading || !url}
-          className="h-8"
-        >
-          {loading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-          Go
-        </Button>
+        {onClose && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onClose}
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">Close browser</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
@@ -605,30 +632,17 @@ _You can ask me to modify this element, debug it, or help with related styling._
             )}
           </>
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md p-8">
-              <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mb-4">
-                Enter a URL above and click Go to browse
-              </p>
-              <div className="bg-info/10 border border-info/20 rounded-lg p-3 text-left">
-                <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p className="font-medium text-foreground">AI automation works with:</p>
-                    <ul className="space-y-0.5 ml-2">
-                      <li>• Local files (file:// URLs)</li>
-                      <li>• Localhost pages</li>
-                      <li>• Same-origin content</li>
-                    </ul>
-                    <p className="mt-2 text-warning">
-                      External websites (https://) block automation due to browser security.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Empty className="h-full border-0">
+            <EmptyHeader>
+              <EmptyMedia>
+                <Globe className="h-16 w-16 text-muted-foreground/40" strokeWidth={1.5} aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>Browser</EmptyTitle>
+              <EmptyDescription>
+                Enter a URL above, or instruct the Agent to navigate and use the browser
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
 
         {/* Loading overlay */}
@@ -639,43 +653,6 @@ _You can ask me to modify this element, debug it, or help with related styling._
         )}
       </div>
 
-      {/* Status Bar */}
-      <div className="px-3 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className={`h-2 w-2 rounded-full ${currentUrl ? "bg-success" : "bg-muted-foreground/40"}`} />
-            <span className="truncate max-w-[300px]">
-              {currentUrl || "No page loaded"}
-            </span>
-          </div>
-          {devBrowserStatus.running && currentUrl && (
-            <div className="flex items-center gap-1.5">
-              <Zap className={`h-3 w-3 ${
-                injected ? "text-success" :
-                isCrossOrigin ? "text-warning" :
-                "text-muted-foreground/60"
-              }`} />
-              <span className={
-                injected ? "text-success" :
-                isCrossOrigin ? "text-warning" :
-                "text-muted-foreground/60"
-              }>
-                {injected ? "AI-ready" : isCrossOrigin ? "Browse-only" : "Manual"}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {devBrowserStatus.running && devBrowserStatus.port && (
-            <span className="text-muted-foreground/60">
-              MCP:{devBrowserStatus.port}
-            </span>
-          )}
-          {currentUrl && (
-            <span className="text-muted-foreground/60">Sandboxed iframe</span>
-          )}
-        </div>
-      </div>
 
       {/* Console Panel */}
       {showConsole && (
@@ -688,24 +665,36 @@ _You can ask me to modify this element, debug it, or help with related styling._
               <span className="text-xs text-muted-foreground/60">({consoleLogs.length})</span>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setConsoleLogs([])}
-                title="Clear console"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setShowConsole(false)}
-                title="Close console"
-              >
-                <ChevronDown className="h-3 w-3" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setConsoleLogs([])}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Clear console</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setShowConsole(false)}
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Close console</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 

@@ -30,7 +30,6 @@ import { useSettings as useSettingsQuery } from "@/features/settings";
 import {
   Button,
   Badge,
-  EmptyState,
   Skeleton,
   SidebarProvider,
   SidebarInset,
@@ -40,6 +39,7 @@ import {
   TabsContent,
   useSidebar,
 } from "@/components/ui";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -407,35 +407,15 @@ function MainContent({
           />
         )}
 
-        {/* RIGHT PANEL OR BROWSER - Mutually exclusive in grid */}
+        {/* RIGHT PANEL OR BROWSER - Layered with transforms */}
         {selectedWorkspace && (
-          isBrowserOpen ? (
-            /* BROWSER - Slides in with animation, replaces right panel in grid */
+          <div className="relative h-full overflow-hidden">
+            {/* RIGHT PANEL - Always rendered, hidden when browser open */}
             <div
-              className="flex flex-col h-full overflow-hidden bg-background border-l border-border/40 animate-in slide-in-from-right duration-300"
+              className={`flex flex-col h-full overflow-hidden transition-opacity duration-300 ${isBrowserOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              aria-hidden={isBrowserOpen}
+              inert={isBrowserOpen ? (true as any) : undefined}
             >
-              {/* Browser Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background/50 backdrop-blur-sm flex-shrink-0">
-                <h2 className="text-lg font-semibold text-foreground">Browser</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsBrowserOpen(false)}
-                  className="h-8 w-8"
-                  title="Close browser"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Browser Content */}
-              <div className="flex-1 overflow-hidden">
-                <BrowserPanel workspaceId={selectedWorkspace.id} />
-              </div>
-            </div>
-          ) : (
-            /* RIGHT PANEL - Files/Changes tabs at top + Collapsible Terminal at bottom */
-            <div className="flex flex-col h-full overflow-hidden">
               {/* Top Section: Files/Changes Tabs */}
               <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
                 <div className="border-b border-border/40 flex-shrink-0">
@@ -482,7 +462,19 @@ function MainContent({
                 workspaceName={selectedWorkspace.directory_name}
               />
             </div>
-          )
+
+            {/* BROWSER - Slides in from right, overlays right panel */}
+            <div
+              className={`absolute inset-0 flex flex-col h-full overflow-hidden bg-background border-l border-border transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                isBrowserOpen ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <BrowserPanel
+                workspaceId={selectedWorkspace.id}
+                onClose={() => setIsBrowserOpen(false)}
+              />
+            </div>
+          </div>
         )}
       </div>
     </SidebarInset>
@@ -849,11 +841,17 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
         <div className="space-standard">
-          <EmptyState
-            icon={<FolderOpen />}
-            title="No Workspaces"
-            description="Create a new workspace to get started"
-            action={
+          <Empty className="border-0">
+            <EmptyHeader>
+              <EmptyMedia>
+                <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>No Workspaces</EmptyTitle>
+              <EmptyDescription>
+                Create a new workspace to get started
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
               <Button
                 variant="default"
                 onClick={() => handleNewWorkspace()}
@@ -861,8 +859,8 @@ export function MainLayout() {
               >
                 + Create Workspace
               </Button>
-            }
-          />
+            </EmptyContent>
+          </Empty>
         </div>
       ) : (
         <AppSidebar

@@ -2,7 +2,7 @@ import { FolderOpen, Search, Loader2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui';
+import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/ui/empty';
 import { useFilesRust, invalidateFileCache } from '../api/useFilesRust';
 import { FileTree } from './components/FileTree';
 import type { Workspace } from '@/shared/types';
@@ -65,10 +65,16 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
   if (!selectedWorkspace) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
-        <EmptyState
-          icon={<FolderOpen />}
-          description="No workspace selected"
-        />
+        <Empty className="border-0">
+          <EmptyHeader>
+            <EmptyMedia>
+              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyDescription>
+              No workspace selected
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     );
   }
@@ -85,10 +91,16 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8">
-        <EmptyState
-          icon={<FolderOpen />}
-          description={`Error: ${error instanceof Error ? error.message : 'Unknown error'}`}
-        />
+        <Empty className="border-0">
+          <EmptyHeader>
+            <EmptyMedia>
+              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyDescription>
+              Error: {error instanceof Error ? error.message : 'Unknown error'}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     );
   }
@@ -136,10 +148,16 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
           <FileTree nodes={filteredFiles} onFileClick={handleFileClick} />
         ) : (
           <div className="p-8">
-            <EmptyState
-              icon={<FolderOpen />}
-              description={searchQuery ? "No files match your search" : "No files found"}
-            />
+            <Empty className="border-0">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+                </EmptyMedia>
+                <EmptyDescription>
+                  {searchQuery ? "No files match your search" : "No files found"}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           </div>
         )}
       </div>
