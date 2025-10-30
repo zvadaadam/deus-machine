@@ -1,7 +1,7 @@
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -141,12 +141,17 @@ export function Chat({
           <Skeleton className="h-4 w-[80%]" />
         </div>
       ) : messages.length === 0 ? (
-        <EmptyState
-          icon="💬"
-          title="No messages yet"
-          description="Start a conversation with Claude Code to make changes to your workspace"
-          animate
-        />
+        <Empty className="border-0">
+          <EmptyHeader>
+            <EmptyMedia>
+              <div className="text-4xl">💬</div>
+            </EmptyMedia>
+            <EmptyTitle>No messages yet</EmptyTitle>
+            <EmptyDescription>
+              Start a conversation with Claude Code to make changes to your workspace
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <>
           <div className="flex flex-col pb-32 min-h-0 min-w-0">
