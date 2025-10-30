@@ -116,6 +116,85 @@ We use **Tailwind CSS v4** which has significant differences from v3:
 }
 ```
 
+### Modern CSS Best Practices (Top-1% Quality)
+
+These principles ensure maintainable, extendable styling that scales:
+
+#### **1. Semantic HTML First, Styling Second**
+- Use correct HTML elements: `<button>` not clickable `<div>`
+- Proper ARIA semantics reduce CSS you need to write
+- Example: `<button>` handles focus, keyboard, disabled states automatically
+
+#### **2. Keep Specificity Low**
+- One class deep most of the time
+- Avoid deeply nested selectors: `❌ .list .card > h3.title`
+- Prefer flat classes: `✅ .card-title`
+- Use `data-*` attributes for variants: `<Button data-variant="outline">`
+
+#### **3. Avoid !important**
+- Only use in extreme cases (overriding third-party libraries, debugging)
+- If you need `!important`, the specificity architecture is wrong
+- Fix the root cause, don't bandage with `!important`
+
+#### **4. Use CSS Variables for Everything**
+- ❌ Never hardcode: `bg-blue-500`, `#3b82f6`, `rgba(59, 130, 246, 0.5)`
+- ✅ Always use tokens: `bg-primary`, `var(--primary)`, `color-mix(in oklch, var(--primary) 50%, transparent)`
+- Colors, spacing, radii, shadows, durations - all should be tokens
+
+#### **5. Animate Only Transform & Opacity**
+- These are GPU-accelerated and give 60fps animations
+- ❌ Avoid animating: `width`, `height`, `top`, `left`, `margin`, `padding`
+- ✅ Prefer animating: `transform`, `opacity`
+- Use `will-change: transform` or `will-change: opacity` for animations
+
+#### **6. Respect User Preferences**
+```css
+/* Disable animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+#### **7. Use Container Queries for Components**
+- Components should respond to their **container**, not viewport
+- Already using in `card.tsx`: `@container/card-header`
+- Prefer `@container` over `@media` for reusable components
+
+```tsx
+// ✅ GOOD - Adapts to container
+<div className="@container">
+  <div className="@sm:grid-cols-2 @lg:grid-cols-3">
+    {/* Responds to parent width */}
+  </div>
+</div>
+
+// ❌ BAD - Only responds to viewport
+<div className="sm:grid-cols-2 lg:grid-cols-3">
+  {/* Same size everywhere */}
+</div>
+```
+
+#### **8. Use Logical Properties (Future-proof)**
+- Makes layouts work in RTL languages and vertical writing modes
+- `margin-inline` instead of `margin-left/margin-right`
+- `padding-block` instead of `padding-top/padding-bottom`
+- `inline-size` instead of `width`
+- `block-size` instead of `height`
+
+#### **9. Avoid Fixed Heights on Text**
+- Let content define height
+- Use `min-height`, `max-height`, or `clamp()` if needed
+- ❌ `height: 200px` on a card with text
+- ✅ `min-height: 200px` or just let it flow
+
+#### **10. Use Modern Color Functions**
+- `color-mix(in oklch, var(--primary) 25%, transparent)` for semi-transparent colors
+- `oklch()` for perceptually uniform colors
+- Already doing this! Keep it up.
+
 ### General Styling Guidelines
 - Consistent paddings default 16px (this product is more dense)
 - Consistent font sizes
@@ -126,97 +205,86 @@ We use **Tailwind CSS v4** which has significant differences from v3:
 
 Maximize reusing of Shadcn components. If you want to design something new, explore src/components/ui/ to see if you can use something or build it from these components. They're the atomic components of all the design.
 
-### Shadcn UI - CRITICAL Best Practices
+### Shadcn UI - Practical Best Practices
 
-**DO NOT modify core shadcn components directly!** Follow these rules:
+**Shadcn uses the "Open Code" model - you own the code and SHOULD edit it!**
 
-#### Never Edit Core Components
-- ❌ **NEVER** modify files in `src/components/ui/` created by shadcn CLI
-- ❌ Don't change the internal logic, props, or structure of shadcn components
-- ❌ Don't add custom functionality directly into shadcn component files
-- These are **library components** - treat them as read-only dependencies
+The files in `src/components/ui/` are not a locked library - they're starter code that you're meant to customize for your design system. Editing them directly is the intended workflow.
 
-#### How to Customize - The Right Way
+#### When to Edit vs Wrap
 
-**1. Use Component Variants (Preferred)**
-```tsx
-// ✅ CORRECT - Use built-in variants
-<Button variant="destructive" size="lg">Delete</Button>
-<Badge variant="outline">New</Badge>
+**✅ Edit `components/ui/*` directly when:**
+- Changing default styles (colors, borders, animations, radius, shadows)
+- Adding new variants that should be available project-wide
+- Fixing bugs or accessibility issues in the base component
+- Adjusting animation timing or transition curves globally
+- Changing default behavior (focus rings, hover states, disabled styles)
 
-// ❌ WRONG - Don't modify button.tsx directly
-```
+**✅ Create wrappers in `components/custom/*` when:**
+- Adding app-specific behavior (analytics, feature flags, permissions)
+- Combining multiple shadcn components into domain-specific patterns
+- Creating product-specific variants (e.g., "DangerButton" with alert icon)
+- Adding business logic that doesn't belong in base UI primitives
 
-**2. Extend Through Composition**
-```tsx
-// ✅ CORRECT - Create wrapper components
-// src/components/custom/DangerButton.tsx
-export function DangerButton({ children, ...props }) {
-  return (
-    <Button variant="destructive" className="gap-2" {...props}>
-      <AlertTriangle className="size-4" />
-      {children}
-    </Button>
-  )
+#### Best Practices
+
+**1. Theme first, then component edits**
+- Try CSS variables in `src/global.css` first (colors, radius, spacing)
+- If you find yourself using `className` to override the same styles everywhere, edit the component instead
+- Example: If every Button needs `rounded-lg` instead of `rounded-md`, edit `button.tsx` once
+
+**2. Keep predictable APIs**
+- Preserve standard props: `className`, `variant`, `size`, `asChild`
+- Don't remove or rename these - consuming code depends on them
+- Don't embed domain logic (feature flags, product copy) in `ui/*` files
+
+**3. Track upstream changes**
+- Watch [shadcn's changelog](https://ui.shadcn.com/docs/changelog) for component updates
+- Use `npx shadcn@canary add button --overwrite` to refresh from upstream
+- Review Git diff and reapply your customizations after updates
+- Commit with clear messages: `chore(ui/button): pull upstream + preserve custom variants`
+
+**4. Prefer global fixes over per-component edits**
+- Example: For cursor pointer on buttons, add CSS rule instead of editing each component:
+
+```css
+/* src/global.css */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
 }
 ```
 
-**3. Use ClassName for Styling**
-```tsx
-// ✅ CORRECT - Add Tailwind classes via className
-<Button className="bg-gradient-to-r from-purple-500 to-pink-500">
-  Gradient Button
-</Button>
+**5. Use CSS variables for colors**
+- ❌ Don't hardcode colors: `text-green-500 dark:text-green-400`
+- ✅ Create semantic variables: `--color-status-success` → `text-[color:var(--status-success)]`
+- This makes theming consistent and updates easier
 
-// ❌ WRONG - Don't edit button.tsx to add gradients
-```
+#### Anti-Patterns to Avoid
 
-**4. Create Composite Components**
-```tsx
-// ✅ CORRECT - Compose shadcn components into new ones
-// src/components/custom/ConfirmDialog.tsx
-export function ConfirmDialog({ title, message, onConfirm }) {
-  return (
-    <AlertDialog>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Confirm</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-```
-
-#### When Components Need Updates
-- If shadcn releases updates, reinstall via CLI: `npx shadcn@canary add button --overwrite`
-- Your customizations should live in separate files, so reinstalls are safe
-- Use version control to review changes before overwriting
+❌ **Don't** use `!important` unless absolutely necessary (e.g., overriding third-party libraries)
+❌ **Don't** hardcode colors - create CSS variables in `global.css` instead
+❌ **Don't** add domain logic (API calls, feature flags) to `ui/*` components
+❌ **Don't** feel guilty about editing shadcn components - it's the expected workflow!
 
 #### Project Structure
 ```
 src/
 ├── components/
-│   ├── ui/              ← Shadcn components (DON'T TOUCH)
-│   │   ├── button.tsx
-│   │   ├── dialog.tsx
+│   ├── ui/              ← Shadcn base components (EDIT FREELY)
+│   │   ├── button.tsx   ← Add variants, change defaults
+│   │   ├── badge.tsx    ← Adjust colors, add shapes
 │   │   └── ...
-│   └── custom/          ← Your custom components (USE THIS)
-│       ├── DangerButton.tsx
-│       └── ConfirmDialog.tsx
+│   └── custom/          ← App-specific compositions
+│       ├── DangerButton.tsx      ← Product-specific variants
+│       └── ConfirmDialog.tsx     ← Domain patterns
 ```
 
-#### Why This Matters
-- Shadcn components are **not a package** - they're source code copied into your project
-- Updates require manual reinstallation via CLI
-- Custom changes get lost when you update components
-- Composition and variants are the shadcn-recommended patterns
-- This approach is from shadcn's official documentation and philosophy
+#### Real Examples from This Project
+
+**✅ sidebar.tsx** - Modified animation timing globally (duration-[180ms] instead of default)
+**✅ avatar.tsx** - Could add `shape` variant for `rounded-[8px]` squares vs `rounded-full` circles
+**❌ SidebarHeader.tsx** - Currently uses className override `rounded-[8px]` - should edit avatar.tsx instead
 
 ### General Component Guidelines
 - Split functionality into reusable components

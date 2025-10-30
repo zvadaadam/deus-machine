@@ -174,8 +174,8 @@ export function WelcomeView({
                     {/* Subtle state indicator - no bright badges, just refined text */}
                     <div className={cn(
                       "text-xs font-medium ml-4 flex-shrink-0 transition-opacity duration-200",
-                      workspace.state === 'ready' && "text-green-600/60 dark:text-green-400/50",
-                      workspace.state === 'initializing' && "text-blue-600/60 dark:text-blue-400/50",
+                      workspace.state === 'ready' && "text-status-working/60",
+                      workspace.state === 'initializing' && "text-info/60",
                       workspace.state === 'archived' && "text-muted-foreground/40",
                       !['ready', 'initializing', 'archived'].includes(workspace.state) && "text-muted-foreground/50"
                     )}>

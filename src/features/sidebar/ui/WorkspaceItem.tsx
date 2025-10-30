@@ -139,12 +139,15 @@ export function WorkspaceItem({
                 <TextShimmer
                   as="span"
                   duration={2}
-                  className={cn(
-                    "text-xs flex-shrink-0",
-                    workspace.session_status === "working"
-                      ? "[--base-color:theme(colors.blue.700)] [--base-gradient-color:theme(colors.blue.300)] dark:[--base-color:theme(colors.blue.600)] dark:[--base-gradient-color:theme(colors.blue.400)]"
-                      : "[--base-color:theme(colors.yellow.600)] [--base-gradient-color:theme(colors.yellow.200)] dark:[--base-color:theme(colors.yellow.700)] dark:[--base-gradient-color:theme(colors.yellow.400)]"
-                  )}
+                  className="text-xs flex-shrink-0"
+                  style={{
+                    '--base-color': workspace.session_status === "working"
+                      ? 'var(--status-working)'
+                      : 'var(--status-compacting)',
+                    '--base-gradient-color': workspace.session_status === "working"
+                      ? 'color-mix(in oklch, var(--status-working) 60%, white)'
+                      : 'color-mix(in oklch, var(--status-compacting) 60%, white)',
+                  } as React.CSSProperties}
                 >
                   {getStatusText(workspace.session_status)}
                 </TextShimmer>

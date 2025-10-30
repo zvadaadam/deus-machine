@@ -123,7 +123,7 @@ conductor/
 │   │   ├── config/               # Configuration
 │   │   └── lib/                  # Utility functions
 │   └── components/               # UI components
-│       └── ui/                   # Shadcn components (DON'T MODIFY)
+│       └── ui/                   # Shadcn components (edit freely - owned code)
 ├── src-tauri/                    # Rust backend
 │   ├── src/
 │   │   ├── main.rs               # Tauri app entry
@@ -162,8 +162,8 @@ Port discovery is automatic:
 
 When working on this project:
 - Follow the guidelines in [CLAUDE.md](CLAUDE.md)
-- Never modify shadcn components in `src/components/ui/` directly
-- Use semantic colors from the design system
+- Shadcn components in `src/components/ui/` are owned code - edit freely when needed
+- Use semantic colors from the design system (CSS variables in `global.css`)
 - Keep animations fast (200-300ms)
 - Documentation lives IN the code (use inline comments)
 
