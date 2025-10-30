@@ -382,19 +382,19 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.59 0.24 264);
 
-  /* Diff viewer colors - GitHub-inspired (Light Mode) */
-  --diff-addition-bg: oklch(0.95 0.08 145);        /* Brighter mint green background */
-  --diff-addition-gutter: oklch(0.90 0.10 145);    /* Darker gutter for additions */
-  --diff-addition-word: oklch(0.85 0.14 145);      /* SATURATED green for word highlights */
-  --diff-addition-text: oklch(0.35 0.12 145);      /* Dark green text */
+  /* Diff viewer colors - Copper theme (Light Mode) */
+  --diff-addition-bg: oklch(0.95 0.06 160);        /* Soft emerald green on warm cream */
+  --diff-addition-gutter: oklch(0.88 0.10 155);    /* Deeper green gutter */
+  --diff-addition-word: oklch(0.82 0.14 158);      /* Saturated green highlight */
+  --diff-addition-text: oklch(0.38 0.12 160);      /* Dark forest green text */
 
-  --diff-deletion-bg: oklch(0.95 0.08 25);         /* Brighter rose background */
-  --diff-deletion-gutter: oklch(0.90 0.10 25);     /* Darker gutter for deletions */
-  --diff-deletion-word: oklch(0.85 0.16 25);       /* SATURATED red for word highlights */
-  --diff-deletion-text: oklch(0.40 0.14 25);       /* Dark red text */
+  --diff-deletion-bg: oklch(0.94 0.06 35);         /* Warm peachy-copper deletion background */
+  --diff-deletion-gutter: oklch(0.86 0.12 32);     /* Deeper copper-red gutter */
+  --diff-deletion-word: oklch(0.80 0.16 30);       /* Saturated copper-red highlight */
+  --diff-deletion-text: oklch(0.42 0.14 28);       /* Dark ember text */
 
-  --diff-line-number: oklch(0.50 0 0);             /* Muted gray for line numbers */
-  --diff-line-number-bg: oklch(0.97 0 0);          /* Very light background for line numbers */
+  --diff-line-number: oklch(0.52 0.02 75);         /* Warm muted brown-gray */
+  --diff-line-number-bg: oklch(0.96 0.02 90);      /* Subtle warm cream background */
 }
 
 .dark {
@@ -461,19 +461,19 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.59 0.24 264);
 
-  /* Diff viewer colors - GitHub-inspired (Dark Mode) */
-  --diff-addition-bg: oklch(0.22 0.10 145);        /* Dark green background */
-  --diff-addition-gutter: oklch(0.18 0.12 145);    /* Even darker gutter for additions */
-  --diff-addition-word: oklch(0.30 0.18 145);      /* SATURATED bright green for word highlights */
-  --diff-addition-text: oklch(0.75 0.14 145);      /* Bright green text */
+  /* Diff viewer colors - Copper theme (Dark Mode) */
+  --diff-addition-bg: oklch(0.23 0.08 160);        /* Deep emerald on graphite */
+  --diff-addition-gutter: oklch(0.19 0.10 158);    /* Darker green gutter */
+  --diff-addition-word: oklch(0.35 0.16 160);      /* Bright emerald highlight */
+  --diff-addition-text: oklch(0.76 0.14 160);      /* Bright mint green text */
 
-  --diff-deletion-bg: oklch(0.22 0.10 25);         /* Dark red background */
-  --diff-deletion-gutter: oklch(0.18 0.12 25);     /* Even darker gutter for deletions */
-  --diff-deletion-word: oklch(0.30 0.20 25);       /* SATURATED bright red for word highlights */
-  --diff-deletion-text: oklch(0.70 0.16 25);       /* Bright red text */
+  --diff-deletion-bg: oklch(0.24 0.08 38);         /* Warm copper-ember on graphite */
+  --diff-deletion-gutter: oklch(0.20 0.10 35);     /* Darker copper gutter */
+  --diff-deletion-word: oklch(0.36 0.18 35);       /* Glowing copper-red highlight */
+  --diff-deletion-text: oklch(0.72 0.16 32);       /* Bright ember orange text */
 
-  --diff-line-number: oklch(0.55 0 0);             /* Lighter gray for dark mode line numbers */
-  --diff-line-number-bg: oklch(0.18 0 0);          /* Dark background for line numbers */
+  --diff-line-number: oklch(0.54 0.02 70);         /* Warm graphite-gray for line numbers */
+  --diff-line-number-bg: oklch(0.17 0.01 255);     /* Deep graphite background */
 }
 
 /* Apply semantic border color to all elements with border utilities */
