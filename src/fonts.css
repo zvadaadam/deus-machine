@@ -1,5 +1,5 @@
-/* Helvetica Neue font family */
-@font-face {
+/* OLD: Helvetica Neue font family (commented out, replaced by Suisse Intl) */
+/* @font-face {
   font-family: 'Helvetica Neue';
   src: url('/fonts/helvetica-neue-5/HelveticaNeueRoman.otf') format('opentype');
   font-weight: 400;
@@ -21,7 +21,7 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
-}
+} */
 
 /* Suisse Intl Mono font family - WOFF2 optimized for web */
 /* Note: Suisse Intl Mono only has one weight, so we map it to all font-weights */

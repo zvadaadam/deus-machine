@@ -99,8 +99,8 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
-  /* Font families */
-  --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Font families - Using Suisse Intl for both sans and mono */
+  --font-family-sans: 'Suisse Intl', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-family-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
 
   /* Font sizes with line heights */
