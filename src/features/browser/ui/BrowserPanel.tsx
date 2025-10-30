@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target, Globe } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 /**
  * Timeout for fetching injection script from dev-browser server
@@ -631,15 +632,12 @@ _You can ask me to modify this element, debug it, or help with related styling._
             )}
           </>
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-md px-8">
-              <Globe className="h-16 w-16 mx-auto mb-6 text-muted-foreground/40" strokeWidth={1.5} />
-              <h3 className="text-xl font-semibold mb-3 text-foreground">Browser</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Enter a URL above, or instruct the Agent to navigate and use the browser
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            icon={<Globe className="w-full h-full" strokeWidth={1.5} />}
+            title="Browser"
+            description="Enter a URL above, or instruct the Agent to navigate and use the browser"
+            className="h-full border-0"
+          />
         )}
 
         {/* Loading overlay */}
