@@ -30,7 +30,6 @@ import { useSettings as useSettingsQuery } from "@/features/settings";
 import {
   Button,
   Badge,
-  EmptyState,
   Skeleton,
   SidebarProvider,
   SidebarInset,
@@ -40,6 +39,7 @@ import {
   TabsContent,
   useSidebar,
 } from "@/components/ui";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -837,11 +837,17 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
         <div className="space-standard">
-          <EmptyState
-            icon={<FolderOpen />}
-            title="No Workspaces"
-            description="Create a new workspace to get started"
-            action={
+          <Empty className="border-0">
+            <EmptyHeader>
+              <EmptyMedia>
+                <FolderOpen className="h-16 w-16 text-muted-foreground/40" />
+              </EmptyMedia>
+              <EmptyTitle>No Workspaces</EmptyTitle>
+              <EmptyDescription>
+                Create a new workspace to get started
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
               <Button
                 variant="default"
                 onClick={() => handleNewWorkspace()}
@@ -849,8 +855,8 @@ export function MainLayout() {
               >
                 + Create Workspace
               </Button>
-            }
-          />
+            </EmptyContent>
+          </Empty>
         </div>
       ) : (
         <AppSidebar
