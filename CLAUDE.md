@@ -116,6 +116,85 @@ We use **Tailwind CSS v4** which has significant differences from v3:
 }
 ```
 
+### Modern CSS Best Practices (Top-1% Quality)
+
+These principles ensure maintainable, extendable styling that scales:
+
+#### **1. Semantic HTML First, Styling Second**
+- Use correct HTML elements: `<button>` not clickable `<div>`
+- Proper ARIA semantics reduce CSS you need to write
+- Example: `<button>` handles focus, keyboard, disabled states automatically
+
+#### **2. Keep Specificity Low**
+- One class deep most of the time
+- Avoid deeply nested selectors: `❌ .list .card > h3.title`
+- Prefer flat classes: `✅ .card-title`
+- Use `data-*` attributes for variants: `<Button data-variant="outline">`
+
+#### **3. Avoid !important**
+- Only use in extreme cases (overriding third-party libraries, debugging)
+- If you need `!important`, the specificity architecture is wrong
+- Fix the root cause, don't bandage with `!important`
+
+#### **4. Use CSS Variables for Everything**
+- ❌ Never hardcode: `bg-blue-500`, `#3b82f6`, `rgba(59, 130, 246, 0.5)`
+- ✅ Always use tokens: `bg-primary`, `var(--primary)`, `color-mix(in oklch, var(--primary) 50%, transparent)`
+- Colors, spacing, radii, shadows, durations - all should be tokens
+
+#### **5. Animate Only Transform & Opacity**
+- These are GPU-accelerated and give 60fps animations
+- ❌ Avoid animating: `width`, `height`, `top`, `left`, `margin`, `padding`
+- ✅ Prefer animating: `transform`, `opacity`
+- Use `will-change: transform` or `will-change: opacity` for animations
+
+#### **6. Respect User Preferences**
+```css
+/* Disable animations for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+#### **7. Use Container Queries for Components**
+- Components should respond to their **container**, not viewport
+- Already using in `card.tsx`: `@container/card-header`
+- Prefer `@container` over `@media` for reusable components
+
+```tsx
+// ✅ GOOD - Adapts to container
+<div className="@container">
+  <div className="@sm:grid-cols-2 @lg:grid-cols-3">
+    {/* Responds to parent width */}
+  </div>
+</div>
+
+// ❌ BAD - Only responds to viewport
+<div className="sm:grid-cols-2 lg:grid-cols-3">
+  {/* Same size everywhere */}
+</div>
+```
+
+#### **8. Use Logical Properties (Future-proof)**
+- Makes layouts work in RTL languages and vertical writing modes
+- `margin-inline` instead of `margin-left/margin-right`
+- `padding-block` instead of `padding-top/padding-bottom`
+- `inline-size` instead of `width`
+- `block-size` instead of `height`
+
+#### **9. Avoid Fixed Heights on Text**
+- Let content define height
+- Use `min-height`, `max-height`, or `clamp()` if needed
+- ❌ `height: 200px` on a card with text
+- ✅ `min-height: 200px` or just let it flow
+
+#### **10. Use Modern Color Functions**
+- `color-mix(in oklch, var(--primary) 25%, transparent)` for semi-transparent colors
+- `oklch()` for perceptually uniform colors
+- Already doing this! Keep it up.
+
 ### General Styling Guidelines
 - Consistent paddings default 16px (this product is more dense)
 - Consistent font sizes
