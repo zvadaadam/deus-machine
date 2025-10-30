@@ -101,7 +101,7 @@
 
   /* Font families */
   --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-family-mono: 'Iosevka Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+  --font-family-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
 
   /* Font sizes with line heights */
   --font-size-display-lg: 48px;
