@@ -187,9 +187,9 @@ export function RepositoryItem({
                         strokeLinecap="round"
                         className={cn(
                           "opacity-55",
-                          ringColor === 'working' && "text-green-500 dark:text-green-400",
-                          ringColor === 'unread' && "text-amber-500 dark:text-amber-400",
-                          ringColor === 'error' && "text-red-500 dark:text-red-400"
+                          ringColor === 'working' && "text-status-working",
+                          ringColor === 'unread' && "text-status-unread",
+                          ringColor === 'error' && "text-destructive"
                         )}
                       />
                     </svg>
@@ -209,9 +209,9 @@ export function RepositoryItem({
                       "bg-sidebar-accent",
                       "border-2",
                       // Ring color hierarchy: error > unread > working
-                      ringColor === 'error' && "border-red-500 dark:border-red-400",
-                      ringColor === 'unread' && "border-amber-500 dark:border-amber-400",
-                      ringColor === 'working' && "border-green-500/70 dark:border-green-400/70"
+                      ringColor === 'error' && "border-destructive",
+                      ringColor === 'unread' && "border-status-unread",
+                      ringColor === 'working' && "border-status-working/70"
                     ],
                     // Idle repos: Reduced presence, no ring
                     isIdle && [
@@ -231,7 +231,7 @@ export function RepositoryItem({
                     <div
                       className="absolute inset-[-2px] rounded-[10px] pointer-events-none animate-[breathing-glow_2.5s_ease-in-out_infinite] motion-reduce:animate-none"
                       style={{
-                        background: 'radial-gradient(circle, rgba(34,197,94,0.25) 0%, transparent 70%)',
+                        background: 'radial-gradient(circle, color-mix(in oklch, var(--status-working) 25%, transparent) 0%, transparent 70%)',
                         willChange: 'opacity'
                       }}
                     />
@@ -242,9 +242,9 @@ export function RepositoryItem({
                     <span className={cn(
                       "relative z-10 text-[11px] font-bold tabular-nums",
                       // Number color matches ring color for visual unity
-                      ringColor === 'working' && "text-green-600 dark:text-green-400",
-                      ringColor === 'unread' && "text-amber-600 dark:text-amber-400",
-                      ringColor === 'error' && "text-red-600 dark:text-red-400"
+                      ringColor === 'working' && "text-status-working",
+                      ringColor === 'unread' && "text-status-unread",
+                      ringColor === 'error' && "text-destructive"
                     )}>
                       {workingCount}
                     </span>
@@ -269,8 +269,8 @@ export function RepositoryItem({
                       "z-20 border-[2px] border-sidebar",
                       "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                       "animate-in zoom-in-50",
-                      "bg-amber-500 dark:bg-amber-600 text-white",
-                      "shadow-[0_2px_8px_rgba(245,158,11,0.3)]"
+                      "bg-status-unread text-status-unread-fg",
+                      "shadow-[0_2px_8px_color-mix(in_oklch,var(--status-unread)_30%,transparent)]"
                     )}
                     aria-label={`${unreadCount} unread workspace${unreadCount > 1 ? 's' : ''}`}
                   >
