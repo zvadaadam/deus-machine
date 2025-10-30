@@ -88,6 +88,17 @@
   --color-file-markup: var(--file-markup);
   --color-file-image: var(--file-image);
 
+  /* Z-index tokens */
+  --z-base: var(--z-base);
+  --z-dropdown: var(--z-dropdown);
+  --z-sticky: var(--z-sticky);
+  --z-fixed: var(--z-fixed);
+  --z-modal-backdrop: var(--z-modal-backdrop);
+  --z-modal: var(--z-modal);
+  --z-popover: var(--z-popover);
+  --z-tooltip: var(--z-tooltip);
+  --z-notification: var(--z-notification);
+
   /* Font families */
   --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-family-mono: 'Iosevka Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
@@ -340,6 +351,17 @@
   --file-styles: oklch(0.62 0.20 290);           /* Purple for CSS */
   --file-markup: oklch(0.62 0.18 40);            /* Orange for HTML */
   --file-image: oklch(0.65 0.21 340);            /* Pink for images */
+
+  /* Z-index scale for layered UI elements */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-tooltip: 1200;
+  --z-notification: 1300;
 
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
