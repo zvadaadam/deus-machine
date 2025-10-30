@@ -107,7 +107,7 @@ export class ErrorBoundary extends Component<Props, State> {
                     backgroundColor: 'var(--bg-secondary, #f9fafb)',
                     borderRadius: '4px',
                     fontSize: '14px',
-                    fontFamily: 'monospace',
+                    fontFamily: 'var(--font-family-mono)',
                     maxHeight: '200px',
                     overflow: 'auto',
                   }}
