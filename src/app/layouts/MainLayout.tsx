@@ -516,7 +516,7 @@ function MainContent({
                 {/* Changes Tab - Split: File List + Diff Viewer */}
                 <TabsContent
                   value="changes"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
                   <div className="flex h-full overflow-hidden">
                     {/* File List - Always visible */}
@@ -564,7 +564,7 @@ function MainContent({
                 {/* Files Tab - Split: File Browser + Diff Viewer */}
                 <TabsContent
                   value="files"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
                   <div className="flex h-full overflow-hidden">
                     {/* File Browser - Always visible */}
@@ -613,7 +613,7 @@ function MainContent({
                 {/* Browser Tab - Full width, no split */}
                 <TabsContent
                   value="browser"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
                   <BrowserPanel
                     workspaceId={selectedWorkspace.id}
