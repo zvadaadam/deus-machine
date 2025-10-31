@@ -43,7 +43,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen, ChevronsRight } from "lucide-react";
+import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, FolderOpen, ChevronsRight } from "lucide-react";
 import { useWorkspaceStore, useWorkspaceLayoutStore } from "@/features/workspace/store";
 import type { RightPanelTab } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -323,18 +323,13 @@ function MainContent({
   };
 
   /**
-   * Close currently selected file (return to empty state, keep panel expanded)
-   */
-  const handleFileClose = () => {
-    setSelectedFile(null);
-  };
-
-  /**
    * Collapse panel to narrow mode
    * Works for all tabs: Changes, Files, Browser
+   * Also clears selected file (no intermediate empty state)
    */
   const handlePanelCollapse = () => {
     setRightPanelExpanded(false);
+    setSelectedFile(null); // Clear file - no intermediate empty state
     // If on browser tab, switch to changes (browser doesn't have narrow mode)
     if (rightPanelTab === 'browser') {
       setRightPanelTab('changes');
@@ -429,9 +424,9 @@ function MainContent({
           <div className="flex flex-col h-full overflow-hidden">
             {/* Panel Header with Tabs */}
             <Tabs value={rightPanelTab} onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <div className="border-b border-border/40 flex-shrink-0 flex items-center">
+              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-11">
                 {/* Tab Triggers */}
-                <TabsList className="h-8 flex-1 justify-start rounded-none bg-transparent p-0 px-2 gap-0">
+                <TabsList className="h-11 flex-1 justify-start rounded-none bg-transparent p-0 px-2 gap-0">
                   <TabsTrigger
                     value="changes"
                     className="relative rounded-none border-b border-b-transparent data-[state=active]:border-b-foreground data-[state=inactive]:text-muted-foreground/60 px-3 py-1.5 transition-[border-color,color] duration-200 ease-out"
@@ -452,31 +447,17 @@ function MainContent({
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Panel Controls - Show collapse button when expanded, close button when file selected */}
+                {/* Panel Controls - Collapse button when expanded */}
                 {rightPanelExpanded && (
-                  <div className="flex items-center gap-1 px-2 border-l border-border/30">
-                    {/* Close File Button - Only when file is selected */}
-                    {selectedFile && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={handleFileClose}
-                        title="Close file"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-
-                    {/* Collapse Panel Button - Always visible in expanded state */}
+                  <div className="flex items-center px-3 border-l border-border/30">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-9 w-9 rounded-lg"
                       onClick={handlePanelCollapse}
                       title="Collapse panel"
                     >
-                      <ChevronsRight className="h-4 w-4" />
+                      <ChevronsRight className="h-[18px] w-[18px]" />
                     </Button>
                   </div>
                 )}
