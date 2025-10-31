@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
@@ -34,7 +34,7 @@ export function FileChangesPanel({
    * Load and display diff for a specific file as an inline tab
    * Prevents race conditions by tracking the current file being loaded
    */
-  async function handleFileClick(file: string, additions: number, deletions: number) {
+  const handleFileClick = useCallback(async (file: string, additions: number, deletions: number) => {
     if (!selectedWorkspace || !onOpenDiffTab || !onUpdateDiffTab) return;
 
     // Track this file as the current one being loaded
@@ -71,7 +71,7 @@ export function FileChangesPanel({
         diff: 'Error loading diff',
       });
     }
-  }
+  }, [selectedWorkspace, onOpenDiffTab, onUpdateDiffTab]);
 
   /**
    * Auto-load diff when file is restored from persistence
@@ -89,7 +89,7 @@ export function FileChangesPanel({
     if (currentFileRef.current !== selectedFilePath) {
       handleFileClick(fileData.file, fileData.additions, fileData.deletions);
     }
-  }, [selectedFilePath, selectedWorkspace?.id, fileChanges]);
+  }, [selectedFilePath, selectedWorkspace?.id, fileChanges, handleFileClick]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

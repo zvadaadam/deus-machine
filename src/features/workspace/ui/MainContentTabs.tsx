@@ -57,8 +57,6 @@ interface MainContentTabsProps {
   repositoryName?: string;
   branch?: string;
   workspacePath?: string;
-  isBrowserOpen?: boolean;
-  onBrowserToggle?: () => void;
   onBranchRename?: (newName: string) => void;
 }
 
@@ -88,8 +86,6 @@ export function MainContentTabBar({
   repositoryName,
   branch,
   workspacePath,
-  isBrowserOpen,
-  onBrowserToggle,
   onBranchRename,
 }: Omit<MainContentTabsProps, 'children'>) {
   // Branch editing state
@@ -360,8 +356,6 @@ export function MainContentTabs({
   repositoryName,
   branch,
   workspacePath,
-  isBrowserOpen,
-  onBrowserToggle,
   onBranchRename,
 }: MainContentTabsProps) {
   return (
@@ -375,8 +369,6 @@ export function MainContentTabs({
         repositoryName={repositoryName}
         branch={branch}
         workspacePath={workspacePath}
-        isBrowserOpen={isBrowserOpen}
-        onBrowserToggle={onBrowserToggle}
         onBranchRename={onBranchRename}
       />
       <div className="flex-1 min-h-0 overflow-hidden">

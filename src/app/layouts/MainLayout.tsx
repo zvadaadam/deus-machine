@@ -154,7 +154,7 @@ function MainContent({
         selectedFile: selectedFile ? { path: selectedFile.path, source: 'changes' } : null,
       });
     }
-  }, [selectedWorkspace, rightPanelExpanded, rightPanelTab, sidebarOpen, selectedFile, setLayoutState]);
+  }, [selectedWorkspace?.id, rightPanelExpanded, rightPanelTab, sidebarOpen, selectedFile, setLayoutState]);
 
   // Restore layout state when workspace changes
   useEffect(() => {
