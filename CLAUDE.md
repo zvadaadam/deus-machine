@@ -195,6 +195,45 @@ These principles ensure maintainable, extendable styling that scales:
 - `oklch()` for perceptually uniform colors
 - Already doing this! Keep it up.
 
+#### **11. Avoid Unnecessary Flex Nesting**
+- **Antipattern**: Wrapping a flex container in another flex container with no purpose
+- Each flex container adds layout calculation overhead and default behaviors (gap, alignment)
+- **Rule**: Only use flex when that specific container needs flex layout logic
+
+```tsx
+// ❌ BAD - Double flex with no purpose
+<div className="flex">                     // Outer flex: Why?
+  <div className="flex h-full gap-4">     // Inner flex: Does actual work
+    <Child />
+  </div>
+</div>
+
+// ✅ GOOD - Single flex with clear responsibility
+<div className="h-full">                  // Block container: Height constraint
+  <div className="flex h-full gap-4">     // Flex: Layout logic
+    <Child />
+  </div>
+</div>
+
+// ✅ ALSO GOOD - Double flex with different purposes
+<div className="flex flex-col">           // Outer: Vertical stacking
+  <Header />
+  <div className="flex gap-4">            // Inner: Horizontal layout
+    <Child />
+  </div>
+</div>
+```
+
+**Why this matters:**
+- Default flex behaviors (align-items: stretch, gap) compound and create unexpected spacing
+- Browser calculates layout twice unnecessarily (performance)
+- Harder to debug when flex constraints conflict
+- Violates single-responsibility principle
+
+**Real example from our codebase:**
+- TabsContent with `data-[state=active]:flex` wrapping another `flex` div created phantom padding
+- Removing outer flex eliminated the spacing issue completely
+
 ### General Styling Guidelines
 - Consistent paddings default 16px (this product is more dense)
 - Consistent font sizes
