@@ -239,10 +239,20 @@ function MainContent({
 
   /**
    * Handle tab change in right panel
-   * Expands panel automatically when switching to a tab
+   *
+   * Jony Ive principle: Switching tabs should show the tab content clearly,
+   * not auto-open files or maintain state from other tabs. User decides what opens.
    */
   const handleRightPanelTabChange = (tab: RightPanelTab) => {
     setRightPanelTab(tab);
+
+    // Clear selected file when switching tabs (show empty state)
+    setSelectedFile(null);
+
+    // Collapse panel when switching to Changes/Files (show list view)
+    if (tab === 'changes' || tab === 'files') {
+      setRightPanelExpanded(false);
+    }
 
     // Expand panel when switching to browser tab
     if (tab === 'browser' && !rightPanelExpanded) {
@@ -504,15 +514,29 @@ function MainContent({
                       />
                     </div>
 
-                    {/* Diff Viewer - Slides in from right when file selected */}
-                    {selectedFile && rightPanelExpanded && (
+                    {/* Right Side - Diff Viewer or Empty State */}
+                    {rightPanelExpanded && (
                       <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
-                        <DiffViewer
-                          filePath={selectedFile.path}
-                          diff={selectedFile.diff}
-                          additions={selectedFile.additions}
-                          deletions={selectedFile.deletions}
-                        />
+                        {selectedFile ? (
+                          <DiffViewer
+                            filePath={selectedFile.path}
+                            diff={selectedFile.diff}
+                            additions={selectedFile.additions}
+                            deletions={selectedFile.deletions}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center p-8">
+                            <div className="text-center max-w-sm">
+                              <FileCode className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+                              <h3 className="text-sm font-medium text-foreground/60 mb-2">
+                                Select a file to view changes
+                              </h3>
+                              <p className="text-xs text-muted-foreground/50">
+                                Click on any file from the list to see its diff
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -539,15 +563,29 @@ function MainContent({
                       />
                     </div>
 
-                    {/* Diff Viewer - Slides in from right when file selected */}
-                    {selectedFile && rightPanelExpanded && (
+                    {/* Right Side - Diff Viewer or Empty State */}
+                    {rightPanelExpanded && (
                       <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
-                        <DiffViewer
-                          filePath={selectedFile.path}
-                          diff={selectedFile.diff}
-                          additions={selectedFile.additions}
-                          deletions={selectedFile.deletions}
-                        />
+                        {selectedFile ? (
+                          <DiffViewer
+                            filePath={selectedFile.path}
+                            diff={selectedFile.diff}
+                            additions={selectedFile.additions}
+                            deletions={selectedFile.deletions}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center p-8">
+                            <div className="text-center max-w-sm">
+                              <FolderOpen className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+                              <h3 className="text-sm font-medium text-foreground/60 mb-2">
+                                Browse and select a file
+                              </h3>
+                              <p className="text-xs text-muted-foreground/50">
+                                Explore the file tree and click on any file to view it
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
