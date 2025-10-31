@@ -482,55 +482,87 @@ function MainContent({
                 )}
               </div>
 
-              {/* Tab Content - File Diff Overlay or Tab Content */}
-              {selectedFile && rightPanelExpanded ? (
-                // File Diff Panel - Overlays tab content when file is selected
-                <div className="flex-1 overflow-hidden">
-                  <DiffViewer
-                    filePath={selectedFile.path}
-                    diff={selectedFile.diff}
-                    additions={selectedFile.additions}
-                    deletions={selectedFile.deletions}
+              {/* Tab Content - Split layout for Changes/Files with diff viewer */}
+              <>
+                {/* Changes Tab - Split: File List + Diff Viewer */}
+                <TabsContent
+                  value="changes"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+                >
+                  <div className="flex h-full overflow-hidden">
+                    {/* File List - Always visible */}
+                    <div className={`flex-shrink-0 border-r border-border/40 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      selectedFile && rightPanelExpanded ? 'w-[280px]' : 'flex-1'
+                    }`}>
+                      <FileChangesPanel
+                        selectedWorkspace={selectedWorkspace}
+                        onOpenDiffTab={handleFileClick}
+                        onUpdateDiffTab={handleUpdateFile}
+                        selectedFilePath={selectedFile?.path}
+                      />
+                    </div>
+
+                    {/* Diff Viewer - Slides in from right when file selected */}
+                    {selectedFile && rightPanelExpanded && (
+                      <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
+                        <DiffViewer
+                          filePath={selectedFile.path}
+                          diff={selectedFile.diff}
+                          additions={selectedFile.additions}
+                          deletions={selectedFile.deletions}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Files Tab - Split: File Browser + Diff Viewer */}
+                <TabsContent
+                  value="files"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+                >
+                  <div className="flex h-full overflow-hidden">
+                    {/* File Browser - Always visible */}
+                    <div className={`flex-shrink-0 border-r border-border/40 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      selectedFile && rightPanelExpanded ? 'w-[280px]' : 'flex-1'
+                    }`}>
+                      <FileBrowserPanel
+                        selectedWorkspace={selectedWorkspace}
+                        onFileClick={(path) => {
+                          // TODO: Load file content and show in diff viewer
+                          console.log('File browser click:', path);
+                        }}
+                      />
+                    </div>
+
+                    {/* Diff Viewer - Slides in from right when file selected */}
+                    {selectedFile && rightPanelExpanded && (
+                      <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
+                        <DiffViewer
+                          filePath={selectedFile.path}
+                          diff={selectedFile.diff}
+                          additions={selectedFile.additions}
+                          deletions={selectedFile.deletions}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Browser Tab - Full width, no split */}
+                <TabsContent
+                  value="browser"
+                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                >
+                  <BrowserPanel
+                    workspaceId={selectedWorkspace.id}
+                    onClose={() => {
+                      setRightPanelTab('changes');
+                      setRightPanelExpanded(false);
+                    }}
                   />
-                </div>
-              ) : (
-                // Normal Tab Content - Changes, Files, or Browser
-                <>
-                  {/* Changes Tab */}
-                  <TabsContent
-                    value="changes"
-                    className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-                  >
-                    <FileChangesPanel
-                      selectedWorkspace={selectedWorkspace}
-                      onOpenDiffTab={handleFileClick}
-                      onUpdateDiffTab={handleUpdateFile}
-                    />
-                  </TabsContent>
-
-                  {/* Files Tab */}
-                  <TabsContent
-                    value="files"
-                    className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-                  >
-                    <FileBrowserPanel selectedWorkspace={selectedWorkspace} />
-                  </TabsContent>
-
-                  {/* Browser Tab */}
-                  <TabsContent
-                    value="browser"
-                    className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-                  >
-                    <BrowserPanel
-                      workspaceId={selectedWorkspace.id}
-                      onClose={() => {
-                        setRightPanelTab('changes');
-                        setRightPanelExpanded(false);
-                      }}
-                    />
-                  </TabsContent>
-                </>
-              )}
+                </TabsContent>
+              </>
             </Tabs>
 
             {/* Bottom Section: Collapsible Terminal */}
