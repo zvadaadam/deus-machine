@@ -69,6 +69,7 @@ interface ChatProps {
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
   onStop?: () => void;  // Callback to stop/cancel the session
+  className?: string;
 }
 
 export function Chat({
@@ -80,6 +81,7 @@ export function Chat({
   lastMessageRef,
   messagesContainerRef,
   onStop,
+  className,
 }: ChatProps) {
   const { parseContent } = useSession();
 
@@ -130,7 +132,10 @@ export function Chat({
       id="chat-messages"
       role="log"
       aria-live="polite"
-      className="relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0 px-6 pt-6"
+      className={cn(
+        "relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0 px-6 pt-6",
+        className,
+      )}
       ref={messagesContainerRef}
     >
       {loading ? (

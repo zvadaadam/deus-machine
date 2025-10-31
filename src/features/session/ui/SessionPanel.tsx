@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { X, ChevronDown } from "lucide-react";
 
+const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
+
 interface SessionPanelProps {
   sessionId: string;
   onClose?: () => void;
@@ -166,36 +168,38 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     return (
       <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
         <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
-          <Chat
-            messages={messages}
-            loading={loading}
-            sessionStatus={sessionStatus}
-            latestMessageSentAt={latestMessageSentAt}
-            messagesEndRef={messagesEndRef}
-            lastMessageRef={lastMessageRef}
-            messagesContainerRef={messagesContainerRef}
-            onStop={stopSession}
-          />
+          <div className={`${CONTENT_WIDTH_CLASSES} flex flex-col flex-1 min-h-0 relative`}>
+            <Chat
+              messages={messages}
+              loading={loading}
+              sessionStatus={sessionStatus}
+              latestMessageSentAt={latestMessageSentAt}
+              messagesEndRef={messagesEndRef}
+              lastMessageRef={lastMessageRef}
+              messagesContainerRef={messagesContainerRef}
+              onStop={stopSession}
+            />
 
-        {/* Scroll to bottom button */}
-        {scrollToBottomButton}
+            {/* Scroll to bottom button */}
+            {scrollToBottomButton}
 
-        {/* Message Input - Sticky at bottom */}
-        <MessageInput
-          messageInput={messageInput}
-          sending={sending}
-          sessionStatus={sessionStatus}
-          embedded={true}
-          model={model}
-          thinkingLevel={thinkingLevel}
-          mcpServers={mcpServers}
-          onMessageChange={setMessageInput}
-          onSend={() => sendMessage()}
-          onStop={stopSession}
-          onModelChange={handleModelChange}
-          onThinkingLevelChange={handleThinkingLevelChange}
-          onAttachmentClick={handleAttachmentClick}
-        />
+            {/* Message Input - Sticky at bottom */}
+            <MessageInput
+              messageInput={messageInput}
+              sending={sending}
+              sessionStatus={sessionStatus}
+              embedded={true}
+              model={model}
+              thinkingLevel={thinkingLevel}
+              mcpServers={mcpServers}
+              onMessageChange={setMessageInput}
+              onSend={() => sendMessage()}
+              onStop={stopSession}
+              onModelChange={handleModelChange}
+              onThinkingLevelChange={handleThinkingLevelChange}
+              onAttachmentClick={handleAttachmentClick}
+            />
+          </div>
         </div>
       </SessionProvider>
     );
@@ -231,40 +235,42 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           <div className="flex-1 flex flex-col min-h-0">
             <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
               <div className="flex flex-col flex-1 min-h-0 relative">
-                <Chat
-                  messages={messages}
-                  loading={loading}
-                  sessionStatus={sessionStatus}
-                  latestMessageSentAt={latestMessageSentAt}
-                  messagesEndRef={messagesEndRef}
-                  lastMessageRef={lastMessageRef}
-                  messagesContainerRef={messagesContainerRef}
-                  onStop={stopSession}
-                />
+                <div className={`${CONTENT_WIDTH_CLASSES} flex flex-col flex-1 min-h-0 relative`}>
+                  <Chat
+                    messages={messages}
+                    loading={loading}
+                    sessionStatus={sessionStatus}
+                    latestMessageSentAt={latestMessageSentAt}
+                    messagesEndRef={messagesEndRef}
+                    lastMessageRef={lastMessageRef}
+                    messagesContainerRef={messagesContainerRef}
+                    onStop={stopSession}
+                  />
 
-              {/* Scroll to bottom button */}
-              {scrollToBottomButton}
+                  {/* Scroll to bottom button */}
+                  {scrollToBottomButton}
 
-              {/* Message Input - Sticky at bottom */}
-              <MessageInput
-                messageInput={messageInput}
-                sending={sending}
-                isCompacting={isCompacting}
-                sessionStatus={sessionStatus}
-                embedded={false}
-                model={model}
-                thinkingLevel={thinkingLevel}
-                showCompactButton={showCompactButton}
-                mcpServers={mcpServers}
-                onMessageChange={setMessageInput}
-                onSend={() => sendMessage()}
-                onCompact={compactConversation}
-                onCreatePR={createPR}
-                onStop={stopSession}
-                onModelChange={handleModelChange}
-                onThinkingLevelChange={handleThinkingLevelChange}
-                onAttachmentClick={handleAttachmentClick}
-              />
+                  {/* Message Input - Sticky at bottom */}
+                  <MessageInput
+                    messageInput={messageInput}
+                    sending={sending}
+                    isCompacting={isCompacting}
+                    sessionStatus={sessionStatus}
+                    embedded={false}
+                    model={model}
+                    thinkingLevel={thinkingLevel}
+                    showCompactButton={showCompactButton}
+                    mcpServers={mcpServers}
+                    onMessageChange={setMessageInput}
+                    onSend={() => sendMessage()}
+                    onCompact={compactConversation}
+                    onCreatePR={createPR}
+                    onStop={stopSession}
+                    onModelChange={handleModelChange}
+                    onThinkingLevelChange={handleThinkingLevelChange}
+                    onAttachmentClick={handleAttachmentClick}
+                  />
+                </div>
               </div>
             </SessionProvider>
           </div>
