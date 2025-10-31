@@ -424,24 +424,24 @@ function MainContent({
           <div className="flex flex-col h-full overflow-hidden">
             {/* Panel Header with Tabs - h-12 (48px) aligned with session panel context bar */}
             <Tabs value={rightPanelTab} onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-12">
-                {/* Tab Triggers - Matching session panel chat tabs style */}
-                <TabsList className="h-12 flex-1 justify-start rounded-none bg-transparent p-0 px-5 gap-0">
+              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-12 px-3">
+                {/* Tab Triggers - Segmented control styling */}
+                <TabsList className="mr-auto">
                   <TabsTrigger
                     value="changes"
-                    className="relative text-sm font-normal border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground/65 hover:text-muted-foreground transition-colors duration-200 ease-out px-4"
+                    className="min-w-[88px] justify-center"
                   >
                     Changes
                   </TabsTrigger>
                   <TabsTrigger
                     value="files"
-                    className="relative text-sm font-normal border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground/65 hover:text-muted-foreground transition-colors duration-200 ease-out px-4"
+                    className="min-w-[88px] justify-center"
                   >
                     Files
                   </TabsTrigger>
                   <TabsTrigger
                     value="browser"
-                    className="relative text-sm font-normal border-b-2 border-b-transparent data-[state=active]:border-b-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground/65 hover:text-muted-foreground transition-colors duration-200 ease-out px-4"
+                    className="min-w-[88px] justify-center"
                   >
                     Browser
                   </TabsTrigger>
