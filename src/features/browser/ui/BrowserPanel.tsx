@@ -449,8 +449,8 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-2 border-b border-border flex-shrink-0">
+      {/* Browser Controls - h-11 (44px) to align with chat tabs row */}
+      <div className="flex items-center gap-2 px-2 border-b border-border flex-shrink-0 h-11">
         <Button
           variant="ghost"
           size="icon"
@@ -557,23 +557,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
           </TooltipContent>
         </Tooltip>
 
-        {onClose && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onClose}
-              >
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p className="text-xs">Close browser</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
+        {/* Close button removed - now in panel header for consistency across all tabs */}
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}

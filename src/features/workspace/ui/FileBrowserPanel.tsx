@@ -10,6 +10,7 @@ import type { FileTreeNode } from '../api/useFilesRust';
 
 interface FileBrowserPanelProps {
   selectedWorkspace: Workspace | null;
+  onFileClick?: (path: string) => void;
 }
 
 /**
@@ -20,7 +21,7 @@ interface FileBrowserPanelProps {
  * - Real-time search filtering
  * - 30s cache with manual refresh
  */
-export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
+export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickProp }: FileBrowserPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Use Rust-based file scanning
@@ -39,8 +40,12 @@ export function FileBrowserPanel({ selectedWorkspace }: FileBrowserPanelProps) {
   };
 
   const handleFileClick = (path: string) => {
-    console.log('File clicked:', path);
-    // TODO: Open file viewer or send to chat
+    if (onFileClickProp) {
+      onFileClickProp(path);
+    } else {
+      console.log('File clicked:', path);
+      // TODO: Open file viewer or send to chat
+    }
   };
 
   // Filter files based on search (recursive search)
