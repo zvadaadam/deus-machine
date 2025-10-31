@@ -422,6 +422,9 @@ function MainContent({
         {/* RIGHT PANEL - Unified system for Changes/Files/Browser/File Diffs */}
         {selectedWorkspace && (
           <div className="flex flex-col h-full overflow-hidden">
+            {/* Spacer to align with session panel's ROW 2 navigation bar */}
+            <div className="h-12 border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0" />
+
             {/* Panel Header with Tabs */}
             <Tabs value={rightPanelTab} onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)} className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-11">
