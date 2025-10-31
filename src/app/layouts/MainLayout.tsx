@@ -43,8 +43,9 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen } from "lucide-react";
-import { useWorkspaceStore } from "@/features/workspace/store";
+import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, FolderOpen, ChevronsRight } from "lucide-react";
+import { useWorkspaceStore, useWorkspaceLayoutStore } from "@/features/workspace/store";
+import type { RightPanelTab } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 import type {
@@ -75,64 +76,108 @@ function MainContent({
 }) {
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
-  // Right panel view tab (Files or Changes)
-  const [rightPanelViewTab, setRightPanelViewTab] = useState<'files' | 'changes'>('changes');
+  // Workspace layout store - per-workspace persistence (extract methods to avoid re-renders)
+  const setLayoutState = useWorkspaceLayoutStore((state) => state.setLayout);
+  const getLayoutState = useWorkspaceLayoutStore((state) => state.getLayout);
 
-  // State for main content tabs (chat sessions)
+  const workspaceLayout = selectedWorkspace
+    ? getLayoutState(selectedWorkspace.id)
+    : null;
+
+  // Right panel tab (Changes, Files, or Browser)
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>(
+    workspaceLayout?.activeRightTab || 'changes'
+  );
+
+  // Right panel expansion state (narrow 400px vs wide 2fr)
+  const [rightPanelExpanded, setRightPanelExpanded] = useState(
+    workspaceLayout?.rightPanelExpanded || false
+  );
+
+  // Selected file for diff viewing
+  const [selectedFile, setSelectedFile] = useState<{ path: string; diff: string; additions: number; deletions: number } | null>(null);
+
+  // State for main content tabs (chat sessions - only chat, no more diff tabs)
   const [mainTabs, setMainTabs] = useState<Tab[]>([
     { id: 'chat-1', label: 'Chat #1', type: 'chat', closeable: false }
   ]);
   const [activeMainTabId, setActiveMainTabId] = useState('chat-1');
 
-  // State for browser overlay
-  const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-
   /**
-   * Sidebar Auto-Management for Browser
+   * Sidebar Auto-Management for Right Panel Expansion
    *
-   * UX Goal: Maximize browser space when it opens, restore user's workspace when it closes
+   * UX Goal: Maximize panel space when it expands (file/browser), restore workspace when it collapses
    *
    * Behavior:
-   * 1. Browser opens → save sidebar state, auto-close if open (give browser max space)
-   * 2. User manually opens sidebar while browser is active → respect their choice
-   * 3. Browser closes:
+   * 1. Panel expands → save sidebar state, auto-close if open (give panel max space)
+   * 2. User manually opens sidebar while panel is expanded → respect their choice
+   * 3. Panel collapses:
    *    - If user never reopened sidebar → restore to saved state
    *    - If user reopened sidebar → keep it open (respect their intent)
    */
-  const [sidebarWasOpenBeforeBrowser, setSidebarWasOpenBeforeBrowser] = useState(false);
-  const prevBrowserOpenRef = useRef(isBrowserOpen);
+  const [sidebarWasOpenBeforeExpansion, setSidebarWasOpenBeforeExpansion] = useState(false);
+  const prevPanelExpandedRef = useRef(rightPanelExpanded);
 
   useEffect(() => {
-    const browserJustOpened = isBrowserOpen && !prevBrowserOpenRef.current;
-    const browserJustClosed = !isBrowserOpen && prevBrowserOpenRef.current;
+    const panelJustExpanded = rightPanelExpanded && !prevPanelExpandedRef.current;
+    const panelJustCollapsed = !rightPanelExpanded && prevPanelExpandedRef.current;
 
-    if (browserJustOpened) {
+    if (panelJustExpanded) {
       // Save current state before making changes
-      setSidebarWasOpenBeforeBrowser(sidebarOpen);
-      // Auto-close sidebar to give browser maximum space
+      setSidebarWasOpenBeforeExpansion(sidebarOpen);
+      // Auto-close sidebar to give panel maximum space
       if (sidebarOpen) {
         setSidebarOpen(false);
       }
     }
 
-    if (browserJustClosed) {
-      // Restore sidebar only if user never reopened it while browser was active
-      // Logic: If sidebar is still closed AND it was open before → restore it
-      if (!sidebarOpen && sidebarWasOpenBeforeBrowser) {
+    if (panelJustCollapsed) {
+      // Restore sidebar only if user never reopened it while panel was expanded
+      if (!sidebarOpen && sidebarWasOpenBeforeExpansion) {
         setSidebarOpen(true);
       }
       // Reset saved state
-      setSidebarWasOpenBeforeBrowser(false);
+      setSidebarWasOpenBeforeExpansion(false);
     }
 
-    // Track current browser state for next render
-    prevBrowserOpenRef.current = isBrowserOpen;
-  }, [isBrowserOpen, sidebarOpen, setSidebarOpen, sidebarWasOpenBeforeBrowser]);
+    // Track current panel state for next render
+    prevPanelExpandedRef.current = rightPanelExpanded;
+  }, [rightPanelExpanded, sidebarOpen, setSidebarOpen, sidebarWasOpenBeforeExpansion]);
 
-  // Handle browser toggle
-  const handleBrowserToggle = () => {
-    setIsBrowserOpen(prev => !prev);
-  };
+  // Sync state to persistence store
+  useEffect(() => {
+    if (selectedWorkspace) {
+      setLayoutState(selectedWorkspace.id, {
+        rightPanelExpanded,
+        activeRightTab: rightPanelTab,
+        sidebarCollapsed: !sidebarOpen,
+        selectedFile: selectedFile ? { path: selectedFile.path, source: 'changes' } : null,
+      });
+    }
+  }, [selectedWorkspace?.id, rightPanelExpanded, rightPanelTab, sidebarOpen, selectedFile, setLayoutState]);
+
+  // Restore layout state when workspace changes
+  useEffect(() => {
+    if (!selectedWorkspace) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const layout = getLayoutState(selectedWorkspace.id);
+    setRightPanelTab(layout.activeRightTab);
+    setRightPanelExpanded(layout.rightPanelExpanded);
+
+    if (layout.selectedFile && layout.activeRightTab !== 'browser') {
+      setSelectedFile({
+        path: layout.selectedFile.path,
+        diff: 'Loading diff...',
+        additions: 0,
+        deletions: 0,
+      });
+    } else {
+      setSelectedFile(null);
+    }
+  }, [selectedWorkspace?.id, getLayoutState]);
 
   // Handle branch rename
   const handleBranchRename = (newName: string) => {
@@ -204,135 +249,136 @@ function MainContent({
   }, [selectedWorkspace]);
 
   /**
-   * Open a diff as a new tab (or switch to existing)
+   * Handle tab change in right panel
    *
-   * Behavior:
-   * - If tab already exists for this file → switch to it and update content
-   * - If tab doesn't exist → create new tab after current active tab
-   * - Tab label shows filename only (truncated if needed)
+   * Jony Ive principle: Switching tabs should show the tab content clearly,
+   * not auto-open files or maintain state from other tabs. User decides what opens.
+   *
+   * Panel width behavior:
+   * - Browser → Changes/Files: Keep panel expanded, restore last file if available
+   * - Changes/Files: User manually controls with file selection or close button
+   * - Browser: Auto-expand if needed (browser needs space)
+   */
+  const handleRightPanelTabChange = (tab: RightPanelTab) => {
+    const previousTab = rightPanelTab;
+    setRightPanelTab(tab);
+
+    // Restore last opened file when returning to Changes tab (if panel is expanded)
+    if (tab === 'changes' && rightPanelExpanded && selectedWorkspace) {
+      const layout = getLayoutState(selectedWorkspace.id);
+      if (layout.selectedFile && previousTab !== 'changes') {
+        // User is returning to Changes tab from another tab
+        // Restore their last viewed file
+        // Note: We'll need to trigger the file load via FileChangesPanel
+        // For now, just set the state - the actual diff will be loaded on click
+        setSelectedFile({
+          path: layout.selectedFile.path,
+          diff: 'Loading...',
+          additions: 0,
+          deletions: 0,
+        });
+      }
+    } else if (tab !== 'changes' && tab !== 'files') {
+      // Switching to browser or other tab - clear selection
+      setSelectedFile(null);
+    }
+
+    // Only auto-expand for browser (never auto-collapse for Changes/Files)
+    if (tab === 'browser' && !rightPanelExpanded) {
+      setRightPanelExpanded(true);
+    }
+  };
+
+  /**
+   * Handle file click - opens file diff in right panel
+   * Replaces old tab-based approach with panel-based approach
    *
    * @param fileData - File path, diff content, and change statistics
    */
-  const handleOpenDiffTab = (fileData: {
+  const handleFileClick = (fileData: {
     file: string;
     diff: string;
     additions: number;
     deletions: number;
   }) => {
-    const fileName = fileData.file.split('/').pop() || fileData.file;
+    // Set selected file
+    setSelectedFile({
+      path: fileData.file,
+      diff: fileData.diff,
+      additions: fileData.additions,
+      deletions: fileData.deletions,
+    });
 
-    // Check if tab already exists for this file
-    const existingTabIndex = mainTabs.findIndex(
-      t => t.type === 'diff' && t.data?.filePath === fileData.file
-    );
-
-    if (existingTabIndex !== -1) {
-      // Tab exists - switch to it and update content
-      const existingTab = mainTabs[existingTabIndex];
-      setActiveMainTabId(existingTab.id);
-
-      // Update diff content
-      setMainTabs(tabs =>
-        tabs.map((t, i) =>
-          i === existingTabIndex
-            ? {
-                ...t,
-                data: {
-                  ...t.data,
-                  diff: fileData.diff,
-                  additions: fileData.additions,
-                  deletions: fileData.deletions,
-                },
-              }
-            : t
-        )
-      );
-    } else {
-      // Create new tab
-      const newTab: Tab = {
-        id: `diff-${Date.now()}`,
-        label: fileName,
-        type: 'diff',
-        closeable: true,
-        data: {
-          filePath: fileData.file,
-          diff: fileData.diff,
-          additions: fileData.additions,
-          deletions: fileData.deletions,
-        },
-      };
-
-      // Insert after current active tab
-      const activeIndex = mainTabs.findIndex(t => t.id === activeMainTabId);
-      const insertIndex = activeIndex >= 0 ? activeIndex + 1 : mainTabs.length;
-
-      const newTabs = [
-        ...mainTabs.slice(0, insertIndex),
-        newTab,
-        ...mainTabs.slice(insertIndex),
-      ];
-
-      setMainTabs(newTabs);
-      setActiveMainTabId(newTab.id);
-    }
+    // Expand panel to show file
+    setRightPanelExpanded(true);
   };
 
   /**
-   * Update an existing diff tab with new data
+   * Update file diff content (for async loading)
    *
-   * Used for async diff loading:
-   * 1. Tab opens with "Loading..." message
-   * 2. API fetches actual diff
-   * 3. This function updates the tab with real data
-   *
-   * @param filePath - File path to identify which tab to update
-   * @param updates - Partial updates to tab data (diff, additions, deletions)
+   * Used when FileChangesPanel/FileBrowserPanel loads diff asynchronously
    */
-  const handleUpdateDiffTab = (
+  const handleUpdateFile = (
     filePath: string,
     updates: { diff?: string; additions?: number; deletions?: number }
   ) => {
-    setMainTabs(tabs =>
-      tabs.map(t =>
-        t.type === 'diff' && t.data?.filePath === filePath
-          ? {
-              ...t,
-              data: {
-                ...t.data,
-                ...updates,
-              },
-            }
-          : t
-      )
-    );
+    setSelectedFile(current => {
+      if (current?.path === filePath) {
+        return {
+          ...current,
+          diff: updates.diff !== undefined ? updates.diff : current.diff,
+          additions: updates.additions !== undefined ? updates.additions : current.additions,
+          deletions: updates.deletions !== undefined ? updates.deletions : current.deletions,
+        };
+      }
+      return current;
+    });
+  };
+
+  /**
+   * Collapse panel to narrow mode
+   * Works for all tabs: Changes, Files, Browser
+   * Also clears selected file (no intermediate empty state)
+   */
+  const handlePanelCollapse = () => {
+    setRightPanelExpanded(false);
+    setSelectedFile(null); // Clear file - no intermediate empty state
+    // If on browser tab, switch to changes (browser doesn't have narrow mode)
+    if (rightPanelTab === 'browser') {
+      setRightPanelTab('changes');
+    }
   };
 
   return (
     <SidebarInset className="min-w-0">
       {/**
-       * CSS Grid Layout: Main Content | Right Panel/Browser
+       * CSS Grid Layout: Main Content | Right Panel
        *
-       * Architecture:
-       * - When browser closed: Main (flex, min 500px) | Right Panel (fixed 400px)
-       * - When browser open: Main (flex, min 350px, 1fr) | Browser (min 700px, 2fr)
+       * New Architecture (Unified Panel System):
+       * - Panel collapsed: Main (flex, min 500px) | Right Panel (fixed 400px)
+       * - Panel expanded: Main (flex, min 350px, 1fr) | Right Panel (min 700px, 2fr)
        *
-       * Why browser gets more space:
-       * - Web pages need significant horizontal space (700-800px+)
-       * - Chat works well in narrower space (vertical scrolling)
-       * - 2fr growth factor: browser gets 2x extra space as viewport grows
+       * Panel Modes:
+       * - Narrow (400px): File list, changes list
+       * - Wide (2fr, ~700px+): File diff viewer, browser
+       *
+       * Why expanded panel gets more space:
+       * - File diffs & web pages need horizontal space (700-800px+)
+       * - Chat works well in narrower column (vertical scrolling)
+       * - 2fr growth factor: panel gets 2x extra space as viewport grows
        *
        * Example with 1200px total:
-       * - Main: ~400px (min 350px + some flex)
-       * - Browser: ~800px (min 700px + 2x flex)
+       * - Collapsed: Main ~800px | Panel 400px
+       * - Expanded: Main ~400px | Panel ~800px
        */}
       <div
-        className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-colors duration-200"
+        className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{
           display: 'grid',
           gridTemplateColumns: selectedWorkspace
-            ? isBrowserOpen
-              ? 'minmax(350px, 1fr) minmax(700px, 2fr)'  // Main (smaller) | Browser (LARGER, grows 2x faster)
-              : 'minmax(500px, 1fr) 400px'   // Main | Right Panel
+            ? rightPanelExpanded
+              ? 'minmax(350px, 1fr) minmax(700px, 2fr)'  // Main (compressed) | Panel (EXPANDED)
+              : 'minmax(500px, 1fr) 400px'               // Main | Panel (narrow)
             : '1fr',
           height: '100%',
           gap: '0',
@@ -341,7 +387,7 @@ function MainContent({
         {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
         {selectedWorkspace ? (
           <div className="flex flex-col h-full overflow-hidden border-r border-border/40">
-            {/* Tab Bar with integrated workspace header (branch name, browser button, tabs) */}
+            {/* Tab Bar with integrated workspace header (branch name, tabs) - No more browser button */}
             <MainContentTabBar
               tabs={mainTabs}
               activeTabId={activeMainTabId}
@@ -351,20 +397,17 @@ function MainContent({
               repositoryName={selectedWorkspace.root_path.split('/').filter(Boolean).pop()}
               branch={selectedWorkspace.branch}
               workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              isBrowserOpen={isBrowserOpen}
-              onBrowserToggle={handleBrowserToggle}
               onBranchRename={handleBranchRename}
             />
 
-            {/* 3. Tab Content - Flexible height, scrollable (renders based on active tab type) */}
+            {/* Tab Content - Chat sessions only (diffs now in right panel) */}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               {(() => {
                 // Find the active tab
                 const activeTab = mainTabs.find(t => t.id === activeMainTabId);
 
-                // Render content based on tab type
+                // Only chat tabs exist now - diffs moved to right panel
                 if (activeTab?.type === 'chat') {
-                  // Chat tab - show SessionPanel
                   return selectedWorkspace.active_session_id ? (
                     <SessionPanel
                       ref={workspaceChatPanelRef}
@@ -374,25 +417,7 @@ function MainContent({
                   ) : null;
                 }
 
-                if (activeTab?.type === 'diff') {
-                  // Diff tab - show DiffViewer
-                  return (
-                    <DiffViewer
-                      filePath={activeTab.data?.filePath}
-                      diff={activeTab.data?.diff}
-                      additions={activeTab.data?.additions}
-                      deletions={activeTab.data?.deletions}
-                    />
-                  );
-                }
-
-                // Future: 'file' type for full file viewer
-                if (activeTab?.type === 'file') {
-                  // TODO: Implement FileViewer component
-                  return null;
-                }
-
-                // Fallback - no active tab or unknown type
+                // Fallback - no active tab
                 return null;
               })()}
             </div>
@@ -407,73 +432,166 @@ function MainContent({
           />
         )}
 
-        {/* RIGHT PANEL OR BROWSER - Layered with transforms */}
+        {/* RIGHT PANEL - Unified system for Changes/Files/Browser/File Diffs */}
         {selectedWorkspace && (
-          <div className="relative h-full overflow-hidden">
-            {/* RIGHT PANEL - Always rendered, hidden when browser open */}
-            <div
-              className={`flex flex-col h-full overflow-hidden transition-opacity duration-300 ${isBrowserOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-              aria-hidden={isBrowserOpen}
-              inert={isBrowserOpen ? (true as any) : undefined}
-            >
-              {/* Top Section: Files/Changes Tabs */}
-              <Tabs value={rightPanelViewTab} onValueChange={(v) => setRightPanelViewTab(v as any)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-                <div className="border-b border-border/40 flex-shrink-0">
-                  <TabsList className="h-8 w-full justify-start rounded-none bg-transparent p-0 px-2 gap-0">
-                    <TabsTrigger
-                      value="files"
-                      className="relative rounded-none border-b border-b-transparent data-[state=active]:border-b-foreground data-[state=inactive]:text-muted-foreground/60 px-3 py-1.5 transition-[border-color,color] duration-200 ease-out"
-                    >
-                      <span className="text-xs font-medium">Files</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="changes"
-                      className="relative rounded-none border-b border-b-transparent data-[state=active]:border-b-foreground data-[state=inactive]:text-muted-foreground/60 px-3 py-1.5 transition-[border-color,color] duration-200 ease-out"
-                    >
-                      <span className="text-xs font-medium">Changes</span>
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Panel Header with Tabs - h-12 (48px) aligned with session panel context bar */}
+            <Tabs value={rightPanelTab} onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-12 px-3">
+                {/* Tab Triggers - Segmented control styling */}
+                <TabsList className="mr-auto">
+                  <TabsTrigger
+                    value="changes"
+                    className="min-w-[88px] justify-center"
+                  >
+                    Changes
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="files"
+                    className="min-w-[88px] justify-center"
+                  >
+                    Files
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="browser"
+                    className="min-w-[88px] justify-center"
+                  >
+                    Browser
+                  </TabsTrigger>
+                </TabsList>
 
-                {/* Files Tab */}
-                <TabsContent
-                  value="files"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
-                >
-                  <FileBrowserPanel selectedWorkspace={selectedWorkspace} />
-                </TabsContent>
+                {/* Panel Controls - Collapse button when expanded */}
+                {rightPanelExpanded && (
+                  <div className="flex items-center px-3 border-l border-border/30">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-lg"
+                      onClick={handlePanelCollapse}
+                      title="Collapse panel"
+                    >
+                      <ChevronsRight className="h-[18px] w-[18px]" />
+                    </Button>
+                  </div>
+                )}
+              </div>
 
-                {/* Changes Tab */}
+              {/* Tab Content - Split layout for Changes/Files with diff viewer */}
+              <>
+                {/* Changes Tab - Split: File List + Diff Viewer */}
                 <TabsContent
                   value="changes"
-                  className="m-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col data-[state=inactive]:hidden"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
-                  <FileChangesPanel
-                    selectedWorkspace={selectedWorkspace}
-                    onOpenDiffTab={handleOpenDiffTab}
-                    onUpdateDiffTab={handleUpdateDiffTab}
+                  <div className="flex h-full overflow-hidden">
+                    {/* File List - Fixed width when expanded, full width when collapsed */}
+                    <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Expanded: always 280px (consistency)
+                        : 'flex-1'                                // Collapsed: full width
+                    }`}>
+                      <FileChangesPanel
+                        selectedWorkspace={selectedWorkspace}
+                        onOpenDiffTab={handleFileClick}
+                        onUpdateDiffTab={handleUpdateFile}
+                        selectedFilePath={selectedFile?.path}
+                      />
+                    </div>
+
+                    {/* Right Side - Diff Viewer or Empty State */}
+                    {rightPanelExpanded && (
+                      <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
+                        {selectedFile ? (
+                          <DiffViewer
+                            filePath={selectedFile.path}
+                            diff={selectedFile.diff}
+                            additions={selectedFile.additions}
+                            deletions={selectedFile.deletions}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center">
+                            <div className="text-center max-w-sm">
+                              <FileCode className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+                              <h3 className="text-sm font-medium text-foreground/60 mb-2">
+                                Select a file to view changes
+                              </h3>
+                              <p className="text-xs text-muted-foreground/50">
+                                Click on any file from the list to see its diff
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Files Tab - Split: File Browser + Diff Viewer */}
+                <TabsContent
+                  value="files"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
+                >
+                  <div className="flex h-full overflow-hidden">
+                    {/* File Browser - Fixed width when expanded, full width when collapsed */}
+                    <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Expanded: always 280px (consistency)
+                        : 'flex-1'                                // Collapsed: full width
+                    }`}>
+                      <FileBrowserPanel
+                        selectedWorkspace={selectedWorkspace}
+                        onFileClick={(path) => {
+                          // TODO: Load file content and show in diff viewer
+                          console.log('File browser click:', path);
+                        }}
+                      />
+                    </div>
+
+                    {/* Right Side - Diff Viewer or Empty State */}
+                    {rightPanelExpanded && (
+                      <div className="flex-1 overflow-hidden animate-in slide-in-from-right-2 duration-300">
+                        {selectedFile ? (
+                          <DiffViewer
+                            filePath={selectedFile.path}
+                            diff={selectedFile.diff}
+                            additions={selectedFile.additions}
+                            deletions={selectedFile.deletions}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center">
+                            <div className="text-center max-w-sm">
+                              <FolderOpen className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+                              <h3 className="text-sm font-medium text-foreground/60 mb-2">
+                                Browse and select a file
+                              </h3>
+                              <p className="text-xs text-muted-foreground/50">
+                                Explore the file tree and click on any file to view it
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Browser Tab - Full width, no split */}
+                <TabsContent
+                  value="browser"
+                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
+                >
+                  <BrowserPanel
+                    workspaceId={selectedWorkspace.id}
                   />
                 </TabsContent>
-              </Tabs>
+              </>
+            </Tabs>
 
-              {/* Bottom Section: Collapsible Terminal */}
-              <CollapsibleTerminalPanel
-                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                workspaceName={selectedWorkspace.directory_name}
-              />
-            </div>
-
-            {/* BROWSER - Slides in from right, overlays right panel */}
-            <div
-              className={`absolute inset-0 flex flex-col h-full overflow-hidden bg-background border-l border-border transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                isBrowserOpen ? 'translate-x-0' : 'translate-x-full'
-              }`}
-            >
-              <BrowserPanel
-                workspaceId={selectedWorkspace.id}
-                onClose={() => setIsBrowserOpen(false)}
-              />
-            </div>
+            {/* Bottom Section: Collapsible Terminal */}
+            <CollapsibleTerminalPanel
+              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+              workspaceName={selectedWorkspace.directory_name}
+            />
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
@@ -8,6 +8,7 @@ interface FileChangesPanelProps {
   selectedWorkspace: Workspace | null;
   onOpenDiffTab?: (data: { file: string; diff: string; additions: number; deletions: number }) => void;
   onUpdateDiffTab?: (filePath: string, updates: { diff?: string; additions?: number; deletions?: number }) => void;
+  selectedFilePath?: string; // Currently selected file for highlighting
 }
 
 /**
@@ -18,6 +19,7 @@ export function FileChangesPanel({
   selectedWorkspace,
   onOpenDiffTab,
   onUpdateDiffTab,
+  selectedFilePath,
 }: FileChangesPanelProps) {
   const currentFileRef = useRef<string | null>(null);
 
@@ -32,7 +34,7 @@ export function FileChangesPanel({
    * Load and display diff for a specific file as an inline tab
    * Prevents race conditions by tracking the current file being loaded
    */
-  async function handleFileClick(file: string, additions: number, deletions: number) {
+  const handleFileClick = useCallback(async (file: string, additions: number, deletions: number) => {
     if (!selectedWorkspace || !onOpenDiffTab || !onUpdateDiffTab) return;
 
     // Track this file as the current one being loaded
@@ -69,7 +71,25 @@ export function FileChangesPanel({
         diff: 'Error loading diff',
       });
     }
-  }
+  }, [selectedWorkspace, onOpenDiffTab, onUpdateDiffTab]);
+
+  /**
+   * Auto-load diff when file is restored from persistence
+   * This happens when user switches back to Changes tab and we restore their last viewed file
+   */
+  useEffect(() => {
+    if (!selectedFilePath || !selectedWorkspace || !fileChanges.length) return;
+
+    // Find the file in the current changes list
+    const fileData = fileChanges.find(f => f.file === selectedFilePath);
+    if (!fileData) return;
+
+    // If this file is selected but we haven't loaded it yet, load it now
+    // (This happens when restoring from persistence)
+    if (currentFileRef.current !== selectedFilePath) {
+      handleFileClick(fileData.file, fileData.additions, fileData.deletions);
+    }
+  }, [selectedFilePath, selectedWorkspace?.id, fileChanges, handleFileClick]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -105,7 +125,7 @@ export function FileChangesPanel({
 
       {/* File Changes */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="p-2">
+        <div className="py-2">
           {selectedWorkspace && fileChanges.length > 0 ? (
             <div className="space-y-1">
               {fileChanges.map((file) => {
@@ -148,18 +168,30 @@ export function FileChangesPanel({
                   displayPath = `${firstFolder}/…/${lastParent}/`;
                 }
 
+                const isSelected = file.file === selectedFilePath;
+
                 return (
                   <div
                     key={file.file}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group hover:bg-muted/20 transition-colors duration-200"
+                    className={`flex items-center justify-between pr-2.5 py-1.5 rounded cursor-pointer group transition-colors duration-200 ${
+                      isSelected
+                        ? 'bg-primary/10 border-l-2 border-primary pl-2'
+                        : 'hover:bg-muted/20 border-l-2 border-transparent pl-2.5'
+                    }`}
                     onClick={() => handleFileClick(file.file, file.additions, file.deletions)}
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">
-                      <span className="text-[11px] text-muted-foreground/50">
+                      <span className={`text-[11px] ${
+                        isSelected ? 'text-primary/70' : 'text-muted-foreground/50'
+                      }`}>
                         {displayPath}
                       </span>
-                      <span className="text-[11px] text-foreground/90 group-hover:text-foreground transition-colors duration-200">
+                      <span className={`text-[11px] transition-colors duration-200 ${
+                        isSelected
+                          ? 'text-primary font-medium'
+                          : 'text-foreground/90 group-hover:text-foreground'
+                      }`}>
                         {filename}
                       </span>
                     </div>
@@ -180,7 +212,7 @@ export function FileChangesPanel({
               }).filter(Boolean)}
             </div>
           ) : selectedWorkspace ? (
-            <div className="p-8">
+            <div className="py-8">
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>
@@ -193,7 +225,7 @@ export function FileChangesPanel({
               </Empty>
             </div>
           ) : (
-            <div className="p-8">
+            <div className="py-8">
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>

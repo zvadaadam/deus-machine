@@ -57,8 +57,6 @@ interface MainContentTabsProps {
   repositoryName?: string;
   branch?: string;
   workspacePath?: string;
-  isBrowserOpen?: boolean;
-  onBrowserToggle?: () => void;
   onBranchRename?: (newName: string) => void;
 }
 
@@ -88,8 +86,6 @@ export function MainContentTabBar({
   repositoryName,
   branch,
   workspacePath,
-  isBrowserOpen,
-  onBrowserToggle,
   onBranchRename,
 }: Omit<MainContentTabsProps, 'children'>) {
   // Branch editing state
@@ -236,30 +232,7 @@ export function MainContentTabBar({
 
           {/* Right: Meta Actions */}
           <div className="flex items-center gap-2">
-            {onBrowserToggle && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-pressed={!!isBrowserOpen}
-                    aria-label={isBrowserOpen ? 'Close browser' : 'Open browser'}
-                    onClick={onBrowserToggle}
-                    className={cn(
-                      "h-9 w-9 rounded-lg flex items-center justify-center",
-                      "transition-all duration-200 ease-out",
-                      isBrowserOpen
-                        ? "bg-primary/15 text-primary border border-primary/30 hover:bg-primary/20"
-                        : "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10"
-                    )}
-                  >
-                    <Globe className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">{isBrowserOpen ? 'Close browser' : 'Open browser'}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {/* Browser button removed - now in right panel tabs */}
             {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
           </div>
         </div>
@@ -383,8 +356,6 @@ export function MainContentTabs({
   repositoryName,
   branch,
   workspacePath,
-  isBrowserOpen,
-  onBrowserToggle,
   onBranchRename,
 }: MainContentTabsProps) {
   return (
@@ -398,8 +369,6 @@ export function MainContentTabs({
         repositoryName={repositoryName}
         branch={branch}
         workspacePath={workspacePath}
-        isBrowserOpen={isBrowserOpen}
-        onBrowserToggle={onBrowserToggle}
         onBranchRename={onBranchRename}
       />
       <div className="flex-1 min-h-0 overflow-hidden">
