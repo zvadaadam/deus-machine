@@ -449,8 +449,8 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Browser Controls */}
-      <div className="flex items-center gap-2 p-2 border-b border-border flex-shrink-0">
+      {/* Browser Controls - h-11 (44px) to align with chat tabs row */}
+      <div className="flex items-center gap-2 px-2 border-b border-border flex-shrink-0 h-11">
         <Button
           variant="ghost"
           size="icon"
