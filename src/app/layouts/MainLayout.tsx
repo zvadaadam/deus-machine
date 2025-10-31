@@ -43,7 +43,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { Package, GitPullRequest, Archive, Square, Sparkles, FileCode, Monitor, X, FolderOpen, ChevronsRight } from "lucide-react";
 import { useWorkspaceStore, useWorkspaceLayoutStore } from "@/features/workspace/store";
 import type { RightPanelTab } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -96,9 +96,6 @@ function MainContent({
 
   // Selected file for diff viewing
   const [selectedFile, setSelectedFile] = useState<{ path: string; diff: string; additions: number; deletions: number } | null>(null);
-
-  // Track file list for navigation
-  const [fileList, setFileList] = useState<Array<{ file: string; additions: number; deletions: number }>>([]);
 
   // State for main content tabs (chat sessions - only chat, no more diff tabs)
   const [mainTabs, setMainTabs] = useState<Tab[]>([
@@ -326,42 +323,22 @@ function MainContent({
   };
 
   /**
-   * Navigate to previous/next file in the list
-   */
-  const handleFilePrev = () => {
-    if (!selectedFile || fileList.length === 0) return;
-    const currentIndex = fileList.findIndex(f => f.file === selectedFile.path);
-    if (currentIndex <= 0) return; // Already at first file
-    const prevFile = fileList[currentIndex - 1];
-    // Trigger loading (FileChangesPanel will handle async diff fetch)
-    handleFileClick({
-      file: prevFile.file,
-      diff: 'Loading...',
-      additions: prevFile.additions,
-      deletions: prevFile.deletions,
-    });
-  };
-
-  const handleFileNext = () => {
-    if (!selectedFile || fileList.length === 0) return;
-    const currentIndex = fileList.findIndex(f => f.file === selectedFile.path);
-    if (currentIndex === -1 || currentIndex >= fileList.length - 1) return; // Already at last file
-    const nextFile = fileList[currentIndex + 1];
-    // Trigger loading (FileChangesPanel will handle async diff fetch)
-    handleFileClick({
-      file: nextFile.file,
-      diff: 'Loading...',
-      additions: nextFile.additions,
-      deletions: nextFile.deletions,
-    });
-  };
-
-  /**
-   * Close file panel
+   * Close currently selected file (return to empty state, keep panel expanded)
    */
   const handleFileClose = () => {
     setSelectedFile(null);
+  };
+
+  /**
+   * Collapse panel to narrow mode
+   * Works for all tabs: Changes, Files, Browser
+   */
+  const handlePanelCollapse = () => {
     setRightPanelExpanded(false);
+    // If on browser tab, switch to changes (browser doesn't have narrow mode)
+    if (rightPanelTab === 'browser') {
+      setRightPanelTab('changes');
+    }
   };
 
   return (
@@ -475,37 +452,31 @@ function MainContent({
                   </TabsTrigger>
                 </TabsList>
 
-                {/* File Navigation Controls - Only shown when file is selected */}
-                {selectedFile && rightPanelExpanded && (
+                {/* Panel Controls - Show collapse button when expanded, close button when file selected */}
+                {rightPanelExpanded && (
                   <div className="flex items-center gap-1 px-2 border-l border-border/30">
+                    {/* Close File Button - Only when file is selected */}
+                    {selectedFile && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={handleFileClose}
+                        title="Close file"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    {/* Collapse Panel Button - Always visible in expanded state */}
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={handleFilePrev}
-                      disabled={!fileList.length || fileList.findIndex(f => f.file === selectedFile.path) <= 0}
-                      title="Previous file"
+                      onClick={handlePanelCollapse}
+                      title="Collapse panel"
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={handleFileNext}
-                      disabled={!fileList.length || fileList.findIndex(f => f.file === selectedFile.path) >= fileList.length - 1}
-                      title="Next file"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={handleFileClose}
-                      title="Close file"
-                    >
-                      <X className="h-4 w-4" />
+                      <ChevronsRight className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
