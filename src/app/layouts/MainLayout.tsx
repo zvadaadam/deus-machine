@@ -588,10 +588,6 @@ function MainContent({
                 >
                   <BrowserPanel
                     workspaceId={selectedWorkspace.id}
-                    onClose={() => {
-                      setRightPanelTab('changes');
-                      setRightPanelExpanded(false);
-                    }}
                   />
                 </TabsContent>
               </>
