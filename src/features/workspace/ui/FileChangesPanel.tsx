@@ -8,6 +8,7 @@ interface FileChangesPanelProps {
   selectedWorkspace: Workspace | null;
   onOpenDiffTab?: (data: { file: string; diff: string; additions: number; deletions: number }) => void;
   onUpdateDiffTab?: (filePath: string, updates: { diff?: string; additions?: number; deletions?: number }) => void;
+  selectedFilePath?: string; // Currently selected file for highlighting
 }
 
 /**
@@ -18,6 +19,7 @@ export function FileChangesPanel({
   selectedWorkspace,
   onOpenDiffTab,
   onUpdateDiffTab,
+  selectedFilePath,
 }: FileChangesPanelProps) {
   const currentFileRef = useRef<string | null>(null);
 
@@ -148,18 +150,30 @@ export function FileChangesPanel({
                   displayPath = `${firstFolder}/…/${lastParent}/`;
                 }
 
+                const isSelected = file.file === selectedFilePath;
+
                 return (
                   <div
                     key={file.file}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group hover:bg-muted/20 transition-colors duration-200"
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group transition-colors duration-200 ${
+                      isSelected
+                        ? 'bg-primary/10 border-l-2 border-primary pl-2'
+                        : 'hover:bg-muted/20 border-l-2 border-transparent pl-2.5'
+                    }`}
                     onClick={() => handleFileClick(file.file, file.additions, file.deletions)}
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">
-                      <span className="text-[11px] text-muted-foreground/50">
+                      <span className={`text-[11px] ${
+                        isSelected ? 'text-primary/70' : 'text-muted-foreground/50'
+                      }`}>
                         {displayPath}
                       </span>
-                      <span className="text-[11px] text-foreground/90 group-hover:text-foreground transition-colors duration-200">
+                      <span className={`text-[11px] transition-colors duration-200 ${
+                        isSelected
+                          ? 'text-primary font-medium'
+                          : 'text-foreground/90 group-hover:text-foreground'
+                      }`}>
                         {filename}
                       </span>
                     </div>
