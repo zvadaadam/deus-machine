@@ -76,10 +76,12 @@ function MainContent({
 }) {
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
-  // Workspace layout store - per-workspace persistence
-  const layoutStore = useWorkspaceLayoutStore();
+  // Workspace layout store - per-workspace persistence (extract methods to avoid re-renders)
+  const setLayoutState = useWorkspaceLayoutStore((state) => state.setLayout);
+  const getLayoutState = useWorkspaceLayoutStore((state) => state.getLayout);
+
   const workspaceLayout = selectedWorkspace
-    ? layoutStore.getLayout(selectedWorkspace.id)
+    ? getLayoutState(selectedWorkspace.id)
     : null;
 
   // Right panel tab (Changes, Files, or Browser)
@@ -148,23 +150,23 @@ function MainContent({
   // Sync state to persistence store
   useEffect(() => {
     if (selectedWorkspace) {
-      layoutStore.setLayout(selectedWorkspace.id, {
+      setLayoutState(selectedWorkspace.id, {
         rightPanelExpanded,
         activeRightTab: rightPanelTab,
         sidebarCollapsed: !sidebarOpen,
       });
     }
-  }, [selectedWorkspace, rightPanelExpanded, rightPanelTab, sidebarOpen, layoutStore]);
+  }, [selectedWorkspace, rightPanelExpanded, rightPanelTab, sidebarOpen, setLayoutState]);
 
   // Restore layout state when workspace changes
   useEffect(() => {
     if (selectedWorkspace) {
-      const layout = layoutStore.getLayout(selectedWorkspace.id);
+      const layout = getLayoutState(selectedWorkspace.id);
       setRightPanelTab(layout.activeRightTab);
       setRightPanelExpanded(layout.rightPanelExpanded);
       setSelectedFile(null); // Clear file when switching workspaces
     }
-  }, [selectedWorkspace?.id]);
+  }, [selectedWorkspace?.id, getLayoutState]);
 
   // Handle branch rename
   const handleBranchRename = (newName: string) => {
