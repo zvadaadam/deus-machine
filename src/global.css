@@ -8,29 +8,6 @@
 
 /* Tailwind v4 Theme Configuration */
 @theme {
-  /* Color palette */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-
-  --color-secondary-50: #faf5ff;
-  --color-secondary-100: #f3e8ff;
-  --color-secondary-200: #e9d5ff;
-  --color-secondary-300: #d8b4fe;
-  --color-secondary-400: #c084fc;
-  --color-secondary-500: #a855f7;
-  --color-secondary-600: #9333ea;
-  --color-secondary-700: #7e22ce;
-  --color-secondary-800: #6b21a8;
-  --color-secondary-900: #581c87;
-
   /* Semantic colors - exposed to Tailwind utilities */
   /* These reference the CSS variables defined in :root (light) and .dark */
   --color-background: var(--background);
@@ -55,10 +32,6 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
-  --color-thinking: var(--thinking);
-  --color-thinking-foreground: var(--thinking-foreground);
-  --color-thinking-muted: var(--thinking-muted);
-  --color-thinking-border: var(--thinking-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -99,9 +72,14 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
-  /* Font families */
-  --font-family-sans: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-family-mono: 'Iosevka Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+  /* Font families - Using Suisse Intl for both sans and mono */
+  /* Tailwind v4 utilities (font-sans, font-mono) use these variables */
+  --font-sans: 'Suisse Intl', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+
+  /* Legacy aliases for backward compatibility */
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   /* Font sizes with line heights */
   --font-size-display-lg: 48px;
@@ -299,41 +277,35 @@
   }
 }
 
-/* Design tokens & base styles */
+/* Design tokens & base styles - Copper Ember × Graphite Theme */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.59 0.24 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.84 0.28 303);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.65 0.25 27);
-  --destructive-foreground: oklch(0.985 0 0);
+  --radius: 0.75rem;
+  --background: oklch(0.97 0.02 95);         /* #FFF9F0 warm cream */
+  --foreground: oklch(0.22 0.03 260);        /* #0F172A dark text */
+  --card: oklch(0.94 0.02 95);               /* #FFF2E0 */
+  --card-foreground: oklch(0.22 0.03 260);
+  --popover: oklch(0.94 0.02 95);
+  --popover-foreground: oklch(0.22 0.03 260);
+  --primary: oklch(0.46 0.10 65);            /* #73481E copper brown (accessible) */
+  --primary-foreground: oklch(0.98 0.01 95); /* near-white */
+  --secondary: oklch(0.90 0.01 95);          /* warm neutral */
+  --secondary-foreground: oklch(0.22 0.03 260);
+  --muted: oklch(0.92 0.01 95);
+  --muted-foreground: oklch(0.55 0.02 255);
+  --accent: oklch(0.95 0.03 65);             /* #FFE8D1 copper-wash */
+  --accent-foreground: oklch(0.22 0.03 260);
+  --destructive: oklch(0.64 0.20 25);
+  --destructive-foreground: oklch(0.98 0.01 95);
 
-  /* Semantic state colors */
-  --success: oklch(0.55 0.18 145);
-  --success-foreground: oklch(1 0 0);
+  /* Semantic state colors (stable across themes) */
+  --success: oklch(0.72 0.14 160);
+  --success-foreground: oklch(0.12 0.02 180);
 
-  --warning: oklch(0.75 0.20 75);
-  --warning-foreground: oklch(1 0 0);
+  --warning: oklch(0.80 0.16 85);
+  --warning-foreground: oklch(0.16 0.02 85);
 
-  --info: oklch(0.65 0.18 220);
-  --info-foreground: oklch(1 0 0);
-
-  /* Thinking/reasoning colors (purple theme) */
-  --thinking: oklch(0.70 0.20 303);
-  --thinking-foreground: oklch(1 0 0);
-  --thinking-muted: oklch(0.96 0.05 303);
-  --thinking-border: oklch(0.85 0.10 303);
+  --info: oklch(0.78 0.10 270);       /* muted violet info (no blue) */
+  --info-foreground: oklch(0.15 0.02 270);
 
   /* Status colors for workspace/session states */
   --status-working: oklch(0.60 0.17 145);        /* Green for active/working */
@@ -363,68 +335,62 @@
   --z-tooltip: 1200;
   --z-notification: 1300;
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.59 0.24 264);
+  --border: oklch(0.88 0.01 95);
+  --input: oklch(0.88 0.01 95);
+  --ring: oklch(0.66 0.16 55 / 0.35);  /* copper glow ring */
 
   /* Sidebar colors */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.3 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.59 0.24 264);
+  --sidebar: oklch(0.985 0.01 90);
+  --sidebar-foreground: oklch(0.32 0.02 75);
+  --sidebar-primary: oklch(0.46 0.10 65);       /* copper brown */
+  --sidebar-primary-foreground: oklch(0.98 0.01 95);
+  --sidebar-accent: oklch(0.95 0.02 90);
+  --sidebar-accent-foreground: oklch(0.22 0.03 260);
+  --sidebar-border: oklch(0.90 0.01 95);
+  --sidebar-ring: oklch(0.66 0.16 55 / 0.35);
 
-  /* Diff viewer colors - GitHub-inspired (Light Mode) */
-  --diff-addition-bg: oklch(0.95 0.08 145);        /* Brighter mint green background */
-  --diff-addition-gutter: oklch(0.90 0.10 145);    /* Darker gutter for additions */
-  --diff-addition-word: oklch(0.85 0.14 145);      /* SATURATED green for word highlights */
-  --diff-addition-text: oklch(0.35 0.12 145);      /* Dark green text */
+  /* Diff viewer colors - Copper theme (Light Mode) */
+  --diff-addition-bg: oklch(0.95 0.06 160);        /* Soft emerald green on warm cream */
+  --diff-addition-gutter: oklch(0.88 0.10 155);    /* Deeper green gutter */
+  --diff-addition-word: oklch(0.82 0.14 158);      /* Saturated green highlight */
+  --diff-addition-text: oklch(0.38 0.12 160);      /* Dark forest green text */
 
-  --diff-deletion-bg: oklch(0.95 0.08 25);         /* Brighter rose background */
-  --diff-deletion-gutter: oklch(0.90 0.10 25);     /* Darker gutter for deletions */
-  --diff-deletion-word: oklch(0.85 0.16 25);       /* SATURATED red for word highlights */
-  --diff-deletion-text: oklch(0.40 0.14 25);       /* Dark red text */
+  --diff-deletion-bg: oklch(0.94 0.06 35);         /* Warm peachy-copper deletion background */
+  --diff-deletion-gutter: oklch(0.86 0.12 32);     /* Deeper copper-red gutter */
+  --diff-deletion-word: oklch(0.80 0.16 30);       /* Saturated copper-red highlight */
+  --diff-deletion-text: oklch(0.42 0.14 28);       /* Dark ember text */
 
-  --diff-line-number: oklch(0.50 0 0);             /* Muted gray for line numbers */
-  --diff-line-number-bg: oklch(0.97 0 0);          /* Very light background for line numbers */
+  --diff-line-number: oklch(0.52 0.02 75);         /* Warm muted brown-gray */
+  --diff-line-number-bg: oklch(0.96 0.02 90);      /* Subtle warm cream background */
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.25 264);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.84 0.28 303);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.55 0.20 27);
-  --destructive-foreground: oklch(0.985 0 0);
+  --background: oklch(0.15 0.01 255);        /* graphite ink #0B0C10 */
+  --foreground: oklch(0.92 0.02 250);        /* #E6EDF3 */
+  --card: oklch(0.19 0.01 255);
+  --card-foreground: oklch(0.92 0.02 250);
+  --popover: oklch(0.19 0.01 255);
+  --popover-foreground: oklch(0.92 0.02 250);
+  --primary: oklch(0.66 0.16 55);            /* #E0903F copper ember */
+  --primary-foreground: oklch(0.15 0.01 255);/* dark graphite text on copper */
+  --secondary: oklch(0.22 0.01 255);
+  --secondary-foreground: oklch(0.92 0.02 250);
+  --muted: oklch(0.24 0.01 255);
+  --muted-foreground: oklch(0.72 0.02 255);
+  --accent: oklch(0.86 0.06 55);             /* light copper tint for chips */
+  --accent-foreground: oklch(0.15 0.01 255);
+  --destructive: oklch(0.64 0.20 25);
+  --destructive-foreground: oklch(0.98 0.01 95);
 
-  /* Semantic state colors - optimized for dark mode */
-  --success: oklch(0.65 0.18 145);
-  --success-foreground: oklch(0.25 0.15 145);
+  /* Semantic state colors - stable across themes */
+  --success: oklch(0.72 0.14 160);
+  --success-foreground: oklch(0.12 0.02 180);
 
-  --warning: oklch(0.80 0.20 75);
-  --warning-foreground: oklch(0.35 0.15 75);
+  --warning: oklch(0.80 0.16 85);
+  --warning-foreground: oklch(0.16 0.02 85);
 
-  --info: oklch(0.70 0.18 220);
-  --info-foreground: oklch(0.30 0.15 220);
-
-  /* Thinking/reasoning colors (purple theme) - optimized for dark mode */
-  --thinking: oklch(0.75 0.22 303);
-  --thinking-foreground: oklch(0.35 0.18 303);
-  --thinking-muted: oklch(0.25 0.08 303);
-  --thinking-border: oklch(0.35 0.12 303);
+  --info: oklch(0.78 0.10 270);
+  --info-foreground: oklch(0.12 0.02 270);
 
   /* Status colors for workspace/session states - optimized for dark mode */
   --status-working: oklch(0.70 0.18 145);        /* Brighter green for dark bg */
@@ -435,7 +401,7 @@
   --status-unread-fg: oklch(0.35 0.15 75);
 
   /* File type icon colors (same in dark mode for perceptual consistency) */
-  --file-typescript: oklch(0.55 0.18 250);       /* Blue for TS/JS */
+  --file-typescript: oklch(0.62 0.16 220);       /* Soft blue-violet for TS/JS (kept neutral) */
   --file-rust: oklch(0.58 0.20 30);              /* Orange-red for Rust */
   --file-data: oklch(0.70 0.17 85);              /* Yellow for JSON/YAML */
   --file-docs: oklch(0.60 0.16 145);             /* Green for markdown/docs */
@@ -443,32 +409,32 @@
   --file-markup: oklch(0.62 0.18 40);            /* Orange for HTML */
   --file-image: oklch(0.65 0.21 340);            /* Pink for images */
 
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.59 0.24 264);
+  --border: oklch(0.28 0.01 255);
+  --input: oklch(0.28 0.01 255);
+  --ring: oklch(0.66 0.16 55 / 0.55);  /* brighter copper ring on dark */
 
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.59 0.24 264);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.59 0.24 264);
+  --sidebar: oklch(0.19 0.01 255);
+  --sidebar-foreground: oklch(0.92 0.02 250);
+  --sidebar-primary: oklch(0.66 0.16 55);       /* copper ember */
+  --sidebar-primary-foreground: oklch(0.15 0.01 255);
+  --sidebar-accent: oklch(0.24 0.01 255);
+  --sidebar-accent-foreground: oklch(0.92 0.02 250);
+  --sidebar-border: oklch(0.28 0.01 255);
+  --sidebar-ring: oklch(0.66 0.16 55 / 0.55);
 
-  /* Diff viewer colors - GitHub-inspired (Dark Mode) */
-  --diff-addition-bg: oklch(0.22 0.10 145);        /* Dark green background */
-  --diff-addition-gutter: oklch(0.18 0.12 145);    /* Even darker gutter for additions */
-  --diff-addition-word: oklch(0.30 0.18 145);      /* SATURATED bright green for word highlights */
-  --diff-addition-text: oklch(0.75 0.14 145);      /* Bright green text */
+  /* Diff viewer colors - Copper theme (Dark Mode) */
+  --diff-addition-bg: oklch(0.23 0.08 160);        /* Deep emerald on graphite */
+  --diff-addition-gutter: oklch(0.19 0.10 158);    /* Darker green gutter */
+  --diff-addition-word: oklch(0.35 0.16 160);      /* Bright emerald highlight */
+  --diff-addition-text: oklch(0.76 0.14 160);      /* Bright mint green text */
 
-  --diff-deletion-bg: oklch(0.22 0.10 25);         /* Dark red background */
-  --diff-deletion-gutter: oklch(0.18 0.12 25);     /* Even darker gutter for deletions */
-  --diff-deletion-word: oklch(0.30 0.20 25);       /* SATURATED bright red for word highlights */
-  --diff-deletion-text: oklch(0.70 0.16 25);       /* Bright red text */
+  --diff-deletion-bg: oklch(0.24 0.08 38);         /* Warm copper-ember on graphite */
+  --diff-deletion-gutter: oklch(0.20 0.10 35);     /* Darker copper gutter */
+  --diff-deletion-word: oklch(0.36 0.18 35);       /* Glowing copper-red highlight */
+  --diff-deletion-text: oklch(0.72 0.16 32);       /* Bright ember orange text */
 
-  --diff-line-number: oklch(0.55 0 0);             /* Lighter gray for dark mode line numbers */
-  --diff-line-number-bg: oklch(0.18 0 0);          /* Dark background for line numbers */
+  --diff-line-number: oklch(0.54 0.02 70);         /* Warm graphite-gray for line numbers */
+  --diff-line-number-bg: oklch(0.17 0.01 255);     /* Deep graphite background */
 }
 
 /* Apply semantic border color to all elements with border utilities */
