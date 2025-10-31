@@ -308,7 +308,7 @@ export function RepositoryItem({
                     onClick={() => onNewWorkspace(repository.repo_id)}
                     className={cn(
                       "w-full",
-                      "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+                      "text-muted-foreground hover:text-primary/80 hover:bg-sidebar-accent/25",
                       "transition-colors duration-200 ease-out"
                     )}
                   >
