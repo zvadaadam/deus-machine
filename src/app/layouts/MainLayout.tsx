@@ -242,6 +242,11 @@ function MainContent({
    *
    * Jony Ive principle: Switching tabs should show the tab content clearly,
    * not auto-open files or maintain state from other tabs. User decides what opens.
+   *
+   * Panel width behavior:
+   * - Browser → Changes/Files: Keep panel expanded, show empty state (user chose wide view)
+   * - Changes/Files: User manually controls with file selection or close button
+   * - Browser: Auto-expand if needed (browser needs space)
    */
   const handleRightPanelTabChange = (tab: RightPanelTab) => {
     setRightPanelTab(tab);
@@ -249,12 +254,7 @@ function MainContent({
     // Clear selected file when switching tabs (show empty state)
     setSelectedFile(null);
 
-    // Collapse panel when switching to Changes/Files (show list view)
-    if (tab === 'changes' || tab === 'files') {
-      setRightPanelExpanded(false);
-    }
-
-    // Expand panel when switching to browser tab
+    // Only auto-expand for browser (never auto-collapse for Changes/Files)
     if (tab === 'browser' && !rightPanelExpanded) {
       setRightPanelExpanded(true);
     }

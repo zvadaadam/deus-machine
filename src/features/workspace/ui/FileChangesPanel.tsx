@@ -107,7 +107,7 @@ export function FileChangesPanel({
 
       {/* File Changes */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="p-2">
+        <div className="py-2">
           {selectedWorkspace && fileChanges.length > 0 ? (
             <div className="space-y-1">
               {fileChanges.map((file) => {
