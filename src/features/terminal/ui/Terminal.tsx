@@ -26,7 +26,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: 'Suisse Intl Mono, Menlo, Monaco, "Courier New", monospace',
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
