@@ -212,7 +212,7 @@ export function FileChangesPanel({
               }).filter(Boolean)}
             </div>
           ) : selectedWorkspace ? (
-            <div className="p-8">
+            <div className="py-8">
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>
@@ -225,7 +225,7 @@ export function FileChangesPanel({
               </Empty>
             </div>
           ) : (
-            <div className="p-8">
+            <div className="py-8">
               <Empty className="border-0">
                 <EmptyHeader>
                   <EmptyMedia>
