@@ -491,8 +491,10 @@ function MainContent({
                 >
                   <div className="flex h-full overflow-hidden">
                     {/* File List - Always visible */}
-                    <div className={`flex-shrink-0 border-r border-border/40 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                      selectedFile && rightPanelExpanded ? 'w-[280px]' : 'flex-1'
+                    <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      selectedFile && rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Split view: fixed width + border
+                        : 'flex-1'                                // Full width: no border
                     }`}>
                       <FileChangesPanel
                         selectedWorkspace={selectedWorkspace}
@@ -523,8 +525,10 @@ function MainContent({
                 >
                   <div className="flex h-full overflow-hidden">
                     {/* File Browser - Always visible */}
-                    <div className={`flex-shrink-0 border-r border-border/40 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                      selectedFile && rightPanelExpanded ? 'w-[280px]' : 'flex-1'
+                    <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      selectedFile && rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Split view: fixed width + border
+                        : 'flex-1'                                // Full width: no border
                     }`}>
                       <FileBrowserPanel
                         selectedWorkspace={selectedWorkspace}
