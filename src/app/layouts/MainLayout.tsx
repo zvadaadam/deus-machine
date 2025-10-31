@@ -422,10 +422,13 @@ function MainContent({
         {/* RIGHT PANEL - Unified system for Changes/Files/Browser/File Diffs */}
         {selectedWorkspace && (
           <div className="flex flex-col h-full overflow-hidden">
-            {/* Panel Header with Tabs - Unified header (92px) matching session panel total height (h-12 + h-11) */}
+            {/* Spacer matching session panel context bar height to align tabs with navigation row */}
+            <div className="h-12 flex-shrink-0" />
+
+            {/* Panel Header with Tabs - h-11 matching session panel navigation row */}
             <Tabs value={rightPanelTab} onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-end h-[92px]">
-                {/* Tab Triggers - positioned at bottom to align with session panel navigation row */}
+              <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm flex-shrink-0 flex items-center h-11">
+                {/* Tab Triggers */}
                 <TabsList className="h-11 flex-1 justify-start rounded-none bg-transparent p-0 px-2 gap-0">
                   <TabsTrigger
                     value="changes"
