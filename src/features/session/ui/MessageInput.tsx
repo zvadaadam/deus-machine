@@ -52,6 +52,7 @@ interface MessageInputProps {
   onModelChange?: (model: string) => void;
   onThinkingLevelChange?: (level: string) => void;
   onAttachmentClick?: () => void;
+  className?: string;
 }
 
 export function MessageInput({
@@ -72,6 +73,7 @@ export function MessageInput({
   onModelChange,
   onThinkingLevelChange,
   onAttachmentClick,
+  className,
 }: MessageInputProps) {
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -183,7 +185,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="relative flex-shrink-0 p-4">
+    <div className={cn("relative flex-shrink-0 p-4", className)}>
       {/* Scroll fade overlay */}
       <div className="absolute bottom-full left-0 right-0 h-32 pointer-events-none bg-fade-overlay" />
 
