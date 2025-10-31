@@ -154,9 +154,10 @@ function MainContent({
         rightPanelExpanded,
         activeRightTab: rightPanelTab,
         sidebarCollapsed: !sidebarOpen,
+        selectedFile: selectedFile ? { path: selectedFile.path, source: 'changes' } : null,
       });
     }
-  }, [selectedWorkspace, rightPanelExpanded, rightPanelTab, sidebarOpen, setLayoutState]);
+  }, [selectedWorkspace, rightPanelExpanded, rightPanelTab, sidebarOpen, selectedFile, setLayoutState]);
 
   // Restore layout state when workspace changes
   useEffect(() => {
@@ -244,15 +245,33 @@ function MainContent({
    * not auto-open files or maintain state from other tabs. User decides what opens.
    *
    * Panel width behavior:
-   * - Browser → Changes/Files: Keep panel expanded, show empty state (user chose wide view)
+   * - Browser → Changes/Files: Keep panel expanded, restore last file if available
    * - Changes/Files: User manually controls with file selection or close button
    * - Browser: Auto-expand if needed (browser needs space)
    */
   const handleRightPanelTabChange = (tab: RightPanelTab) => {
+    const previousTab = rightPanelTab;
     setRightPanelTab(tab);
 
-    // Clear selected file when switching tabs (show empty state)
-    setSelectedFile(null);
+    // Restore last opened file when returning to Changes tab (if panel is expanded)
+    if (tab === 'changes' && rightPanelExpanded && selectedWorkspace) {
+      const layout = getLayoutState(selectedWorkspace.id);
+      if (layout.selectedFile && previousTab !== 'changes') {
+        // User is returning to Changes tab from another tab
+        // Restore their last viewed file
+        // Note: We'll need to trigger the file load via FileChangesPanel
+        // For now, just set the state - the actual diff will be loaded on click
+        setSelectedFile({
+          path: layout.selectedFile.path,
+          diff: 'Loading...',
+          additions: 0,
+          deletions: 0,
+        });
+      }
+    } else if (tab !== 'changes' && tab !== 'files') {
+      // Switching to browser or other tab - clear selection
+      setSelectedFile(null);
+    }
 
     // Only auto-expand for browser (never auto-collapse for Changes/Files)
     if (tab === 'browser' && !rightPanelExpanded) {
