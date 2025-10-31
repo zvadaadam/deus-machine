@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
@@ -72,6 +72,24 @@ export function FileChangesPanel({
       });
     }
   }
+
+  /**
+   * Auto-load diff when file is restored from persistence
+   * This happens when user switches back to Changes tab and we restore their last viewed file
+   */
+  useEffect(() => {
+    if (!selectedFilePath || !selectedWorkspace || !fileChanges.length) return;
+
+    // Find the file in the current changes list
+    const fileData = fileChanges.find(f => f.file === selectedFilePath);
+    if (!fileData) return;
+
+    // If this file is selected but we haven't loaded it yet, load it now
+    // (This happens when restoring from persistence)
+    if (currentFileRef.current !== selectedFilePath) {
+      handleFileClick(fileData.file, fileData.additions, fileData.deletions);
+    }
+  }, [selectedFilePath, selectedWorkspace?.id, fileChanges]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -155,7 +173,7 @@ export function FileChangesPanel({
                 return (
                   <div
                     key={file.file}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer group transition-colors duration-200 ${
+                    className={`flex items-center justify-between pr-2.5 py-1.5 rounded cursor-pointer group transition-colors duration-200 ${
                       isSelected
                         ? 'bg-primary/10 border-l-2 border-primary pl-2'
                         : 'hover:bg-muted/20 border-l-2 border-transparent pl-2.5'
