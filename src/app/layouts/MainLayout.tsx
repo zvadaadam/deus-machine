@@ -158,11 +158,24 @@ function MainContent({
 
   // Restore layout state when workspace changes
   useEffect(() => {
-    if (selectedWorkspace) {
-      const layout = getLayoutState(selectedWorkspace.id);
-      setRightPanelTab(layout.activeRightTab);
-      setRightPanelExpanded(layout.rightPanelExpanded);
-      setSelectedFile(null); // Clear file when switching workspaces
+    if (!selectedWorkspace) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const layout = getLayoutState(selectedWorkspace.id);
+    setRightPanelTab(layout.activeRightTab);
+    setRightPanelExpanded(layout.rightPanelExpanded);
+
+    if (layout.selectedFile && layout.activeRightTab !== 'browser') {
+      setSelectedFile({
+        path: layout.selectedFile.path,
+        diff: 'Loading diff...',
+        additions: 0,
+        deletions: 0,
+      });
+    } else {
+      setSelectedFile(null);
     }
   }, [selectedWorkspace?.id, getLayoutState]);
 
