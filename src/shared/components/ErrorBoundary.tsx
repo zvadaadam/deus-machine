@@ -134,8 +134,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 onClick={this.handleReset}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  backgroundColor: 'var(--color-primary-600, #2563eb)',
-                  color: 'white',
+                  backgroundColor: 'var(--primary)',
+                  color: 'var(--primary-foreground)',
                   border: 'none',
                   borderRadius: '6px',
                   fontSize: '14px',
@@ -144,10 +144,10 @@ export class ErrorBoundary extends Component<Props, State> {
                   transition: 'background-color 0.2s',
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-primary-700, #1d4ed8)';
+                  e.currentTarget.style.backgroundColor = 'color-mix(in oklch, var(--primary) 90%, black)';
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-primary-600, #2563eb)';
+                  e.currentTarget.style.backgroundColor = 'var(--primary)';
                 }}
               >
                 Try Again
@@ -157,8 +157,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 style={{
                   padding: '0.75rem 1.5rem',
                   backgroundColor: 'transparent',
-                  color: 'var(--color-primary-600, #2563eb)',
-                  border: '1px solid var(--color-primary-600, #2563eb)',
+                  color: 'var(--primary)',
+                  border: '1px solid var(--primary)',
                   borderRadius: '6px',
                   fontSize: '14px',
                   fontWeight: 500,
@@ -166,7 +166,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   transition: 'all 0.2s',
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-primary-50, #eff6ff)';
+                  e.currentTarget.style.backgroundColor = 'var(--accent)';
                 }}
                 onMouseOut={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';

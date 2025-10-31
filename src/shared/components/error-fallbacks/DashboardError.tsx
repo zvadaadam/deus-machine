@@ -29,8 +29,8 @@ export function DashboardError() {
           onClick={handleReload}
           style={{
             padding: '0.75rem 1.5rem',
-            backgroundColor: 'var(--color-primary-600)',
-            color: 'white',
+            backgroundColor: 'var(--primary)',
+            color: 'var(--primary-foreground)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '14px',
