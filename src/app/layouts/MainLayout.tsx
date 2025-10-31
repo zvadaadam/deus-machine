@@ -471,11 +471,11 @@ function MainContent({
                   className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
                   <div className="flex h-full overflow-hidden">
-                    {/* File List - Always visible */}
+                    {/* File List - Fixed width when expanded, full width when collapsed */}
                     <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                      selectedFile && rightPanelExpanded
-                        ? 'w-[280px] border-r border-border/40'  // Split view: fixed width + border
-                        : 'flex-1'                                // Full width: no border
+                      rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Expanded: always 280px (consistency)
+                        : 'flex-1'                                // Collapsed: full width
                     }`}>
                       <FileChangesPanel
                         selectedWorkspace={selectedWorkspace}
@@ -519,11 +519,11 @@ function MainContent({
                   className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
                   <div className="flex h-full overflow-hidden">
-                    {/* File Browser - Always visible */}
+                    {/* File Browser - Fixed width when expanded, full width when collapsed */}
                     <div className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                      selectedFile && rightPanelExpanded
-                        ? 'w-[280px] border-r border-border/40'  // Split view: fixed width + border
-                        : 'flex-1'                                // Full width: no border
+                      rightPanelExpanded
+                        ? 'w-[280px] border-r border-border/40'  // Expanded: always 280px (consistency)
+                        : 'flex-1'                                // Collapsed: full width
                     }`}>
                       <FileBrowserPanel
                         selectedWorkspace={selectedWorkspace}
