@@ -8,29 +8,6 @@
 
 /* Tailwind v4 Theme Configuration */
 @theme {
-  /* Color palette */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-
-  --color-secondary-50: #faf5ff;
-  --color-secondary-100: #f3e8ff;
-  --color-secondary-200: #e9d5ff;
-  --color-secondary-300: #d8b4fe;
-  --color-secondary-400: #c084fc;
-  --color-secondary-500: #a855f7;
-  --color-secondary-600: #9333ea;
-  --color-secondary-700: #7e22ce;
-  --color-secondary-800: #6b21a8;
-  --color-secondary-900: #581c87;
-
   /* Semantic colors - exposed to Tailwind utilities */
   /* These reference the CSS variables defined in :root (light) and .dark */
   --color-background: var(--background);
@@ -55,10 +32,6 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
-  --color-thinking: var(--thinking);
-  --color-thinking-foreground: var(--thinking-foreground);
-  --color-thinking-muted: var(--thinking-muted);
-  --color-thinking-border: var(--thinking-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -334,12 +307,6 @@
   --info: oklch(0.78 0.10 270);       /* muted violet info (no blue) */
   --info-foreground: oklch(0.15 0.02 270);
 
-  /* Thinking/reasoning colors (purple theme) */
-  --thinking: oklch(0.70 0.20 303);
-  --thinking-foreground: oklch(1 0 0);
-  --thinking-muted: oklch(0.96 0.05 303);
-  --thinking-border: oklch(0.85 0.10 303);
-
   /* Status colors for workspace/session states */
   --status-working: oklch(0.60 0.17 145);        /* Green for active/working */
   --status-working-fg: oklch(1 0 0);
@@ -424,12 +391,6 @@
 
   --info: oklch(0.78 0.10 270);
   --info-foreground: oklch(0.12 0.02 270);
-
-  /* Thinking/reasoning colors (purple theme) - optimized for dark mode */
-  --thinking: oklch(0.75 0.22 303);
-  --thinking-foreground: oklch(0.35 0.18 303);
-  --thinking-muted: oklch(0.25 0.08 303);
-  --thinking-border: oklch(0.35 0.12 303);
 
   /* Status colors for workspace/session states - optimized for dark mode */
   --status-working: oklch(0.70 0.18 145);        /* Brighter green for dark bg */
