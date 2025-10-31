@@ -544,7 +544,7 @@ function MainContent({
                             deletions={selectedFile.deletions}
                           />
                         ) : (
-                          <div className="h-full flex items-center justify-center p-8">
+                          <div className="h-full flex items-center justify-center">
                             <div className="text-center max-w-sm">
                               <FileCode className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
                               <h3 className="text-sm font-medium text-foreground/60 mb-2">
@@ -593,7 +593,7 @@ function MainContent({
                             deletions={selectedFile.deletions}
                           />
                         ) : (
-                          <div className="h-full flex items-center justify-center p-8">
+                          <div className="h-full flex items-center justify-center">
                             <div className="text-center max-w-sm">
                               <FolderOpen className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
                               <h3 className="text-sm font-medium text-foreground/60 mb-2">
