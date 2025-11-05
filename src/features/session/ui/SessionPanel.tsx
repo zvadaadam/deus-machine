@@ -97,6 +97,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   // Show compact button when there are enough messages to benefit from compacting
   const showCompactButton = messages.length > 10;
 
+  // Derive context token count once to avoid duplication
+  const contextTokenCount = session?.context_token_count ?? 0;
+
   // Session actions using custom hook
   const {
     sendMessage,
@@ -192,7 +195,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               model={model}
               thinkingLevel={thinkingLevel}
               mcpServers={mcpServers}
-              contextTokenCount={session?.context_token_count || 0}
+              contextTokenCount={contextTokenCount}
               onMessageChange={setMessageInput}
               onSend={() => sendMessage()}
               onStop={stopSession}
@@ -262,7 +265,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     thinkingLevel={thinkingLevel}
                     showCompactButton={showCompactButton}
                     mcpServers={mcpServers}
-                    contextTokenCount={session?.context_token_count || 0}
+                    contextTokenCount={contextTokenCount}
                     onMessageChange={setMessageInput}
                     onSend={() => sendMessage()}
                     onCompact={compactConversation}
