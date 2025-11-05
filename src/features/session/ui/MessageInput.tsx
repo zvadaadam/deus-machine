@@ -124,7 +124,7 @@ export function MessageInput({
               "w-1 h-1 transition-all duration-200",
               i < filledCount
                 ? "bg-primary"
-                : "border border-primary/40 bg-transparent"
+                : "border border-primary/40"
             )}
           />
         ))}
@@ -260,14 +260,14 @@ export function MessageInput({
         {/* Bottom toolbar */}
         <InputGroupAddon align="block-end" className="w-full flex items-center justify-between px-1.5">
           {/* Controls group (left) */}
-          <div className="flex items-center gap-0">
+          <div className="flex items-center">
               {/* Add attachment button */}
               <InputGroupButton
                 onClick={onAttachmentClick}
                 variant="ghost"
                 size="icon-sm"
                 title="Add attachment"
-                className="rounded-md transition-colors"
+                className="rounded-md"
               >
                 <Plus className="w-4 h-4" />
               </InputGroupButton>
@@ -280,7 +280,7 @@ export function MessageInput({
                     size="sm"
                     title="Select model"
                     aria-label={`Select model, currently ${modelLabel}`}
-                    className="rounded-md px-3 transition-colors group focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="group focus-visible:ring-0"
                   >
                     <span className="text-xs font-normal text-popover-foreground">{modelLabel}</span>
                     <ChevronDown className="size-3 text-popover-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
@@ -297,7 +297,7 @@ export function MessageInput({
                     <span className="font-medium uppercase text-xs font-family-mono">Sonnet 4.5</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onModelChange?.('haiku')}>
-                    <span className="uppercase text-xs font-family-mono">Haiku 3.5</span>
+                    <span className="font-medium uppercase text-xs font-family-mono">Haiku 3.5</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -310,7 +310,7 @@ export function MessageInput({
                 title={`Thinking: ${thinkingLevel}`}
                 aria-label={`Thinking level: ${thinkingLevel}`}
                 className={cn(
-                  "gap-1 rounded-full transition-colors",
+                  "rounded-full",
                   thinkingLevel !== 'NONE' ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -328,7 +328,7 @@ export function MessageInput({
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
-                className="gap-1 rounded-sm border text-warning transition-colors"
+                className="rounded-sm border text-warning"
               >
                 <Minimize2 className="size-3" />
                 <span className="text-xs font-normal">{isCompacting ? 'Compacting...' : 'Compact'}</span>
@@ -378,12 +378,7 @@ export function MessageInput({
                 onClick={() => setBrowserEnabled(!browserEnabled)}
                 title={browserEnabled ? "Browser enabled" : "Enable browser"}
                 aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
-                className={cn(
-                  "transition-colors",
-                  browserEnabled
-                    ? "text-blue-500"
-                    : "text-muted-foreground"
-                )}
+                className={browserEnabled ? "text-blue-500" : "text-muted-foreground"}
               >
                 <Globe className="w-4 h-4" />
               </InputGroupButton>
@@ -396,12 +391,7 @@ export function MessageInput({
                     size="icon-sm"
                     title={`MCP Servers${activeMCPCount > 0 ? ` (${activeMCPCount} active)` : ''}`}
                     aria-label="MCP Servers"
-                    className={cn(
-                      "transition-colors",
-                      activeMCPCount > 0
-                        ? "text-primary"
-                        : "text-muted-foreground"
-                    )}
+                    className={activeMCPCount > 0 ? "text-primary" : "text-muted-foreground"}
                   >
                     <Hammer className="w-4 h-4" />
                   </InputGroupButton>
