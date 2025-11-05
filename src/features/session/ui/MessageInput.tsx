@@ -322,17 +322,19 @@ export function MessageInput({
           {/* Actions group (right) */}
           <div className="flex items-center gap-1">
               {/* Compact button - leftmost position */}
-              <Button
-                onClick={onCompact}
-                disabled={sending || isCompacting}
-                title="Compact conversation"
-                variant="ghost"
-                size="sm"
-                className="rounded-sm border text-warning"
-              >
-                <Minimize2 className="size-3" />
-                <span className="text-xs font-normal">{isCompacting ? 'Compacting...' : 'Compact'}</span>
-              </Button>
+              {showCompactButton && (
+                <Button
+                  onClick={onCompact}
+                  disabled={sending || isCompacting}
+                  title="Compact conversation"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-sm border text-warning"
+                >
+                  <Minimize2 className="size-3" />
+                  <span className="text-xs font-normal">{isCompacting ? 'Compacting...' : 'Compact'}</span>
+                </Button>
+              )}
 
               {/* Context window indicator - circular progress */}
               <div
