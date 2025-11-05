@@ -192,6 +192,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               model={model}
               thinkingLevel={thinkingLevel}
               mcpServers={mcpServers}
+              contextTokenCount={session?.context_token_count || 0}
               onMessageChange={setMessageInput}
               onSend={() => sendMessage()}
               onStop={stopSession}
@@ -261,6 +262,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     thinkingLevel={thinkingLevel}
                     showCompactButton={showCompactButton}
                     mcpServers={mcpServers}
+                    contextTokenCount={session?.context_token_count || 0}
                     onMessageChange={setMessageInput}
                     onSend={() => sendMessage()}
                     onCompact={compactConversation}

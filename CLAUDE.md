@@ -116,6 +116,70 @@ We use **Tailwind CSS v4** which has significant differences from v3:
 }
 ```
 
+### **What Goes Where: Styling Architecture** (CRITICAL)
+
+This is the **single source of truth** for where different types of styling should live. Follow this religiously to avoid complexity bloat.
+
+#### **Global CSS (src/global.css) - ONLY These Things:**
+
+1. **@theme Block**: Design tokens (colors, fonts, spacing scales, z-index)
+2. **@keyframes**: GPU-accelerated animations (`fadeIn`, `slideInRight`, etc.)
+3. **Global Element Styles**: `html`, `body`, `#root`, scrollbars
+4. **Complex Effects Tailwind Can't Do**:
+   - `.vibrancy-bg`, `.vibrancy-panel` (backdrop filters with Arc-style frosting)
+   - `.bg-fade-overlay` (custom gradients)
+   - `.markdown-content` (complex nested selectors for markdown rendering)
+   - `.scrollbar-vibrancy` (custom scrollbar styling)
+5. **Accessibility**: `@media (prefers-reduced-motion)`, `@media (hover: hover)`
+
+#### **❌ Never Add to Global CSS:**
+
+- ❌ Simple spacing utilities (`.space-standard` = `p-4`) → Use Tailwind `p-*`
+- ❌ Simple shadows (`.elevation-1` = `shadow-sm`) → Use Tailwind `shadow-*`
+- ❌ Typography utilities (`.text-large`) → Use Tailwind `text-*` or CSS variables
+- ❌ Layout utilities (`.flex-center`) → Use Tailwind `flex items-center justify-center`
+- ❌ Color utilities (`.bg-primary-light`) → Use Tailwind `bg-primary/80`
+
+**Rule of thumb:** If Tailwind can do it in 2-3 classes, don't add a custom utility.
+
+#### **Component Variants (src/components/ui/*) - Use For:**
+
+- Repeated styling patterns across the app (buttons, inputs, cards)
+- Size variations: `size="sm"`, `size="lg"`
+- Style variations: `variant="outline"`, `variant="ghost"`
+- State variations: `data-state="active"`, `data-no-ring={true}`
+
+**Example of Good Variant:**
+```tsx
+// ✅ GOOD - InputGroup with data-no-ring variant
+<InputGroup data-no-ring={true} className="rounded-3xl shadow-lg">
+```
+
+**Example of Bad Override:**
+```tsx
+// ❌ BAD - Using !important to override
+<InputGroup className="!ring-0 focus-within:!ring-0">
+```
+
+#### **Inline Tailwind Classes - Use For:**
+
+- Layout: `flex`, `grid`, `gap-4`, `w-full`
+- One-off adjustments: `rounded-3xl`, `shadow-lg`, `bg-muted/30`
+- Responsive design: `sm:grid-cols-2`, `md:gap-6`, `lg:p-8`
+- State variants: `hover:bg-accent`, `focus-visible:ring-2`, `disabled:opacity-50`
+
+#### **Arbitrary Values - When to Use:**
+
+Arbitrary values (`[...]`) are **acceptable** when:
+- ✅ Using design system variables: `text-[var(--font-size-body-lg)]`
+- ✅ Radix UI CSS variables: `h-[var(--radix-select-trigger-height)]`
+- ✅ Specific design requirements with no Tailwind equivalent: `h-[1.2rem]`, `min-w-[88px]`
+
+Arbitrary values are **anti-patterns** when:
+- ❌ Tailwind has a utility: `rounded-[24px]` → `rounded-3xl`
+- ❌ Overriding with !important: `!ring-0` → Fix the component variant instead
+- ❌ Hardcoding colors: `bg-[#3b82f6]` → Use `bg-primary` or define in `@theme`
+
 ### Modern CSS Best Practices (Top-1% Quality)
 
 These principles ensure maintainable, extendable styling that scales:

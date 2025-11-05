@@ -1,6 +1,6 @@
 import type { SessionStatus } from "@/shared/types";
 import { useState } from "react";
-import { Minimize2, Wrench, ArrowUp, Square, Sparkles, Brain, Paperclip, X, Plus, Hammer } from "lucide-react";
+import { Minimize2, ArrowUp, Square, Brain, Paperclip, X, Plus, Hammer, Globe, ChevronDown } from "lucide-react";
 import {
   InputGroup,
   InputGroupAddon,
@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -19,6 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
 interface Attachment {
@@ -44,6 +46,7 @@ interface MessageInputProps {
   thinkingLevel?: string;
   showCompactButton?: boolean;
   mcpServers?: MCPServer[];
+  contextTokenCount?: number;
   onMessageChange: (value: string) => void;
   onSend: () => void;
   onCompact?: () => void;
@@ -65,6 +68,7 @@ export function MessageInput({
   thinkingLevel = 'NONE',
   showCompactButton = false,
   mcpServers = [],
+  contextTokenCount = 0,
   onMessageChange,
   onSend,
   onCompact,
@@ -79,6 +83,9 @@ export function MessageInput({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Browser MCP state (future integration)
+  const [browserEnabled, setBrowserEnabled] = useState(false);
+
   // Keyboard shortcut
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -89,8 +96,8 @@ export function MessageInput({
     }
   };
 
-  // Model display label
-  const modelLabel = model === 'opus' ? 'Opus' : model === 'haiku' ? 'Haiku' : 'Sonnet';
+  // Model display label (full version numbers)
+  const modelLabel = model === 'opus' ? 'Opus 3' : model === 'haiku' ? 'Haiku 3.5' : 'Sonnet 4.5';
 
   // Thinking level - cycle through levels
   const cycleThinkingLevel = () => {
@@ -109,12 +116,12 @@ export function MessageInput({
       thinkingLevel === 'MEDIUM' ? 2 : 1;
 
     return (
-      <div className="flex flex-col gap-0.5 ml-1">
-        {[0, 1, 2].map((i) => (
+      <div className="flex flex-col gap-0.5 ml-0.5">
+        {[2, 1, 0].map((i) => (
           <span
             key={i}
             className={cn(
-              "w-1 h-1 rounded-full transition-all duration-200",
+              "w-1 h-1 transition-all duration-200",
               i < filledCount
                 ? "bg-primary"
                 : "border border-primary/40 bg-transparent"
@@ -127,6 +134,11 @@ export function MessageInput({
 
   // MCP active count
   const activeMCPCount = mcpServers.filter(s => s.active).length;
+
+  // Context window calculation (200k token limit for Sonnet 3.5)
+  const MAX_TOKENS = 200000;
+  const contextPercentage = Math.min((contextTokenCount / MAX_TOKENS) * 100, 100);
+  const contextFillColor = contextPercentage > 80 ? '#E0903F' : '#B8BFC8'; // Copper when > 80%
 
   // Drag & Drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -185,20 +197,21 @@ export function MessageInput({
   };
 
   return (
-    <div className={cn("relative flex-shrink-0 p-4", className)}>
+    <div className={cn("relative shrink-0 pb-4 px-4", className)}>
       {/* Scroll fade overlay */}
       <div className="absolute bottom-full left-0 right-0 h-32 pointer-events-none bg-fade-overlay" />
 
       {/* InputGroup with drag & drop */}
       <InputGroup
-        className="relative rounded-[24px] shadow-lg bg-muted/30 backdrop-blur-xl border-border/50 hover:border-border transition-all duration-200 !ring-0 focus-within:!ring-0 has-[[data-slot=input-group-control]:focus-visible]:!ring-0 has-[[data-slot=input-group-control]:focus-visible]:!border-border overflow-visible"
+        data-no-ring={true}
+        className="relative rounded-2xl bg-secondary border-border transition-colors duration-200 overflow-visible"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {/* Drag overlay */}
         {isDragging && (
-          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-[24px] flex flex-col items-center justify-center gap-2 pointer-events-none z-1">
+          <div className="absolute inset-0 bg-primary/10 border-2 border-primary border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none z-1">
             <Paperclip className="w-8 h-8 text-primary" />
             <p className="text-primary font-medium text-sm">Drop files here</p>
           </div>
@@ -206,11 +219,11 @@ export function MessageInput({
 
         {/* Attachment previews - inside InputGroup */}
         {attachments.length > 0 && (
-          <div className="flex gap-3 p-4 pb-3 overflow-x-auto scrollbar-vibrancy">
+          <div className="w-full flex justify-start items-start gap-3 px-3 pt-3 overflow-x-auto scrollbar-vibrancy">
             {attachments.map(attachment => (
               <div
                 key={attachment.id}
-                className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0"
+                className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border bg-muted shrink-0"
               >
                 <img
                   src={attachment.preview}
@@ -220,7 +233,7 @@ export function MessageInput({
                 {/* Remove button */}
                 <button
                   onClick={() => removeAttachment(attachment.id)}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-muted flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                   aria-label="Remove attachment"
                 >
                   <X className="w-3 h-3 text-muted-foreground" />
@@ -238,21 +251,23 @@ export function MessageInput({
         <InputGroupTextarea
           value={messageInput}
           onChange={(e) => onMessageChange(e.target.value)}
-          placeholder="Ask Claude Code to make changes, @mention files, run /commands"
+          placeholder="Ask a follow-up ..."
           disabled={sending}
           onKeyDown={handleKeyDown}
-          className="min-h-[40px] max-h-[200px] text-body-lg resize-none overflow-y-auto scrollbar-vibrancy"
+          className={cn("min-h-10 max-h-50 pl-4 pt-4 overflow-y-auto scrollbar-vibrancy placeholder:text-placeholder", className)}
         />
 
         {/* Bottom toolbar */}
-        <InputGroupAddon align="block-end" className="w-full flex items-center justify-between gap-4">
+        <InputGroupAddon align="block-end" className="w-full flex items-center justify-between px-1.5">
           {/* Controls group (left) */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0">
               {/* Add attachment button */}
               <InputGroupButton
                 onClick={onAttachmentClick}
+                variant="ghost"
                 size="icon-sm"
                 title="Add attachment"
+                className="rounded-md transition-colors"
               >
                 <Plus className="w-4 h-4" />
               </InputGroupButton>
@@ -260,55 +275,138 @@ export function MessageInput({
               {/* Model picker dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <InputGroupButton
+                  <Button
+                    variant="ghost"
                     size="sm"
                     title="Select model"
                     aria-label={`Select model, currently ${modelLabel}`}
+                    className="rounded-md px-3 transition-colors group focus-visible:ring-0 focus-visible:ring-offset-0"
                   >
-                    <Sparkles className="w-4 h-4" />
-                    <span>{modelLabel}</span>
-                  </InputGroupButton>
+                    <span className="text-xs font-normal text-popover-foreground">{modelLabel}</span>
+                    <ChevronDown className="size-3 text-popover-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => onModelChange?.('sonnet')}>
-                    Claude 3.5 Sonnet
-                  </DropdownMenuItem>
+                  <DropdownMenuLabel>
+                    <span className="text-muted-foreground text-xs">Claude Code</span>
+                  </DropdownMenuLabel>
                   <DropdownMenuItem onClick={() => onModelChange?.('opus')}>
-                    Claude 3 Opus
+                    <span className="font-medium uppercase text-xs font-family-mono">Opus 3</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onModelChange?.('sonnet')}>
+                    <span className="font-medium uppercase text-xs font-family-mono">Sonnet 4.5</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onModelChange?.('haiku')}>
-                    Claude 3.5 Haiku
+                    <span className="uppercase text-xs font-family-mono">Haiku 3.5</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
               {/* Thinking cycle button */}
               <InputGroupButton
+                variant="ghost"
                 size="sm"
                 onClick={cycleThinkingLevel}
                 title={`Thinking: ${thinkingLevel}`}
                 aria-label={`Thinking level: ${thinkingLevel}`}
                 className={cn(
-                  "gap-1",
-                  thinkingLevel !== 'NONE' && "text-primary"
+                  "gap-1 rounded-full transition-colors",
+                  thinkingLevel !== 'NONE' ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                <Brain className="w-4 h-4" />
+                <Brain className="w-3 h-3" />
                 {renderThinkingDots()}
+              </InputGroupButton>
+          </div>
+
+          {/* Actions group (right) */}
+          <div className="flex items-center gap-1">
+              {/* Compact button - leftmost position */}
+              <Button
+                onClick={onCompact}
+                disabled={sending || isCompacting}
+                title="Compact conversation"
+                variant="ghost"
+                size="sm"
+                className="gap-1 rounded-sm border text-warning transition-colors"
+              >
+                <Minimize2 className="size-3" />
+                <span className="text-xs font-normal">{isCompacting ? 'Compacting...' : 'Compact'}</span>
+              </Button>
+
+              {/* Context window indicator - circular progress */}
+              <div
+                className="relative w-8 h-8 flex items-center justify-center shrink-0"
+                title={`Context: ${contextTokenCount.toLocaleString()} / ${MAX_TOKENS.toLocaleString()} tokens (${contextPercentage.toFixed(1)}%)`}
+              >
+                <svg className="w-4 h-4 -rotate-90" viewBox="0 0 16 16">
+                  {/* Background circle */}
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="transparent"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-muted-foreground/30"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="transparent"
+                    stroke={contextFillColor}
+                    strokeWidth="2"
+                    strokeDasharray={`${(contextPercentage / 100) * 37.7} 37.7`}
+                    strokeLinecap="round"
+                    className="transition-all duration-300"
+                  />
+                </svg>
+                {/* Token count text - only show if > 0 */}
+                {contextTokenCount > 0 && (
+                  <span className="absolute text-[8px] font-medium text-muted-foreground">
+                    {contextTokenCount >= 1000 ? `${(contextTokenCount / 1000).toFixed(0)}k` : contextTokenCount}
+                  </span>
+                )}
+              </div>
+
+              {/* Browser MCP toggle */}
+              <InputGroupButton
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setBrowserEnabled(!browserEnabled)}
+                title={browserEnabled ? "Browser enabled" : "Enable browser"}
+                aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
+                className={cn(
+                  "transition-colors",
+                  browserEnabled
+                    ? "text-blue-500"
+                    : "text-muted-foreground"
+                )}
+              >
+                <Globe className="w-4 h-4" />
               </InputGroupButton>
 
               {/* MCP Server indicator */}
               <Popover>
                 <PopoverTrigger asChild>
                   <InputGroupButton
+                    variant="ghost"
                     size="icon-sm"
-                    title="MCP Servers"
+                    title={`MCP Servers${activeMCPCount > 0 ? ` (${activeMCPCount} active)` : ''}`}
                     aria-label="MCP Servers"
+                    className={cn(
+                      "transition-colors",
+                      activeMCPCount > 0
+                        ? "text-primary"
+                        : "text-muted-foreground"
+                    )}
                   >
                     <Hammer className="w-4 h-4" />
                   </InputGroupButton>
                 </PopoverTrigger>
-                <PopoverContent className="w-64" align="start" side="top">
+                <PopoverContent className="w-64" align="end" side="top">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="font-semibold text-sm">MCP Servers</p>
@@ -337,35 +435,6 @@ export function MessageInput({
                   </div>
                 </PopoverContent>
               </Popover>
-          </div>
-
-          {/* Actions group (right) */}
-          <div className="flex items-center gap-1.5">
-              {/* Compact button (conditional) */}
-              {showCompactButton && !embedded && (
-                <InputGroupButton
-                  onClick={onCompact}
-                  disabled={sending || isCompacting}
-                  title="Compact conversation"
-                  size="sm"
-                >
-                  <Minimize2 className="w-4 h-4" />
-                  <span>{isCompacting ? 'Compacting...' : 'Compact'}</span>
-                </InputGroupButton>
-              )}
-
-              {/* Create PR button (non-embedded) */}
-              {!embedded && (
-                <InputGroupButton
-                  onClick={onCreatePR}
-                  disabled={sending}
-                  title="Create PR"
-                  size="sm"
-                >
-                  <Wrench className="w-4 h-4" />
-                  <span>Create PR</span>
-                </InputGroupButton>
-              )}
 
               {/* Stop button - shows when session is working */}
               {sessionStatus === 'working' && (
@@ -374,6 +443,7 @@ export function MessageInput({
                   variant="destructive"
                   size="icon-sm"
                   title="Stop execution"
+                  className="rounded-full"
                 >
                   <Square className="w-5 h-5" />
                 </InputGroupButton>
@@ -387,6 +457,7 @@ export function MessageInput({
                 size="icon-sm"
                 title="Send message (⌘ + Enter)"
                 aria-label="Send message"
+                className="rounded-full"
               >
                 <ArrowUp className="w-5 h-5" />
               </InputGroupButton>
