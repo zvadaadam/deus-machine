@@ -958,7 +958,7 @@ export function MainLayout() {
       {loading ? (
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
-        <div className="space-standard">
+        <div className="p-4">
           <Empty className="border-0">
             <EmptyHeader>
               <EmptyMedia>

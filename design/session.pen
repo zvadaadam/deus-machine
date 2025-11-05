@@ -3,906 +3,9 @@
   "children": [
     {
       "type": "frame",
-      "id": "session-panel-dark",
-      "x": 0,
-      "y": 0,
-      "name": "Session Panel - Dark Theme",
-      "width": 1400,
-      "height": 900,
-      "fill": "#0B0C10",
-      "layout": {
-        "mode": "horizontal",
-        "justify": "start",
-        "align": "start"
-      },
-      "children": [
-        {
-          "type": "frame",
-          "id": "left-sidebar",
-          "name": "Left Sidebar",
-          "width": 280,
-          "height": "fill_container",
-          "fill": "#131418",
-          "stroke": {
-            "thickness": {
-              "right": 1
-            },
-            "fill": "#30363D"
-          },
-          "layout": {
-            "mode": "vertical",
-            "spacing": 4,
-            "padding": 8,
-            "justify": "start",
-            "align": "start"
-          },
-          "children": [
-            {
-              "type": "frame",
-              "id": "chat-tab",
-              "name": "Chat Tab",
-              "width": "fill_container",
-              "height": "fit_content",
-              "fill": "#1F2127",
-              "cornerRadius": 6,
-              "layout": {
-                "mode": "horizontal",
-                "padding": [
-                  8,
-                  12
-                ],
-                "justify": "space_between",
-                "align": "center"
-              },
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "tab-left",
-                  "name": "Tab Left",
-                  "width": "fit_content",
-                  "height": "fit_content",
-                  "fill": "transparent",
-                  "layout": {
-                    "mode": "horizontal",
-                    "spacing": 8,
-                    "justify": "start",
-                    "align": "center"
-                  },
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "chat-icon",
-                      "name": "Chat Icon",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "chat_bubble",
-                      "iconFontFamily": "Material Symbols Rounded",
-                      "fill": "#E0903F"
-                    },
-                    {
-                      "type": "text",
-                      "id": "chat-label",
-                      "name": "Chat Label",
-                      "fill": "#E6EDF3",
-                      "content": "Chat #1",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    }
-                  ]
-                },
-                {
-                  "type": "icon_font",
-                  "id": "add-icon",
-                  "name": "Add Icon",
-                  "width": 16,
-                  "height": 16,
-                  "iconFontName": "add",
-                  "iconFontFamily": "Material Symbols Rounded",
-                  "fill": "#B8BFC8"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "thinking-item",
-              "name": "Thinking Item",
-              "width": "fill_container",
-              "height": "fit_content",
-              "fill": "transparent",
-              "cornerRadius": 4,
-              "layout": {
-                "mode": "horizontal",
-                "spacing": 8,
-                "padding": [
-                  6,
-                  8
-                ],
-                "justify": "start",
-                "align": "start"
-              },
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "chevron-icon",
-                  "name": "Chevron",
-                  "width": 16,
-                  "height": 16,
-                  "iconFontName": "chevron_right",
-                  "iconFontFamily": "Material Symbols Rounded",
-                  "fill": "#B8BFC8"
-                },
-                {
-                  "type": "icon_font",
-                  "id": "thinking-icon",
-                  "name": "Thinking Icon",
-                  "width": 16,
-                  "height": 16,
-                  "iconFontName": "psychology",
-                  "iconFontFamily": "Material Symbols Rounded",
-                  "fill": "#E0903F"
-                },
-                {
-                  "type": "text",
-                  "id": "thinking-text",
-                  "name": "Thinking Text",
-                  "fill": "#B8BFC8",
-                  "content": "Thinking",
-                  "fontFamily": "Suisse Intl",
-                  "fontSize": 13
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "main-content",
-          "name": "Main Content Area",
-          "width": "fill_container",
-          "height": "fill_container",
-          "fill": "#0B0C10",
-          "layout": {
-            "mode": "vertical",
-            "justify": "start",
-            "align": "center"
-          },
-          "children": [
-            {
-              "type": "frame",
-              "id": "chat-messages",
-              "name": "Chat Messages",
-              "width": 960,
-              "height": "fill_container",
-              "fill": "transparent",
-              "layout": {
-                "mode": "vertical",
-                "padding": [
-                  24,
-                  24,
-                  140,
-                  24
-                ],
-                "justify": "start",
-                "align": "start"
-              },
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "user-message-dark",
-                  "name": "User Message",
-                  "width": 650,
-                  "height": "fit_content",
-                  "fill": "#1F2127",
-                  "cornerRadius": 12,
-                  "layout": {
-                    "mode": "vertical",
-                    "spacing": 4,
-                    "padding": [
-                      12,
-                      16
-                    ],
-                    "justify": "start",
-                    "align": "start"
-                  },
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "user-text-1",
-                      "fill": "#E6EDF3",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 600
-                      },
-                      "content": "I run AI code review and this is the feedback. Wdyt? Is it actionable?",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 14
-                    },
-                    {
-                      "type": "text",
-                      "id": "user-text-2",
-                      "fill": "#B8BFC8",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 600
-                      },
-                      "content": "(Btw, we don't wanna over-engineer the codebase, but if it help to have clean codebase it ok)",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 14
-                    },
-                    {
-                      "type": "text",
-                      "id": "user-text-3",
-                      "fill": "#B8BFC8",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 600
-                      },
-                      "content": "(ALSO DROP THE MARKDOWN FILES THAT ARE NOT NEEDED)",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 14
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "thinking-block-1",
-                  "name": "Thinking Block",
-                  "width": "fill_container",
-                  "height": "fit_content",
-                  "fill": "transparent",
-                  "layout": {
-                    "mode": "horizontal",
-                    "spacing": 8,
-                    "padding": [
-                      8,
-                      0
-                    ],
-                    "justify": "start",
-                    "align": "center"
-                  },
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "thinking-brain-icon",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "psychology",
-                      "iconFontFamily": "Material Symbols Rounded",
-                      "fill": "#E0903F"
-                    },
-                    {
-                      "type": "text",
-                      "id": "thinking-label",
-                      "fill": "#E6EDF3",
-                      "content": "Thinking",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 13,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "thinking-summary",
-                      "fill": "#7D8590",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 800
-                      },
-                      "content": "The user is asking me to: 1. Read the AI code review feedback 2. Assess if it's actionable 3. Keep in mind not to over-e...",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 13
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "read-tool-block",
-                  "name": "Read Tool Block",
-                  "width": "fill_container",
-                  "height": "fit_content",
-                  "fill": "transparent",
-                  "cornerRadius": 8,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#30363D"
-                  },
-                  "layout": {
-                    "mode": "vertical",
-                    "justify": "start",
-                    "align": "start"
-                  },
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "tool-header-read",
-                      "name": "Tool Header",
-                      "width": "fill_container",
-                      "height": "fit_content",
-                      "fill": "transparent",
-                      "layout": {
-                        "mode": "horizontal",
-                        "spacing": 8,
-                        "padding": [
-                          8,
-                          12
-                        ],
-                        "justify": "start",
-                        "align": "center"
-                      },
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "file-icon",
-                          "width": 16,
-                          "height": 16,
-                          "iconFontName": "description",
-                          "iconFontFamily": "Material Symbols Rounded",
-                          "fill": "#E0903F"
-                        },
-                        {
-                          "type": "text",
-                          "id": "tool-name-read",
-                          "fill": "#E6EDF3",
-                          "content": "Read",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 13,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "tool-file-path",
-                          "fill": "#7D8590",
-                          "content": "42b6843d-b620-439b-9c54-5c158f7e38eb.txt",
-                          "fontFamily": "Suisse Intl Mono",
-                          "fontSize": 12
-                        },
-                        {
-                          "type": "text",
-                          "id": "tool-line-count",
-                          "fill": "#7D8590",
-                          "content": "• 972 lines",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 12
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "thinking-block-2",
-                  "name": "Thinking Block 2",
-                  "width": "fill_container",
-                  "height": "fit_content",
-                  "fill": "transparent",
-                  "layout": {
-                    "mode": "horizontal",
-                    "spacing": 8,
-                    "padding": [
-                      8,
-                      0
-                    ],
-                    "justify": "start",
-                    "align": "center"
-                  },
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "thinking-brain-icon-2",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "psychology",
-                      "iconFontFamily": "Material Symbols Rounded",
-                      "fill": "#E0903F"
-                    },
-                    {
-                      "type": "text",
-                      "id": "thinking-label-2",
-                      "fill": "#E6EDF3",
-                      "content": "Thinking",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 13,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "thinking-summary-2",
-                      "fill": "#7D8590",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 800
-                      },
-                      "content": "Let me analyze the AI code review feedback. It's from CodeRabbit bot and has several categories: 1. **Critical issues (...",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 13
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "assistant-message-formatted",
-                  "name": "Assistant Message",
-                  "width": "fill_container",
-                  "height": "fit_content",
-                  "fill": "transparent",
-                  "layout": {
-                    "mode": "vertical",
-                    "spacing": 16,
-                    "padding": [
-                      8,
-                      0
-                    ],
-                    "justify": "start",
-                    "align": "start"
-                  },
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "assistant-intro",
-                      "fill": "#E6EDF3",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 900
-                      },
-                      "content": "Let me read the code review and assess what's actionable.",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 16
-                    },
-                    {
-                      "type": "text",
-                      "id": "assistant-breakdown",
-                      "fill": "#E6EDF3",
-                      "textGrowth": "fixed-width",
-                      "size": {
-                        "width": 900
-                      },
-                      "content": "The AI code review has good feedback! Here's my breakdown:",
-                      "fontFamily": "Suisse Intl",
-                      "fontSize": 16
-                    },
-                    {
-                      "type": "frame",
-                      "id": "critical-section",
-                      "name": "Critical Section",
-                      "width": "fill_container",
-                      "height": "fit_content",
-                      "fill": "transparent",
-                      "layout": {
-                        "mode": "vertical",
-                        "spacing": 12,
-                        "justify": "start",
-                        "align": "start"
-                      },
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "critical-heading",
-                          "fill": "#E6EDF3",
-                          "content": "🔴 Critical - Should Fix",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 18,
-                          "fontWeight": "700"
-                        },
-                        {
-                          "type": "text",
-                          "id": "critical-item-1",
-                          "fill": "#E6EDF3",
-                          "textGrowth": "fixed-width",
-                          "size": {
-                            "width": 900
-                          },
-                          "content": "1. Missing React import (ChatInput.tsx) - Will cause TypeScript errors",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 14
-                        },
-                        {
-                          "type": "text",
-                          "id": "critical-item-2",
-                          "fill": "#E6EDF3",
-                          "textGrowth": "fixed-width",
-                          "size": {
-                            "width": 900
-                          },
-                          "content": "2. Duplicate TradingAgent interface - Type mismatch causing unsafe casts",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 14
-                        },
-                        {
-                          "type": "text",
-                          "id": "critical-item-3",
-                          "fill": "#E6EDF3",
-                          "textGrowth": "fixed-width",
-                          "size": {
-                            "width": 900
-                          },
-                          "content": "3. Unused constant (USE_TRADINGVIEW) - Will fail build with noUnusedLocals",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 14
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "major-section",
-                      "name": "Major Section",
-                      "width": "fill_container",
-                      "height": "fit_content",
-                      "fill": "transparent",
-                      "layout": {
-                        "mode": "vertical",
-                        "spacing": 12,
-                        "justify": "start",
-                        "align": "start"
-                      },
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "major-heading",
-                          "fill": "#E6EDF3",
-                          "content": "🟤 Major - Worth Fixing",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 18,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "message-input-container",
-              "name": "Message Input Container",
-              "width": 960,
-              "height": "fit_content",
-              "fill": "transparent",
-              "layout": {
-                "mode": "vertical",
-                "padding": 16,
-                "justify": "end",
-                "align": "center"
-              },
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "message-input-dark",
-                  "name": "Message Input",
-                  "width": "fill_container",
-                  "height": "fit_content",
-                  "fill": "#1F2127",
-                  "cornerRadius": 24,
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#30363D"
-                  },
-                  "layout": {
-                    "mode": "vertical",
-                    "justify": "start",
-                    "align": "start"
-                  },
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "input-field-dark",
-                      "name": "Input Field",
-                      "width": "fill_container",
-                      "height": 48,
-                      "fill": "transparent",
-                      "layout": {
-                        "mode": "horizontal",
-                        "padding": [
-                          12,
-                          16
-                        ],
-                        "justify": "start",
-                        "align": "center"
-                      },
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "input-placeholder",
-                          "fill": "#7D8590",
-                          "textGrowth": "fixed-width",
-                          "size": {
-                            "width": 700
-                          },
-                          "content": "Ask Claude Code to make changes, @mention files, run /commands",
-                          "fontFamily": "Suisse Intl",
-                          "fontSize": 14
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "input-toolbar-dark",
-                      "name": "Input Toolbar",
-                      "width": "fill_container",
-                      "height": "fit_content",
-                      "fill": "transparent",
-                      "layout": {
-                        "mode": "horizontal",
-                        "padding": [
-                          8,
-                          16
-                        ],
-                        "justify": "space_between",
-                        "align": "center"
-                      },
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "toolbar-left",
-                          "name": "Toolbar Left",
-                          "width": "fit_content",
-                          "height": "fit_content",
-                          "fill": "transparent",
-                          "layout": {
-                            "mode": "horizontal",
-                            "spacing": 8,
-                            "justify": "start",
-                            "align": "center"
-                          },
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "add-button-dark",
-                              "name": "Add Button",
-                              "width": 28,
-                              "height": 28,
-                              "fill": "transparent",
-                              "cornerRadius": 6,
-                              "layout": {
-                                "mode": "horizontal",
-                                "justify": "center",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "add-icon-dark",
-                                  "width": 16,
-                                  "height": 16,
-                                  "iconFontName": "add",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#B8BFC8"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "sonnet-button-dark",
-                              "name": "Sonnet Button",
-                              "width": "fit_content",
-                              "height": 28,
-                              "fill": "transparent",
-                              "cornerRadius": 6,
-                              "layout": {
-                                "mode": "horizontal",
-                                "spacing": 6,
-                                "padding": [
-                                  6,
-                                  10
-                                ],
-                                "justify": "start",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "model-icon-dark",
-                                  "width": 16,
-                                  "height": 16,
-                                  "iconFontName": "auto_awesome",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#E0903F"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "sonnet-label",
-                                  "fill": "#E6EDF3",
-                                  "content": "Sonnet",
-                                  "fontFamily": "Suisse Intl",
-                                  "fontSize": 13
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "thinking-button-dark",
-                              "name": "Thinking Button",
-                              "width": 28,
-                              "height": 28,
-                              "fill": "transparent",
-                              "cornerRadius": 6,
-                              "layout": {
-                                "mode": "horizontal",
-                                "spacing": 4,
-                                "justify": "center",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "thinking-icon-dark",
-                                  "width": 16,
-                                  "height": 16,
-                                  "iconFontName": "psychology",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#E0903F"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "thinking-dots-container",
-                                  "width": 4,
-                                  "height": "fit_content",
-                                  "fill": "transparent",
-                                  "layout": {
-                                    "mode": "vertical",
-                                    "spacing": 2,
-                                    "justify": "start",
-                                    "align": "center"
-                                  },
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "dot-1",
-                                      "fill": "#E0903F",
-                                      "width": 4,
-                                      "height": 4
-                                    },
-                                    {
-                                      "type": "ellipse",
-                                      "id": "dot-2",
-                                      "fill": "transparent",
-                                      "width": 4,
-                                      "height": 4,
-                                      "stroke": {
-                                        "thickness": 1,
-                                        "fill": "#E0903F"
-                                      }
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "tools-button-dark",
-                              "name": "Tools Button",
-                              "width": 28,
-                              "height": 28,
-                              "fill": "transparent",
-                              "cornerRadius": 6,
-                              "layout": {
-                                "mode": "horizontal",
-                                "justify": "center",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "tools-icon-dark",
-                                  "width": 16,
-                                  "height": 16,
-                                  "iconFontName": "construction",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#B8BFC8"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "toolbar-right",
-                          "name": "Toolbar Right",
-                          "width": "fit_content",
-                          "height": "fit_content",
-                          "fill": "transparent",
-                          "layout": {
-                            "mode": "horizontal",
-                            "spacing": 8,
-                            "justify": "start",
-                            "align": "center"
-                          },
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "stop-button-dark",
-                              "name": "Stop Button",
-                              "width": 32,
-                              "height": 32,
-                              "fill": "#7D2828",
-                              "cornerRadius": 8,
-                              "layout": {
-                                "mode": "horizontal",
-                                "justify": "center",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "stop-icon-dark",
-                                  "width": 18,
-                                  "height": 18,
-                                  "iconFontName": "stop",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#E6EDF3"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "send-button-dark",
-                              "name": "Send Button",
-                              "width": 32,
-                              "height": 32,
-                              "fill": "#E0903F",
-                              "cornerRadius": 16,
-                              "layout": {
-                                "mode": "horizontal",
-                                "justify": "center",
-                                "align": "center"
-                              },
-                              "children": [
-                                {
-                                  "type": "icon_font",
-                                  "id": "send-icon-dark",
-                                  "width": 18,
-                                  "height": 18,
-                                  "iconFontName": "arrow_upward",
-                                  "iconFontFamily": "Material Symbols Rounded",
-                                  "fill": "#0B0C10"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "scroll-to-bottom-dark",
-              "name": "Scroll to Bottom",
-              "width": 40,
-              "height": 40,
-              "fill": "#1F2127",
-              "cornerRadius": 20,
-              "stroke": {
-                "thickness": 1,
-                "fill": "#30363D"
-              },
-              "layout": {
-                "mode": "horizontal",
-                "justify": "center",
-                "align": "center"
-              },
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "chevron-down-icon",
-                  "width": 20,
-                  "height": 20,
-                  "iconFontName": "expand_more",
-                  "iconFontFamily": "Material Symbols Rounded",
-                  "fill": "#B8BFC8"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
       "id": "message-input-component",
-      "x": 205,
-      "y": 1066,
+      "x": 67,
+      "y": 326,
       "name": "Message Input Component - Detailed",
       "width": 960,
       "height": "fit_content",
@@ -938,18 +41,18 @@
               16,
               16
             ],
-            "justify": "start",
+            "justify": "end",
             "align": "start"
           },
           "children": [
             {
               "type": "frame",
               "id": "input-group-main",
-              "name": "InputGroup (rounded-[24px])",
+              "name": "InputGroup (rounded-2xl)",
               "width": "fill_container",
               "height": "fit_content",
               "fill": "#3D4149",
-              "cornerRadius": 8,
+              "cornerRadius": 16,
               "stroke": {
                 "thickness": 1,
                 "fill": "#48505E"
@@ -982,9 +85,10 @@
                       "size": {
                         "width": 820
                       },
-                      "content": "Ask Claude Code to make changes, @mention files, run /commands",
+                      "content": "Ask a follow-up ...",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -999,10 +103,10 @@
                     "mode": "horizontal",
                     "spacing": 16,
                     "padding": [
-                      8,
+                      0,
+                      6,
                       12,
-                      12,
-                      12
+                      6
                     ],
                     "justify": "space_between",
                     "align": "center"
@@ -1015,6 +119,7 @@
                       "width": "fit_content",
                       "height": "fit_content",
                       "fill": "transparent",
+                      "cornerRadius": 18,
                       "layout": {
                         "mode": "horizontal",
                         "spacing": 6,
@@ -1054,7 +159,7 @@
                           "width": "fit_content",
                           "height": 32,
                           "fill": "#42464E",
-                          "cornerRadius": 6,
+                          "cornerRadius": 8,
                           "layout": {
                             "mode": "horizontal",
                             "spacing": 6,
@@ -1064,22 +169,22 @@
                           },
                           "children": [
                             {
-                              "type": "icon_font",
-                              "id": "sparkles-icon",
-                              "width": 16,
-                              "height": 16,
-                              "iconFontName": "auto_awesome",
-                              "iconFontFamily": "Material Symbols Outlined",
-                              "fill": "#E0903F"
-                            },
-                            {
                               "type": "text",
                               "id": "model-label",
                               "fill": "#E6EDF3",
-                              "content": "Sonnet",
+                              "content": "Sonnet 4.5",
                               "fontFamily": "Suisse Intl",
                               "fontSize": 13,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "chevron-down-icon",
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "keyboard_arrow_down",
+                              "iconFontFamily": "Material Symbols Rounded",
+                              "fill": "#E6EDF3"
                             }
                           ]
                         },
@@ -1090,7 +195,7 @@
                           "width": "fit_content",
                           "height": 32,
                           "fill": "#42464E",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "spacing": 4,
@@ -1112,12 +217,12 @@
                               "type": "frame",
                               "id": "thinking-dots-v",
                               "name": "Thinking Dots (MEDIUM)",
-                              "width": 5,
+                              "width": 1,
                               "height": "fit_content",
                               "fill": "transparent",
                               "layout": {
                                 "mode": "vertical",
-                                "spacing": 2,
+                                "spacing": 0.5,
                                 "justify": "start",
                                 "align": "start"
                               },
@@ -1126,22 +231,22 @@
                                   "type": "ellipse",
                                   "id": "dot-filled-1",
                                   "fill": "#E0903F",
-                                  "width": 5,
-                                  "height": 5
+                                  "width": 1,
+                                  "height": 1
                                 },
                                 {
                                   "type": "ellipse",
                                   "id": "dot-filled-2",
                                   "fill": "#E0903F",
-                                  "width": 5,
-                                  "height": 5
+                                  "width": 1,
+                                  "height": 1
                                 },
                                 {
                                   "type": "ellipse",
                                   "id": "dot-empty-3",
                                   "fill": "transparent",
-                                  "width": 5,
-                                  "height": 5,
+                                  "width": 1,
+                                  "height": 1,
                                   "stroke": {
                                     "thickness": 1,
                                     "fill": "#E0903F"
@@ -1194,6 +299,47 @@
                         },
                         {
                           "type": "frame",
+                          "id": "context-indicator",
+                          "name": "Context Indicator (32px container)",
+                          "width": 32,
+                          "height": 32,
+                          "fill": "transparent",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "context-circle",
+                              "x": 8,
+                              "y": 8,
+                              "fill": "transparent",
+                              "width": 16,
+                              "height": 16,
+                              "stroke": {
+                                "thickness": 2,
+                                "fill": "#E0903F"
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "id": "context-count",
+                              "x": 0,
+                              "y": 0,
+                              "fill": "#E6EDF3",
+                              "textGrowth": "fixed-width-height",
+                              "size": {
+                                "width": 32,
+                                "height": 32
+                              },
+                              "content": "15k",
+                              "textAlign": "center",
+                              "textAlignVertical": "middle",
+                              "fontFamily": "Suisse Intl",
+                              "fontSize": 8,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "mcp-button",
                           "name": "MCP Button (icon-sm)",
                           "width": 32,
@@ -1224,7 +370,7 @@
                           "width": 32,
                           "height": 32,
                           "fill": "#7D2828",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "justify": "center",
@@ -1249,7 +395,7 @@
                           "width": 32,
                           "height": 32,
                           "fill": "#E0903F",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "justify": "center",
@@ -1264,6 +410,46 @@
                               "iconFontName": "arrow_upward",
                               "iconFontFamily": "Material Symbols Rounded",
                               "fill": "#0B0C10"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "compact-button",
+                          "name": "Compact Button (size=sm, border)",
+                          "width": "fit_content",
+                          "height": 32,
+                          "fill": "#42464E",
+                          "cornerRadius": 4,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#48505E"
+                          },
+                          "layout": {
+                            "mode": "horizontal",
+                            "spacing": 4,
+                            "padding": 10,
+                            "justify": "center",
+                            "align": "center"
+                          },
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "minimize2-icon",
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "close_fullscreen",
+                              "iconFontFamily": "Material Symbols Rounded",
+                              "fill": "#E0903F"
+                            },
+                            {
+                              "type": "text",
+                              "id": "compact-text",
+                              "fill": "#E0903F",
+                              "content": "Compact",
+                              "fontFamily": "Suisse Intl",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
