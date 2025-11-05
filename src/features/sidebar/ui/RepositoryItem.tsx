@@ -165,12 +165,11 @@ export function RepositoryItem({
                   (ws) => ws.session_status === "compacting"
                 ).length;
                 if (compactingCount > 0) parts.push(`${compactingCount} compacting`);
-                const idleCount =
-                  repository.workspaces.length -
-                  errorCount -
-                  unreadCount -
-                  workingCount -
-                  compactingCount;
+                const idleCount = repository.workspaces.filter((ws) => {
+                  const status = ws.session_status;
+                  const hasUnread = (ws.unread ?? 0) > 0 || (ws.session_unread ?? 0) > 0;
+                  return status !== "error" && status !== "working" && status !== "compacting" && !hasUnread;
+                }).length;
                 if (idleCount > 0) parts.push(`${idleCount} idle`);
                 return `${repository.repo_name}${parts.length > 0 ? "\n" + parts.join(" • ") : ""}`;
               })()}

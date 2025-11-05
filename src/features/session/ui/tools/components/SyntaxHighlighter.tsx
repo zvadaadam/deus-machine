@@ -5,6 +5,7 @@
  * Can be replaced with Prism.js or Shiki later for better highlighting.
  */
 
+import type { ReactNode } from "react";
 import { cn } from "@/shared/lib/utils";
 
 interface SyntaxHighlighterProps {
@@ -23,7 +24,7 @@ export function SyntaxHighlighter({
   const lines = code.split("\n");
 
   // Simple keyword highlighting for common languages
-  const highlightLine = (line: string, lang: string): React.ReactNode => {
+  const highlightLine = (line: string, lang: string): ReactNode => {
     // For now, return plain text. Easy to enhance later.
     // This keeps the component ready for Prism.js integration.
     return line;
