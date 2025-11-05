@@ -5,8 +5,8 @@
  * Extracted from SessionPanel to reduce component complexity.
  */
 
-import { useCallback } from 'react';
-import { useSendMessage, useStopSession } from '../api/session.queries';
+import { useCallback } from "react";
+import { useSendMessage, useStopSession } from "../api/session.queries";
 
 interface UseSessionActionsProps {
   sessionId: string;
@@ -33,36 +33,33 @@ export function useSessionActions({
   const sendMessageMutation = useSendMessage();
   const stopSessionMutation = useStopSession();
 
-  const sendMessage = useCallback(async (customContent?: string) => {
-    const content = customContent || messageInput.trim();
-    if (!content || sendMessageMutation.isPending) return;
+  const sendMessage = useCallback(
+    async (customContent?: string) => {
+      const content = customContent || messageInput.trim();
+      if (!content || sendMessageMutation.isPending) return;
 
-    try {
-      await sendMessageMutation.mutateAsync({ sessionId, content });
-      onMessageSent?.();
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
-  }, [messageInput, sendMessageMutation, sessionId, onMessageSent]);
+      try {
+        await sendMessageMutation.mutateAsync({ sessionId, content });
+        onMessageSent?.();
+      } catch (error) {
+        console.error("Failed to send message:", error);
+      }
+    },
+    [messageInput, sendMessageMutation, sessionId, onMessageSent]
+  );
 
   const stopSession = useCallback(async () => {
-    if (!window.confirm('Stop the current Claude Code session?')) return;
+    if (!window.confirm("Stop the current Claude Code session?")) return;
     try {
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
-      console.error('Failed to stop session:', error);
+      console.error("Failed to stop session:", error);
     }
   }, [stopSessionMutation, sessionId]);
 
-  const compactConversation = useCallback(
-    () => sendMessage('/compact'),
-    [sendMessage]
-  );
+  const compactConversation = useCallback(() => sendMessage("/compact"), [sendMessage]);
 
-  const createPR = useCallback(
-    () => sendMessage('Create a PR onto main'),
-    [sendMessage]
-  );
+  const createPR = useCallback(() => sendMessage("Create a PR onto main"), [sendMessage]);
 
   return {
     sendMessage,

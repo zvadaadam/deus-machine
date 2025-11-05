@@ -36,18 +36,18 @@ export function SystemPromptModal({
 }: SystemPromptModalProps) {
   return (
     <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
+      <DialogContent className="max-h-[90vh] sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle>Edit System Prompt - {workspaceName}</DialogTitle>
           <DialogDescription>
-            Edit the CLAUDE.md file to customize Claude's behavior for this
-            workspace. This prompt is sent with every message.
+            Edit the CLAUDE.md file to customize Claude's behavior for this workspace. This prompt
+            is sent with every message.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {loading ? (
-            <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+            <div className="text-muted-foreground flex h-[400px] items-center justify-center">
               Loading system prompt...
             </div>
           ) : (
@@ -65,16 +65,14 @@ export function SystemPromptModal({
 - Describe the project structure
 - List important files or modules
 - Add any domain-specific knowledge"
-              className="min-h-[400px] font-mono text-sm resize-y"
+              className="min-h-[400px] resize-y font-mono text-sm"
             />
           )}
 
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             💡 Tip: Use Markdown formatting. Changes are saved to{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">
-              CLAUDE.md
-            </code>{" "}
-            in the workspace directory.
+            <code className="bg-muted rounded px-1 py-0.5 text-xs">CLAUDE.md</code> in the workspace
+            directory.
           </p>
         </div>
 

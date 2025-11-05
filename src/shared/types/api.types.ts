@@ -45,6 +45,6 @@ export interface PaginatedResponse<T> {
  * Query parameters for filtering workspaces
  */
 export interface WorkspaceQueryParams extends PaginationParams {
-  state?: 'ready' | 'initializing' | 'archived';
+  state?: "ready" | "initializing" | "archived";
   repo_id?: string;
 }

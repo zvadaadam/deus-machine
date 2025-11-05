@@ -5,7 +5,7 @@
  * Can be replaced with Prism.js or Shiki later for better highlighting.
  */
 
-import { cn } from '@/shared/lib/utils';
+import { cn } from "@/shared/lib/utils";
 
 interface SyntaxHighlighterProps {
   code: string;
@@ -18,9 +18,9 @@ export function SyntaxHighlighter({
   code,
   language,
   showLineNumbers = false,
-  className
+  className,
 }: SyntaxHighlighterProps) {
-  const lines = code.split('\n');
+  const lines = code.split("\n");
 
   // Simple keyword highlighting for common languages
   const highlightLine = (line: string, lang: string): React.ReactNode => {
@@ -30,28 +30,24 @@ export function SyntaxHighlighter({
   };
 
   return (
-    <div className={cn('font-mono text-sm', className)}>
+    <div className={cn("font-mono text-sm", className)}>
       {showLineNumbers ? (
         <table className="border-collapse">
           <tbody>
             {lines.map((line, i) => (
               <tr key={i} className="hover:bg-muted/30 transition-colors">
-                <td className="text-muted-foreground select-none text-right pr-4 border-r border-border/40 align-top w-12">
+                <td className="text-muted-foreground border-border/40 w-12 border-r pr-4 text-right align-top select-none">
                   {i + 1}
                 </td>
                 <td className="pl-4 align-top">
-                  <code className="block whitespace-pre">
-                    {highlightLine(line, language)}
-                  </code>
+                  <code className="block whitespace-pre">{highlightLine(line, language)}</code>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        <code className="block whitespace-pre">
-          {code}
-        </code>
+        <code className="block whitespace-pre">{code}</code>
       )}
     </div>
   );

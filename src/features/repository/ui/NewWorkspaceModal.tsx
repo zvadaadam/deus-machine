@@ -46,8 +46,8 @@ export function NewWorkspaceModal({
         <DialogHeader>
           <DialogTitle>Create New Workspace</DialogTitle>
           <DialogDescription>
-            A new workspace will be created with an auto-generated name (city
-            name) and git worktree.
+            A new workspace will be created with an auto-generated name (city name) and git
+            worktree.
           </DialogDescription>
         </DialogHeader>
 
@@ -66,7 +66,7 @@ export function NewWorkspaceModal({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               The workspace will be created in this repository
             </p>
           </div>
@@ -76,11 +76,7 @@ export function NewWorkspaceModal({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={onCreate}
-            disabled={creating || !selectedRepoId}
-            className="gap-2"
-          >
+          <Button onClick={onCreate} disabled={creating || !selectedRepoId} className="gap-2">
             {creating ? "⟳" : "+"}
             {creating ? "Creating..." : "Create Workspace"}
           </Button>

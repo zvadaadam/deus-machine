@@ -5,8 +5,8 @@
  * For high-level session operations, use src/services/socket.ts (UnixSocketService)
  */
 
-import { listen } from '../invoke';
-import { socketCommands } from '../commands/socket';
+import { listen } from "../invoke";
+import { socketCommands } from "../commands/socket";
 
 export class SocketClient {
   /**
@@ -34,7 +34,7 @@ export class SocketClient {
    * Listen for socket messages
    */
   onMessage(callback: (data: string) => void): Promise<() => void> {
-    return listen('socket_message', (event) => {
+    return listen("socket_message", (event) => {
       callback(event.payload as string);
     });
   }

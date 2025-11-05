@@ -1,1 +1,1 @@
-export { DashboardError } from './DashboardError';
+export { DashboardError } from "./DashboardError";

@@ -3,9 +3,9 @@
  * Global state management for workspace selection and workspace-related data
  */
 
-import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
-import type { Workspace, DiffStats } from '../types';
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+import type { Workspace, DiffStats } from "../types";
 
 interface WorkspaceState {
   // Selected workspace
@@ -30,18 +30,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       // Actions
       selectWorkspace: (workspace) =>
-        set(
-          { selectedWorkspace: workspace },
-          false,
-          'workspace/select'
-        ),
+        set({ selectedWorkspace: workspace }, false, "workspace/select"),
 
-      clearSelection: () =>
-        set(
-          { selectedWorkspace: null },
-          false,
-          'workspace/clearSelection'
-        ),
+      clearSelection: () => set({ selectedWorkspace: null }, false, "workspace/clearSelection"),
 
       setDiffStats: (workspaceId, stats) =>
         set(
@@ -52,7 +43,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             },
           }),
           false,
-          'workspace/setDiffStats'
+          "workspace/setDiffStats"
         ),
 
       setMultipleDiffStats: (stats) =>
@@ -64,12 +55,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             },
           }),
           false,
-          'workspace/setMultipleDiffStats'
+          "workspace/setMultipleDiffStats"
         ),
     }),
     {
-      name: 'workspace-store',
-      enabled: process.env.NODE_ENV === 'development',
+      name: "workspace-store",
+      enabled: process.env.NODE_ENV === "development",
     }
   )
 );

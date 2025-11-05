@@ -5,9 +5,9 @@
  * Designed to sit below user messages, visible on hover.
  */
 
-import { type LucideIcon } from 'lucide-react';
-import { cn } from '@/shared/lib/utils';
-import { chatTheme } from './theme';
+import { type LucideIcon } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import { chatTheme } from "./theme";
 
 interface ActionButtonProps {
   icon: LucideIcon;
@@ -24,7 +24,7 @@ export function ActionButton({
   onClick,
   active = false,
   showLabel = true,
-  className
+  className,
 }: ActionButtonProps) {
   return (
     <button
