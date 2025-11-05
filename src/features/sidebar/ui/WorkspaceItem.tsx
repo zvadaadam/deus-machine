@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Archive } from "lucide-react";
 import { SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -140,7 +140,7 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
                         workspace.session_status === "working"
                           ? "color-mix(in oklch, var(--status-working) 60%, white)"
                           : "color-mix(in oklch, var(--status-compacting) 60%, white)",
-                    } as React.CSSProperties
+                    } as CSSProperties
                   }
                 >
                   {getStatusText(workspace.session_status)}

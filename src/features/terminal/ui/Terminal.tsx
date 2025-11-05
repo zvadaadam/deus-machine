@@ -10,7 +10,6 @@ import "./Terminal.css";
 interface TerminalProps {
   id: string;
   workspacePath: string;
-  onClose: () => void;
 }
 
 export function Terminal({ id, workspacePath }: TerminalProps) {
