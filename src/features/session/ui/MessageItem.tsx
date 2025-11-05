@@ -189,7 +189,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
             renderContentBlocks(contentBlocks as (ContentBlock | string)[])
           ) : (
             // Fallback for non-array content
-            <div className={cn('text-[14px] leading-[1.6]', roleStyles.text)}>
+            <div className={cn('text-body leading-relaxed', roleStyles.text)}>
               {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
             </div>
           )}

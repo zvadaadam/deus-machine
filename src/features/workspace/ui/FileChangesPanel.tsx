@@ -106,14 +106,14 @@ export function FileChangesPanel({
                 href={server.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group shadow-sm hover:shadow hover-interactive"
+                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group shadow-sm hover:shadow hover:bg-sidebar-accent/60 transition-all duration-200 ease-out"
                 title={`Open ${server.name} in browser`}
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
                   <Monitor className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-body-sm font-medium truncate group-hover:hover-primary-text">{server.name}</div>
+                  <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors duration-200">{server.name}</div>
                   <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
@@ -182,27 +182,29 @@ export function FileChangesPanel({
                     title={file.file}
                   >
                     <div className="flex-1 min-w-0 font-mono">
-                      <span className={`text-[11px] ${
+                      <span className={cn(
+                        'text-caption-sm',
                         isSelected ? 'text-primary/70' : 'text-muted-foreground/50'
-                      }`}>
+                      )}>
                         {displayPath}
                       </span>
-                      <span className={`text-[11px] transition-colors duration-200 ${
+                      <span className={cn(
+                        'text-caption-sm transition-colors duration-200',
                         isSelected
                           ? 'text-primary font-medium'
                           : 'text-foreground/90 group-hover:text-foreground'
-                      }`}>
+                      )}>
                         {filename}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3 font-mono tabular-nums min-w-[60px] justify-end">
                       {file.additions > 0 && (
-                        <span className="text-[10px] font-semibold text-success/90">
+                        <span className="text-2xs font-semibold text-success/90">
                           +{file.additions}
                         </span>
                       )}
                       {file.deletions > 0 && (
-                        <span className="text-[10px] font-semibold text-destructive/90">
+                        <span className="text-2xs font-semibold text-destructive/90">
                           -{file.deletions}
                         </span>
                       )}

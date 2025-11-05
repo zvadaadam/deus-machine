@@ -143,14 +143,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   // Scroll to bottom button (shared between embedded and modal views)
   const scrollToBottomButton = (
     <div
-      className={`absolute bottom-20 right-6 pointer-events-auto z-10 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+      className={`absolute bottom-20 right-6 pointer-events-auto z-10 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
         showScrollButton
           ? 'opacity-100 scale-100'
           : 'opacity-0 scale-90 pointer-events-none motion-reduce:scale-100'
       }`}
-      style={{
-        transitionProperty: 'opacity, transform'
-      }}
     >
       <Button
         variant="secondary"
@@ -171,7 +168,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     return (
       <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
         <div className="flex flex-col flex-1 min-h-0 min-w-0 relative">
-          <div className={`${CONTENT_WIDTH_CLASSES} flex flex-col flex-1 min-h-0 relative`}>
+          {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
+          <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex flex-col flex-1 min-h-0 relative`}>
             <Chat
               messages={messages}
               loading={loading}
@@ -239,7 +237,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           <div className="flex-1 flex flex-col min-h-0">
             <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
               <div className="flex flex-col flex-1 min-h-0 relative">
-                <div className={`${CONTENT_WIDTH_CLASSES} flex flex-col flex-1 min-h-0 relative`}>
+                {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
+                <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex flex-col flex-1 min-h-0 relative`}>
                   <Chat
                     messages={messages}
                     loading={loading}

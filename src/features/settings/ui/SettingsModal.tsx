@@ -94,7 +94,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     ];
 
     return (
-      <nav className="w-[200px] border-r border-border pr-4">
+      <nav className="w-50 border-r border-border pr-4">
         <ScrollArea className="h-[500px]">
           <div className="space-y-1">
             {sections.map(section => (
@@ -276,7 +276,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
   function renderContent() {
     if (loading) {
       return (
-        <div className="flex items-center justify-center h-[400px]">
+        <div className="flex items-center justify-center h-100">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       );

@@ -640,7 +640,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="h-[200px] border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
+        <div className="h-50 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
           {/* Console Header */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30 flex-shrink-0">
             <div className="flex items-center gap-2">
