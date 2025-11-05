@@ -22,6 +22,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -640,57 +641,7 @@
     }
   }
 
-  /* Elevation System - Linear/Vercel inspired */
-  .elevation-0 {
-    box-shadow: none;
-  }
-
-  .elevation-1 {
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.15);
-  }
-
-  .elevation-2 {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.16);
-  }
-
-  .elevation-3 {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.10), 0 4px 16px rgba(0, 0, 0, 0.20);
-  }
-
-  .elevation-4 {
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.24);
-  }
-
-  .elevation-5 {
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16), 0 12px 48px rgba(0, 0, 0, 0.30);
-  }
-
-  /* Typography classes removed - use inline Tailwind (text-lg, text-sm, etc.) */
-
-  /* Consistent Spacing */
-  .space-standard {
-    padding: 1rem; /* 16px */
-  }
-
-  .space-standard-x {
-    padding-left: 1rem; /* 16px horizontal */
-    padding-right: 1rem;
-  }
-
-  .space-standard-y {
-    padding-top: 1rem; /* 16px vertical */
-    padding-bottom: 1rem;
-  }
-
-  .space-tight {
-    padding: 0.75rem; /* 12px */
-  }
-
-  .space-loose {
-    padding: 1.5rem; /* 24px */
-  }
-
-  /* Empty state classes removed - now using inline Tailwind in EmptyState.tsx */
+  /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
 
 /* Message input fade overlay utility */
 .bg-fade-overlay {
