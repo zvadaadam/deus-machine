@@ -25,7 +25,7 @@ export function getRepoInitials(repoName: string): string {
  * @returns Semantic design token classes
  */
 export function getRepoColor(repoName: string): { bg: string; text: string } {
-  const hash = repoName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hash = repoName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   // Use semantic tokens from design system for theme consistency
   const schemes = [
     { bg: "bg-primary/10", text: "text-primary" },
@@ -43,7 +43,7 @@ export function getRepoColor(repoName: string): { bg: string; text: string } {
  */
 export function getCleanRepoName(repoName: string): string {
   // Check if repo name contains username prefix (format: "username/repo")
-  const parts = repoName.split('/');
+  const parts = repoName.split("/");
   if (parts.length === 2) {
     // Return just the repo name without username
     return parts[1];

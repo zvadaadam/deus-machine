@@ -13,12 +13,7 @@ import type { WorkspaceItemProps } from "../model/types";
  * WorkspaceItem Component
  * Displays a single workspace with status, changes, and archive functionality
  */
-export function WorkspaceItem({
-  workspace,
-  isActive,
-  onClick,
-  onArchive
-}: WorkspaceItemProps) {
+export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: WorkspaceItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   // Track working duration
@@ -85,7 +80,7 @@ export function WorkspaceItem({
     }
   };
 
-  const isArchived = workspace.state === 'archived';
+  const isArchived = workspace.state === "archived";
   const showArchiveButton = isHovered && !isArchived && !!onArchive;
 
   return (
@@ -96,8 +91,8 @@ export function WorkspaceItem({
         data-workspace-id={workspace.id}
         className={cn(
           // Base layout
-          "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",
-          "rounded-lg cursor-pointer",
+          "relative flex min-h-[56px] items-center justify-between gap-3 px-3 py-3",
+          "cursor-pointer rounded-lg",
           "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
 
           // State-based backgrounds - subtle surface elevation
@@ -108,53 +103,52 @@ export function WorkspaceItem({
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
         onKeyDown={(e) => {
-          if (e.key === ' ') e.preventDefault();
+          if (e.key === " ") e.preventDefault();
         }}
         onKeyUp={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') onClick();
+          if (e.key === "Enter" || e.key === " ") onClick();
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
           <PulseRadiateIcon
             isActive={workspace.session_status === "working"}
-            className={cn(
-              "h-4 w-4 flex-shrink-0",
-              getStatusTextColor(workspace.session_status)
-            )}
+            className={cn("h-4 w-4 flex-shrink-0", getStatusTextColor(workspace.session_status))}
           />
-          <div className="flex flex-col min-w-0">
+          <div className="flex min-w-0 flex-col">
             {/* Branch name on top */}
-            <span className="text-sm truncate">
-              {workspace.branch}
-            </span>
+            <span className="truncate text-sm">{workspace.branch}</span>
             {/* Directory name and status on bottom */}
-            <div className="flex items-center gap-0 min-w-0">
-              <span className="text-xs text-muted-foreground truncate">
+            <div className="flex min-w-0 items-center gap-0">
+              <span className="text-muted-foreground truncate text-xs">
                 {workspace.directory_name}
               </span>
-              <span className="text-xs text-muted-foreground/70 flex-shrink-0">・</span>
+              <span className="text-muted-foreground/70 flex-shrink-0 text-xs">・</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
                   duration={2}
-                  className="text-xs flex-shrink-0"
-                  style={{
-                    '--base-color': workspace.session_status === "working"
-                      ? 'var(--status-working)'
-                      : 'var(--status-compacting)',
-                    '--base-gradient-color': workspace.session_status === "working"
-                      ? 'color-mix(in oklch, var(--status-working) 60%, white)'
-                      : 'color-mix(in oklch, var(--status-compacting) 60%, white)',
-                  } as React.CSSProperties}
+                  className="flex-shrink-0 text-xs"
+                  style={
+                    {
+                      "--base-color":
+                        workspace.session_status === "working"
+                          ? "var(--status-working)"
+                          : "var(--status-compacting)",
+                      "--base-gradient-color":
+                        workspace.session_status === "working"
+                          ? "color-mix(in oklch, var(--status-working) 60%, white)"
+                          : "color-mix(in oklch, var(--status-compacting) 60%, white)",
+                    } as React.CSSProperties
+                  }
                 >
                   {getStatusText(workspace.session_status)}
                 </TextShimmer>
               ) : (
                 <span
                   className={cn(
-                    "text-xs flex-shrink-0",
+                    "flex-shrink-0 text-xs",
                     getStatusTextColor(workspace.session_status)
                   )}
                 >
@@ -171,19 +165,19 @@ export function WorkspaceItem({
             onClick={handleArchive}
             aria-label={`Archive workspace ${workspace.branch}`}
             title="Archive workspace"
-            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground h-7 px-2"
           >
             <Archive className="h-3.5 w-3.5" />
           </Button>
         ) : hasChanges ? (
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-1">
             {additions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
+              <span className="border-success/30 bg-success/10 text-success inline-flex items-center rounded border px-1 py-0.5 text-[10px] font-medium whitespace-nowrap">
                 +{additions}
               </span>
             )}
             {deletions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
+              <span className="border-destructive/30 bg-destructive/10 text-destructive inline-flex items-center rounded border px-1 py-0.5 text-[10px] font-medium whitespace-nowrap">
                 -{deletions}
               </span>
             )}

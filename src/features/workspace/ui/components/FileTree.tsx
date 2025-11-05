@@ -1,8 +1,17 @@
-import { useState } from 'react';
-import { ChevronRight, ChevronDown, File, FileText, FileCode, FileJson, FileImage, FileType } from 'lucide-react';
-import { cn } from '@/shared/lib/utils';
-import { formatFileSize } from '@/shared/lib/formatters';
-import type { FileTreeNode } from '../../api/useFilesRust';
+import { useState } from "react";
+import {
+  ChevronRight,
+  ChevronDown,
+  File,
+  FileText,
+  FileCode,
+  FileJson,
+  FileImage,
+  FileType,
+} from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import { formatFileSize } from "@/shared/lib/formatters";
+import type { FileTreeNode } from "../../api/useFilesRust";
 
 interface FileTreeProps {
   nodes: FileTreeNode[];
@@ -16,70 +25,73 @@ interface FileTreeProps {
  * Uses semantic color variables from global.css for consistency
  */
 function getFileIconConfig(filename: string): { icon: typeof File; color: string } {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
 
   // TypeScript/JavaScript
-  if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
-    return { icon: FileCode, color: 'text-file-typescript' };
+  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext)) {
+    return { icon: FileCode, color: "text-file-typescript" };
   }
 
   // Rust (check before Data to prioritize .toml for Rust projects)
-  if (['rs', 'toml'].includes(ext)) {
-    return { icon: FileCode, color: 'text-file-rust' };
+  if (["rs", "toml"].includes(ext)) {
+    return { icon: FileCode, color: "text-file-rust" };
   }
 
   // Markup/Data
-  if (['json', 'yaml', 'yml', 'xml'].includes(ext)) {
-    return { icon: FileJson, color: 'text-file-data' };
+  if (["json", "yaml", "yml", "xml"].includes(ext)) {
+    return { icon: FileJson, color: "text-file-data" };
   }
 
   // Documentation
-  if (['md', 'mdx', 'txt', 'rst'].includes(ext)) {
-    return { icon: FileText, color: 'text-file-docs' };
+  if (["md", "mdx", "txt", "rst"].includes(ext)) {
+    return { icon: FileText, color: "text-file-docs" };
   }
 
   // Styles
-  if (['css', 'scss', 'sass', 'less'].includes(ext)) {
-    return { icon: FileCode, color: 'text-file-styles' };
+  if (["css", "scss", "sass", "less"].includes(ext)) {
+    return { icon: FileCode, color: "text-file-styles" };
   }
 
   // HTML
-  if (['html', 'htm'].includes(ext)) {
-    return { icon: FileCode, color: 'text-file-markup' };
+  if (["html", "htm"].includes(ext)) {
+    return { icon: FileCode, color: "text-file-markup" };
   }
 
   // Images (includes svg since they're primarily used as images)
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'].includes(ext)) {
-    return { icon: FileImage, color: 'text-file-image' };
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext)) {
+    return { icon: FileImage, color: "text-file-image" };
   }
 
   // Config files
-  if (['env', 'gitignore', 'dockerignore', 'editorconfig'].includes(ext) || filename.startsWith('.')) {
-    return { icon: FileType, color: 'text-muted-foreground/50' };
+  if (
+    ["env", "gitignore", "dockerignore", "editorconfig"].includes(ext) ||
+    filename.startsWith(".")
+  ) {
+    return { icon: FileType, color: "text-muted-foreground/50" };
   }
 
   // Default
-  return { icon: File, color: 'text-muted-foreground/40' };
+  return { icon: File, color: "text-muted-foreground/40" };
 }
 
 /**
  * Get subtle color accent for git status
  * Subtle hints, not overwhelming - this is a secondary feature
  */
-function getGitStatusColor(gitStatus?: 'modified' | 'added' | 'deleted' | 'untracked'): string {
-  if (!gitStatus) return '';
+function getGitStatusColor(gitStatus?: "modified" | "added" | "deleted" | "untracked"): string {
+  if (!gitStatus) return "";
 
   switch (gitStatus) {
-    case 'modified':
-      return 'text-warning'; // Amber/orange
-    case 'added':
-      return 'text-success'; // Green
-    case 'deleted':
-      return 'text-destructive/60 line-through'; // Red with strikethrough
-    case 'untracked':
-      return 'text-info'; // Blue
+    case "modified":
+      return "text-warning"; // Amber/orange
+    case "added":
+      return "text-success"; // Green
+    case "deleted":
+      return "text-destructive/60 line-through"; // Red with strikethrough
+    case "untracked":
+      return "text-info"; // Blue
     default:
-      return '';
+      return "";
   }
 }
 
@@ -87,24 +99,19 @@ function getGitStatusColor(gitStatus?: 'modified' | 'added' | 'deleted' | 'untra
  * Check if a folder contains any changed files (recursively)
  */
 function hasChanges(node: FileTreeNode): boolean {
-  if (node.type === 'file') {
+  if (node.type === "file") {
     return !!node.git_status;
   }
 
   // Check if any children have changes
-  return node.children?.some(child => hasChanges(child)) || false;
+  return node.children?.some((child) => hasChanges(child)) || false;
 }
 
 export function FileTree({ nodes, onFileClick, level = 0 }: FileTreeProps) {
   return (
     <div className="space-y-0.5">
       {nodes.map((node) => (
-        <TreeNode
-          key={node.path}
-          node={node}
-          level={level}
-          onFileClick={onFileClick}
-        />
+        <TreeNode key={node.path} node={node} level={level} onFileClick={onFileClick} />
       ))}
     </div>
   );
@@ -113,7 +120,7 @@ export function FileTree({ nodes, onFileClick, level = 0 }: FileTreeProps) {
 function TreeNode({
   node,
   level,
-  onFileClick
+  onFileClick,
 }: {
   node: FileTreeNode;
   level: number;
@@ -122,10 +129,10 @@ function TreeNode({
   // Auto-expand:
   // 1. First 2 levels always expanded
   // 2. Folders containing changes auto-expanded
-  const shouldAutoExpand = level < 2 || (node.type === 'directory' && hasChanges(node));
+  const shouldAutoExpand = level < 2 || (node.type === "directory" && hasChanges(node));
   const [isExpanded, setIsExpanded] = useState(shouldAutoExpand);
 
-  const isDirectory = node.type === 'directory';
+  const isDirectory = node.type === "directory";
   const hasChildren = node.children && node.children.length > 0;
 
   const indentSize = level * 16; // 16px per level (improved from 12px)
@@ -135,7 +142,7 @@ function TreeNode({
   const FileIcon = fileConfig?.icon;
 
   // Get git status color (subtle accent for changed files)
-  const gitStatusColor = !isDirectory ? getGitStatusColor(node.git_status) : '';
+  const gitStatusColor = !isDirectory ? getGitStatusColor(node.git_status) : "";
   const folderHasChanges = isDirectory && hasChanges(node);
 
   return (
@@ -143,9 +150,9 @@ function TreeNode({
       {/* Node Row */}
       <div
         className={cn(
-          'flex items-center gap-2 px-2 py-1 rounded cursor-pointer',
-          'hover:bg-accent/50 transition-colors duration-200',
-          'group'
+          "flex cursor-pointer items-center gap-2 rounded px-2 py-1",
+          "hover:bg-accent/50 transition-colors duration-200",
+          "group"
         )}
         style={{ paddingLeft: `${indentSize + 8}px` }}
         onClick={() => {
@@ -157,45 +164,50 @@ function TreeNode({
         }}
       >
         {/* Single Icon Column - Chevron for folders, File icon for files */}
-        <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+        <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
           {isDirectory ? (
             // Folders: Show chevron only
             hasChildren ? (
               isExpanded ? (
-                <ChevronDown className="w-4 h-4 text-foreground/60" />
+                <ChevronDown className="text-foreground/60 h-4 w-4" />
               ) : (
-                <ChevronRight className="w-4 h-4 text-foreground/60" />
+                <ChevronRight className="text-foreground/60 h-4 w-4" />
               )
             ) : (
               // Empty folder - show faint chevron
-              <ChevronRight className="w-4 h-4 text-muted-foreground/20" />
+              <ChevronRight className="text-muted-foreground/20 h-4 w-4" />
             )
           ) : FileIcon ? (
             // Files: Show colored icon
-            <FileIcon className={cn('w-4 h-4', fileConfig?.color)} />
+            <FileIcon className={cn("h-4 w-4", fileConfig?.color)} />
           ) : (
-            <File className="w-4 h-4 text-muted-foreground/40" />
+            <File className="text-muted-foreground/40 h-4 w-4" />
           )}
         </div>
 
         {/* File/Folder Name */}
-        <span className={cn(
-          'text-[13px] truncate flex-1',
-          // Base styles
-          isDirectory ? 'font-normal text-foreground' : 'font-normal text-foreground/90',
-          // Git status color (subtle accent - files only)
-          gitStatusColor
-        )}>
+        <span
+          className={cn(
+            "flex-1 truncate text-[13px]",
+            // Base styles
+            isDirectory ? "text-foreground font-normal" : "text-foreground/90 font-normal",
+            // Git status color (subtle accent - files only)
+            gitStatusColor
+          )}
+        >
           {node.name}
           {/* Folder with changes indicator (subtle dot) */}
           {folderHasChanges && (
-            <span className="ml-1.5 inline-block w-1 h-1 rounded-full bg-warning" title="Contains changes" />
+            <span
+              className="bg-warning ml-1.5 inline-block h-1 w-1 rounded-full"
+              title="Contains changes"
+            />
           )}
         </span>
 
         {/* File Size (files only) */}
         {!isDirectory && node.size !== undefined && (
-          <span className="text-[11px] text-muted-foreground/40 font-mono tabular-nums flex-shrink-0">
+          <span className="text-muted-foreground/40 flex-shrink-0 font-mono text-[11px] tabular-nums">
             {formatFileSize(node.size)}
           </span>
         )}
@@ -203,11 +215,7 @@ function TreeNode({
 
       {/* Children (if expanded) */}
       {isDirectory && isExpanded && hasChildren && (
-        <FileTree
-          nodes={node.children!}
-          level={level + 1}
-          onFileClick={onFileClick}
-        />
+        <FileTree nodes={node.children!} level={level + 1} onFileClick={onFileClick} />
       )}
     </div>
   );

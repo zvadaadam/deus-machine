@@ -4,7 +4,7 @@
  * Type definitions for chat components and tool renderers
  */
 
-import type { ToolUseBlock, ToolResultBlock } from '@/shared/types';
+import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 
 /**
  * Map of tool_use_id to ToolResultBlock
@@ -31,6 +31,6 @@ export type ToolRenderer = React.ComponentType<ToolRendererProps>;
 export interface ToolMetadata {
   name: string;
   icon?: string;
-  color?: 'default' | 'success' | 'error' | 'info';
+  color?: "default" | "success" | "error" | "info";
   description?: string;
 }

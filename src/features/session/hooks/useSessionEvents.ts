@@ -19,11 +19,11 @@
  * - Prevents orphaned listeners on fast navigation between sessions
  */
 
-import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/shared/api/queryKeys';
-import { isTauriEnv } from '@/platform/tauri';
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { isTauriEnv } from "@/platform/tauri";
 
 interface SessionMessageEvent {
   session_id: string;
@@ -54,15 +54,15 @@ export function useSessionEvents(sessionId: string | null) {
     }
 
     // Store the promise to ensure proper cleanup even if component unmounts quickly
-    const unlistenPromise = listen<SessionMessageEvent>('session:message', (event) => {
+    const unlistenPromise = listen<SessionMessageEvent>("session:message", (event) => {
       const { session_id, message_id, sdk_message_id } = event.payload;
 
       // Only process events for this session
       if (session_id === sessionId) {
-        console.log('[Events] 📨 New message received:', {
+        console.log("[Events] 📨 New message received:", {
           message_id,
           sdk_message_id,
-          latency: '<100ms' // Real-time!
+          latency: "<100ms", // Real-time!
         });
 
         // Invalidate messages query to trigger refetch
@@ -79,14 +79,14 @@ export function useSessionEvents(sessionId: string | null) {
 
     // Log when listener is ready
     unlistenPromise.then(() => {
-      console.log('[Events] 👂 Listening for session events:', sessionId.substring(0, 8));
+      console.log("[Events] 👂 Listening for session events:", sessionId.substring(0, 8));
     });
 
     // Cleanup: await the promise to get unlisten function
     return () => {
       unlistenPromise.then((unlisten) => {
         unlisten();
-        console.log('[Events] 🔇 Stopped listening for session events');
+        console.log("[Events] 🔇 Stopped listening for session events");
       });
     };
   }, [sessionId, queryClient]);

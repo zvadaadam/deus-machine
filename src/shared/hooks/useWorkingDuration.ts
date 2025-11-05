@@ -5,8 +5,8 @@
  * Returns formatted duration string (e.g., "2m 34s")
  */
 
-import { useState, useEffect, useRef } from 'react';
-import type { SessionStatus } from '@/features/session/types';
+import { useState, useEffect, useRef } from "react";
+import type { SessionStatus } from "@/features/session/types";
 
 interface UseWorkingDurationOptions {
   status: SessionStatus | null | undefined;
@@ -25,7 +25,7 @@ interface UseWorkingDurationReturn {
  */
 export function formatDuration(ms: number): string {
   // Guard against negative durations (clock skew, bad data)
-  if (ms < 0) return '0s';
+  if (ms < 0) return "0s";
 
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -55,7 +55,7 @@ export function useWorkingDuration({
   const [duration, setDuration] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const isWorking = status === 'working';
+  const isWorking = status === "working";
 
   useEffect(() => {
     // Calculate duration if working and have start timestamp
@@ -98,7 +98,7 @@ export function useWorkingDuration({
 
   return {
     duration,
-    formattedDuration: duration > 0 ? formatDuration(duration) : '',
+    formattedDuration: duration > 0 ? formatDuration(duration) : "",
     isTracking: isWorking && !!latestMessageSentAt,
   };
 }

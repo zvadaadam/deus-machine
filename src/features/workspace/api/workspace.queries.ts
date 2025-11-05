@@ -3,19 +3,19 @@
  * TanStack Query hooks for workspace-related data fetching
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
-import { WorkspaceService } from './workspace.service';
-import { RepoService } from '@/features/repository/api/repository.service';
-import { queryKeys } from '@/shared/api/queryKeys';
-import { API_CONFIG } from '@/shared/config/api.config';
-import type { RepoGroup, DiffStats, FileChange } from '../types';
-import type { PRStatus, DevServer } from '@/shared/types';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { WorkspaceService } from "./workspace.service";
+import { RepoService } from "@/features/repository/api/repository.service";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { API_CONFIG } from "@/shared/config/api.config";
+import type { RepoGroup, DiffStats, FileChange } from "../types";
+import type { PRStatus, DevServer } from "@/shared/types";
 
 /**
  * Fetch workspaces grouped by repository with polling
  */
-export function useWorkspacesByRepo(state: string = 'ready') {
+export function useWorkspacesByRepo(state: string = "ready") {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
@@ -46,18 +46,15 @@ export function useStats() {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useDiffStats(
-  workspaceId: string | null,
-  sessionStatus?: string | null
-) {
+export function useDiffStats(workspaceId: string | null, sessionStatus?: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.diffStats(workspaceId || ''),
+    queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
     enabled: !!workspaceId,
     staleTime: 30000, // 30 seconds for idle workspaces
     // ✅ Poll ONLY when workspace is actively working
     // TODO: Disable on desktop once git diff events are implemented
-    refetchInterval: sessionStatus === 'working' ? 5000 : false,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
   });
 }
 
@@ -70,19 +67,19 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 
   // Stable, de-duplicated IDs for keying and effects
   const workspaceIds = useMemo(() => {
-    const ids = repoGroups.flatMap(g => g.workspaces.map(w => w.id));
+    const ids = repoGroups.flatMap((g) => g.workspaces.map((w) => w.id));
     return Array.from(new Set(ids)).sort(); // stable order
   }, [repoGroups]);
 
   // Prime cache for first N and return aggregate
   const query = useQuery({
-    queryKey: ['bulk-diff-stats', workspaceIds],
+    queryKey: ["bulk-diff-stats", workspaceIds],
     enabled: workspaceIds.length > 0,
     staleTime: 1000,
     queryFn: async () => {
       const first5 = workspaceIds.slice(0, 5);
       const firstResults = await Promise.all(
-        first5.map(id => WorkspaceService.fetchDiffStats(id))
+        first5.map((id) => WorkspaceService.fetchDiffStats(id))
       );
 
       // Cache first 5 results immediately
@@ -92,7 +89,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 
       // Aggregate from cache (includes any previously prefetched items)
       const aggregate: Record<string, DiffStats> = {};
-      workspaceIds.forEach(id => {
+      workspaceIds.forEach((id) => {
         const stats = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
         if (stats) aggregate[id] = stats;
       });
@@ -116,8 +113,15 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
             // Update aggregate cache with new data
             const data = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
             if (data) {
-              const existing = queryClient.getQueryData<Record<string, DiffStats>>(['bulk-diff-stats', workspaceIds]) || {};
-              queryClient.setQueryData(['bulk-diff-stats', workspaceIds], { ...existing, [id]: data });
+              const existing =
+                queryClient.getQueryData<Record<string, DiffStats>>([
+                  "bulk-diff-stats",
+                  workspaceIds,
+                ]) || {};
+              queryClient.setQueryData(["bulk-diff-stats", workspaceIds], {
+                ...existing,
+                [id]: data,
+              });
             }
           });
       }, idx * 200);
@@ -142,12 +146,9 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useFileChanges(
-  workspaceId: string | null,
-  sessionStatus?: string | null
-) {
+export function useFileChanges(workspaceId: string | null, sessionStatus?: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.diffFiles(workspaceId || ''),
+    queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchDiffFiles(workspaceId!);
       return result.files || [];
@@ -156,7 +157,7 @@ export function useFileChanges(
     staleTime: 30000, // 30 seconds for idle workspaces
     // ✅ Poll ONLY when workspace is actively working
     // TODO: Disable on desktop once git file events are implemented
-    refetchInterval: sessionStatus === 'working' ? 5000 : false,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
   });
 }
 
@@ -165,7 +166,7 @@ export function useFileChanges(
  */
 export function usePRStatus(workspaceId: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.prStatus(workspaceId || ''),
+    queryKey: queryKeys.workspaces.prStatus(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchPRStatus(workspaceId!),
     enabled: !!workspaceId,
     staleTime: 5000,
@@ -177,7 +178,7 @@ export function usePRStatus(workspaceId: string | null) {
  */
 export function useDevServers(workspaceId: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.devServers(workspaceId || ''),
+    queryKey: queryKeys.workspaces.devServers(workspaceId || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchDevServers(workspaceId!);
       return result.servers || [];
@@ -192,7 +193,7 @@ export function useDevServers(workspaceId: string | null) {
  */
 export function useFileDiff(workspaceId: string | null, filePath: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.diffFile(workspaceId || '', filePath || ''),
+    queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
       return result.diff;
@@ -237,10 +238,10 @@ export function useArchiveWorkspace() {
  */
 export function useSystemPrompt(workspaceId: string | null) {
   return useQuery({
-    queryKey: ['workspaces', 'system-prompt', workspaceId],
+    queryKey: ["workspaces", "system-prompt", workspaceId],
     queryFn: async () => {
       const result = await WorkspaceService.fetchSystemPrompt(workspaceId!);
-      return result.system_prompt || '';
+      return result.system_prompt || "";
     },
     enabled: !!workspaceId,
     staleTime: 30000, // System prompts don't change often
@@ -259,7 +260,7 @@ export function useUpdateSystemPrompt() {
     onSuccess: (_, variables) => {
       // Invalidate system prompt query for this workspace
       queryClient.invalidateQueries({
-        queryKey: ['workspaces', 'system-prompt', variables.workspaceId],
+        queryKey: ["workspaces", "system-prompt", variables.workspaceId],
       });
     },
   });

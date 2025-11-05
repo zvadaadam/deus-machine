@@ -12,7 +12,7 @@ export interface PRStatus {
   pr_number?: number;
   pr_title?: string;
   pr_url?: string;
-  merge_status?: 'ready' | 'pending' | 'blocked' | 'merged';
+  merge_status?: "ready" | "pending" | "blocked" | "merged";
 }
 
 /**
@@ -22,6 +22,6 @@ export interface PRStatus {
 export interface DevServer {
   port: number;
   url: string;
-  type: 'vite' | 'webpack' | 'angular' | 'node' | 'other';
+  type: "vite" | "webpack" | "angular" | "node" | "other";
   name: string;
 }

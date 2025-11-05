@@ -21,12 +21,12 @@
  * ```
  */
 
-import { useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import { cn } from '@/shared/lib/utils';
+import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import { cn } from "@/shared/lib/utils";
 
 interface MarkdownRendererProps {
   children: string;
@@ -52,7 +52,7 @@ function CopyButton({ getText }: { getText: () => string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error("Failed to copy:", err);
     }
   };
 
@@ -63,24 +63,42 @@ function CopyButton({ getText }: { getText: () => string }) {
       className={cn(
         // Proper alignment: pre has 8px top + 12px right padding
         // Button positioned at: 12px top (8+4 breathing), 16px right (12+4 breathing)
-        'absolute top-3 right-4',
-        'p-1.5 rounded',
-        'text-muted-foreground hover:text-foreground',
-        'hover:bg-muted/50',
-        'transition-all duration-200 ease-out',
-        'opacity-0 group-hover:opacity-100',
-        copied && 'text-success'
+        "absolute top-3 right-4",
+        "rounded p-1.5",
+        "text-muted-foreground hover:text-foreground",
+        "hover:bg-muted/50",
+        "transition-all duration-200 ease-out",
+        "opacity-0 group-hover:opacity-100",
+        copied && "text-success"
       )}
       aria-label="Copy code"
     >
       {copied ? (
         // Check icon (copied state)
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <polyline points="20 6 9 17 4 12" />
         </svg>
       ) : (
         // Copy icon (default state)
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
         </svg>
@@ -91,7 +109,7 @@ function CopyButton({ getText }: { getText: () => string }) {
 
 export function MarkdownRenderer({
   children,
-  className = '',
+  className = "",
   allowHtml = false,
   proseClassName,
 }: MarkdownRendererProps) {
@@ -108,8 +126,8 @@ export function MarkdownRenderer({
         // Allow basic code styling
         attributes: {
           ...defaultSchema.attributes,
-          pre: [['className']],
-          code: [['className']],
+          pre: [["className"]],
+          code: [["className"]],
         },
       },
     ]);
@@ -121,11 +139,11 @@ export function MarkdownRenderer({
     pre({ children, ...props }: any) {
       const ref = useRef<HTMLPreElement>(null);
       return (
-        <div className="relative group">
+        <div className="group relative">
           <pre ref={ref} {...props}>
             {children}
           </pre>
-          <CopyButton getText={() => ref.current?.innerText ?? ''} />
+          <CopyButton getText={() => ref.current?.innerText ?? ""} />
         </div>
       );
     },

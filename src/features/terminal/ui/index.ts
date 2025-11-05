@@ -1,3 +1,3 @@
-export { TerminalPanel } from './TerminalPanel';
-export { Terminal } from './Terminal';
-export { CollapsibleTerminalPanel } from './CollapsibleTerminalPanel';
+export { TerminalPanel } from "./TerminalPanel";
+export { Terminal } from "./Terminal";
+export { CollapsibleTerminalPanel } from "./CollapsibleTerminalPanel";

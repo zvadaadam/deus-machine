@@ -21,19 +21,19 @@ export function useKeyboardShortcuts({
   useEffect(() => {
     async function handleKeyDown(e: KeyboardEvent) {
       // ⌘R or Ctrl+R - Refresh workspace data
-      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "r") {
         e.preventDefault();
-        console.log('🔄 Refreshing workspace data...');
+        console.log("🔄 Refreshing workspace data...");
         await onRefresh();
       }
 
       // ESC - Close modals
-      if (e.key === 'Escape' && onEscape) {
+      if (e.key === "Escape" && onEscape) {
         onEscape();
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onRefresh, onEscape, selectedWorkspace, modalStates]);
 }

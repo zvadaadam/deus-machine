@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 import {
   DndContext,
   closestCenter,
@@ -7,19 +7,14 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarMenu,
-  useSidebar,
-} from "@/components/ui/sidebar";
+} from "@dnd-kit/sortable";
+import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
@@ -79,10 +74,10 @@ export function AppSidebar({
 
   // Flatten all workspaces with repo info for keyboard navigation
   const allWorkspaces = React.useMemo(() => {
-    return orderedRepositories.flatMap(repo =>
-      repo.workspaces.map(workspace => ({
+    return orderedRepositories.flatMap((repo) =>
+      repo.workspaces.map((workspace) => ({
         workspace,
-        repoId: repo.repo_id
+        repoId: repo.repo_id,
       }))
     );
   }, [orderedRepositories]);
@@ -93,12 +88,12 @@ export function AppSidebar({
       // Only handle if no input/textarea is focused
       const activeElement = document.activeElement;
       const isInputFocused =
-        activeElement?.tagName === 'INPUT' ||
-        activeElement?.tagName === 'TEXTAREA' ||
-        activeElement?.getAttribute('contenteditable') === 'true';
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.getAttribute("contenteditable") === "true";
 
       if (isInputFocused) return;
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       if (!allWorkspaces.length) return;
 
       e.preventDefault();
@@ -115,14 +110,15 @@ export function AppSidebar({
 
       // Cmd/Ctrl + Arrow: Jump between repositories
       if (e.metaKey || e.ctrlKey) {
-        const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === currentWorkspaceId);
+        const currentIndex = allWorkspaces.findIndex((w) => w.workspace.id === currentWorkspaceId);
         const currentRepoId = currentIndex >= 0 ? allWorkspaces[currentIndex].repoId : null;
 
-        if (e.key === 'ArrowDown') {
+        if (e.key === "ArrowDown") {
           // Find first workspace of next repo
-          const nextRepoIndex = currentIndex >= 0
-            ? allWorkspaces.findIndex((w, i) => i > currentIndex && w.repoId !== currentRepoId)
-            : 0;
+          const nextRepoIndex =
+            currentIndex >= 0
+              ? allWorkspaces.findIndex((w, i) => i > currentIndex && w.repoId !== currentRepoId)
+              : 0;
           targetItem = nextRepoIndex >= 0 ? allWorkspaces[nextRepoIndex] : allWorkspaces[0];
         } else {
           // Find first workspace of previous repo
@@ -131,17 +127,20 @@ export function AppSidebar({
             if (allWorkspaces[i].repoId !== currentRepoId) {
               // Found different repo, now find its first workspace
               const targetRepoId = allWorkspaces[i].repoId;
-              prevRepoIndex = allWorkspaces.findIndex(w => w.repoId === targetRepoId);
+              prevRepoIndex = allWorkspaces.findIndex((w) => w.repoId === targetRepoId);
               break;
             }
           }
-          targetItem = prevRepoIndex >= 0 ? allWorkspaces[prevRepoIndex] : allWorkspaces[allWorkspaces.length - 1];
+          targetItem =
+            prevRepoIndex >= 0
+              ? allWorkspaces[prevRepoIndex]
+              : allWorkspaces[allWorkspaces.length - 1];
         }
       } else {
         // Normal arrow: Navigate within all workspaces
-        const currentIndex = allWorkspaces.findIndex(w => w.workspace.id === currentWorkspaceId);
+        const currentIndex = allWorkspaces.findIndex((w) => w.workspace.id === currentWorkspaceId);
 
-        if (e.key === 'ArrowDown') {
+        if (e.key === "ArrowDown") {
           const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
           targetItem = allWorkspaces[nextIndex];
         } else {
@@ -162,7 +161,7 @@ export function AppSidebar({
       requestAnimationFrame(() => {
         const element = document.querySelector(`[data-workspace-id="${targetItem.workspace.id}"]`);
         if (element) {
-          element.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+          element.scrollIntoView({ behavior: "instant", block: "nearest" });
         }
       });
 
@@ -177,9 +176,9 @@ export function AppSidebar({
       }, 150);
     };
 
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
       clearTimeout(navigationTimeoutRef.current);
     };
   }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
@@ -202,8 +201,8 @@ export function AppSidebar({
       return;
     }
 
-    const oldIndex = orderedRepositories.findIndex(r => r.repo_id === active.id);
-    const newIndex = orderedRepositories.findIndex(r => r.repo_id === over.id);
+    const oldIndex = orderedRepositories.findIndex((r) => r.repo_id === active.id);
+    const newIndex = orderedRepositories.findIndex((r) => r.repo_id === over.id);
 
     if (oldIndex === -1 || newIndex === -1) {
       return;
@@ -213,7 +212,7 @@ export function AppSidebar({
     const reordered = arrayMove(orderedRepositories, oldIndex, newIndex);
 
     // Save new order to store
-    const newOrder = reordered.map(r => r.repo_id);
+    const newOrder = reordered.map((r) => r.repo_id);
     setRepositoryOrder(newOrder);
   }
 
@@ -223,13 +222,9 @@ export function AppSidebar({
 
       {/* Repositories List - Single tree for smooth animations */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={orderedRepositories.map(r => r.repo_id)}
+            items={orderedRepositories.map((r) => r.repo_id)}
             strategy={verticalListSortingStrategy}
           >
             <SidebarMenu

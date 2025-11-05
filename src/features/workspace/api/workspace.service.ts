@@ -3,19 +3,10 @@
  * API methods for workspace management operations
  */
 
-import { apiClient } from '@/shared/api/client';
-import { ENDPOINTS } from '@/shared/config/api.config';
-import type {
-  Workspace,
-  RepoGroup,
-  DiffStats,
-  FileChange,
-} from '../types';
-import type {
-  WorkspaceQueryParams,
-  PRStatus,
-  DevServer,
-} from '@/shared/types';
+import { apiClient } from "@/shared/api/client";
+import { ENDPOINTS } from "@/shared/config/api.config";
+import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
+import type { WorkspaceQueryParams, PRStatus, DevServer } from "@/shared/types";
 
 export const WorkspaceService = {
   /**
@@ -24,7 +15,7 @@ export const WorkspaceService = {
   fetchAll: async (params?: WorkspaceQueryParams): Promise<Workspace[]> => {
     const queryString = params
       ? `?${new URLSearchParams(params as Record<string, string>).toString()}`
-      : '';
+      : "";
     return apiClient.get<Workspace[]>(`${ENDPOINTS.WORKSPACES}${queryString}`);
   },
 
@@ -32,7 +23,7 @@ export const WorkspaceService = {
    * Fetch workspaces grouped by repository
    */
   fetchByRepo: async (state?: string): Promise<RepoGroup[]> => {
-    const query = state ? `?state=${state}` : '';
+    const query = state ? `?state=${state}` : "";
     return apiClient.get<RepoGroup[]>(`${ENDPOINTS.WORKSPACES_BY_REPO}${query}`);
   },
 
@@ -82,7 +73,7 @@ export const WorkspaceService = {
    * Archive a workspace
    */
   archive: async (id: string): Promise<Workspace> => {
-    return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), { state: 'archived' });
+    return apiClient.patch<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id), { state: "archived" });
   },
 
   /**
@@ -110,6 +101,8 @@ export const WorkspaceService = {
    * Update system prompt for a workspace
    */
   updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {
-    return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), { system_prompt: systemPrompt });
+    return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), {
+      system_prompt: systemPrompt,
+    });
   },
 };
