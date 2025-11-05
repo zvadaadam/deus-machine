@@ -1,1 +1,1 @@
-export { BrowserPanel } from './BrowserPanel';
+export { BrowserPanel } from "./BrowserPanel";

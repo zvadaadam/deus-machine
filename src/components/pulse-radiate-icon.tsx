@@ -35,8 +35,20 @@ export function PulseRadiateIcon({ isActive = false, className }: PulseRadiateIc
       {isActive && (
         <>
           <circle className="pulse-ring-active" cx="16" cy="16" r="4" />
-          <circle className="pulse-ring-active" cx="16" cy="16" r="4" style={{ animationDelay: "0.4s" }} />
-          <circle className="pulse-ring-active" cx="16" cy="16" r="4" style={{ animationDelay: "0.8s" }} />
+          <circle
+            className="pulse-ring-active"
+            cx="16"
+            cy="16"
+            r="4"
+            style={{ animationDelay: "0.4s" }}
+          />
+          <circle
+            className="pulse-ring-active"
+            cx="16"
+            cy="16"
+            r="4"
+            style={{ animationDelay: "0.8s" }}
+          />
         </>
       )}
     </svg>

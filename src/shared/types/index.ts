@@ -16,7 +16,7 @@ export type {
   FileChange,
   FileEdit,
   FileChangeGroup,
-} from '@/features/workspace';
+} from "@/features/workspace";
 
 // Note: Session types moved to features/session/types.ts
 // Re-export for backward compatibility (to be removed later)
@@ -31,11 +31,11 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-} from '@/features/session';
+} from "@/features/session";
 
 // Note: Repo and Stats types moved to features/repository/types.ts
 // Re-export for backward compatibility (to be removed later)
-export type { Repo, Stats } from '@/features/repository';
+export type { Repo, Stats } from "@/features/repository";
 
 // API types
 export type {
@@ -44,10 +44,7 @@ export type {
   PaginationParams,
   PaginatedResponse,
   WorkspaceQueryParams,
-} from './api.types';
+} from "./api.types";
 
 // GitHub types
-export type {
-  PRStatus,
-  DevServer,
-} from './github.types';
+export type { PRStatus, DevServer } from "./github.types";

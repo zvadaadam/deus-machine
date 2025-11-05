@@ -1,4 +1,4 @@
-import type { Settings } from '../../../types';
+import type { Settings } from "../../../types";
 
 export interface SettingsSectionProps {
   settings: Settings;
@@ -6,6 +6,6 @@ export interface SettingsSectionProps {
 }
 
 export interface GeneralSectionProps extends SettingsSectionProps {
-  theme: 'light' | 'dark' | 'system';
-  setTheme: (theme: 'light' | 'dark' | 'system') => void;
+  theme: "light" | "dark" | "system";
+  setTheme: (theme: "light" | "dark" | "system") => void;
 }

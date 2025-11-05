@@ -45,21 +45,20 @@ export function useBrowser() {
       if (isTauriMode()) {
         // Tauri mode: start server via Rust backend
         // Use environment variable if available, otherwise use relative path
-        const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH ||
-          "../../../dev-browser";
+        const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH || "../../../dev-browser";
 
         if (import.meta.env.DEV) {
           const displayPath =
-            typeof devBrowserPath === 'string'
+            typeof devBrowserPath === "string"
               ? devBrowserPath.split(/[\\/]/).pop()
-              : 'dev-browser';
-          console.log('[useBrowser] Calling start_browser_server. path:', displayPath);
+              : "dev-browser";
+          console.log("[useBrowser] Calling start_browser_server. path:", displayPath);
         }
         await invoke("start_browser_server", {
           browserPath: devBrowserPath,
         });
         if (import.meta.env.DEV) {
-          console.log('[useBrowser] start_browser_server returned successfully');
+          console.log("[useBrowser] start_browser_server returned successfully");
         }
 
         // Wait for server to start with retry
@@ -69,7 +68,7 @@ export function useBrowser() {
         let serverReady = false;
 
         while (attempt < maxAttempts && !serverReady) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
           serverReady = await invoke<boolean>("is_browser_running");
           attempt++;
         }
@@ -111,14 +110,14 @@ export function useBrowser() {
 
           return { port: WEB_MODE_PORT, authToken: null };
         } else {
-          throw new Error('MCP server not responding');
+          throw new Error("MCP server not responding");
         }
       }
     } catch (error) {
       // Avoid serializing arbitrary error objects (may throw on circular refs)
       const kind = error instanceof Error ? error.name : typeof error;
       const msg = error instanceof Error ? error.message : String(error);
-      console.error('[useBrowser] Error starting server:', kind, msg);
+      console.error("[useBrowser] Error starting server:", kind, msg);
       const errorMessage = error instanceof Error ? error.message : "Failed to start browser";
       setStatus({
         running: false,
@@ -146,7 +145,7 @@ export function useBrowser() {
     } catch (error) {
       const kind = error instanceof Error ? error.name : typeof error;
       const msg = error instanceof Error ? error.message : String(error);
-      console.error('[useBrowser] Error stopping server:', kind, msg);
+      console.error("[useBrowser] Error stopping server:", kind, msg);
     }
   }, []);
 
@@ -211,7 +210,7 @@ export function useBrowser() {
         }
       }
     } catch (error) {
-      setStatus(prev => ({
+      setStatus((prev) => ({
         ...prev,
         error: error instanceof Error ? error.message : "Status check failed",
       }));

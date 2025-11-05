@@ -7,12 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExternalLink, ChevronRight } from "lucide-react";
 
 interface InstalledApp {
@@ -94,7 +89,11 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
         <Button
           variant={iconOnly ? "ghost" : "outline"}
           size={iconOnly ? "icon" : "sm"}
-          className={iconOnly ? "h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200 ease-out" : "gap-2 px-3"}
+          className={
+            iconOnly
+              ? "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200 ease-out"
+              : "gap-2 px-3"
+          }
           onPointerEnter={handleOpen}
           onPointerLeave={handleClose}
         >
@@ -103,8 +102,8 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
             <>
               <span className="text-sm">Open in</span>
               <ChevronRight
-                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ease-out ${
-                  open ? 'rotate-90' : 'rotate-0'
+                className={`text-muted-foreground h-4 w-4 transition-transform duration-200 ease-out ${
+                  open ? "rotate-90" : "rotate-0"
                 }`}
               />
             </>
@@ -135,9 +134,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
     return (
       <TooltipProvider delayDuration={200}>
         <Tooltip>
-          <TooltipTrigger asChild>
-            {dropdownMenu}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{dropdownMenu}</TooltipTrigger>
           <TooltipContent side="bottom">
             <p className="text-xs">Open in VSCode, Cursor...</p>
           </TooltipContent>

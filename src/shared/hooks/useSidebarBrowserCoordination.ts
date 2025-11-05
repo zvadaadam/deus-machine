@@ -25,8 +25,8 @@
  * ```
  */
 
-import { useCallback } from 'react';
-import { useLayoutCoordinationStore } from '@/shared/stores/layoutCoordinationStore';
+import { useCallback } from "react";
+import { useLayoutCoordinationStore } from "@/shared/stores/layoutCoordinationStore";
 
 interface SidebarBrowserCoordinationReturn {
   /**
@@ -59,12 +59,8 @@ export function useSidebarBrowserCoordination(
   sidebarOpen: boolean,
   setSidebarOpen: (open: boolean) => void
 ): SidebarBrowserCoordinationReturn {
-  const {
-    onBrowserTabOpen,
-    onBrowserTabClose,
-    onSidebarToggle,
-    shouldAutoCloseSidebar,
-  } = useLayoutCoordinationStore();
+  const { onBrowserTabOpen, onBrowserTabClose, onSidebarToggle, shouldAutoCloseSidebar } =
+    useLayoutCoordinationStore();
 
   /**
    * Handler for when browser tab becomes active

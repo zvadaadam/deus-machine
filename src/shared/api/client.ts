@@ -5,8 +5,8 @@
  * Now supports dynamic port allocation
  */
 
-import { API_CONFIG, getBaseURL } from '../config/api.config';
-import type { ApiError } from '../types';
+import { API_CONFIG, getBaseURL } from "../config/api.config";
+import type { ApiError } from "../types";
 
 class ApiClient {
   private timeout: number;
@@ -19,7 +19,7 @@ class ApiClient {
    * Generic GET request
    */
   async get<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+    return this.request<T>(endpoint, { method: "GET" });
   }
 
   /**
@@ -27,8 +27,8 @@ class ApiClient {
    */
   async post<T>(endpoint: string, data?: any): Promise<T> {
     return this.request<T>(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: data ? JSON.stringify(data) : undefined,
     });
   }
@@ -38,8 +38,8 @@ class ApiClient {
    */
   async put<T>(endpoint: string, data?: any): Promise<T> {
     return this.request<T>(endpoint, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: data ? JSON.stringify(data) : undefined,
     });
   }
@@ -49,8 +49,8 @@ class ApiClient {
    */
   async patch<T>(endpoint: string, data: any): Promise<T> {
     return this.request<T>(endpoint, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
   }
@@ -59,7 +59,7 @@ class ApiClient {
    * Generic DELETE request
    */
   async delete<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+    return this.request<T>(endpoint, { method: "DELETE" });
   }
 
   /**
@@ -98,8 +98,8 @@ class ApiClient {
       }
 
       // Handle empty responses
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
         return null as T;
       }
 
@@ -108,10 +108,10 @@ class ApiClient {
       clearTimeout(timeoutId);
 
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
+        if (error.name === "AbortError") {
           throw {
             status: 408,
-            message: 'Request timeout',
+            message: "Request timeout",
             details: error,
           } as ApiError;
         }

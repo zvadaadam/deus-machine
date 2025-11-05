@@ -1,1 +1,1 @@
-export * from './workspace.queries';
+export * from "./workspace.queries";

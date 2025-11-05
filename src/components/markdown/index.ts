@@ -7,5 +7,5 @@
  * - ChatMarkdown: Pre-configured for chat messages (dense, IDE-friendly)
  */
 
-export { MarkdownRenderer } from './MarkdownRenderer';
-export { ChatMarkdown } from './ChatMarkdown';
+export { MarkdownRenderer } from "./MarkdownRenderer";
+export { ChatMarkdown } from "./ChatMarkdown";

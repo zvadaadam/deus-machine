@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 /* Import fonts */
-@import './fonts.css';
+@import "./fonts.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -75,8 +75,10 @@
 
   /* Font families - Using Suisse Intl for both sans and mono */
   /* Tailwind v4 utilities (font-sans, font-mono) use these variables */
-  --font-sans: 'Suisse Intl', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'Suisse Intl Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+  --font-sans:
+    "Suisse Intl", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
 
   /* Legacy aliases for backward compatibility */
   --font-family-sans: var(--font-sans);
@@ -250,7 +252,8 @@
 }
 
 @keyframes shimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -270,7 +273,8 @@
 
 /* Breathing glow for working badges - gentle pulse like heartbeat */
 @keyframes breathing-glow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -281,49 +285,49 @@
 /* Design tokens & base styles - Copper Ember × Graphite Theme */
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.97 0.02 95);         /* #FFF9F0 warm cream */
-  --foreground: oklch(0.22 0.03 260);        /* #0F172A dark text */
-  --card: oklch(0.94 0.02 95);               /* #FFF2E0 */
+  --background: oklch(0.97 0.02 95); /* #FFF9F0 warm cream */
+  --foreground: oklch(0.22 0.03 260); /* #0F172A dark text */
+  --card: oklch(0.94 0.02 95); /* #FFF2E0 */
   --card-foreground: oklch(0.22 0.03 260);
   --popover: oklch(0.94 0.02 95);
   --popover-foreground: oklch(0.22 0.03 260);
-  --primary: oklch(0.46 0.10 65);            /* #73481E copper brown (accessible) */
+  --primary: oklch(0.46 0.1 65); /* #73481E copper brown (accessible) */
   --primary-foreground: oklch(0.98 0.01 95); /* near-white */
-  --secondary: oklch(0.90 0.01 95);          /* warm neutral */
+  --secondary: oklch(0.9 0.01 95); /* warm neutral */
   --secondary-foreground: oklch(0.22 0.03 260);
   --muted: oklch(0.92 0.01 95);
   --muted-foreground: oklch(0.55 0.02 255);
-  --accent: oklch(0.95 0.03 65);             /* #FFE8D1 copper-wash */
+  --accent: oklch(0.95 0.03 65); /* #FFE8D1 copper-wash */
   --accent-foreground: oklch(0.22 0.03 260);
-  --destructive: oklch(0.64 0.20 25);
+  --destructive: oklch(0.64 0.2 25);
   --destructive-foreground: oklch(0.98 0.01 95);
 
   /* Semantic state colors (stable across themes) */
   --success: oklch(0.72 0.14 160);
   --success-foreground: oklch(0.12 0.02 180);
 
-  --warning: oklch(0.80 0.16 85);
+  --warning: oklch(0.8 0.16 85);
   --warning-foreground: oklch(0.16 0.02 85);
 
-  --info: oklch(0.78 0.10 270);       /* muted violet info (no blue) */
+  --info: oklch(0.78 0.1 270); /* muted violet info (no blue) */
   --info-foreground: oklch(0.15 0.02 270);
 
   /* Status colors for workspace/session states */
-  --status-working: oklch(0.60 0.17 145);        /* Green for active/working */
+  --status-working: oklch(0.6 0.17 145); /* Green for active/working */
   --status-working-fg: oklch(1 0 0);
-  --status-compacting: oklch(0.58 0.22 303);     /* Purple for maintenance */
+  --status-compacting: oklch(0.58 0.22 303); /* Purple for maintenance */
   --status-compacting-fg: oklch(1 0 0);
-  --status-unread: oklch(0.72 0.19 75);          /* Amber for unread (alias to warning) */
+  --status-unread: oklch(0.72 0.19 75); /* Amber for unread (alias to warning) */
   --status-unread-fg: oklch(1 0 0);
 
   /* File type icon colors (semantic, consistent in light/dark) */
-  --file-typescript: oklch(0.55 0.18 250);       /* Blue for TS/JS */
-  --file-rust: oklch(0.58 0.20 30);              /* Orange-red for Rust */
-  --file-data: oklch(0.70 0.17 85);              /* Yellow for JSON/YAML */
-  --file-docs: oklch(0.60 0.16 145);             /* Green for markdown/docs */
-  --file-styles: oklch(0.62 0.20 290);           /* Purple for CSS */
-  --file-markup: oklch(0.62 0.18 40);            /* Orange for HTML */
-  --file-image: oklch(0.65 0.21 340);            /* Pink for images */
+  --file-typescript: oklch(0.55 0.18 250); /* Blue for TS/JS */
+  --file-rust: oklch(0.58 0.2 30); /* Orange-red for Rust */
+  --file-data: oklch(0.7 0.17 85); /* Yellow for JSON/YAML */
+  --file-docs: oklch(0.6 0.16 145); /* Green for markdown/docs */
+  --file-styles: oklch(0.62 0.2 290); /* Purple for CSS */
+  --file-markup: oklch(0.62 0.18 40); /* Orange for HTML */
+  --file-image: oklch(0.65 0.21 340); /* Pink for images */
 
   /* Z-index scale for layered UI elements */
   --z-base: 0;
@@ -338,85 +342,85 @@
 
   --border: oklch(0.88 0.01 95);
   --input: oklch(0.88 0.01 95);
-  --ring: oklch(0.66 0.16 55 / 0.35);  /* copper glow ring */
+  --ring: oklch(0.66 0.16 55 / 0.35); /* copper glow ring */
 
   /* Sidebar colors */
   --sidebar: oklch(0.985 0.01 90);
   --sidebar-foreground: oklch(0.32 0.02 75);
-  --sidebar-primary: oklch(0.46 0.10 65);       /* copper brown */
+  --sidebar-primary: oklch(0.46 0.1 65); /* copper brown */
   --sidebar-primary-foreground: oklch(0.98 0.01 95);
   --sidebar-accent: oklch(0.95 0.02 90);
   --sidebar-accent-foreground: oklch(0.22 0.03 260);
-  --sidebar-border: oklch(0.90 0.01 95);
+  --sidebar-border: oklch(0.9 0.01 95);
   --sidebar-ring: oklch(0.66 0.16 55 / 0.35);
 
   /* Diff viewer colors - Copper theme (Light Mode) */
-  --diff-addition-bg: oklch(0.95 0.06 160);        /* Soft emerald green on warm cream */
-  --diff-addition-gutter: oklch(0.88 0.10 155);    /* Deeper green gutter */
-  --diff-addition-word: oklch(0.82 0.14 158);      /* Saturated green highlight */
-  --diff-addition-text: oklch(0.38 0.12 160);      /* Dark forest green text */
+  --diff-addition-bg: oklch(0.95 0.06 160); /* Soft emerald green on warm cream */
+  --diff-addition-gutter: oklch(0.88 0.1 155); /* Deeper green gutter */
+  --diff-addition-word: oklch(0.82 0.14 158); /* Saturated green highlight */
+  --diff-addition-text: oklch(0.38 0.12 160); /* Dark forest green text */
 
-  --diff-deletion-bg: oklch(0.94 0.06 35);         /* Warm peachy-copper deletion background */
-  --diff-deletion-gutter: oklch(0.86 0.12 32);     /* Deeper copper-red gutter */
-  --diff-deletion-word: oklch(0.80 0.16 30);       /* Saturated copper-red highlight */
-  --diff-deletion-text: oklch(0.42 0.14 28);       /* Dark ember text */
+  --diff-deletion-bg: oklch(0.94 0.06 35); /* Warm peachy-copper deletion background */
+  --diff-deletion-gutter: oklch(0.86 0.12 32); /* Deeper copper-red gutter */
+  --diff-deletion-word: oklch(0.8 0.16 30); /* Saturated copper-red highlight */
+  --diff-deletion-text: oklch(0.42 0.14 28); /* Dark ember text */
 
-  --diff-line-number: oklch(0.52 0.02 75);         /* Warm muted brown-gray */
-  --diff-line-number-bg: oklch(0.96 0.02 90);      /* Subtle warm cream background */
+  --diff-line-number: oklch(0.52 0.02 75); /* Warm muted brown-gray */
+  --diff-line-number-bg: oklch(0.96 0.02 90); /* Subtle warm cream background */
 }
 
 .dark {
-  --background: oklch(0.15 0.01 255);        /* graphite ink #0B0C10 */
-  --foreground: oklch(0.92 0.02 250);        /* #E6EDF3 */
+  --background: oklch(0.15 0.01 255); /* graphite ink #0B0C10 */
+  --foreground: oklch(0.92 0.02 250); /* #E6EDF3 */
   --card: oklch(0.19 0.01 255);
   --card-foreground: oklch(0.92 0.02 250);
   --popover: oklch(0.19 0.01 255);
   --popover-foreground: oklch(0.92 0.02 250);
-  --primary: oklch(0.66 0.16 55);            /* #E0903F copper ember */
-  --primary-foreground: oklch(0.15 0.01 255);/* dark graphite text on copper */
+  --primary: oklch(0.66 0.16 55); /* #E0903F copper ember */
+  --primary-foreground: oklch(0.15 0.01 255); /* dark graphite text on copper */
   --secondary: oklch(0.22 0.01 255);
   --secondary-foreground: oklch(0.92 0.02 250);
   --muted: oklch(0.24 0.01 255);
   --muted-foreground: oklch(0.72 0.02 255);
-  --accent: oklch(0.86 0.06 55);             /* light copper tint for chips */
+  --accent: oklch(0.86 0.06 55); /* light copper tint for chips */
   --accent-foreground: oklch(0.15 0.01 255);
-  --destructive: oklch(0.64 0.20 25);
+  --destructive: oklch(0.64 0.2 25);
   --destructive-foreground: oklch(0.98 0.01 95);
 
   /* Semantic state colors - stable across themes */
   --success: oklch(0.72 0.14 160);
   --success-foreground: oklch(0.12 0.02 180);
 
-  --warning: oklch(0.80 0.16 85);
+  --warning: oklch(0.8 0.16 85);
   --warning-foreground: oklch(0.16 0.02 85);
 
-  --info: oklch(0.78 0.10 270);
+  --info: oklch(0.78 0.1 270);
   --info-foreground: oklch(0.12 0.02 270);
 
   /* Status colors for workspace/session states - optimized for dark mode */
-  --status-working: oklch(0.70 0.18 145);        /* Brighter green for dark bg */
+  --status-working: oklch(0.7 0.18 145); /* Brighter green for dark bg */
   --status-working-fg: oklch(0.25 0.15 145);
-  --status-compacting: oklch(0.68 0.24 303);     /* Brighter purple for dark bg */
-  --status-compacting-fg: oklch(0.30 0.18 303);
-  --status-unread: oklch(0.80 0.20 75);          /* Brighter amber for dark bg */
+  --status-compacting: oklch(0.68 0.24 303); /* Brighter purple for dark bg */
+  --status-compacting-fg: oklch(0.3 0.18 303);
+  --status-unread: oklch(0.8 0.2 75); /* Brighter amber for dark bg */
   --status-unread-fg: oklch(0.35 0.15 75);
 
   /* File type icon colors (same in dark mode for perceptual consistency) */
-  --file-typescript: oklch(0.62 0.16 220);       /* Soft blue-violet for TS/JS (kept neutral) */
-  --file-rust: oklch(0.58 0.20 30);              /* Orange-red for Rust */
-  --file-data: oklch(0.70 0.17 85);              /* Yellow for JSON/YAML */
-  --file-docs: oklch(0.60 0.16 145);             /* Green for markdown/docs */
-  --file-styles: oklch(0.62 0.20 290);           /* Purple for CSS */
-  --file-markup: oklch(0.62 0.18 40);            /* Orange for HTML */
-  --file-image: oklch(0.65 0.21 340);            /* Pink for images */
+  --file-typescript: oklch(0.62 0.16 220); /* Soft blue-violet for TS/JS (kept neutral) */
+  --file-rust: oklch(0.58 0.2 30); /* Orange-red for Rust */
+  --file-data: oklch(0.7 0.17 85); /* Yellow for JSON/YAML */
+  --file-docs: oklch(0.6 0.16 145); /* Green for markdown/docs */
+  --file-styles: oklch(0.62 0.2 290); /* Purple for CSS */
+  --file-markup: oklch(0.62 0.18 40); /* Orange for HTML */
+  --file-image: oklch(0.65 0.21 340); /* Pink for images */
 
   --border: oklch(0.28 0.01 255);
   --input: oklch(0.28 0.01 255);
-  --ring: oklch(0.66 0.16 55 / 0.55);  /* brighter copper ring on dark */
+  --ring: oklch(0.66 0.16 55 / 0.55); /* brighter copper ring on dark */
 
   --sidebar: oklch(0.19 0.01 255);
   --sidebar-foreground: oklch(0.92 0.02 250);
-  --sidebar-primary: oklch(0.66 0.16 55);       /* copper ember */
+  --sidebar-primary: oklch(0.66 0.16 55); /* copper ember */
   --sidebar-primary-foreground: oklch(0.15 0.01 255);
   --sidebar-accent: oklch(0.24 0.01 255);
   --sidebar-accent-foreground: oklch(0.92 0.02 250);
@@ -424,18 +428,18 @@
   --sidebar-ring: oklch(0.66 0.16 55 / 0.55);
 
   /* Diff viewer colors - Copper theme (Dark Mode) */
-  --diff-addition-bg: oklch(0.23 0.08 160);        /* Deep emerald on graphite */
-  --diff-addition-gutter: oklch(0.19 0.10 158);    /* Darker green gutter */
-  --diff-addition-word: oklch(0.35 0.16 160);      /* Bright emerald highlight */
-  --diff-addition-text: oklch(0.76 0.14 160);      /* Bright mint green text */
+  --diff-addition-bg: oklch(0.23 0.08 160); /* Deep emerald on graphite */
+  --diff-addition-gutter: oklch(0.19 0.1 158); /* Darker green gutter */
+  --diff-addition-word: oklch(0.35 0.16 160); /* Bright emerald highlight */
+  --diff-addition-text: oklch(0.76 0.14 160); /* Bright mint green text */
 
-  --diff-deletion-bg: oklch(0.24 0.08 38);         /* Warm copper-ember on graphite */
-  --diff-deletion-gutter: oklch(0.20 0.10 35);     /* Darker copper gutter */
-  --diff-deletion-word: oklch(0.36 0.18 35);       /* Glowing copper-red highlight */
-  --diff-deletion-text: oklch(0.72 0.16 32);       /* Bright ember orange text */
+  --diff-deletion-bg: oklch(0.24 0.08 38); /* Warm copper-ember on graphite */
+  --diff-deletion-gutter: oklch(0.2 0.1 35); /* Darker copper gutter */
+  --diff-deletion-word: oklch(0.36 0.18 35); /* Glowing copper-red highlight */
+  --diff-deletion-text: oklch(0.72 0.16 32); /* Bright ember orange text */
 
-  --diff-line-number: oklch(0.54 0.02 70);         /* Warm graphite-gray for line numbers */
-  --diff-line-number-bg: oklch(0.17 0.01 255);     /* Deep graphite background */
+  --diff-line-number: oklch(0.54 0.02 70); /* Warm graphite-gray for line numbers */
+  --diff-line-number-bg: oklch(0.17 0.01 255); /* Deep graphite background */
 }
 
 /* Apply semantic border color to all elements with border utilities */
@@ -449,199 +453,200 @@
   border-color: var(--border);
 }
 
-  /* Base layout - applies to both web and desktop */
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
+/* Base layout - applies to both web and desktop */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
-  body {
-    color: var(--foreground);
-    font-family: var(--font-family-sans);
-    background: var(--background); /* Web: solid background */
-  }
+body {
+  color: var(--foreground);
+  font-family: var(--font-family-sans);
+  background: var(--background); /* Web: solid background */
+}
 
-  #root {
-    min-height: 100vh;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-    transition-duration: 200ms;
-  }
+#root {
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
 
-  /* Tauri desktop-only styles - transparent backgrounds for window vibrancy */
-  .tauri body {
-    background: transparent;
-  }
+/* Tauri desktop-only styles - transparent backgrounds for window vibrancy */
+.tauri body {
+  background: transparent;
+}
 
-  .tauri #root {
-    background: transparent;
-    position: fixed;
-    inset: 0;
-    max-width: none;
-  }
+.tauri #root {
+  background: transparent;
+  position: fixed;
+  inset: 0;
+  max-width: none;
+}
 
 /* Custom utilities */
-  /* Accessibility: Reduced motion support */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
+/* Accessibility: Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
+}
 
-  /* Hover transitions only on hover-capable devices */
-  @media (hover: hover) and (pointer: fine) {
-    .hover-transition {
-      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-      transition-duration: 200ms;
-      transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
-    }
-
-    /* Interactive element hover (replaces long media query patterns) */
-    .hover-interactive {
-      transition: background-color 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                  box-shadow 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-    .hover-interactive:hover {
-      background-color: color-mix(in oklch, var(--sidebar-accent) 60%, transparent);
-    }
-
-    /* Primary text color on hover */
-    .hover-primary-text {
-      transition: color 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-    .hover-primary-text:hover {
-      color: var(--primary);
-    }
-
-    /* Standard color transition (replaces: transition-colors duration-200 ease-out) */
-    .transition-colors-default {
-      transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-      transition-duration: 200ms;
-      transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-  }
-
-  /* Arc browser-style frosted glass vibrancy */
-  /* Note: Universal background is applied to #root (line 88) */
-  /* Desktop: Tauri's native window effects handle blur */
-  /* Web: backdrop-blur applied to child panels */
-
-  /* Subtle shadow for frosted glass panels - Arc-style floating effect */
-  /* Use inline Tailwind for bg/blur/border; this class only for complex shadow */
-  .vibrancy-shadow {
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 4px rgba(0, 0, 0, 0.06);
-  }
-
-  /* Main container background - for modals, dialogs */
-  .vibrancy-bg {
-    background-color: color-mix(in oklch, var(--background) 95%, transparent);
-    backdrop-filter: blur(24px);
+/* Hover transitions only on hover-capable devices */
+@media (hover: hover) and (pointer: fine) {
+  .hover-transition {
     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
     transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
   }
 
-  /* Subtle panel sections - for headers, dividers */
+  /* Interactive element hover (replaces long media query patterns) */
+  .hover-interactive {
+    transition:
+      background-color 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+      box-shadow 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .hover-interactive:hover {
+    background-color: color-mix(in oklch, var(--sidebar-accent) 60%, transparent);
+  }
+
+  /* Primary text color on hover */
+  .hover-primary-text {
+    transition: color 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .hover-primary-text:hover {
+    color: var(--primary);
+  }
+
+  /* Standard color transition (replaces: transition-colors duration-200 ease-out) */
+  .transition-colors-default {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+}
+
+/* Arc browser-style frosted glass vibrancy */
+/* Note: Universal background is applied to #root (line 88) */
+/* Desktop: Tauri's native window effects handle blur */
+/* Web: backdrop-blur applied to child panels */
+
+/* Subtle shadow for frosted glass panels - Arc-style floating effect */
+/* Use inline Tailwind for bg/blur/border; this class only for complex shadow */
+.vibrancy-shadow {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* Main container background - for modals, dialogs */
+.vibrancy-bg {
+  background-color: color-mix(in oklch, var(--background) 95%, transparent);
+  backdrop-filter: blur(24px);
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
+
+/* Subtle panel sections - for headers, dividers */
+.vibrancy-panel {
+  background-color: color-mix(in oklch, var(--background) 30%, transparent);
+  backdrop-filter: blur(4px);
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-duration: 200ms;
+}
+
+/* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
+.scrollbar-vibrancy::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
+  border-radius: 6px;
+  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
+}
+
+.scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+}
+
+/* Global scrollbar styles - applies to all scrollable elements */
+/* Force custom scrollbars (overrides macOS overlay scrollbars) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Scrollbar buttons (helps webkit take control) */
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Reduce motion support for vibrancy and scrollbars */
+@media (prefers-reduced-motion: reduce) {
+  .vibrancy-bg,
   .vibrancy-panel {
-    background-color: color-mix(in oklch, var(--background) 30%, transparent);
-    backdrop-filter: blur(4px);
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-    transition-duration: 200ms;
+    transition: none;
   }
 
-  /* Scrollbar styles - Linear/Stripe/Airbnb inspired subtle design */
-  .scrollbar-vibrancy::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  .scrollbar-vibrancy::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
+  *::-webkit-scrollbar-thumb,
   .scrollbar-vibrancy::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
-    border-radius: 6px;
-    transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: none !important;
   }
+}
 
-  .scrollbar-vibrancy::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
-  }
-
-  .scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
-    background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
-  }
-
-  /* Global scrollbar styles - applies to all scrollable elements */
-  /* Force custom scrollbars (overrides macOS overlay scrollbars) */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
-  }
-
-  *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
-    border-radius: 6px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-    transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-
-  *::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  *::-webkit-scrollbar-thumb:active {
-    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  *::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  /* Scrollbar buttons (helps webkit take control) */
-  *::-webkit-scrollbar-button {
-    display: none;
-  }
-
-  /* Reduce motion support for vibrancy and scrollbars */
-  @media (prefers-reduced-motion: reduce) {
-    .vibrancy-bg,
-    .vibrancy-panel {
-      transition: none;
-    }
-
-    *::-webkit-scrollbar-thumb,
-    .scrollbar-vibrancy::-webkit-scrollbar-thumb {
-      transition: none !important;
-    }
-  }
-
-  /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
+/* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
 
 /* Message input fade overlay utility */
 .bg-fade-overlay {
@@ -704,24 +709,24 @@ mark.diff-word-deletion {
 .markdown-content h6 {
   color: var(--foreground);
   line-height: 1.3;
-  margin-top: 1.5rem;    /* MORE space above = separates sections */
+  margin-top: 1.5rem; /* MORE space above = separates sections */
   margin-bottom: 0.375rem; /* LESS space below = groups with content */
 }
 
 /* Top-level headers: Bold for scanability when scrolling */
 .markdown-content h1 {
-  font-size: 1.25rem;  /* 20px */
-  font-weight: 700;    /* Bold - primary visual anchor */
+  font-size: 1.25rem; /* 20px */
+  font-weight: 700; /* Bold - primary visual anchor */
 }
 
 .markdown-content h2 {
   font-size: 1.125rem; /* 18px */
-  font-weight: 700;    /* Bold - secondary visual anchor */
+  font-weight: 700; /* Bold - secondary visual anchor */
 }
 
 /* Lower-level headers: Semibold (hierarchy without shouting) */
 .markdown-content h3 {
-  font-size: 1rem;     /* 16px */
+  font-size: 1rem; /* 16px */
   font-weight: 600;
 }
 
@@ -736,7 +741,7 @@ mark.diff-word-deletion {
 }
 
 .markdown-content h6 {
-  font-size: 0.75rem;  /* 12px */
+  font-size: 0.75rem; /* 12px */
   font-weight: 600;
 }
 
@@ -752,7 +757,7 @@ mark.diff-word-deletion {
 
 /* Paragraphs - Tighter spacing */
 .markdown-content p {
-  margin-top: 0.375rem;   /* Reduced from 0.5rem */
+  margin-top: 0.375rem; /* Reduced from 0.5rem */
   margin-bottom: 0.375rem;
 }
 
@@ -796,7 +801,7 @@ mark.diff-word-deletion {
 /* Lists - Compact with visible bullets */
 .markdown-content ul,
 .markdown-content ol {
-  margin-top: 0.375rem;  /* Reduced from 0.5rem */
+  margin-top: 0.375rem; /* Reduced from 0.5rem */
   margin-bottom: 0.75rem; /* Reduced from 1rem */
   padding-left: 1.125rem; /* Reduced from 1.25rem (20px → 18px) */
 }
@@ -810,7 +815,7 @@ mark.diff-word-deletion {
 }
 
 .markdown-content li {
-  margin-top: 0.125rem;  /* Reduced from 0.25rem */
+  margin-top: 0.125rem; /* Reduced from 0.25rem */
   margin-bottom: 0.125rem;
 }
 
@@ -845,7 +850,7 @@ mark.diff-word-deletion {
 
 /* Horizontal rule */
 .markdown-content hr {
-  margin-top: 1.5rem;  /* Reduced from 2rem */
+  margin-top: 1.5rem; /* Reduced from 2rem */
   margin-bottom: 1.5rem;
   border: none;
   border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
@@ -863,7 +868,7 @@ mark.diff-word-deletion {
 
 /* Code blocks - COMPACT (12px, less padding) */
 .markdown-content pre {
-  margin-top: 0.75rem;  /* Reduced from 1rem */
+  margin-top: 0.75rem; /* Reduced from 1rem */
   margin-bottom: 0.75rem;
   padding: 0.5rem 0.75rem; /* Reduced from 1rem (MUCH tighter) */
   overflow-x: auto;
@@ -871,7 +876,7 @@ mark.diff-word-deletion {
   background-color: color-mix(in oklch, var(--muted) 50%, transparent);
   border: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
   font-family: var(--font-family-mono);
-  font-size: 0.75rem;  /* 12px (reduced from 14px - SMALLER) */
+  font-size: 0.75rem; /* 12px (reduced from 14px - SMALLER) */
   line-height: 1.5;
 }
 

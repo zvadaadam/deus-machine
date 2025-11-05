@@ -9,7 +9,7 @@
  * - Fallback: Port 3333 if neither is available
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from "@tauri-apps/api/core";
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
@@ -17,14 +17,42 @@ let portPromise: Promise<number> | null = null;
 // Common ports to try during discovery (most recently used ports)
 // Backend uses PORT=0 for dynamic allocation, so we try a range of common ports
 const DISCOVERY_PORTS = [
-  51176, 52820, 53792, // Recent dynamic ports
-  59270, 59271, 59269, // Previous attempts
-  3333, 3334, 3335,    // Default fallback range
-  8080, 8081, 8082,    // Alternative common ports
-  50000, 50001, 50002, 50003, 50004, 50005, // Dynamic port range
-  51000, 51001, 51002, 51003, 51004, 51005, // More dynamic ports
-  52000, 52001, 52002, 52003, 52004, 52005, // More dynamic ports
-  53000, 53001, 53002, 53003, 53004, 53005, // More dynamic ports
+  51176,
+  52820,
+  53792, // Recent dynamic ports
+  59270,
+  59271,
+  59269, // Previous attempts
+  3333,
+  3334,
+  3335, // Default fallback range
+  8080,
+  8081,
+  8082, // Alternative common ports
+  50000,
+  50001,
+  50002,
+  50003,
+  50004,
+  50005, // Dynamic port range
+  51000,
+  51001,
+  51002,
+  51003,
+  51004,
+  51005, // More dynamic ports
+  52000,
+  52001,
+  52002,
+  52003,
+  52004,
+  52005, // More dynamic ports
+  53000,
+  53001,
+  53002,
+  53003,
+  53004,
+  53005, // More dynamic ports
 ];
 
 /**
@@ -32,13 +60,13 @@ const DISCOVERY_PORTS = [
  */
 async function discoverBackendPort(): Promise<number | null> {
   // Try localStorage first (fastest)
-  const stored = localStorage.getItem('conductor_backend_port');
+  const stored = localStorage.getItem("conductor_backend_port");
   if (stored) {
     const port = parseInt(stored);
     try {
       const response = await fetch(`http://localhost:${port}/api/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(1000)
+        method: "GET",
+        signal: AbortSignal.timeout(1000),
       });
       if (response.ok) {
         console.log(`[API] Found backend on stored port: ${port}`);
@@ -58,8 +86,8 @@ async function discoverBackendPort(): Promise<number | null> {
       const timeoutId = setTimeout(() => controller.abort(), 500);
 
       const response = await fetch(`http://localhost:${port}/api/health`, {
-        method: 'GET',
-        signal: controller.signal
+        method: "GET",
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -74,11 +102,11 @@ async function discoverBackendPort(): Promise<number | null> {
   });
 
   const results = await Promise.all(portChecks);
-  const foundPort = results.find(port => port !== null);
+  const foundPort = results.find((port) => port !== null);
 
   if (foundPort) {
     console.log(`[API] Discovered backend on port: ${foundPort}`);
-    localStorage.setItem('conductor_backend_port', foundPort.toString());
+    localStorage.setItem("conductor_backend_port", foundPort.toString());
     return foundPort;
   }
 
@@ -111,12 +139,14 @@ async function getBackendPort(): Promise<number> {
 
     // 2. Try Tauri API (for Tauri app mode)
     try {
-      const port = await invoke<number>('get_backend_port');
+      const port = await invoke<number>("get_backend_port");
       console.log(`[API] Using Tauri backend port: ${port}`);
       cachedPort = port;
       return port;
     } catch (error) {
-      console.log('[API] Tauri API not available (running in web browser), trying port discovery...');
+      console.log(
+        "[API] Tauri API not available (running in web browser), trying port discovery..."
+      );
     }
 
     // 3. Try port discovery (for web browser accessing Vite dev server)
@@ -128,7 +158,7 @@ async function getBackendPort(): Promise<number> {
     }
 
     // 4. Fallback to hardcoded port
-    console.warn('[API] Could not discover backend port, falling back to default port 3333');
+    console.warn("[API] Could not discover backend port, falling back to default port 3333");
     cachedPort = 3333;
     return 3333;
   })();
@@ -157,8 +187,8 @@ export const API_CONFIG = {
 
 export const ENDPOINTS = {
   // Workspace endpoints
-  WORKSPACES: '/workspaces',
-  WORKSPACES_BY_REPO: '/workspaces/by-repo',
+  WORKSPACES: "/workspaces",
+  WORKSPACES_BY_REPO: "/workspaces/by-repo",
   WORKSPACE_BY_ID: (id: string) => `/workspaces/${id}`,
   WORKSPACE_DIFF_STATS: (id: string) => `/workspaces/${id}/diff-stats`,
   WORKSPACE_DIFF_FILES: (id: string) => `/workspaces/${id}/diff-files`,
@@ -169,15 +199,15 @@ export const ENDPOINTS = {
   WORKSPACE_SYSTEM_PROMPT: (id: string) => `/workspaces/${id}/system-prompt`,
 
   // Session endpoints
-  SESSIONS: '/sessions',
+  SESSIONS: "/sessions",
   SESSION_BY_ID: (id: string) => `/sessions/${id}`,
   SESSION_MESSAGES: (id: string) => `/sessions/${id}/messages`,
   SESSION_STOP: (id: string) => `/sessions/${id}/stop`,
 
   // Repository endpoints
-  REPOS: '/repos',
+  REPOS: "/repos",
   REPO_BY_ID: (id: string) => `/repos/${id}`,
 
   // Stats endpoint
-  STATS: '/stats',
+  STATS: "/stats",
 } as const;

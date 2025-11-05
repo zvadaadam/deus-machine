@@ -9,7 +9,7 @@
  */
 export interface Settings {
   // General
-  theme?: 'light' | 'dark' | 'system';
+  theme?: "light" | "dark" | "system";
   notifications_enabled?: boolean;
   sound_effects_enabled?: boolean;
   sound_type?: string;
@@ -85,13 +85,13 @@ export interface Hook {
  * Used for navigation in settings UI
  */
 export type SettingsSection =
-  | 'general'
-  | 'account'
-  | 'terminal'
-  | 'mcp'
-  | 'commands'
-  | 'agents'
-  | 'memory'
-  | 'hooks'
-  | 'provider'
-  | 'experimental';
+  | "general"
+  | "account"
+  | "terminal"
+  | "mcp"
+  | "commands"
+  | "agents"
+  | "memory"
+  | "hooks"
+  | "provider"
+  | "experimental";

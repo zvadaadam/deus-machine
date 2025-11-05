@@ -1,14 +1,14 @@
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import type { GeneralSectionProps } from './types';
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
   return (
@@ -20,7 +20,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <Label htmlFor="theme">Theme</Label>
           <Select
             value={theme}
-            onValueChange={(value: 'light' | 'dark' | 'system') => setTheme(value)}
+            onValueChange={(value: "light" | "dark" | "system") => setTheme(value)}
           >
             <SelectTrigger id="theme">
               <SelectValue />
@@ -39,9 +39,9 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <Checkbox
             id="notifications"
             checked={settings.notifications_enabled ?? true}
-            onCheckedChange={(checked) => saveSetting('notifications_enabled', checked === true)}
+            onCheckedChange={(checked) => saveSetting("notifications_enabled", checked === true)}
           />
-          <Label htmlFor="notifications" className="text-sm cursor-pointer">
+          <Label htmlFor="notifications" className="cursor-pointer text-sm">
             Enable notifications
           </Label>
         </div>
@@ -50,9 +50,9 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <Checkbox
             id="sound-effects"
             checked={settings.sound_effects_enabled ?? true}
-            onCheckedChange={(checked) => saveSetting('sound_effects_enabled', checked === true)}
+            onCheckedChange={(checked) => saveSetting("sound_effects_enabled", checked === true)}
           />
-          <Label htmlFor="sound-effects" className="text-sm cursor-pointer">
+          <Label htmlFor="sound-effects" className="cursor-pointer text-sm">
             Enable sound effects
           </Label>
         </div>
@@ -60,8 +60,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
         <div className="space-y-2">
           <Label htmlFor="sound-type">Sound type</Label>
           <Select
-            value={settings.sound_type ?? 'choo-choo'}
-            onValueChange={(value) => saveSetting('sound_type', value)}
+            value={settings.sound_type ?? "choo-choo"}
+            onValueChange={(value) => saveSetting("sound_type", value)}
           >
             <SelectTrigger id="sound-type">
               <SelectValue />
@@ -77,8 +77,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
         <div className="space-y-2">
           <Label htmlFor="diff-view">Diff view mode</Label>
           <Select
-            value={settings.diff_view_mode ?? 'unified'}
-            onValueChange={(value) => saveSetting('diff_view_mode', value)}
+            value={settings.diff_view_mode ?? "unified"}
+            onValueChange={(value) => saveSetting("diff_view_mode", value)}
           >
             <SelectTrigger id="diff-view">
               <SelectValue />

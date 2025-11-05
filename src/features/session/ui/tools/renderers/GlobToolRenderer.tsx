@@ -8,9 +8,9 @@
  * AFTER: ~90 LOC
  */
 
-import { FileSearch } from 'lucide-react';
-import { BaseToolRenderer } from '../components';
-import type { ToolRendererProps } from '../../chat-types';
+import { FileSearch } from "lucide-react";
+import { BaseToolRenderer } from "../components";
+import type { ToolRendererProps } from "../../chat-types";
 
 export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { pattern, path } = toolUse.input;
@@ -18,15 +18,20 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   // Parse results - Glob returns newline-separated file paths or "No files found"
   const parseResults = (content: string): string[] => {
-    if (!content || content.trim() === '' || content.includes('No files found')) {
+    if (!content || content.trim() === "" || content.includes("No files found")) {
       return [];
     }
-    return content.split('\n').filter(line => line.trim().length > 0);
+    return content.split("\n").filter((line) => line.trim().length > 0);
   };
 
-  const files = toolResult && !isError ? parseResults(
-    typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content)
-  ) : [];
+  const files =
+    toolResult && !isError
+      ? parseResults(
+          typeof toolResult.content === "string"
+            ? toolResult.content
+            : JSON.stringify(toolResult.content)
+        )
+      : [];
 
   const hasResults = files.length > 0;
   const resultCount = files.length;
@@ -34,19 +39,20 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="File Search (Glob)"
-      icon={<FileSearch className="w-4 h-4 text-muted-foreground/70" />}
+      icon={<FileSearch className="text-muted-foreground/70 h-4 w-4" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] text-muted-foreground">
-          {pattern} {path && `in ${path}`} • {hasResults ? `${resultCount} file${resultCount !== 1 ? 's' : ''}` : 'no files'}
+        <span className="text-muted-foreground font-mono text-[12px]">
+          {pattern} {path && `in ${path}`} •{" "}
+          {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
         </span>
       )}
       renderContent={() => {
         // No results message
         if (!hasResults) {
           return (
-            <div className="px-2 pb-2 text-xs text-muted-foreground italic">
+            <div className="text-muted-foreground px-2 pb-2 text-xs italic">
               No files matched the pattern
             </div>
           );
@@ -54,15 +60,15 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
         // File list
         return (
-          <div className="px-2 pb-2 space-y-1">
-            <div className="text-xs text-muted-foreground mb-1">Matched files:</div>
-            <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
+          <div className="space-y-1 px-2 pb-2">
+            <div className="text-muted-foreground mb-1 text-xs">Matched files:</div>
+            <div className="max-h-60 space-y-0.5 overflow-y-auto pr-1">
               {files.map((file, index) => (
                 <div
                   key={index}
-                  className="text-xs font-mono bg-muted/50 hover:bg-muted transition-colors px-2 py-1 rounded group flex items-center gap-2"
+                  className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
                 >
-                  <span className="text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity">
+                  <span className="text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100">
                     {index + 1}.
                   </span>
                   <span className="flex-1 break-all">{file}</span>

@@ -1,12 +1,12 @@
-import { FolderOpen, Search, Loader2, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/ui/empty';
-import { useFilesRust, invalidateFileCache } from '../api/useFilesRust';
-import { FileTree } from './components/FileTree';
-import type { Workspace } from '@/shared/types';
-import type { FileTreeNode } from '../api/useFilesRust';
+import { FolderOpen, Search, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
+import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
+import { FileTree } from "./components/FileTree";
+import type { Workspace } from "@/shared/types";
+import type { FileTreeNode } from "../api/useFilesRust";
 
 interface FileBrowserPanelProps {
   selectedWorkspace: Workspace | null;
@@ -21,8 +21,11 @@ interface FileBrowserPanelProps {
  * - Real-time search filtering
  * - 30s cache with manual refresh
  */
-export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickProp }: FileBrowserPanelProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+export function FileBrowserPanel({
+  selectedWorkspace,
+  onFileClick: onFileClickProp,
+}: FileBrowserPanelProps) {
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Use Rust-based file scanning
   const workspacePath = selectedWorkspace
@@ -43,7 +46,7 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
     if (onFileClickProp) {
       onFileClickProp(path);
     } else {
-      console.log('File clicked:', path);
+      console.log("File clicked:", path);
       // TODO: Open file viewer or send to chat
     }
   };
@@ -69,15 +72,13 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
 
   if (!selectedWorkspace) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
+      <div className="flex h-full flex-col items-center justify-center p-8">
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+              <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
             </EmptyMedia>
-            <EmptyDescription>
-              No workspace selected
-            </EmptyDescription>
+            <EmptyDescription>No workspace selected</EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>
@@ -86,23 +87,23 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
 
   if (isLoading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-xs text-muted-foreground mt-3">Scanning files with Rust...</p>
+      <div className="flex h-full flex-col items-center justify-center p-8">
+        <Loader2 className="text-primary h-8 w-8 animate-spin" />
+        <p className="text-muted-foreground mt-3 text-xs">Scanning files with Rust...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
+      <div className="flex h-full flex-col items-center justify-center p-8">
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+              <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
             </EmptyMedia>
             <EmptyDescription>
-              Error: {error instanceof Error ? error.message : 'Unknown error'}
+              Error: {error instanceof Error ? error.message : "Unknown error"}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -111,17 +112,17 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Search Bar + Refresh */}
-      <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2 flex-shrink-0">
+      <div className="border-border/30 flex flex-shrink-0 items-center gap-2 border-b px-3 py-1.5">
         <div className="relative flex-1">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+          <Search className="text-muted-foreground/40 absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
           <Input
             type="text"
             placeholder="Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-7 text-xs placeholder:text-muted-foreground/50"
+            className="placeholder:text-muted-foreground/50 h-9 pl-7 text-xs"
           />
         </div>
         <Button
@@ -136,19 +137,19 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
       </div>
 
       {/* File Count Stats */}
-      <div className="px-3 py-2 border-b border-border/20 flex items-center justify-between flex-shrink-0">
-        <span className="text-xs font-medium text-muted-foreground/60">
+      <div className="border-border/20 flex flex-shrink-0 items-center justify-between border-b px-3 py-2">
+        <span className="text-muted-foreground/60 text-xs font-medium">
           {data?.totalFiles || 0} files
         </span>
         {data?.totalSize && (
-          <span className="text-xs text-muted-foreground/40 font-mono tabular-nums">
+          <span className="text-muted-foreground/40 font-mono text-xs tabular-nums">
             {formatTotalSize(data.totalSize)}
           </span>
         )}
       </div>
 
       {/* File Tree */}
-      <div className="flex-1 overflow-y-auto scrollbar-vibrancy p-2">
+      <div className="scrollbar-vibrancy flex-1 overflow-y-auto p-2">
         {filteredFiles.length > 0 ? (
           <FileTree nodes={filteredFiles} onFileClick={handleFileClick} />
         ) : (
@@ -156,7 +157,7 @@ export function FileBrowserPanel({ selectedWorkspace, onFileClick: onFileClickPr
             <Empty className="border-0">
               <EmptyHeader>
                 <EmptyMedia>
-                  <FolderOpen className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
+                  <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
                 </EmptyMedia>
                 <EmptyDescription>
                   {searchQuery ? "No files match your search" : "No files found"}
