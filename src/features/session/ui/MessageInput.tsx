@@ -138,7 +138,10 @@ export function MessageInput({
   // Context window calculation (200k token limit for Sonnet 3.5)
   const MAX_TOKENS = 200000;
   const contextPercentage = Math.min((contextTokenCount / MAX_TOKENS) * 100, 100);
-  const contextFillColor = contextPercentage > 80 ? '#E0903F' : '#B8BFC8'; // Copper when > 80%
+  // Use CSS variables instead of hardcoded hex values (CLAUDE.md compliance)
+  const contextFillColor = contextPercentage > 80
+    ? 'var(--primary)'      // Copper/warning when > 80%
+    : 'var(--muted-foreground)'; // Neutral gray normally
 
   // Drag & Drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -254,7 +257,7 @@ export function MessageInput({
           placeholder="Ask a follow-up ..."
           disabled={sending}
           onKeyDown={handleKeyDown}
-          className={cn("min-h-10 max-h-50 pl-4 pt-4 overflow-y-auto scrollbar-vibrancy placeholder:text-placeholder", className)}
+          className={cn("min-h-10 max-h-48 pl-4 pt-4 overflow-y-auto scrollbar-vibrancy placeholder:text-placeholder", className)}
         />
 
         {/* Bottom toolbar */}

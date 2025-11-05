@@ -108,7 +108,7 @@ export function RepositoryItem({
                   const repoColor = getRepoColor(repository.repo_name);
                   return (
                     <div className={cn(
-                      "h-6 w-6 flex items-center justify-center text-[10px] font-semibold flex-shrink-0",
+                      "h-6 w-6 flex items-center justify-center text-2xs font-semibold flex-shrink-0",
                       "rounded-md",
                       repoColor.bg,
                       repoColor.text
@@ -171,7 +171,7 @@ export function RepositoryItem({
                 {workingCount > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <svg
-                      className="absolute w-[36px] h-[36px] animate-[subtle-spin_2s_linear_infinite] motion-reduce:animate-none"
+                      className="absolute w-[36px] h-[36px] animate-subtle-spin motion-reduce:animate-none"
                       style={{ willChange: 'transform' }}
                       viewBox="0 0 36 36"
                       fill="none"
@@ -200,7 +200,7 @@ export function RepositoryItem({
                 <div
                   className={cn(
                     "relative h-8 w-8 flex items-center justify-center text-xs font-semibold",
-                    "rounded-[8px]",
+                    "rounded-lg",
                     "transform-gpu translate-z-0",
                     // Only transition border-color (not shadow/layout) - fast and smooth
                     "transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
@@ -229,7 +229,7 @@ export function RepositoryItem({
                   {/* Breathing glow using pseudo-element (GPU-accelerated) */}
                   {workingCount > 0 && isActive && ringColor === 'working' && (
                     <div
-                      className="absolute inset-[-2px] rounded-[10px] pointer-events-none animate-[breathing-glow_2.5s_ease-in-out_infinite] motion-reduce:animate-none"
+                      className="absolute inset-[-2px] rounded-[10px] pointer-events-none animate-breathing-glow motion-reduce:animate-none"
                       style={{
                         background: 'radial-gradient(circle, color-mix(in oklch, var(--status-working) 25%, transparent) 0%, transparent 70%)',
                         willChange: 'opacity'
@@ -240,7 +240,7 @@ export function RepositoryItem({
                   {/* Center content: working count OR initials */}
                   {workingCount > 0 ? (
                     <span className={cn(
-                      "relative z-10 text-[11px] font-bold tabular-nums",
+                      "relative z-10 text-caption-sm font-bold tabular-nums",
                       // Number color matches ring color for visual unity
                       ringColor === 'working' && "text-status-working",
                       ringColor === 'unread' && "text-status-unread",
@@ -265,7 +265,7 @@ export function RepositoryItem({
                     className={cn(
                       "absolute -top-1 -right-1",
                       "flex h-[18px] min-w-[18px] items-center justify-center",
-                      "rounded-full text-[10px] font-bold px-1",
+                      "rounded-full text-2xs font-bold px-1",
                       "z-20 border-[2px] border-sidebar",
                       "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                       "animate-in zoom-in-50",
@@ -332,11 +332,11 @@ export function RepositoryItem({
                     <div key={status} className="mb-3">
                       {/* Section Header */}
                       <div className="px-3 py-2 flex items-center gap-2">
-                        <span className="text-[10px] font-bold tracking-wider uppercase">
+                        <span className="text-2xs font-bold tracking-wider uppercase">
                           <span className={cn("mr-1", sectionConfig.text)}>{emoji}</span>
                           <span className={sectionConfig.text}>{label}</span>
                         </span>
-                        <span className={cn("text-[10px] font-semibold", sectionConfig.text)}>
+                        <span className={cn("text-2xs font-semibold", sectionConfig.text)}>
                           {workspacesInSection.length}
                         </span>
                       </div>

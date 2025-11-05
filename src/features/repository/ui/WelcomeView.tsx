@@ -94,7 +94,7 @@ export function WelcomeView({
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpenProject?.()}
           >
             <div className="w-9 h-9 rounded-lg bg-foreground/5 flex items-center justify-center text-foreground/80">
-              <FolderPlus className="w-[18px] h-[18px]" />
+              <FolderPlus className="w-4.5 h-4.5" />
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Open Project</h3>
@@ -112,7 +112,7 @@ export function WelcomeView({
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onCloneRepository?.()}
           >
             <div className="w-9 h-9 rounded-lg bg-foreground/5 flex items-center justify-center text-foreground/80">
-              <Github className="w-[18px] h-[18px]" />
+              <Github className="w-4.5 h-4.5" />
             </div>
             <div>
               <h3 className="font-medium text-sm text-foreground mb-0.5">Clone Repository</h3>

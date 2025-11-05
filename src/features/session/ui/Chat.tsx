@@ -191,8 +191,8 @@ export function Chat({
                 className={cn(
                   "flex items-center gap-2 py-2.5 px-3.5 mr-auto max-w-[85%]",
                   "bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl",
-                  "text-success font-medium text-[13px] shadow-sm",
-                  "animate-[pulse_0.6s_ease_infinite] motion-reduce:animate-none",
+                  "text-success font-medium text-body-sm shadow-sm",
+                  "animate-gentle-pulse motion-reduce:animate-none",
                   indicatorMarginClass,
                 )}
               >

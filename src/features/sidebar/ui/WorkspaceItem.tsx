@@ -178,12 +178,12 @@ export function WorkspaceItem({
         ) : hasChanges ? (
           <div className="flex items-center gap-1 flex-shrink-0">
             {additions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-2xs font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
                 +{additions}
               </span>
             )}
             {deletions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-2xs font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
                 -{deletions}
               </span>
             )}

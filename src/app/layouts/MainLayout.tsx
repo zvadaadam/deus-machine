@@ -372,7 +372,7 @@ function MainContent({
        * - Expanded: Main ~400px | Panel ~800px
        */}
       <div
-        className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 vibrancy-shadow overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        className="flex-1 min-w-0 rounded-lg bg-background/70 backdrop-blur-[20px] border border-border/40 shadow-sm overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{
           display: 'grid',
           gridTemplateColumns: selectedWorkspace
