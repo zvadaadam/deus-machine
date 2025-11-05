@@ -106,7 +106,7 @@ export function FileChangesPanel({
                 href={server.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group elevation-1 hover:elevation-2 hover-interactive"
+                className="flex items-center gap-3 p-2.5 rounded-lg no-underline group shadow-sm hover:shadow hover-interactive"
                 title={`Open ${server.name} in browser`}
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">

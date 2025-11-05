@@ -149,7 +149,8 @@
                   "fill": "#B8BFC8",
                   "content": "Thinking",
                   "fontFamily": "Suisse Intl",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -216,7 +217,8 @@
                       },
                       "content": "I run AI code review and this is the feedback. Wdyt? Is it actionable?",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -228,7 +230,8 @@
                       },
                       "content": "(Btw, we don't wanna over-engineer the codebase, but if it help to have clean codebase it ok)",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -240,7 +243,8 @@
                       },
                       "content": "(ALSO DROP THE MARKDOWN FILES THAT ARE NOT NEEDED)",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -290,7 +294,8 @@
                       },
                       "content": "The user is asking me to: 1. Read the AI code review feedback 2. Assess if it's actionable 3. Keep in mind not to over-e...",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -354,7 +359,8 @@
                           "fill": "#7D8590",
                           "content": "42b6843d-b620-439b-9c54-5c158f7e38eb.txt",
                           "fontFamily": "Suisse Intl Mono",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -362,7 +368,8 @@
                           "fill": "#7D8590",
                           "content": "• 972 lines",
                           "fontFamily": "Suisse Intl",
-                          "fontSize": 12
+                          "fontSize": 12,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -414,7 +421,8 @@
                       },
                       "content": "Let me analyze the AI code review feedback. It's from CodeRabbit bot and has several categories: 1. **Critical issues (...",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -446,7 +454,8 @@
                       },
                       "content": "Let me read the code review and assess what's actionable.",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -458,7 +467,8 @@
                       },
                       "content": "The AI code review has good feedback! Here's my breakdown:",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "frame",
@@ -493,7 +503,8 @@
                           },
                           "content": "1. Missing React import (ChatInput.tsx) - Will cause TypeScript errors",
                           "fontFamily": "Suisse Intl",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -505,7 +516,8 @@
                           },
                           "content": "2. Duplicate TradingAgent interface - Type mismatch causing unsafe casts",
                           "fontFamily": "Suisse Intl",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -517,7 +529,8 @@
                           },
                           "content": "3. Unused constant (USE_TRADINGVIEW) - Will fail build with noUnusedLocals",
                           "fontFamily": "Suisse Intl",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -609,7 +622,8 @@
                           },
                           "content": "Ask Claude Code to make changes, @mention files, run /commands",
                           "fontFamily": "Suisse Intl",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -703,7 +717,8 @@
                                   "fill": "#E6EDF3",
                                   "content": "Sonnet",
                                   "fontFamily": "Suisse Intl",
-                                  "fontSize": 13
+                                  "fontSize": 13,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -901,8 +916,8 @@
     {
       "type": "frame",
       "id": "message-input-component",
-      "x": 205,
-      "y": 1066,
+      "x": 306,
+      "y": 944,
       "name": "Message Input Component - Detailed",
       "width": 960,
       "height": "fit_content",
@@ -938,18 +953,18 @@
               16,
               16
             ],
-            "justify": "start",
+            "justify": "end",
             "align": "start"
           },
           "children": [
             {
               "type": "frame",
               "id": "input-group-main",
-              "name": "InputGroup (rounded-[24px])",
+              "name": "InputGroup (rounded-2xl)",
               "width": "fill_container",
               "height": "fit_content",
               "fill": "#3D4149",
-              "cornerRadius": 8,
+              "cornerRadius": 16,
               "stroke": {
                 "thickness": 1,
                 "fill": "#48505E"
@@ -984,7 +999,8 @@
                       },
                       "content": "Ask Claude Code to make changes, @mention files, run /commands",
                       "fontFamily": "Suisse Intl",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -1015,6 +1031,7 @@
                       "width": "fit_content",
                       "height": "fit_content",
                       "fill": "transparent",
+                      "cornerRadius": 18,
                       "layout": {
                         "mode": "horizontal",
                         "spacing": 6,
@@ -1029,7 +1046,7 @@
                           "width": 32,
                           "height": 32,
                           "fill": "#42464E",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "justify": "center",
@@ -1054,7 +1071,7 @@
                           "width": "fit_content",
                           "height": 32,
                           "fill": "#42464E",
-                          "cornerRadius": 6,
+                          "cornerRadius": 18,
                           "layout": {
                             "mode": "horizontal",
                             "spacing": 6,
@@ -1064,19 +1081,10 @@
                           },
                           "children": [
                             {
-                              "type": "icon_font",
-                              "id": "sparkles-icon",
-                              "width": 16,
-                              "height": 16,
-                              "iconFontName": "auto_awesome",
-                              "iconFontFamily": "Material Symbols Outlined",
-                              "fill": "#E0903F"
-                            },
-                            {
                               "type": "text",
                               "id": "model-label",
                               "fill": "#E6EDF3",
-                              "content": "Sonnet",
+                              "content": "Sonnet 4.5",
                               "fontFamily": "Suisse Intl",
                               "fontSize": 13,
                               "fontWeight": "normal"
@@ -1090,7 +1098,7 @@
                           "width": "fit_content",
                           "height": 32,
                           "fill": "#42464E",
-                          "cornerRadius": 6,
+                          "cornerRadius": 18,
                           "layout": {
                             "mode": "horizontal",
                             "spacing": 4,
@@ -1224,7 +1232,7 @@
                           "width": 32,
                           "height": 32,
                           "fill": "#7D2828",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "justify": "center",
@@ -1249,7 +1257,7 @@
                           "width": 32,
                           "height": 32,
                           "fill": "#E0903F",
-                          "cornerRadius": 6,
+                          "cornerRadius": 32,
                           "layout": {
                             "mode": "horizontal",
                             "justify": "center",
