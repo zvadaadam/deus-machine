@@ -19,26 +19,21 @@ interface DiffModalProps {
  * Modal for displaying git diff for a specific file
  * Shows unified diff format with syntax highlighting
  */
-export function DiffModal({
-  selectedFile,
-  fileDiff,
-  loading,
-  onClose,
-}: DiffModalProps) {
+export function DiffModal({ selectedFile, fileDiff, loading, onClose }: DiffModalProps) {
   return (
     <Dialog open={!!selectedFile} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh]">
+      <DialogContent className="max-h-[80vh] sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>Diff: {selectedFile}</DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="h-[500px] w-full rounded-md border p-4">
           {loading ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
+            <div className="text-muted-foreground flex h-full items-center justify-center">
               Loading diff...
             </div>
           ) : (
-            <pre className="text-sm font-mono whitespace-pre">{fileDiff}</pre>
+            <pre className="font-mono text-sm whitespace-pre">{fileDiff}</pre>
           )}
         </ScrollArea>
 

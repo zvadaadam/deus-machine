@@ -3,10 +3,10 @@
  * TanStack Query hooks for settings management
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SettingsService } from './settings.service';
-import { queryKeys } from '@/shared/api/queryKeys';
-import type { Settings, MCPServer, Command, Agent, Hook } from '../types';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { SettingsService } from "./settings.service";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { Settings, MCPServer, Command, Agent, Hook } from "../types";
 
 /**
  * Fetch all settings
@@ -25,7 +25,7 @@ export function useSettings() {
 export function useMCPServers() {
   return useQuery({
     queryKey: queryKeys.settings.mcpServers,
-    queryFn: () => SettingsService.fetchFileConfig<MCPServer[]>('mcp-servers'),
+    queryFn: () => SettingsService.fetchFileConfig<MCPServer[]>("mcp-servers"),
     staleTime: 30000,
   });
 }
@@ -36,7 +36,7 @@ export function useMCPServers() {
 export function useCommands() {
   return useQuery({
     queryKey: queryKeys.settings.commands,
-    queryFn: () => SettingsService.fetchFileConfig<Command[]>('commands'),
+    queryFn: () => SettingsService.fetchFileConfig<Command[]>("commands"),
     staleTime: 30000,
   });
 }
@@ -47,7 +47,7 @@ export function useCommands() {
 export function useAgents() {
   return useQuery({
     queryKey: queryKeys.settings.agents,
-    queryFn: () => SettingsService.fetchFileConfig<Agent[]>('agents'),
+    queryFn: () => SettingsService.fetchFileConfig<Agent[]>("agents"),
     staleTime: 30000,
   });
 }
@@ -58,7 +58,7 @@ export function useAgents() {
 export function useHooks() {
   return useQuery({
     queryKey: queryKeys.settings.hooks,
-    queryFn: () => SettingsService.fetchFileConfig<Hook>('hooks'),
+    queryFn: () => SettingsService.fetchFileConfig<Hook>("hooks"),
     staleTime: 30000,
   });
 }
@@ -84,7 +84,7 @@ export function useUpdateSettings() {
 export function useClearMemory() {
   return useMutation({
     mutationFn: async () => {
-      const { MemoryService } = await import('./memory.service');
+      const { MemoryService } = await import("./memory.service");
       return MemoryService.clear();
     },
   });

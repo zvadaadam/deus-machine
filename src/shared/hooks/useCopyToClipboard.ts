@@ -11,7 +11,7 @@
  *   </button>
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface UseCopyToClipboardOptions {
   resetDelay?: number; // Milliseconds before resetting "copied" state (default: 2000)
@@ -31,30 +31,33 @@ export function useCopyToClipboard(
   const [error, setError] = useState<Error | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  const copy = useCallback(async (text: string): Promise<boolean> => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setError(null);
+  const copy = useCallback(
+    async (text: string): Promise<boolean> => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setError(null);
 
-      // Clear existing timer before setting new one
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
+        // Clear existing timer before setting new one
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
+
+        // Reset "copied" state after delay
+        timerRef.current = window.setTimeout(() => {
+          setCopied(false);
+        }, resetDelay);
+
+        return true;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error("Failed to copy to clipboard");
+        setError(error);
+        console.error("Failed to copy:", error);
+        return false;
       }
-
-      // Reset "copied" state after delay
-      timerRef.current = window.setTimeout(() => {
-        setCopied(false);
-      }, resetDelay);
-
-      return true;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to copy to clipboard');
-      setError(error);
-      console.error('Failed to copy:', error);
-      return false;
-    }
-  }, [resetDelay]);
+    },
+    [resetDelay]
+  );
 
   // Cleanup timer on unmount
   useEffect(() => {

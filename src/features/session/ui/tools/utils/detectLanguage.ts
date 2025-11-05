@@ -9,70 +9,70 @@
  * Detects language from file path extension
  */
 export function detectLanguageFromPath(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase();
+  const ext = path.split(".").pop()?.toLowerCase();
 
   const languageMap: Record<string, string> = {
     // TypeScript/JavaScript
-    ts: 'typescript',
-    tsx: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    mjs: 'javascript',
-    cjs: 'javascript',
+    ts: "typescript",
+    tsx: "typescript",
+    js: "javascript",
+    jsx: "javascript",
+    mjs: "javascript",
+    cjs: "javascript",
 
     // Python
-    py: 'python',
-    pyw: 'python',
+    py: "python",
+    pyw: "python",
 
     // Rust
-    rs: 'rust',
+    rs: "rust",
 
     // Go
-    go: 'go',
+    go: "go",
 
     // Java/Kotlin
-    java: 'java',
-    kt: 'kotlin',
-    kts: 'kotlin',
+    java: "java",
+    kt: "kotlin",
+    kts: "kotlin",
 
     // C/C++
-    c: 'c',
-    cpp: 'cpp',
-    cc: 'cpp',
-    cxx: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
+    c: "c",
+    cpp: "cpp",
+    cc: "cpp",
+    cxx: "cpp",
+    h: "c",
+    hpp: "cpp",
 
     // Web
-    html: 'html',
-    htm: 'html',
-    css: 'css',
-    scss: 'scss',
-    sass: 'sass',
-    less: 'less',
+    html: "html",
+    htm: "html",
+    css: "css",
+    scss: "scss",
+    sass: "sass",
+    less: "less",
 
     // Config/Data
-    json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    toml: 'toml',
-    xml: 'xml',
+    json: "json",
+    yaml: "yaml",
+    yml: "yaml",
+    toml: "toml",
+    xml: "xml",
 
     // Shell
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'zsh',
+    sh: "bash",
+    bash: "bash",
+    zsh: "zsh",
 
     // Markdown
-    md: 'markdown',
-    mdx: 'markdown',
+    md: "markdown",
+    mdx: "markdown",
 
     // Other
-    sql: 'sql',
-    rb: 'ruby',
-    php: 'php',
-    swift: 'swift',
+    sql: "sql",
+    rb: "ruby",
+    php: "php",
+    swift: "swift",
   };
 
-  return languageMap[ext || ''] || 'text';
+  return languageMap[ext || ""] || "text";
 }

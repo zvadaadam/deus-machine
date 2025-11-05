@@ -5,7 +5,7 @@
  * Import this file early in your app to ensure tools are registered.
  */
 
-import { toolRegistry } from './ToolRegistry';
+import { toolRegistry } from "./ToolRegistry";
 import {
   DefaultToolRenderer,
   EditToolRenderer,
@@ -22,7 +22,7 @@ import {
   KillShellToolRenderer,
   TaskToolRenderer,
   LSToolRenderer,
-} from './renderers';
+} from "./renderers";
 
 // Idempotency guard - prevent double registration during HMR/dev
 let __didRegisterTools = false;
@@ -39,24 +39,24 @@ export function registerAllTools() {
   toolRegistry.setDefault(DefaultToolRenderer);
 
   // Register specific tool renderers
-  toolRegistry.register('Edit', EditToolRenderer);
-  toolRegistry.register('Write', WriteToolRenderer);
-  toolRegistry.register('Bash', BashToolRenderer);
-  toolRegistry.register('Read', ReadToolRenderer);
-  toolRegistry.register('Grep', GrepToolRenderer);
-  toolRegistry.register('TodoWrite', TodoWriteToolRenderer);
-  toolRegistry.register('Glob', GlobToolRenderer);
-  toolRegistry.register('BashOutput', BashOutputToolRenderer);
-  toolRegistry.register('MultiEdit', MultiEditToolRenderer);
-  toolRegistry.register('WebFetch', WebFetchToolRenderer);
-  toolRegistry.register('WebSearch', WebSearchToolRenderer);
-  toolRegistry.register('KillShell', KillShellToolRenderer);
-  toolRegistry.register('Task', TaskToolRenderer);
-  toolRegistry.register('LS', LSToolRenderer);
+  toolRegistry.register("Edit", EditToolRenderer);
+  toolRegistry.register("Write", WriteToolRenderer);
+  toolRegistry.register("Bash", BashToolRenderer);
+  toolRegistry.register("Read", ReadToolRenderer);
+  toolRegistry.register("Grep", GrepToolRenderer);
+  toolRegistry.register("TodoWrite", TodoWriteToolRenderer);
+  toolRegistry.register("Glob", GlobToolRenderer);
+  toolRegistry.register("BashOutput", BashOutputToolRenderer);
+  toolRegistry.register("MultiEdit", MultiEditToolRenderer);
+  toolRegistry.register("WebFetch", WebFetchToolRenderer);
+  toolRegistry.register("WebSearch", WebSearchToolRenderer);
+  toolRegistry.register("KillShell", KillShellToolRenderer);
+  toolRegistry.register("Task", TaskToolRenderer);
+  toolRegistry.register("LS", LSToolRenderer);
 
   if (import.meta.env.DEV) {
     const stats = toolRegistry.getStats();
-    console.log('[ToolRegistry] Initialization complete:', stats);
+    console.log("[ToolRegistry] Initialization complete:", stats);
   }
 }
 

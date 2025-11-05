@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/shared/lib/utils';
-import { TerminalPanel } from './TerminalPanel';
+import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/shared/lib/utils";
+import { TerminalPanel } from "./TerminalPanel";
 
 interface CollapsibleTerminalPanelProps {
   workspacePath: string;
@@ -28,7 +28,7 @@ export function CollapsibleTerminalPanel({
   return isExpanded ? (
     // Expanded: Full terminal (collapse button integrated into TerminalPanel header)
     <div
-      className="flex flex-col border-t-2 border-border transition-[height] duration-300 ease-out overflow-hidden"
+      className="border-border flex flex-col overflow-hidden border-t-2 transition-[height] duration-300 ease-out"
       style={{ height: `${defaultHeight}px` }}
     >
       <TerminalPanel
@@ -40,14 +40,14 @@ export function CollapsibleTerminalPanel({
   ) : (
     // Collapsed: Terminal bar at bottom
     <div
-      className="h-8 border-t-2 border-border flex items-center justify-between px-3 cursor-pointer hover:bg-muted/30 transition-colors duration-200 flex-shrink-0"
+      className="border-border hover:bg-muted/30 flex h-8 flex-shrink-0 cursor-pointer items-center justify-between border-t-2 px-3 transition-colors duration-200"
       onClick={() => setIsExpanded(true)}
       role="button"
       aria-label="Expand terminal"
       title="Click to expand terminal"
     >
-      <span className="text-xs font-medium text-muted-foreground">Terminal</span>
-      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+      <span className="text-muted-foreground text-xs font-medium">Terminal</span>
+      <ChevronUp className="text-muted-foreground h-3 w-3" />
     </div>
   );
 }

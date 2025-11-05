@@ -12,7 +12,7 @@
  * - Copy buttons on code blocks
  */
 
-import { MarkdownRenderer } from './MarkdownRenderer';
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ChatMarkdownProps {
   children: string;
@@ -23,11 +23,7 @@ interface ChatMarkdownProps {
 
 export function ChatMarkdown({ children, className, allowHtml = false }: ChatMarkdownProps) {
   return (
-    <MarkdownRenderer
-      allowHtml={allowHtml}
-      className={className}
-      proseClassName="markdown-content"
-    >
+    <MarkdownRenderer allowHtml={allowHtml} className={className} proseClassName="markdown-content">
       {children}
     </MarkdownRenderer>
   );

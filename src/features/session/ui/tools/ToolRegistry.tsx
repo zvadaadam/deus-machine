@@ -14,7 +14,7 @@
  *   - Discoverable: Can list all registered tools
  */
 
-import type { ToolRenderer } from '../chat-types';
+import type { ToolRenderer } from "../chat-types";
 
 class ToolRendererRegistry {
   private renderers = new Map<string, ToolRenderer>();
@@ -24,13 +24,13 @@ class ToolRendererRegistry {
    * Register a tool renderer
    */
   register(toolName: string, renderer: ToolRenderer): void {
-    if (!toolName || typeof toolName !== 'string') {
-      console.error('[ToolRegistry] Invalid tool name:', toolName);
+    if (!toolName || typeof toolName !== "string") {
+      console.error("[ToolRegistry] Invalid tool name:", toolName);
       return;
     }
 
     if (!renderer) {
-      console.error('[ToolRegistry] Invalid renderer for tool:', toolName);
+      console.error("[ToolRegistry] Invalid renderer for tool:", toolName);
       return;
     }
 
@@ -57,7 +57,7 @@ class ToolRendererRegistry {
     this.defaultRenderer = renderer;
 
     if (import.meta.env.DEV) {
-      console.log('[ToolRegistry] ✓ Set default renderer');
+      console.log("[ToolRegistry] ✓ Set default renderer");
     }
   }
 
@@ -84,7 +84,7 @@ class ToolRendererRegistry {
 
     // Return a minimal fallback to prevent crashes
     return () => (
-      <div className="p-2 bg-destructive/10 text-destructive rounded text-sm">
+      <div className="bg-destructive/10 text-destructive rounded p-2 text-sm">
         <strong>⚠️ No renderer available for tool: {toolName}</strong>
       </div>
     );
@@ -123,7 +123,7 @@ class ToolRendererRegistry {
     this.defaultRenderer = null;
 
     if (import.meta.env.DEV) {
-      console.log('[ToolRegistry] Cleared all renderers');
+      console.log("[ToolRegistry] Cleared all renderers");
     }
   }
 }
@@ -133,10 +133,10 @@ export const toolRegistry = new ToolRendererRegistry();
 
 // Log registry info in development
 if (import.meta.env.DEV) {
-  console.log('[ToolRegistry] Initialized tool renderer registry');
+  console.log("[ToolRegistry] Initialized tool renderer registry");
 
   // Make it accessible from browser console for debugging
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     (window as any).__toolRegistry = toolRegistry;
   }
 }

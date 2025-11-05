@@ -20,10 +20,10 @@ export interface HighlightRange {
  * Fast word-based tokenization with position tracking
  * Split on word boundaries instead of every character
  */
-function tokenizeWords(text: string): { words: string[], positions: number[] } {
+function tokenizeWords(text: string): { words: string[]; positions: number[] } {
   const words: string[] = [];
   const positions: number[] = [];
-  let currentWord = '';
+  let currentWord = "";
   let currentPos = 0;
 
   for (let i = 0; i < text.length; i++) {
@@ -31,7 +31,7 @@ function tokenizeWords(text: string): { words: string[], positions: number[] } {
     const isWordChar = /\w/.test(char);
 
     if (isWordChar) {
-      if (currentWord === '') {
+      if (currentWord === "") {
         currentPos = i;
       }
       currentWord += char;
@@ -39,7 +39,7 @@ function tokenizeWords(text: string): { words: string[], positions: number[] } {
       if (currentWord) {
         words.push(currentWord);
         positions.push(currentPos);
-        currentWord = '';
+        currentWord = "";
       }
       // Treat each non-word char as its own token (for punctuation changes)
       words.push(char);
@@ -59,10 +59,7 @@ function tokenizeWords(text: string): { words: string[], positions: number[] } {
  * Fast Set-based word diff
  * Much faster than full LCS for typical code changes
  */
-function computeWordLCS(
-  oldWords: string[],
-  newWords: string[]
-): [Set<number>, Set<number>] {
+function computeWordLCS(oldWords: string[], newWords: string[]): [Set<number>, Set<number>] {
   const oldInLCS = new Set<number>();
   const newInLCS = new Set<number>();
 
@@ -213,20 +210,20 @@ export function applyWordHighlights(
   htmlContent: string,
   plainText: string,
   ranges: HighlightRange[],
-  type: 'addition' | 'deletion'
+  type: "addition" | "deletion"
 ): string {
   if (ranges.length === 0) {
     return htmlContent;
   }
 
   // CSS class for word-level highlights
-  const markClass = type === 'addition' ? 'diff-word-addition' : 'diff-word-deletion';
+  const markClass = type === "addition" ? "diff-word-addition" : "diff-word-deletion";
 
   // Parse HTML to track positions
   // Strategy: Walk through HTML and plain text simultaneously
   // When we hit a range, insert <mark> tags
 
-  let result = '';
+  let result = "";
   let plainTextPos = 0;
   let htmlPos = 0;
   let currentRangeIndex = 0;
@@ -237,9 +234,9 @@ export function applyWordHighlights(
     const char = htmlContent[htmlPos];
 
     // Track when we're inside an HTML tag
-    if (char === '<') {
+    if (char === "<") {
       inTag = true;
-    } else if (char === '>') {
+    } else if (char === ">") {
       inTag = false;
       result += char;
       htmlPos++;
@@ -254,7 +251,7 @@ export function applyWordHighlights(
     }
 
     // If it's an HTML entity, handle specially
-    if (char === '&') {
+    if (char === "&") {
       const entityMatch = htmlContent.slice(htmlPos).match(/^&[a-z]+;/i);
       if (entityMatch) {
         // Copy entity and advance plain text by 1
@@ -286,7 +283,7 @@ export function applyWordHighlights(
       currentRangeIndex < ranges.length &&
       plainTextPos >= ranges[currentRangeIndex].end
     ) {
-      result += '</mark>';
+      result += "</mark>";
       markOpen = false;
       currentRangeIndex++;
     }
@@ -294,7 +291,7 @@ export function applyWordHighlights(
 
   // Close any open mark tag
   if (markOpen) {
-    result += '</mark>';
+    result += "</mark>";
   }
 
   return result;

@@ -1,15 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { OpenInDropdown } from '@/shared/components';
-import { cn } from '@/shared/lib/utils';
+import { useState, useRef, useEffect } from "react";
+import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { OpenInDropdown } from "@/shared/components";
+import { cn } from "@/shared/lib/utils";
 
 /**
  * Tab data structure
@@ -18,7 +13,7 @@ import { cn } from '@/shared/lib/utils';
 export interface Tab {
   id: string;
   label: string;
-  type: 'chat' | 'diff' | 'file';
+  type: "chat" | "diff" | "file";
   closeable?: boolean;
 
   /**
@@ -62,9 +57,9 @@ interface MainContentTabsProps {
 
 // Tab styling constants for easier maintenance
 const TAB_STYLES = {
-  ICON_SIZE: 'w-3.5 h-3.5',
-  GRADIENT_WIDTH: 'w-12',
-  CLOSE_BUTTON_OFFSET: 'right-2',
+  ICON_SIZE: "w-3.5 h-3.5",
+  GRADIENT_WIDTH: "w-12",
+  CLOSE_BUTTON_OFFSET: "right-2",
 } as const;
 
 /**
@@ -87,10 +82,10 @@ export function MainContentTabBar({
   branch,
   workspacePath,
   onBranchRename,
-}: Omit<MainContentTabsProps, 'children'>) {
+}: Omit<MainContentTabsProps, "children">) {
   // Branch editing state
   const [isEditingBranch, setIsEditingBranch] = useState(false);
-  const [branchInputValue, setBranchInputValue] = useState('');
+  const [branchInputValue, setBranchInputValue] = useState("");
   const branchInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-focus input when editing starts
@@ -132,37 +127,39 @@ export function MainContentTabBar({
 
   const cancelEditingBranch = () => {
     setIsEditingBranch(false);
-    setBranchInputValue('');
+    setBranchInputValue("");
   };
 
   const handleBranchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       saveBranchName();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       e.preventDefault();
       cancelEditingBranch();
     }
   };
 
   // Get icon for tab type - Sparkles for chat (AI), FileCode for files
-  const getTabIcon = (type: Tab['type']) => {
-    const iconClass = cn(TAB_STYLES.ICON_SIZE, 'flex-shrink-0 opacity-60');
-    return type === 'chat'
-      ? <Sparkles className={iconClass} />
-      : <FileCode className={iconClass} />;
+  const getTabIcon = (type: Tab["type"]) => {
+    const iconClass = cn(TAB_STYLES.ICON_SIZE, "flex-shrink-0 opacity-60");
+    return type === "chat" ? (
+      <Sparkles className={iconClass} />
+    ) : (
+      <FileCode className={iconClass} />
+    );
   };
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex flex-col flex-shrink-0">
+      <div className="flex flex-shrink-0 flex-col">
         {/* ROW 1: Context Bar - Who & Where (48px) */}
-        <div className="flex items-center justify-between h-12 px-5 border-b border-border/50 bg-background/50 backdrop-blur-sm">
+        <div className="border-border/50 bg-background/50 flex h-12 items-center justify-between border-b px-5 backdrop-blur-sm">
           {/* Left: Sidebar Trigger */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-lg text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 transition-all duration-200"
+            className="text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200"
             asChild
           >
             <SidebarTrigger />
@@ -170,12 +167,12 @@ export function MainContentTabBar({
 
           {/* Center: Breadcrumb - Repository / Branch (Editable) */}
           {branch && (
-            <div className="group flex-1 flex items-center justify-center gap-2 px-6">
-              <FolderGit className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
+            <div className="group flex flex-1 items-center justify-center gap-2 px-6">
+              <FolderGit className="text-muted-foreground/60 h-4 w-4 flex-shrink-0" />
 
               {repositoryName && (
                 <>
-                  <span className="font-mono text-sm text-muted-foreground/60 flex-shrink-0">
+                  <span className="text-muted-foreground/60 flex-shrink-0 font-mono text-sm">
                     {repositoryName}
                   </span>
                   <span className="text-muted-foreground/40 select-none">/</span>
@@ -193,10 +190,10 @@ export function MainContentTabBar({
                   onKeyDown={handleBranchKeyDown}
                   onBlur={saveBranchName}
                   className={cn(
-                    'font-mono text-sm font-medium text-foreground',
-                    'bg-transparent border-none outline-none',
-                    'focus:ring-1 focus:ring-primary rounded px-1 -mx-1',
-                    'min-w-[100px]'
+                    "text-foreground font-mono text-sm font-medium",
+                    "border-none bg-transparent outline-none",
+                    "focus:ring-primary -mx-1 rounded px-1 focus:ring-1",
+                    "min-w-[100px]"
                   )}
                 />
               ) : (
@@ -205,10 +202,10 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   disabled={!onBranchRename}
                   className={cn(
-                    'font-mono text-sm font-medium text-foreground/90',
-                    'hover:text-foreground',
-                    'transition-colors duration-150 ease-out',
-                    onBranchRename && 'cursor-text'
+                    "text-foreground/90 font-mono text-sm font-medium",
+                    "hover:text-foreground",
+                    "transition-colors duration-150 ease-out",
+                    onBranchRename && "cursor-text"
                   )}
                   title={onBranchRename ? "Click to edit branch name" : undefined}
                 >
@@ -224,7 +221,7 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   className="flex items-center justify-center"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                  <Pencil className="text-muted-foreground/40 h-3.5 w-3.5 flex-shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
                 </button>
               )}
             </div>
@@ -238,8 +235,8 @@ export function MainContentTabBar({
         </div>
 
         {/* ROW 2: Navigation Bar - What (44px) */}
-        <div className="flex items-center h-11 px-5 border-b border-border/60 bg-background">
-          <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+        <div className="border-border/60 bg-background flex h-11 items-center border-b px-5">
+          <div className="scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent flex min-w-0 flex-1 items-center overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
 
@@ -251,42 +248,42 @@ export function MainContentTabBar({
                   tabIndex={0}
                   onClick={() => handleTabClick(tab.id)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       handleTabClick(tab.id);
                     }
                   }}
                   className={cn(
-                    'group relative flex items-center gap-1.5',
-                    'px-4 h-11 min-w-[120px] max-w-[200px]',
-                    'text-sm font-normal cursor-pointer',
-                    'transition-colors duration-200 ease-out',
-                    isActive ? 'text-foreground' : 'text-muted-foreground/65 hover:text-muted-foreground'
+                    "group relative flex items-center gap-1.5",
+                    "h-11 max-w-[200px] min-w-[120px] px-4",
+                    "cursor-pointer text-sm font-normal",
+                    "transition-colors duration-200 ease-out",
+                    isActive
+                      ? "text-foreground"
+                      : "text-muted-foreground/65 hover:text-muted-foreground"
                   )}
                 >
                   {/* Active indicator - bottom border */}
-                  {isActive && (
-                    <div className="absolute inset-x-0 bottom-0 h-[2px] bg-primary" />
-                  )}
+                  {isActive && <div className="bg-primary absolute inset-x-0 bottom-0 h-[2px]" />}
 
                   {/* Tab type icon */}
                   {getTabIcon(tab.type)}
 
                   {/* Tab label with gradient fade */}
-                  <div className="relative flex-1 min-w-0">
-                    <span className="block truncate">
-                      {tab.label}
-                    </span>
+                  <div className="relative min-w-0 flex-1">
+                    <span className="block truncate">{tab.label}</span>
 
                     {/* Gradient fade overlay - only for closeable tabs */}
                     {tab.closeable !== false && (
-                      <div className={cn(
-                        'absolute inset-y-0 right-0 pointer-events-none',
-                        TAB_STYLES.GRADIENT_WIDTH,
-                        'bg-gradient-to-l from-background via-background/90 to-transparent',
-                        'opacity-0 transition-opacity duration-150 ease-out',
-                        'group-hover:opacity-100'
-                      )} />
+                      <div
+                        className={cn(
+                          "pointer-events-none absolute inset-y-0 right-0",
+                          TAB_STYLES.GRADIENT_WIDTH,
+                          "from-background via-background/90 bg-gradient-to-l to-transparent",
+                          "opacity-0 transition-opacity duration-150 ease-out",
+                          "group-hover:opacity-100"
+                        )}
+                      />
                     )}
                   </div>
 
@@ -296,15 +293,15 @@ export function MainContentTabBar({
                       type="button"
                       onClick={(e) => handleTabClose(e, tab.id)}
                       className={cn(
-                        'absolute flex items-center justify-center w-4 h-4 rounded-sm',
+                        "absolute flex h-4 w-4 items-center justify-center rounded-sm",
                         TAB_STYLES.CLOSE_BUTTON_OFFSET,
-                        'transition-all duration-150 ease-out',
-                        'hover:bg-muted-foreground/20',
-                        'opacity-0 group-hover:opacity-100'
+                        "transition-all duration-150 ease-out",
+                        "hover:bg-muted-foreground/20",
+                        "opacity-0 group-hover:opacity-100"
                       )}
                       aria-label={`Close ${tab.label} tab`}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="h-3 w-3" />
                     </button>
                   )}
                 </div>
@@ -320,14 +317,14 @@ export function MainContentTabBar({
                     aria-label="New chat tab"
                     onClick={handleAddTab}
                     className={cn(
-                      'flex items-center justify-center',
-                      'px-4 h-11 flex-shrink-0',
-                      'text-muted-foreground/60 hover:text-muted-foreground',
-                      'hover:bg-muted/10',
-                      'transition-all duration-200 ease-out'
+                      "flex items-center justify-center",
+                      "h-11 flex-shrink-0 px-4",
+                      "text-muted-foreground/60 hover:text-muted-foreground",
+                      "hover:bg-muted/10",
+                      "transition-all duration-200 ease-out"
                     )}
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="h-4 w-4" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
@@ -359,7 +356,7 @@ export function MainContentTabs({
   onBranchRename,
 }: MainContentTabsProps) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       <MainContentTabBar
         tabs={tabs}
         activeTabId={activeTabId}
@@ -371,9 +368,7 @@ export function MainContentTabs({
         workspacePath={workspacePath}
         onBranchRename={onBranchRename}
       />
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {children}
-      </div>
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }

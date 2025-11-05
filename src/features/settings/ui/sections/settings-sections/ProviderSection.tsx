@@ -1,30 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect, useRef } from "react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import type { SettingsSectionProps } from './types';
+} from "@/components/ui/select";
+import type { SettingsSectionProps } from "./types";
 
 export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
   // Controlled state for custom endpoint with debounced save
-  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? '');
+  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? "");
 
   // Browser-compatible timeout ref (ReturnType<typeof setTimeout> works in both Node and browser)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track latest typed value and last successfully saved value for safe unmount flush
   const latestValueRef = useRef(customEndpoint);
-  const lastSavedRef = useRef(settings.custom_endpoint ?? '');
+  const lastSavedRef = useRef(settings.custom_endpoint ?? "");
 
   // Sync with external changes (e.g., from refetch)
   useEffect(() => {
-    setCustomEndpoint(settings.custom_endpoint ?? '');
-    lastSavedRef.current = settings.custom_endpoint ?? '';
+    setCustomEndpoint(settings.custom_endpoint ?? "");
+    lastSavedRef.current = settings.custom_endpoint ?? "";
   }, [settings.custom_endpoint]);
 
   // Debounced save handler
@@ -34,7 +34,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      saveSetting('custom_endpoint', value);
+      saveSetting("custom_endpoint", value);
       lastSavedRef.current = value; // Track what was saved
     }, 500);
   };
@@ -49,7 +49,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
 
       // Flush any unsaved changes ONLY on unmount (compare latest vs last saved)
       if (latestValueRef.current !== lastSavedRef.current) {
-        saveSetting('custom_endpoint', latestValueRef.current);
+        saveSetting("custom_endpoint", latestValueRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,8 +62,8 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
         <div className="space-y-2">
           <Label htmlFor="provider">Provider</Label>
           <Select
-            value={settings.claude_provider ?? 'anthropic'}
-            onValueChange={(value) => saveSetting('claude_provider', value)}
+            value={settings.claude_provider ?? "anthropic"}
+            onValueChange={(value) => saveSetting("claude_provider", value)}
           >
             <SelectTrigger id="provider">
               <SelectValue />
@@ -80,8 +80,8 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
         <div className="space-y-2">
           <Label htmlFor="model">Default Model</Label>
           <Select
-            value={settings.claude_model ?? 'sonnet'}
-            onValueChange={(value) => saveSetting('claude_model', value)}
+            value={settings.claude_model ?? "sonnet"}
+            onValueChange={(value) => saveSetting("claude_model", value)}
           >
             <SelectTrigger id="model">
               <SelectValue />
@@ -94,7 +94,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
           </Select>
         </div>
 
-        {settings.claude_provider === 'custom' && (
+        {settings.claude_provider === "custom" && (
           <div className="space-y-2">
             <Label htmlFor="custom-endpoint">Custom Endpoint URL</Label>
             <Input

@@ -1,17 +1,17 @@
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Button } from '@/components/ui/button';
+import { useState } from "react";
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useClearMemory } from '../../../api/settings.queries';
-import type { SettingsSectionProps } from './types';
+} from "@/components/ui/select";
+import { useClearMemory } from "../../../api/settings.queries";
+import type { SettingsSectionProps } from "./types";
 
 export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
   const [showingConfirmation, setShowingConfirmation] = useState(false);
@@ -26,9 +26,11 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
           <Checkbox
             id="conversation-memory"
             checked={settings.conversation_memory_enabled ?? true}
-            onCheckedChange={(checked) => saveSetting('conversation_memory_enabled', checked === true)}
+            onCheckedChange={(checked) =>
+              saveSetting("conversation_memory_enabled", checked === true)
+            }
           />
-          <Label htmlFor="conversation-memory" className="text-sm cursor-pointer">
+          <Label htmlFor="conversation-memory" className="cursor-pointer text-sm">
             Enable conversation memory
           </Label>
         </div>
@@ -36,8 +38,8 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
         <div className="space-y-2">
           <Label htmlFor="memory-retention">Memory retention</Label>
           <Select
-            value={settings.memory_retention ?? 'session'}
-            onValueChange={(value) => saveSetting('memory_retention', value)}
+            value={settings.memory_retention ?? "session"}
+            onValueChange={(value) => saveSetting("memory_retention", value)}
           >
             <SelectTrigger id="memory-retention">
               <SelectValue />
@@ -57,17 +59,19 @@ export function MemorySection({ settings, saveSetting }: SettingsSectionProps) {
           disabled={clearMemoryMutation.isPending || showingConfirmation}
           onClick={() => {
             setShowingConfirmation(true);
-            toast('Are you sure you want to clear all memory?', {
-              description: 'This action cannot be undone.',
+            toast("Are you sure you want to clear all memory?", {
+              description: "This action cannot be undone.",
               action: {
-                label: 'Clear Memory',
+                label: "Clear Memory",
                 onClick: async () => {
                   try {
                     await clearMemoryMutation.mutateAsync();
-                    toast.success('Memory cleared successfully');
+                    toast.success("Memory cleared successfully");
                   } catch (error) {
-                    console.error('Failed to clear memory:', error);
-                    toast.error(`Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`);
+                    console.error("Failed to clear memory:", error);
+                    toast.error(
+                      `Failed to clear memory: ${error instanceof Error ? error.message : String(error)}`
+                    );
                   } finally {
                     setShowingConfirmation(false);
                   }

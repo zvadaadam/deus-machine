@@ -5,9 +5,9 @@
  * Shows success/error state with appropriate styling.
  */
 
-import type { ToolResultBlock as ToolResultBlockType } from '@/shared/types';
-import { chatTheme } from '../theme';
-import { cn } from '@/shared/lib/utils';
+import type { ToolResultBlock as ToolResultBlockType } from "@/shared/types";
+import { chatTheme } from "../theme";
+import { cn } from "@/shared/lib/utils";
 
 interface ToolResultBlockProps {
   block: ToolResultBlockType;
@@ -19,15 +19,15 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
   }
 
   const isError = block.is_error;
-  let content = block.content || '';
+  let content = block.content || "";
 
   // Stringify objects/arrays
-  if (typeof content === 'object') {
+  if (typeof content === "object") {
     content = JSON.stringify(content, null, 2);
   }
 
   // Don't render empty results
-  if (!content || content.toString().trim() === '') {
+  if (!content || content.toString().trim() === "") {
     return null;
   }
 
@@ -35,20 +35,16 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
     <div
       className={cn(
         chatTheme.blocks.tool.container,
-        'mt-1 text-sm',
+        "mt-1 text-sm",
         isError
-          ? chatTheme.blocks.tool.borderLeft.error + ' bg-destructive/10'
+          ? chatTheme.blocks.tool.borderLeft.error + " bg-destructive/10"
           : chatTheme.blocks.tool.borderLeft.success
       )}
     >
       {/* Header */}
       <div className={chatTheme.blocks.tool.header}>
-        <span className={chatTheme.blocks.tool.icon}>
-          {isError ? '❌' : '✅'}
-        </span>
-        <strong className="text-xs font-semibold">
-          {isError ? 'Error' : 'Result'}
-        </strong>
+        <span className={chatTheme.blocks.tool.icon}>{isError ? "❌" : "✅"}</span>
+        <strong className="text-xs font-semibold">{isError ? "Error" : "Result"}</strong>
       </div>
 
       {/* Content */}
@@ -57,10 +53,8 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
         aria-label={isError ? "Tool error" : "Tool result"}
         className={cn(
           chatTheme.blocks.tool.content,
-          'max-h-[150px] overflow-y-auto scrollbar-vibrancy',
-          isError
-            ? 'bg-destructive/10 text-destructive'
-            : 'bg-sidebar-accent/40 text-foreground'
+          "scrollbar-vibrancy max-h-[150px] overflow-y-auto",
+          isError ? "bg-destructive/10 text-destructive" : "bg-sidebar-accent/40 text-foreground"
         )}
       >
         {content}

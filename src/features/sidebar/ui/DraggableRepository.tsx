@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { cn } from '@/shared/lib/utils';
-import type { RepositoryItemProps } from '../model/types';
-import { RepositoryItem } from './RepositoryItem';
+import { useEffect } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/shared/lib/utils";
+import type { RepositoryItemProps } from "../model/types";
+import { RepositoryItem } from "./RepositoryItem";
 
 interface DraggableRepositoryProps extends RepositoryItemProps {
   dragDisabled?: boolean;
@@ -47,20 +47,20 @@ export function DraggableRepository({
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(isDragging && 'z-50 opacity-50')}
-    >
+    <div ref={setNodeRef} style={style} className={cn(isDragging && "z-50 opacity-50")}>
       <RepositoryItem
         repository={repository}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
-        dragHandleProps={!dragDisabled ? {
-          attributes,
-          listeners,
-          setActivatorNodeRef,
-        } : undefined}
+        dragHandleProps={
+          !dragDisabled
+            ? {
+                attributes,
+                listeners,
+                setActivatorNodeRef,
+              }
+            : undefined
+        }
         {...props}
       />
     </div>

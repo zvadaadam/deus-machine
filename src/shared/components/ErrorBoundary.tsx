@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -33,8 +33,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log error to console
-    console.error('[ErrorBoundary] Caught error:', error);
-    console.error('[ErrorBoundary] Error info:', errorInfo);
+    console.error("[ErrorBoundary] Caught error:", error);
+    console.error("[ErrorBoundary] Error info:", errorInfo);
 
     // Update state with error info
     this.setState({
@@ -67,59 +67,61 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100vh',
-            padding: '2rem',
-            backgroundColor: 'var(--bg-primary, #ffffff)',
-            color: 'var(--text-primary, #111827)',
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            padding: "2rem",
+            backgroundColor: "var(--bg-primary, #ffffff)",
+            color: "var(--text-primary, #111827)",
           }}
         >
-          <div style={{ maxWidth: '600px', textAlign: 'center' }}>
-            <div style={{ fontSize: '48px', marginBottom: '1rem' }}>⚠️</div>
-            <h2 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '1rem' }}>
+          <div style={{ maxWidth: "600px", textAlign: "center" }}>
+            <div style={{ fontSize: "48px", marginBottom: "1rem" }}>⚠️</div>
+            <h2 style={{ fontSize: "24px", fontWeight: 600, marginBottom: "1rem" }}>
               Something went wrong
             </h2>
-            <p style={{ color: 'var(--text-secondary, #6b7280)', marginBottom: '2rem' }}>
+            <p style={{ color: "var(--text-secondary, #6b7280)", marginBottom: "2rem" }}>
               The application encountered an unexpected error. You can try reloading the page or
               resetting the component.
             </p>
 
             {/* Error details - collapsible */}
             {this.state.error && (
-              <details style={{ marginBottom: '2rem', textAlign: 'left' }}>
+              <details style={{ marginBottom: "2rem", textAlign: "left" }}>
                 <summary
                   style={{
-                    cursor: 'pointer',
-                    padding: '0.5rem',
-                    backgroundColor: 'var(--bg-secondary, #f9fafb)',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem',
+                    cursor: "pointer",
+                    padding: "0.5rem",
+                    backgroundColor: "var(--bg-secondary, #f9fafb)",
+                    borderRadius: "4px",
+                    marginBottom: "0.5rem",
                   }}
                 >
                   Error details
                 </summary>
                 <div
                   style={{
-                    padding: '1rem',
-                    backgroundColor: 'var(--bg-secondary, #f9fafb)',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    fontFamily: 'var(--font-family-mono)',
-                    maxHeight: '200px',
-                    overflow: 'auto',
+                    padding: "1rem",
+                    backgroundColor: "var(--bg-secondary, #f9fafb)",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "var(--font-family-mono)",
+                    maxHeight: "200px",
+                    overflow: "auto",
                   }}
                 >
                   <strong>Error:</strong>
-                  <pre style={{ marginTop: '0.5rem', whiteSpace: 'pre-wrap' }}>
+                  <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {this.state.error.message}
                   </pre>
                   {this.state.error.stack && (
                     <>
-                      <strong style={{ marginTop: '1rem', display: 'block' }}>Stack trace:</strong>
-                      <pre style={{ marginTop: '0.5rem', whiteSpace: 'pre-wrap', fontSize: '12px' }}>
+                      <strong style={{ marginTop: "1rem", display: "block" }}>Stack trace:</strong>
+                      <pre
+                        style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap", fontSize: "12px" }}
+                      >
                         {this.state.error.stack}
                       </pre>
                     </>
@@ -129,25 +131,26 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
               <button
                 onClick={this.handleReset}
                 style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'var(--primary)',
-                  color: 'var(--primary-foreground)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
+                  padding: "0.75rem 1.5rem",
+                  backgroundColor: "var(--primary)",
+                  color: "var(--primary-foreground)",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "14px",
                   fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
+                  cursor: "pointer",
+                  transition: "background-color 0.2s",
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'color-mix(in oklch, var(--primary) 90%, black)';
+                  e.currentTarget.style.backgroundColor =
+                    "color-mix(in oklch, var(--primary) 90%, black)";
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--primary)';
+                  e.currentTarget.style.backgroundColor = "var(--primary)";
                 }}
               >
                 Try Again
@@ -155,21 +158,21 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 onClick={this.handleReload}
                 style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'transparent',
-                  color: 'var(--primary)',
-                  border: '1px solid var(--primary)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
+                  padding: "0.75rem 1.5rem",
+                  backgroundColor: "transparent",
+                  color: "var(--primary)",
+                  border: "1px solid var(--primary)",
+                  borderRadius: "6px",
+                  fontSize: "14px",
                   fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  cursor: "pointer",
+                  transition: "all 0.2s",
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--accent)';
+                  e.currentTarget.style.backgroundColor = "var(--accent)";
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.backgroundColor = "transparent";
                 }}
               >
                 Reload Application

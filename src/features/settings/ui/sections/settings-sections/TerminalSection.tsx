@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { useEffect, useRef, useState } from "react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import type { SettingsSectionProps } from './types';
+} from "@/components/ui/select";
+import type { SettingsSectionProps } from "./types";
 
 export function TerminalSection({ settings, saveSetting }: SettingsSectionProps) {
   const [fontSize, setFontSize] = useState(settings.terminal_font_size ?? 12);
@@ -26,7 +26,7 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
     }
     debounceRef.current = setTimeout(() => {
       if (fontSize !== settings.terminal_font_size) {
-        saveSetting('terminal_font_size', fontSize);
+        saveSetting("terminal_font_size", fontSize);
       }
     }, 500);
 
@@ -62,8 +62,8 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
         <div className="space-y-2">
           <Label htmlFor="default-editor">Default editor</Label>
           <Select
-            value={settings.default_open_in ?? 'cursor'}
-            onValueChange={(value) => saveSetting('default_open_in', value)}
+            value={settings.default_open_in ?? "cursor"}
+            onValueChange={(value) => saveSetting("default_open_in", value)}
           >
             <SelectTrigger id="default-editor">
               <SelectValue />
