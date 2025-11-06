@@ -57,7 +57,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
           <ChevronRight
             className={cn(
               "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
-              (isExpanded || isHovered) && "rotate-90",
+              isExpanded && "rotate-90",
               isHovered || isExpanded ? "opacity-100" : "opacity-0"
             )}
             aria-hidden="true"
