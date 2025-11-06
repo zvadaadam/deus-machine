@@ -39,11 +39,11 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className="bg-muted/60 rounded px-2 py-0.5 font-mono text-[12px] font-medium">
+          <span className="bg-muted/60 rounded px-2 py-0.5 font-mono text-xs font-medium">
             {fileName}
           </span>
           {(added > 0 || removed > 0) && (
-            <span className="text-[12px]">
+            <span className="text-xs">
               {" • "}
               <span className="text-success font-semibold">+{added}</span>{" "}
               <span className="text-destructive font-semibold">-{removed}</span>

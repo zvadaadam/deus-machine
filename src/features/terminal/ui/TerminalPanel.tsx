@@ -96,7 +96,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
       } else {
         toast.error("No development server detected!", {
           description: (
-            <div style={{ whiteSpace: "pre-wrap" }}>
+            <div className="whitespace-pre-wrap">
               {`Please start your dev server first:\n  • Vite: npm run dev (port 5173)\n  • React/Next: npm run dev (port 3000)\n  • Angular: ng serve (port 4200)\n\nThen click Run again.`}
             </div>
           ),
@@ -116,14 +116,14 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
       <div className="vibrancy-panel border-border/40 flex h-[28px] flex-shrink-0 items-center justify-between border-b">
         <div className="flex flex-1 items-center gap-0.5 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
-            <div className="bg-background text-foreground flex items-center rounded-t px-2 py-1 text-[11px] font-medium whitespace-nowrap select-none">
+            <div className="bg-background text-foreground flex items-center rounded-t px-2 py-1 text-xs font-medium whitespace-nowrap select-none">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-t px-2 py-1 text-[11px] whitespace-nowrap transition-colors duration-200 ease-out select-none ${
+              className={`flex cursor-pointer items-center gap-1.5 rounded-t px-2 py-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none ${
                 activeTabId === tab.id
                   ? "bg-background text-foreground font-medium"
                   : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -215,8 +215,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
           tabs.map((tab) => (
             <div
               key={tab.id}
-              className="h-full w-full"
-              style={{ display: activeTabId === tab.id ? "block" : "none" }}
+              className={`h-full w-full ${activeTabId === tab.id ? "block" : "hidden"}`}
             >
               <Terminal
                 id={tab.id}

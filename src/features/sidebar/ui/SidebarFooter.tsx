@@ -15,13 +15,13 @@ import type { SidebarFooterProps } from "../model/types";
  */
 export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
   return (
-    <SidebarFooterUI className="p-2 pt-0">
+    <SidebarFooterUI className="p-0">
       <Button
         variant="ghost"
         size="sm"
         onClick={() => onAddRepository?.()}
         className={cn(
-          "h-8 w-full pr-3 pl-3",
+          "h-8 w-full px-2",
           "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
           "transition-colors duration-200 ease-out",
           "group-data-[collapsible=icon]:hidden"

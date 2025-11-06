@@ -69,9 +69,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
       icon={<ListChecks className="text-muted-foreground/70 h-4 w-4" />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => (
-        <span className="text-muted-foreground text-[12px]">{currentTaskText}</span>
-      )}
+      renderSummary={() => <span className="text-muted-foreground text-xs">{currentTaskText}</span>}
       renderContent={() => (
         <div className="space-y-1 px-2 pb-2">
           {todos.map((todo, index) => (

@@ -40,9 +40,9 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
 
   // Weight-based styling - applied to container
   const weightStyles = {
-    muted: "text-[13px] leading-[1.5] text-muted-foreground opacity-70 py-1",
+    muted: "text-sm leading-[1.5] text-muted-foreground opacity-70 py-1",
     normal: "", // Normal uses ChatMarkdown defaults (14px)
-    hero: "text-[15px] leading-[1.65] py-3 mt-2 border-t border-border/20",
+    hero: "text-sm leading-[1.65] py-3 mt-2 border-t border-border/20",
   };
 
   // User messages: plain text (preserve newlines)
@@ -52,14 +52,14 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     // Remove text color from weightStyles for user messages to avoid conflicts
     const userWeightStyle =
       weight === "muted"
-        ? "text-[13px] leading-[1.5] opacity-70 py-1" // Removed text-muted-foreground
+        ? "text-sm leading-[1.5] opacity-70 py-1" // Removed text-muted-foreground
         : weightStyles[weight];
 
     return (
       <p
         className={cn(
           "whitespace-pre-wrap",
-          "text-[14px] leading-[1.5]",
+          "text-sm leading-[1.5]",
           chatTheme.message.user.text,
           userWeightStyle,
           // Theme color applied last - proper CSS specificity, extensible

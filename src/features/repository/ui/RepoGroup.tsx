@@ -6,6 +6,7 @@ import {
   SidebarGroupLabel,
   SidebarMenu,
 } from "@/components/ui/sidebar";
+import { cn } from "@/shared/lib/utils";
 import { WorkspaceItem } from "./WorkspaceItem";
 import type { RepoGroup as RepoGroupType, Workspace, DiffStats } from "@/shared/types";
 
@@ -42,14 +43,15 @@ export function RepoGroup({
     <SidebarGroup>
       <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
         <SidebarGroupLabel asChild>
-          <CollapsibleTrigger className="text-body-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex w-full items-center gap-2 rounded-md px-2 py-1 font-semibold transition-colors duration-200">
+          <CollapsibleTrigger className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold transition-colors duration-200">
             <ChevronDown
-              className={`h-4 w-4 transition-transform duration-200 ${
-                isCollapsed ? "-rotate-90" : ""
-              }`}
+              className={cn(
+                "h-4 w-4 transition-transform duration-200",
+                isCollapsed && "-rotate-90"
+              )}
             />
             <span className="flex-1 text-left">{group.repo_name}</span>
-            <span className="text-caption text-muted-foreground">{readyWorkspaces.length}</span>
+            <span className="text-muted-foreground text-xs">{readyWorkspaces.length}</span>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
 

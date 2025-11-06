@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
+import { cn } from "@/shared/lib/utils";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
 import type { Workspace } from "@/shared/types";
 
@@ -108,7 +109,7 @@ export function FileChangesPanel({
       {selectedWorkspace && devServers.length > 0 && (
         <div className="border-border/50 bg-background/30 border-b">
           <div className="bg-background/50 border-border/30 sticky top-0 z-10 border-b px-4 py-2.5 backdrop-blur-sm">
-            <h3 className="text-caption text-muted-foreground font-semibold tracking-wider uppercase">
+            <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
               Dev Servers
             </h3>
           </div>
@@ -119,17 +120,17 @@ export function FileChangesPanel({
                 href={server.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group hover-interactive flex items-center gap-3 rounded-lg p-2.5 no-underline shadow-sm hover:shadow"
+                className="group hover:bg-sidebar-accent/60 flex items-center gap-3 rounded-lg p-2.5 no-underline shadow-sm transition-all duration-200 ease-out hover:shadow"
                 title={`Open ${server.name} in browser`}
               >
                 <div className="bg-primary/10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
                   <Monitor className="text-primary h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-body-sm group-hover:hover-primary-text truncate font-medium">
+                  <div className="group-hover:text-primary truncate text-sm font-medium transition-colors duration-200">
                     {server.name}
                   </div>
-                  <div className="text-caption text-muted-foreground truncate font-mono">
+                  <div className="text-muted-foreground truncate font-mono text-xs">
                     {server.url}
                   </div>
                 </div>
@@ -201,30 +202,32 @@ export function FileChangesPanel({
                     >
                       <div className="min-w-0 flex-1 font-mono">
                         <span
-                          className={`text-[11px] ${
+                          className={cn(
+                            "text-xs",
                             isSelected ? "text-primary/70" : "text-muted-foreground/50"
-                          }`}
+                          )}
                         >
                           {displayPath}
                         </span>
                         <span
-                          className={`text-[11px] transition-colors duration-200 ${
+                          className={cn(
+                            "text-xs transition-colors duration-200",
                             isSelected
                               ? "text-primary font-medium"
                               : "text-foreground/90 group-hover:text-foreground"
-                          }`}
+                          )}
                         >
                           {filename}
                         </span>
                       </div>
                       <div className="ml-3 flex min-w-[60px] flex-shrink-0 items-center justify-end gap-2 font-mono tabular-nums">
                         {file.additions > 0 && (
-                          <span className="text-success/90 text-[10px] font-semibold">
+                          <span className="text-2xs text-success/90 font-semibold">
                             +{file.additions}
                           </span>
                         )}
                         {file.deletions > 0 && (
-                          <span className="text-destructive/90 text-[10px] font-semibold">
+                          <span className="text-2xs text-destructive/90 font-semibold">
                             -{file.deletions}
                           </span>
                         )}

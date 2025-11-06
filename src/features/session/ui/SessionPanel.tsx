@@ -127,14 +127,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Scroll to bottom button (shared between embedded and modal views)
     const scrollToBottomButton = (
       <div
-        className={`pointer-events-auto absolute right-6 bottom-20 z-10 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+        className={`pointer-events-auto absolute right-6 bottom-20 z-10 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
           showScrollButton
             ? "scale-100 opacity-100"
             : "pointer-events-none scale-90 opacity-0 motion-reduce:scale-100"
         }`}
-        style={{
-          transitionProperty: "opacity, transform",
-        }}
       >
         <Button
           variant="secondary"
@@ -155,7 +152,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       return (
         <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}>
+            {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
+            <div
+              className={`${CONTENT_WIDTH_CLASSES} relative mx-auto flex min-h-0 flex-1 flex-col`}
+            >
               <Chat
                 messages={messages}
                 loading={loading}
@@ -210,7 +210,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           onClick={(e) => e.stopPropagation()}
         >
           <div className="border-border/60 flex items-center justify-between border-b p-4">
-            <h2 id="workspace-activity-title" className="text-foreground m-0 text-lg font-medium">
+            <h2 id="workspace-activity-title" className="text-foreground m-0 text-lg font-semibold">
               Workspace Activity
             </h2>
             <Button variant="ghost" size="icon" onClick={handleClose} title="Close">
@@ -223,7 +223,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             <div className="flex min-h-0 flex-1 flex-col">
               <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
-                  <div className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}>
+                  {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
+                  <div
+                    className={`${CONTENT_WIDTH_CLASSES} relative mx-auto flex min-h-0 flex-1 flex-col`}
+                  >
                     <Chat
                       messages={messages}
                       loading={loading}

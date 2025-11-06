@@ -76,7 +76,7 @@ export function WelcomeView({
             {/* Filled state: Subtle section label */}
             {!isEmpty && (
               <div className="mb-4">
-                <h2 className="text-muted-foreground/80 px-2 text-xs font-medium tracking-wider uppercase">
+                <h2 className="text-muted-foreground px-2 text-xs font-semibold tracking-wider uppercase">
                   Add Repository
                 </h2>
               </div>
@@ -93,7 +93,7 @@ export function WelcomeView({
                   onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpenProject?.()}
                 >
                   <div className="bg-foreground/5 text-foreground/80 flex h-9 w-9 items-center justify-center rounded-lg">
-                    <FolderPlus className="h-[18px] w-[18px]" />
+                    <FolderPlus className="h-4.5 w-4.5" />
                   </div>
                   <div>
                     <h3 className="text-foreground mb-0.5 text-sm font-medium">Open Project</h3>
@@ -109,7 +109,7 @@ export function WelcomeView({
                   onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onCloneRepository?.()}
                 >
                   <div className="bg-foreground/5 text-foreground/80 flex h-9 w-9 items-center justify-center rounded-lg">
-                    <Github className="h-[18px] w-[18px]" />
+                    <Github className="h-4.5 w-4.5" />
                   </div>
                   <div>
                     <h3 className="text-foreground mb-0.5 text-sm font-medium">Clone Repository</h3>
@@ -123,7 +123,7 @@ export function WelcomeView({
             {!isEmpty && (
               <div className="mt-12 space-y-4">
                 <div className="flex items-baseline justify-between px-2">
-                  <h2 className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                  <h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                     Recent Workspaces
                   </h2>
                   {recentWorkspaces.length > 0 && (

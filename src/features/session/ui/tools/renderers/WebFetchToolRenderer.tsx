@@ -45,7 +45,7 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate font-mono text-[12px]">{getDomain()}</span>
+        <span className="text-muted-foreground truncate font-mono text-xs">{getDomain()}</span>
       )}
       renderContent={() => {
         // No result message
