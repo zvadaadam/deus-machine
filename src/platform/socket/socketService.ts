@@ -9,7 +9,7 @@
  * Note: In web mode (non-Tauri), this service is disabled and returns mock responses
  */
 
-import { invoke, isTauriEnv } from '@/platform/tauri';
+import { invoke, isTauriEnv } from "@/platform/tauri";
 
 export interface SocketMessage {
   command: string;
@@ -37,30 +37,30 @@ class UnixSocketService {
   async connect(): Promise<void> {
     // Skip in web mode (non-Tauri)
     if (!isTauriEnv) {
-      console.log('[SOCKET] ⚠️  Running in web mode - socket features disabled');
+      console.log("[SOCKET] ⚠️  Running in web mode - socket features disabled");
       return;
     }
 
     try {
       // 1. Get socket path from backend (using dynamic port)
-      const { getBaseURL } = await import('@/shared/config/api.config');
+      const { getBaseURL } = await import("@/shared/config/api.config");
       const baseURL = await getBaseURL();
       const response = await fetch(`${baseURL}/sidecar/status`);
       const status = await response.json();
 
       if (!status.socketPath) {
-        throw new Error('Socket path not available');
+        throw new Error("Socket path not available");
       }
 
       this.socketPath = status.socketPath;
 
       // 2. Connect via Tauri Rust (using platform wrapper)
-      await invoke('connect_to_sidecar', { socketPath: this.socketPath });
+      await invoke("connect_to_sidecar", { socketPath: this.socketPath });
 
       this.connected = true;
-      console.log('[SOCKET] ✅ Connected to:', this.socketPath);
+      console.log("[SOCKET] ✅ Connected to:", this.socketPath);
     } catch (error) {
-      console.error('[SOCKET] ❌ Connection failed:', error);
+      console.error("[SOCKET] ❌ Connection failed:", error);
       throw error;
     }
   }
@@ -70,21 +70,21 @@ class UnixSocketService {
    */
   async send(message: SocketMessage): Promise<SocketResponse> {
     if (!this.connected) {
-      throw new Error('Not connected to socket');
+      throw new Error("Not connected to socket");
     }
 
     try {
       // Send NDJSON message via Rust (using platform wrapper)
       const messageStr = JSON.stringify(message);
-      await invoke('send_sidecar_message', { message: messageStr });
+      await invoke("send_sidecar_message", { message: messageStr });
 
       // Receive response
-      const responseStr = await invoke<string>('receive_sidecar_message');
+      const responseStr = await invoke<string>("receive_sidecar_message");
       const response = JSON.parse(responseStr);
 
       return response;
     } catch (error) {
-      console.error('[SOCKET] ❌ Send failed:', error);
+      console.error("[SOCKET] ❌ Send failed:", error);
       throw error;
     }
   }
@@ -94,7 +94,7 @@ class UnixSocketService {
    */
   async startSession(sessionId: string, workspacePath: string): Promise<SocketResponse> {
     return this.send({
-      command: 'start_session',
+      command: "start_session",
       sessionId,
       workspacePath,
     });
@@ -105,7 +105,7 @@ class UnixSocketService {
    */
   async sendMessage(sessionId: string, content: string): Promise<SocketResponse> {
     return this.send({
-      command: 'send_message',
+      command: "send_message",
       sessionId,
       content,
     });
@@ -116,7 +116,7 @@ class UnixSocketService {
    */
   async stopSession(sessionId: string): Promise<SocketResponse> {
     return this.send({
-      command: 'stop_session',
+      command: "stop_session",
       sessionId,
     });
   }
@@ -126,7 +126,7 @@ class UnixSocketService {
    */
   async getMessages(sessionId: string): Promise<SocketResponse> {
     return this.send({
-      command: 'get_messages',
+      command: "get_messages",
       sessionId,
     });
   }
@@ -137,12 +137,12 @@ class UnixSocketService {
   async disconnect(): Promise<void> {
     if (this.connected) {
       try {
-        await invoke('disconnect_from_sidecar');
+        await invoke("disconnect_from_sidecar");
         this.connected = false;
         this.socketPath = null;
-        console.log('[SOCKET] 🔌 Disconnected');
+        console.log("[SOCKET] 🔌 Disconnected");
       } catch (error) {
-        console.error('[SOCKET] ❌ Disconnect failed:', error);
+        console.error("[SOCKET] ❌ Disconnect failed:", error);
       }
     }
   }

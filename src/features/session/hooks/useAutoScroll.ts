@@ -41,12 +41,15 @@ export function useAutoScroll({
   }, [messagesContainerRef, scrollThreshold]);
 
   // Scroll to bottom function
-  const scrollToBottom = useCallback((smooth = false) => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: smooth ? 'smooth' : 'auto',
-      block: 'end'
-    });
-  }, [messagesEndRef]);
+  const scrollToBottom = useCallback(
+    (smooth = false) => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: smooth ? "smooth" : "auto",
+        block: "end",
+      });
+    },
+    [messagesEndRef]
+  );
 
   // Auto-scroll when new messages arrive (if user hasn't scrolled up)
   useEffect(() => {
@@ -69,14 +72,14 @@ export function useAutoScroll({
       setUserScrolledUp(!nearBottom);
     };
 
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
   }, [messagesContainerRef, isNearBottom]);
 
   // Manual scroll to bottom (resets user scroll state)
   const handleScrollToBottomClick = useCallback(() => {
     setUserScrolledUp(false);
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     scrollToBottom(!prefersReduced);
   }, [scrollToBottom]);
 

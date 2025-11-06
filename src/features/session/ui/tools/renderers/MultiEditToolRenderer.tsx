@@ -8,13 +8,13 @@
  * AFTER: ~115 LOC
  */
 
-import { useState } from 'react';
-import { FilePenLine, Copy, Check } from 'lucide-react';
-import { BaseToolRenderer } from '../components';
-import { FilePathDisplay } from '../components/FilePathDisplay';
-import { useCopyToClipboard } from '@/shared/hooks/useCopyToClipboard';
-import { cn } from '@/shared/lib/utils';
-import type { ToolRendererProps } from '../../chat-types';
+import { useState } from "react";
+import { FilePenLine, Copy, Check } from "lucide-react";
+import { BaseToolRenderer } from "../components";
+import { FilePathDisplay } from "../components/FilePathDisplay";
+import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { cn } from "@/shared/lib/utils";
+import type { ToolRendererProps } from "../../chat-types";
 
 interface Edit {
   old_string: string;
@@ -24,7 +24,7 @@ interface Edit {
 export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, edits } = toolUse.input;
   const editCount = edits?.length || 0;
-  const fileName = file_path.split('/').pop() || file_path;
+  const fileName = file_path.split("/").pop() || file_path;
 
   // Single clipboard util + per-item key to localize feedback
   const { copy } = useCopyToClipboard();
@@ -39,34 +39,32 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Multi Edit"
-      icon={<FilePenLine className="w-4 h-4 text-success/70" />}
+      icon={<FilePenLine className="text-success/70 h-4 w-4" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <span className="font-mono">
-          {fileName} • {editCount} edit{editCount !== 1 ? 's' : ''}
+          {fileName} • {editCount} edit{editCount !== 1 ? "s" : ""}
         </span>
       )}
       renderContent={() => {
         if (!edits || edits.length === 0) {
           return (
-            <div className="px-2 pb-2 text-xs text-muted-foreground italic">
-              No edits provided
-            </div>
+            <div className="text-muted-foreground px-2 pb-2 text-xs italic">No edits provided</div>
           );
         }
 
         return (
-          <div className="px-2 pb-2 space-y-3">
-            <div className="text-xs text-muted-foreground">
-              {editCount} edit{editCount !== 1 ? 's' : ''} to apply:
+          <div className="space-y-3 px-2 pb-2">
+            <div className="text-muted-foreground text-xs">
+              {editCount} edit{editCount !== 1 ? "s" : ""} to apply:
             </div>
 
             {edits.map((edit: Edit, index: number) => (
               <div key={index} className="space-y-1">
                 {/* Edit number header */}
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <span className="bg-muted px-1.5 py-0.5 rounded">
+                <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                  <span className="bg-muted rounded px-1.5 py-0.5">
                     Edit {index + 1}/{editCount}
                   </span>
                 </div>
@@ -75,50 +73,50 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {/* Before (old_string) */}
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between px-2 py-1 bg-destructive/10 rounded-t border-l-2 border-l-destructive">
-                      <span className="font-medium text-destructive">Before</span>
+                    <div className="bg-destructive/10 border-l-destructive flex items-center justify-between rounded-t border-l-2 px-2 py-1">
+                      <span className="text-destructive font-medium">Before</span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleCopy(`old-${index}`, edit.old_string);
                         }}
-                        className="p-1 hover:bg-destructive/20 rounded transition-colors"
+                        className="hover:bg-destructive/20 rounded p-1 transition-colors"
                         title="Copy before"
                         aria-label="Copy before text"
                       >
                         {copiedKey === `old-${index}` ? (
-                          <Check className="w-3 h-3 text-destructive" />
+                          <Check className="text-destructive h-3 w-3" />
                         ) : (
-                          <Copy className="w-3 h-3 text-destructive" />
+                          <Copy className="text-destructive h-3 w-3" />
                         )}
                       </button>
                     </div>
-                    <pre className="p-2 bg-destructive/5 rounded-b border border-destructive/20 overflow-x-auto font-mono whitespace-pre-wrap break-words text-destructive-foreground">
+                    <pre className="bg-destructive/5 border-destructive/20 text-destructive-foreground overflow-x-auto rounded-b border p-2 font-mono break-words whitespace-pre-wrap">
                       {edit.old_string}
                     </pre>
                   </div>
 
                   {/* After (new_string) */}
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between px-2 py-1 bg-success/10 rounded-t border-l-2 border-l-success">
-                      <span className="font-medium text-success">After</span>
+                    <div className="bg-success/10 border-l-success flex items-center justify-between rounded-t border-l-2 px-2 py-1">
+                      <span className="text-success font-medium">After</span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleCopy(`new-${index}`, edit.new_string);
                         }}
-                        className="p-1 hover:bg-success/20 rounded transition-colors"
+                        className="hover:bg-success/20 rounded p-1 transition-colors"
                         title="Copy after"
                         aria-label="Copy after text"
                       >
                         {copiedKey === `new-${index}` ? (
-                          <Check className="w-3 h-3 text-success" />
+                          <Check className="text-success h-3 w-3" />
                         ) : (
-                          <Copy className="w-3 h-3 text-success" />
+                          <Copy className="text-success h-3 w-3" />
                         )}
                       </button>
                     </div>
-                    <pre className="p-2 bg-success/5 rounded-b border border-success/20 overflow-x-auto font-mono whitespace-pre-wrap break-words text-success-foreground">
+                    <pre className="bg-success/5 border-success/20 text-success-foreground overflow-x-auto rounded-b border p-2 font-mono break-words whitespace-pre-wrap">
                       {edit.new_string}
                     </pre>
                   </div>

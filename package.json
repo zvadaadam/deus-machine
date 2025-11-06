@@ -29,7 +29,14 @@
     "// TESTING": "",
     "//7": "═══════════════════════════════════════════════════════════════",
     "test": "node tests/e2e-flow.test.cjs",
-    "// test": "🧪 Run E2E test suite - requires backend running"
+    "// test": "🧪 Run E2E test suite - requires backend running",
+    "//8": "═══════════════════════════════════════════════════════════════",
+    "// CODE FORMATTING": "",
+    "//9": "═══════════════════════════════════════════════════════════════",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
+    "// format": "✨ Format all code with Prettier + auto-sort Tailwind classes",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
+    "// format:check": "🔍 Check if code is properly formatted (useful for CI)"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.0.0",
@@ -97,6 +104,8 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.7.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.5.3",
     "vite": "^5.4.1"

@@ -26,7 +26,10 @@ interface MessageItemProps {
   isLatestAssistant?: boolean; // Whether this is the latest assistant message
 }
 
-export const MessageItem = memo(function MessageItem({ message, isLatestAssistant = false }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({
+  message,
+  isLatestAssistant = false,
+}: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -41,7 +44,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
 
   // Check if content should be collapsible (user messages only, uses theme constants)
   useEffect(() => {
-    if (message.role === 'user' && contentRef.current) {
+    if (message.role === "user" && contentRef.current) {
       const actualHeight = contentRef.current.scrollHeight;
       setShouldCollapse(actualHeight > chatTheme.collapse.maxHeight);
     }
@@ -49,15 +52,15 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
 
   // Extract text content for copy functionality
   const extractTextContent = (): string => {
-    if (typeof message.content === 'string') return message.content;
+    if (typeof message.content === "string") return message.content;
     if (Array.isArray(contentBlocks)) {
       return contentBlocks
         .map((block: ContentBlock | string) => {
-          if (typeof block === 'string') return block;
-          if (block?.type === 'text') return block.text;
-          return '';
+          if (typeof block === "string") return block;
+          if (block?.type === "text") return block.text;
+          return "";
         })
-        .join('\n');
+        .join("\n");
     }
     return String(message.content);
   };
@@ -68,19 +71,20 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
 
   const handleRevert = () => {
     // TODO: Implement revert functionality
-    console.log('Revert to message:', message.id);
+    console.log("Revert to message:", message.id);
   };
 
   // Helper: Render content blocks with proper keys (DRY - used for both user/assistant)
   const renderContentBlocks = (blocks: (ContentBlock | string)[]) => {
     return blocks.map((block: ContentBlock | string, index: number) => {
       // Generate unique key: use tool_use id if available, otherwise fallback to index
-      const key = typeof block === 'object' && block?.type === 'tool_use'
-        ? block.id
-        : `${message.id}:${index}`;
+      const key =
+        typeof block === "object" && block?.type === "tool_use"
+          ? block.id
+          : `${message.id}:${index}`;
 
       // Determine if this is the last text block (for assistant weight styling)
-      const isLastTextBlock = message.role === 'assistant' && index === lastTextBlockIndex;
+      const isLastTextBlock = message.role === "assistant" && index === lastTextBlockIndex;
 
       return (
         <BlockRenderer
@@ -118,35 +122,34 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
    */
 
   // Determine role-based styling
-  const roleStyles = message.role === 'user'
-    ? chatTheme.message.user
-    : chatTheme.message.assistant;
+  const roleStyles = message.role === "user" ? chatTheme.message.user : chatTheme.message.assistant;
 
   // Find last text block index for weight (assistant messages only)
   const findLastTextBlockIndex = (blocks: (ContentBlock | string)[]) => {
     for (let i = blocks.length - 1; i >= 0; i--) {
       const block = blocks[i];
-      if (typeof block === 'string' || (typeof block === 'object' && block?.type === 'text')) {
+      if (typeof block === "string" || (typeof block === "object" && block?.type === "text")) {
         return i;
       }
     }
     return -1;
   };
 
-  const lastTextBlockIndex = Array.isArray(contentBlocks) && message.role === 'assistant'
-    ? findLastTextBlockIndex(contentBlocks as (ContentBlock | string)[])
-    : -1;
+  const lastTextBlockIndex =
+    Array.isArray(contentBlocks) && message.role === "assistant"
+      ? findLastTextBlockIndex(contentBlocks as (ContentBlock | string)[])
+      : -1;
 
   // Assistant messages - use BlockRenderer with weight
-  if (message.role === 'assistant') {
+  if (message.role === "assistant") {
     return (
       <div
         key={message.id}
         className={cn(
-          'relative group',
+          "group relative",
           roleStyles.maxWidth,
           roleStyles.container,
-          'flex flex-col gap-2 min-w-0 overflow-x-hidden',
+          "flex min-w-0 flex-col gap-2 overflow-x-hidden",
           chatTheme.common.transition
         )}
       >
@@ -155,7 +158,9 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
         ) : (
           // Fallback for non-array content
           <div className="text-base leading-relaxed">
-            {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+            {typeof contentBlocks === "string"
+              ? contentBlocks
+              : JSON.stringify(contentBlocks, null, 2)}
           </div>
         )}
       </div>
@@ -164,7 +169,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
 
   // User messages - refined design with absolutely positioned actions
   return (
-    <div key={message.id} className="relative group flex flex-col items-end mb-8">
+    <div key={message.id} className="group relative mb-8 flex flex-col items-end">
       {/* Message card */}
       <div
         className={cn(
@@ -172,7 +177,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           roleStyles.container,
           chatTheme.message.user.shape,
           chatTheme.message.user.padding,
-          'min-w-0'
+          "min-w-0"
         )}
       >
         {/* Message content */}
@@ -180,23 +185,25 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
           ref={contentRef}
           id={`message-content-${message.id}`}
           className={cn(
-            'min-w-0',
+            "min-w-0",
             // Collapse long messages (using theme constant)
-            shouldCollapse && !isExpanded && 'max-h-[168px] overflow-hidden relative'
+            shouldCollapse && !isExpanded && "relative max-h-[168px] overflow-hidden"
           )}
         >
           {Array.isArray(contentBlocks) ? (
             renderContentBlocks(contentBlocks as (ContentBlock | string)[])
           ) : (
             // Fallback for non-array content
-            <div className={cn('text-sm leading-relaxed', roleStyles.text)}>
-              {typeof contentBlocks === 'string' ? contentBlocks : JSON.stringify(contentBlocks, null, 2)}
+            <div className={cn("text-sm leading-relaxed", roleStyles.text)}>
+              {typeof contentBlocks === "string"
+                ? contentBlocks
+                : JSON.stringify(contentBlocks, null, 2)}
             </div>
           )}
 
           {/* Fade overlay for collapsed state - subtle gradient */}
           {shouldCollapse && !isExpanded && (
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted via-muted/60 to-transparent pointer-events-none" />
+            <div className="from-muted via-muted/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
           )}
         </div>
 
@@ -228,7 +235,7 @@ export const MessageItem = memo(function MessageItem({ message, isLatestAssistan
       <div className={chatTheme.userActions.container}>
         <ActionButton
           icon={Copy}
-          label={copied ? 'Copied' : 'Copy'}
+          label={copied ? "Copied" : "Copy"}
           onClick={handleCopy}
           active={copied}
         />

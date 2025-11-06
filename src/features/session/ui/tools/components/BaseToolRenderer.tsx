@@ -13,11 +13,11 @@
  * - Backward compatible with existing tool renderers
  */
 
-import { useState, ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { cn } from '@/shared/lib/utils';
-import type { ToolUseBlock, ToolResultBlock } from '@/shared/types';
-import { ToolError } from './ToolError';
+import { useState, ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import { ToolError } from "./ToolError";
 
 export interface BaseToolRendererProps {
   // Identity
@@ -33,7 +33,11 @@ export interface BaseToolRendererProps {
 
   // Content rendering (choose one)
   children?: ReactNode; // NEW API: Single children slot
-  renderContent?: (props: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock; isExpanded: boolean }) => ReactNode; // OLD API
+  renderContent?: (props: {
+    toolUse: ToolUseBlock;
+    toolResult?: ToolResultBlock;
+    isExpanded: boolean;
+  }) => ReactNode; // OLD API
   renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode; // Preview when collapsed
 }
 
@@ -52,7 +56,7 @@ export function BaseToolRenderer({
 
   // Minimal design: Error-only status (assume success by default)
   const status = isError
-    ? { text: '✗ Error', className: 'text-destructive text-xs font-medium' }
+    ? { text: "✗ Error", className: "text-destructive text-xs font-medium" }
     : null;
 
   return (
@@ -62,21 +66,21 @@ export function BaseToolRenderer({
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'flex items-center gap-2 px-2 py-1.5 text-sm',
-          'text-left w-full cursor-pointer',
-          'transition-opacity duration-200 ease-out',
-          'hover:opacity-70',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+          "flex items-center gap-2 px-2 py-1.5 text-sm",
+          "w-full cursor-pointer text-left",
+          "transition-opacity duration-200 ease-out",
+          "hover:opacity-70",
+          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
         aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${toolName} tool details`}
+        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${toolName} tool details`}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* Chevron - subtle and small */}
           <ChevronRight
             className={cn(
-              'w-3 h-3 text-muted-foreground/50 transition-transform duration-200 flex-shrink-0',
-              isExpanded && 'rotate-90'
+              "text-muted-foreground/50 h-3 w-3 flex-shrink-0 transition-transform duration-200",
+              isExpanded && "rotate-90"
             )}
             aria-hidden="true"
           />
@@ -85,18 +89,14 @@ export function BaseToolRenderer({
           {icon}
 
           {/* Tool name - truncate if too long */}
-          <span className="font-medium truncate">{toolName}</span>
+          <span className="truncate font-medium">{toolName}</span>
 
           {/* Status indicator (error only) */}
-          {status && (
-            <span className={status.className}>
-              {status.text}
-            </span>
-          )}
+          {status && <span className={status.className}>{status.text}</span>}
 
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="truncate text-xs text-muted-foreground">
+            <span className="text-muted-foreground truncate text-xs">
               {renderSummary({ toolUse })}
             </span>
           )}
@@ -105,7 +105,7 @@ export function BaseToolRenderer({
 
       {/* Expanded content - indented, no duplication */}
       {isExpanded && (
-        <div className="ml-5 mt-1">
+        <div className="mt-1 ml-5">
           {/* NEW API: children */}
           {children}
 
@@ -116,7 +116,7 @@ export function BaseToolRenderer({
 
       {/* Error Display - Always Visible When Error */}
       {isError && toolResult && (
-        <div className="ml-5 mt-1">
+        <div className="mt-1 ml-5">
           <ToolError content={toolResult.content} />
         </div>
       )}

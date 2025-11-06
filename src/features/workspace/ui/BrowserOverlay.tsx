@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { BrowserPanel } from '@/features/browser';
-import { cn } from '@/shared/lib/utils';
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { BrowserPanel } from "@/features/browser";
+import { cn } from "@/shared/lib/utils";
 
 interface BrowserOverlayProps {
   isOpen: boolean;
@@ -40,15 +40,15 @@ export function BrowserOverlay({ isOpen, workspaceId, onClose }: BrowserOverlayP
   const overlay = (
     <div
       className={cn(
-        'fixed top-0 right-0 bottom-0 z-50',
-        'w-[400px]',
-        'bg-background/95 backdrop-blur-xl',
-        'border-l border-border',
-        'shadow-[-20px_0_60px_rgba(0,0,0,0.3)]',
-        'flex flex-col',
-        'transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]',
-        'motion-reduce:transition-none',
-        isOpen ? 'translate-x-0' : 'translate-x-full'
+        "fixed top-0 right-0 bottom-0 z-50",
+        "w-[400px]",
+        "bg-background/95 backdrop-blur-xl",
+        "border-border border-l",
+        "shadow-[-20px_0_60px_rgba(0,0,0,0.3)]",
+        "flex flex-col",
+        "transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+        "motion-reduce:transition-none",
+        isOpen ? "translate-x-0" : "translate-x-full"
       )}
     >
       <BrowserPanel workspaceId={workspaceId} onClose={onClose} />

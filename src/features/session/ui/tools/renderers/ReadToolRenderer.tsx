@@ -7,26 +7,27 @@
  * AFTER: ~35 LOC (only unique syntax highlighting logic!)
  */
 
-import { FileText } from 'lucide-react';
-import { BaseToolRenderer, CodeBlock, FilePathDisplay } from '../components';
-import type { ToolRendererProps } from '../../chat-types';
-import { detectLanguageFromPath } from '../utils/detectLanguage';
+import { FileText } from "lucide-react";
+import { BaseToolRenderer, CodeBlock, FilePathDisplay } from "../components";
+import type { ToolRendererProps } from "../../chat-types";
+import { detectLanguageFromPath } from "../utils/detectLanguage";
 
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, offset, limit } = toolUse.input;
 
   // Extract filename from path
-  const fileName = file_path.split('/').pop() || file_path;
+  const fileName = file_path.split("/").pop() || file_path;
 
   // Count lines from result content
   const getLineCount = () => {
     if (!toolResult || toolResult.is_error) return null;
 
-    const content = typeof toolResult.content === 'string'
-      ? toolResult.content
-      : JSON.stringify(toolResult.content, null, 2);
+    const content =
+      typeof toolResult.content === "string"
+        ? toolResult.content
+        : JSON.stringify(toolResult.content, null, 2);
 
-    return content.split('\n').length;
+    return content.split("\n").length;
   };
 
   const lineCount = getLineCount();
@@ -34,16 +35,16 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Read"
-      icon={<FileText className="w-4 h-4 text-info/70 flex-shrink-0" />}
+      icon={<FileText className="text-info/70 h-4 w-4 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
       defaultExpanded={false}
       renderSummary={() => (
         <>
-          <span className="font-mono text-xs px-2 py-0.5 bg-muted/60 rounded font-medium">
+          <span className="bg-muted/60 rounded px-2 py-0.5 font-mono text-xs font-medium">
             {fileName}
           </span>
-          {lineCount && <span className="text-xs text-muted-foreground"> • {lineCount} lines</span>}
+          {lineCount && <span className="text-muted-foreground text-xs"> • {lineCount} lines</span>}
         </>
       )}
       renderContent={({ toolResult }) => {
@@ -52,7 +53,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         return (
           <CodeBlock
             code={
-              typeof toolResult.content === 'object'
+              typeof toolResult.content === "object"
                 ? JSON.stringify(toolResult.content, null, 2)
                 : toolResult.content
             }

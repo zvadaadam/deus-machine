@@ -7,28 +7,28 @@
  * AFTER: ~40 LOC
  */
 
-import { Terminal } from 'lucide-react';
-import { BaseToolRenderer } from '../components';
-import { cn } from '@/shared/lib/utils';
-import type { ToolRendererProps } from '../../chat-types';
+import { Terminal } from "lucide-react";
+import { BaseToolRenderer } from "../components";
+import { cn } from "@/shared/lib/utils";
+import type { ToolRendererProps } from "../../chat-types";
 
 export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { command, description } = toolUse.input;
   const isError = toolResult?.is_error;
 
   // Show command, optionally prefixed by description
-  const commandPreview = command.length > 60 ? command.substring(0, 60) + '...' : command;
+  const commandPreview = command.length > 60 ? command.substring(0, 60) + "..." : command;
 
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={<Terminal className="w-4 h-4 text-primary/70 flex-shrink-0" />}
+      icon={<Terminal className="text-primary/70 h-4 w-4 flex-shrink-0" />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          {description && <span className="text-xs text-muted-foreground">{description} → </span>}
-          <span className="font-mono text-xs px-2 py-0.5 bg-primary/15 text-primary rounded font-medium">
+          {description && <span className="text-muted-foreground text-xs">{description} → </span>}
+          <span className="bg-primary/15 text-primary rounded px-2 py-0.5 font-mono text-xs font-medium">
             {commandPreview}
           </span>
         </>
@@ -37,23 +37,24 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         if (!toolResult) return null;
 
         // Extract output content
-        const output = typeof toolResult.content === 'object'
-          ? JSON.stringify(toolResult.content, null, 2)
-          : toolResult.content;
+        const output =
+          typeof toolResult.content === "object"
+            ? JSON.stringify(toolResult.content, null, 2)
+            : toolResult.content;
 
         return (
           <pre
             className={cn(
-              'p-4 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap',
-              'max-h-[400px] overflow-y-auto border',
+              "overflow-x-auto rounded-lg p-4 font-mono text-sm whitespace-pre-wrap",
+              "max-h-[400px] overflow-y-auto border",
               isError
-                ? 'bg-destructive/15 text-destructive-foreground border-destructive/30'
-                : 'bg-muted/80 text-foreground border-border/60'
+                ? "bg-destructive/15 text-destructive-foreground border-destructive/30"
+                : "bg-muted/80 text-foreground border-border/60"
             )}
           >
             <code>
               <span className="text-success font-semibold">$ {command}</span>
-              {'\n'}
+              {"\n"}
               {output}
             </code>
           </pre>

@@ -62,8 +62,8 @@ export function CloneRepositoryModal({
         <DialogHeader>
           <DialogTitle>Clone Repository</DialogTitle>
           <DialogDescription>
-            Clone a repository from GitHub. The repository will be added to
-            Conductor and you can create workspaces from it.
+            Clone a repository from GitHub. The repository will be added to Conductor and you can
+            create workspaces from it.
           </DialogDescription>
         </DialogHeader>
 
@@ -77,7 +77,7 @@ export function CloneRepositoryModal({
               onChange={(e) => setGithubUrl(e.target.value)}
               disabled={cloning}
             />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Enter the HTTPS or SSH URL of the GitHub repository
             </p>
           </div>
@@ -91,9 +91,7 @@ export function CloneRepositoryModal({
               onChange={(e) => setTargetPath(e.target.value)}
               disabled={cloning}
             />
-            <p className="text-sm text-muted-foreground">
-              Leave empty to clone into ~/Projects
-            </p>
+            <p className="text-muted-foreground text-sm">Leave empty to clone into ~/Projects</p>
           </div>
         </div>
 
@@ -101,11 +99,7 @@ export function CloneRepositoryModal({
           <Button variant="outline" onClick={handleClose} disabled={cloning}>
             Cancel
           </Button>
-          <Button
-            onClick={handleClone}
-            disabled={cloning || !githubUrl.trim()}
-            className="gap-2"
-          >
+          <Button onClick={handleClone} disabled={cloning || !githubUrl.trim()} className="gap-2">
             {cloning ? "⟳" : "📦"}
             {cloning ? "Cloning..." : "Clone Repository"}
           </Button>

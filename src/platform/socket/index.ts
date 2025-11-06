@@ -3,5 +3,5 @@
  * Public exports for socket communication
  */
 
-export { socketService } from './socketService';
-export type { SocketMessage, SocketResponse } from './socketService';
+export { socketService } from "./socketService";
+export type { SocketMessage, SocketResponse } from "./socketService";

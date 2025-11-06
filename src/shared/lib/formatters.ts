@@ -11,11 +11,11 @@
 export function formatTimeAgo(dateString: string): string {
   const now = new Date();
   // SQLite stores dates as UTC strings without 'Z', so append 'Z' to parse as UTC
-  const date = new Date(dateString.includes('Z') ? dateString : dateString + 'Z');
+  const date = new Date(dateString.includes("Z") ? dateString : dateString + "Z");
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (seconds < 0) return 'just now'; // Handle future dates due to timezone issues
-  if (seconds < 60) return 'just now';
+  if (seconds < 0) return "just now"; // Handle future dates due to timezone issues
+  if (seconds < 60) return "just now";
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d ago`;
@@ -47,7 +47,7 @@ export function formatTokenCount(tokens: number): string {
  * @returns Formatted file size (e.g., "1.5 MB")
  */
 export function formatFileSize(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const units = ["B", "KB", "MB", "GB", "TB"];
   let size = bytes;
   let unitIndex = 0;
 

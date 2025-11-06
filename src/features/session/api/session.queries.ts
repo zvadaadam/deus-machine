@@ -3,11 +3,11 @@
  * TanStack Query hooks for Claude Code session management
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SessionService } from './session.service';
-import { queryKeys } from '@/shared/api/queryKeys';
-import type { Session, Message, SessionStatus } from '../types';
-import { useMemo, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { SessionService } from "./session.service";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { Session, Message, SessionStatus } from "../types";
+import { useMemo, useCallback } from "react";
 
 /**
  * Fetch session details with dynamic polling based on status
@@ -19,14 +19,14 @@ import { useMemo, useCallback } from 'react';
  */
 export function useSession(sessionId: string | null) {
   return useQuery({
-    queryKey: queryKeys.sessions.detail(sessionId || ''),
+    queryKey: queryKeys.sessions.detail(sessionId || ""),
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
     // Dynamic polling: faster when working, slower when idle
     // TODO: Disable on desktop once session status events are implemented
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      return session?.status === 'working' ? 2000 : 5000;
+      return session?.status === "working" ? 2000 : 5000;
     },
     staleTime: 10000, // 10 seconds (was 500ms)
   });
@@ -39,18 +39,18 @@ export function useSession(sessionId: string | null) {
  */
 export function useMessages(sessionId: string | null, sessionStatus?: SessionStatus) {
   return useQuery({
-    queryKey: queryKeys.sessions.messages(sessionId || ''),
+    queryKey: queryKeys.sessions.messages(sessionId || ""),
     queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
     // ✅ Smart fallback: Events in Tauri, polling in browser
     refetchInterval: (query) => {
       // Desktop mode (Tauri): Events handle updates, no polling
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      if (typeof window !== "undefined" && "__TAURI__" in window) {
         return false;
       }
 
       // Web mode (Browser): Poll only when session is working
-      if (sessionStatus === 'working') {
+      if (sessionStatus === "working") {
         return 2000; // Poll every 2s when Claude is working
       }
 
@@ -66,7 +66,7 @@ export function useMessages(sessionId: string | null, sessionStatus?: SessionSta
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const sessionStatus = (sessionQuery.data?.status as SessionStatus) || 'idle';
+  const sessionStatus = (sessionQuery.data?.status as SessionStatus) || "idle";
   const messagesQuery = useMessages(sessionId, sessionStatus);
 
   // Parse content helper (from original useMessages)
@@ -77,7 +77,7 @@ export function useSessionWithMessages(sessionId: string | null) {
       return parsed.message?.content || parsed.content || [];
     } catch (error) {
       // If JSON.parse fails, treat it as plain text
-      return [{ type: 'text', text: content }];
+      return [{ type: "text", text: content }];
     }
   }, []); // Empty deps - pure function with no external dependencies
 
@@ -90,7 +90,7 @@ export function useSessionWithMessages(sessionId: string | null) {
       const contentBlocks = parseContent(message.content);
       if (Array.isArray(contentBlocks)) {
         contentBlocks.forEach((block: any) => {
-          if (block.type === 'tool_result' && block.tool_use_id) {
+          if (block.type === "tool_result" && block.tool_use_id) {
             map.set(block.tool_use_id, block);
           }
         });
@@ -107,7 +107,7 @@ export function useSessionWithMessages(sessionId: string | null) {
     // Find the latest user message
     const latestUserMessage = [...messagesQuery.data]
       .reverse()
-      .find((msg: Message) => msg.role === 'user');
+      .find((msg: Message) => msg.role === "user");
 
     return latestUserMessage?.sent_at || null;
   }, [messagesQuery.data]);
@@ -115,7 +115,7 @@ export function useSessionWithMessages(sessionId: string | null) {
   return {
     session: sessionQuery.data,
     messages: messagesQuery.data || [],
-    sessionStatus: (sessionQuery.data?.status as SessionStatus) || 'idle',
+    sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
     isCompacting: sessionQuery.data?.is_compacting === 1,
     latestMessageSentAt,
     loading: sessionQuery.isLoading || messagesQuery.isLoading,

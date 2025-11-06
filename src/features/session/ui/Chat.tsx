@@ -1,7 +1,13 @@
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -22,7 +28,7 @@ function getMessageSpacingClasses(
   role: MessageRole,
   prevRole: MessageRole | null,
   nextRole: MessageRole | null,
-  isFirst: boolean,
+  isFirst: boolean
 ): string {
   const isUser = role === "user";
 
@@ -68,7 +74,7 @@ interface ChatProps {
   messagesEndRef: RefObject<HTMLDivElement>;
   lastMessageRef: RefObject<HTMLDivElement>;
   messagesContainerRef: RefObject<HTMLDivElement>;
-  onStop?: () => void;  // Callback to stop/cancel the session
+  onStop?: () => void; // Callback to stop/cancel the session
   className?: string;
 }
 
@@ -88,7 +94,7 @@ export function Chat({
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
     status: sessionStatus,
-    latestMessageSentAt
+    latestMessageSentAt,
   });
 
   // Memoize message filtering to avoid re-parsing JSON on every render
@@ -99,8 +105,9 @@ export function Chat({
       const onlyToolResults =
         isArray &&
         contentBlocks.length > 0 &&
-        contentBlocks.every((block: ContentBlock | string) =>
-          typeof block === "object" && block?.type === "tool_result"
+        contentBlocks.every(
+          (block: ContentBlock | string) =>
+            typeof block === "object" && block?.type === "tool_result"
         );
       const isEmpty =
         (isArray && contentBlocks.length === 0) ||
@@ -112,7 +119,7 @@ export function Chat({
   // Find index of latest assistant message (for auto-expanding turns)
   const latestAssistantIndex = useMemo(() => {
     for (let i = renderableMessages.length - 1; i >= 0; i--) {
-      if (renderableMessages[i].role === 'assistant') {
+      if (renderableMessages[i].role === "assistant") {
         return i;
       }
     }
@@ -133,8 +140,8 @@ export function Chat({
       role="log"
       aria-live="polite"
       className={cn(
-        "relative flex-1 overflow-y-auto overflow-x-hidden scroll-smooth motion-reduce:scroll-auto min-h-0 px-6 pt-6",
-        className,
+        "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-smooth px-6 pt-6 motion-reduce:scroll-auto",
+        className
       )}
       ref={messagesContainerRef}
     >
@@ -149,7 +156,9 @@ export function Chat({
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia>
-              <div className="text-4xl" aria-hidden="true">💬</div>
+              <div className="text-4xl" aria-hidden="true">
+                💬
+              </div>
             </EmptyMedia>
             <EmptyTitle>No messages yet</EmptyTitle>
             <EmptyDescription>
@@ -159,17 +168,26 @@ export function Chat({
         </Empty>
       ) : (
         <>
-          <div className="flex flex-col pb-32 min-h-0 min-w-0">
+          <div className="flex min-h-0 min-w-0 flex-col pb-32">
             {renderableMessages.map((message, renderIndex) => {
               const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
-              const nextRole = renderIndex < renderableMessages.length - 1 ? renderableMessages[renderIndex + 1].role : null;
-              const spacingClass = getMessageSpacingClasses(message.role, prevRole, nextRole, renderIndex === 0);
+              const nextRole =
+                renderIndex < renderableMessages.length - 1
+                  ? renderableMessages[renderIndex + 1].role
+                  : null;
+              const spacingClass = getMessageSpacingClasses(
+                message.role,
+                prevRole,
+                nextRole,
+                renderIndex === 0
+              );
 
               // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
               const isLastRendered = renderIndex === renderableMessages.length - 1;
 
               // Check if this is the latest assistant message (for auto-expanding)
-              const isLatestAssistant = message.role === 'assistant' && renderIndex === latestAssistantIndex;
+              const isLatestAssistant =
+                message.role === "assistant" && renderIndex === latestAssistantIndex;
 
               return (
                 <div
@@ -177,10 +195,7 @@ export function Chat({
                   ref={isLastRendered ? lastMessageRef : undefined}
                   className={cn(spacingClass, "min-w-0")}
                 >
-                  <MessageItem
-                    message={message}
-                    isLatestAssistant={isLatestAssistant}
-                  />
+                  <MessageItem message={message} isLatestAssistant={isLatestAssistant} />
                 </div>
               );
             })}
@@ -189,21 +204,21 @@ export function Chat({
                 role="status"
                 aria-live="polite"
                 className={cn(
-                  "flex items-center gap-2 py-2.5 px-3.5 mr-auto max-w-[85%]",
-                  "bg-success/10 backdrop-blur-sm border border-success/30 rounded-xl",
-                  "text-success font-medium text-sm shadow-sm",
+                  "mr-auto flex max-w-[85%] items-center gap-2 px-3.5 py-2.5",
+                  "bg-success/10 border-success/30 rounded-xl border backdrop-blur-sm",
+                  "text-success text-sm font-medium shadow-sm",
                   "animate-gentle-pulse motion-reduce:animate-none",
-                  indicatorMarginClass,
+                  indicatorMarginClass
                 )}
               >
                 <div
-                  className="w-4 h-4 border-2 border-success/20 border-t-success rounded-full animate-spin motion-reduce:animate-none flex-shrink-0"
+                  className="border-success/20 border-t-success h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 motion-reduce:animate-none"
                   aria-hidden="true"
                 />
                 <span className="flex-1">
                   Claude is working...
                   {formattedDuration && (
-                    <span className="ml-1.5 text-success/80">({formattedDuration})</span>
+                    <span className="text-success/80 ml-1.5">({formattedDuration})</span>
                   )}
                 </span>
                 {onStop && (
@@ -211,7 +226,7 @@ export function Chat({
                     variant="ghost"
                     size="sm"
                     onClick={onStop}
-                    className="ml-auto h-6 px-2 text-success/80 hover:text-success hover:bg-success/20 transition-colors duration-200"
+                    className="text-success/80 hover:text-success hover:bg-success/20 ml-auto h-6 px-2 transition-colors duration-200"
                     aria-label="Stop session"
                     title="Stop Claude"
                   >

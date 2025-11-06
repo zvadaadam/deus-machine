@@ -3,10 +3,10 @@
  * TanStack Query hooks for repository management
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RepoService } from './repository.service';
-import { queryKeys } from '@/shared/api/queryKeys';
-import type { Repo } from '../types';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { RepoService } from "./repository.service";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { Repo } from "../types";
 
 /**
  * Fetch all repositories
@@ -24,7 +24,7 @@ export function useRepos() {
  */
 export function useRepo(id: string | null) {
   return useQuery({
-    queryKey: queryKeys.repos.detail(id || ''),
+    queryKey: queryKeys.repos.detail(id || ""),
     queryFn: () => RepoService.fetchById(id!),
     enabled: !!id,
     staleTime: 10000,
@@ -54,8 +54,7 @@ export function useCloneRepo() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ url, path }: { url: string; path: string }) =>
-      RepoService.clone(url, path),
+    mutationFn: ({ url, path }: { url: string; path: string }) => RepoService.clone(url, path),
     onSuccess: () => {
       // Invalidate repos and workspaces
       queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });

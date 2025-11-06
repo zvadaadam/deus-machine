@@ -2,8 +2,29 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { RefreshCw, ExternalLink, Loader2, AlertCircle, Zap, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown, Terminal, X, Info, Target, Globe } from "lucide-react";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
+import {
+  RefreshCw,
+  ExternalLink,
+  Loader2,
+  AlertCircle,
+  Zap,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
+  ChevronDown,
+  Terminal,
+  X,
+  Info,
+  Target,
+  Globe,
+} from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 
 /**
@@ -19,7 +40,7 @@ interface BrowserPanelProps {
 
 interface ConsoleLog {
   timestamp: Date;
-  level: 'info' | 'warn' | 'error' | 'debug';
+  level: "info" | "warn" | "error" | "debug";
   message: string;
 }
 
@@ -43,12 +64,12 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { status: devBrowserStatus, startServer } = useBrowser();
-  const tabId = `browser-${workspaceId || 'main'}`;
+  const tabId = `browser-${workspaceId || "main"}`;
 
   // Helper to add console log
   const MAX_LOGS = 500;
-  const addLog = (level: ConsoleLog['level'], message: string) => {
-    setConsoleLogs(prev => {
+  const addLog = (level: ConsoleLog["level"], message: string) => {
+    setConsoleLogs((prev) => {
       const next = [...prev, { timestamp: new Date(), level, message }];
       return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
     });
@@ -57,17 +78,17 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   // Auto-scroll console to bottom
   useEffect(() => {
     if (showConsole && consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [consoleLogs, showConsole]);
 
   // Auto-start dev-browser server on mount
   useEffect(() => {
     if (!devBrowserStatus.running && !devBrowserStatus.error) {
-      addLog('info', 'Starting dev-browser MCP server...');
-      startServer().catch(err => {
+      addLog("info", "Starting dev-browser MCP server...");
+      startServer().catch((err) => {
         console.error("Failed to auto-start dev-browser:", err);
-        addLog('error', `Failed to start MCP server: ${err.message}`);
+        addLog("error", `Failed to start MCP server: ${err.message}`);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,7 +97,7 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   // Log when MCP server starts
   useEffect(() => {
     if (devBrowserStatus.running && devBrowserStatus.port) {
-      addLog('info', `MCP server running on port ${devBrowserStatus.port}`);
+      addLog("info", `MCP server running on port ${devBrowserStatus.port}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devBrowserStatus.running]);
@@ -92,11 +113,15 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 
       // Ensure URL has protocol
       let fullUrl = targetUrl;
-      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('file://')) {
-        fullUrl = 'https://' + targetUrl;
+      if (
+        !targetUrl.startsWith("http://") &&
+        !targetUrl.startsWith("https://") &&
+        !targetUrl.startsWith("file://")
+      ) {
+        fullUrl = "https://" + targetUrl;
       }
 
-      addLog('info', `Navigating to: ${fullUrl}`);
+      addLog("info", `Navigating to: ${fullUrl}`);
 
       // Update iframe src
       if (iframeRef.current) {
@@ -108,18 +133,18 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 
       // Add to history (only if not navigating via back/forward)
       if (!urlToNavigate) {
-        setHistory(prev => {
+        setHistory((prev) => {
           const newHistory = prev.slice(0, historyIndex + 1);
           newHistory.push(fullUrl);
           return newHistory;
         });
-        setHistoryIndex(prev => prev + 1);
+        setHistoryIndex((prev) => prev + 1);
       }
     } catch (err) {
       console.error("Failed to navigate:", err);
       const errorMsg = err instanceof Error ? err.message : "Navigation failed";
       setError(errorMsg);
-      addLog('error', `Navigation failed: ${errorMsg}`);
+      addLog("error", `Navigation failed: ${errorMsg}`);
     }
   }
 
@@ -157,7 +182,7 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
     if (!devBrowserStatus.running || !devBrowserStatus.port || !iframeRef.current) {
       const errorMsg = "Dev-browser server not running";
       setError(errorMsg);
-      addLog('error', errorMsg);
+      addLog("error", errorMsg);
       return;
     }
 
@@ -168,14 +193,14 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
       // Try to access contentDocument - will throw if cross-origin
       const canAccess = iframe.contentDocument !== null;
       if (!canAccess) {
-        throw new Error('Cross-origin iframe - cannot access content');
+        throw new Error("Cross-origin iframe - cannot access content");
       }
     } catch (crossOriginError) {
       // Cross-origin page detected - browsing works but automation doesn't
       setIsCrossOrigin(true);
       setInjected(false);
-      addLog('info', '🌐 Browsing external website (automation unavailable)');
-      addLog('info', 'ℹ️  Automation only works with: file://, localhost, or same-origin pages');
+      addLog("info", "🌐 Browsing external website (automation unavailable)");
+      addLog("info", "ℹ️  Automation only works with: file://, localhost, or same-origin pages");
       return;
     }
 
@@ -183,7 +208,10 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
     setIsCrossOrigin(false);
 
     try {
-      addLog('info', `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`);
+      addLog(
+        "info",
+        `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`
+      );
 
       // Get parent origin for postMessage security
       const parentOrigin = window.location.origin; // e.g., http://localhost:1420
@@ -201,16 +229,16 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 
       const scriptContent = await response.text();
 
-      addLog('debug', `Script fetched (${scriptContent.length} chars), injecting into iframe...`);
+      addLog("debug", `Script fetched (${scriptContent.length} chars), injecting into iframe...`);
 
       // Inject into iframe
       if (iframe.contentDocument && iframe.contentDocument.body) {
         // Create script element in iframe
-        const script = iframe.contentDocument.createElement('script');
+        const script = iframe.contentDocument.createElement("script");
         script.textContent = scriptContent;
         iframe.contentDocument.body.appendChild(script);
         setInjected(true);
-        addLog('info', '✓ Automation script injected successfully');
+        addLog("info", "✓ Automation script injected successfully");
 
         // Check if automation registered after a delay
         setTimeout(() => {
@@ -218,21 +246,21 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
             // Avoid eval; directly probe the flag placed by the injected script
             const automationReady = Boolean((iframe.contentWindow as any)?.__browserAutomation);
             if (automationReady) {
-              addLog('info', '✓ Browser automation registered and ready');
+              addLog("info", "✓ Browser automation registered and ready");
             } else {
-              addLog('warn', 'Automation script injected but not yet registered');
+              addLog("warn", "Automation script injected but not yet registered");
             }
           } catch (e) {
-            addLog('warn', 'Cannot verify automation status');
+            addLog("warn", "Cannot verify automation status");
           }
         }, 1000);
       } else {
-        throw new Error('Iframe document or body not available');
+        throw new Error("Iframe document or body not available");
       }
     } catch (err) {
       console.error("Failed to inject automation:", err);
       const errorMsg = err instanceof Error ? err.message : "Injection failed";
-      addLog('error', `Injection failed: ${errorMsg}`);
+      addLog("error", `Injection failed: ${errorMsg}`);
     }
   }
 
@@ -247,7 +275,7 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 
   function openInExternalBrowser() {
     if (currentUrl) {
-      window.open(currentUrl, '_blank', 'noopener,noreferrer');
+      window.open(currentUrl, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -260,11 +288,11 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   function handleIframeLoad() {
     setLoading(false);
     setError(null);
-    addLog('info', `Page loaded: ${currentUrl}`);
+    addLog("info", `Page loaded: ${currentUrl}`);
 
     // Auto-inject automation script after page loads
     if (devBrowserStatus.running && currentUrl && !injected) {
-      addLog('info', 'Waiting 500ms before injecting automation...');
+      addLog("info", "Waiting 500ms before injecting automation...");
       // Delay injection to allow page to fully initialize
       setTimeout(() => {
         injectAutomation();
@@ -276,7 +304,7 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
     setLoading(false);
     const errorMsg = "Failed to load page. The site may block embedding or have CORS restrictions.";
     setError(errorMsg);
-    addLog('error', errorMsg);
+    addLog("error", errorMsg);
   }
 
   // ==================== ELEMENT SELECTOR FUNCTIONS ====================
@@ -293,23 +321,29 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
     try {
       targetOrigin = new URL(currentUrl).origin;
     } catch {
-      addLog('warn', 'Invalid URL origin; cannot toggle element selector securely');
+      addLog("warn", "Invalid URL origin; cannot toggle element selector securely");
       return;
     }
 
     if (selectorActive) {
       // Disable selector mode
-      addLog('info', '🎯 Deactivating element selector');
-      iframeRef.current.contentWindow?.postMessage({
-        type: 'disable-element-selection'
-      }, targetOrigin);
+      addLog("info", "🎯 Deactivating element selector");
+      iframeRef.current.contentWindow?.postMessage(
+        {
+          type: "disable-element-selection",
+        },
+        targetOrigin
+      );
       setSelectorActive(false);
     } else {
       // Enable selector mode
-      addLog('info', '🎯 Activating element selector - Click any element to inspect');
-      iframeRef.current.contentWindow?.postMessage({
-        type: 'enable-element-selection'
-      }, targetOrigin);
+      addLog("info", "🎯 Activating element selector - Click any element to inspect");
+      iframeRef.current.contentWindow?.postMessage(
+        {
+          type: "enable-element-selection",
+        },
+        targetOrigin
+      );
       setSelectorActive(true);
     }
   }
@@ -319,16 +353,18 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
    * Formats element data and dispatches to chat
    */
   function handleElementSelected(elementData: any) {
-    const tn = elementData?.element?.tagName?.toLowerCase?.() ?? 'element';
-    const eid = elementData?.element?.id ? `#${elementData.element.id}` : '';
-    addLog('info', `✓ Element selected: ${tn}${eid}`);
+    const tn = elementData?.element?.tagName?.toLowerCase?.() ?? "element";
+    const eid = elementData?.element?.id ? `#${elementData.element.id}` : "";
+    addLog("info", `✓ Element selected: ${tn}${eid}`);
 
     const formatted = formatElementForChat(elementData);
 
     // Dispatch custom event for Dashboard to pick up
-    window.dispatchEvent(new CustomEvent('insert-to-chat', {
-      detail: { text: formatted }
-    }));
+    window.dispatchEvent(
+      new CustomEvent("insert-to-chat", {
+        detail: { text: formatted },
+      })
+    );
 
     setSelectorActive(false);
     // Best-effort: ensure selector is turned off in iframe as well
@@ -336,10 +372,10 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
       const frame = iframeRef.current?.contentWindow;
       if (frame && currentUrl) {
         const to = new URL(currentUrl).origin;
-        frame.postMessage({ type: 'disable-element-selection' }, to);
+        frame.postMessage({ type: "disable-element-selection" }, to);
       }
     } catch {}
-    addLog('info', '📝 Element data sent to chat');
+    addLog("info", "📝 Element data sent to chat");
   }
 
   /**
@@ -349,24 +385,25 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
   function formatElementForChat(elementData: any): string {
     // Defensive guards for untrusted postMessage data
     const el = elementData?.element || {};
-    const tagName = (el.tagName || 'element').toLowerCase?.() || 'element';
-    const idText = el.id ? `#${el.id}` : '';
-    const classText = typeof el.className === 'string' && el.className
-      ? '.' + el.className.split(' ').filter(Boolean).join('.')
-      : '';
+    const tagName = (el.tagName || "element").toLowerCase?.() || "element";
+    const idText = el.id ? `#${el.id}` : "";
+    const classText =
+      typeof el.className === "string" && el.className
+        ? "." + el.className.split(" ").filter(Boolean).join(".")
+        : "";
     const elementSelector = tagName + idText + classText;
 
     // Build React component section if available
     const rc = elementData?.reactComponent;
-    let reactSection = '';
+    let reactSection = "";
     if (rc && (rc.name || rc.fileName)) {
-      const lines = ['### ⚛️ React Component'];
+      const lines = ["### ⚛️ React Component"];
       if (rc.name) lines.push(`- **Component:** \`${rc.name}\``);
       if (rc.fileName) {
         const fileInfo = rc.lineNumber != null ? `${rc.fileName}:${rc.lineNumber}` : rc.fileName;
         lines.push(`- **File:** \`${fileInfo}\``);
       }
-      reactSection = '\n' + lines.join('\n') + '\n';
+      reactSection = "\n" + lines.join("\n") + "\n";
     }
 
     // Safe rect access
@@ -375,14 +412,18 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
     const size = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
 
     // Safe text access
-    const textContent = typeof el.innerText === 'string' && el.innerText
-      ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? '...' : ''}"`
-      : '';
+    const textContent =
+      typeof el.innerText === "string" && el.innerText
+        ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? "..." : ""}"`
+        : "";
 
     // Safe attributes
-    const attributes = Array.isArray(el.attributes) && el.attributes.length > 0
-      ? el.attributes.map((a: any) => `- **${a?.name ?? 'unknown'}**: \`"${a?.value ?? ''}"\``).join('\n')
-      : '_(No attributes)_';
+    const attributes =
+      Array.isArray(el.attributes) && el.attributes.length > 0
+        ? el.attributes
+            .map((a: any) => `- **${a?.name ?? "unknown"}**: \`"${a?.value ?? ""}"\``)
+            .join("\n")
+        : "_(No attributes)_";
 
     // Safe computed styles
     const styles = el.computedStyle || {};
@@ -391,7 +432,7 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
 ## 🎯 Selected Element
 
 **Element:** \`${elementSelector}\`
-**Path:** ${el.path ?? '_(unknown)_'}
+**Path:** ${el.path ?? "_(unknown)_"}
 **Position:** ${position}
 **Size:** ${size}
 ${textContent}
@@ -400,12 +441,12 @@ ${reactSection}
 ${attributes}
 
 ### Computed Styles
-- **color**: ${styles.color ?? '_'}
-- **backgroundColor**: ${styles.backgroundColor ?? '_'}
-- **fontSize**: ${styles.fontSize ?? '_'}
-- **fontWeight**: ${styles.fontWeight ?? '_'}
-- **display**: ${styles.display ?? '_'}
-- **position**: ${styles.position ?? '_'}
+- **color**: ${styles.color ?? "_"}
+- **backgroundColor**: ${styles.backgroundColor ?? "_"}
+- **fontSize**: ${styles.fontSize ?? "_"}
+- **fontWeight**: ${styles.fontWeight ?? "_"}
+- **display**: ${styles.display ?? "_"}
+- **position**: ${styles.position ?? "_"}
 
 ---
 _You can ask me to modify this element, debug it, or help with related styling._
@@ -431,26 +472,26 @@ _You can ask me to modify this element, debug it, or help with related styling._
       if (!selectorActive || !injected) return;
 
       // Validate message data structure
-      if (!event.data || typeof event.data !== 'object') return;
+      if (!event.data || typeof event.data !== "object") return;
 
-      if (event.data.type === 'element-selected') {
+      if (event.data.type === "element-selected") {
         handleElementSelected(event.data);
-      } else if (event.data.type === 'exit-selection-mode') {
+      } else if (event.data.type === "exit-selection-mode") {
         setSelectorActive(false);
-        addLog('info', 'Element selector deactivated (Escape pressed)');
+        addLog("info", "Element selector deactivated (Escape pressed)");
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, [injected, iframeRef, selectorActive, currentUrl]);
 
   // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Browser Controls - h-11 (44px) to align with chat tabs row */}
-      <div className="flex items-center gap-2 px-2 border-b border-border flex-shrink-0 h-11">
+      <div className="border-border flex h-11 flex-shrink-0 items-center gap-2 border-b px-2">
         <Button
           variant="ghost"
           size="icon"
@@ -484,20 +525,20 @@ _You can ask me to modify this element, debug it, or help with related styling._
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
 
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <Input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Enter URL and press Enter..."
-            className="h-7 text-sm pr-8 focus-visible:ring-0 focus-visible:border-border"
+            className="focus-visible:border-border h-7 pr-8 text-sm focus-visible:ring-0"
             disabled={loading}
           />
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 absolute right-0.5 top-0.5"
+            className="absolute top-0.5 right-0.5 h-6 w-6"
             onClick={openInExternalBrowser}
             disabled={!currentUrl}
             title="Open in external browser"
@@ -537,7 +578,9 @@ _You can ask me to modify this element, debug it, or help with related styling._
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p className="text-xs">{selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}</p>
+            <p className="text-xs">
+              {selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
+            </p>
           </TooltipContent>
         </Tooltip>
 
@@ -561,7 +604,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
       </div>
 
       {/* Browser View - Sandboxed iframe like Cursor */}
-      <div className={`relative overflow-hidden ${showConsole ? 'flex-1' : 'flex-1 min-h-0'}`}>
+      <div className={`relative overflow-hidden ${showConsole ? "flex-1" : "min-h-0 flex-1"}`}>
         {currentUrl ? (
           <>
             {/* Sandboxed iframe with Cursor-like permissions */}
@@ -569,7 +612,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
               ref={iframeRef}
               src={currentUrl}
               sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-pointer-lock allow-popups allow-modals"
-              className="w-full h-full border-0"
+              className="h-full w-full border-0"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
               title="Browser"
@@ -577,16 +620,17 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
             {/* Cross-Origin Info Banner */}
             {isCrossOrigin && !loading && (
-              <div className="absolute top-0 left-0 right-0 bg-warning/10 border-b border-warning/20 backdrop-blur-sm">
+              <div className="bg-warning/10 border-warning/20 absolute top-0 right-0 left-0 border-b backdrop-blur-sm">
                 <div className="flex items-center gap-2 px-3 py-2">
-                  <Info className="h-3.5 w-3.5 text-warning flex-shrink-0" />
-                  <p className="text-xs text-warning-foreground flex-1">
-                    <span className="font-medium">Browsing only</span> — AI automation unavailable on external websites
+                  <Info className="text-warning h-3.5 w-3.5 flex-shrink-0" />
+                  <p className="text-warning-foreground flex-1 text-xs">
+                    <span className="font-medium">Browsing only</span> — AI automation unavailable
+                    on external websites
                   </p>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 hover:bg-warning/20"
+                    className="hover:bg-warning/20 h-5 w-5"
                     onClick={() => setIsCrossOrigin(false)}
                     title="Dismiss"
                   >
@@ -598,12 +642,12 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
             {/* Error overlay */}
             {error && (
-              <div className="absolute inset-0 flex items-center justify-center vibrancy-bg">
-                <div className="text-center max-w-md p-8">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-                  <h3 className="text-lg font-semibold mb-2">Unable to Load Page</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                  <div className="flex gap-2 justify-center">
+              <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+                <div className="max-w-md p-8 text-center">
+                  <AlertCircle className="text-destructive mx-auto mb-4 h-12 w-12" />
+                  <h3 className="mb-2 text-lg font-semibold">Unable to Load Page</h3>
+                  <p className="text-muted-foreground mb-4 text-sm">{error}</p>
+                  <div className="flex justify-center gap-2">
                     <Button size="sm" onClick={reload} variant="outline">
                       Try Again
                     </Button>
@@ -619,7 +663,11 @@ _You can ask me to modify this element, debug it, or help with related styling._
           <Empty className="h-full border-0">
             <EmptyHeader>
               <EmptyMedia>
-                <Globe className="h-16 w-16 text-muted-foreground/40" strokeWidth={1.5} aria-hidden="true" />
+                <Globe
+                  className="text-muted-foreground/40 h-16 w-16"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
               </EmptyMedia>
               <EmptyTitle>Browser</EmptyTitle>
               <EmptyDescription>
@@ -631,22 +679,21 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
         {/* Loading overlay */}
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center vibrancy-bg">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+            <Loader2 className="text-primary h-8 w-8 animate-spin" />
           </div>
         )}
       </div>
 
-
       {/* Console Panel */}
       {showConsole && (
-        <div className="h-50 border-t border-border bg-muted/10 flex flex-col flex-shrink-0">
+        <div className="border-border bg-muted/10 flex h-50 flex-shrink-0 flex-col border-t">
           {/* Console Header */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30 flex-shrink-0">
+          <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
             <div className="flex items-center gap-2">
-              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Console</span>
-              <span className="text-xs text-muted-foreground/60">({consoleLogs.length})</span>
+              <Terminal className="text-muted-foreground h-3.5 w-3.5" />
+              <span className="text-muted-foreground text-xs font-medium">Console</span>
+              <span className="text-muted-foreground/60 text-xs">({consoleLogs.length})</span>
             </div>
             <div className="flex items-center gap-1">
               <Tooltip>
@@ -689,16 +736,22 @@ _You can ask me to modify this element, debug it, or help with related styling._
             ) : (
               <div className="space-y-0.5">
                 {consoleLogs.map((log, i) => (
-                  <div key={i} className={`flex gap-2 ${
-                    log.level === 'error' ? 'text-destructive' :
-                    log.level === 'warn' ? 'text-warning' :
-                    log.level === 'debug' ? 'text-info' :
-                    'text-foreground'
-                  }`}>
+                  <div
+                    key={i}
+                    className={`flex gap-2 ${
+                      log.level === "error"
+                        ? "text-destructive"
+                        : log.level === "warn"
+                          ? "text-warning"
+                          : log.level === "debug"
+                            ? "text-info"
+                            : "text-foreground"
+                    }`}
+                  >
                     <span className="text-muted-foreground/60 flex-shrink-0">
-                      {log.timestamp.toLocaleTimeString('en-US', { hour12: false })}
+                      {log.timestamp.toLocaleTimeString("en-US", { hour12: false })}
                     </span>
-                    <span className="flex-shrink-0 font-semibold w-14">
+                    <span className="w-14 flex-shrink-0 font-semibold">
                       [{log.level.toUpperCase()}]
                     </span>
                     <span className="flex-1">{log.message}</span>

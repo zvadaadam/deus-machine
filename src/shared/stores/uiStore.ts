@@ -3,8 +3,8 @@
  * Global state management for UI-related state (modals, panels, etc.)
  */
 
-import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 interface UIState {
   // Modals
@@ -32,46 +32,20 @@ export const useUIStore = create<UIState>()(
 
       // Modal actions
       openNewWorkspaceModal: () =>
-        set(
-          { showNewWorkspaceModal: true },
-          false,
-          'ui/openNewWorkspaceModal'
-        ),
+        set({ showNewWorkspaceModal: true }, false, "ui/openNewWorkspaceModal"),
 
       closeNewWorkspaceModal: () =>
-        set(
-          { showNewWorkspaceModal: false },
-          false,
-          'ui/closeNewWorkspaceModal'
-        ),
+        set({ showNewWorkspaceModal: false }, false, "ui/closeNewWorkspaceModal"),
 
       openSystemPromptModal: () =>
-        set(
-          { showSystemPromptModal: true },
-          false,
-          'ui/openSystemPromptModal'
-        ),
+        set({ showSystemPromptModal: true }, false, "ui/openSystemPromptModal"),
 
       closeSystemPromptModal: () =>
-        set(
-          { showSystemPromptModal: false },
-          false,
-          'ui/closeSystemPromptModal'
-        ),
+        set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
 
-      openSettingsModal: () =>
-        set(
-          { showSettingsModal: true },
-          false,
-          'ui/openSettingsModal'
-        ),
+      openSettingsModal: () => set({ showSettingsModal: true }, false, "ui/openSettingsModal"),
 
-      closeSettingsModal: () =>
-        set(
-          { showSettingsModal: false },
-          false,
-          'ui/closeSettingsModal'
-        ),
+      closeSettingsModal: () => set({ showSettingsModal: false }, false, "ui/closeSettingsModal"),
 
       closeAllModals: () =>
         set(
@@ -81,12 +55,12 @@ export const useUIStore = create<UIState>()(
             showSettingsModal: false,
           },
           false,
-          'ui/closeAllModals'
+          "ui/closeAllModals"
         ),
     }),
     {
-      name: 'ui-store',
-      enabled: process.env.NODE_ENV === 'development',
+      name: "ui-store",
+      enabled: process.env.NODE_ENV === "development",
     }
   )
 );
