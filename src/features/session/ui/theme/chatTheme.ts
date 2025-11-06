@@ -101,7 +101,7 @@ export const chatTheme = {
       contentHierarchy: {
         metadata: "text-xs text-muted-foreground font-normal", // 12px, muted - secondary info
         body: "text-sm text-foreground", // 14px, standard - main content
-        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-xs px-2 py-2", // 10px, bold - important content
+        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-2 py-2", // 10px, bold - important content
       },
     },
 

@@ -18,6 +18,7 @@ import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useCopyToClipboard } from "@/shared/hooks";
+import { diffLines } from "diff";
 
 interface UnifiedDiffProps {
   oldString: string;
@@ -34,103 +35,36 @@ type DiffLine = {
 };
 
 /**
- * Simple diff algorithm - computes line-by-line changes
- * Uses a basic approach: compare lines sequentially and mark changes
+ * Line diff algorithm using the proven 'diff' package
+ * Uses Myers algorithm (same as git) for accurate line-by-line comparison
  */
 function computeLineDiff(oldStr: string, newStr: string): DiffLine[] {
-  const oldLines = oldStr.split("\n");
-  const newLines = newStr.split("\n");
+  const pieces = diffLines(oldStr, newStr);
+  let oldLine = 0;
+  let newLine = 0;
   const result: DiffLine[] = [];
 
-  let oldIndex = 0;
-  let newIndex = 0;
+  for (const piece of pieces) {
+    const lines = piece.value.split("\n");
+    // Drop trailing empty item caused by split on trailing newline
+    if (lines[lines.length - 1] === "") lines.pop();
 
-  // Simple sequential comparison
-  // This is a basic algorithm - could be improved with Myers or similar
-  while (oldIndex < oldLines.length || newIndex < newLines.length) {
-    const oldLine = oldLines[oldIndex];
-    const newLine = newLines[newIndex];
-
-    if (oldIndex >= oldLines.length) {
-      // Remaining new lines are additions
-      result.push({
-        type: "addition",
-        content: newLine,
-        newLineNum: newIndex + 1,
-      });
-      newIndex++;
-    } else if (newIndex >= newLines.length) {
-      // Remaining old lines are deletions
-      result.push({
-        type: "deletion",
-        content: oldLine,
-        oldLineNum: oldIndex + 1,
-      });
-      oldIndex++;
-    } else if (oldLine === newLine) {
-      // Lines match - context
-      result.push({
-        type: "context",
-        content: oldLine,
-        oldLineNum: oldIndex + 1,
-        newLineNum: newIndex + 1,
-      });
-      oldIndex++;
-      newIndex++;
-    } else {
-      // Lines differ - try to detect if it's a replacement or separate changes
-      // Look ahead to see if we can find matching lines
-      const lookahead = 3;
-      let foundMatchInOld = -1;
-      let foundMatchInNew = -1;
-
-      // Check if current old line appears in upcoming new lines
-      for (let i = 1; i <= lookahead && newIndex + i < newLines.length; i++) {
-        if (oldLine === newLines[newIndex + i]) {
-          foundMatchInNew = i;
-          break;
-        }
-      }
-
-      // Check if current new line appears in upcoming old lines
-      for (let i = 1; i <= lookahead && oldIndex + i < oldLines.length; i++) {
-        if (newLine === oldLines[oldIndex + i]) {
-          foundMatchInOld = i;
-          break;
-        }
-      }
-
-      // Decide how to proceed based on matches found
-      if (foundMatchInNew === -1 && foundMatchInOld === -1) {
-        // No matches found - treat as replacement (deletion + addition)
-        result.push({
-          type: "deletion",
-          content: oldLine,
-          oldLineNum: oldIndex + 1,
-        });
-        result.push({
-          type: "addition",
-          content: newLine,
-          newLineNum: newIndex + 1,
-        });
-        oldIndex++;
-        newIndex++;
-      } else if (foundMatchInNew > 0 && (foundMatchInOld === -1 || foundMatchInNew <= foundMatchInOld)) {
-        // Old line will match soon in new - mark as deletion and advance old
-        result.push({
-          type: "deletion",
-          content: oldLine,
-          oldLineNum: oldIndex + 1,
-        });
-        oldIndex++;
+    for (const line of lines) {
+      if (piece.added) {
+        newLine += 1;
+        result.push({ type: "addition", content: line, newLineNum: newLine });
+      } else if (piece.removed) {
+        oldLine += 1;
+        result.push({ type: "deletion", content: line, oldLineNum: oldLine });
       } else {
-        // New line will match soon in old - mark as addition and advance new
+        oldLine += 1;
+        newLine += 1;
         result.push({
-          type: "addition",
-          content: newLine,
-          newLineNum: newIndex + 1,
+          type: "context",
+          content: line,
+          oldLineNum: oldLine,
+          newLineNum: newLine,
         });
-        newIndex++;
       }
     }
   }
