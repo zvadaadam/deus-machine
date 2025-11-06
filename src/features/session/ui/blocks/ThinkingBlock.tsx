@@ -45,20 +45,20 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
       >
         {/* Icon container - fixed width to prevent layout shift */}
         <div className="relative h-4 w-4 flex-shrink-0">
-          {/* Brain icon - default state */}
+          {/* Brain icon - default state (hides on hover or when expanded) */}
           <Brain
             className={cn(
               "text-muted-foreground/70 absolute left-0 top-0 h-4 w-4 transition-opacity duration-50",
-              isHovered ? "opacity-0" : "opacity-100"
+              isHovered || isExpanded ? "opacity-0" : "opacity-100"
             )}
           />
 
-          {/* Chevron - hover state (fast like table row hover) */}
+          {/* Chevron - shows on hover or when expanded (fast like table row hover) */}
           <ChevronRight
             className={cn(
               "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
-              isExpanded && "rotate-90",
-              isHovered ? "opacity-100" : "opacity-0"
+              (isExpanded || isHovered) && "rotate-90",
+              isHovered || isExpanded ? "opacity-100" : "opacity-0"
             )}
             aria-hidden="true"
           />
