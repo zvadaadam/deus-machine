@@ -109,7 +109,6 @@ export function RepositoryItem({
                 {/* Status indicators when collapsed */}
                 {isCollapsed &&
                   (() => {
-                    const priorityStatus = getRepoPriorityStatus(repository.workspaces);
                     const unreadCount = getRepoUnreadCount(repository.workspaces);
                     const hasWorking = repository.workspaces.some(
                       (w) => w.session_status === "working"
@@ -135,7 +134,7 @@ export function RepositoryItem({
 
               <ChevronDown
                 className={cn(
-                  "text-sidebar-foreground/50 h-4 w-4 shrink-0 transition-transform delay-60 duration-180 ease-out motion-reduce:transition-none",
+                  "text-sidebar-foreground/50 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
                   isCollapsed && "-rotate-90"
                 )}
               />
