@@ -12,6 +12,7 @@ import { ListChecks, Circle, Loader2, CheckCircle2 } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
 
 interface Todo {
   content: string;
@@ -65,8 +66,8 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
 
   return (
     <BaseToolRenderer
-      toolName="Todo List"
-      icon={<ListChecks className="text-muted-foreground/70 h-4 w-4" />}
+      toolName="Todo"
+      icon={<ListChecks className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.TodoWrite)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => <span className="text-muted-foreground text-xs">{currentTaskText}</span>}

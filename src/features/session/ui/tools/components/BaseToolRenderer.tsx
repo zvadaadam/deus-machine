@@ -52,6 +52,7 @@ export function BaseToolRenderer({
   renderSummary,
 }: BaseToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isHovered, setIsHovered] = useState(false);
   const isError = toolResult?.is_error;
 
   // Minimal design: Error-only status (assume success by default)
@@ -65,6 +66,8 @@ export function BaseToolRenderer({
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
@@ -76,20 +79,31 @@ export function BaseToolRenderer({
         aria-label={`${isExpanded ? "Collapse" : "Expand"} ${toolName} tool details`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {/* Chevron - subtle and small */}
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground/50 h-3 w-3 flex-shrink-0 transition-transform duration-200",
-              isExpanded && "rotate-90"
-            )}
-            aria-hidden="true"
-          />
+          {/* Icon container - fixed width to prevent layout shift */}
+          <div className="relative h-4 w-4 flex-shrink-0">
+            {/* Tool icon - default state */}
+            <div
+              className={cn(
+                "absolute left-0 top-0 transition-opacity duration-50",
+                isHovered ? "opacity-0" : "opacity-100"
+              )}
+            >
+              {icon}
+            </div>
 
-          {/* Tool icon */}
-          {icon}
+            {/* Chevron - hover state (fast like table row hover) */}
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
+                isExpanded && "rotate-90",
+                isHovered ? "opacity-100" : "opacity-0"
+              )}
+              aria-hidden="true"
+            />
+          </div>
 
-          {/* Tool name - truncate if too long */}
-          <span className="truncate font-medium">{toolName}</span>
+          {/* Tool name - truncate if too long (reduced weight for hierarchy) */}
+          <span className="text-muted-foreground truncate font-normal">{toolName}</span>
 
           {/* Status indicator (error only) */}
           {status && <span className={status.className}>{status.text}</span>}

@@ -97,11 +97,17 @@ export const chatTheme = {
         info: "border-l-2 border-l-info",
         warning: "border-l-2 border-l-warning",
       },
+      // Content hierarchy for tool outputs
+      contentHierarchy: {
+        metadata: "text-xs text-muted-foreground font-normal", // 12px, muted - secondary info
+        body: "text-sm text-foreground", // 14px, standard - main content
+        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-xs px-2 py-2", // 10px, bold - important content
+      },
     },
 
-    // Text blocks (px-2 to align with tool call headers)
+    // Text blocks (px-2 py-1.5 to align with tool blocks - consistent 6px vertical padding)
     text: {
-      container: "flex flex-col gap-1.5 px-2",
+      container: "flex flex-col gap-1.5 px-2 py-1.5",
       content: "m-0 leading-relaxed text-foreground text-base font-sans break-words",
     },
 
@@ -209,6 +215,40 @@ export const chatTheme = {
     rounded: "rounded-xl",
     shadow: "shadow-sm",
     transition: "transition-colors duration-200 ease-out motion-reduce:transition-none",
+  },
+
+  // Tool icon theme - semantic colors based on action type
+  // Uses colors from global.css for consistency and theme awareness
+  tools: {
+    // Action-based semantic colors (informational tools)
+    Read: "text-info", // Violet - gathering information
+    Grep: "text-info", // Violet - searching/reading
+    Glob: "text-info", // Violet - finding files
+    LS: "text-info", // Violet - listing
+    BashOutput: "text-info", // Violet - reading output
+
+    // Creation tools
+    Write: "text-success", // Green - creating new content
+
+    // Modification tools
+    Edit: "text-warning", // Amber - changing existing content
+    MultiEdit: "text-warning", // Amber - multiple changes
+
+    // Execution tools
+    Bash: "text-primary", // Copper - running commands
+    Task: "text-primary", // Copper - executing tasks
+
+    // Management tools
+    TodoWrite: "text-primary", // Copper - task management
+    KillShell: "text-destructive", // Red - terminating
+
+    // Network tools
+    WebFetch: "text-info", // Violet - fetching data
+    WebSearch: "text-info", // Violet - searching
+
+    // Size and layout
+    iconSize: "h-4 w-4",
+    iconBase: "flex-shrink-0",
   },
 } as const;
 

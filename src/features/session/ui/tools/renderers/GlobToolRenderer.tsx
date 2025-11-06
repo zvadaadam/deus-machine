@@ -11,6 +11,8 @@
 import { FileSearch } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
+import { cn } from "@/shared/lib/utils";
 
 export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { pattern, path } = toolUse.input;
@@ -38,15 +40,20 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   return (
     <BaseToolRenderer
-      toolName="File Search (Glob)"
-      icon={<FileSearch className="text-muted-foreground/70 h-4 w-4" />}
+      toolName="Glob"
+      icon={<FileSearch className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Glob)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {pattern} {path && `in ${path}`} •{" "}
-          {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
-        </span>
+        <>
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+            {pattern}
+          </span>
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+            {path && ` in ${path}`} •{" "}
+            {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
+          </span>
+        </>
       )}
       renderContent={() => {
         // No results message
