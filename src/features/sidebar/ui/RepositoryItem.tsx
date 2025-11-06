@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
-import { getRepoInitials, getRepoColor, getCleanRepoName } from "../lib/utils";
+import { getRepoInitials, getCleanRepoName } from "../lib/utils";
 import {
   getRepoUnreadCount,
   getRepoPriorityStatus,
@@ -84,11 +84,11 @@ export function RepositoryItem({
       <SidebarMenuItem
         data-state={isCollapsed ? "closed" : "open"}
         className={cn(
-          "group/repository-item relative flex items-center py-1",
-          // Expanded: pl-3 pr-3 for spacing
+          "group/repository-item relative flex items-center",
+          // Expanded: px-2 for cleaner dense spacing
           // Collapsed: px-0 with justify-center to center the badge
           sidebarExpanded &&
-            "hover:bg-sidebar-accent/30 rounded-md pr-3 pl-3 transition-colors duration-200",
+            "hover:bg-sidebar-accent/30 rounded-md px-2 py-2 transition-colors duration-200",
           !sidebarExpanded && "justify-center overflow-visible px-0"
         )}
       >
@@ -105,27 +105,36 @@ export function RepositoryItem({
           <CollapsibleTrigger asChild>
             <button className="flex flex-1 items-center justify-between gap-2 bg-transparent text-sm font-medium hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent">
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                {(() => {
-                  const repoColor = getRepoColor(repository.repo_name);
-                  return (
-                    <div
-                      className={cn(
-                        "flex h-6 w-6 flex-shrink-0 items-center justify-center text-[10px] font-semibold",
-                        "rounded-md",
-                        repoColor.bg,
-                        repoColor.text
-                      )}
-                    >
-                      {getRepoInitials(repository.repo_name)}
-                    </div>
-                  );
-                })()}
                 <span className="truncate">{getCleanRepoName(repository.repo_name)}</span>
+                {/* Status indicators when collapsed */}
+                {isCollapsed &&
+                  (() => {
+                    const unreadCount = getRepoUnreadCount(repository.workspaces);
+                    const hasWorking = repository.workspaces.some(
+                      (w) => w.session_status === "working"
+                    );
+
+                    return (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Unread indicator - amber dot */}
+                        {unreadCount > 0 && (
+                          <div
+                            className="bg-status-unread h-2 w-2 rounded-full"
+                            title={`${unreadCount} unread`}
+                          />
+                        )}
+                        {/* Working indicator - primary dot */}
+                        {hasWorking && (
+                          <div className="bg-primary h-2 w-2 rounded-full" title="Working" />
+                        )}
+                      </div>
+                    );
+                  })()}
               </div>
 
               <ChevronDown
                 className={cn(
-                  "text-sidebar-foreground/50 h-4 w-4 flex-shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] motion-reduce:transition-none",
+                  "text-sidebar-foreground/50 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
                   isCollapsed && "-rotate-90"
                 )}
               />
@@ -165,11 +174,9 @@ export function RepositoryItem({
                   (ws) => ws.session_status === "compacting"
                 ).length;
                 if (compactingCount > 0) parts.push(`${compactingCount} compacting`);
-                const idleCount = repository.workspaces.filter((ws) => {
-                  const status = ws.session_status;
-                  const hasUnread = (ws.unread ?? 0) > 0 || (ws.session_unread ?? 0) > 0;
-                  return status !== "error" && status !== "working" && status !== "compacting" && !hasUnread;
-                }).length;
+                const idleCount = repository.workspaces.filter(
+                  (ws) => ws.session_status === "idle"
+                ).length;
                 if (idleCount > 0) parts.push(`${idleCount} idle`);
                 return `${repository.repo_name}${parts.length > 0 ? "\n" + parts.join(" • ") : ""}`;
               })()}
@@ -180,7 +187,7 @@ export function RepositoryItem({
                 {workingCount > 0 && (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <svg
-                      className="absolute h-[36px] w-[36px] animate-[subtle-spin_2s_linear_infinite] motion-reduce:animate-none"
+                      className="animate-subtle-spin absolute h-[36px] w-[36px] motion-reduce:animate-none"
                       style={{ willChange: "transform" }}
                       viewBox="0 0 36 36"
                       fill="none"
@@ -209,7 +216,7 @@ export function RepositoryItem({
                 <div
                   className={cn(
                     "relative flex h-8 w-8 items-center justify-center text-xs font-semibold",
-                    "rounded-[8px]",
+                    "rounded-lg",
                     "translate-z-0 transform-gpu",
                     // Only transition border-color (not shadow/layout) - fast and smooth
                     "transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
@@ -237,7 +244,7 @@ export function RepositoryItem({
                   {/* Breathing glow using pseudo-element (GPU-accelerated) */}
                   {workingCount > 0 && isActive && ringColor === "working" && (
                     <div
-                      className="pointer-events-none absolute inset-[-2px] animate-[breathing-glow_2.5s_ease-in-out_infinite] rounded-[10px] motion-reduce:animate-none"
+                      className="animate-breathing-glow pointer-events-none absolute inset-[-2px] rounded-[10px] motion-reduce:animate-none"
                       style={{
                         background:
                           "radial-gradient(circle, color-mix(in oklch, var(--status-working) 25%, transparent) 0%, transparent 70%)",
@@ -250,7 +257,7 @@ export function RepositoryItem({
                   {workingCount > 0 ? (
                     <span
                       className={cn(
-                        "relative z-10 text-[11px] font-bold tabular-nums",
+                        "relative z-10 text-xs font-bold tabular-nums",
                         // Number color matches ring color for visual unity
                         ringColor === "working" && "text-status-working",
                         ringColor === "unread" && "text-status-unread",
@@ -278,8 +285,8 @@ export function RepositoryItem({
                     className={cn(
                       "absolute -top-1 -right-1",
                       "flex h-[18px] min-w-[18px] items-center justify-center",
-                      "rounded-full px-1 text-[10px] font-bold",
-                      "border-sidebar z-20 border-[2px]",
+                      "text-2xs rounded-full px-1 font-bold",
+                      "border-sidebar z-20 border-2",
                       "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                       "animate-in zoom-in-50",
                       "bg-status-unread text-status-unread-fg",
@@ -296,7 +303,7 @@ export function RepositoryItem({
         </div>
       </SidebarMenuItem>
       <CollapsibleContent>
-        <SidebarMenuSub className="mx-0 translate-x-0 border-l-0 px-0">
+        <SidebarMenuSub className="mx-0 gap-0 border-l-0 px-0 py-0">
           {sidebarExpanded &&
             (() => {
               // Sort workspaces by priority, then group by status
@@ -307,38 +314,37 @@ export function RepositoryItem({
               const sections: Array<{
                 status: keyof typeof groupedWorkspaces;
                 label: string;
-                emoji: string;
               }> = [
-                { status: "error", label: "ERRORS", emoji: "🔴" },
-                { status: "unread", label: "NEEDS REVIEW", emoji: "🟡" },
-                { status: "working", label: "WORKING", emoji: "🟢" },
-                { status: "compacting", label: "MAINTENANCE", emoji: "🟣" },
-                { status: "idle", label: "IDLE", emoji: "⚪" },
+                { status: "error", label: "ERRORS" },
+                { status: "unread", label: "NEEDS REVIEW" },
+                { status: "working", label: "WORKING" },
+                { status: "compacting", label: "MAINTENANCE" },
+                { status: "idle", label: "IDLE" },
               ];
 
               return (
                 <>
                   {/* New Workspace Button - At Top */}
-                  <SidebarMenuSubItem className="mb-2">
+                  <SidebarMenuSubItem className="my-1">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => onNewWorkspace(repository.repo_id)}
                       className={cn(
-                        "w-full",
-                        "text-muted-foreground hover:text-primary/80 hover:bg-sidebar-accent/25",
+                        "w-full px-2",
+                        "text-muted-foreground/60 hover:text-muted-foreground",
                         "transition-colors duration-200 ease-out"
                       )}
                     >
                       <div className="flex w-full items-center gap-3">
-                        <Plus className="h-4 w-4 flex-shrink-0" />
-                        <span className="text-sm">New Workspace</span>
+                        <Plus className="h-4 w-4 shrink-0" />
+                        <span className="text-sm font-normal">New Workspace</span>
                       </div>
                     </Button>
                   </SidebarMenuSubItem>
 
                   {/* Render sections in priority order */}
-                  {sections.map(({ status, label, emoji }) => {
+                  {sections.map(({ status, label }) => {
                     const workspacesInSection = groupedWorkspaces[status];
                     if (!workspacesInSection || workspacesInSection.length === 0) {
                       return null;
@@ -347,15 +353,13 @@ export function RepositoryItem({
                     const sectionConfig = STATUS_CONFIG[status];
 
                     return (
-                      <div key={status} className="mb-3">
+                      <div key={status}>
                         {/* Section Header */}
-                        <div className="flex items-center gap-2 px-3 py-2">
-                          <span className="text-[10px] font-bold tracking-wider uppercase">
-                            <span className={cn("mr-1", sectionConfig.text)}>{emoji}</span>
-                            <span className={sectionConfig.text}>{label}</span>
-                          </span>
-                          <span className={cn("text-[10px] font-semibold", sectionConfig.text)}>
-                            {workspacesInSection.length}
+                        <div className="flex items-center px-2 py-2">
+                          <span
+                            className={cn("text-2xs font-mono tracking-wider", sectionConfig.text)}
+                          >
+                            {label}
                           </span>
                         </div>
 

@@ -141,7 +141,11 @@ export function MessageInput({
   // Context window calculation (200k token limit for Sonnet 3.5)
   const MAX_TOKENS = 200000;
   const contextPercentage = Math.min((contextTokenCount / MAX_TOKENS) * 100, 100);
-  const contextFillColor = contextPercentage > 80 ? "#E0903F" : "#B8BFC8"; // Copper when > 80%
+  // Use CSS variables instead of hardcoded hex values (CLAUDE.md compliance)
+  const contextFillColor =
+    contextPercentage > 80
+      ? "var(--primary)" // Copper/warning when > 80%
+      : "var(--muted-foreground)"; // Neutral gray normally
 
   // Drag & Drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -243,7 +247,7 @@ export function MessageInput({
                   <X className="text-muted-foreground h-3 w-3" />
                 </button>
                 {/* File name */}
-                <div className="bg-muted text-muted-foreground absolute right-0 bottom-0 left-0 truncate px-1 py-0.5 text-[10px] opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="bg-muted text-muted-foreground text-2xs absolute right-0 bottom-0 left-0 truncate px-1 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   {attachment.file.name}
                 </div>
               </div>
@@ -259,7 +263,7 @@ export function MessageInput({
           disabled={sending}
           onKeyDown={handleKeyDown}
           className={cn(
-            "scrollbar-vibrancy placeholder:text-placeholder max-h-50 min-h-10 overflow-y-auto pt-4 pl-4",
+            "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
           )}
         />
@@ -379,7 +383,7 @@ export function MessageInput({
               </svg>
               {/* Token count text - only show if > 0 */}
               {contextTokenCount > 0 && (
-                <span className="text-muted-foreground absolute text-[8px] font-medium">
+                <span className="text-2xs text-muted-foreground absolute font-medium">
                   {contextTokenCount >= 1000
                     ? `${(contextTokenCount / 1000).toFixed(0)}k`
                     : contextTokenCount}
@@ -394,7 +398,7 @@ export function MessageInput({
               onClick={() => setBrowserEnabled(!browserEnabled)}
               title={browserEnabled ? "Browser enabled" : "Enable browser"}
               aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
-              className={browserEnabled ? "text-blue-500" : "text-muted-foreground"}
+              className={browserEnabled ? "text-info" : "text-muted-foreground"}
             >
               <Globe className="h-4 w-4" />
             </InputGroupButton>

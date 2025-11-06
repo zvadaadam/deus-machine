@@ -230,10 +230,10 @@ export function AppSidebar({
             <SidebarMenu
               className={cn(
                 "gap-2",
-                // Expanded: padding for drag handles and workspace content
-                "p-2",
+                // Expanded: minimal horizontal padding for cleaner dense layout
+                "px-1 py-2",
                 // Collapsed: no horizontal padding, items center themselves
-                "group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2"
+                "group-data-[collapsible=icon]:px-0"
               )}
             >
               {orderedRepositories.map((repo) => (

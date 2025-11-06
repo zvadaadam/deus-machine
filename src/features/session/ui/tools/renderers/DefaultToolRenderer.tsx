@@ -26,7 +26,7 @@ export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) 
       toolResult={toolResult}
       renderSummary={() =>
         firstInputValue ? (
-          <span className="text-muted-foreground truncate font-mono text-[12px]">
+          <span className="text-muted-foreground truncate font-mono text-xs">
             {firstInputValue}
           </span>
         ) : undefined

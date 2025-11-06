@@ -33,7 +33,7 @@ export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate font-mono text-[12px]">
+        <span className="text-muted-foreground truncate font-mono text-xs">
           {description || subagent_type || "Running agent"}
         </span>
       )}

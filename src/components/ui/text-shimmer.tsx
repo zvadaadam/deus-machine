@@ -8,10 +8,14 @@ interface TextShimmerProps {
   className?: string;
   duration?: number;
   spread?: number;
+  color?: string;
+  gradientColor?: string;
 }
 
 export function TextShimmer({
   children,
+  color = "var(--muted-foreground)",
+  gradientColor = "color-mix(in oklch, var(--muted-foreground) 60%, transparent)",
   as: Component = "p",
   className,
   duration = 2,
@@ -41,8 +45,8 @@ export function TextShimmer({
       }}
       style={
         {
-          "--base-color": "var(--muted-foreground)",
-          "--base-gradient-color": "var(--foreground)",
+          "--base-color": color,
+          "--base-gradient-color": gradientColor,
           "--bg":
             "linear-gradient(90deg, transparent calc(50% - var(--spread)), var(--base-gradient-color), transparent calc(50% + var(--spread)))",
           "--spread": `${dynamicSpread}px`,

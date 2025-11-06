@@ -27,10 +27,8 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          {description && (
-            <span className="text-muted-foreground text-[12px]">{description} → </span>
-          )}
-          <span className="bg-primary/15 text-primary rounded px-2 py-0.5 font-mono text-[12px] font-medium">
+          {description && <span className="text-muted-foreground text-xs">{description} → </span>}
+          <span className="bg-primary/15 text-primary rounded px-2 py-0.5 font-mono text-xs font-medium">
             {commandPreview}
           </span>
         </>
@@ -47,7 +45,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         return (
           <pre
             className={cn(
-              "overflow-x-auto rounded-lg p-4 font-mono text-[13px] whitespace-pre-wrap",
+              "overflow-x-auto rounded-lg p-4 font-mono text-sm whitespace-pre-wrap",
               "max-h-[400px] overflow-y-auto border",
               isError
                 ? "bg-destructive/15 text-destructive-foreground border-destructive/30"

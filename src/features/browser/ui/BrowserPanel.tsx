@@ -687,7 +687,7 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
       {/* Console Panel */}
       {showConsole && (
-        <div className="border-border bg-muted/10 flex h-[200px] flex-shrink-0 flex-col border-t">
+        <div className="border-border bg-muted/10 flex h-[12.5rem] flex-shrink-0 flex-col border-t">
           {/* Console Header */}
           <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
             <div className="flex items-center gap-2">
