@@ -15,6 +15,7 @@ import { FilePathDisplay } from "../components/FilePathDisplay";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
 
 interface Edit {
   old_string: string;
@@ -38,14 +39,19 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
 
   return (
     <BaseToolRenderer
-      toolName="Multi Edit"
-      icon={<FilePenLine className="text-success/70 h-4 w-4" />}
+      toolName="MultiEdit"
+      icon={<FilePenLine className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.MultiEdit)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono">
-          {fileName} • {editCount} edit{editCount !== 1 ? "s" : ""}
-        </span>
+        <>
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+            {fileName}
+          </span>
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+            {" "}• {editCount} edit{editCount !== 1 ? "s" : ""}
+          </span>
+        </>
       )}
       renderContent={() => {
         if (!edits || edits.length === 0) {

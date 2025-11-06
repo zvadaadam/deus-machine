@@ -12,6 +12,7 @@ import { FolderOpen, File, Folder } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
 
 export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { path } = toolUse.input;
@@ -45,14 +46,19 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   return (
     <BaseToolRenderer
-      toolName="List Directory"
-      icon={<FolderOpen className="text-muted-foreground/70 h-4 w-4" />}
+      toolName="LS"
+      icon={<FolderOpen className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.LS)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {dirName} • {hasListings ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "empty"}
-        </span>
+        <>
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+            {dirName}
+          </span>
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+            {" "}• {hasListings ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "empty"}
+          </span>
+        </>
       )}
       renderContent={() => {
         // Empty directory message

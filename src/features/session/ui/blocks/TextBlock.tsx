@@ -6,11 +6,13 @@
  * - User messages: Rendered as plain text (user input)
  *
  * Weight variants:
- * - 'muted': Transitional text between actions (13px, opacity 0.7)
- * - 'normal': Regular text (14px, normal opacity)
- * - 'hero': Final summary text (15px, prominent, with top border)
+ * - 'muted': Transitional text between actions (60% opacity)
+ * - 'normal': Final summary text (100% opacity - stands out)
  *
- * Now uses ChatMarkdown component for secure, beautiful rendering with:
+ * Visual hierarchy: Only the last text block in completed assistant turns shows as white (normal).
+ * All other text remains subtle (muted) to emphasize WHAT was done over HOW.
+ *
+ * Uses ChatMarkdown component for secure, beautiful rendering with:
  * - CSS-based syntax highlighting (instant rendering)
  * - Sanitized HTML (security)
  * - Copy buttons on code blocks
@@ -22,7 +24,7 @@ import { chatTheme } from "../theme";
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
 
-export type TextWeight = "muted" | "normal" | "hero";
+export type TextWeight = "muted" | "normal";
 
 interface TextBlockProps {
   block: TextBlockType | string;
@@ -38,32 +40,20 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     return null;
   }
 
-  // Weight-based styling - applied to container
-  const weightStyles = {
-    muted: "text-sm leading-[1.5] text-muted-foreground opacity-70 py-1",
-    normal: "", // Normal uses ChatMarkdown defaults (14px)
-    hero: "text-sm leading-[1.65] py-3 mt-2 border-t border-border/20",
-  };
+  // Weight-based styling
+  // Note: For assistant messages, we use opacity wrapper (line 77) instead of text color
+  // because .markdown-content in global.css has explicit colors that override utilities
 
   // User messages: plain text (preserve newlines)
   // Maximum readability - theme-based bright text color
-  // Color applied LAST to ensure proper CSS specificity (no !important needed)
   if (role === "user") {
-    // Remove text color from weightStyles for user messages to avoid conflicts
-    const userWeightStyle =
-      weight === "muted"
-        ? "text-sm leading-[1.5] opacity-70 py-1" // Removed text-muted-foreground
-        : weightStyles[weight];
-
     return (
       <p
         className={cn(
-          "whitespace-pre-wrap",
-          "text-sm leading-[1.5]",
+          "whitespace-pre-wrap text-sm leading-[1.5]",
           chatTheme.message.user.text,
-          userWeightStyle,
-          // Theme color applied last - proper CSS specificity, extensible
-          chatTheme.message.user.textColor
+          chatTheme.message.user.textColor,
+          weight === "muted" && "opacity-60" // Subtle if muted
         )}
       >
         {text}
@@ -72,9 +62,12 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   }
 
   // Assistant messages: markdown with Shiki highlighting
+  // Wrap in div for weight control (opacity) since .markdown-content has explicit color
   return (
-    <ChatMarkdown className={cn(chatTheme.blocks.text.container, weightStyles[weight])}>
-      {text}
-    </ChatMarkdown>
+    <div className={weight === "muted" ? "opacity-60" : ""}>
+      <ChatMarkdown className={chatTheme.blocks.text.container}>
+        {text}
+      </ChatMarkdown>
+    </div>
   );
 }

@@ -11,26 +11,39 @@ import { Terminal } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
 
 export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { command, description } = toolUse.input;
   const isError = toolResult?.is_error;
 
-  // Show command, optionally prefixed by description
-  const commandPreview = command.length > 60 ? command.substring(0, 60) + "..." : command;
+  // Truncate command more aggressively when description exists (command is secondary)
+  const commandPreview = command.length > 35 ? command.substring(0, 35) + "..." : command;
 
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={<Terminal className="text-primary/70 h-4 w-4 flex-shrink-0" />}
+      icon={<Terminal className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Bash)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          {description && <span className="text-muted-foreground text-xs">{description} → </span>}
-          <span className="bg-primary/15 text-primary rounded px-2 py-0.5 font-mono text-xs font-medium">
-            {commandPreview}
-          </span>
+          {description ? (
+            // Description exists: Description is hero, command is metadata
+            <>
+              <span className={chatTheme.blocks.tool.contentHierarchy.emphasis}>
+                {description}
+              </span>
+              <span className={cn(chatTheme.blocks.tool.contentHierarchy.metadata, "font-mono")}>
+                {" → "}{commandPreview}
+              </span>
+            </>
+          ) : (
+            // No description: Command is hero
+            <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-primary/15 text-primary rounded px-2 py-0.5 font-mono")}>
+              {commandPreview}
+            </span>
+          )}
         </>
       )}
       renderContent={({ toolResult }) => {

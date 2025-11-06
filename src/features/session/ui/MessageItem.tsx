@@ -23,12 +23,16 @@ type ParsedContent = (ContentBlock | string)[] | string | null;
 
 interface MessageItemProps {
   message: Message;
-  isLatestAssistant?: boolean; // Whether this is the latest assistant message
+  isLatestAssistant?: boolean; // Whether this is the latest assistant message (for auto-expanding)
+  isLastInTurn?: boolean; // Whether this is the last message in its assistant turn
+  isWorking?: boolean; // Whether AI is currently working
 }
 
 export const MessageItem = memo(function MessageItem({
   message,
   isLatestAssistant = false,
+  isLastInTurn = false,
+  isWorking = false,
 }: MessageItemProps) {
   const { parseContent, toolResultMap } = useSession();
   const { copy, copied } = useCopyToClipboard();
@@ -83,8 +87,20 @@ export const MessageItem = memo(function MessageItem({
           ? block.id
           : `${message.id}:${index}`;
 
-      // Determine if this is the last text block (for assistant weight styling)
-      const isLastTextBlock = message.role === "assistant" && index === lastTextBlockIndex;
+      // Determine weight for text blocks (now considers TURNS, not just individual messages):
+      // A TURN = consecutive messages with the same role (e.g., multiple assistant messages)
+      //
+      // Rules:
+      // 1. If this message is NOT the last in its turn → all text blocks muted
+      // 2. If this message IS the last in its turn:
+      //    - Turn completed (old turn OR latest turn when not working) → last text block white
+      //    - Turn in progress (latest turn while working) → all text blocks muted
+      const isTurnCompleted = !isLatestAssistant || (isLatestAssistant && !isWorking);
+      const isLastTextBlock =
+        message.role === "assistant" &&
+        isLastInTurn && // Only last message in turn can have white text
+        isTurnCompleted &&
+        index === lastTextBlockIndex;
 
       return (
         <BlockRenderer
@@ -169,7 +185,7 @@ export const MessageItem = memo(function MessageItem({
 
   // User messages - refined design with absolutely positioned actions
   return (
-    <div key={message.id} className="group relative mb-8 flex flex-col items-end">
+    <div key={message.id} className="group relative flex flex-col items-end">
       {/* Message card */}
       <div
         className={cn(

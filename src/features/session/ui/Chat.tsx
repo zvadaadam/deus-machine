@@ -126,6 +126,24 @@ export function Chat({
     return -1;
   }, [renderableMessages]);
 
+  // Identify which messages are the LAST in their assistant turn
+  // A turn = consecutive messages with the same role
+  // We need this to apply text weight correctly across multi-message turns
+  const lastMessageInTurnIndices = useMemo(() => {
+    const indices = new Set<number>();
+    for (let i = 0; i < renderableMessages.length; i++) {
+      const message = renderableMessages[i];
+      if (message.role === "assistant") {
+        // Check if next message is NOT assistant (turn ends)
+        const nextRole = i < renderableMessages.length - 1 ? renderableMessages[i + 1].role : null;
+        if (nextRole !== "assistant") {
+          indices.add(i); // This is the last message in this assistant turn
+        }
+      }
+    }
+    return indices;
+  }, [renderableMessages]);
+
   // Calculate indicator margin based on last message role
   const indicatorMarginClass = useMemo(() => {
     const lastRenderableRole = renderableMessages.length
@@ -189,13 +207,21 @@ export function Chat({
               const isLatestAssistant =
                 message.role === "assistant" && renderIndex === latestAssistantIndex;
 
+              // Check if this is the last message in its assistant turn
+              const isLastInTurn = lastMessageInTurnIndices.has(renderIndex);
+
               return (
                 <div
                   key={message.id}
                   ref={isLastRendered ? lastMessageRef : undefined}
                   className={cn(spacingClass, "min-w-0")}
                 >
-                  <MessageItem message={message} isLatestAssistant={isLatestAssistant} />
+                  <MessageItem
+                    message={message}
+                    isLatestAssistant={isLatestAssistant}
+                    isLastInTurn={isLastInTurn}
+                    isWorking={sessionStatus === "working"}
+                  />
                 </div>
               );
             })}
@@ -203,36 +229,24 @@ export function Chat({
               <div
                 role="status"
                 aria-live="polite"
+                aria-label={`Working for ${formattedDuration || "0 seconds"}`}
                 className={cn(
-                  "mr-auto flex max-w-[85%] items-center gap-2 px-3.5 py-2.5",
-                  "bg-success/10 border-success/30 rounded-xl border backdrop-blur-sm",
-                  "text-success text-sm font-medium shadow-sm",
+                  "mr-auto flex items-center gap-2.5 px-3 py-2",
+                  "bg-success/10 border-success/30 rounded-lg border backdrop-blur-sm",
+                  "text-success shadow-sm",
                   "animate-gentle-pulse motion-reduce:animate-none",
                   indicatorMarginClass
                 )}
               >
+                {/* Spinner - shows activity */}
                 <div
-                  className="border-success/20 border-t-success h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 motion-reduce:animate-none"
+                  className="border-success/25 border-t-success h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 motion-reduce:animate-none"
                   aria-hidden="true"
                 />
-                <span className="flex-1">
-                  Claude is working...
-                  {formattedDuration && (
-                    <span className="text-success/80 ml-1.5">({formattedDuration})</span>
-                  )}
+                {/* Timer - monospace prevents jumping, prominent size */}
+                <span className="font-mono text-sm font-semibold tracking-tight">
+                  {formattedDuration || "0s"}
                 </span>
-                {onStop && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onStop}
-                    className="text-success/80 hover:text-success hover:bg-success/20 ml-auto h-6 px-2 transition-colors duration-200"
-                    aria-label="Stop session"
-                    title="Stop Claude"
-                  >
-                    <Square className="h-3 w-3" />
-                  </Button>
-                )}
               </div>
             )}
           </div>
