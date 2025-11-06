@@ -30,8 +30,8 @@ export function DragHandle({ attributes, listeners, setActivatorNodeRef }: DragH
 
         // Visual styling
         "text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors duration-200",
-        "transition-cursor cursor-grab duration-200 active:cursor-grabbing",
-        "transition-touch-none touch-none duration-200"
+        "cursor-grab active:cursor-grabbing",
+        "touch-none"
       )}
       aria-label="Drag to reorder"
     >

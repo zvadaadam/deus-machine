@@ -15,7 +15,7 @@ interface TextShimmerProps {
 export function TextShimmer({
   children,
   color = "var(--muted-foreground)",
-  gradientColor = "color-mix(in oklch, var(--muted-foreground) 60%, white)",
+  gradientColor = "color-mix(in oklch, var(--muted-foreground) 60%, transparent)",
   as: Component = "p",
   className,
   duration = 2,

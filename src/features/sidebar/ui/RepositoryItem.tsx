@@ -175,12 +175,9 @@ export function RepositoryItem({
                   (ws) => ws.session_status === "compacting"
                 ).length;
                 if (compactingCount > 0) parts.push(`${compactingCount} compacting`);
-                const idleCount =
-                  repository.workspaces.length -
-                  errorCount -
-                  unreadCount -
-                  workingCount -
-                  compactingCount;
+                const idleCount = repository.workspaces.filter(
+                  (ws) => ws.session_status === "idle"
+                ).length;
                 if (idleCount > 0) parts.push(`${idleCount} idle`);
                 return `${repository.repo_name}${parts.length > 0 ? "\n" + parts.join(" • ") : ""}`;
               })()}
@@ -318,13 +315,12 @@ export function RepositoryItem({
               const sections: Array<{
                 status: keyof typeof groupedWorkspaces;
                 label: string;
-                emoji: string;
               }> = [
-                { status: "error", label: "ERRORS", emoji: "🔴" },
-                { status: "unread", label: "NEEDS REVIEW", emoji: "🟡" },
-                { status: "working", label: "WORKING", emoji: "🟢" },
-                { status: "compacting", label: "MAINTENANCE", emoji: "🟣" },
-                { status: "idle", label: "IDLE", emoji: "⚪" },
+                { status: "error", label: "ERRORS" },
+                { status: "unread", label: "NEEDS REVIEW" },
+                { status: "working", label: "WORKING" },
+                { status: "compacting", label: "MAINTENANCE" },
+                { status: "idle", label: "IDLE" },
               ];
 
               return (
@@ -358,7 +354,7 @@ export function RepositoryItem({
                     const sectionConfig = STATUS_CONFIG[status];
 
                     return (
-                      <div>
+                      <div key={status}>
                         {/* Section Header */}
                         <div className="flex items-center px-2 py-2">
                           <span
