@@ -25,7 +25,7 @@ export function DragHandle({
       className={cn(
         // Absolute positioning - centered in the padding gutter
         // Positioned at visual midpoint between sidebar edge (0px) and text (20px)
-        "absolute -left-1.75 top-1/2 -translate-y-1/2",
+        "absolute -left-2 top-1/2 -translate-y-1/2",
         "flex items-center justify-center",
 
         // Visibility
@@ -33,9 +33,9 @@ export function DragHandle({
         "transition-opacity duration-200",
 
         // Visual styling
-        "text-sidebar-foreground/30 hover:text-sidebar-foreground/60",
-        "cursor-grab active:cursor-grabbing",
-        "touch-none"
+        "text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors duration-200",
+        "cursor-grab active:cursor-grabbing transition-cursor duration-200",
+        "touch-none transition-touch-none duration-200"
       )}
       aria-label="Drag to reorder"
     >

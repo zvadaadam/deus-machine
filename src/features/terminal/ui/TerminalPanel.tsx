@@ -116,14 +116,14 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
       <div className="flex items-center justify-between vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
         <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
-            <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-caption-sm whitespace-nowrap select-none font-medium">
+            <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-xs whitespace-nowrap select-none font-medium">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-t cursor-pointer text-caption-sm whitespace-nowrap select-none transition-colors duration-200 ease-out ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-t cursor-pointer text-xs whitespace-nowrap select-none transition-colors duration-200 ease-out ${
                 activeTabId === tab.id
                   ? 'bg-background text-foreground font-medium'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'

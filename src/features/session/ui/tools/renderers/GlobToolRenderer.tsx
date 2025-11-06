@@ -38,7 +38,7 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {pattern} {path && `in ${path}`} • {hasResults ? `${resultCount} file${resultCount !== 1 ? 's' : ''}` : 'no files'}
         </span>
       )}

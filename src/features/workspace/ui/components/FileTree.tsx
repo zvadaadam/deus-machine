@@ -180,7 +180,7 @@ function TreeNode({
 
         {/* File/Folder Name */}
         <span className={cn(
-          'text-[13px] truncate flex-1',
+          'text-xs font-mono truncate flex-1',
           // Base styles
           isDirectory ? 'font-normal text-foreground' : 'font-normal text-foreground/90',
           // Git status color (subtle accent - files only)
@@ -195,7 +195,7 @@ function TreeNode({
 
         {/* File Size (files only) */}
         {!isDirectory && node.size !== undefined && (
-          <span className="text-[11px] text-muted-foreground/40 font-mono tabular-nums flex-shrink-0">
+          <span className="text-xs text-muted-foreground/40 font-mono tabular-nums flex-shrink-0">
             {formatFileSize(node.size)}
           </span>
         )}

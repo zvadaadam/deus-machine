@@ -77,7 +77,7 @@ export function WelcomeView({
             {/* Filled state: Subtle section label */}
             {!isEmpty && (
               <div className="mb-4">
-                <h2 className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider px-2">
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2">
                   Add Repository
                 </h2>
               </div>
@@ -128,7 +128,7 @@ export function WelcomeView({
             {!isEmpty && (
               <div className="mt-12 space-y-4">
             <div className="flex items-baseline justify-between px-2">
-              <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Recent Workspaces</h2>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent Workspaces</h2>
               {recentWorkspaces.length > 0 && (
                 <Button
                   variant="ghost"

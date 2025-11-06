@@ -52,7 +52,7 @@ export function BaseToolRenderer({
 
   // Minimal design: Error-only status (assume success by default)
   const status = isError
-    ? { text: '✗ Error', className: 'text-destructive text-[11px] font-medium' }
+    ? { text: '✗ Error', className: 'text-destructive text-xs font-medium' }
     : null;
 
   return (
@@ -62,7 +62,7 @@ export function BaseToolRenderer({
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'flex items-center gap-2 px-2 py-1.5 text-[13px]',
+          'flex items-center gap-2 px-2 py-1.5 text-sm',
           'text-left w-full cursor-pointer',
           'transition-opacity duration-200 ease-out',
           'hover:opacity-70',
@@ -96,7 +96,7 @@ export function BaseToolRenderer({
 
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="truncate text-[12px] text-muted-foreground">
+            <span className="truncate text-xs text-muted-foreground">
               {renderSummary({ toolUse })}
             </span>
           )}
