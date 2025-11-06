@@ -21,13 +21,13 @@ export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
         size="sm"
         onClick={() => onAddRepository?.()}
         className={cn(
-          "w-full h-8 px-2",
+          "h-8 w-full px-2",
           "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
           "transition-colors duration-200 ease-out",
           "group-data-[collapsible=icon]:hidden"
         )}
       >
-        <div className="flex items-center gap-3 w-full">
+        <div className="flex w-full items-center gap-3">
           <Plus className="h-4 w-4 flex-shrink-0" />
           <span className="text-sm">Add Repository</span>
         </div>

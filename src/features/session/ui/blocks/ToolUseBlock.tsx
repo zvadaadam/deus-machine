@@ -8,8 +8,8 @@
  * This enables renderers to show execution status (✓ Applied / ✗ Failed).
  */
 
-import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from '@/shared/types';
-import { toolRegistry } from '../tools/ToolRegistry';
+import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from "@/shared/types";
+import { toolRegistry } from "../tools/ToolRegistry";
 
 interface ToolUseBlockProps {
   block: ToolUseBlockType;
@@ -19,7 +19,7 @@ interface ToolUseBlockProps {
 export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   if (!block || !block.name) {
     if (import.meta.env.DEV) {
-      console.warn('[ToolUseBlock] Invalid block:', block);
+      console.warn("[ToolUseBlock] Invalid block:", block);
     }
     return null;
   }
@@ -29,8 +29,9 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
 
   // Debug log to verify memoization is working (should NOT spam on input typing)
   if (import.meta.env.DEV && toolResult) {
-    console.debug(`[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
-      toolResult.is_error ? '❌ Error' : '✅ Success'
+    console.debug(
+      `[ToolUseBlock] Linking ${block.name} (${block.id}) with result:`,
+      toolResult.is_error ? "❌ Error" : "✅ Success"
     );
   }
 

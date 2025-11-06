@@ -5,7 +5,7 @@
  * using Shiki (VS Code's syntax highlighter)
  */
 
-import { createHighlighter, type Highlighter } from 'shiki';
+import { createHighlighter, type Highlighter } from "shiki";
 
 let highlighterInstance: Highlighter | null = null;
 let highlighterPromise: Promise<Highlighter> | null = null;
@@ -29,21 +29,34 @@ export async function getHighlighter(): Promise<Highlighter> {
 
   // Start initialization and cache the promise
   highlighterPromise = createHighlighter({
-    themes: ['github-dark', 'github-light'],
+    themes: ["github-dark", "github-light"],
     langs: [
-      'typescript', 'javascript', 'tsx', 'jsx',
-      'python', 'rust', 'go', 'java',
-      'html', 'css', 'json', 'yaml',
-      'bash', 'sql', 'markdown',
+      "typescript",
+      "javascript",
+      "tsx",
+      "jsx",
+      "python",
+      "rust",
+      "go",
+      "java",
+      "html",
+      "css",
+      "json",
+      "yaml",
+      "bash",
+      "sql",
+      "markdown",
     ],
-  }).then(highlighter => {
-    highlighterInstance = highlighter;
-    return highlighter;
-  }).catch(err => {
-    // Reset promise on failure to allow retry
-    highlighterPromise = null;
-    throw err;
-  });
+  })
+    .then((highlighter) => {
+      highlighterInstance = highlighter;
+      return highlighter;
+    })
+    .catch((err) => {
+      // Reset promise on failure to allow retry
+      highlighterPromise = null;
+      throw err;
+    });
 
   return highlighterPromise;
 }
@@ -59,14 +72,14 @@ export async function getHighlighter(): Promise<Highlighter> {
 export async function highlightCode(
   code: string,
   language: string,
-  theme: 'github-dark' | 'github-light' = 'github-dark'
+  theme: "github-dark" | "github-light" = "github-dark"
 ): Promise<string> {
   try {
     const highlighter = await getHighlighter();
 
     // Check if language is supported, fallback to plaintext
     const supportedLangs = highlighter.getLoadedLanguages();
-    const lang = (supportedLangs as string[]).includes(language) ? language : 'text';
+    const lang = (supportedLangs as string[]).includes(language) ? language : "text";
 
     const html = highlighter.codeToHtml(code, {
       lang,
@@ -75,7 +88,7 @@ export async function highlightCode(
 
     return html;
   } catch (error) {
-    console.error('Syntax highlighting failed:', error);
+    console.error("Syntax highlighting failed:", error);
     return `<pre><code>${escapeHtml(code)}</code></pre>`;
   }
 }
@@ -94,7 +107,7 @@ export interface DiffHunk {
 }
 
 export interface DiffLine {
-  type: 'addition' | 'deletion' | 'context';
+  type: "addition" | "deletion" | "context";
   content: string;
   oldLineNum?: number;
   newLineNum?: number;
@@ -105,7 +118,7 @@ export interface HunkGap {
 }
 
 export function parseDiff(diffText: string): DiffHunk[] {
-  const lines = diffText.split('\n');
+  const lines = diffText.split("\n");
   const hunks: DiffHunk[] = [];
   let currentHunk: DiffHunk | null = null;
   let oldLineNum = 0;
@@ -115,24 +128,24 @@ export function parseDiff(diffText: string): DiffHunk[] {
   for (const line of lines) {
     // Skip git metadata - everything that's not actual code
     if (
-      line.startsWith('diff --git') ||
-      line.startsWith('index ') ||
-      line.startsWith('---') ||
-      line.startsWith('+++') ||
-      line.startsWith('new file mode') ||
-      line.startsWith('deleted file mode') ||
-      line.startsWith('old mode') ||
-      line.startsWith('new mode') ||
-      line.startsWith('similarity index') ||
-      line.startsWith('rename from') ||
-      line.startsWith('rename to') ||
-      line.startsWith('Binary files')
+      line.startsWith("diff --git") ||
+      line.startsWith("index ") ||
+      line.startsWith("---") ||
+      line.startsWith("+++") ||
+      line.startsWith("new file mode") ||
+      line.startsWith("deleted file mode") ||
+      line.startsWith("old mode") ||
+      line.startsWith("new mode") ||
+      line.startsWith("similarity index") ||
+      line.startsWith("rename from") ||
+      line.startsWith("rename to") ||
+      line.startsWith("Binary files")
     ) {
       continue;
     }
 
     // Parse hunk header: @@ -oldStart,oldLines +newStart,newLines @@
-    if (line.startsWith('@@')) {
+    if (line.startsWith("@@")) {
       // Save previous hunk
       if (currentHunk) {
         hunks.push(currentHunk);
@@ -163,23 +176,23 @@ export function parseDiff(diffText: string): DiffHunk[] {
 
     // Process code lines (additions, deletions, context)
     if (currentHunk) {
-      if (line.startsWith('+')) {
+      if (line.startsWith("+")) {
         currentHunk.lines.push({
-          type: 'addition',
+          type: "addition",
           content: line.slice(1), // Remove + prefix
           newLineNum: newLineNum++,
         });
-      } else if (line.startsWith('-')) {
+      } else if (line.startsWith("-")) {
         currentHunk.lines.push({
-          type: 'deletion',
+          type: "deletion",
           content: line.slice(1), // Remove - prefix
           oldLineNum: oldLineNum++,
         });
       } else {
         // Context line (starts with space or empty)
         currentHunk.lines.push({
-          type: 'context',
-          content: line.startsWith(' ') ? line.slice(1) : line,
+          type: "context",
+          content: line.startsWith(" ") ? line.slice(1) : line,
           oldLineNum: oldLineNum++,
           newLineNum: newLineNum++,
         });
@@ -216,17 +229,17 @@ export function calculateSkippedLines(prevHunk: DiffHunk, nextHunk: DiffHunk): n
 export async function highlightDiffLine(
   content: string,
   language: string,
-  theme: 'github-dark' | 'github-light' = 'github-dark'
+  theme: "github-dark" | "github-light" = "github-dark"
 ): Promise<string> {
   // For empty lines, return empty space
   if (content.trim().length === 0) {
-    return '&nbsp;';
+    return "&nbsp;";
   }
 
   try {
     const highlighter = await getHighlighter();
     const supportedLangs = highlighter.getLoadedLanguages();
-    const lang = (supportedLangs as string[]).includes(language) ? language : 'text';
+    const lang = (supportedLangs as string[]).includes(language) ? language : "text";
 
     const html = highlighter.codeToHtml(content, {
       lang,
@@ -238,11 +251,11 @@ export async function highlightDiffLine(
     let highlightedCode = codeMatch ? codeMatch[1] : escapeHtml(content);
 
     // Remove shiki's default background (we handle backgrounds ourselves)
-    highlightedCode = highlightedCode.replace(/style="[^"]*background[^"]*"/gi, '');
+    highlightedCode = highlightedCode.replace(/style="[^"]*background[^"]*"/gi, "");
 
     return highlightedCode;
   } catch (error) {
-    console.error('Diff line highlighting failed:', error);
+    console.error("Diff line highlighting failed:", error);
     return escapeHtml(content);
   }
 }
@@ -251,7 +264,7 @@ export async function highlightDiffLine(
  * Escape HTML special characters
  */
 function escapeHtml(text: string): string {
-  const div = document.createElement('div');
+  const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }

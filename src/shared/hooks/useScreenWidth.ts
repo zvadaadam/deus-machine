@@ -1,5 +1,8 @@
-import { useEffect } from 'react';
-import { useLayoutCoordinationStore, SCREEN_WIDTH_THRESHOLD } from '@/shared/stores/layoutCoordinationStore';
+import { useEffect } from "react";
+import {
+  useLayoutCoordinationStore,
+  SCREEN_WIDTH_THRESHOLD,
+} from "@/shared/stores/layoutCoordinationStore";
 
 /**
  * useScreenWidth Hook
@@ -28,12 +31,12 @@ export function useScreenWidth(threshold: number = SCREEN_WIDTH_THRESHOLD) {
     };
 
     // Use both matchMedia change event and resize for comprehensive coverage
-    mql.addEventListener('change', handleResize);
-    window.addEventListener('resize', handleResize);
+    mql.addEventListener("change", handleResize);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      mql.removeEventListener('change', handleResize);
-      window.removeEventListener('resize', handleResize);
+      mql.removeEventListener("change", handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, [threshold, updateScreenWidth]);
 

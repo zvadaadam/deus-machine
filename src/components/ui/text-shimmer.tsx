@@ -1,6 +1,6 @@
-import React, { useMemo, type JSX } from 'react';
-import { motion } from 'framer-motion';
-import { cn } from '@/shared/lib/utils';
+import React, { useMemo, type JSX } from "react";
+import { motion } from "framer-motion";
+import { cn } from "@/shared/lib/utils";
 
 interface TextShimmerProps {
   children: string;
@@ -14,9 +14,9 @@ interface TextShimmerProps {
 
 export function TextShimmer({
   children,
-  color = 'var(--muted-foreground)',
-  gradientColor = 'color-mix(in oklch, var(--muted-foreground) 60%, white)',
-  as: Component = 'p',
+  color = "var(--muted-foreground)",
+  gradientColor = "color-mix(in oklch, var(--muted-foreground) 60%, white)",
+  as: Component = "p",
   className,
   duration = 2,
   spread = 2,
@@ -30,25 +30,26 @@ export function TextShimmer({
   return (
     <MotionComponent
       className={cn(
-        'relative inline-block bg-[length:200%_100%,auto] bg-clip-text',
-        'text-transparent',
+        "relative inline-block bg-[length:200%_100%,auto] bg-clip-text",
+        "text-transparent",
         className
       )}
       animate={{
-        backgroundPosition: ['200% center', '-200% center'],
+        backgroundPosition: ["200% center", "-200% center"],
       }}
       transition={{
         repeat: Infinity,
         duration,
-        ease: 'linear',
-        repeatType: 'loop',
+        ease: "linear",
+        repeatType: "loop",
       }}
       style={
         {
-          '--base-color': color,
-          '--base-gradient-color': gradientColor,
-          '--bg': 'linear-gradient(90deg, transparent calc(50% - var(--spread)), var(--base-gradient-color), transparent calc(50% + var(--spread)))',
-          '--spread': `${dynamicSpread}px`,
+          "--base-color": color,
+          "--base-gradient-color": gradientColor,
+          "--bg":
+            "linear-gradient(90deg, transparent calc(50% - var(--spread)), var(--base-gradient-color), transparent calc(50% + var(--spread)))",
+          "--spread": `${dynamicSpread}px`,
           backgroundImage: `var(--bg), linear-gradient(var(--base-color), var(--base-color))`,
         } as React.CSSProperties
       }

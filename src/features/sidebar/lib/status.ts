@@ -7,24 +7,24 @@
  * @see src/features/session/types.ts for SessionStatus type definition
  */
 
-import type { SessionStatus } from '@/features/session/types';
-import type { Workspace } from '@/features/workspace/types';
+import type { SessionStatus } from "@/features/session/types";
+import type { Workspace } from "@/features/workspace/types";
 
 /**
  * Display status extends SessionStatus with derived states
  * 'unread' is derived from workspace.unread or session.unread_count
  */
-export type DisplayStatus = SessionStatus | 'unread';
+export type DisplayStatus = SessionStatus | "unread";
 
 /**
  * Priority levels for sorting (higher = more urgent)
  */
 export enum StatusPriority {
-  ERROR = 4,      // Critical - something broke
-  UNREAD = 3,     // Important - needs review
-  WORKING = 2,    // Active - in progress
+  ERROR = 4, // Critical - something broke
+  UNREAD = 3, // Important - needs review
+  WORKING = 2, // Active - in progress
   COMPACTING = 1, // Maintenance - background
-  IDLE = 0,       // Dormant - no activity
+  IDLE = 0, // Dormant - no activity
 }
 
 /**
@@ -47,11 +47,11 @@ export interface StatusConfig {
   priority: StatusPriority;
   label: string;
   labelActive: string; // Present continuous form (e.g., "Working...")
-  badge: string;       // Tailwind classes for badge
-  border: string;      // Tailwind classes for border/glow
-  text: string;        // Tailwind classes for text
-  bg: string;          // Tailwind classes for background
-  pulse?: boolean;     // Whether to animate/pulse
+  badge: string; // Tailwind classes for badge
+  border: string; // Tailwind classes for border/glow
+  text: string; // Tailwind classes for text
+  bg: string; // Tailwind classes for background
+  pulse?: boolean; // Whether to animate/pulse
 }
 
 /**
@@ -62,52 +62,52 @@ export interface StatusConfig {
 export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
   error: {
     priority: StatusPriority.ERROR,
-    label: 'Error',
-    labelActive: 'Error',
-    badge: 'bg-destructive text-destructive-foreground',
-    border: 'border-destructive/50',
-    text: 'text-destructive',
-    bg: 'bg-destructive/10',
+    label: "Error",
+    labelActive: "Error",
+    badge: "bg-destructive text-destructive-foreground",
+    border: "border-destructive/50",
+    text: "text-destructive",
+    bg: "bg-destructive/10",
     pulse: true,
   },
   unread: {
     priority: StatusPriority.UNREAD,
-    label: 'Needs Review',
-    labelActive: 'Unread',
-    badge: 'bg-status-unread text-status-unread-fg',
-    border: 'border-status-unread/50',
-    text: 'text-status-unread',
-    bg: 'bg-status-unread/10',
+    label: "Needs Review",
+    labelActive: "Unread",
+    badge: "bg-status-unread text-status-unread-fg",
+    border: "border-status-unread/50",
+    text: "text-status-unread",
+    bg: "bg-status-unread/10",
     pulse: false,
   },
   working: {
     priority: StatusPriority.WORKING,
-    label: 'Working',
-    labelActive: 'Working...',
-    badge: 'bg-primary text-primary-foreground',
-    border: 'border-primary/50',
-    text: 'text-primary',
-    bg: 'bg-primary/10',
+    label: "Working",
+    labelActive: "Working...",
+    badge: "bg-primary text-primary-foreground",
+    border: "border-primary/50",
+    text: "text-primary",
+    bg: "bg-primary/10",
     pulse: true,
   },
   compacting: {
     priority: StatusPriority.COMPACTING,
-    label: 'Compacting',
-    labelActive: 'Compacting...',
-    badge: 'bg-status-compacting text-status-compacting-fg',
-    border: 'border-status-compacting/50',
-    text: 'text-status-compacting',
-    bg: 'bg-status-compacting/10',
+    label: "Compacting",
+    labelActive: "Compacting...",
+    badge: "bg-status-compacting text-status-compacting-fg",
+    border: "border-status-compacting/50",
+    text: "text-status-compacting",
+    bg: "bg-status-compacting/10",
     pulse: true,
   },
   idle: {
     priority: StatusPriority.IDLE,
-    label: 'Idle',
-    labelActive: 'Idle',
-    badge: 'bg-muted text-muted-foreground',
-    border: 'border-muted',
-    text: 'text-muted-foreground',
-    bg: 'bg-muted/30',
+    label: "Idle",
+    labelActive: "Idle",
+    badge: "bg-muted text-muted-foreground",
+    border: "border-muted",
+    text: "text-muted-foreground",
+    bg: "bg-muted/30",
     pulse: false,
   },
 };
@@ -128,20 +128,21 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
  */
 export function getDisplayStatus(workspace: Workspace): DisplayStatus {
   // 1) Error status (highest priority)
-  if (workspace.session_status === 'error') {
-    return 'error';
+  if (workspace.session_status === "error") {
+    return "error";
   }
 
   // 2) Check for unread messages (highest non-error priority)
-  const hasUnread = (workspace.unread && workspace.unread > 0) ||
-                    (workspace.session_unread && workspace.session_unread > 0);
+  const hasUnread =
+    (workspace.unread && workspace.unread > 0) ||
+    (workspace.session_unread && workspace.session_unread > 0);
 
   if (hasUnread) {
-    return 'unread';
+    return "unread";
   }
 
   // 3) Default to session status
-  return workspace.session_status || 'idle';
+  return workspace.session_status || "idle";
 }
 
 /**
@@ -192,7 +193,7 @@ export function groupByStatus<T extends Workspace>(
 ): Partial<Record<DisplayStatus, T[]>> {
   const groups: Partial<Record<DisplayStatus, T[]>> = {};
 
-  workspaces.forEach(workspace => {
+  workspaces.forEach((workspace) => {
     const status = getDisplayStatus(workspace);
     if (!groups[status]) {
       groups[status] = [];
@@ -219,7 +220,7 @@ export function getStatusCounts(workspaces: Workspace[]): Record<DisplayStatus, 
     idle: 0,
   };
 
-  workspaces.forEach(workspace => {
+  workspaces.forEach((workspace) => {
     const status = getDisplayStatus(workspace);
     counts[status]++;
   });
@@ -246,9 +247,9 @@ export function getRepoUnreadCount(workspaces: Workspace[]): number {
  */
 export function getRepoPriorityStatus(workspaces: Workspace[]): DisplayStatus {
   let highestPriority = StatusPriority.IDLE;
-  let highestStatus: DisplayStatus = 'idle';
+  let highestStatus: DisplayStatus = "idle";
 
-  workspaces.forEach(workspace => {
+  workspaces.forEach((workspace) => {
     const status = getDisplayStatus(workspace);
     const priority = STATUS_CONFIG[status].priority;
 

@@ -3,9 +3,9 @@
  * Centralized types for workspace entities and operations
  */
 
-import type { SessionStatus } from '@/features/session/types';
+import type { SessionStatus } from "@/features/session/types";
 
-export type WorkspaceState = 'ready' | 'initializing' | 'archived';
+export type WorkspaceState = "ready" | "initializing" | "archived";
 
 /**
  * Core workspace entity
@@ -55,7 +55,7 @@ export interface DiffStats {
  */
 export interface FileChange {
   file: string;
-  file_path?: string;  // Some APIs use file_path instead
+  file_path?: string; // Some APIs use file_path instead
   additions: number;
   deletions: number;
 }
@@ -70,7 +70,7 @@ export interface FileEdit {
   content?: string;
   timestamp: string;
   message_id: string;
-  tool_name: 'Edit' | 'Write';
+  tool_name: "Edit" | "Write";
 }
 
 /**

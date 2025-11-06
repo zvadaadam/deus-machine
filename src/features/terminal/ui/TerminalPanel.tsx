@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Terminal } from './Terminal';
+import { useState } from "react";
+import { toast } from "sonner";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Terminal } from "./Terminal";
 
 interface DevServer {
   url: string;
@@ -27,7 +27,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
   const [showRun, setShowRun] = useState(true);
   const [nextTerminalNum, setNextTerminalNum] = useState(1);
   const [showBrowser, setShowBrowser] = useState(false);
-  const [browserUrl, setBrowserUrl] = useState<string>('');
+  const [browserUrl, setBrowserUrl] = useState<string>("");
   const [detectingServer, setDetectingServer] = useState(false);
 
   function addTerminal() {
@@ -63,8 +63,8 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
     for (const port of commonPorts) {
       try {
         await fetch(`http://localhost:${port}`, {
-          method: 'HEAD',
-          mode: 'no-cors', // Allow checking if server exists without CORS
+          method: "HEAD",
+          mode: "no-cors", // Allow checking if server exists without CORS
         });
         // If we get here without error, server is running
         return {
@@ -82,7 +82,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
   }
 
   async function handleRunWorkspace() {
-    console.log('Run workspace clicked for:', workspaceName);
+    console.log("Run workspace clicked for:", workspaceName);
     setDetectingServer(true);
 
     try {
@@ -94,7 +94,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
         setShowBrowser(true);
         setShowRun(false);
       } else {
-        toast.error('No development server detected!', {
+        toast.error("No development server detected!", {
           description: (
             <div className="whitespace-pre-wrap">
               {`Please start your dev server first:\n  • Vite: npm run dev (port 5173)\n  • React/Next: npm run dev (port 3000)\n  • Angular: ng serve (port 4200)\n\nThen click Run again.`}
@@ -104,29 +104,29 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
         });
       }
     } catch (error) {
-      console.error('Error detecting server:', error);
-      toast.error('Error detecting development server. Please check the console.');
+      console.error("Error detecting server:", error);
+      toast.error("Error detecting development server. Please check the console.");
     } finally {
       setDetectingServer(false);
     }
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="flex items-center justify-between vibrancy-panel border-b border-border/40 h-[28px] flex-shrink-0">
-        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto px-2">
+    <div className="bg-background flex h-full flex-col">
+      <div className="vibrancy-panel border-border/40 flex h-[28px] flex-shrink-0 items-center justify-between border-b">
+        <div className="flex flex-1 items-center gap-0.5 overflow-x-auto px-2">
           {showRun && tabs.length === 0 && (
-            <div className="flex items-center px-2 py-1 bg-background text-foreground rounded-t text-xs whitespace-nowrap select-none font-medium">
+            <div className="bg-background text-foreground flex items-center rounded-t px-2 py-1 text-xs font-medium whitespace-nowrap select-none">
               <span>Run</span>
             </div>
           )}
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-t cursor-pointer text-xs whitespace-nowrap select-none transition-colors duration-200 ease-out ${
+              className={`flex cursor-pointer items-center gap-1.5 rounded-t px-2 py-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none ${
                 activeTabId === tab.id
-                  ? 'bg-background text-foreground font-medium'
-                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? "bg-background text-foreground font-medium"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
               onClick={() => {
                 setActiveTabId(tab.id);
@@ -135,7 +135,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
             >
               <span>{tab.title}</span>
               <button
-                className="bg-transparent border-none text-muted-foreground text-sm leading-none p-0 w-3 h-3 flex items-center justify-center cursor-pointer rounded-sm transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+                className="text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-3 w-3 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-sm leading-none transition-colors duration-200 ease-out"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -146,7 +146,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
             </div>
           ))}
           <button
-            className="bg-transparent border-none text-muted-foreground text-sm px-1.5 py-0.5 cursor-pointer rounded transition-colors duration-200 ease-out hover:bg-muted/80 hover:text-foreground"
+            className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
             onClick={addTerminal}
             title="New terminal"
           >
@@ -160,7 +160,7 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
             variant="ghost"
             size="icon"
             onClick={onCollapse}
-            className="h-5 w-5 mr-2"
+            className="mr-2 h-5 w-5"
             title="Collapse terminal"
           >
             <ChevronDown className="h-3 w-3" />
@@ -168,21 +168,21 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden relative">
+      <div className="relative flex-1 overflow-hidden">
         {showBrowser ? (
-          <div className="w-full h-full flex flex-col bg-background">
-            <div className="flex items-center justify-between h-[35px] bg-muted/30 border-b border-border px-3 flex-shrink-0">
-              <div className="flex-1 flex items-center bg-background border border-border rounded px-2 py-1 mr-2">
-                <span className="text-xs text-muted-foreground font-mono overflow-hidden text-ellipsis whitespace-nowrap">
+          <div className="bg-background flex h-full w-full flex-col">
+            <div className="bg-muted/30 border-border flex h-[35px] flex-shrink-0 items-center justify-between border-b px-3">
+              <div className="bg-background border-border mr-2 flex flex-1 items-center rounded border px-2 py-1">
+                <span className="text-muted-foreground overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap">
                   {browserUrl}
                 </span>
               </div>
               <button
-                className="bg-transparent border-none text-muted-foreground text-xl leading-none p-0 w-6 h-6 flex items-center justify-center cursor-pointer rounded transition-[background-color,color] duration-200 ease-out hover:bg-muted hover:text-foreground"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-6 w-6 cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-xl leading-none transition-[background-color,color] duration-200 ease-out"
                 onClick={() => {
                   setShowBrowser(false);
                   setShowRun(true);
-                  setBrowserUrl('');
+                  setBrowserUrl("");
                 }}
                 title="Close browser"
               >
@@ -191,23 +191,23 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
             </div>
             <iframe
               src={browserUrl}
-              className="flex-1 w-full h-full border-none bg-background"
+              className="bg-background h-full w-full flex-1 border-none"
               title="Development Server"
               sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
             />
           </div>
         ) : showRun && tabs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full bg-background px-6">
+          <div className="bg-background flex h-full flex-col items-center justify-center px-6">
             <button
-              className="group flex items-center gap-2 bg-transparent border border-border/40 rounded-lg px-4 py-2.5 cursor-pointer transition-all duration-200 ease-out hover:border-foreground/40 hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group border-border/40 hover:border-foreground/40 hover:bg-muted/30 flex cursor-pointer items-center gap-2 rounded-lg border bg-transparent px-4 py-2.5 transition-all duration-200 ease-out disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleRunWorkspace}
               disabled={detectingServer}
             >
-              <div className="text-base text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
+              <div className="text-muted-foreground group-hover:text-foreground text-base transition-colors duration-200 ease-out">
                 ▶
               </div>
-              <div className="text-sm font-medium text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground">
-                {detectingServer ? 'Detecting server...' : 'Run workspace'}
+              <div className="text-muted-foreground group-hover:text-foreground text-sm font-medium transition-colors duration-200 ease-out">
+                {detectingServer ? "Detecting server..." : "Run workspace"}
               </div>
             </button>
           </div>
@@ -215,9 +215,13 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
           tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`w-full h-full ${activeTabId === tab.id ? 'block' : 'hidden'}`}
+              className={`h-full w-full ${activeTabId === tab.id ? "block" : "hidden"}`}
             >
-              <Terminal id={tab.id} workspacePath={workspacePath} onClose={() => closeTab(tab.id)} />
+              <Terminal
+                id={tab.id}
+                workspacePath={workspacePath}
+                onClose={() => closeTab(tab.id)}
+              />
             </div>
           ))
         )}

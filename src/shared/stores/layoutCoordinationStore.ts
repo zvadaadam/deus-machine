@@ -12,8 +12,8 @@
  * - Restore previous sidebar state when browser closes (if not manually opened)
  */
 
-import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 /**
  * Threshold for auto-closing sidebar (in pixels)
@@ -75,8 +75,8 @@ const initialState = {
   browserTabActive: false,
   sidebarWasOpenBeforeBrowser: false,
   userManuallyOpenedSidebar: false,
-  screenWidth: typeof window !== 'undefined' ? window.innerWidth : 1920,
-  isWideScreen: typeof window !== 'undefined' ? window.innerWidth >= SCREEN_WIDTH_THRESHOLD : true,
+  screenWidth: typeof window !== "undefined" ? window.innerWidth : 1920,
+  isWideScreen: typeof window !== "undefined" ? window.innerWidth >= SCREEN_WIDTH_THRESHOLD : true,
 };
 
 export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
@@ -97,7 +97,7 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
             userManuallyOpenedSidebar: false,
           },
           false,
-          'layout/browserTabOpen'
+          "layout/browserTabOpen"
         );
       },
 
@@ -109,14 +109,13 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
             browserTabActive: false,
           },
           false,
-          'layout/browserTabClose'
+          "layout/browserTabClose"
         );
 
         // Return whether sidebar should be restored
         // Don't restore if user manually opened it (they want it open)
         const shouldRestoreSidebar =
-          !state.userManuallyOpenedSidebar &&
-          state.sidebarWasOpenBeforeBrowser;
+          !state.userManuallyOpenedSidebar && state.sidebarWasOpenBeforeBrowser;
 
         return { shouldRestoreSidebar };
       },
@@ -132,7 +131,7 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
               userManuallyOpenedSidebar: true,
             },
             false,
-            'layout/sidebarManuallyOpened'
+            "layout/sidebarManuallyOpened"
           );
         }
 
@@ -143,7 +142,7 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
               userManuallyOpenedSidebar: false,
             },
             false,
-            'layout/sidebarClosed'
+            "layout/sidebarClosed"
           );
         }
       },
@@ -156,7 +155,7 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
             isWideScreen: width >= SCREEN_WIDTH_THRESHOLD,
           },
           false,
-          'layout/updateScreenWidth'
+          "layout/updateScreenWidth"
         );
       },
 
@@ -168,16 +167,12 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
 
       // Reset
       reset: () => {
-        set(
-          initialState,
-          false,
-          'layout/reset'
-        );
+        set(initialState, false, "layout/reset");
       },
     }),
     {
-      name: 'layout-coordination-store',
-      enabled: process.env.NODE_ENV === 'development',
+      name: "layout-coordination-store",
+      enabled: process.env.NODE_ENV === "development",
     }
   )
 );

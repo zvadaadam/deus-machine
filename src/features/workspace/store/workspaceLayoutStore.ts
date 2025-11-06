@@ -20,14 +20,14 @@
  * }
  */
 
-import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { devtools, persist } from "zustand/middleware";
 
-export type RightPanelTab = 'changes' | 'files' | 'browser';
+export type RightPanelTab = "changes" | "files" | "browser";
 
 export interface SelectedFile {
   path: string;
-  source: 'changes' | 'files';
+  source: "changes" | "files";
 }
 
 interface WorkspaceLayoutState {
@@ -88,7 +88,7 @@ interface WorkspaceLayoutStore {
 
 const defaultLayout: WorkspaceLayoutState = {
   rightPanelExpanded: false,
-  activeRightTab: 'changes',
+  activeRightTab: "changes",
   selectedFile: null,
   sidebarCollapsed: false,
 };
@@ -120,7 +120,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               },
             }),
             false,
-            'workspaceLayout/setLayout'
+            "workspaceLayout/setLayout"
           ),
 
         // Setters - Individual properties
@@ -136,7 +136,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               },
             }),
             false,
-            'workspaceLayout/setRightPanelExpanded'
+            "workspaceLayout/setRightPanelExpanded"
           ),
 
         setActiveRightTab: (workspaceId, tab) =>
@@ -151,7 +151,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               },
             }),
             false,
-            'workspaceLayout/setActiveRightTab'
+            "workspaceLayout/setActiveRightTab"
           ),
 
         setSelectedFile: (workspaceId, file) =>
@@ -166,7 +166,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               },
             }),
             false,
-            'workspaceLayout/setSelectedFile'
+            "workspaceLayout/setSelectedFile"
           ),
 
         setSidebarCollapsed: (workspaceId, collapsed) =>
@@ -181,7 +181,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               },
             }),
             false,
-            'workspaceLayout/setSidebarCollapsed'
+            "workspaceLayout/setSidebarCollapsed"
           ),
 
         // Utilities
@@ -192,24 +192,19 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
               return { layouts: remaining };
             },
             false,
-            'workspaceLayout/clearWorkspaceLayout'
+            "workspaceLayout/clearWorkspaceLayout"
           ),
 
-        resetAll: () =>
-          set(
-            { layouts: {} },
-            false,
-            'workspaceLayout/resetAll'
-          ),
+        resetAll: () => set({ layouts: {} }, false, "workspaceLayout/resetAll"),
       }),
       {
-        name: 'workspace-layout-store', // localStorage key
+        name: "workspace-layout-store", // localStorage key
         version: 1,
       }
     ),
     {
-      name: 'workspace-layout-store',
-      enabled: process.env.NODE_ENV === 'development',
+      name: "workspace-layout-store",
+      enabled: process.env.NODE_ENV === "development",
     }
   )
 );

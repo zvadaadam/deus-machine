@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface SidebarState {
   // Sidebar-specific state
@@ -54,7 +54,7 @@ export const useSidebarStore = create<SidebarState>()(
       },
     }),
     {
-      name: 'sidebar-storage',
+      name: "sidebar-storage",
       // Serialize Set properly for localStorage
       partialize: (state) => ({
         collapsedRepos: Array.from(state.collapsedRepos),

@@ -1,5 +1,5 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
+import { Component, ErrorInfo, ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   children: ReactNode;
@@ -34,8 +34,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log error to console
-    console.error('[ErrorBoundary] Caught error:', error);
-    console.error('[ErrorBoundary] Error info:', errorInfo);
+    console.error("[ErrorBoundary] Caught error:", error);
+    console.error("[ErrorBoundary] Error info:", errorInfo);
 
     // Update state with error info
     this.setState({
@@ -66,12 +66,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // Default fallback UI
       return (
-        <div className="flex flex-col items-center justify-center h-screen p-8 bg-background text-foreground">
+        <div className="bg-background text-foreground flex h-screen flex-col items-center justify-center p-8">
           <div className="max-w-2xl text-center">
-            <div className="text-5xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-semibold mb-4">
-              Something went wrong
-            </h2>
+            <div className="mb-4 text-5xl">⚠️</div>
+            <h2 className="mb-4 text-2xl font-semibold">Something went wrong</h2>
             <p className="text-muted-foreground mb-8">
               The application encountered an unexpected error. You can try reloading the page or
               resetting the component.
@@ -80,18 +78,18 @@ export class ErrorBoundary extends Component<Props, State> {
             {/* Error details - collapsible */}
             {this.state.error && (
               <details className="mb-8 text-left">
-                <summary className="cursor-pointer p-2 bg-muted rounded mb-2 text-sm font-medium">
+                <summary className="bg-muted mb-2 cursor-pointer rounded p-2 text-sm font-medium">
                   Error details
                 </summary>
-                <div className="p-4 bg-muted rounded text-sm font-mono max-h-50 overflow-auto">
+                <div className="bg-muted max-h-50 overflow-auto rounded p-4 font-mono text-sm">
                   <strong className="text-foreground">Error:</strong>
-                  <pre className="mt-2 whitespace-pre-wrap text-foreground/90">
+                  <pre className="text-foreground/90 mt-2 whitespace-pre-wrap">
                     {this.state.error.message}
                   </pre>
                   {this.state.error.stack && (
                     <>
-                      <strong className="mt-4 block text-foreground">Stack trace:</strong>
-                      <pre className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                      <strong className="text-foreground mt-4 block">Stack trace:</strong>
+                      <pre className="text-muted-foreground mt-2 text-xs whitespace-pre-wrap">
                         {this.state.error.stack}
                       </pre>
                     </>
@@ -101,10 +99,8 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
 
             {/* Action buttons */}
-            <div className="flex gap-4 justify-center">
-              <Button onClick={this.handleReset}>
-                Try Again
-              </Button>
+            <div className="flex justify-center gap-4">
+              <Button onClick={this.handleReset}>Try Again</Button>
               <Button onClick={this.handleReload} variant="outline">
                 Reload Application
               </Button>

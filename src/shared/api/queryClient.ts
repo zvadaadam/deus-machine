@@ -13,7 +13,7 @@
  * - Individual queries override these defaults for specific needs
  */
 
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient } from "@tanstack/react-query";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,18 +36,18 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
 
       // Only refetch if data is actually stale (not on every mount)
-      refetchOnMount: 'stale',
+      refetchOnMount: "stale",
 
       // Don't refetch on reconnect (conditional polling handles updates)
       refetchOnReconnect: false,
 
       // Network mode: always fetch (even offline for local backend)
-      networkMode: 'always',
+      networkMode: "always",
     },
     mutations: {
       // Retry mutations once on failure
       retry: 1,
-      networkMode: 'always',
+      networkMode: "always",
     },
   },
 });

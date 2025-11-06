@@ -3,9 +3,9 @@
  * API methods for Claude Code session management
  */
 
-import { apiClient } from '@/shared/api/client';
-import { ENDPOINTS } from '@/shared/config/api.config';
-import type { Session, Message } from '../types';
+import { apiClient } from "@/shared/api/client";
+import { ENDPOINTS } from "@/shared/config/api.config";
+import type { Session, Message } from "../types";
 
 export const SessionService = {
   /**
