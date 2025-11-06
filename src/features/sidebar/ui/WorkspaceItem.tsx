@@ -85,7 +85,7 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
           // Base layout
           "relative mb-1 flex min-h-[56px] items-center justify-between gap-3 px-2 py-3",
           "cursor-pointer rounded-lg",
-          "duration-80ms transition-all ease-out",
+          "transition-all duration-[80ms] ease-out",
 
           // State-based backgrounds - subtle surface elevation
           isActive && "bg-muted/60",
