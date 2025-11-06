@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { Monitor, Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
+import { cn } from "@/shared/lib/utils";
 import { useFileChanges, useDevServers } from "@/features/workspace/api";
 import type { Workspace } from "@/shared/types";
 
@@ -97,7 +98,7 @@ export function FileChangesPanel({
       {selectedWorkspace && devServers.length > 0 && (
         <div className="border-b border-border/50 bg-background/30">
           <div className="px-4 py-2.5 sticky top-0 z-10 bg-background/50 backdrop-blur-sm border-b border-border/30">
-            <h3 className="text-caption font-semibold text-muted-foreground uppercase tracking-wider">Dev Servers</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dev Servers</h3>
           </div>
           <div className="p-3 space-y-2">
             {devServers.map((server) => (
@@ -113,8 +114,8 @@ export function FileChangesPanel({
                   <Monitor className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-body-sm font-medium truncate group-hover:text-primary transition-colors duration-200">{server.name}</div>
-                  <div className="text-caption text-muted-foreground truncate font-mono">{server.url}</div>
+                  <div className="text-sm font-medium truncate group-hover:text-primary transition-colors duration-200">{server.name}</div>
+                  <div className="text-xs text-muted-foreground truncate font-mono">{server.url}</div>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-success flex-shrink-0" />
               </a>
@@ -183,13 +184,13 @@ export function FileChangesPanel({
                   >
                     <div className="flex-1 min-w-0 font-mono">
                       <span className={cn(
-                        'text-caption-sm',
+                        'text-xs',
                         isSelected ? 'text-primary/70' : 'text-muted-foreground/50'
                       )}>
                         {displayPath}
                       </span>
                       <span className={cn(
-                        'text-caption-sm transition-colors duration-200',
+                        'text-xs transition-colors duration-200',
                         isSelected
                           ? 'text-primary font-medium'
                           : 'text-foreground/90 group-hover:text-foreground'

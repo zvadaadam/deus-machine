@@ -45,7 +45,7 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {dirName} • {hasListings ? `${itemCount} item${itemCount !== 1 ? 's' : ''}` : 'empty'}
         </span>
       )}

@@ -7,6 +7,7 @@ import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration } from "@/shared/hooks";
 import { useDiffStats } from "@/features/workspace/api";
+import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
 
 /**
@@ -57,18 +58,9 @@ export function WorkspaceItem({
     return shouldShimmer(status) ? `${capitalized}...` : capitalized;
   };
 
-  const getStatusTextColor = (status: string | null | undefined) => {
-    switch (status) {
-      case "working":
-        return "text-primary";
-      case "idle":
-        return "text-muted-foreground/70";
-      case "compacting":
-        return "text-warning";
-      default:
-        return "text-destructive";
-    }
-  };
+  // Get the display status (handles unread, working, idle, etc.)
+  const displayStatus = getDisplayStatus(workspace);
+  const statusConfig = STATUS_CONFIG[displayStatus];
 
   const shouldShimmer = (status: string | null | undefined) => {
     return status === "working" || status === "compacting";
@@ -96,9 +88,9 @@ export function WorkspaceItem({
         data-workspace-id={workspace.id}
         className={cn(
           // Base layout
-          "relative flex items-center justify-between gap-3 py-3 px-3 min-h-[56px]",
+          "relative flex items-center justify-between gap-3 py-3 px-2 min-h-[56px] mb-1",
           "rounded-lg cursor-pointer",
-          "transition-all duration-[80ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+          "transition-all duration-80ms ease-out",
 
           // State-based backgrounds - subtle surface elevation
           isActive && "bg-muted/60",
@@ -120,42 +112,36 @@ export function WorkspaceItem({
           <PulseRadiateIcon
             isActive={workspace.session_status === "working"}
             className={cn(
-              "h-4 w-4 flex-shrink-0",
-              getStatusTextColor(workspace.session_status)
+              "h-4 w-4 shrink-0",
+              statusConfig.text
             )}
           />
           <div className="flex flex-col min-w-0">
             {/* Branch name on top */}
-            <span className="text-sm truncate">
+            <span className="text-sm font-normal text-foreground truncate">
               {workspace.branch}
             </span>
             {/* Directory name and status on bottom */}
             <div className="flex items-center gap-0 min-w-0">
-              <span className="text-xs text-muted-foreground truncate">
+              <span className="text-xs text-muted-foreground/70 truncate">
                 {workspace.directory_name}
               </span>
-              <span className="text-xs text-muted-foreground/70 flex-shrink-0">・</span>
+              <span className="text-xs text-muted-foreground/70 shrink-0">・</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"
                   duration={2}
-                  className="text-xs flex-shrink-0"
-                  style={{
-                    '--base-color': workspace.session_status === "working"
-                      ? 'var(--status-working)'
-                      : 'var(--status-compacting)',
-                    '--base-gradient-color': workspace.session_status === "working"
-                      ? 'color-mix(in oklch, var(--status-working) 60%, white)'
-                      : 'color-mix(in oklch, var(--status-compacting) 60%, white)',
-                  } as React.CSSProperties}
+                  className="text-xs shrink-0"
+                  color={workspace.session_status === "working" ? "var(--status-working)" : "var(--status-compacting)"}
+                  gradientColor={workspace.session_status === "working" ? "color-mix(in oklch, var(--status-working) 60%, white)" : "color-mix(in oklch, var(--status-compacting) 60%, white)"}
                 >
                   {getStatusText(workspace.session_status)}
                 </TextShimmer>
               ) : (
                 <span
                   className={cn(
-                    "text-xs flex-shrink-0",
-                    getStatusTextColor(workspace.session_status)
+                    "text-xs shrink-0",
+                    statusConfig.text
                   )}
                 >
                   {getStatusText(workspace.session_status)}
@@ -176,14 +162,15 @@ export function WorkspaceItem({
             <Archive className="h-3.5 w-3.5" />
           </Button>
         ) : hasChanges ? (
-          <div className="flex items-center gap-1 flex-shrink-0">
+          /* File changes badge for workspaces with changes */
+          <div className="flex items-center gap-1 shrink-0 border rounded px-1">
             {additions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-2xs font-medium border border-success/30 bg-success/10 text-success whitespace-nowrap">
+              <span className="inline-flex items-center py-0.5 rounded text-2xs font-normal font-mono text-success whitespace-nowrap">
                 +{additions}
               </span>
             )}
             {deletions > 0 && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-2xs font-medium border border-destructive/30 bg-destructive/10 text-destructive whitespace-nowrap">
+              <span className="inline-flex items-center py-0.5 rounded text-2xs font-normal font-mono text-destructive whitespace-nowrap">
                 -{deletions}
               </span>
             )}

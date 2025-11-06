@@ -40,10 +40,10 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       defaultExpanded={false}
       renderSummary={() => (
         <>
-          <span className="font-mono text-[12px] px-2 py-0.5 bg-muted/60 rounded font-medium">
+          <span className="font-mono text-xs px-2 py-0.5 bg-muted/60 rounded font-medium">
             {fileName}
           </span>
-          {lineCount && <span className="text-[12px] text-muted-foreground"> • {lineCount} lines</span>}
+          {lineCount && <span className="text-xs text-muted-foreground"> • {lineCount} lines</span>}
         </>
       )}
       renderContent={({ toolResult }) => {

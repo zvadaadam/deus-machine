@@ -37,7 +37,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-[12px] text-muted-foreground truncate">
+        <span className="text-xs text-muted-foreground truncate">
           "{query}"{filterText}
         </span>
       )}

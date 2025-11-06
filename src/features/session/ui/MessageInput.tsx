@@ -242,7 +242,7 @@ export function MessageInput({
                   <X className="w-3 h-3 text-muted-foreground" />
                 </button>
                 {/* File name */}
-                <div className="absolute bottom-0 left-0 right-0 bg-muted text-muted-foreground text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 bg-muted text-muted-foreground text-2xs px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                   {attachment.file.name}
                 </div>
               </div>
@@ -370,7 +370,7 @@ export function MessageInput({
                 </svg>
                 {/* Token count text - only show if > 0 */}
                 {contextTokenCount > 0 && (
-                  <span className="absolute text-[8px] font-medium text-muted-foreground">
+                  <span className="absolute text-2xs font-medium text-muted-foreground">
                     {contextTokenCount >= 1000 ? `${(contextTokenCount / 1000).toFixed(0)}k` : contextTokenCount}
                   </span>
                 )}
@@ -383,7 +383,7 @@ export function MessageInput({
                 onClick={() => setBrowserEnabled(!browserEnabled)}
                 title={browserEnabled ? "Browser enabled" : "Enable browser"}
                 aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
-                className={browserEnabled ? "text-blue-500" : "text-muted-foreground"}
+                className={browserEnabled ? "text-info" : "text-muted-foreground"}
               >
                 <Globe className="w-4 h-4" />
               </InputGroupButton>

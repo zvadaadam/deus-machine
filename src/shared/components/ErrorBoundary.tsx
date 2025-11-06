@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   children: ReactNode;
@@ -65,61 +66,32 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // Default fallback UI
       return (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100vh',
-            padding: '2rem',
-            backgroundColor: 'var(--bg-primary, #ffffff)',
-            color: 'var(--text-primary, #111827)',
-          }}
-        >
-          <div style={{ maxWidth: '600px', textAlign: 'center' }}>
-            <div style={{ fontSize: '48px', marginBottom: '1rem' }}>⚠️</div>
-            <h2 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '1rem' }}>
+        <div className="flex flex-col items-center justify-center h-screen p-8 bg-background text-foreground">
+          <div className="max-w-2xl text-center">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-semibold mb-4">
               Something went wrong
             </h2>
-            <p style={{ color: 'var(--text-secondary, #6b7280)', marginBottom: '2rem' }}>
+            <p className="text-muted-foreground mb-8">
               The application encountered an unexpected error. You can try reloading the page or
               resetting the component.
             </p>
 
             {/* Error details - collapsible */}
             {this.state.error && (
-              <details style={{ marginBottom: '2rem', textAlign: 'left' }}>
-                <summary
-                  style={{
-                    cursor: 'pointer',
-                    padding: '0.5rem',
-                    backgroundColor: 'var(--bg-secondary, #f9fafb)',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem',
-                  }}
-                >
+              <details className="mb-8 text-left">
+                <summary className="cursor-pointer p-2 bg-muted rounded mb-2 text-sm font-medium">
                   Error details
                 </summary>
-                <div
-                  style={{
-                    padding: '1rem',
-                    backgroundColor: 'var(--bg-secondary, #f9fafb)',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    fontFamily: 'var(--font-family-mono)',
-                    maxHeight: '200px',
-                    overflow: 'auto',
-                  }}
-                >
-                  <strong>Error:</strong>
-                  <pre style={{ marginTop: '0.5rem', whiteSpace: 'pre-wrap' }}>
+                <div className="p-4 bg-muted rounded text-sm font-mono max-h-50 overflow-auto">
+                  <strong className="text-foreground">Error:</strong>
+                  <pre className="mt-2 whitespace-pre-wrap text-foreground/90">
                     {this.state.error.message}
                   </pre>
                   {this.state.error.stack && (
                     <>
-                      <strong style={{ marginTop: '1rem', display: 'block' }}>Stack trace:</strong>
-                      <pre style={{ marginTop: '0.5rem', whiteSpace: 'pre-wrap', fontSize: '12px' }}>
+                      <strong className="mt-4 block text-foreground">Stack trace:</strong>
+                      <pre className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
                         {this.state.error.stack}
                       </pre>
                     </>
@@ -129,51 +101,13 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button
-                onClick={this.handleReset}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'var(--primary)',
-                  color: 'var(--primary-foreground)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'color-mix(in oklch, var(--primary) 90%, black)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--primary)';
-                }}
-              >
+            <div className="flex gap-4 justify-center">
+              <Button onClick={this.handleReset}>
                 Try Again
-              </button>
-              <button
-                onClick={this.handleReload}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'transparent',
-                  color: 'var(--primary)',
-                  border: '1px solid var(--primary)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--accent)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
+              </Button>
+              <Button onClick={this.handleReload} variant="outline">
                 Reload Application
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -47,7 +47,7 @@ export function RepoGroup({
     <SidebarGroup>
       <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
         <SidebarGroupLabel asChild>
-          <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1 text-body-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md transition-colors duration-200">
+          <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md transition-colors duration-200">
             <ChevronDown
               className={cn(
                 "h-4 w-4 transition-transform duration-200",
@@ -55,7 +55,7 @@ export function RepoGroup({
               )}
             />
             <span className="flex-1 text-left">{group.repo_name}</span>
-            <span className="text-caption text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {readyWorkspaces.length}
             </span>
           </CollapsibleTrigger>

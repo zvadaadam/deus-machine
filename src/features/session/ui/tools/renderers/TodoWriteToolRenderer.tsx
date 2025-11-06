@@ -67,7 +67,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-[12px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {currentTaskText}
         </span>
       )}

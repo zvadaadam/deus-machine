@@ -31,7 +31,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          'flex items-center gap-2 px-2 py-1.5 text-[13px]',
+          'flex items-center gap-2 px-2 py-1.5 text-sm',
           'text-left w-full cursor-pointer',
           'transition-opacity duration-200 hover:opacity-80',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -54,7 +54,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
 
         {/* Preview when collapsed only */}
         {!isExpanded && (
-          <span className="text-muted-foreground italic truncate text-[12px]">
+          <span className="text-muted-foreground italic truncate text-xs">
             {preview}
           </span>
         )}
@@ -62,7 +62,7 @@ export function ThinkingBlock({ block }: ThinkingBlockProps) {
 
       {/* Expanded: show FULL thinking text */}
       {isExpanded && (
-        <div className="ml-5 mt-1 text-[13px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
+        <div className="ml-5 mt-1 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
           {block.thinking}
         </div>
       )}

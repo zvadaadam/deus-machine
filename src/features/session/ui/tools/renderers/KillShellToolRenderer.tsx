@@ -23,7 +23,7 @@ export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="font-mono text-[12px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           shell {shell_id.substring(0, 6)}
         </span>
       )}

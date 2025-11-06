@@ -42,10 +42,10 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className="font-mono text-[12px] px-2 py-0.5 bg-info/15 text-info rounded font-medium">
+          <span className="font-mono text-xs px-2 py-0.5 bg-info/15 text-info rounded font-medium">
             {pattern}
           </span>
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {' '}in {glob || fileType || pathPreview}
             {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? 'es' : ''}`}
           </span>

@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
-import { getRepoInitials, getRepoColor, getCleanRepoName } from "../lib/utils";
+import { getRepoInitials, getCleanRepoName } from "../lib/utils";
 import { getRepoUnreadCount, getRepoPriorityStatus, STATUS_CONFIG, sortByStatusPriority, groupByStatus, getDisplayStatus } from "../lib/status";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
@@ -84,10 +84,10 @@ export function RepositoryItem({
       <SidebarMenuItem
         data-state={isCollapsed ? "closed" : "open"}
         className={cn(
-          "group/repository-item relative flex items-center py-1",
-          // Expanded: pl-3 pr-3 for spacing
+          "group/repository-item relative flex items-center",
+          // Expanded: px-2 for cleaner dense spacing
           // Collapsed: px-0 with justify-center to center the badge
-          sidebarExpanded && "pl-3 pr-3 hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
+          sidebarExpanded && "px-2 py-2 hover:bg-sidebar-accent/30 rounded-md transition-colors duration-200",
           !sidebarExpanded && "px-0 overflow-visible justify-center"
         )}
       >
@@ -104,27 +104,33 @@ export function RepositoryItem({
               className="flex-1 flex items-center justify-between text-sm font-medium bg-transparent hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent gap-2"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                {(() => {
-                  const repoColor = getRepoColor(repository.repo_name);
-                  return (
-                    <div className={cn(
-                      "h-6 w-6 flex items-center justify-center text-2xs font-semibold flex-shrink-0",
-                      "rounded-md",
-                      repoColor.bg,
-                      repoColor.text
-                    )}>
-                      {getRepoInitials(repository.repo_name)}
-                    </div>
-                  );
-                })()}
                 <span className="truncate">
                   {getCleanRepoName(repository.repo_name)}
                 </span>
+                {/* Status indicators when collapsed */}
+                {isCollapsed && (() => {
+                  const priorityStatus = getRepoPriorityStatus(repository.workspaces);
+                  const unreadCount = getRepoUnreadCount(repository.workspaces);
+                  const hasWorking = repository.workspaces.some(w => w.session_status === 'working');
+
+                  return (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Unread indicator - amber dot */}
+                      {unreadCount > 0 && (
+                        <div className="w-2 h-2 rounded-full bg-status-unread" title={`${unreadCount} unread`} />
+                      )}
+                      {/* Working indicator - primary dot */}
+                      {hasWorking && (
+                        <div className="w-2 h-2 rounded-full bg-primary" title="Working" />
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-[180ms] delay-[60ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] flex-shrink-0 motion-reduce:transition-none",
+                  "h-4 w-4 text-sidebar-foreground/50 transition-transform duration-180 delay-60 ease-out shrink-0 motion-reduce:transition-none",
                   isCollapsed && "-rotate-90"
                 )}
               />
@@ -240,7 +246,7 @@ export function RepositoryItem({
                   {/* Center content: working count OR initials */}
                   {workingCount > 0 ? (
                     <span className={cn(
-                      "relative z-10 text-caption-sm font-bold tabular-nums",
+                      "relative z-10 text-xs font-bold tabular-nums",
                       // Number color matches ring color for visual unity
                       ringColor === 'working' && "text-status-working",
                       ringColor === 'unread' && "text-status-unread",
@@ -266,7 +272,7 @@ export function RepositoryItem({
                       "absolute -top-1 -right-1",
                       "flex h-[18px] min-w-[18px] items-center justify-center",
                       "rounded-full text-2xs font-bold px-1",
-                      "z-20 border-[2px] border-sidebar",
+                      "z-20 border-2 border-sidebar",
                       "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                       "animate-in zoom-in-50",
                       "bg-status-unread text-status-unread-fg",
@@ -283,7 +289,7 @@ export function RepositoryItem({
         </div>
       </SidebarMenuItem>
       <CollapsibleContent>
-        <SidebarMenuSub className="border-l-0 mx-0 px-0 translate-x-0">
+        <SidebarMenuSub className="border-l-0 mx-0 px-0 py-0 gap-0">
           {sidebarExpanded && (() => {
             // Sort workspaces by priority, then group by status
             const sortedWorkspaces = sortByStatusPriority(repository.workspaces);
@@ -301,26 +307,26 @@ export function RepositoryItem({
             return (
               <>
                 {/* New Workspace Button - At Top */}
-                <SidebarMenuSubItem className="mb-2">
+                <SidebarMenuSubItem className="my-1">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onNewWorkspace(repository.repo_id)}
                     className={cn(
-                      "w-full",
-                      "text-muted-foreground hover:text-primary/80 hover:bg-sidebar-accent/25",
-                      "transition-colors duration-200 ease-out"
+                      "w-full px-2",
+                      "text-muted-foreground/60 hover:text-muted-foreground",
+                      "transition-colors duration-200 ease-out",
                     )}
                   >
                     <div className="flex items-center gap-3 w-full">
-                      <Plus className="h-4 w-4 flex-shrink-0" />
-                      <span className="text-sm">New Workspace</span>
+                      <Plus className="h-4 w-4 shrink-0" />
+                      <span className="text-sm font-normal">New Workspace</span>
                     </div>
                   </Button>
                 </SidebarMenuSubItem>
 
                 {/* Render sections in priority order */}
-                {sections.map(({ status, label, emoji }) => {
+                {sections.map(({ status, label }) => {
                   const workspacesInSection = groupedWorkspaces[status];
                   if (!workspacesInSection || workspacesInSection.length === 0) {
                     return null;
@@ -329,15 +335,11 @@ export function RepositoryItem({
                   const sectionConfig = STATUS_CONFIG[status];
 
                   return (
-                    <div key={status} className="mb-3">
+                    <div>
                       {/* Section Header */}
-                      <div className="px-3 py-2 flex items-center gap-2">
-                        <span className="text-2xs font-bold tracking-wider uppercase">
-                          <span className={cn("mr-1", sectionConfig.text)}>{emoji}</span>
-                          <span className={sectionConfig.text}>{label}</span>
-                        </span>
-                        <span className={cn("text-2xs font-semibold", sectionConfig.text)}>
-                          {workspacesInSection.length}
+                      <div className="px-2 py-2 flex items-center">
+                          <span className={cn("text-2xs tracking-wider font-mono", sectionConfig.text)}>
+                          {label}
                         </span>
                       </div>
 
