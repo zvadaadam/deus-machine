@@ -11,6 +11,8 @@ import { FilePlus } from "lucide-react";
 import { BaseToolRenderer, CodeBlock, FilePathDisplay } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { detectLanguageFromPath } from "../utils/detectLanguage";
+import { chatTheme } from "../../theme";
+import { cn } from "@/shared/lib/utils";
 
 export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, content } = toolUse.input;
@@ -19,16 +21,16 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   return (
     <BaseToolRenderer
-      toolName="Write File"
-      icon={<FilePlus className="text-success/70 h-4 w-4" />}
+      toolName="Write"
+      icon={<FilePlus className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Write)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className="bg-muted/60 rounded px-2 py-0.5 font-mono text-xs font-medium">
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-muted/60 rounded px-1.5 py-0.5 font-mono")}>
             {fileName}
           </span>
-          <span className="text-muted-foreground text-xs"> • {lineCount} lines</span>
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}> • {lineCount} lines</span>
         </>
       )}
       renderContent={() => (

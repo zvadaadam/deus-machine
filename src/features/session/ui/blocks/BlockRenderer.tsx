@@ -32,7 +32,7 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
     return null;
   }
 
-  // Determine text weight: last text block is 'normal', others are 'muted'
+  // Determine text weight: last text block in completed turn is 'normal' (white), others are 'muted' (subtle)
   const weight = isLastTextBlock ? "normal" : "muted";
 
   // Handle string blocks (convert to text block)
@@ -52,12 +52,6 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
 
     case "tool_result":
       // Don't render tool_result standalone - it's already linked to tool_use
-      // Debug log to verify memoization is working (should NOT spam on input typing)
-      if (import.meta.env.DEV) {
-        console.debug(
-          `[BlockRenderer] Skipping standalone tool_result (tool_use_id: ${block.tool_use_id})`
-        );
-      }
       return null;
 
     case "thinking":
