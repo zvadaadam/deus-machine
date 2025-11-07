@@ -42,16 +42,16 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
   return (
     <BaseToolRenderer
-      toolName="Grep Search"
-      icon={<Search className="text-info/70 h-4 w-4" />}
+      toolName="Grep"
+      icon={<Search className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className="bg-info/15 text-info rounded px-2 py-0.5 font-mono text-xs font-medium">
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-info/15 text-info rounded px-2 py-0.5 font-mono")}>
             {pattern}
           </span>
-          <span className="text-muted-foreground text-xs">
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
             {" "}
             in {glob || fileType || pathPreview}
             {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? "es" : ""}`}

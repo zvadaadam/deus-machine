@@ -698,7 +698,7 @@ mark.diff-word-deletion {
 
 /* Strong and emphasis */
 .markdown-content strong {
-  font-weight: 700; /* Bold - for scanability (like headlines) */
+  font-weight: 600; /* Semibold - emphasis without being too heavy */
   color: var(--foreground);
 }
 

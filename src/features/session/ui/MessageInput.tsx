@@ -207,7 +207,7 @@ export function MessageInput({
   return (
     <div className={cn("relative shrink-0 px-4 pb-4", className)}>
       {/* Scroll fade overlay */}
-      <div className="bg-fade-overlay pointer-events-none absolute right-0 bottom-full left-0 h-32" />
+      <div className="bg-fade-overlay pointer-events-none absolute right-0 bottom-full left-0 translate-y-2 h-8" />
 
       {/* InputGroup with drag & drop */}
       <InputGroup
