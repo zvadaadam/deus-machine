@@ -463,9 +463,9 @@ function MainContent({
               onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)}
               className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-              <div className="border-border/50 bg-background/50 flex h-12 flex-shrink-0 items-center border-b px-3 backdrop-blur-sm">
+              <div className="bg-background/50 flex h-12 flex-shrink-0 items-center border-b border-border backdrop-blur-sm">
                 {/* Tab Triggers - Segmented control styling */}
-                <TabsList className="mr-auto">
+                <TabsList className="flex-1">
                   <TabsTrigger value="changes" className="min-w-[88px] justify-center">
                     Changes
                   </TabsTrigger>
@@ -479,7 +479,7 @@ function MainContent({
 
                 {/* Panel Controls - Collapse button when expanded */}
                 {rightPanelExpanded && (
-                  <div className="border-border/30 flex items-center border-l px-3">
+                  <div className="border-border/30 flex h-full items-center border-l px-3">
                     <Button
                       variant="ghost"
                       size="icon"
