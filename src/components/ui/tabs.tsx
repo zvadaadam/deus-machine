@@ -5,6 +5,39 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "@/shared/lib/utils";
 
+/**
+ * Tab separator styling - Minimal design with colored active indicator
+ *
+ * Strategy:
+ * 1. Vertical separators between ALL tabs
+ * 2. Continuous bottom border on parent wrapper (edge-to-edge)
+ * 3. Active tab gets accent-colored bottom border (2px) that overlays the base border
+ * 4. This creates clear, purposeful visual hierarchy
+ *
+ * Benefits: Simple, clear affordance, reliable rendering, uses color meaningfully
+ */
+if (typeof document !== "undefined") {
+  const styleId = "tabs-separator-style";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      /* Active tab indicator - colored underline using accent color */
+      [role="tab"][data-state="active"]::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--primary);
+        z-index: 10;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 const Tabs = TabsPrimitive.Root;
 
 const TabsList = React.forwardRef<
@@ -14,7 +47,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "text-muted-foreground/70 relative inline-flex h-11 items-center gap-1.5 pr-1 pl-2",
+      "text-muted-foreground/70 relative flex h-full items-center",
       className
     )}
     {...props}
@@ -29,7 +62,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "text-muted-foreground/75 focus-visible:ring-primary/40 data-[state=inactive]:hover:text-foreground/80 data-[state=active]:text-foreground relative inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium tracking-tight whitespace-nowrap transition-[background-color,color,box-shadow] duration-200 ease-out outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white/16 data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] data-[state=inactive]:hover:bg-white/5",
+      "text-muted-foreground/60 focus-visible:ring-primary/40 data-[state=inactive]:hover:text-foreground/70 data-[state=active]:text-foreground relative inline-flex items-center gap-1.5 px-6 h-full text-sm tracking-tight whitespace-nowrap transition-colors duration-200 ease-out outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:font-medium data-[state=inactive]:font-normal border-r border-border/40",
       className
     )}
     {...props}
