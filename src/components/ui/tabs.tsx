@@ -6,19 +6,26 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/shared/lib/utils";
 
 /**
- * Tab separator styling - Minimal design with colored active indicator
+ * Tab active indicator styling hook
+ * Injects global style for active tab underline using React lifecycle
  *
  * Strategy:
  * 1. Vertical separators between ALL tabs
  * 2. Continuous bottom border on parent wrapper (edge-to-edge)
- * 3. Active tab gets accent-colored bottom border (2px) that overlays the base border
+ * 3. Active tab gets accent-colored bottom border (2px) via ::after pseudo-element
  * 4. This creates clear, purposeful visual hierarchy
  *
  * Benefits: Simple, clear affordance, reliable rendering, uses color meaningfully
  */
-if (typeof document !== "undefined") {
-  const styleId = "tabs-separator-style";
-  if (!document.getElementById(styleId)) {
+const useTabActiveIndicatorStyles = () => {
+  React.useEffect(() => {
+    const styleId = "tabs-separator-style";
+
+    // Don't re-inject if already present
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
     const style = document.createElement("style");
     style.id = styleId;
     style.textContent = `
@@ -35,10 +42,24 @@ if (typeof document !== "undefined") {
       }
     `;
     document.head.appendChild(style);
-  }
-}
 
-const Tabs = TabsPrimitive.Root;
+    // Cleanup: remove style when component unmounts
+    return () => {
+      document.getElementById(styleId)?.remove();
+    };
+  }, []);
+};
+
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>((props, ref) => {
+  // Inject active tab indicator styles on mount
+  useTabActiveIndicatorStyles();
+
+  return <TabsPrimitive.Root ref={ref} {...props} />;
+});
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
