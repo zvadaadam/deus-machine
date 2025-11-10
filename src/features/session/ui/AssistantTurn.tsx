@@ -5,12 +5,13 @@
  * A turn = all assistant messages between user messages.
  *
  * Behavior:
- * - Latest turn: Always expanded (user sees everything)
+ * - Latest turn: Expanded by default (user sees everything)
  * - Previous turns: Collapsed by default (user sees summary + stats)
- * - Click header to toggle expand/collapse
+ * - Header always visible for multi-message turns (predictable, gives user control)
+ * - Click header to toggle expand/collapse at any time
  *
  * Structure:
- * ┌─ TurnStatsHeader (clickable, shows aggregated stats)
+ * ┌─ TurnStatsHeader (clickable, shows "Collapse" or metrics)
  * ├─ Collapsible (hides intermediate messages when collapsed)
  * │  ├─ Tool call 1
  * │  ├─ Tool call 2
@@ -56,8 +57,8 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
 
   return (
     <div className="assistant-turn flex min-w-0 flex-col">
-      {/* Stats header - hide while AI is actively working, show once complete or for old turns */}
-      {hiddenMessages.length > 0 && !(isLatest && isWorking) && (
+      {/* Stats header - always visible for multi-message turns */}
+      {hiddenMessages.length > 0 && (
         <TurnStatsHeader
           stats={stats}
           isExpanded={isExpanded}
