@@ -1,6 +1,7 @@
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
+import { AssistantTurn } from "./AssistantTurn";
 import {
   Empty,
   EmptyHeader,
@@ -24,26 +25,56 @@ type MessageRole = Message["role"];
 const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
 const TIGHT_MARGIN_CLASS = chatTheme.spacing.assistantTightMargin;
 
-function getMessageSpacingClasses(
-  role: MessageRole,
-  prevRole: MessageRole | null,
-  nextRole: MessageRole | null,
+/**
+ * Turn Types
+ *
+ * A turn = consecutive messages with the same role (user or assistant)
+ * - UserTurn: Single user message
+ * - AssistantTurn: One or more consecutive assistant messages
+ */
+type UserTurn = {
+  type: "user";
+  message: Message;
+  messageIndex: number;
+};
+
+type AssistantTurnData = {
+  type: "assistant";
+  messages: Message[];
+  firstMessageIndex: number;
+  isLatest: boolean;
+};
+
+type Turn = UserTurn | AssistantTurnData;
+
+/**
+ * Calculate spacing classes for turns (replaces message-level spacing)
+ *
+ * A turn = consecutive messages with the same role
+ * Spacing logic:
+ * - First turn: Minimal top margin
+ * - User turn after assistant: Generous top margin (mt-8)
+ * - User turn after user: No extra margin (consecutive user messages)
+ * - Assistant turn: Tight margin (mt-1)
+ * - Bottom margin: User turns add mb-8, assistant turns add minimal margin
+ */
+function getTurnSpacingClasses(
+  turn: Turn,
+  prevTurn: Turn | null,
+  nextTurn: Turn | null,
   isFirst: boolean
 ): string {
-  const isUser = role === "user";
+  const isUser = turn.type === "user";
 
   const topClass = (() => {
     if (isUser) {
-      // First user message keeps a generous offset from the top of the log
       if (isFirst) return "mt-8";
-      // Avoid double stacking when users send multiple messages back to back
-      if (prevRole === "user") return "mt-0";
+      if (prevTurn?.type === "user") return "mt-0";
       return "mt-8";
     }
 
-    // Assistant/system/tool style messages stay tight unless they're the very first entry
+    // Assistant turn
     if (isFirst) return "mt-1";
-    // Let the previous bubble control the gap (user messages already add mb-8)
     return "mt-0";
   })();
 
@@ -52,11 +83,12 @@ function getMessageSpacingClasses(
       return USER_MARGIN_CLASS;
     }
 
-    if (nextRole === "user") {
+    // Assistant turn
+    if (nextTurn?.type === "user") {
       return "mb-0";
     }
 
-    if (nextRole) {
+    if (nextTurn) {
       return TIGHT_MARGIN_CLASS;
     }
 
@@ -116,32 +148,69 @@ export function Chat({
     });
   }, [messages, parseContent]);
 
-  // Find index of latest assistant message (for auto-expanding turns)
-  const latestAssistantIndex = useMemo(() => {
-    for (let i = renderableMessages.length - 1; i >= 0; i--) {
-      if (renderableMessages[i].role === "assistant") {
-        return i;
-      }
-    }
-    return -1;
-  }, [renderableMessages]);
+  /**
+   * Group consecutive messages into turns
+   *
+   * A turn = consecutive messages with the same role
+   * - User messages: Each user message is its own turn
+   * - Assistant messages: Consecutive assistant messages form a single turn
+   *
+   * This enables turn-level collapsing (hide intermediate messages, show summary)
+   */
+  const turns = useMemo(() => {
+    const turnList: Turn[] = [];
+    let currentAssistantTurn: Message[] | null = null;
+    let firstAssistantIndex = -1;
 
-  // Identify which messages are the LAST in their assistant turn
-  // A turn = consecutive messages with the same role
-  // We need this to apply text weight correctly across multi-message turns
-  const lastMessageInTurnIndices = useMemo(() => {
-    const indices = new Set<number>();
-    for (let i = 0; i < renderableMessages.length; i++) {
-      const message = renderableMessages[i];
+    renderableMessages.forEach((message, index) => {
       if (message.role === "assistant") {
-        // Check if next message is NOT assistant (turn ends)
-        const nextRole = i < renderableMessages.length - 1 ? renderableMessages[i + 1].role : null;
-        if (nextRole !== "assistant") {
-          indices.add(i); // This is the last message in this assistant turn
+        // Start or continue assistant turn
+        if (!currentAssistantTurn) {
+          currentAssistantTurn = [message];
+          firstAssistantIndex = index;
+        } else {
+          currentAssistantTurn.push(message);
         }
+      } else {
+        // User message - close any open assistant turn first
+        if (currentAssistantTurn) {
+          turnList.push({
+            type: "assistant",
+            messages: currentAssistantTurn,
+            firstMessageIndex: firstAssistantIndex,
+            isLatest: false, // Will be updated later
+          });
+          currentAssistantTurn = null;
+        }
+
+        // Add user turn
+        turnList.push({
+          type: "user",
+          message,
+          messageIndex: index,
+        });
+      }
+    });
+
+    // Close any remaining assistant turn
+    if (currentAssistantTurn) {
+      turnList.push({
+        type: "assistant",
+        messages: currentAssistantTurn,
+        firstMessageIndex: firstAssistantIndex,
+        isLatest: false, // Will be updated later
+      });
+    }
+
+    // Mark the latest assistant turn
+    for (let i = turnList.length - 1; i >= 0; i--) {
+      if (turnList[i].type === "assistant") {
+        (turnList[i] as AssistantTurnData).isLatest = true;
+        break;
       }
     }
-    return indices;
+
+    return turnList;
   }, [renderableMessages]);
 
   // Calculate indicator margin based on last message role
@@ -187,39 +256,41 @@ export function Chat({
       ) : (
         <>
           <div className="flex min-h-0 min-w-0 flex-col pb-32">
-            {renderableMessages.map((message, renderIndex) => {
-              const prevRole = renderIndex > 0 ? renderableMessages[renderIndex - 1].role : null;
-              const nextRole =
-                renderIndex < renderableMessages.length - 1
-                  ? renderableMessages[renderIndex + 1].role
-                  : null;
-              const spacingClass = getMessageSpacingClasses(
-                message.role,
-                prevRole,
-                nextRole,
-                renderIndex === 0
-              );
+            {turns.map((turn, turnIndex) => {
+              const prevTurn = turnIndex > 0 ? turns[turnIndex - 1] : null;
+              const nextTurn = turnIndex < turns.length - 1 ? turns[turnIndex + 1] : null;
+              const spacingClass = getTurnSpacingClasses(turn, prevTurn, nextTurn, turnIndex === 0);
 
-              // Attach lastMessageRef to the LAST RENDERED message (not based on original array index)
-              const isLastRendered = renderIndex === renderableMessages.length - 1;
+              // Attach lastMessageRef to the LAST RENDERED turn
+              const isLastRendered = turnIndex === turns.length - 1;
 
-              // Check if this is the latest assistant message (for auto-expanding)
-              const isLatestAssistant =
-                message.role === "assistant" && renderIndex === latestAssistantIndex;
+              if (turn.type === "user") {
+                return (
+                  <div
+                    key={turn.message.id}
+                    ref={isLastRendered ? lastMessageRef : undefined}
+                    className={cn(spacingClass, "min-w-0")}
+                  >
+                    <MessageItem
+                      message={turn.message}
+                      isLatestAssistant={false}
+                      isLastInTurn={true}
+                      isWorking={false}
+                    />
+                  </div>
+                );
+              }
 
-              // Check if this is the last message in its assistant turn
-              const isLastInTurn = lastMessageInTurnIndices.has(renderIndex);
-
+              // Assistant turn
               return (
                 <div
-                  key={message.id}
+                  key={turn.messages[0].id}
                   ref={isLastRendered ? lastMessageRef : undefined}
                   className={cn(spacingClass, "min-w-0")}
                 >
-                  <MessageItem
-                    message={message}
-                    isLatestAssistant={isLatestAssistant}
-                    isLastInTurn={isLastInTurn}
+                  <AssistantTurn
+                    messages={turn.messages}
+                    isLatest={turn.isLatest}
                     isWorking={sessionStatus === "working"}
                   />
                 </div>
