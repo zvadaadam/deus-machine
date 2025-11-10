@@ -56,8 +56,8 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
 
   return (
     <div className="assistant-turn flex min-w-0 flex-col">
-      {/* Stats header - only show if there are hidden messages */}
-      {hiddenMessages.length > 0 && (
+      {/* Stats header - hide while AI is actively working, show once complete or for old turns */}
+      {hiddenMessages.length > 0 && !(isLatest && isWorking) && (
         <TurnStatsHeader
           stats={stats}
           isExpanded={isExpanded}
