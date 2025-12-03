@@ -231,7 +231,7 @@ export function MainLayout() {
       if (!cloneTarget) {
         const { homeDir, join } = await import("@tauri-apps/api/path");
         cloneTarget = await join(await homeDir(), "Projects", repoName);
-      } else if (!targetPath.includes(repoName)) {
+      } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
         const { join } = await import("@tauri-apps/api/path");
         cloneTarget = await join(targetPath, repoName);
       }

@@ -361,9 +361,10 @@ pub struct GitCloneResult {
     pub name: String,
 }
 
-/// Clone a git repository to a target directory with progress events
+/// Clone a git repository to a target directory with progress events.
+/// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
-pub fn git_clone(
+pub async fn git_clone(
     url: String,
     target_path: String,
     app_handle: tauri::AppHandle,
@@ -379,6 +380,7 @@ pub fn git_clone(
         .unwrap_or("repository")
         .to_string();
 
+    // Pre-clone validation (fast, can stay on async thread)
     if target.exists() {
         if target.is_dir() {
             let is_non_empty = std::fs::read_dir(&target)
@@ -415,71 +417,86 @@ pub fn git_clone(
         },
     );
 
-    let last_percent = Arc::new(AtomicUsize::new(0));
-    let app = app_handle.clone();
-    let mut callbacks = RemoteCallbacks::new();
-    let progress_tracker = last_percent.clone();
-    callbacks.transfer_progress(move |stats| {
-        let total = stats.total_objects();
-        let received = stats.received_objects();
-        let indexed = stats.indexed_objects();
-        let received_bytes = stats.received_bytes();
-        let percent = if total > 0 {
-            (received * 100) / total
-        } else {
-            0
-        };
+    // Clone values for the blocking task
+    let url_clone = url.clone();
+    let target_clone = target.clone();
+    let folder_name_clone = folder_name.clone();
+    let app_clone = app_handle.clone();
 
-        let last = progress_tracker.load(Ordering::Relaxed);
-        if percent != last {
-            progress_tracker.store(percent, Ordering::Relaxed);
+    // Run blocking git2 operations on a separate thread
+    let result = tokio::task::spawn_blocking(move || {
+        let last_percent = Arc::new(AtomicUsize::new(0));
+        let app = app_clone.clone();
+        let mut callbacks = RemoteCallbacks::new();
+        let progress_tracker = last_percent.clone();
 
-            let (phase, status) = if received < total {
-                ("receiving".to_string(), "Receiving...".to_string())
-            } else if indexed < received {
-                ("indexing".to_string(), "Indexing...".to_string())
+        callbacks.transfer_progress(move |stats| {
+            let total = stats.total_objects();
+            let received = stats.received_objects();
+            let indexed = stats.indexed_objects();
+            let received_bytes = stats.received_bytes();
+            let percent = if total > 0 {
+                (received * 100) / total
             } else {
-                ("resolving".to_string(), "Resolving...".to_string())
+                0
             };
 
-            let _ = app.emit(
-                "git-clone-progress",
-                GitCloneProgress {
-                    percent,
-                    received,
-                    total,
-                    received_bytes,
-                    status,
-                    phase,
-                },
-            );
-        }
-        true
-    });
+            let last = progress_tracker.load(Ordering::Relaxed);
+            if percent != last {
+                progress_tracker.store(percent, Ordering::Relaxed);
 
-    let mut fetch_options = FetchOptions::new();
-    fetch_options.remote_callbacks(callbacks);
-
-    let mut builder = RepoBuilder::new();
-    builder.fetch_options(fetch_options);
-
-    builder.clone(&url, &target).map_err(|e| {
-        match e.code() {
-            ErrorCode::NotFound => "Repository not found. Check the URL and try again.".to_string(),
-            ErrorCode::Auth => "Authentication required. Check your credentials.".to_string(),
-            ErrorCode::Exists => format!("Folder \"{}\" already exists", folder_name),
-            _ => {
-                let msg = e.message();
-                if msg.contains("failed to resolve address") || msg.contains("Could not resolve host") {
-                    "Could not connect. Check your internet connection.".to_string()
-                } else if msg.contains("SSL") || msg.contains("certificate") {
-                    "SSL/certificate error. Check your network settings.".to_string()
+                let (phase, status) = if received < total {
+                    ("receiving".to_string(), "Receiving...".to_string())
+                } else if indexed < received {
+                    ("indexing".to_string(), "Indexing...".to_string())
                 } else {
-                    format!("Clone failed: {}", msg)
+                    ("resolving".to_string(), "Resolving...".to_string())
+                };
+
+                let _ = app.emit(
+                    "git-clone-progress",
+                    GitCloneProgress {
+                        percent,
+                        received,
+                        total,
+                        received_bytes,
+                        status,
+                        phase,
+                    },
+                );
+            }
+            true
+        });
+
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        let mut builder = RepoBuilder::new();
+        builder.fetch_options(fetch_options);
+
+        builder.clone(&url_clone, &target_clone).map_err(|e| {
+            match e.code() {
+                ErrorCode::NotFound => "Repository not found. Check the URL and try again.".to_string(),
+                ErrorCode::Auth => "Authentication required. Check your credentials.".to_string(),
+                ErrorCode::Exists => format!("Folder \"{}\" already exists", folder_name_clone),
+                _ => {
+                    let msg = e.message();
+                    if msg.contains("failed to resolve address") || msg.contains("Could not resolve host") {
+                        "Could not connect. Check your internet connection.".to_string()
+                    } else if msg.contains("SSL") || msg.contains("certificate") {
+                        "SSL/certificate error. Check your network settings.".to_string()
+                    } else {
+                        format!("Clone failed: {}", msg)
+                    }
                 }
             }
-        }
-    })?;
+        })
+    })
+    .await
+    .map_err(|e| format!("Clone task failed: {}", e))?;
+
+    // Handle the inner Result from the blocking task
+    result?;
 
     let _ = app_handle.emit(
         "git-clone-progress",
