@@ -112,6 +112,7 @@ fn main() {
             commands::scan_workspace_files,
             commands::invalidate_file_cache,
             commands::clear_file_cache,
+            commands::git_clone,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
