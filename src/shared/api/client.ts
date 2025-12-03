@@ -85,13 +85,12 @@ class ApiClient {
           message: response.statusText,
         };
 
-        // Try to parse error details
         try {
           const errorData = await response.json();
           error.details = errorData;
-          error.message = errorData.message || error.message;
+          error.message = errorData.error || errorData.message || error.message;
         } catch {
-          // Response is not JSON, use status text
+          // Response is not JSON
         }
 
         throw error;
