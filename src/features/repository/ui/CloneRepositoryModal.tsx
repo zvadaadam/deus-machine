@@ -57,15 +57,18 @@ export function CloneRepositoryModal({
     }
 
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
     (async () => {
       const { listen } = await import("@tauri-apps/api/event");
+      if (cancelled) return;
       unlisten = await listen<GitCloneProgress>("git-clone-progress", (event) => {
         setProgress(event.payload);
       });
     })();
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [cloning]);
