@@ -46,19 +46,3 @@ export function useAddRepo() {
     },
   });
 }
-
-/**
- * Clone repository mutation
- */
-export function useCloneRepo() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ url, path }: { url: string; path: string }) => RepoService.clone(url, path),
-    onSuccess: () => {
-      // Invalidate repos and workspaces
-      queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-    },
-  });
-}

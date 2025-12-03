@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{Emitter, State};
 use crate::pty::PtyManager;
 use crate::socket::SocketManager;
 use crate::backend::BackendManager;
@@ -339,6 +339,164 @@ pub fn is_browser_running(
     browser_manager: State<'_, BrowserManager>,
 ) -> Result<bool, String> {
     Ok(browser_manager.is_running())
+}
+
+//============================================================================
+// GIT COMMANDS
+//============================================================================
+
+#[derive(serde::Serialize, Clone)]
+pub struct GitCloneProgress {
+    pub percent: usize,
+    pub received: usize,
+    pub total: usize,
+    pub received_bytes: usize,
+    pub status: String,
+    pub phase: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitCloneResult {
+    pub path: String,
+    pub name: String,
+}
+
+/// Clone a git repository to a target directory with progress events
+#[tauri::command]
+pub fn git_clone(
+    url: String,
+    target_path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<GitCloneResult, String> {
+    use git2::{build::RepoBuilder, ErrorCode, FetchOptions, RemoteCallbacks};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let target = PathBuf::from(&target_path);
+    let folder_name = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("repository")
+        .to_string();
+
+    if target.exists() {
+        if target.is_dir() {
+            let is_non_empty = std::fs::read_dir(&target)
+                .map(|mut entries| entries.next().is_some())
+                .unwrap_or(false);
+
+            if is_non_empty {
+                let git_dir = target.join(".git");
+                if git_dir.exists() {
+                    return Err(format!(
+                        "\"{}\" already contains a git repository. Use \"Add Repository\" instead.",
+                        folder_name
+                    ));
+                }
+                return Err(format!(
+                    "Folder \"{}\" already exists and is not empty",
+                    folder_name
+                ));
+            }
+        } else {
+            return Err(format!("A file named \"{}\" already exists at this location", folder_name));
+        }
+    }
+
+    let _ = app_handle.emit(
+        "git-clone-progress",
+        GitCloneProgress {
+            percent: 0,
+            received: 0,
+            total: 0,
+            received_bytes: 0,
+            status: "Connecting...".to_string(),
+            phase: "connecting".to_string(),
+        },
+    );
+
+    let last_percent = Arc::new(AtomicUsize::new(0));
+    let app = app_handle.clone();
+    let mut callbacks = RemoteCallbacks::new();
+    let progress_tracker = last_percent.clone();
+    callbacks.transfer_progress(move |stats| {
+        let total = stats.total_objects();
+        let received = stats.received_objects();
+        let indexed = stats.indexed_objects();
+        let received_bytes = stats.received_bytes();
+        let percent = if total > 0 {
+            (received * 100) / total
+        } else {
+            0
+        };
+
+        let last = progress_tracker.load(Ordering::Relaxed);
+        if percent != last {
+            progress_tracker.store(percent, Ordering::Relaxed);
+
+            let (phase, status) = if received < total {
+                ("receiving".to_string(), "Receiving...".to_string())
+            } else if indexed < received {
+                ("indexing".to_string(), "Indexing...".to_string())
+            } else {
+                ("resolving".to_string(), "Resolving...".to_string())
+            };
+
+            let _ = app.emit(
+                "git-clone-progress",
+                GitCloneProgress {
+                    percent,
+                    received,
+                    total,
+                    received_bytes,
+                    status,
+                    phase,
+                },
+            );
+        }
+        true
+    });
+
+    let mut fetch_options = FetchOptions::new();
+    fetch_options.remote_callbacks(callbacks);
+
+    let mut builder = RepoBuilder::new();
+    builder.fetch_options(fetch_options);
+
+    builder.clone(&url, &target).map_err(|e| {
+        match e.code() {
+            ErrorCode::NotFound => "Repository not found. Check the URL and try again.".to_string(),
+            ErrorCode::Auth => "Authentication required. Check your credentials.".to_string(),
+            ErrorCode::Exists => format!("Folder \"{}\" already exists", folder_name),
+            _ => {
+                let msg = e.message();
+                if msg.contains("failed to resolve address") || msg.contains("Could not resolve host") {
+                    "Could not connect. Check your internet connection.".to_string()
+                } else if msg.contains("SSL") || msg.contains("certificate") {
+                    "SSL/certificate error. Check your network settings.".to_string()
+                } else {
+                    format!("Clone failed: {}", msg)
+                }
+            }
+        }
+    })?;
+
+    let _ = app_handle.emit(
+        "git-clone-progress",
+        GitCloneProgress {
+            percent: 100,
+            received: 0,
+            total: 0,
+            received_bytes: 0,
+            status: "Complete".to_string(),
+            phase: "complete".to_string(),
+        },
+    );
+
+    Ok(GitCloneResult {
+        path: target_path,
+        name: folder_name,
+    })
 }
 
 //============================================================================
