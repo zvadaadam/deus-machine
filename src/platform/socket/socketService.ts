@@ -37,7 +37,8 @@ class UnixSocketService {
   async connect(): Promise<void> {
     // Skip in web mode (non-Tauri)
     if (!isTauriEnv) {
-      console.log("[SOCKET] ⚠️  Running in web mode - socket features disabled");
+      if (import.meta.env.DEV)
+        console.log("[SOCKET] ⚠️  Running in web mode - socket features disabled");
       return;
     }
 
@@ -58,7 +59,7 @@ class UnixSocketService {
       await invoke("connect_to_sidecar", { socketPath: this.socketPath });
 
       this.connected = true;
-      console.log("[SOCKET] ✅ Connected to:", this.socketPath);
+      if (import.meta.env.DEV) console.log("[SOCKET] ✅ Connected to:", this.socketPath);
     } catch (error) {
       console.error("[SOCKET] ❌ Connection failed:", error);
       throw error;
@@ -140,7 +141,7 @@ class UnixSocketService {
         await invoke("disconnect_from_sidecar");
         this.connected = false;
         this.socketPath = null;
-        console.log("[SOCKET] 🔌 Disconnected");
+        if (import.meta.env.DEV) console.log("[SOCKET] 🔌 Disconnected");
       } catch (error) {
         console.error("[SOCKET] ❌ Disconnect failed:", error);
       }
