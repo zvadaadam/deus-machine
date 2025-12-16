@@ -12,7 +12,7 @@ export function useSocket() {
       try {
         await socketService.connect();
         socketConnected = true;
-        console.log("[useSocket] ✅ Socket connected");
+        if (import.meta.env.DEV) console.log("[useSocket] ✅ Socket connected");
       } catch (error) {
         console.error("[useSocket] ❌ Socket connection failed:", error);
         // Fall back to HTTP if socket fails
