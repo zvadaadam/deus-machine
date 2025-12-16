@@ -176,3 +176,26 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
     }
   )
 );
+
+/**
+ * Stable Actions - Call from anywhere without causing re-renders
+ */
+export const layoutCoordinationActions = {
+  onBrowserTabOpen: (currentSidebarOpen: boolean) =>
+    useLayoutCoordinationStore.getState().onBrowserTabOpen(currentSidebarOpen),
+  onBrowserTabClose: () =>
+    useLayoutCoordinationStore.getState().onBrowserTabClose(),
+  onSidebarToggle: (isManual: boolean, newOpenState: boolean) =>
+    useLayoutCoordinationStore.getState().onSidebarToggle(isManual, newOpenState),
+  updateScreenWidth: (width: number) =>
+    useLayoutCoordinationStore.getState().updateScreenWidth(width),
+  shouldAutoCloseSidebar: () =>
+    useLayoutCoordinationStore.getState().shouldAutoCloseSidebar(),
+  reset: () => useLayoutCoordinationStore.getState().reset(),
+  // State getters (for reading without subscription)
+  getState: () => ({
+    browserTabActive: useLayoutCoordinationStore.getState().browserTabActive,
+    isWideScreen: useLayoutCoordinationStore.getState().isWideScreen,
+    screenWidth: useLayoutCoordinationStore.getState().screenWidth,
+  }),
+};
