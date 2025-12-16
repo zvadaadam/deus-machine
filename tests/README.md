@@ -36,13 +36,6 @@ BACKEND_PORT=60068 npm test
 5. Checks database storage
 6. Archives the test workspace (cleanup)
 
-### `E2E-TEST-RESULTS.md`
-Complete documentation of:
-- Test results
-- Fixes applied to the backend
-- Architecture verification
-- Cross-repository support proof
-
 ## Requirements
 
 - Backend must be running
