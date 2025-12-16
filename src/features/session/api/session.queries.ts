@@ -170,6 +170,10 @@ export function useSendMessage() {
       );
 
       // Also update session status to "working"
+      const previousSession = queryClient.getQueryData<Session>(
+        queryKeys.sessions.detail(sessionId)
+      );
+
       queryClient.setQueryData<Session>(
         queryKeys.sessions.detail(sessionId),
         (old) => {
@@ -180,7 +184,7 @@ export function useSendMessage() {
         }
       );
 
-      return { previousMessages };
+      return { previousMessages, previousSession };
     },
 
     onError: (_err, variables, context) => {
@@ -188,6 +192,12 @@ export function useSendMessage() {
         queryClient.setQueryData(
           queryKeys.sessions.messages(variables.sessionId),
           context.previousMessages
+        );
+      }
+      if (context?.previousSession) {
+        queryClient.setQueryData(
+          queryKeys.sessions.detail(variables.sessionId),
+          context.previousSession
         );
       }
     },
