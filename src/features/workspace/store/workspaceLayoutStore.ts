@@ -208,3 +208,24 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
     }
   )
 );
+
+/**
+ * Stable Actions - Call from anywhere without causing re-renders
+ */
+export const workspaceLayoutActions = {
+  getLayout: (workspaceId: string) =>
+    useWorkspaceLayoutStore.getState().getLayout(workspaceId),
+  setLayout: (workspaceId: string, layout: Partial<WorkspaceLayoutState>) =>
+    useWorkspaceLayoutStore.getState().setLayout(workspaceId, layout),
+  setRightPanelExpanded: (workspaceId: string, expanded: boolean) =>
+    useWorkspaceLayoutStore.getState().setRightPanelExpanded(workspaceId, expanded),
+  setActiveRightTab: (workspaceId: string, tab: RightPanelTab) =>
+    useWorkspaceLayoutStore.getState().setActiveRightTab(workspaceId, tab),
+  setSelectedFile: (workspaceId: string, file: SelectedFile | null) =>
+    useWorkspaceLayoutStore.getState().setSelectedFile(workspaceId, file),
+  setSidebarCollapsed: (workspaceId: string, collapsed: boolean) =>
+    useWorkspaceLayoutStore.getState().setSidebarCollapsed(workspaceId, collapsed),
+  clearWorkspaceLayout: (workspaceId: string) =>
+    useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
+  resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),
+};

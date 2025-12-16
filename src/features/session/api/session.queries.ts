@@ -4,6 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { produce } from "immer";
 import { SessionService } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Session, Message, SessionStatus } from "../types";
@@ -126,7 +127,10 @@ export function useSessionWithMessages(sessionId: string | null) {
 }
 
 /**
- * Send message mutation
+ * Send message mutation with optimistic update
+ *
+ * Shows user message immediately in the chat while request is in flight.
+ * The optimistic message has a temporary ID that gets replaced on refetch.
  */
 export function useSendMessage() {
   const queryClient = useQueryClient();
@@ -134,8 +138,62 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: ({ sessionId, content }: { sessionId: string; content: string }) =>
       SessionService.sendMessage(sessionId, content),
-    onSuccess: (_, variables) => {
-      // Invalidate messages and session to trigger refetch
+
+    // Optimistic update: Add user message to chat immediately
+    onMutate: async ({ sessionId, content }) => {
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.sessions.messages(sessionId),
+      });
+
+      const previousMessages = queryClient.getQueryData<Message[]>(
+        queryKeys.sessions.messages(sessionId)
+      );
+
+      // Create optimistic user message
+      const optimisticMessage: Message = {
+        id: `optimistic-${Date.now()}`,
+        session_id: sessionId,
+        role: "user",
+        content: JSON.stringify({ content: [{ type: "text", text: content }] }),
+        created_at: new Date().toISOString(),
+        sent_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<Message[]>(
+        queryKeys.sessions.messages(sessionId),
+        (old) => {
+          if (!old) return [optimisticMessage];
+          return produce(old, (draft) => {
+            draft.push(optimisticMessage);
+          });
+        }
+      );
+
+      // Also update session status to "working"
+      queryClient.setQueryData<Session>(
+        queryKeys.sessions.detail(sessionId),
+        (old) => {
+          if (!old) return old;
+          return produce(old, (draft) => {
+            draft.status = "working";
+          });
+        }
+      );
+
+      return { previousMessages };
+    },
+
+    onError: (_err, variables, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(
+          queryKeys.sessions.messages(variables.sessionId),
+          context.previousMessages
+        );
+      }
+    },
+
+    onSettled: (_, __, variables) => {
+      // Invalidate to get real message from server
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.messages(variables.sessionId),
       });

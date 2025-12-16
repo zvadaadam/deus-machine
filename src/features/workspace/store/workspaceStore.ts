@@ -64,3 +64,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
   )
 );
+
+/**
+ * Stable Actions - Call from anywhere without causing re-renders
+ */
+export const workspaceActions = {
+  selectWorkspace: (workspace: Workspace | null) =>
+    useWorkspaceStore.getState().selectWorkspace(workspace),
+  clearSelection: () => useWorkspaceStore.getState().clearSelection(),
+  setDiffStats: (workspaceId: string, stats: DiffStats) =>
+    useWorkspaceStore.getState().setDiffStats(workspaceId, stats),
+  setMultipleDiffStats: (stats: Record<string, DiffStats>) =>
+    useWorkspaceStore.getState().setMultipleDiffStats(stats),
+};
