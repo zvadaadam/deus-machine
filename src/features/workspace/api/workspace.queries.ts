@@ -5,6 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
+import { produce } from "immer";
 import { WorkspaceService } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -219,15 +220,65 @@ export function useCreateWorkspace() {
 }
 
 /**
- * Archive workspace mutation
+ * Archive workspace mutation with optimistic update
+ *
+ * Flow:
+ * 1. User clicks archive → UI updates IMMEDIATELY (workspace removed from list)
+ * 2. HTTP request sent in background
+ * 3. Success: Cache already correct, refetch confirms
+ * 4. Error: Rollback to previous state, show error
  */
 export function useArchiveWorkspace() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (workspaceId: string) => WorkspaceService.archive(workspaceId),
-    onSuccess: () => {
-      // Invalidate workspaces to trigger refetch
+
+    // Optimistic update: Remove workspace from UI immediately
+    onMutate: async (workspaceId: string) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: queryKeys.workspaces.byRepo("ready") });
+
+      // Snapshot the previous value
+      const previousData = queryClient.getQueryData<RepoGroup[]>(
+        queryKeys.workspaces.byRepo("ready")
+      );
+
+      // Optimistically remove the workspace from the list
+      queryClient.setQueryData<RepoGroup[]>(
+        queryKeys.workspaces.byRepo("ready"),
+        (old) => {
+          if (!old) return old;
+          return produce(old, (draft) => {
+            for (const repo of draft) {
+              const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
+              if (index !== -1) {
+                repo.workspaces.splice(index, 1);
+                break;
+              }
+            }
+            // Remove empty repos
+            return draft.filter((repo) => repo.workspaces.length > 0);
+          });
+        }
+      );
+
+      // Return context with the previous value for rollback
+      return { previousData };
+    },
+
+    // If mutation fails, roll back to the previous value
+    onError: (_err, _workspaceId, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(
+          queryKeys.workspaces.byRepo("ready"),
+          context.previousData
+        );
+      }
+    },
+
+    // Always refetch after error or success to ensure consistency
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
   });
@@ -249,7 +300,7 @@ export function useSystemPrompt(workspaceId: string | null) {
 }
 
 /**
- * Update system prompt mutation
+ * Update system prompt mutation with optimistic update
  */
 export function useUpdateSystemPrompt() {
   const queryClient = useQueryClient();
@@ -257,8 +308,37 @@ export function useUpdateSystemPrompt() {
   return useMutation({
     mutationFn: ({ workspaceId, systemPrompt }: { workspaceId: string; systemPrompt: string }) =>
       WorkspaceService.updateSystemPrompt(workspaceId, systemPrompt),
-    onSuccess: (_, variables) => {
-      // Invalidate system prompt query for this workspace
+
+    // Optimistic update: Show new prompt immediately
+    onMutate: async ({ workspaceId, systemPrompt }) => {
+      await queryClient.cancelQueries({
+        queryKey: ["workspaces", "system-prompt", workspaceId],
+      });
+
+      const previousPrompt = queryClient.getQueryData<string>([
+        "workspaces",
+        "system-prompt",
+        workspaceId,
+      ]);
+
+      queryClient.setQueryData(
+        ["workspaces", "system-prompt", workspaceId],
+        systemPrompt
+      );
+
+      return { previousPrompt };
+    },
+
+    onError: (_err, variables, context) => {
+      if (context?.previousPrompt !== undefined) {
+        queryClient.setQueryData(
+          ["workspaces", "system-prompt", variables.workspaceId],
+          context.previousPrompt
+        );
+      }
+    },
+
+    onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["workspaces", "system-prompt", variables.workspaceId],
       });

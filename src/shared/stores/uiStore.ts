@@ -64,3 +64,26 @@ export const useUIStore = create<UIState>()(
     }
   )
 );
+
+/**
+ * Stable Actions - Call from anywhere without causing re-renders
+ *
+ * Use these when:
+ * - Calling from event handlers or callbacks
+ * - Calling from Tauri event listeners
+ * - Calling from keyboard shortcuts
+ * - You don't need to subscribe to state changes
+ *
+ * Example:
+ *   // Instead of: const { openSettingsModal } = useUIStore()
+ *   uiActions.openSettingsModal()
+ */
+export const uiActions = {
+  openNewWorkspaceModal: () => useUIStore.getState().openNewWorkspaceModal(),
+  closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
+  openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
+  closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
+  openSettingsModal: () => useUIStore.getState().openSettingsModal(),
+  closeSettingsModal: () => useUIStore.getState().closeSettingsModal(),
+  closeAllModals: () => useUIStore.getState().closeAllModals(),
+};
