@@ -4,6 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { produce } from "immer";
 import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Settings, MCPServer, Command, Agent, Hook } from "../types";
@@ -64,15 +65,40 @@ export function useHooks() {
 }
 
 /**
- * Update settings mutation
+ * Update settings mutation with optimistic update
  */
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (settings: Partial<Settings>) => SettingsService.update(settings),
-    onSuccess: () => {
-      // Invalidate all settings queries to trigger refetch
+
+    // Optimistic update: Apply settings immediately
+    onMutate: async (newSettings: Partial<Settings>) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings.all });
+
+      const previousSettings = queryClient.getQueryData<Settings>(queryKeys.settings.all);
+
+      queryClient.setQueryData<Settings>(
+        queryKeys.settings.all,
+        (old) => {
+          if (!old) return old;
+          return produce(old, (draft) => {
+            Object.assign(draft, newSettings);
+          });
+        }
+      );
+
+      return { previousSettings };
+    },
+
+    onError: (_err, _newSettings, context) => {
+      if (context?.previousSettings) {
+        queryClient.setQueryData(queryKeys.settings.all, context.previousSettings);
+      }
+    },
+
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
     },
   });
