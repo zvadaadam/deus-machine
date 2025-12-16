@@ -23,25 +23,6 @@ export function formatTimeAgo(dateString: string): string {
 }
 
 /**
- * Format number with thousand separators
- * @param num - Number to format
- * @returns Formatted number string (e.g., "1,234")
- */
-export function formatNumber(num: number): string {
-  return num.toLocaleString();
-}
-
-/**
- * Format token count to K notation
- * @param tokens - Token count
- * @returns Formatted token string (e.g., "12.5k")
- */
-export function formatTokenCount(tokens: number): string {
-  if (tokens < 1000) return tokens.toString();
-  return `${(tokens / 1000).toFixed(1)}k`;
-}
-
-/**
  * Format file size to human-readable format
  * @param bytes - File size in bytes
  * @returns Formatted file size (e.g., "1.5 MB")
