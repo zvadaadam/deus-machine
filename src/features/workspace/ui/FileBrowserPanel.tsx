@@ -46,7 +46,7 @@ export function FileBrowserPanel({
     if (onFileClickProp) {
       onFileClickProp(path);
     } else {
-      console.log("File clicked:", path);
+      if (import.meta.env.DEV) console.log("File clicked:", path);
       // TODO: Open file viewer or send to chat
     }
   };

@@ -23,7 +23,7 @@ export function useKeyboardShortcuts({
       // ⌘R or Ctrl+R - Refresh workspace data
       if ((e.metaKey || e.ctrlKey) && e.key === "r") {
         e.preventDefault();
-        console.log("🔄 Refreshing workspace data...");
+        if (import.meta.env.DEV) console.log("🔄 Refreshing workspace data...");
         await onRefresh();
       }
 

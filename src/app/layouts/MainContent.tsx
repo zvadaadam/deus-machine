@@ -90,7 +90,7 @@ export function MainContent({
    * 2. User manually opens sidebar while panel is expanded → respect their choice
    * 3. Panel collapses → restore to saved state if user never reopened sidebar
    */
-  const [sidebarWasOpenBeforeExpansion, setSidebarWasOpenBeforeExpansion] = useState(false);
+  const sidebarWasOpenBeforeExpansionRef = useRef(false);
   const prevPanelExpandedRef = useRef(rightPanelExpanded);
 
   useEffect(() => {
@@ -98,23 +98,23 @@ export function MainContent({
     const panelJustCollapsed = !rightPanelExpanded && prevPanelExpandedRef.current;
 
     if (panelJustExpanded) {
-      setSidebarWasOpenBeforeExpansion(sidebarOpen);
+      sidebarWasOpenBeforeExpansionRef.current = sidebarOpen;
       if (sidebarOpen) {
         setSidebarOpen(false);
       }
     }
 
     if (panelJustCollapsed) {
-      if (!sidebarOpen && sidebarWasOpenBeforeExpansion) {
+      if (!sidebarOpen && sidebarWasOpenBeforeExpansionRef.current) {
         setSidebarOpen(true);
       }
-      setSidebarWasOpenBeforeExpansion(false);
+      sidebarWasOpenBeforeExpansionRef.current = false;
     }
 
     prevPanelExpandedRef.current = rightPanelExpanded;
-  }, [rightPanelExpanded, sidebarOpen, setSidebarOpen, sidebarWasOpenBeforeExpansion]);
+  }, [rightPanelExpanded, sidebarOpen, setSidebarOpen]);
 
-  // Sync state to persistence store
+  // Sync state to persistence store (trigger only on ID change, not all workspace properties)
   useEffect(() => {
     if (selectedWorkspace) {
       setLayoutState(selectedWorkspace.id, {
@@ -124,6 +124,7 @@ export function MainContent({
         selectedFile: selectedFile ? { path: selectedFile.path, source: "changes" } : null,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedWorkspace?.id,
     rightPanelExpanded,
@@ -133,15 +134,14 @@ export function MainContent({
     setLayoutState,
   ]);
 
-  // Restore layout state when workspace changes
+  // Restore layout state when workspace changes (setState is intentional for state restoration)
   useEffect(() => {
-    if (!selectedWorkspace) {
-      setSelectedFile(null);
-      return;
-    }
+    if (!selectedWorkspace) return;
 
     const layout = getLayoutState(selectedWorkspace.id);
+
     setRightPanelTab(layout.activeRightTab);
+
     setRightPanelExpanded(layout.rightPanelExpanded);
 
     if (layout.selectedFile && layout.activeRightTab !== "browser") {
@@ -154,11 +154,13 @@ export function MainContent({
     } else {
       setSelectedFile(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWorkspace?.id, getLayoutState]);
 
   // Handle branch rename
   const handleBranchRename = (newName: string) => {
-    console.log("Branch rename requested:", selectedWorkspace?.branch, "→", newName);
+    if (import.meta.env.DEV)
+      console.log("Branch rename requested:", selectedWorkspace?.branch, "→", newName);
   };
 
   // Tab management handlers
@@ -363,7 +365,7 @@ export function MainContent({
               onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)}
               className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-              <div className="bg-background/50 flex h-12 flex-shrink-0 items-center border-b border-border backdrop-blur-sm">
+              <div className="bg-background/50 border-border flex h-12 flex-shrink-0 items-center border-b backdrop-blur-sm">
                 <TabsList className="flex-1">
                   <TabsTrigger value="changes" className="min-w-[88px] justify-center">
                     Changes
@@ -401,9 +403,7 @@ export function MainContent({
                   <div className="flex h-full overflow-hidden">
                     <div
                       className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        rightPanelExpanded
-                          ? "border-border/40 w-[280px] border-r"
-                          : "flex-1"
+                        rightPanelExpanded ? "border-border/40 w-[280px] border-r" : "flex-1"
                       }`}
                     >
                       <FileChangesPanel
@@ -449,15 +449,13 @@ export function MainContent({
                   <div className="flex h-full overflow-hidden">
                     <div
                       className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        rightPanelExpanded
-                          ? "border-border/40 w-[280px] border-r"
-                          : "flex-1"
+                        rightPanelExpanded ? "border-border/40 w-[280px] border-r" : "flex-1"
                       }`}
                     >
                       <FileBrowserPanel
                         selectedWorkspace={selectedWorkspace}
                         onFileClick={(path) => {
-                          console.log("File browser click:", path);
+                          if (import.meta.env.DEV) console.log("File browser click:", path);
                         }}
                       />
                     </div>

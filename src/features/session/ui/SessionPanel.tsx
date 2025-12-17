@@ -66,18 +66,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
       // TODO: Implement API call to update session model
-      console.log("[SessionPanel] Model changed to:", newModel);
     };
 
     const handleThinkingLevelChange = (level: string) => {
       setThinkingLevel(level);
       // TODO: Implement API call to update session thinking level
-      console.log("[SessionPanel] Thinking level changed to:", level);
     };
 
     const handleAttachmentClick = () => {
       // TODO: Implement file picker dialog
-      console.log("[SessionPanel] Attachment clicked");
     };
 
     // TODO: Fetch MCP servers from settings/API

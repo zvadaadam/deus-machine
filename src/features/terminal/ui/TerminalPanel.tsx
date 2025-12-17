@@ -82,14 +82,14 @@ export function TerminalPanel({ workspacePath, workspaceName, onCollapse }: Term
   }
 
   async function handleRunWorkspace() {
-    console.log("Run workspace clicked for:", workspaceName);
+    if (import.meta.env.DEV) console.log("Run workspace clicked for:", workspaceName);
     setDetectingServer(true);
 
     try {
       const server = await detectDevServer();
 
       if (server) {
-        console.log(`✅ Detected dev server at ${server.url}`);
+        if (import.meta.env.DEV) console.log(`✅ Detected dev server at ${server.url}`);
         setBrowserUrl(server.url);
         setShowBrowser(true);
         setShowRun(false);
