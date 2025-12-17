@@ -22,17 +22,16 @@ export interface FileTreeResponse {
  * Much faster than Node.js for large repositories
  */
 async function scanWorkspaceFiles(workspacePath: string): Promise<FileTreeResponse> {
-  console.log("[useFilesRust] Invoking Rust scan_workspace_files:", workspacePath);
+  if (import.meta.env.DEV)
+    console.log("[useFilesRust] Invoking Rust scan_workspace_files:", workspacePath);
 
   try {
     const result = await invoke<FileTreeResponse>("scan_workspace_files", {
       workspacePath,
     });
 
-    console.log("[useFilesRust] Rust scan complete:", {
-      totalFiles: result.totalFiles,
-      totalSize: result.totalSize,
-    });
+    if (import.meta.env.DEV)
+      console.log("[useFilesRust] Rust scan complete:", { totalFiles: result.totalFiles });
 
     return result;
   } catch (error) {

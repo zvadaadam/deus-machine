@@ -69,7 +69,7 @@ async function discoverBackendPort(): Promise<number | null> {
         signal: AbortSignal.timeout(1000),
       });
       if (response.ok) {
-        console.log(`[API] Found backend on stored port: ${port}`);
+        if (import.meta.env.DEV) console.log(`[API] Found backend on stored port: ${port}`);
         return port;
       }
     } catch (e) {
@@ -78,7 +78,8 @@ async function discoverBackendPort(): Promise<number | null> {
   }
 
   // Try discovery on common ports in parallel for speed
-  console.log(`[API] Scanning ${DISCOVERY_PORTS.length} ports for backend...`);
+  if (import.meta.env.DEV)
+    console.log(`[API] Scanning ${DISCOVERY_PORTS.length} ports for backend...`);
 
   const portChecks = DISCOVERY_PORTS.map(async (port) => {
     try {
@@ -105,7 +106,7 @@ async function discoverBackendPort(): Promise<number | null> {
   const foundPort = results.find((port) => port !== null);
 
   if (foundPort) {
-    console.log(`[API] Discovered backend on port: ${foundPort}`);
+    if (import.meta.env.DEV) console.log(`[API] Discovered backend on port: ${foundPort}`);
     localStorage.setItem("conductor_backend_port", foundPort.toString());
     return foundPort;
   }
@@ -131,7 +132,7 @@ async function getBackendPort(): Promise<number> {
     if (import.meta.env.VITE_BACKEND_PORT) {
       const port = parseInt(import.meta.env.VITE_BACKEND_PORT as string, 10);
       if (!isNaN(port)) {
-        console.log(`[API] Using web dev backend port: ${port}`);
+        if (import.meta.env.DEV) console.log(`[API] Using web dev backend port: ${port}`);
         cachedPort = port;
         return port;
       }
@@ -140,19 +141,19 @@ async function getBackendPort(): Promise<number> {
     // 2. Try Tauri API (for Tauri app mode)
     try {
       const port = await invoke<number>("get_backend_port");
-      console.log(`[API] Using Tauri backend port: ${port}`);
+      if (import.meta.env.DEV) console.log(`[API] Using Tauri backend port: ${port}`);
       cachedPort = port;
       return port;
     } catch (error) {
-      console.log(
-        "[API] Tauri API not available (running in web browser), trying port discovery..."
-      );
+      if (import.meta.env.DEV)
+        console.log("[API] Tauri API not available, trying port discovery...");
     }
 
     // 3. Try port discovery (for web browser accessing Vite dev server)
     const discoveredPort = await discoverBackendPort();
     if (discoveredPort) {
-      console.log(`[API] Using discovered backend port: ${discoveredPort}`);
+      if (import.meta.env.DEV)
+        console.log(`[API] Using discovered backend port: ${discoveredPort}`);
       cachedPort = discoveredPort;
       return discoveredPort;
     }

@@ -59,11 +59,8 @@ export function useSessionEvents(sessionId: string | null) {
 
       // Only process events for this session
       if (session_id === sessionId) {
-        console.log("[Events] 📨 New message received:", {
-          message_id,
-          sdk_message_id,
-          latency: "<100ms", // Real-time!
-        });
+        if (import.meta.env.DEV)
+          console.log("[Events] 📨 New message received:", { message_id, sdk_message_id });
 
         // Invalidate messages query to trigger refetch
         queryClient.invalidateQueries({
@@ -77,16 +74,18 @@ export function useSessionEvents(sessionId: string | null) {
       }
     });
 
-    // Log when listener is ready
-    unlistenPromise.then(() => {
-      console.log("[Events] 👂 Listening for session events:", sessionId.substring(0, 8));
-    });
+    // Log when listener is ready (dev only)
+    if (import.meta.env.DEV) {
+      unlistenPromise.then(() => {
+        console.log("[Events] 👂 Listening for session events:", sessionId.substring(0, 8));
+      });
+    }
 
     // Cleanup: await the promise to get unlisten function
     return () => {
       unlistenPromise.then((unlisten) => {
         unlisten();
-        console.log("[Events] 🔇 Stopped listening for session events");
+        if (import.meta.env.DEV) console.log("[Events] 🔇 Stopped listening for session events");
       });
     };
   }, [sessionId, queryClient]);

@@ -75,7 +75,7 @@ export const MessageItem = memo(function MessageItem({
 
   const handleRevert = () => {
     // TODO: Implement revert functionality
-    console.log("Revert to message:", message.id);
+    if (import.meta.env.DEV) console.log("Revert to message:", message.id);
   };
 
   // Helper: Render content blocks with proper keys (DRY - used for both user/assistant)
