@@ -91,7 +91,6 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
         addLog("error", `Failed to start MCP server: ${err.message}`);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
 
   // Log when MCP server starts
@@ -374,7 +373,9 @@ export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
         const to = new URL(currentUrl).origin;
         frame.postMessage({ type: "disable-element-selection" }, to);
       }
-    } catch {}
+    } catch {
+      // Best-effort - ignore errors (e.g., cross-origin restrictions)
+    }
     addLog("info", "📝 Element data sent to chat");
   }
 

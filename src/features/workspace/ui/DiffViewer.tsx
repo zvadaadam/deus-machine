@@ -141,7 +141,7 @@ export function DiffViewer({
         );
 
         // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
-        let wordDiffCache = new Map<number, { oldRanges: any[]; newRanges: any[] }>();
+        const wordDiffCache = new Map<number, { oldRanges: any[]; newRanges: any[] }>();
 
         for (let i = 0; i < syntaxHighlighted.length; i++) {
           const line = syntaxHighlighted[i];
