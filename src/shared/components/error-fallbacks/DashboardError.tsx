@@ -1,45 +1,27 @@
-/**
- * Dashboard-specific error fallback UI
- * Shown when the Dashboard component crashes
- */
-export function DashboardError() {
-  const handleReload = () => {
-    window.location.href = "/";
-  };
+import type { FallbackProps } from "react-error-boundary";
+import { Button } from "@/components/ui/button";
 
+/**
+ * Dashboard-specific error fallback UI.
+ * Shown when the Dashboard/MainLayout component crashes.
+ * Uses FallbackProps to integrate with react-error-boundary.
+ */
+export function DashboardError({ resetErrorBoundary }: FallbackProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        padding: "2rem",
-        backgroundColor: "var(--bg-primary)",
-      }}
-    >
-      <div style={{ maxWidth: "500px", textAlign: "center" }}>
-        <div style={{ fontSize: "64px", marginBottom: "1rem" }}>📊</div>
-        <h2 style={{ fontSize: "24px", fontWeight: 600, marginBottom: "1rem" }}>Dashboard Error</h2>
-        <p style={{ color: "var(--text-secondary)", marginBottom: "2rem" }}>
+    <div className="bg-background text-foreground flex h-screen items-center justify-center p-8">
+      <div className="max-w-md text-center">
+        <div className="mb-4 text-6xl">&#x1F4CA;</div>
+        <h2 className="mb-4 text-2xl font-semibold">Dashboard Error</h2>
+        <p className="text-muted-foreground mb-8">
           The dashboard encountered an error while loading your workspaces. This might be a
           temporary issue.
         </p>
-        <button
-          onClick={handleReload}
-          style={{
-            padding: "0.75rem 1.5rem",
-            backgroundColor: "var(--primary)",
-            color: "var(--primary-foreground)",
-            border: "none",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: 500,
-            cursor: "pointer",
-          }}
-        >
-          Reload Dashboard
-        </button>
+        <div className="flex justify-center gap-4">
+          <Button onClick={resetErrorBoundary}>Try Again</Button>
+          <Button onClick={() => (window.location.href = "/")} variant="outline">
+            Reload Dashboard
+          </Button>
+        </div>
       </div>
     </div>
   );
