@@ -105,6 +105,53 @@ function detectDefaultBranch(root_path) {
   return 'main';
 }
 
+/**
+ * Resolve the parent branch for a workspace with fallback strategy
+ * This is called dynamically on each diff request to handle branch changes
+ *
+ * @param {string} workspacePath - Full path to workspace directory
+ * @param {string|null} parentBranch - Workspace's configured parent branch
+ * @param {string|null} defaultBranch - Repository's default branch
+ * @returns {string} The resolved branch ref (e.g., "origin/main")
+ */
+function resolveParentBranch(workspacePath, parentBranch, defaultBranch) {
+  // Priority order: parent_branch → default_branch → main → master → develop
+  const candidates = [
+    parentBranch,
+    defaultBranch,
+    'main',
+    'master',
+    'develop',
+  ].filter(Boolean);
+
+  for (const branch of candidates) {
+    const ref = `origin/${branch}`;
+    try {
+      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/${ref}`], {
+        cwd: workspacePath,
+        timeout: 2000
+      });
+      return ref; // Branch exists
+    } catch {
+      // Branch doesn't exist, try next
+    }
+  }
+
+  // Last resort: return whatever HEAD points to locally
+  try {
+    const headRef = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: workspacePath,
+      encoding: 'utf-8',
+      timeout: 2000
+    }).trim();
+    // Use local branch comparison as fallback
+    return headRef;
+  } catch {
+    // Absolute fallback - will likely fail but provides consistent error
+    return 'origin/main';
+  }
+}
+
 // Initialize settings table if it doesn't exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
@@ -463,10 +510,10 @@ app.get('/api/workspaces/:id/diff-stats', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
+    const parentBranch = resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
 
-    // Get git diff stats comparing against remote parent branch (origin/main)
-    // This ensures we always compare against the latest remote state, even if local main is outdated
+    // Get git diff stats comparing against remote parent branch
+    // This ensures we always compare against the latest remote state
     try {
       const output = execFileSync(
         'git',
@@ -510,7 +557,7 @@ app.get('/api/workspaces/:id/diff-files', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
+    const parentBranch = resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
 
     try {
       const output = execFileSync(
@@ -552,7 +599,11 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
     const { file } = req.query;
 
     if (!file) {
-      return res.status(400).json({ error: 'file parameter is required' });
+      return res.status(400).json({
+        error: 'validation_error',
+        message: 'file parameter is required',
+        retryable: false
+      });
     }
 
     const workspace = db.prepare(`
@@ -563,11 +614,15 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
     `).get(req.params.id);
 
     if (!workspace || !workspace.root_path || !workspace.directory_name) {
-      return res.status(404).json({ error: 'Workspace not found' });
+      return res.status(404).json({
+        error: 'not_found',
+        message: 'Workspace not found',
+        retryable: false
+      });
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const parentBranch = `origin/${workspace.parent_branch || workspace.default_branch || 'main'}`;
+    const parentBranch = resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
 
     try {
       const output = execFileSync(
@@ -586,10 +641,42 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
         diff: output
       });
     } catch (gitError) {
-      res.status(500).json({ error: 'Failed to get diff', details: gitError.message });
+      // Structured error response with details for debugging
+      const errorResponse = {
+        error: 'diff_failed',
+        message: 'Failed to get diff',
+        retryable: true,
+        details: {
+          file,
+          parentBranch,
+          reason: null
+        }
+      };
+
+      if (gitError.killed) {
+        errorResponse.message = 'Diff operation timed out';
+        errorResponse.details.reason = 'timeout';
+      } else if (gitError.message?.includes('unknown revision')) {
+        errorResponse.message = 'Parent branch not found';
+        errorResponse.details.reason = 'branch_not_found';
+        errorResponse.retryable = false;
+      } else if (gitError.message?.includes('not a git repository')) {
+        errorResponse.message = 'Not a git repository';
+        errorResponse.details.reason = 'not_git_repo';
+        errorResponse.retryable = false;
+      } else {
+        errorResponse.details.reason = 'git_error';
+        errorResponse.details.errorMessage = gitError.message;
+      }
+
+      res.status(500).json(errorResponse);
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      error: 'server_error',
+      message: error.message,
+      retryable: true
+    });
   }
 });
 

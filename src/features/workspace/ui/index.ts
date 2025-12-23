@@ -1,4 +1,3 @@
-export { FileChangesPanel } from "./FileChangesPanel";
 export { FileBrowserPanel } from "./FileBrowserPanel";
 export { DiffViewer } from "./DiffViewer";
 export { MainContentTabs, MainContentTabBar, type Tab } from "./MainContentTabs";
