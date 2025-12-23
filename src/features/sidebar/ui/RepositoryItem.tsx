@@ -87,8 +87,7 @@ export function RepositoryItem({
           "group/repository-item relative flex items-center",
           // Expanded: px-2 for cleaner dense spacing
           // Collapsed: px-0 with justify-center to center the badge
-          sidebarExpanded &&
-            "hover:bg-sidebar-accent/30 rounded-md px-2 py-2 transition-colors duration-200",
+          sidebarExpanded && "rounded-md px-2 py-2",
           !sidebarExpanded && "justify-center overflow-visible px-0"
         )}
       >
@@ -103,7 +102,10 @@ export function RepositoryItem({
         >
           {dragHandleProps && <DragHandle {...dragHandleProps} />}
           <CollapsibleTrigger asChild>
-            <button className="flex flex-1 items-center justify-between gap-2 bg-transparent text-sm font-medium hover:bg-transparent focus:outline-none focus-visible:outline-none active:bg-transparent">
+            <Button
+              variant="ghost"
+              className="hover:bg-foreground/5 -m-2 h-auto flex-1 justify-between gap-2 rounded-md p-2 text-sm font-medium transition-colors duration-200"
+            >
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="truncate">{getCleanRepoName(repository.repo_name)}</span>
                 {/* Status indicators when collapsed */}
@@ -134,11 +136,11 @@ export function RepositoryItem({
 
               <ChevronDown
                 className={cn(
-                  "text-sidebar-foreground/50 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
+                  "text-sidebar-foreground/60 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
                   isCollapsed && "-rotate-90"
                 )}
               />
-            </button>
+            </Button>
           </CollapsibleTrigger>
         </div>
 
@@ -164,22 +166,22 @@ export function RepositoryItem({
                 isActive && "transition-transform duration-200 ease-out hover:translate-y-[-2px]",
                 isIdle && "transition-opacity duration-200 ease-out hover:opacity-60"
               )}
-              tooltip={(() => {
-                // Rich tooltip showing full breakdown
-                const parts: string[] = [];
-                if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
-                if (unreadCount > 0) parts.push(`${unreadCount} unread`);
-                if (workingCount > 0) parts.push(`${workingCount} working`);
-                const compactingCount = repository.workspaces.filter(
-                  (ws) => ws.session_status === "compacting"
-                ).length;
-                if (compactingCount > 0) parts.push(`${compactingCount} compacting`);
-                const idleCount = repository.workspaces.filter(
-                  (ws) => ws.session_status === "idle"
-                ).length;
-                if (idleCount > 0) parts.push(`${idleCount} idle`);
-                return `${repository.repo_name}${parts.length > 0 ? "\n" + parts.join(" • ") : ""}`;
-              })()}
+              tooltip={{
+                children: (() => {
+                  // Build status parts: errors, needs review, working (no idle)
+                  const parts: string[] = [];
+                  if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
+                  if (unreadCount > 0) parts.push(`${unreadCount} needs review`);
+                  if (workingCount > 0) parts.push(`${workingCount} working`);
+
+                  return (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium">{repository.repo_name}</span>
+                      {parts.length > 0 && <span className="opacity-60">{parts.join(" • ")}</span>}
+                    </div>
+                  );
+                })(),
+              }}
               onClick={handleClick}
             >
               <div className="relative flex items-center justify-center overflow-visible">
@@ -202,7 +204,7 @@ export function RepositoryItem({
                         strokeDasharray="40 60"
                         strokeLinecap="round"
                         className={cn(
-                          "opacity-55",
+                          "opacity-60",
                           ringColor === "working" && "text-status-working",
                           ringColor === "unread" && "text-status-unread",
                           ringColor === "error" && "text-destructive"
@@ -215,22 +217,22 @@ export function RepositoryItem({
                 {/* Main repository badge with ring - 32px (size-8) matches shadcn design */}
                 <div
                   className={cn(
-                    "relative flex h-8 w-8 items-center justify-center text-xs font-semibold",
+                    "relative flex h-8 w-8 items-center justify-center text-xs font-medium",
                     "rounded-lg",
                     "translate-z-0 transform-gpu",
                     // Only transition border-color (not shadow/layout) - fast and smooth
                     "transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
                     // Active repos: Full brightness with status ring
                     isActive && [
-                      "bg-sidebar-accent",
+                      "bg-foreground/5",
                       "border-2",
                       // Ring color hierarchy: error > unread > working
                       ringColor === "error" && "border-destructive",
                       ringColor === "unread" && "border-status-unread",
-                      ringColor === "working" && "border-status-working/70",
+                      ringColor === "working" && "border-status-working/60",
                     ],
                     // Idle repos: Reduced presence, no ring
-                    isIdle && ["bg-sidebar", "text-sidebar-foreground/40"]
+                    isIdle && ["bg-sidebar", "text-sidebar-foreground/30"]
                   )}
                   style={
                     // Use pseudo-element for glow via CSS variable (GPU-accelerated via opacity animation)
@@ -269,9 +271,9 @@ export function RepositoryItem({
                   ) : (
                     <span
                       className={cn(
-                        "relative z-10 text-xs font-semibold",
+                        "relative z-10 text-xs font-medium",
                         // Inherit parent opacity for idle repos, full brightness for active
-                        isIdle ? "text-sidebar-foreground/40" : "text-sidebar-foreground"
+                        isIdle ? "text-sidebar-foreground/30" : "text-sidebar-foreground"
                       )}
                     >
                       {getRepoInitials(repository.repo_name)}
@@ -332,7 +334,7 @@ export function RepositoryItem({
                       onClick={() => onNewWorkspace(repository.repo_id)}
                       className={cn(
                         "w-full px-2",
-                        "text-muted-foreground/60 hover:text-muted-foreground",
+                        "text-muted-foreground/60 hover:text-muted-foreground hover:bg-foreground/5",
                         "transition-colors duration-200 ease-out"
                       )}
                     >
