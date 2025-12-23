@@ -29,8 +29,8 @@ export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
               "h-auto w-full justify-start gap-3 rounded-lg p-2",
               "text-muted-foreground",
               "hover:bg-foreground/5 hover:text-foreground",
-              // Collapsed: center the icon, hide text
-              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+              // Collapsed: center the icon, disable button hover (icon container has its own)
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:hover:bg-transparent"
             )}
           >
             {/* Icon container - 32x32 to match header avatar */}
