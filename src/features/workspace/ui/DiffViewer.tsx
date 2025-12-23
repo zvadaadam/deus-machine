@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -10,7 +10,8 @@ import {
   type DiffLine,
 } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
-import { computeWordDiff, applyWordHighlights } from "@/shared/lib/wordDiff";
+import { computeWordDiff, applyWordHighlights, type HighlightRange } from "@/shared/lib/wordDiff";
+import { useTheme } from "@/app/providers";
 
 interface DiffViewerProps {
   filePath?: string;
@@ -65,30 +66,13 @@ export function DiffViewer({
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const [highlightedHunks, setHighlightedHunks] = useState<HighlightedHunk[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
-  const [theme, setTheme] = useState<"github-dark" | "github-light">("github-dark");
 
-  /**
-   * Detect current theme from document.documentElement.classList
-   * Watches for theme changes via MutationObserver
-   */
-  useEffect(() => {
-    const detectTheme = () => {
-      const isDark = document.documentElement.classList.contains("dark");
-      setTheme(isDark ? "github-dark" : "github-light");
-    };
-
-    // Initial detection
-    detectTheme();
-
-    // Watch for theme changes
-    const observer = new MutationObserver(detectTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
+  // Use app theme provider instead of MutationObserver
+  const { actualTheme } = useTheme();
+  const shikiTheme = useMemo(
+    () => (actualTheme === "dark" ? "github-dark" : "github-light"),
+    [actualTheme]
+  );
 
   /**
    * Extract filename and path context from full file path
@@ -136,12 +120,15 @@ export function DiffViewer({
         const syntaxHighlighted = await Promise.all(
           hunk.lines.map(async (line) => ({
             ...line,
-            syntaxHtml: await highlightDiffLine(line.content, language, theme),
+            syntaxHtml: await highlightDiffLine(line.content, language, shikiTheme),
           }))
         );
 
         // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
-        const wordDiffCache = new Map<number, { oldRanges: any[]; newRanges: any[] }>();
+        const wordDiffCache = new Map<
+          number,
+          { oldRanges: HighlightRange[]; newRanges: HighlightRange[] }
+        >();
 
         for (let i = 0; i < syntaxHighlighted.length; i++) {
           const line = syntaxHighlighted[i];
@@ -226,7 +213,7 @@ export function DiffViewer({
     return () => {
       cancelled = true;
     };
-  }, [diff, language, theme]);
+  }, [diff, language, shikiTheme]);
 
   /**
    * Copy diff content to clipboard

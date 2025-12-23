@@ -10,8 +10,7 @@ import { WorkspaceService } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
-import type { RepoGroup, DiffStats, FileChange } from "../types";
-import type { PRStatus, DevServer } from "@/shared/types";
+import type { RepoGroup, DiffStats } from "../types";
 
 /**
  * Fetch workspaces grouped by repository with polling
@@ -56,6 +55,9 @@ export function useDiffStats(workspaceId: string | null, sessionStatus?: string 
     // ✅ Poll ONLY when workspace is actively working
     // TODO: Disable on desktop once git diff events are implemented
     refetchInterval: sessionStatus === "working" ? 5000 : false,
+    // Always refetch when switching workspaces or returning to tab
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -159,6 +161,9 @@ export function useFileChanges(workspaceId: string | null, sessionStatus?: strin
     // ✅ Poll ONLY when workspace is actively working
     // TODO: Disable on desktop once git file events are implemented
     refetchInterval: sessionStatus === "working" ? 5000 : false,
+    // Always refetch when switching workspaces or returning to tab
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -245,23 +250,20 @@ export function useArchiveWorkspace() {
       );
 
       // Optimistically remove the workspace from the list
-      queryClient.setQueryData<RepoGroup[]>(
-        queryKeys.workspaces.byRepo("ready"),
-        (old) => {
-          if (!old) return old;
-          return produce(old, (draft) => {
-            for (const repo of draft) {
-              const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
-              if (index !== -1) {
-                repo.workspaces.splice(index, 1);
-                break;
-              }
+      queryClient.setQueryData<RepoGroup[]>(queryKeys.workspaces.byRepo("ready"), (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
+            if (index !== -1) {
+              repo.workspaces.splice(index, 1);
+              break;
             }
-            // Remove empty repos
-            return draft.filter((repo) => repo.workspaces.length > 0);
-          });
-        }
-      );
+          }
+          // Remove empty repos
+          return draft.filter((repo) => repo.workspaces.length > 0);
+        });
+      });
 
       // Return context with the previous value for rollback
       return { previousData };
@@ -270,10 +272,7 @@ export function useArchiveWorkspace() {
     // If mutation fails, roll back to the previous value
     onError: (_err, _workspaceId, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.workspaces.byRepo("ready"),
-          context.previousData
-        );
+        queryClient.setQueryData(queryKeys.workspaces.byRepo("ready"), context.previousData);
       }
     },
 
@@ -321,10 +320,7 @@ export function useUpdateSystemPrompt() {
         workspaceId,
       ]);
 
-      queryClient.setQueryData(
-        ["workspaces", "system-prompt", workspaceId],
-        systemPrompt
-      );
+      queryClient.setQueryData(["workspaces", "system-prompt", workspaceId], systemPrompt);
 
       return { previousPrompt };
     },
