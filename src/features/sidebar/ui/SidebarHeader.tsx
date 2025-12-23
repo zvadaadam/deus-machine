@@ -57,12 +57,14 @@ export function SidebarHeader({
               <PanelLeft className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right" align="center" hidden={!showTooltip}>
-            <p className="flex items-center gap-2 text-xs">
-              <span>{isExpanded ? "Collapse" : "Expand"} sidebar</span>
-              <kbd className="font-mono text-xs opacity-60">{modKey}B</kbd>
-            </p>
-          </TooltipContent>
+          {showTooltip && (
+            <TooltipContent side="right" align="center">
+              <p className="flex items-center gap-2 text-xs">
+                <span>{isExpanded ? "Collapse" : "Expand"} sidebar</span>
+                <kbd className="font-mono text-xs opacity-60">{modKey}B</kbd>
+              </p>
+            </TooltipContent>
+          )}
         </Tooltip>
 
         {/* Settings Button - Avatar + Name */}
