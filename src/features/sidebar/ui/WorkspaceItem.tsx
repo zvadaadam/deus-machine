@@ -88,8 +88,8 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
           "transition-all duration-[80ms] ease-out",
 
           // State-based backgrounds - subtle surface elevation
-          isActive && "bg-muted/60",
-          !isActive && "hover:bg-muted/30"
+          isActive && "bg-foreground/5",
+          !isActive && "hover:bg-foreground/5"
         )}
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
@@ -113,10 +113,10 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
             <span className="text-foreground truncate text-sm font-normal">{workspace.branch}</span>
             {/* Directory name and status on bottom */}
             <div className="flex min-w-0 items-center gap-0">
-              <span className="text-muted-foreground/70 truncate text-xs">
+              <span className="text-muted-foreground/60 truncate text-xs">
                 {workspace.directory_name}
               </span>
-              <span className="text-muted-foreground/70 shrink-0 text-xs">・</span>
+              <span className="text-muted-foreground/60 shrink-0 text-xs">・</span>
               {shouldShimmer(workspace.session_status) ? (
                 <TextShimmer
                   as="span"

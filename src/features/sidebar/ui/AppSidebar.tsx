@@ -33,7 +33,7 @@ export function AppSidebar({
   onArchive,
   profile = { username: "User" },
 }: AppSidebarProps) {
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const { openSettingsModal } = useUIStore();
   const {
     collapsedRepos,
@@ -218,7 +218,12 @@ export function AppSidebar({
 
   return (
     <Sidebar variant="inset" collapsible="icon">
-      <SidebarHeader profile={profile} onOpenSettings={openSettingsModal} />
+      <SidebarHeader
+        profile={profile}
+        onOpenSettings={openSettingsModal}
+        onToggleSidebar={toggleSidebar}
+        isExpanded={isExpanded}
+      />
 
       {/* Repositories List - Single tree for smooth animations */}
       <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">

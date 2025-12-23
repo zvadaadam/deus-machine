@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OpenInDropdown } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
@@ -154,28 +152,22 @@ export function MainContentTabBar({
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-shrink-0 flex-col">
         {/* ROW 1: Context Bar - Who & Where (48px) */}
-        <div className="border-border/50 bg-background/50 flex h-12 items-center justify-between border-b px-5 backdrop-blur-sm">
-          {/* Left: Sidebar Trigger */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200"
-            asChild
-          >
-            <SidebarTrigger />
-          </Button>
-
+        <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-center border-b px-5 backdrop-blur-sm">
           {/* Center: Breadcrumb - Repository / Branch (Editable) */}
+          {/* max-w prevents overlap with absolutely positioned right actions */}
           {branch && (
-            <div className="group flex flex-1 items-center justify-center gap-2 px-6">
+            <div className="group flex max-w-[calc(100%-100px)] items-center justify-center gap-2">
               <FolderGit className="text-muted-foreground/60 h-4 w-4 flex-shrink-0" />
 
               {repositoryName && (
                 <>
-                  <span className="text-muted-foreground/60 flex-shrink-0 font-mono text-sm">
+                  <span
+                    className="text-muted-foreground/60 max-w-[200px] truncate font-mono text-sm"
+                    title={repositoryName}
+                  >
                     {repositoryName}
                   </span>
-                  <span className="text-muted-foreground/40 select-none">/</span>
+                  <span className="text-muted-foreground/40 flex-shrink-0 select-none">/</span>
                 </>
               )}
 
@@ -202,12 +194,12 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   disabled={!onBranchRename}
                   className={cn(
-                    "text-foreground/90 font-mono text-sm font-medium",
+                    "text-foreground/90 max-w-[200px] truncate font-mono text-sm font-medium",
                     "hover:text-foreground",
                     "transition-colors duration-150 ease-out",
                     onBranchRename && "cursor-text"
                   )}
-                  title={onBranchRename ? "Click to edit branch name" : undefined}
+                  title={onBranchRename ? `${branch} — click to edit` : branch}
                 >
                   {branch}
                 </button>
@@ -227,11 +219,12 @@ export function MainContentTabBar({
             </div>
           )}
 
-          {/* Right: Meta Actions */}
-          <div className="flex items-center gap-2">
-            {/* Browser button removed - now in right panel tabs */}
-            {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
-          </div>
+          {/* Right: Meta Actions - positioned absolutely to not affect centering */}
+          {workspacePath && (
+            <div className="absolute right-5 flex items-center gap-2">
+              <OpenInDropdown workspacePath={workspacePath} iconOnly />
+            </div>
+          )}
         </div>
 
         {/* ROW 2: Navigation Bar - What (44px) */}
