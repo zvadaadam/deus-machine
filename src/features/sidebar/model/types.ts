@@ -68,6 +68,8 @@ export interface SidebarHeaderProps {
     email?: string;
   };
   onOpenSettings: () => void;
+  onToggleSidebar: () => void;
+  isExpanded: boolean;
 }
 
 /**

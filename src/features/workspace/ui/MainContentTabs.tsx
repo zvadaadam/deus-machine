@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OpenInDropdown } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
@@ -154,20 +152,10 @@ export function MainContentTabBar({
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-shrink-0 flex-col">
         {/* ROW 1: Context Bar - Who & Where (48px) */}
-        <div className="border-border/50 bg-background/50 flex h-12 items-center justify-between border-b px-5 backdrop-blur-sm">
-          {/* Left: Sidebar Trigger */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200"
-            asChild
-          >
-            <SidebarTrigger />
-          </Button>
-
+        <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-center border-b px-5 backdrop-blur-sm">
           {/* Center: Breadcrumb - Repository / Branch (Editable) */}
           {branch && (
-            <div className="group flex flex-1 items-center justify-center gap-2 px-6">
+            <div className="group flex items-center justify-center gap-2">
               <FolderGit className="text-muted-foreground/60 h-4 w-4 flex-shrink-0" />
 
               {repositoryName && (
@@ -227,11 +215,12 @@ export function MainContentTabBar({
             </div>
           )}
 
-          {/* Right: Meta Actions */}
-          <div className="flex items-center gap-2">
-            {/* Browser button removed - now in right panel tabs */}
-            {workspacePath && <OpenInDropdown workspacePath={workspacePath} iconOnly />}
-          </div>
+          {/* Right: Meta Actions - positioned absolutely to not affect centering */}
+          {workspacePath && (
+            <div className="absolute right-5 flex items-center gap-2">
+              <OpenInDropdown workspacePath={workspacePath} iconOnly />
+            </div>
+          )}
         </div>
 
         {/* ROW 2: Navigation Bar - What (44px) */}

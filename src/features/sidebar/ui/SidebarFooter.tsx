@@ -1,48 +1,56 @@
 import { Plus } from "lucide-react";
-import {
-  SidebarFooter as SidebarFooterUI,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar";
+import { SidebarFooter as SidebarFooterUI, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type { SidebarFooterProps } from "../model/types";
 
 /**
  * SidebarFooter Component
  * Displays "Add Repository" button
+ * Structure mirrors SidebarHeader for consistency
  */
 export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
+  const { state, isMobile } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  // Tooltip only shows when collapsed AND not on mobile (matches SidebarMenuButton behavior)
+  const showTooltip = isCollapsed && !isMobile;
+
   return (
-    <SidebarFooterUI className="p-0">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onAddRepository?.()}
-        className={cn(
-          "h-8 w-full px-2",
-          "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-          "transition-colors duration-200 ease-out",
-          "group-data-[collapsible=icon]:hidden"
-        )}
-      >
-        <div className="flex w-full items-center gap-3">
-          <Plus className="h-4 w-4 flex-shrink-0" />
-          <span className="text-sm">Add Repository</span>
-        </div>
-      </Button>
-      <SidebarMenu className="hidden group-data-[collapsible=icon]:block">
-        <SidebarMenuItem>
-          <SidebarMenuButton
+    <SidebarFooterUI className="p-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
             onClick={() => onAddRepository?.()}
-            tooltip="Add Repository"
             aria-label="Add Repository"
+            className={cn(
+              "h-auto w-full justify-start gap-3 rounded-lg p-2",
+              "text-muted-foreground",
+              "hover:bg-foreground/5 hover:text-foreground",
+              // Collapsed: center the icon, hide text
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+            )}
           >
-            <Plus className="h-4 w-4" />
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+            {/* Icon container - 32x32 to match header avatar */}
+            <div
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center",
+                // Collapsed: subtle hover effect
+                "group-data-[collapsible=icon]:hover:bg-foreground/5 group-data-[collapsible=icon]:rounded-lg"
+              )}
+            >
+              <Plus className="h-4 w-4" />
+            </div>
+            {/* Label - hidden when collapsed */}
+            <span className="text-sm group-data-[collapsible=icon]:hidden">Add Repository</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right" align="center" hidden={!showTooltip}>
+          <p className="text-xs">Add Repository</p>
+        </TooltipContent>
+      </Tooltip>
     </SidebarFooterUI>
   );
 }

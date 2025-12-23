@@ -29,7 +29,7 @@ export function DragHandle({ attributes, listeners, setActivatorNodeRef }: DragH
         "transition-opacity duration-200",
 
         // Visual styling
-        "text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors duration-200",
+        "text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors duration-200",
         "cursor-grab active:cursor-grabbing",
         "touch-none"
       )}
