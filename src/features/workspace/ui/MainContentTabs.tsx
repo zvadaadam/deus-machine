@@ -199,7 +199,7 @@ export function MainContentTabBar({
                     "transition-colors duration-150 ease-out",
                     onBranchRename && "cursor-text"
                   )}
-                  title={branch}
+                  title={onBranchRename ? `${branch} — click to edit` : branch}
                 >
                   {branch}
                 </button>
