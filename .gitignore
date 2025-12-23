@@ -69,3 +69,6 @@ temp/
 
 # MCP Configuration (user-specific)
 .mcp.json
+
+*storybook.log
+storybook-static
