@@ -161,7 +161,10 @@ export function MainContentTabBar({
 
               {repositoryName && (
                 <>
-                  <span className="text-muted-foreground/60 max-w-[200px] truncate font-mono text-sm">
+                  <span
+                    className="text-muted-foreground/60 max-w-[200px] truncate font-mono text-sm"
+                    title={repositoryName}
+                  >
                     {repositoryName}
                   </span>
                   <span className="text-muted-foreground/40 flex-shrink-0 select-none">/</span>
@@ -196,7 +199,7 @@ export function MainContentTabBar({
                     "transition-colors duration-150 ease-out",
                     onBranchRename && "cursor-text"
                   )}
-                  title={onBranchRename ? "Click to edit branch name" : undefined}
+                  title={branch}
                 >
                   {branch}
                 </button>
