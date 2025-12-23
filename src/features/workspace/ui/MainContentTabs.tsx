@@ -154,16 +154,17 @@ export function MainContentTabBar({
         {/* ROW 1: Context Bar - Who & Where (48px) */}
         <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-center border-b px-5 backdrop-blur-sm">
           {/* Center: Breadcrumb - Repository / Branch (Editable) */}
+          {/* max-w prevents overlap with absolutely positioned right actions */}
           {branch && (
-            <div className="group flex items-center justify-center gap-2">
+            <div className="group flex max-w-[calc(100%-100px)] items-center justify-center gap-2">
               <FolderGit className="text-muted-foreground/60 h-4 w-4 flex-shrink-0" />
 
               {repositoryName && (
                 <>
-                  <span className="text-muted-foreground/60 flex-shrink-0 font-mono text-sm">
+                  <span className="text-muted-foreground/60 max-w-[200px] truncate font-mono text-sm">
                     {repositoryName}
                   </span>
-                  <span className="text-muted-foreground/40 select-none">/</span>
+                  <span className="text-muted-foreground/40 flex-shrink-0 select-none">/</span>
                 </>
               )}
 
@@ -190,7 +191,7 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   disabled={!onBranchRename}
                   className={cn(
-                    "text-foreground/90 font-mono text-sm font-medium",
+                    "text-foreground/90 max-w-[200px] truncate font-mono text-sm font-medium",
                     "hover:text-foreground",
                     "transition-colors duration-150 ease-out",
                     onBranchRename && "cursor-text"

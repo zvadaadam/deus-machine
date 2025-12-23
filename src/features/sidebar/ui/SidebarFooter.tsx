@@ -47,9 +47,11 @@ export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
             <span className="text-sm group-data-[collapsible=icon]:hidden">Add Repository</span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right" align="center" hidden={!showTooltip}>
-          <p className="text-xs">Add Repository</p>
-        </TooltipContent>
+        {showTooltip && (
+          <TooltipContent side="right" align="center">
+            <p className="text-xs">Add Repository</p>
+          </TooltipContent>
+        )}
       </Tooltip>
     </SidebarFooterUI>
   );
