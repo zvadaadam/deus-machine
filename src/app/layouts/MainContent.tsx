@@ -4,14 +4,13 @@ import type { SessionPanelRef } from "@/features/session";
 import { CollapsibleTerminalPanel } from "@/features/terminal";
 import { WelcomeView } from "@/features/repository";
 import {
-  DiffViewer,
-  FileBrowserPanel,
   MainContentTabBar,
   useWorkspaceLayout,
   useFileChanges,
   WorkspaceService,
 } from "@/features/workspace";
 import { FileChangesPanel } from "@/features/file-changes";
+import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import { BrowserPanel } from "@/features/browser";
 import {
   Button,
@@ -79,7 +78,7 @@ export function MainContent({
         return { diff: data.diff || "No diff available" };
       } catch (error) {
         console.error("Failed to fetch diff:", error);
-        return { diff: "Error loading diff" };
+        return { diff: "Error loading diff:" };
       }
     },
     [selectedWorkspace]
@@ -92,6 +91,9 @@ export function MainContent({
     additions: number;
     deletions: number;
   } | null>(null);
+
+  // Selected file for file browser viewing (full file content from working tree)
+  const [browserSelectedFile, setBrowserSelectedFile] = useState<string | null>(null);
 
   // Track workspace changes to clear stale state
   const prevWorkspaceIdRef = useRef<string | null>(null);
@@ -401,20 +403,16 @@ export function MainContent({
                       <FileBrowserPanel
                         selectedWorkspace={selectedWorkspace}
                         onFileClick={(path) => {
-                          if (import.meta.env.DEV) console.log("File browser click:", path);
+                          setBrowserSelectedFile(path);
+                          setRightPanelExpanded(true);
                         }}
                       />
                     </div>
 
                     {rightPanelExpanded && (
                       <div className="animate-in slide-in-from-right-2 flex-1 overflow-hidden duration-300">
-                        {selectedFile ? (
-                          <DiffViewer
-                            filePath={selectedFile.path}
-                            diff={selectedFile.diff}
-                            additions={selectedFile.additions}
-                            deletions={selectedFile.deletions}
-                          />
+                        {browserSelectedFile ? (
+                          <FileViewer filePath={browserSelectedFile} />
                         ) : (
                           <div className="flex h-full items-center justify-center">
                             <div className="max-w-sm text-center">

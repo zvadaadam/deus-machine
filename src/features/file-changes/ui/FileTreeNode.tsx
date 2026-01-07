@@ -104,21 +104,28 @@ export const FileTreeNode = memo(function FileTreeNode({
       {/* Icon */}
       {isDirectory ? (
         isExpanded ? (
-          <FolderOpen className="text-primary/70 h-4 w-4 flex-shrink-0" />
+          <FolderOpen className="text-muted-foreground/50 h-4 w-4 flex-shrink-0" />
         ) : (
-          <Folder className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+          <Folder className="text-muted-foreground/40 h-4 w-4 flex-shrink-0" />
         )
       ) : (
         <div className="relative flex-shrink-0">
-          <FileText className="text-muted-foreground h-4 w-4" />
+          <FileText className="text-muted-foreground/70 h-4 w-4" />
           {node.status && (
             <FileStatusIcon status={node.status} className="absolute -top-0.5 -right-0.5" />
           )}
         </div>
       )}
 
-      {/* Name */}
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">{node.name}</span>
+      {/* Name - folders are subtle, files are prominent */}
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate font-mono text-xs",
+          isDirectory ? "text-muted-foreground/60" : "text-foreground/90"
+        )}
+      >
+        {node.name}
+      </span>
 
       {/* Stats (files only) */}
       {node.type === "file" && (node.additions || node.deletions) && (

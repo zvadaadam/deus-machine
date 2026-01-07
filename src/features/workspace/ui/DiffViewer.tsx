@@ -101,111 +101,130 @@ export function DiffViewer({
     let cancelled = false;
 
     const highlightDiff = async () => {
-      if (!diff || diff === "Loading diff..." || diff.includes("Error loading diff")) {
+      // Skip highlighting for loading/error states
+      if (!diff || diff === "Loading diff..." || diff.startsWith("Error loading diff:")) {
         if (!cancelled) setHighlightedHunks([]);
         return;
       }
 
       if (!cancelled) setIsHighlighting(true);
 
-      // Parse diff to extract code hunks (removes git metadata)
-      const hunks = parseDiff(diff);
-      const highlighted: HighlightedHunk[] = [];
+      try {
+        // Parse diff to extract code hunks (removes git metadata)
+        const hunks = parseDiff(diff);
+        const highlighted: HighlightedHunk[] = [];
 
-      // Highlight each hunk's lines with word-level precision
-      for (const hunk of hunks) {
-        const highlightedLines: HighlightedDiffLine[] = [];
+        // Highlight each hunk's lines with word-level precision
+        for (const hunk of hunks) {
+          const highlightedLines: HighlightedDiffLine[] = [];
 
-        // First pass: syntax highlight all lines with current theme
-        const syntaxHighlighted = await Promise.all(
-          hunk.lines.map(async (line) => ({
-            ...line,
-            syntaxHtml: await highlightDiffLine(line.content, language, shikiTheme),
-          }))
-        );
+          // First pass: syntax highlight all lines with current theme
+          const syntaxHighlighted = await Promise.all(
+            hunk.lines.map(async (line) => ({
+              ...line,
+              syntaxHtml: await highlightDiffLine(line.content, language, shikiTheme),
+            }))
+          );
 
-        // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
-        const wordDiffCache = new Map<
-          number,
-          { oldRanges: HighlightRange[]; newRanges: HighlightRange[] }
-        >();
+          // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
+          const wordDiffCache = new Map<
+            number,
+            { oldRanges: HighlightRange[]; newRanges: HighlightRange[] }
+          >();
 
-        for (let i = 0; i < syntaxHighlighted.length; i++) {
-          const line = syntaxHighlighted[i];
-          let finalHtml = line.syntaxHtml;
+          for (let i = 0; i < syntaxHighlighted.length; i++) {
+            const line = syntaxHighlighted[i];
+            let finalHtml = line.syntaxHtml;
 
-          // Only compute word diff for adjacent pairs and short lines
-          const MAX_LINE_LENGTH = 200;
+            // Only compute word diff for adjacent pairs and short lines
+            const MAX_LINE_LENGTH = 200;
 
-          if (line.type === "deletion" && i + 1 < syntaxHighlighted.length) {
-            const nextLine = syntaxHighlighted[i + 1];
+            if (line.type === "deletion" && i + 1 < syntaxHighlighted.length) {
+              const nextLine = syntaxHighlighted[i + 1];
 
-            // Only if next line is an addition AND both lines are reasonably short
-            if (
-              nextLine.type === "addition" &&
-              line.content.length < MAX_LINE_LENGTH &&
-              nextLine.content.length < MAX_LINE_LENGTH
-            ) {
-              // Compute word diff once and cache it
-              if (!wordDiffCache.has(i)) {
-                const diffResult = computeWordDiff(line.content, nextLine.content);
-                wordDiffCache.set(i, diffResult);
-              }
+              // Only if next line is an addition AND both lines are reasonably short
+              if (
+                nextLine.type === "addition" &&
+                line.content.length < MAX_LINE_LENGTH &&
+                nextLine.content.length < MAX_LINE_LENGTH
+              ) {
+                // Compute word diff once and cache it
+                if (!wordDiffCache.has(i)) {
+                  const diffResult = computeWordDiff(line.content, nextLine.content);
+                  wordDiffCache.set(i, diffResult);
+                }
 
-              const { oldRanges } = wordDiffCache.get(i)!;
-
-              // Apply highlights only if there are meaningful differences
-              if (oldRanges.length > 0 && oldRanges.length < 10) {
-                finalHtml = applyWordHighlights(
-                  line.syntaxHtml,
-                  line.content,
-                  oldRanges,
-                  "deletion"
-                );
-              }
-            }
-          } else if (line.type === "addition" && i > 0) {
-            const prevLine = syntaxHighlighted[i - 1];
-
-            // Only if previous line is a deletion AND both lines are reasonably short
-            if (
-              prevLine.type === "deletion" &&
-              line.content.length < MAX_LINE_LENGTH &&
-              prevLine.content.length < MAX_LINE_LENGTH
-            ) {
-              // Use cached result from deletion
-              const cached = wordDiffCache.get(i - 1);
-              if (cached) {
-                const { newRanges } = cached;
+                const { oldRanges } = wordDiffCache.get(i)!;
 
                 // Apply highlights only if there are meaningful differences
-                if (newRanges.length > 0 && newRanges.length < 10) {
+                if (oldRanges.length > 0 && oldRanges.length < 10) {
                   finalHtml = applyWordHighlights(
                     line.syntaxHtml,
                     line.content,
-                    newRanges,
-                    "addition"
+                    oldRanges,
+                    "deletion"
                   );
                 }
               }
+            } else if (line.type === "addition" && i > 0) {
+              const prevLine = syntaxHighlighted[i - 1];
+
+              // Only if previous line is a deletion AND both lines are reasonably short
+              if (
+                prevLine.type === "deletion" &&
+                line.content.length < MAX_LINE_LENGTH &&
+                prevLine.content.length < MAX_LINE_LENGTH
+              ) {
+                // Use cached result from deletion
+                const cached = wordDiffCache.get(i - 1);
+                if (cached) {
+                  const { newRanges } = cached;
+
+                  // Apply highlights only if there are meaningful differences
+                  if (newRanges.length > 0 && newRanges.length < 10) {
+                    finalHtml = applyWordHighlights(
+                      line.syntaxHtml,
+                      line.content,
+                      newRanges,
+                      "addition"
+                    );
+                  }
+                }
+              }
             }
+
+            highlightedLines.push({
+              ...line,
+              highlightedCode: finalHtml,
+            });
           }
 
-          highlightedLines.push({
-            ...line,
-            highlightedCode: finalHtml,
+          highlighted.push({
+            ...hunk,
+            lines: highlightedLines,
           });
         }
 
-        highlighted.push({
-          ...hunk,
-          lines: highlightedLines,
-        });
-      }
-
-      if (!cancelled) {
-        setHighlightedHunks(highlighted);
-        setIsHighlighting(false);
+        if (!cancelled) {
+          setHighlightedHunks(highlighted);
+          setIsHighlighting(false);
+        }
+      } catch (error) {
+        // Log error and show raw diff as fallback
+        console.error("[DiffViewer] Highlighting failed:", error);
+        if (!cancelled) {
+          // Create simple fallback with unhighlighted lines
+          const fallbackHunks = parseDiff(diff);
+          const fallbackHighlighted: HighlightedHunk[] = fallbackHunks.map((hunk) => ({
+            ...hunk,
+            lines: hunk.lines.map((line) => ({
+              ...line,
+              highlightedCode: line.content || "&nbsp;",
+            })),
+          }));
+          setHighlightedHunks(fallbackHighlighted);
+          setIsHighlighting(false);
+        }
       }
     };
 
@@ -244,6 +263,7 @@ export function DiffViewer({
     return (
       <div
         key={index}
+        data-line-type={type}
         className={cn("relative flex items-start font-mono text-xs leading-relaxed", {
           // Theme-aware backgrounds using CSS variables
           "bg-[var(--diff-addition-bg)]": type === "addition",
@@ -297,7 +317,7 @@ export function DiffViewer({
   };
 
   const isLoading = diff === "Loading diff..." || isHighlighting;
-  const hasError = diff.includes("Error loading diff") || diff === "No diff available";
+  const hasError = diff.startsWith("Error loading diff:") || diff === "No diff available";
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
