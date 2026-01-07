@@ -172,7 +172,7 @@ export function useTreeState(
         saveToStorage(workspaceId, autoExpand);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only react to nodes changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-expand when node count changes, not on every node update
   }, [nodes.length]);
 
   // Persist changes
