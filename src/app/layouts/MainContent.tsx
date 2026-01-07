@@ -132,10 +132,11 @@ export function MainContent({
     prevPanelExpandedRef.current = rightPanelExpanded;
   }, [rightPanelExpanded, sidebarOpen, setSidebarOpen]);
 
-  // Track workspace changes for file validation
+  // Track workspace changes - clear stale file selections
   const currentWorkspaceId = selectedWorkspace?.id ?? null;
   if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
     prevWorkspaceIdRef.current = currentWorkspaceId;
+    setBrowserSelectedFile(null);
   }
 
   // Validate selected file exists in current workspace
