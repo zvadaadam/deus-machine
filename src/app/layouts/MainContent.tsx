@@ -78,19 +78,13 @@ export function MainContent({
         return { diff: data.diff || "No diff available" };
       } catch (error) {
         console.error("Failed to fetch diff:", error);
-        return { diff: "Error loading diff:" };
+        return {
+          diff: `Error loading diff: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
       }
     },
     [selectedWorkspace]
   );
-
-  // Selected file for diff viewing (transient data not persisted)
-  const [selectedFile, setSelectedFile] = useState<{
-    path: string;
-    diff: string;
-    additions: number;
-    deletions: number;
-  } | null>(null);
 
   // Selected file for file browser viewing (full file content from working tree)
   const [browserSelectedFile, setBrowserSelectedFile] = useState<string | null>(null);
@@ -138,12 +132,10 @@ export function MainContent({
     prevPanelExpandedRef.current = rightPanelExpanded;
   }, [rightPanelExpanded, sidebarOpen, setSidebarOpen]);
 
-  // Handle workspace changes and file validation
-  // Using ref comparison to avoid cascading renders
+  // Track workspace changes for file validation
   const currentWorkspaceId = selectedWorkspace?.id ?? null;
   if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
     prevWorkspaceIdRef.current = currentWorkspaceId;
-    // Note: selectedFile will be reset via the handlers below
   }
 
   // Validate selected file exists in current workspace
@@ -230,32 +222,14 @@ export function MainContent({
    */
   const handleRightPanelTabChange = useCallback(
     (tab: RightPanelTab) => {
-      const previousTab = rightPanelTab;
       setRightPanelTab(tab);
-
-      // Restore last opened file when returning to Changes tab
-      if (
-        tab === "changes" &&
-        rightPanelExpanded &&
-        selectedFilePath &&
-        previousTab !== "changes"
-      ) {
-        setSelectedFile({
-          path: selectedFilePath,
-          diff: "Loading...",
-          additions: 0,
-          deletions: 0,
-        });
-      } else if (tab !== "changes" && tab !== "files") {
-        setSelectedFile(null);
-      }
 
       // Auto-expand for browser
       if (tab === "browser" && !rightPanelExpanded) {
         setRightPanelExpanded(true);
       }
     },
-    [rightPanelTab, rightPanelExpanded, selectedFilePath, setRightPanelTab, setRightPanelExpanded]
+    [rightPanelExpanded, setRightPanelTab, setRightPanelExpanded]
   );
 
   /**
@@ -263,7 +237,6 @@ export function MainContent({
    */
   const handlePanelCollapse = useCallback(() => {
     setRightPanelExpanded(false);
-    setSelectedFile(null);
     setSelectedFilePath(null);
     if (rightPanelTab === "browser") {
       setRightPanelTab("changes");
