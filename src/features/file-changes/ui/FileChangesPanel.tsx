@@ -91,7 +91,6 @@ export function FileChangesPanel({
 
   // Fetch diff when selected file changes
   useEffect(() => {
-    // No file selected - nothing to fetch
     if (!selectedFilePath) {
       return;
     }
