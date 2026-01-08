@@ -6,7 +6,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/u
 import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
 import { FileTree } from "./components/FileTree";
 import type { Workspace } from "@/shared/types";
-import type { FileTreeNode } from "../api/useFilesRust";
+import type { FileTreeNode } from "../types";
 
 interface FileBrowserPanelProps {
   selectedWorkspace: Workspace | null;
@@ -47,7 +47,6 @@ export function FileBrowserPanel({
       onFileClickProp(path);
     } else {
       if (import.meta.env.DEV) console.log("File clicked:", path);
-      // TODO: Open file viewer or send to chat
     }
   };
 
