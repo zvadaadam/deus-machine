@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { formatFileSize } from "@/shared/lib/formatters";
-import type { FileTreeNode } from "../../api/useFilesRust";
+import type { FileTreeNode } from "../../types";
 
 interface FileTreeProps {
   nodes: FileTreeNode[];

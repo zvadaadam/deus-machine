@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { CollapsibleTerminalPanel } from "@/features/terminal";
 import { WelcomeView } from "@/features/repository";
 import {
-  DiffViewer,
-  FileChangesPanel,
-  FileBrowserPanel,
   MainContentTabBar,
+  useWorkspaceLayout,
+  useFileChanges,
+  WorkspaceService,
 } from "@/features/workspace";
+import { FileChangesPanel } from "@/features/file-changes";
+import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import { BrowserPanel } from "@/features/browser";
 import {
   Button,
@@ -19,8 +21,7 @@ import {
   TabsContent,
   useSidebar,
 } from "@/components/ui";
-import { FileCode, FolderOpen, ChevronsRight } from "lucide-react";
-import { useWorkspaceLayoutStore } from "@/features/workspace/store";
+import { FolderOpen, ChevronsRight } from "lucide-react";
 import type { RightPanelTab } from "@/features/workspace/store";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 import type { Workspace } from "@/shared/types";
@@ -50,29 +51,46 @@ export function MainContent({
 }: MainContentProps) {
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
-  // Workspace layout store - per-workspace persistence
-  const setLayoutState = useWorkspaceLayoutStore((state) => state.setLayout);
-  const getLayoutState = useWorkspaceLayoutStore((state) => state.getLayout);
+  // Workspace layout - reads directly from store, no bidirectional sync needed
+  const {
+    rightPanelTab,
+    rightPanelExpanded,
+    selectedFilePath,
+    setRightPanelTab,
+    setRightPanelExpanded,
+    setSelectedFilePath,
+  } = useWorkspaceLayout(selectedWorkspace?.id ?? null);
 
-  const workspaceLayout = selectedWorkspace ? getLayoutState(selectedWorkspace.id) : null;
-
-  // Right panel tab (Changes, Files, or Browser)
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>(
-    workspaceLayout?.activeRightTab || "changes"
+  // Fetch file changes for the workspace
+  const { data: fileChanges = [] } = useFileChanges(
+    selectedWorkspace?.id ?? null,
+    selectedWorkspace?.session_status
   );
 
-  // Right panel expansion state (narrow 400px vs wide 2fr)
-  const [rightPanelExpanded, setRightPanelExpanded] = useState(
-    workspaceLayout?.rightPanelExpanded || false
+  // Callback to fetch diff for a specific file
+  const fetchDiff = useCallback(
+    async (filePath: string) => {
+      if (!selectedWorkspace) {
+        return { diff: "No workspace selected" };
+      }
+      try {
+        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, filePath);
+        return { diff: data.diff || "No diff available" };
+      } catch (error) {
+        console.error("Failed to fetch diff:", error);
+        return {
+          diff: `Error loading diff: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
+      }
+    },
+    [selectedWorkspace]
   );
 
-  // Selected file for diff viewing
-  const [selectedFile, setSelectedFile] = useState<{
-    path: string;
-    diff: string;
-    additions: number;
-    deletions: number;
-  } | null>(null);
+  // Selected file for file browser viewing (full file content from working tree)
+  const [browserSelectedFile, setBrowserSelectedFile] = useState<string | null>(null);
+
+  // Track workspace changes to clear stale state
+  const prevWorkspaceIdRef = useRef<string | null>(null);
 
   // State for main content tabs (chat sessions)
   const [mainTabs, setMainTabs] = useState<Tab[]>([
@@ -114,48 +132,32 @@ export function MainContent({
     prevPanelExpandedRef.current = rightPanelExpanded;
   }, [rightPanelExpanded, sidebarOpen, setSidebarOpen]);
 
-  // Sync state to persistence store (trigger only on ID change, not all workspace properties)
+  // Track workspace changes - clear stale file selections
+  const currentWorkspaceId = selectedWorkspace?.id ?? null;
+  if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
+    prevWorkspaceIdRef.current = currentWorkspaceId;
+    setBrowserSelectedFile(null);
+  }
+
+  // Validate selected file exists in current workspace
   useEffect(() => {
-    if (selectedWorkspace) {
-      setLayoutState(selectedWorkspace.id, {
-        rightPanelExpanded,
-        activeRightTab: rightPanelTab,
-        sidebarCollapsed: !sidebarOpen,
-        selectedFile: selectedFile ? { path: selectedFile.path, source: "changes" } : null,
-      });
+    // Early return for no workspace or no file path
+    if (!selectedWorkspace || !selectedFilePath) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    selectedWorkspace?.id,
-    rightPanelExpanded,
-    rightPanelTab,
-    sidebarOpen,
-    selectedFile,
-    setLayoutState,
-  ]);
 
-  // Restore layout state when workspace changes (setState is intentional for state restoration)
-  useEffect(() => {
-    if (!selectedWorkspace) return;
-
-    const layout = getLayoutState(selectedWorkspace.id);
-
-    setRightPanelTab(layout.activeRightTab);
-
-    setRightPanelExpanded(layout.rightPanelExpanded);
-
-    if (layout.selectedFile && layout.activeRightTab !== "browser") {
-      setSelectedFile({
-        path: layout.selectedFile.path,
-        diff: "Loading diff...",
-        additions: 0,
-        deletions: 0,
-      });
-    } else {
-      setSelectedFile(null);
+    // Skip validation until file changes are loaded
+    if (fileChanges.length === 0) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWorkspace?.id, getLayoutState]);
+
+    // Validate file exists in current workspace's file changes
+    const fileExists = fileChanges.some((fc) => fc.file === selectedFilePath);
+    if (!fileExists) {
+      // File doesn't exist in this workspace - clear invalid selection
+      setSelectedFilePath(null);
+    }
+  }, [selectedWorkspace, selectedFilePath, fileChanges, setSelectedFilePath]);
 
   // Handle branch rename
   const handleBranchRename = (newName: string) => {
@@ -219,79 +221,28 @@ export function MainContent({
   /**
    * Handle tab change in right panel
    */
-  const handleRightPanelTabChange = (tab: RightPanelTab) => {
-    const previousTab = rightPanelTab;
-    setRightPanelTab(tab);
+  const handleRightPanelTabChange = useCallback(
+    (tab: RightPanelTab) => {
+      setRightPanelTab(tab);
 
-    // Restore last opened file when returning to Changes tab
-    if (tab === "changes" && rightPanelExpanded && selectedWorkspace) {
-      const layout = getLayoutState(selectedWorkspace.id);
-      if (layout.selectedFile && previousTab !== "changes") {
-        setSelectedFile({
-          path: layout.selectedFile.path,
-          diff: "Loading...",
-          additions: 0,
-          deletions: 0,
-        });
+      // Auto-expand for browser
+      if (tab === "browser" && !rightPanelExpanded) {
+        setRightPanelExpanded(true);
       }
-    } else if (tab !== "changes" && tab !== "files") {
-      setSelectedFile(null);
-    }
-
-    // Auto-expand for browser
-    if (tab === "browser" && !rightPanelExpanded) {
-      setRightPanelExpanded(true);
-    }
-  };
-
-  /**
-   * Handle file click - opens file diff in right panel
-   */
-  const handleFileClick = (fileData: {
-    file: string;
-    diff: string;
-    additions: number;
-    deletions: number;
-  }) => {
-    setSelectedFile({
-      path: fileData.file,
-      diff: fileData.diff,
-      additions: fileData.additions,
-      deletions: fileData.deletions,
-    });
-    setRightPanelExpanded(true);
-  };
-
-  /**
-   * Update file diff content (for async loading)
-   */
-  const handleUpdateFile = (
-    filePath: string,
-    updates: { diff?: string; additions?: number; deletions?: number }
-  ) => {
-    setSelectedFile((current) => {
-      if (current?.path === filePath) {
-        return {
-          ...current,
-          diff: updates.diff !== undefined ? updates.diff : current.diff,
-          additions: updates.additions !== undefined ? updates.additions : current.additions,
-          deletions: updates.deletions !== undefined ? updates.deletions : current.deletions,
-        };
-      }
-      return current;
-    });
-  };
+    },
+    [rightPanelExpanded, setRightPanelTab, setRightPanelExpanded]
+  );
 
   /**
    * Collapse panel to narrow mode
    */
-  const handlePanelCollapse = () => {
+  const handlePanelCollapse = useCallback(() => {
     setRightPanelExpanded(false);
-    setSelectedFile(null);
+    setSelectedFilePath(null);
     if (rightPanelTab === "browser") {
       setRightPanelTab("changes");
     }
-  };
+  }, [rightPanelTab, setRightPanelExpanded, setSelectedFilePath, setRightPanelTab]);
 
   return (
     <SidebarInset className="min-w-0">
@@ -395,50 +346,21 @@ export function MainContent({
 
               {/* Tab Content */}
               <>
-                {/* Changes Tab */}
+                {/* Changes Tab - New tree view with unified scroll */}
                 <TabsContent
                   value="changes"
                   className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
                 >
-                  <div className="flex h-full overflow-hidden">
-                    <div
-                      className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        rightPanelExpanded ? "border-border/40 w-[280px] border-r" : "flex-1"
-                      }`}
-                    >
-                      <FileChangesPanel
-                        selectedWorkspace={selectedWorkspace}
-                        onOpenDiffTab={handleFileClick}
-                        onUpdateDiffTab={handleUpdateFile}
-                        selectedFilePath={selectedFile?.path}
-                      />
-                    </div>
-
-                    {rightPanelExpanded && (
-                      <div className="animate-in slide-in-from-right-2 flex-1 overflow-hidden duration-300">
-                        {selectedFile ? (
-                          <DiffViewer
-                            filePath={selectedFile.path}
-                            diff={selectedFile.diff}
-                            additions={selectedFile.additions}
-                            deletions={selectedFile.deletions}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <div className="max-w-sm text-center">
-                              <FileCode className="text-muted-foreground/30 mx-auto mb-4 h-16 w-16" />
-                              <h3 className="text-foreground/60 mb-2 text-sm font-medium">
-                                Select a file to view changes
-                              </h3>
-                              <p className="text-muted-foreground/50 text-xs">
-                                Click on any file from the list to see its diff
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <FileChangesPanel
+                    selectedWorkspace={selectedWorkspace}
+                    fileChanges={fileChanges}
+                    fetchDiff={fetchDiff}
+                    isExpanded={rightPanelExpanded}
+                    onFileSelect={(path) => {
+                      setSelectedFilePath(path);
+                      setRightPanelExpanded(true);
+                    }}
+                  />
                 </TabsContent>
 
                 {/* Files Tab */}
@@ -455,20 +377,16 @@ export function MainContent({
                       <FileBrowserPanel
                         selectedWorkspace={selectedWorkspace}
                         onFileClick={(path) => {
-                          if (import.meta.env.DEV) console.log("File browser click:", path);
+                          setBrowserSelectedFile(path);
+                          setRightPanelExpanded(true);
                         }}
                       />
                     </div>
 
                     {rightPanelExpanded && (
                       <div className="animate-in slide-in-from-right-2 flex-1 overflow-hidden duration-300">
-                        {selectedFile ? (
-                          <DiffViewer
-                            filePath={selectedFile.path}
-                            diff={selectedFile.diff}
-                            additions={selectedFile.additions}
-                            deletions={selectedFile.deletions}
-                          />
+                        {browserSelectedFile ? (
+                          <FileViewer filePath={browserSelectedFile} />
                         ) : (
                           <div className="flex h-full items-center justify-center">
                             <div className="max-w-sm text-center">

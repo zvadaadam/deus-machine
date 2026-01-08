@@ -1,25 +1,14 @@
+/**
+ * Hook for scanning workspace files using Rust backend
+ * Much faster than Node.js for large repositories
+ */
+
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-
-export interface FileTreeNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  size?: number;
-  modified?: string;
-  children?: FileTreeNode[];
-  git_status?: "modified" | "added" | "deleted" | "untracked";
-}
-
-export interface FileTreeResponse {
-  files: FileTreeNode[];
-  totalFiles: number;
-  totalSize: number;
-}
+import type { FileTreeResponse } from "../types";
 
 /**
  * Scan workspace files using Rust backend
- * Much faster than Node.js for large repositories
  */
 async function scanWorkspaceFiles(workspacePath: string): Promise<FileTreeResponse> {
   if (import.meta.env.DEV)
