@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
@@ -17,15 +17,7 @@ import {
 } from "@/features/workspace/api";
 import { useRepos, useAddRepo } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
-import { Button, SidebarProvider } from "@/components/ui";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-  EmptyContent,
-} from "@/components/ui/empty";
+import { Button, SidebarProvider, Sidebar, SidebarContent } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
@@ -114,14 +106,6 @@ export function MainLayout() {
       showSystemPromptModal,
     },
   });
-
-  // Memoize recent workspaces
-  const recentWorkspaces = useMemo(() => {
-    return repoGroups
-      .flatMap((g) => g.workspaces)
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 15);
-  }, [repoGroups]);
 
   // Listen for 'insert-to-chat' events from BrowserPanel
   useEffect(() => {
@@ -279,22 +263,29 @@ export function MainLayout() {
       {loading ? (
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
-        <div className="p-4">
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyMedia>
-                <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyTitle>No Workspaces</EmptyTitle>
-              <EmptyDescription>Create a new workspace to get started</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="default" onClick={() => handleNewWorkspace()} size="sm">
-                + Create Workspace
+        <Sidebar variant="inset" collapsible="icon">
+          <SidebarContent className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <FolderOpen
+                className="text-muted-foreground/30 h-10 w-10"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <p className="text-muted-foreground/70 text-sm font-medium">No Workspaces</p>
+                <p className="text-muted-foreground/50 text-xs">Create one to get started</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleNewWorkspace()}
+                className="mt-1 text-xs"
+              >
+                + New Workspace
               </Button>
-            </EmptyContent>
-          </Empty>
-        </div>
+            </div>
+          </SidebarContent>
+        </Sidebar>
       ) : (
         <AppSidebar
           repositories={repoGroups}
@@ -311,11 +302,9 @@ export function MainLayout() {
       <MainContent
         selectedWorkspace={selectedWorkspace}
         workspaceChatPanelRef={workspaceChatPanelRef}
-        recentWorkspaces={recentWorkspaces}
         onCreateWorkspace={openNewWorkspaceModal}
         onOpenProject={handleOpenProject}
         onCloneRepository={() => setShowCloneModal(true)}
-        onWorkspaceClick={handleWorkspaceClick}
       />
 
       {/* Modals */}

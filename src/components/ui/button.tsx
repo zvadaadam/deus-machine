@@ -55,4 +55,10 @@ const Button = React.forwardRef<
 
 Button.displayName = "Button";
 
+type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+  };
+
 export { Button, buttonVariants };
+export type { ButtonProps };

@@ -150,8 +150,8 @@ function TreeNode({
       {/* Node Row */}
       <div
         className={cn(
-          "flex cursor-pointer items-center gap-2 rounded px-2 py-1",
-          "hover:bg-accent/50 transition-colors duration-200",
+          "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5",
+          "hover:bg-muted/30 transition-colors duration-200",
           "group"
         )}
         style={{ paddingLeft: `${indentSize + 8}px` }}
@@ -166,48 +166,46 @@ function TreeNode({
         {/* Single Icon Column - Chevron for folders, File icon for files */}
         <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
           {isDirectory ? (
-            // Folders: Show chevron only
+            // Folders: Show whisper-light chevron
             hasChildren ? (
               isExpanded ? (
-                <ChevronDown className="text-foreground/60 h-4 w-4" />
+                <ChevronDown className="text-muted-foreground/40 h-4 w-4" />
               ) : (
-                <ChevronRight className="text-foreground/60 h-4 w-4" />
+                <ChevronRight className="text-muted-foreground/40 h-4 w-4" />
               )
             ) : (
-              // Empty folder - show faint chevron
-              <ChevronRight className="text-muted-foreground/20 h-4 w-4" />
+              // Empty folder - show very faint chevron
+              <ChevronRight className="text-muted-foreground/15 h-4 w-4" />
             )
           ) : FileIcon ? (
-            // Files: Show colored icon
-            <FileIcon className={cn("h-4 w-4", fileConfig?.color)} />
+            // Files: Show colored icon (very muted like VS Code)
+            <FileIcon className={cn("h-4 w-4 opacity-50", fileConfig?.color)} />
           ) : (
-            <File className="text-muted-foreground/40 h-4 w-4" />
+            <File className="text-muted-foreground/30 h-4 w-4" />
           )}
         </div>
 
-        {/* File/Folder Name */}
+        {/* File/Folder Name - VS Code style: subtle, readable, not bold */}
         <span
           className={cn(
-            "flex-1 truncate font-mono text-xs",
-            // Base styles
-            isDirectory ? "text-foreground font-normal" : "text-foreground/90 font-normal",
+            "flex-1 truncate text-[13px] font-normal",
+            // VS Code style: muted gray, consistent weight
+            // Folders with changes get subtle warning tint, otherwise muted
+            isDirectory
+              ? folderHasChanges
+                ? "text-warning/60"
+                : "text-muted-foreground/60"
+              : "text-foreground/70",
             // Git status color (subtle accent - files only)
             gitStatusColor
           )}
         >
           {node.name}
-          {/* Folder with changes indicator (subtle dot) */}
-          {folderHasChanges && (
-            <span
-              className="bg-warning ml-1.5 inline-block h-1 w-1 rounded-full"
-              title="Contains changes"
-            />
-          )}
         </span>
 
         {/* File Size (files only) */}
         {!isDirectory && node.size !== undefined && (
-          <span className="text-muted-foreground/40 flex-shrink-0 font-mono text-xs tabular-nums">
+          <span className="text-muted-foreground/30 flex-shrink-0 font-mono text-[10px] tabular-nums">
             {formatFileSize(node.size)}
           </span>
         )}

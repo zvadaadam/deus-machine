@@ -141,8 +141,23 @@ export function getDisplayStatus(workspace: Workspace): DisplayStatus {
     return "unread";
   }
 
-  // 3) Default to session status
-  return workspace.session_status || "idle";
+  // 3) Map session status to display status
+  // Handle statuses that don't have direct UI mappings
+  // Cast to string to handle runtime values not in TypeScript type definition
+  const sessionStatus = workspace.session_status as string;
+  if (sessionStatus === "needs_plan_response" || sessionStatus === "needs_response") {
+    return "unread"; // Treat as needing attention
+  }
+  if (sessionStatus === "working") {
+    return "working";
+  }
+  if (sessionStatus === "compacting") {
+    return "compacting";
+  }
+  if (sessionStatus === "error") {
+    return "error";
+  }
+  return "idle";
 }
 
 /**

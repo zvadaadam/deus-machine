@@ -1191,7 +1191,7 @@ const server = app.listen(PORT, () => {
   // Output port in machine-readable format for Rust to capture
   console.log(`[BACKEND_PORT]${actualPort}`);
 
-  console.log('\n🎉 Conductor Backend Server (Modular)');
+  console.log('\n🎉 Command Backend Server (Modular)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`📡 API Server: http://localhost:${actualPort}`);
   console.log(`📊 Database: ${DB_PATH}`);
