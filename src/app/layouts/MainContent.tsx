@@ -29,11 +29,9 @@ import type { Workspace } from "@/shared/types";
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
-  recentWorkspaces: Workspace[];
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
   onCloneRepository: () => void;
-  onWorkspaceClick: (workspace: Workspace) => void;
 }
 
 /**
@@ -43,11 +41,9 @@ interface MainContentProps {
 export function MainContent({
   selectedWorkspace,
   workspaceChatPanelRef,
-  recentWorkspaces,
   onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
-  onWorkspaceClick,
 }: MainContentProps) {
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
@@ -254,7 +250,8 @@ export function MainContent({
        * - Wide (2fr, ~700px+): File diff viewer, browser
        */}
       <div
-        className="bg-background/70 border-border/40 min-w-0 flex-1 overflow-hidden rounded-lg border shadow-sm backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        data-slot="main-content"
+        className="bg-background/40 border-border/5 min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{
           display: "grid",
           gridTemplateColumns: selectedWorkspace
@@ -300,11 +297,9 @@ export function MainContent({
           </div>
         ) : (
           <WelcomeView
-            recentWorkspaces={recentWorkspaces}
             onCreateWorkspace={onCreateWorkspace}
             onOpenProject={onOpenProject}
             onCloneRepository={onCloneRepository}
-            onWorkspaceClick={onWorkspaceClick}
           />
         )}
 

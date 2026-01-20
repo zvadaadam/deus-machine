@@ -1,19 +1,23 @@
-# OpenDevs
+# Command
 
 A desktop IDE for managing multiple parallel AI coding agents. Built for semi-technical users who want to get the job done - treating AI chat as a first-class citizen with code as secondary.
 
 ## 🚀 Quick Start
 
 ### Development Mode (Web)
+
 ```bash
 npm run dev:full
 ```
+
 This starts both backend (Node.js on dynamic port) and frontend (Vite on http://localhost:1420).
 
 ### Development Mode (Desktop App)
+
 ```bash
 npm run tauri:dev
 ```
+
 This runs everything: Vite + Backend + Tauri desktop app.
 
 **⚠️ NEVER run `npm run dev` alone** - it only starts frontend without backend!
@@ -49,6 +53,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 ## 🛠 Tech Stack
 
 **Frontend:**
+
 - React 18 + TypeScript
 - Vite (dev server)
 - Tailwind CSS v4 (OKLCH colors)
@@ -57,12 +62,14 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 - Zustand (state management)
 
 **Backend:**
+
 - Node.js + Express
 - SQLite (via better-sqlite3)
 - Claude Code CLI integration
 - Unix socket IPC (for events)
 
 **Desktop:**
+
 - Tauri 2.0 (Rust + WebView)
 - Native OS integrations
 - PTY for terminals
@@ -100,6 +107,7 @@ npm run tauri:build     # Desktop app
 ## 🎨 Design Principles
 
 We follow design inspiration from Linear, Vercel, Stripe, Airbnb, and Perplexity:
+
 - Beautiful aesthetic design for pro-consumer product
 - Consistent paddings (default 16px for density)
 - Semantic color system using OKLCH
@@ -154,6 +162,7 @@ conductor/
 - **Backend (Node.js)**: Dynamic (50XXX-60XXX range)
 
 Port discovery is automatic:
+
 1. Desktop mode: Tauri `invoke('get_backend_port')`
 2. Web dev: `VITE_BACKEND_PORT` env variable
 3. Fallback: Port scanning + localStorage cache
@@ -161,6 +170,7 @@ Port discovery is automatic:
 ## 📝 Contributing
 
 When working on this project:
+
 - Follow the guidelines in [CLAUDE.md](CLAUDE.md)
 - Shadcn components in `src/components/ui/` are owned code - edit freely when needed
 - Use semantic colors from the design system (CSS variables in `global.css`)

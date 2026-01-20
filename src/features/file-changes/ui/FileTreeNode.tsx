@@ -12,7 +12,6 @@
 import { memo, useCallback } from "react";
 import { Folder, FolderOpen, FileText } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { FileStatusIcon } from "./FileStatusIcon";
 import type { FileChangeTreeNode } from "../types";
 import { FILE_TREE } from "../constants";
 
@@ -87,12 +86,12 @@ export const FileTreeNode = memo(function FileTreeNode({
       aria-expanded={isDirectory ? isExpanded : undefined}
       aria-selected={isSelected}
       className={cn(
-        "relative flex cursor-pointer items-center gap-2 py-1 pr-2 text-sm",
+        "relative flex cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm",
         "transition-colors duration-150 ease-out",
         "focus-visible:ring-primary/50 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-none",
         isSelected
           ? "bg-primary/10 text-primary"
-          : "text-foreground/80 hover:bg-muted/40 hover:text-foreground"
+          : "text-foreground/80 hover:bg-muted/30 hover:text-foreground"
       )}
       style={{ paddingLeft: `${indentPx + 8}px` }}
       onClick={handleClick}
@@ -101,37 +100,34 @@ export const FileTreeNode = memo(function FileTreeNode({
       {/* Indent guide lines (show on tree hover) */}
       {indentGuides}
 
-      {/* Icon */}
+      {/* Icon - folders are whisper-light, files slightly more visible */}
       {isDirectory ? (
         isExpanded ? (
-          <FolderOpen className="text-muted-foreground/50 h-4 w-4 flex-shrink-0" />
+          <FolderOpen className="text-muted-foreground/30 h-4 w-4 flex-shrink-0" />
         ) : (
-          <Folder className="text-muted-foreground/40 h-4 w-4 flex-shrink-0" />
+          <Folder className="text-muted-foreground/25 h-4 w-4 flex-shrink-0" />
         )
       ) : (
-        <div className="relative flex-shrink-0">
-          <FileText className="text-muted-foreground/70 h-4 w-4" />
-          {node.status && (
-            <FileStatusIcon status={node.status} className="absolute -top-0.5 -right-0.5" />
-          )}
-        </div>
+        <FileText className="text-muted-foreground/50 h-4 w-4 flex-shrink-0" />
       )}
 
-      {/* Name - folders are subtle, files are prominent */}
+      {/* Name - folders are navigation (subtle), files are content (prominent) */}
+      {/* Deleted files get strikethrough - semantic honesty, not decoration */}
       <span
         className={cn(
-          "min-w-0 flex-1 truncate font-mono text-xs",
-          isDirectory ? "text-muted-foreground/60" : "text-foreground/90"
+          "min-w-0 flex-1 truncate text-[13px]",
+          isDirectory ? "text-muted-foreground/50 font-normal" : "text-foreground/90 font-medium",
+          node.status === "deleted" && "line-through opacity-50"
         )}
       >
         {node.name}
       </span>
 
-      {/* Stats (files only) */}
+      {/* Stats (files only) - muted pastel colors */}
       {node.type === "file" && (node.additions || node.deletions) && (
-        <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums opacity-70">
-          {node.additions ? <span className="text-success">+{node.additions}</span> : null}
-          {node.deletions ? <span className="text-destructive">-{node.deletions}</span> : null}
+        <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums opacity-60">
+          {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
+          {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
         </div>
       )}
     </div>

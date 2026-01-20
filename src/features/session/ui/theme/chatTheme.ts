@@ -38,12 +38,12 @@ export const chatTheme = {
   // Message container styles
   message: {
     user: {
-      // Maximum Readability: Lighter background stands out + bright theme-aware text
+      // Maximum Readability: Warm accent background with high-contrast text
       // Jony Ive: "Clarity is not negotiable. If it's meant to be read, make it unambiguously readable."
       container:
-        "ml-auto w-fit bg-muted hover:bg-muted/80 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-200 ease-out motion-reduce:transition-none",
-      text: "font-normal", // Font weight only - color applied separately for proper specificity
-      textColor: "text-foreground", // Uses semantic foreground color from global.css (theme-aware)
+        "ml-auto w-fit bg-accent hover:bg-accent/80 backdrop-blur-sm transition-colors duration-200 ease-out motion-reduce:transition-none",
+      text: "font-normal",
+      textColor: "text-foreground", // Uses semantic foreground color - darkest text in design system
       maxWidth: "max-w-[85%]",
       shape: "rounded-xl", // 12px - tighter than before
       padding: "px-3 py-2", // Tight, dense padding
