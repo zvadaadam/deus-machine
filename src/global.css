@@ -35,6 +35,7 @@
   --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-surface: var(--input-surface);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -259,52 +260,52 @@
   }
 }
 
-/* Design tokens & base styles - Copper Ember × Graphite Theme */
+/* Design tokens & base styles - Silver × Baby Blue Theme */
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.97 0.02 95); /* #FFF9F0 warm cream */
-  --foreground: oklch(0.22 0.03 260); /* #0F172A dark text */
-  --card: oklch(0.94 0.02 95); /* #FFF2E0 */
-  --card-foreground: oklch(0.22 0.03 260);
-  --popover: oklch(0.94 0.02 95);
-  --popover-foreground: oklch(0.22 0.03 260);
-  --primary: oklch(0.46 0.1 65); /* #73481E copper brown (accessible) */
-  --primary-foreground: oklch(0.98 0.01 95); /* near-white */
-  --secondary: oklch(0.9 0.01 95); /* warm neutral */
-  --secondary-foreground: oklch(0.22 0.03 260);
-  --muted: oklch(0.92 0.01 95);
-  --muted-foreground: oklch(0.55 0.02 255);
-  --accent: oklch(0.95 0.03 65); /* #FFE8D1 copper-wash */
-  --accent-foreground: oklch(0.22 0.03 260);
-  --destructive: oklch(0.64 0.2 25);
+  --background: oklch(0.96 0.005 250); /* Cool silver - sleek, modern */
+  --foreground: oklch(0.18 0.015 250); /* Cool slate text */
+  --card: oklch(0.93 0.006 250); /* Silver card */
+  --card-foreground: oklch(0.18 0.015 250);
+  --popover: oklch(0.93 0.006 250);
+  --popover-foreground: oklch(0.18 0.015 250);
+  --primary: oklch(0.62 0.08 220); /* Pastel baby blue - soft, muted, calming */
+  --primary-foreground: oklch(0.98 0.01 220); /* Near-white with blue hint */
+  --secondary: oklch(0.91 0.006 250); /* Silver secondary */
+  --secondary-foreground: oklch(0.18 0.015 250);
+  --muted: oklch(0.92 0.005 250); /* Silver muted */
+  --muted-foreground: oklch(0.48 0.015 250); /* Cool slate secondary text */
+  --accent: oklch(0.93 0.03 220); /* Pastel blue wash - for user bubbles */
+  --accent-foreground: oklch(0.18 0.015 250);
+  --destructive: oklch(0.58 0.2 25); /* Coral red */
   --destructive-foreground: oklch(0.98 0.01 95);
 
   /* Semantic state colors (stable across themes) */
-  --success: oklch(0.72 0.14 160);
-  --success-foreground: oklch(0.12 0.02 180);
+  --success: oklch(0.62 0.14 160); /* Teal green - distinct from blue */
+  --success-foreground: oklch(0.15 0.03 160);
 
-  --warning: oklch(0.8 0.16 85);
-  --warning-foreground: oklch(0.16 0.02 85);
+  --warning: oklch(0.75 0.14 70); /* Warm amber - complements blue */
+  --warning-foreground: oklch(0.18 0.02 70);
 
-  --info: oklch(0.78 0.1 270); /* muted violet info (no blue) */
-  --info-foreground: oklch(0.15 0.02 270);
+  --info: oklch(0.62 0.07 220); /* Pastel blue info - cohesive */
+  --info-foreground: oklch(0.15 0.02 220);
 
   /* Status colors for workspace/session states */
-  --status-working: oklch(0.6 0.17 145); /* Green for active/working */
+  --status-working: oklch(0.58 0.13 160); /* Teal for ready/working */
   --status-working-fg: oklch(1 0 0);
-  --status-compacting: oklch(0.58 0.22 303); /* Purple for maintenance */
+  --status-compacting: oklch(0.55 0.14 280); /* Soft purple for maintenance */
   --status-compacting-fg: oklch(1 0 0);
-  --status-unread: oklch(0.72 0.19 75); /* Amber for unread (alias to warning) */
+  --status-unread: oklch(0.7 0.14 70); /* Warm amber for unread */
   --status-unread-fg: oklch(1 0 0);
 
   /* File type icon colors (semantic, consistent in light/dark) */
-  --file-typescript: oklch(0.55 0.18 250); /* Blue for TS/JS */
-  --file-rust: oklch(0.58 0.2 30); /* Orange-red for Rust */
-  --file-data: oklch(0.7 0.17 85); /* Yellow for JSON/YAML */
-  --file-docs: oklch(0.6 0.16 145); /* Green for markdown/docs */
-  --file-styles: oklch(0.62 0.2 290); /* Purple for CSS */
-  --file-markup: oklch(0.62 0.18 40); /* Orange for HTML */
-  --file-image: oklch(0.65 0.21 340); /* Pink for images */
+  --file-typescript: oklch(0.58 0.08 220); /* Pastel blue for TS/JS - cohesive */
+  --file-rust: oklch(0.55 0.18 35); /* Coral for Rust */
+  --file-data: oklch(0.65 0.14 80); /* Warm amber for JSON/YAML */
+  --file-docs: oklch(0.52 0.12 160); /* Teal for markdown/docs */
+  --file-styles: oklch(0.55 0.14 280); /* Soft purple for CSS */
+  --file-markup: oklch(0.55 0.16 45); /* Warm coral for HTML */
+  --file-image: oklch(0.58 0.16 340); /* Soft pink for images */
 
   /* Z-index scale for layered UI elements */
   --z-base: 0;
@@ -317,106 +318,108 @@
   --z-tooltip: 1200;
   --z-notification: 1300;
 
-  --border: oklch(0.88 0.01 95);
-  --input: oklch(0.88 0.01 95);
-  --ring: oklch(0.66 0.16 55 / 0.35); /* copper glow ring */
+  --border: oklch(0.88 0.008 250); /* Cool silver border */
+  --input: oklch(0.88 0.008 250);
+  --input-surface: oklch(0.98 0.004 250); /* Bright silver paper */
+  --ring: oklch(0.62 0.1 220 / 0.4); /* Pastel blue glow ring */
 
   /* Sidebar colors */
-  --sidebar: oklch(0.985 0.01 90);
-  --sidebar-foreground: oklch(0.32 0.02 75);
-  --sidebar-primary: oklch(0.46 0.1 65); /* copper brown */
-  --sidebar-primary-foreground: oklch(0.98 0.01 95);
-  --sidebar-accent: oklch(0.95 0.02 90);
-  --sidebar-accent-foreground: oklch(0.22 0.03 260);
-  --sidebar-border: oklch(0.9 0.01 95);
-  --sidebar-ring: oklch(0.66 0.16 55 / 0.35);
+  --sidebar: oklch(0.97 0.004 250); /* Light silver */
+  --sidebar-foreground: oklch(0.35 0.015 250); /* Cool slate gray */
+  --sidebar-primary: oklch(0.62 0.08 220); /* Pastel baby blue */
+  --sidebar-primary-foreground: oklch(0.98 0.01 220);
+  --sidebar-accent: oklch(0.93 0.01 250); /* Silver accent */
+  --sidebar-accent-foreground: oklch(0.18 0.015 250);
+  --sidebar-border: oklch(0.9 0.006 250); /* Subtle silver border */
+  --sidebar-ring: oklch(0.62 0.1 220 / 0.4);
 
-  /* Diff viewer colors - Copper theme (Light Mode) */
-  --diff-addition-bg: oklch(0.95 0.06 160); /* Soft emerald green on warm cream */
-  --diff-addition-gutter: oklch(0.88 0.1 155); /* Deeper green gutter */
-  --diff-addition-word: oklch(0.82 0.14 158); /* Saturated green highlight */
-  --diff-addition-text: oklch(0.38 0.12 160); /* Dark forest green text */
+  /* Diff viewer colors - Silver Blue theme (Light Mode) */
+  --diff-addition-bg: oklch(0.94 0.04 160); /* Soft teal green */
+  --diff-addition-gutter: oklch(0.88 0.08 160); /* Teal gutter */
+  --diff-addition-word: oklch(0.82 0.12 160); /* Teal highlight */
+  --diff-addition-text: oklch(0.38 0.12 160); /* Dark teal text */
 
-  --diff-deletion-bg: oklch(0.94 0.06 35); /* Warm peachy-copper deletion background */
-  --diff-deletion-gutter: oklch(0.86 0.12 32); /* Deeper copper-red gutter */
-  --diff-deletion-word: oklch(0.8 0.16 30); /* Saturated copper-red highlight */
-  --diff-deletion-text: oklch(0.42 0.14 28); /* Dark ember text */
+  --diff-deletion-bg: oklch(0.94 0.04 25); /* Soft coral */
+  --diff-deletion-gutter: oklch(0.86 0.1 25); /* Coral gutter */
+  --diff-deletion-word: oklch(0.8 0.14 25); /* Coral highlight */
+  --diff-deletion-text: oklch(0.42 0.14 25); /* Dark coral text */
 
-  --diff-line-number: oklch(0.52 0.02 75); /* Warm muted brown-gray */
-  --diff-line-number-bg: oklch(0.96 0.02 90); /* Subtle warm cream background */
+  --diff-line-number: oklch(0.5 0.015 250); /* Cool slate muted */
+  --diff-line-number-bg: oklch(0.94 0.005 250); /* Subtle silver background */
 }
 
 .dark {
-  --background: oklch(0.15 0.01 255); /* graphite ink #0B0C10 */
-  --foreground: oklch(0.92 0.02 250); /* #E6EDF3 */
-  --card: oklch(0.19 0.01 255);
-  --card-foreground: oklch(0.92 0.02 250);
-  --popover: oklch(0.19 0.01 255);
-  --popover-foreground: oklch(0.92 0.02 250);
-  --primary: oklch(0.66 0.16 55); /* #E0903F copper ember */
-  --primary-foreground: oklch(0.15 0.01 255); /* dark graphite text on copper */
-  --secondary: oklch(0.22 0.01 255);
-  --secondary-foreground: oklch(0.92 0.02 250);
-  --muted: oklch(0.24 0.01 255);
-  --muted-foreground: oklch(0.72 0.02 255);
-  --accent: oklch(0.86 0.06 55); /* light copper tint for chips */
-  --accent-foreground: oklch(0.15 0.01 255);
-  --destructive: oklch(0.64 0.2 25);
+  --background: oklch(0.14 0.015 250); /* Deep slate with blue undertone */
+  --foreground: oklch(0.92 0.015 250); /* Cool silver-white text */
+  --card: oklch(0.18 0.012 250); /* Slate card */
+  --card-foreground: oklch(0.92 0.015 250);
+  --popover: oklch(0.18 0.012 250);
+  --popover-foreground: oklch(0.92 0.015 250);
+  --primary: oklch(0.72 0.08 220); /* Pastel baby blue - soft, muted */
+  --primary-foreground: oklch(0.14 0.015 250); /* Dark slate text on blue */
+  --secondary: oklch(0.22 0.01 250); /* Dark slate secondary */
+  --secondary-foreground: oklch(0.92 0.015 250);
+  --muted: oklch(0.24 0.01 250); /* Muted slate */
+  --muted-foreground: oklch(0.65 0.015 250); /* Cool gray secondary text */
+  --accent: oklch(0.26 0.05 220); /* Pastel dark blue wash for user bubbles */
+  --accent-foreground: oklch(0.92 0.015 250);
+  --destructive: oklch(0.65 0.22 25); /* Bright coral red */
   --destructive-foreground: oklch(0.98 0.01 95);
 
-  /* Semantic state colors - stable across themes */
-  --success: oklch(0.72 0.14 160);
-  --success-foreground: oklch(0.12 0.02 180);
+  /* Semantic state colors - optimized for dark mode */
+  --success: oklch(0.7 0.16 160); /* Bright teal green */
+  --success-foreground: oklch(0.15 0.03 160);
 
-  --warning: oklch(0.8 0.16 85);
-  --warning-foreground: oklch(0.16 0.02 85);
+  --warning: oklch(0.78 0.16 70); /* Bright amber */
+  --warning-foreground: oklch(0.18 0.02 70);
 
-  --info: oklch(0.78 0.1 270);
-  --info-foreground: oklch(0.12 0.02 270);
+  --info: oklch(0.72 0.07 220); /* Pastel blue info */
+  --info-foreground: oklch(0.15 0.02 220);
 
   /* Status colors for workspace/session states - optimized for dark mode */
-  --status-working: oklch(0.7 0.18 145); /* Brighter green for dark bg */
-  --status-working-fg: oklch(0.25 0.15 145);
-  --status-compacting: oklch(0.68 0.24 303); /* Brighter purple for dark bg */
-  --status-compacting-fg: oklch(0.3 0.18 303);
-  --status-unread: oklch(0.8 0.2 75); /* Brighter amber for dark bg */
-  --status-unread-fg: oklch(0.35 0.15 75);
+  --status-working: oklch(0.68 0.16 160); /* Bright teal for ready/working */
+  --status-working-fg: oklch(0.2 0.1 160);
+  --status-compacting: oklch(0.65 0.18 280); /* Bright purple for maintenance */
+  --status-compacting-fg: oklch(0.25 0.12 280);
+  --status-unread: oklch(0.78 0.18 70); /* Bright amber for unread */
+  --status-unread-fg: oklch(0.3 0.12 70);
 
-  /* File type icon colors (same in dark mode for perceptual consistency) */
-  --file-typescript: oklch(0.62 0.16 220); /* Soft blue-violet for TS/JS (kept neutral) */
-  --file-rust: oklch(0.58 0.2 30); /* Orange-red for Rust */
-  --file-data: oklch(0.7 0.17 85); /* Yellow for JSON/YAML */
-  --file-docs: oklch(0.6 0.16 145); /* Green for markdown/docs */
-  --file-styles: oklch(0.62 0.2 290); /* Purple for CSS */
-  --file-markup: oklch(0.62 0.18 40); /* Orange for HTML */
-  --file-image: oklch(0.65 0.21 340); /* Pink for images */
+  /* File type icon colors - pastel for dark mode */
+  --file-typescript: oklch(0.68 0.08 220); /* Pastel blue for TS/JS */
+  --file-rust: oklch(0.62 0.2 35); /* Bright coral for Rust */
+  --file-data: oklch(0.72 0.16 80); /* Bright amber for JSON/YAML */
+  --file-docs: oklch(0.62 0.14 160); /* Bright teal for markdown/docs */
+  --file-styles: oklch(0.62 0.16 280); /* Bright purple for CSS */
+  --file-markup: oklch(0.62 0.18 45); /* Bright coral for HTML */
+  --file-image: oklch(0.65 0.18 340); /* Bright pink for images */
 
-  --border: oklch(0.28 0.01 255);
-  --input: oklch(0.28 0.01 255);
-  --ring: oklch(0.66 0.16 55 / 0.55); /* brighter copper ring on dark */
+  --border: oklch(0.2 0.01 250); /* Darker slate border - more subtle */
+  --input: oklch(0.2 0.01 250);
+  --input-surface: oklch(0.2 0.012 250); /* Dark input surface */
+  --ring: oklch(0.72 0.1 220 / 0.45); /* Pastel blue glow ring */
 
-  --sidebar: oklch(0.19 0.01 255);
-  --sidebar-foreground: oklch(0.92 0.02 250);
-  --sidebar-primary: oklch(0.66 0.16 55); /* copper ember */
-  --sidebar-primary-foreground: oklch(0.15 0.01 255);
-  --sidebar-accent: oklch(0.24 0.01 255);
-  --sidebar-accent-foreground: oklch(0.92 0.02 250);
-  --sidebar-border: oklch(0.28 0.01 255);
-  --sidebar-ring: oklch(0.66 0.16 55 / 0.55);
+  --sidebar: oklch(0.16 0.012 250); /* Dark slate sidebar */
+  --sidebar-foreground: oklch(0.85 0.015 250); /* Light cool gray */
+  --sidebar-primary: oklch(0.72 0.08 220); /* Pastel baby blue */
+  --sidebar-primary-foreground: oklch(0.14 0.015 250);
+  --sidebar-accent: oklch(0.24 0.015 250); /* Slate accent */
+  --sidebar-accent-foreground: oklch(0.92 0.015 250);
+  --sidebar-border: oklch(0.2 0.01 250); /* Subtle slate border */
+  --sidebar-ring: oklch(0.72 0.1 220 / 0.45);
 
-  /* Diff viewer colors - Copper theme (Dark Mode) */
-  --diff-addition-bg: oklch(0.23 0.08 160); /* Deep emerald on graphite */
-  --diff-addition-gutter: oklch(0.19 0.1 158); /* Darker green gutter */
-  --diff-addition-word: oklch(0.35 0.16 160); /* Bright emerald highlight */
-  --diff-addition-text: oklch(0.76 0.14 160); /* Bright mint green text */
+  /* Diff viewer colors - Silver Blue theme (Dark Mode) */
+  --diff-addition-bg: oklch(0.22 0.06 160); /* Deep teal on slate */
+  --diff-addition-gutter: oklch(0.18 0.08 160); /* Darker teal gutter */
+  --diff-addition-word: oklch(0.32 0.14 160); /* Bright teal highlight */
+  --diff-addition-text: oklch(0.75 0.14 160); /* Bright teal text */
 
-  --diff-deletion-bg: oklch(0.24 0.08 38); /* Warm copper-ember on graphite */
-  --diff-deletion-gutter: oklch(0.2 0.1 35); /* Darker copper gutter */
-  --diff-deletion-word: oklch(0.36 0.18 35); /* Glowing copper-red highlight */
-  --diff-deletion-text: oklch(0.72 0.16 32); /* Bright ember orange text */
+  --diff-deletion-bg: oklch(0.22 0.06 25); /* Deep coral on slate */
+  --diff-deletion-gutter: oklch(0.18 0.08 25); /* Darker coral gutter */
+  --diff-deletion-word: oklch(0.32 0.16 25); /* Bright coral highlight */
+  --diff-deletion-text: oklch(0.72 0.16 25); /* Bright coral text */
 
-  --diff-line-number: oklch(0.54 0.02 70); /* Warm graphite-gray for line numbers */
-  --diff-line-number-bg: oklch(0.17 0.01 255); /* Deep graphite background */
+  --diff-line-number: oklch(0.5 0.015 250); /* Cool slate muted */
+  --diff-line-number-bg: oklch(0.16 0.01 250); /* Deep slate background */
 }
 
 /* Apply semantic border color to all elements with border utilities */
@@ -455,7 +458,10 @@ body {
   transition-duration: 200ms;
 }
 
-/* Tauri desktop-only styles - transparent backgrounds for window vibrancy */
+/* Tauri desktop-only styles - Arc browser-style vibrancy
+ * "Vibrancy" = frosted glass transparency where wallpaper shows through
+ * Requires: window transparent:true + underWindowBackground effect in tauri.conf.json
+ */
 .tauri body {
   background: transparent;
 }
@@ -465,6 +471,94 @@ body {
   position: fixed;
   inset: 0;
   max-width: none;
+}
+
+/* Tauri: Make sidebar wrapper transparent for vibrancy */
+.tauri [data-slot="sidebar-wrapper"] {
+  background: transparent !important;
+}
+
+/* Tauri: Make sidebar inset fully transparent - vibrancy comes from window */
+.tauri [data-slot="sidebar-inset"] {
+  background: transparent !important;
+}
+
+/* Tauri: Make the main content area almost transparent for vibrancy
+ * A subtle tint helps distinguish content area from sidebar
+ */
+.tauri [data-slot="main-content"] {
+  background: color-mix(in oklch, var(--background) 15%, transparent) !important;
+}
+
+/* Tauri: Make sidebar almost fully transparent to let window vibrancy show through
+ * The blur comes from macOS underWindowBackground effect, not CSS backdrop-filter
+ * We only add a very subtle tint (5%) for visual hierarchy
+ * Use both background and background-color for maximum specificity
+ */
+.tauri [data-slot="sidebar"],
+.tauri [data-slot="sidebar-inner"],
+.tauri [data-sidebar="sidebar"] {
+  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+  background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+}
+
+/* Tauri: Make sidebar-gap transparent */
+.tauri [data-slot="sidebar-gap"] {
+  background: transparent !important;
+}
+
+/* Tauri: Make sidebar-container transparent */
+.tauri [data-slot="sidebar-container"] {
+  background: transparent !important;
+}
+
+/* Tauri: Override sidebar backgrounds at wrapper level
+ * The SidebarProvider has has-data-[variant=inset]:bg-sidebar which adds opaque background
+ * We need to make all sidebar containers transparent for vibrancy to show through
+ */
+.tauri [data-slot="sidebar-wrapper"]:has([data-variant="inset"]) {
+  background: transparent !important;
+}
+
+/* Tauri: Nuclear option - override ANY element with bg-sidebar class
+ * Uses [class*="bg-sidebar"] to catch Tailwind variants like has-data-[variant=inset]:bg-sidebar
+ */
+.tauri [class*="bg-sidebar"] {
+  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+  background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+}
+
+/* Tauri: Also catch-all for any bg-sidebar or bg-background that might block vibrancy */
+.tauri .bg-sidebar {
+  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+  background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+}
+
+.tauri [class*="bg-background"] {
+  background: color-mix(in oklch, var(--background) 15%, transparent) !important;
+}
+
+.tauri .bg-background {
+  background: color-mix(in oklch, var(--background) 15%, transparent) !important;
+}
+
+/* Tauri: Handle Tailwind opacity variants (bg-background/40, bg-muted/30, etc.)
+ * Tailwind may use escaped slashes in class names, so we match both patterns
+ * Keep these very transparent for vibrancy
+ */
+.tauri [class*="bg-background/"],
+.tauri [class*="bg-background\\/"] {
+  background: color-mix(in oklch, var(--background) 10%, transparent) !important;
+}
+
+.tauri [class*="bg-sidebar/"],
+.tauri [class*="bg-sidebar\\/"] {
+  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+}
+
+.tauri [class*="bg-muted/"],
+.tauri [class*="bg-muted\\/"] {
+  background: color-mix(in oklch, var(--muted) 10%, transparent) !important;
 }
 
 /* Custom utilities */

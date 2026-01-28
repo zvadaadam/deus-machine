@@ -3,27 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>Conductor</title>
+    <title>Command</title>
 
     <!-- Apply theme before first render to prevent flash -->
     <script>
-      (function() {
+      (function () {
         try {
-          const stored = localStorage.getItem('theme');
-          let theme = 'system';
+          const stored = localStorage.getItem("theme");
+          let theme = "system";
 
-          if (stored === 'light' || stored === 'dark' || stored === 'system') {
+          if (stored === "light" || stored === "dark" || stored === "system") {
             theme = stored;
           }
 
           let resolved;
-          if (theme === 'system') {
-            resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          if (theme === "system") {
+            resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
           } else {
             resolved = theme;
           }
@@ -31,12 +28,23 @@
           document.documentElement.classList.add(resolved);
 
           // Detect Tauri environment and add class for desktop-specific styles
-          if (window.__TAURI__) {
-            document.documentElement.classList.add('tauri');
+          // Check immediately and also after a short delay (Tauri APIs may not be ready yet)
+          function detectTauri() {
+            if (window.__TAURI__ || window.__TAURI_INTERNALS__) {
+              document.documentElement.classList.add("tauri");
+              return true;
+            }
+            return false;
+          }
+
+          if (!detectTauri()) {
+            // Retry after DOM is ready (Tauri injects APIs after initial script execution)
+            setTimeout(detectTauri, 0);
+            document.addEventListener("DOMContentLoaded", detectTauri);
           }
         } catch (e) {
           // Fallback to light mode on error
-          document.documentElement.classList.add('light');
+          document.documentElement.classList.add("light");
         }
       })();
     </script>

@@ -1,6 +1,6 @@
-# Conductor Backend - Modular Architecture
+# Command Backend - Modular Architecture
 
-This directory contains the reorganized, modular backend for the Conductor application.
+This directory contains the reorganized, modular backend for the Command application.
 
 ## Architecture Overview
 

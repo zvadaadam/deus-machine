@@ -217,9 +217,9 @@ export const MessageItem = memo(function MessageItem({
             </div>
           )}
 
-          {/* Fade overlay for collapsed state - subtle gradient */}
+          {/* Fade overlay for collapsed state - matches user message bg-accent */}
           {shouldCollapse && !isExpanded && (
-            <div className="from-muted via-muted/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
+            <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
           )}
         </div>
 

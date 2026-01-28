@@ -78,7 +78,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     };
 
     // TODO: Fetch MCP servers from settings/API
-    const mcpServers = [];
+    const mcpServers: { name: string; active: boolean; command: string }[] = [];
 
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;

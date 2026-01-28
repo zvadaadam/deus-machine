@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Globe, FolderGit, Pencil, Sparkles, FileCode } from "lucide-react";
+import { X, Plus, Globe, GitBranch, Pencil, Sparkles, FileCode } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OpenInDropdown } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
@@ -152,22 +152,23 @@ export function MainContentTabBar({
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-shrink-0 flex-col">
         {/* ROW 1: Context Bar - Who & Where (48px) */}
-        <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-center border-b px-5 backdrop-blur-sm">
-          {/* Center: Breadcrumb - Repository / Branch (Editable) */}
-          {/* max-w prevents overlap with absolutely positioned right actions */}
+        <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-start border-b px-5 backdrop-blur-sm">
+          {/* Left: Breadcrumb - Repository / Branch (Editable) */}
           {branch && (
-            <div className="group flex max-w-[calc(100%-100px)] items-center justify-center gap-2">
-              <FolderGit className="text-muted-foreground/60 h-4 w-4 flex-shrink-0" />
+            <div className="group flex items-center gap-1.5">
+              <GitBranch className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
 
               {repositoryName && (
                 <>
                   <span
-                    className="text-muted-foreground/60 max-w-[200px] truncate font-mono text-sm"
+                    className="text-muted-foreground/60 max-w-[200px] truncate text-[13px] font-normal"
                     title={repositoryName}
                   >
                     {repositoryName}
                   </span>
-                  <span className="text-muted-foreground/40 flex-shrink-0 select-none">/</span>
+                  <span className="text-muted-foreground/30 flex-shrink-0 text-[13px] select-none">
+                    /
+                  </span>
                 </>
               )}
 
@@ -182,7 +183,7 @@ export function MainContentTabBar({
                   onKeyDown={handleBranchKeyDown}
                   onBlur={saveBranchName}
                   className={cn(
-                    "text-foreground font-mono text-sm font-medium",
+                    "text-foreground text-[13px] font-medium",
                     "border-none bg-transparent outline-none",
                     "focus:ring-primary -mx-1 rounded px-1 focus:ring-1",
                     "min-w-[100px]"
@@ -194,8 +195,8 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   disabled={!onBranchRename}
                   className={cn(
-                    "text-foreground/90 max-w-[200px] truncate font-mono text-sm font-medium",
-                    "hover:text-foreground",
+                    "text-foreground max-w-[200px] truncate text-[13px] font-medium",
+                    "hover:text-foreground/80",
                     "transition-colors duration-150 ease-out",
                     onBranchRename && "cursor-text"
                   )}
@@ -213,7 +214,7 @@ export function MainContentTabBar({
                   onClick={startEditingBranch}
                   className="flex items-center justify-center"
                 >
-                  <Pencil className="text-muted-foreground/40 h-3.5 w-3.5 flex-shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+                  <Pencil className="text-muted-foreground/40 h-3 w-3 flex-shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
                 </button>
               )}
             </div>
