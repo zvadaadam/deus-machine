@@ -269,7 +269,7 @@ function startKeepalive(server, interval = 30000) {
  * Main entry point
  */
 async function main() {
-  console.log('\n🚀 OpenDevs Sidecar - Unix Socket Server');
+  console.log('\n🚀 Command Sidecar - Unix Socket Server');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   const server = new UnixSocketServer();

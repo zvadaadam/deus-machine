@@ -1,5 +1,5 @@
 {
-  "productName": "OpenDevs",
+  "productName": "Command",
   "version": "2.0.0",
   "identifier": "com.conductor.app",
   "build": {
@@ -11,9 +11,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": [
-      "../backend/**/*.cjs"
-    ],
+    "resources": ["../backend/**/*.cjs"],
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "10.13"
@@ -24,7 +22,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenDevs",
+        "title": "Command",
         "width": 1280,
         "height": 800,
         "resizable": true,
@@ -34,7 +32,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "windowEffects": {
-          "state": "active",
+          "state": "followsWindowActiveState",
           "effects": ["underWindowBackground"]
         }
       }

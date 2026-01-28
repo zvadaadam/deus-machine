@@ -1,8 +1,8 @@
-# OpenDevs Architecture
+# Command Architecture
 
 ## Overview
 
-OpenDevs is a desktop IDE for managing multiple parallel AI coding agents. It consists of 4 main layers:
+Command is a desktop IDE for managing multiple parallel AI coding agents. It consists of 4 main layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -67,6 +67,7 @@ Content-Type: application/json
 ```
 
 **Port Discovery Priority:**
+
 1. `VITE_BACKEND_PORT` env variable (web dev mode)
 2. Tauri `invoke('get_backend_port')` (desktop mode)
 3. Port scanning (fallback for web mode)
@@ -107,15 +108,15 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
 // backend/lib/claude-session.cjs
 function sendToClaudeSession(sessionId, content) {
   const message = {
-    type: 'user',
+    type: "user",
     message: {
-      role: 'user',
-      content: [{ type: 'text', text: content }]
-    }
+      role: "user",
+      content: [{ type: "text", text: content }],
+    },
   };
 
   // Write to Claude CLI stdin as JSON line
-  sessionInfo.process.stdin.write(JSON.stringify(message) + '\n');
+  sessionInfo.process.stdin.write(JSON.stringify(message) + "\n");
 }
 ```
 
@@ -135,23 +136,24 @@ Backend captures stdout and parses JSON
 
 ```javascript
 // backend/lib/claude-session.cjs
-claudeProcess.stdout.on('data', (data) => {
+claudeProcess.stdout.on("data", (data) => {
   // Parse stream-json lines
   const message = JSON.parse(line);
 
-  if (message.type === 'assistant') {
+  if (message.type === "assistant") {
     // Save assistant message to database
-    db.prepare(`INSERT INTO session_messages (id, session_id, role, content, ...)
-      VALUES (?, ?, 'assistant', ?, ...)`)
-      .run(messageId, sessionId, prepared.content, sentAt, sdkMessageId);
+    db.prepare(
+      `INSERT INTO session_messages (id, session_id, role, content, ...)
+      VALUES (?, ?, 'assistant', ?, ...)`
+    ).run(messageId, sessionId, prepared.content, sentAt, sdkMessageId);
 
     // Emit event to sidecar for real-time updates (desktop mode)
-    emitToSidecar('assistant_message', { sessionId, messageId });
+    emitToSidecar("assistant_message", { sessionId, messageId });
   }
 
-  if (message.type === 'result' && message.subtype === 'success') {
+  if (message.type === "result" && message.subtype === "success") {
     // Mark session as idle when done
-    db.prepare('UPDATE sessions SET status = \'idle\' ...').run(sessionId);
+    db.prepare("UPDATE sessions SET status = 'idle' ...").run(sessionId);
   }
 });
 ```
@@ -159,6 +161,7 @@ claudeProcess.stdout.on('data', (data) => {
 ### 7. Frontend Gets Updates (Two Modes)
 
 #### Desktop Mode (Real-time Events - Preferred)
+
 ```
 Claude responds → Backend saves to DB → Backend emits to Sidecar
   ↓
@@ -170,6 +173,7 @@ UI updates instantly (<100ms latency)
 ```
 
 **Event Flow Implementation:**
+
 ```rust
 // src-tauri/src/socket.rs
 // Listens to Unix socket and emits Tauri events
@@ -180,20 +184,22 @@ queryClient.invalidateQueries(['session', 'messages', sessionId])
 ```
 
 #### Web Mode (HTTP Polling - Fallback)
+
 ```typescript
 // src/features/session/api/session.queries.ts
 useQuery({
-  queryKey: ['session', 'messages', sessionId],
+  queryKey: ["session", "messages", sessionId],
   queryFn: () => SessionService.fetchMessages(sessionId),
   // Dynamic polling: 2s when working, 5s when idle
   refetchInterval: (query) => {
     const session = query.state.data;
-    return session?.status === 'working' ? 2000 : 5000;
-  }
-})
+    return session?.status === "working" ? 2000 : 5000;
+  },
+});
 ```
 
 Frontend polls:
+
 ```
 GET /api/sessions/{id}/messages every 2-5 seconds
   ↓
@@ -208,13 +214,13 @@ Frontend diffs and displays new messages
 
 ```javascript
 // backend/server.cjs
-process.on('uncaughtException', (error, origin) => {
-  console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error, origin) => {
+  console.error("Uncaught Exception:", error);
   // Log error and continue running
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Promise Rejection:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Promise Rejection:", reason);
   // Log promise rejection and continue running
 });
 ```
@@ -223,25 +229,25 @@ process.on('unhandledRejection', (reason, promise) => {
 
 ```javascript
 // backend/lib/claude-session.cjs
-claudeProcess.stdout.on('error', (err) => {
-  console.error('Claude stdout error:', err);
+claudeProcess.stdout.on("error", (err) => {
+  console.error("Claude stdout error:", err);
 });
 
-claudeProcess.stderr.on('error', (err) => {
-  console.error('Claude stderr error:', err);
+claudeProcess.stderr.on("error", (err) => {
+  console.error("Claude stderr error:", err);
 });
 
-claudeProcess.stdin.on('error', (err) => {
-  console.error('Claude stdin error:', err);
+claudeProcess.stdin.on("error", (err) => {
+  console.error("Claude stdin error:", err);
 });
 
-claudeProcess.on('error', (err) => {
-  console.error('Claude process error:', err);
+claudeProcess.on("error", (err) => {
+  console.error("Claude process error:", err);
 });
 
-claudeProcess.on('exit', (code, signal) => {
+claudeProcess.on("exit", (code, signal) => {
   // Clean up session and update database
-  db.prepare('UPDATE sessions SET status = \'idle\' WHERE id = ?').run(sessionId);
+  db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(sessionId);
 });
 ```
 
@@ -282,6 +288,7 @@ CREATE TABLE session_messages (
 ## Development Modes
 
 ### Web Dev Mode (`npm run dev:full`)
+
 - Runs `./dev.sh` which:
   1. Starts backend with PORT=0 (dynamic allocation)
   2. Captures backend port from stdout
@@ -289,6 +296,7 @@ CREATE TABLE session_messages (
 - Frontend connects directly to backend via environment variable
 
 ### Desktop Mode (`npm run tauri:dev`)
+
 - Runs everything in Tauri app
 - Rust layer manages backend lifecycle
 - Frontend uses `invoke('get_backend_port')` to get port
@@ -296,18 +304,21 @@ CREATE TABLE session_messages (
 ## Key Files
 
 ### Frontend
+
 - `src/shared/config/api.config.ts` - Port discovery & API config
 - `src/shared/api/client.ts` - HTTP client
 - `src/features/session/api/session.service.ts` - Session API methods
 - `src/features/session/api/session.queries.ts` - TanStack Query hooks
 
 ### Backend
+
 - `backend/server.cjs` - Main Express server
 - `backend/lib/claude-session.cjs` - Claude CLI process management
 - `backend/lib/database.cjs` - SQLite database
 - `backend/lib/message-sanitizer.cjs` - Message content handling
 
 ### Rust/Tauri
+
 - `src-tauri/src/backend.rs` - Backend process manager
 - `src-tauri/src/commands.rs` - Tauri commands (RPC)
 - `src-tauri/src/socket.rs` - Unix socket listener & event emitter
@@ -316,6 +327,7 @@ CREATE TABLE session_messages (
 - `src-tauri/src/lib.rs` - Main Tauri app
 
 ### Scripts
+
 - `dev.sh` - Development server launcher
 - `backend/server.cjs` - Backend entry point
 
@@ -324,6 +336,7 @@ CREATE TABLE session_messages (
 ### Issue: Claude doesn't respond to message
 
 **Possible causes:**
+
 1. **Backend crashed** → Check error handlers are in place
 2. **Claude CLI not spawning** → Check binary path and permissions
 3. **Frontend not polling** → Check refetchInterval in queries
@@ -331,6 +344,7 @@ CREATE TABLE session_messages (
 5. **Wrong backend port** → Check port discovery in browser console
 
 **Debug steps:**
+
 ```bash
 # 1. Check backend is running
 curl http://localhost:{port}/api/health
@@ -353,6 +367,7 @@ curl -X POST http://localhost:{port}/api/sessions/{sessionId}/messages \
 ### Issue: Backend silently crashes
 
 **Solution:** Comprehensive error handling is in place:
+
 - Global uncaughtException handler (backend/server.cjs)
 - Global unhandledRejection handler (backend/server.cjs)
 - Child process error handlers (backend/lib/claude-session.cjs)
@@ -365,6 +380,7 @@ curl -X POST http://localhost:{port}/api/sessions/{sessionId}/messages \
 **Mental Model:** Claude is a coworker showing their work. Each tool call should instantly answer: "What did Claude do, and what was the impact?"
 
 **Core Principles:**
+
 1. **Pure Content** - Remove decoration; no backgrounds/borders unless meaningful
 2. **Semantic Color** - Color conveys meaning (green = added, red = removed/error), never decoration
 3. **Assume Success** - Only show errors; success is the default, silence is confirmation
@@ -391,21 +407,25 @@ MessageItem.tsx
 ### Key Components
 
 **BlockRenderer** (`src/features/session/ui/blocks/BlockRenderer.tsx`)
+
 - Dispatches content blocks to appropriate renderers
 - Routes `text` → TextBlock, `tool_use` → ToolRegistry, `thinking` → ThinkingBlock
 
 **TextBlock** (`src/features/session/ui/blocks/TextBlock.tsx`)
+
 - Renders markdown with ChatMarkdown component
 - Weight variants: `'muted'` (transitional text, 13px) or `'normal'` (final summary, 15px)
 - Uses CSS-based syntax highlighting for instant rendering (no async Shiki)
 
 **BaseToolRenderer** (`src/features/session/ui/tools/components/BaseToolRenderer.tsx`)
+
 - Shared infrastructure for all tool renderers
 - Provides expand/collapse, error-only status, consistent styling
 - Render props API: `renderSummary`, `renderContent`
 - Single source of truth → affects all 15+ tools
 
 **ToolRegistry** (`src/features/session/ui/tools/ToolRegistry.ts`)
+
 - Maps tool names → specific renderers
 - Auto-registers on startup
 - Fallback to DefaultToolRenderer for unknown tools

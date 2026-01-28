@@ -36,7 +36,7 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
 
       // Only refetch if data is actually stale (not on every mount)
-      refetchOnMount: "stale",
+      refetchOnMount: true,
 
       // Don't refetch on reconnect (conditional polling handles updates)
       refetchOnReconnect: false,
