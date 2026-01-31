@@ -15,7 +15,7 @@ import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
 export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { pattern, path } = toolUse.input;
+  const { pattern, path } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse results - Glob returns newline-separated file paths or "No files found"
@@ -41,7 +41,11 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Glob"
-      icon={<FileSearch className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Glob)} />}
+      icon={
+        <FileSearch
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Glob)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (

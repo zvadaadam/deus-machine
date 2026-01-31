@@ -15,10 +15,12 @@ import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file_path, offset, limit } = toolUse.input;
+  const { file_path, offset, limit } = toolUse.input ?? {};
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
 
   // Extract filename from path
-  const fileName = file_path.split("/").pop() || file_path;
+  const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
 
   // Count lines from result content
   const getLineCount = () => {
@@ -37,16 +39,30 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Read"
-      icon={<FileText className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Read)} />}
+      icon={
+        <FileText
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Read)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       defaultExpanded={false}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-muted/60 rounded px-1.5 py-0.5 font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {fileName}
           </span>
-          {lineCount && <span className={chatTheme.blocks.tool.contentHierarchy.metadata}> • {lineCount} lines</span>}
+          {lineCount && (
+            <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+              {" "}
+              • {lineCount} lines
+            </span>
+          )}
         </>
       )}
       renderContent={({ toolResult }) => {
@@ -59,7 +75,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                 ? JSON.stringify(toolResult.content, null, 2)
                 : toolResult.content
             }
-            language={detectLanguageFromPath(file_path)}
+            language={language}
             showLineNumbers={true}
             maxHeight="400px"
           />
