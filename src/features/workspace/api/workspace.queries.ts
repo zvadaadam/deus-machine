@@ -180,21 +180,6 @@ export function usePRStatus(workspaceId: string | null) {
 }
 
 /**
- * Fetch dev servers for a workspace
- */
-export function useDevServers(workspaceId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.workspaces.devServers(workspaceId || ""),
-    queryFn: async () => {
-      const result = await WorkspaceService.fetchDevServers(workspaceId!);
-      return result.servers || [];
-    },
-    enabled: !!workspaceId,
-    staleTime: 3000,
-  });
-}
-
-/**
  * Fetch specific file diff
  */
 export function useFileDiff(workspaceId: string | null, filePath: string | null) {
@@ -288,7 +273,7 @@ export function useArchiveWorkspace() {
  */
 export function useSystemPrompt(workspaceId: string | null) {
   return useQuery({
-    queryKey: ["workspaces", "system-prompt", workspaceId],
+    queryKey: queryKeys.workspaces.systemPrompt(workspaceId || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchSystemPrompt(workspaceId!);
       return result.system_prompt || "";
@@ -311,16 +296,14 @@ export function useUpdateSystemPrompt() {
     // Optimistic update: Show new prompt immediately
     onMutate: async ({ workspaceId, systemPrompt }) => {
       await queryClient.cancelQueries({
-        queryKey: ["workspaces", "system-prompt", workspaceId],
+        queryKey: queryKeys.workspaces.systemPrompt(workspaceId),
       });
 
-      const previousPrompt = queryClient.getQueryData<string>([
-        "workspaces",
-        "system-prompt",
-        workspaceId,
-      ]);
+      const previousPrompt = queryClient.getQueryData<string>(
+        queryKeys.workspaces.systemPrompt(workspaceId)
+      );
 
-      queryClient.setQueryData(["workspaces", "system-prompt", workspaceId], systemPrompt);
+      queryClient.setQueryData(queryKeys.workspaces.systemPrompt(workspaceId), systemPrompt);
 
       return { previousPrompt };
     },
@@ -328,7 +311,7 @@ export function useUpdateSystemPrompt() {
     onError: (_err, variables, context) => {
       if (context?.previousPrompt !== undefined) {
         queryClient.setQueryData(
-          ["workspaces", "system-prompt", variables.workspaceId],
+          queryKeys.workspaces.systemPrompt(variables.workspaceId),
           context.previousPrompt
         );
       }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/platform/tauri";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -136,7 +136,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
         <Tooltip>
           <TooltipTrigger asChild>{dropdownMenu}</TooltipTrigger>
           <TooltipContent side="bottom">
-            <p className="text-xs">Open in VSCode, Cursor...</p>
+            <p className="text-xs">Open in Finder, VSCode, Cursor...</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

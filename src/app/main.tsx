@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "../global.css";
+import { reportError } from "@/shared/utils/errorReporting";
 
 // Ensure Tauri class is applied (backup check - head script may run before __TAURI__ is available)
 if (
@@ -9,6 +10,28 @@ if (
   ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
 ) {
   document.documentElement.classList.add("tauri");
+}
+
+if (typeof window !== "undefined") {
+  const w = window as Window & { __conductorErrorHandlers__?: boolean };
+  if (!w.__conductorErrorHandlers__) {
+    w.__conductorErrorHandlers__ = true;
+
+    window.addEventListener("error", (event) => {
+      reportError(event.error ?? event.message, {
+        source: "window.error",
+        extra: {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+        },
+      });
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      reportError(event.reason, { source: "window.unhandledrejection" });
+    });
+  }
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

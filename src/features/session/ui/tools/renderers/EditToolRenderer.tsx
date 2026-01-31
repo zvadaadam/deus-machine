@@ -15,21 +15,28 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file_path, old_string, new_string } = toolUse.input;
+  const input = toolUse?.input ?? {};
+  const filePath = typeof input.file_path === "string" ? input.file_path : "unknown file";
+  const oldString = typeof input.old_string === "string" ? input.old_string : "";
+  const newString = typeof input.new_string === "string" ? input.new_string : "";
 
   // Extract filename for collapsed summary
-  const fileName = file_path.split("/").pop() || file_path;
+  const fileName = filePath.split("/").pop() || filePath;
 
   // Calculate diff stats
-  const oldLines = old_string.split("\n").length;
-  const newLines = new_string.split("\n").length;
+  const oldLines = oldString.split("\n").length;
+  const newLines = newString.split("\n").length;
   const added = Math.max(0, newLines - oldLines);
   const removed = Math.max(0, oldLines - newLines);
 
   return (
     <BaseToolRenderer
       toolName="Edit"
-      icon={<FileEdit className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Edit)} />}
+      icon={
+        <FileEdit
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Edit)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
@@ -48,9 +55,9 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       )}
       renderContent={() => (
         <UnifiedDiff
-          oldString={old_string}
-          newString={new_string}
-          fileName={file_path}
+          oldString={oldString}
+          newString={newString}
+          fileName={filePath}
           maxHeight="400px"
         />
       )}
