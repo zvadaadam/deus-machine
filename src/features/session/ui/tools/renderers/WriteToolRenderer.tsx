@@ -16,9 +16,11 @@ import { cn } from "@/shared/lib/utils";
 
 export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, content } = toolUse.input ?? {};
-  const fileName = file_path?.split("/").pop() || file_path || "unknown";
-  const lineCount = content?.split("\n").length ?? 0;
-  const language = file_path ? detectLanguageFromPath(file_path) : undefined;
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const safeContent = typeof content === "string" ? content : "";
+  const fileName = safeFilePath ? (safeFilePath.split("/").pop() ?? safeFilePath) : "unknown";
+  const lineCount = safeContent ? safeContent.split("\n").length : 0;
+  const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
 
   return (
     <BaseToolRenderer
@@ -48,7 +50,7 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       )}
       renderContent={() => (
         <CodeBlock
-          code={content ?? ""}
+          code={safeContent}
           language={language}
           showLineNumbers={true}
           maxHeight="300px"

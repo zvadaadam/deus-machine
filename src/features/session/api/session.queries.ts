@@ -83,7 +83,12 @@ const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | st
         return JSON.stringify(block);
       }
 
-      if ((block as ContentBlock).type !== "tool_use") {
+      const blockType = (block as { type?: unknown }).type;
+      if (typeof blockType !== "string") {
+        didChange = true;
+        return JSON.stringify(block);
+      }
+      if (blockType !== "tool_use") {
         return block as ContentBlock;
       }
 

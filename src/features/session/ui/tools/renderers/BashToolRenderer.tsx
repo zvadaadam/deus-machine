@@ -15,12 +15,13 @@ import { chatTheme } from "../../theme";
 
 export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { command, description } = toolUse.input ?? {};
+  const commandText = typeof command === "string" ? command : "";
   const isError = toolResult?.is_error;
 
   // Truncate command more aggressively when description exists (command is secondary)
   const commandPreview = (() => {
-    if (!command) return "...";
-    return command.length > 35 ? `${command.slice(0, 35)}...` : command;
+    if (!commandText) return "...";
+    return commandText.length > 35 ? `${commandText.slice(0, 35)}...` : commandText;
   })();
 
   return (
@@ -77,7 +78,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
             )}
           >
             <code>
-              <span className="text-success font-semibold">$ {command ?? "..."}</span>
+              <span className="text-success font-semibold">$ {commandText || "..."}</span>
               {"\n"}
               {output}
             </code>
