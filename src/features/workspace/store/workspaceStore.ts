@@ -31,14 +31,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Actions
       selectWorkspace: (workspace) => {
         // DEBUG: trace what's clearing the selection
-        if (!workspace) {
+        if (!workspace && import.meta.env.DEV) {
           console.trace("[workspace-store] selectWorkspace(null) called");
         }
         set({ selectedWorkspace: workspace }, false, "workspace/select");
       },
 
       clearSelection: () => {
-        console.trace("[workspace-store] clearSelection() called");
+        if (import.meta.env.DEV) {
+          console.trace("[workspace-store] clearSelection() called");
+        }
         set({ selectedWorkspace: null }, false, "workspace/clearSelection");
       },
 

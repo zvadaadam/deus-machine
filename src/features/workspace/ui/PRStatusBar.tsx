@@ -22,7 +22,8 @@ export function PRStatusBar({
   const prLabel = prStatus?.pr_number ? `PR #${prStatus.pr_number}` : "No PR";
   const mergeStatus = prStatus?.merge_status;
   const isMerged = mergeStatus === "merged";
-  const mergeDisabled = !prStatus?.pr_url || isMerged;
+  const isBlocked = mergeStatus === "blocked";
+  const mergeDisabled = !prStatus?.pr_url || isMerged || isBlocked;
   const showMergeButton = Boolean(onMergePR);
   const reviewLabel = showMergeButton ? "Review" : "View PR";
 
@@ -77,7 +78,7 @@ export function PRStatusBar({
                 onClick={onMergePR}
                 disabled={mergeDisabled}
               >
-                {isMerged ? "Merged" : "Merge"}
+                {isMerged ? "Merged" : isBlocked ? "Blocked" : "Merge"}
               </Button>
             )}
           </>
