@@ -23,6 +23,7 @@ import { FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import type { Workspace } from "@/shared/types";
+import { invoke } from "@/platform/tauri";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
 
@@ -220,7 +221,6 @@ export function MainLayout() {
         cloneTarget = await join(targetPath, repoName);
       }
 
-      const { invoke } = await import("@tauri-apps/api/core");
       await invoke("git_clone", { url: githubUrl, targetPath: cloneTarget });
 
       let repo: Repo;
@@ -255,7 +255,6 @@ export function MainLayout() {
         {
           "--sidebar-width": "280px",
           "--sidebar-width-mobile": "280px",
-          "--sidebar-width-icon": "3rem",
         } as React.CSSProperties
       }
     >
@@ -263,7 +262,7 @@ export function MainLayout() {
       {loading ? (
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
-        <Sidebar variant="inset" collapsible="icon">
+        <Sidebar variant="inset" collapsible="offcanvas">
           <SidebarContent className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3 text-center">
               <FolderOpen
@@ -301,6 +300,7 @@ export function MainLayout() {
       {/* Main Content */}
       <MainContent
         selectedWorkspace={selectedWorkspace}
+        prStatus={prStatusQuery.data ?? null}
         workspaceChatPanelRef={workspaceChatPanelRef}
         onCreateWorkspace={openNewWorkspaceModal}
         onOpenProject={handleOpenProject}

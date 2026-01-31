@@ -33,6 +33,8 @@ app.use(express.json());
 
 // Global variable to store actual port
 let actualServerPort = null;
+const parentBranchCache = new Map();
+const PARENT_BRANCH_CACHE_TTL_MS = 5000;
 
 // Initialize database
 const db = initDatabase();
@@ -115,6 +117,12 @@ function detectDefaultBranch(root_path) {
  * @returns {string} The resolved branch ref (e.g., "origin/main")
  */
 function resolveParentBranch(workspacePath, parentBranch, defaultBranch) {
+  const cacheKey = `${workspacePath}::${parentBranch || ''}::${defaultBranch || ''}`;
+  const cached = parentBranchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.branch;
+  }
+
   // Priority order: parent_branch → default_branch → main → master → develop
   const candidates = [
     parentBranch,
@@ -131,25 +139,57 @@ function resolveParentBranch(workspacePath, parentBranch, defaultBranch) {
         cwd: workspacePath,
         timeout: 2000
       });
+      parentBranchCache.set(cacheKey, {
+        branch: ref,
+        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS
+      });
       return ref; // Branch exists
     } catch {
       // Branch doesn't exist, try next
     }
   }
 
-  // Last resort: return whatever HEAD points to locally
-  try {
-    const headRef = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd: workspacePath,
-      encoding: 'utf-8',
-      timeout: 2000
-    }).trim();
-    // Use local branch comparison as fallback
-    return headRef;
-  } catch {
-    // Absolute fallback - will likely fail but provides consistent error
-    return 'origin/main';
+  // Try local branches if no remote branch is found
+  for (const branch of candidates) {
+    try {
+      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], {
+        cwd: workspacePath,
+        timeout: 2000
+      });
+      const resolved = branch;
+      parentBranchCache.set(cacheKey, {
+        branch: resolved,
+        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS
+      });
+      return resolved;
+    } catch {
+      // Local branch doesn't exist, try next
+    }
   }
+
+  const fallback = defaultBranch || 'main';
+  parentBranchCache.set(cacheKey, {
+    branch: fallback,
+    expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS
+  });
+  return fallback;
+}
+
+function resolveWorkspaceRelativePath(workspacePath, filePath) {
+  if (!filePath || typeof filePath !== 'string') return null;
+  if (filePath.includes('\0')) return null;
+
+  const normalized = path.normalize(filePath);
+  if (path.isAbsolute(normalized)) return null;
+
+  const resolved = path.resolve(workspacePath, normalized);
+  const relative = path.relative(workspacePath, resolved);
+
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  return relative;
 }
 
 // Initialize settings table if it doesn't exist
@@ -205,6 +245,7 @@ console.log('✅ Global error handlers installed');
 app.get('/api/health', (req, res) => {
   const sidecarStatus = getSidecarStatus();
   res.json({
+    app: 'conductor-backend',
     status: 'ok',
     port: actualServerPort,
     timestamp: new Date().toISOString(),
@@ -623,11 +664,20 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
     const parentBranch = resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
+    const safeFilePath = resolveWorkspaceRelativePath(workspacePath, file);
+
+    if (!safeFilePath) {
+      return res.status(400).json({
+        error: 'validation_error',
+        message: 'Invalid file path',
+        retryable: false
+      });
+    }
 
     try {
       const output = execFileSync(
         'git',
-        ['diff', `${parentBranch}...HEAD`, '--', file],
+        ['diff', `${parentBranch}...HEAD`, '--', safeFilePath],
         {
           cwd: workspacePath,
           encoding: 'utf-8',
@@ -721,6 +771,142 @@ app.get('/api/workspaces/:id/pr-status', async (req, res) => {
       // No PR found
       res.json({ has_pr: false });
     }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Find .pen design files in a workspace
+app.get('/api/workspaces/:id/pen-files', async (req, res) => {
+  try {
+    const workspace = db.prepare(`
+      SELECT w.*, r.root_path
+      FROM workspaces w
+      LEFT JOIN repos r ON w.repository_id = r.id
+      WHERE w.id = ?
+    `).get(req.params.id);
+
+    if (!workspace || !workspace.root_path || !workspace.directory_name) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
+
+    const MAX_PEN_SCAN_DEPTH = 10;
+    const MAX_PEN_FILES = 500;
+
+    function findPenFiles(dirPath, relativeTo, depth = 0, results = []) {
+      if (depth > MAX_PEN_SCAN_DEPTH || results.length >= MAX_PEN_FILES) {
+        return results;
+      }
+      try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+          if (entry.isSymbolicLink && entry.isSymbolicLink()) continue;
+          const fullPath = path.join(dirPath, entry.name);
+          if (entry.isDirectory()) {
+            findPenFiles(fullPath, relativeTo, depth + 1, results);
+          } else if (entry.isFile() && entry.name.endsWith('.pen')) {
+            results.push({
+              name: entry.name,
+              path: path.relative(relativeTo, fullPath),
+            });
+            if (results.length >= MAX_PEN_FILES) {
+              return results;
+            }
+          }
+        }
+      } catch (e) {
+        // skip unreadable directories
+      }
+      return results;
+    }
+
+    const files = findPenFiles(workspacePath, workspacePath);
+    res.json({ files, count: files.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Open a .pen file in the Pencil desktop app
+app.post('/api/workspaces/:id/open-pen-file', async (req, res) => {
+  try {
+    const { filePath } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: 'filePath is required' });
+    }
+
+    const workspace = db.prepare(`
+      SELECT w.*, r.root_path
+      FROM workspaces w
+      LEFT JOIN repos r ON w.repository_id = r.id
+      WHERE w.id = ?
+    `).get(req.params.id);
+
+    if (!workspace || !workspace.root_path || !workspace.directory_name) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
+    const absolutePath = path.resolve(workspacePath, filePath);
+
+    // Security: ensure the resolved path stays within the workspace
+    if (!absolutePath.startsWith(workspacePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Open file via Pencil if available; fallback to default app association.
+    // This avoids macOS routing .pen files back into OpenDevs if it becomes the default handler.
+    const envPencilApp = process.env.PENCIL_APP_NAME || process.env.PENCIL_APP;
+    const pencilCandidates = [
+      envPencilApp,
+      '/Applications/Pencil.app',
+      path.join(os.homedir(), 'Applications', 'Pencil.app'),
+      'Pencil',
+    ].filter(Boolean);
+
+    let pencilApp = null;
+    for (const candidate of pencilCandidates) {
+      if (candidate.endsWith('.app') || candidate.startsWith('/')) {
+        if (fs.existsSync(candidate)) {
+          pencilApp = candidate;
+          break;
+        }
+      } else {
+        pencilApp = candidate;
+        break;
+      }
+    }
+
+    if (process.platform === 'darwin' && pencilApp) {
+      console.log(`[pen] Opening file (Pencil):`, absolutePath);
+      const child = spawn('open', ['-a', pencilApp, absolutePath], { stdio: 'ignore' });
+      let didFallback = false;
+      const fallbackToWeb = () => {
+        if (didFallback) return;
+        didFallback = true;
+        console.warn('[pen] Pencil open failed, opening pencil.dev:', absolutePath);
+        const webChild = spawn('open', ['https://pencil.dev'], { stdio: 'ignore' });
+        webChild.unref();
+      };
+      child.on('error', fallbackToWeb);
+      child.on('exit', (code) => {
+        if (code !== 0) fallbackToWeb();
+      });
+      child.unref();
+    } else {
+      console.warn('[pen] Pencil app not found, opening pencil.dev:', absolutePath);
+      const webChild = spawn('open', ['https://pencil.dev'], { stdio: 'ignore' });
+      webChild.unref();
+    }
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

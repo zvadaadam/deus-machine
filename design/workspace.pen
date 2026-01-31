@@ -7,9 +7,6 @@
       "x": 1480,
       "y": -881,
       "name": "Workspace Content",
-      "theme": {
-        "mode": "dark"
-      },
       "clip": true,
       "width": 1280,
       "height": 900,
@@ -66,8 +63,14 @@
               },
               "fill": "#262626"
             },
+            "6U044": {
+              "x": 10,
+              "y": 6
+            },
             "YzFnw": {
-              "fill": "#6E7681"
+              "fill": "#6E7681",
+              "x": 48,
+              "y": 7
             },
             "USoUp": {
               "flipX": false,
@@ -84,6 +87,12 @@
                 },
                 "fill": "#313131"
               }
+            },
+            "HsBHJ": {
+              "width": "fill_container",
+              "height": "fill_container",
+              "x": 0,
+              "y": 0
             },
             "Mtpqy": {
               "fill": "#8B949E"
@@ -143,6 +152,10 @@
                         "fill": "#E6EDF3"
                       },
                       "descendants": {
+                        "YasV2": {
+                          "x": 16,
+                          "y": 12
+                        },
                         "VDEOJ": {
                           "fill": "#D97706",
                           "stroke": {
@@ -151,10 +164,14 @@
                           }
                         },
                         "0Ut4Y": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "OyQsV": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 48,
+                          "y": 16
                         }
                       }
                     },
@@ -164,6 +181,8 @@
                       "ref": "JCCO1",
                       "name": "tab2",
                       "fill": "transparent",
+                      "x": 124,
+                      "y": 0,
                       "descendants": {
                         "1BUiB": {
                           "fill": "#6E7681",
@@ -173,7 +192,9 @@
                           }
                         },
                         "hCGAr": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "EmtI0": {
                           "content": "API refactor",
@@ -187,6 +208,8 @@
                       "ref": "JCCO1",
                       "name": "tab3",
                       "fill": "transparent",
+                      "x": 261,
+                      "y": 0,
                       "descendants": {
                         "1BUiB": {
                           "fill": "#6E7681",
@@ -196,7 +219,9 @@
                           }
                         },
                         "hCGAr": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "EmtI0": {
                           "content": "Bug fix",
@@ -275,7 +300,11 @@
                       "descendants": {
                         "ZsMjg": {
                           "content": "// Update OPENAI_API_KEY in process.env and write auth.json for Codex CLI\n// This is necessary because Codex CLI reads from ~/.codex/auth.json, not just env vars\nprocess.env.OPENAI_API_KEY = apiKey;\nupdateCodexAuth();",
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "width": "fill_container",
+                          "height": 0,
+                          "x": 16,
+                          "y": 12
                         }
                       }
                     },
@@ -387,7 +416,11 @@
                       "descendants": {
                         "ZsMjg": {
                           "content": "// Change from:\nexport function updateCodexAuth(): void {\n  const apiKey = process.env.OPENAI_API_KEY;\n  // ...\n}\n\n// To:\nexport function updateCodexAuth(apiKey: string): void {\n  // ...\n}",
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "width": "fill_container",
+                          "height": 0,
+                          "x": 16,
+                          "y": 12
                         }
                       }
                     },
@@ -525,10 +558,24 @@
                           "enabled": false
                         }
                       },
+                      "width": "fill_container",
+                      "height": "fit_content",
                       "descendants": {
+                        "DwwXE": {
+                          "width": "fill_container",
+                          "height": 80,
+                          "x": 16,
+                          "y": 16
+                        },
                         "mhSiy": {
                           "fill": "#8B949E",
                           "content": "Ask to make changes, @mention files, run /commands"
+                        },
+                        "BK7Sy": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 16,
+                          "y": 108
                         },
                         "stcWt": {
                           "fill": "transparent"
@@ -537,13 +584,19 @@
                           "fill": "#2E2E2E"
                         },
                         "WeOED": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 12,
+                          "y": 6.5
                         },
                         "uy9hS": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 32,
+                          "y": 6
                         },
                         "yV7Hv": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 72,
+                          "y": 7.5
                         },
                         "wq7iM": {
                           "fill": "#E6EDF3"
@@ -580,7 +633,9 @@
                           "fill": "#2E2E2E"
                         },
                         "NkShR": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 8,
+                          "y": 8
                         }
                       }
                     }
@@ -735,8 +790,18 @@
                         16
                       ],
                       "descendants": {
+                        "PUl6Q": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 16,
+                          "y": 10
+                        },
                         "rQ7VA": {
                           "content": "src/components/Sidebar.tsx"
+                        },
+                        "9b1Vs": {
+                          "x": 315,
+                          "y": 10.5
                         },
                         "rkd3j": {
                           "content": "+45"
@@ -916,8 +981,42 @@
               },
               "fill": "#1E1E1E",
               "descendants": {
+                "zqWp1": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 0
+                },
                 "rjtXW": {
                   "fill": "#2E2E2E"
+                },
+                "js3T3": {
+                  "x": 10,
+                  "y": 10
+                },
+                "15bsd": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 82
+                },
+                "Oks4I": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 146
+                },
+                "PONYE": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 210
+                },
+                "9LHrm": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 274
                 }
               }
             }
@@ -1042,7 +1141,9 @@
                       "fill": "#3D4F3D"
                     },
                     "pvcvk": {
-                      "content": "E"
+                      "content": "E",
+                      "x": 6.5,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "sample-backend"
@@ -1432,7 +1533,9 @@
                       "fill": "#3D4F3D"
                     },
                     "pvcvk": {
-                      "content": "E"
+                      "content": "E",
+                      "x": 6.5,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "echo"
@@ -1593,7 +1696,9 @@
                   "fill": "#4A3D5C"
                 },
                 "pvcvk": {
-                  "content": "S"
+                  "content": "S",
+                  "x": 6,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "steercode-backend"
@@ -1617,7 +1722,9 @@
                   "fill": "#453D5C"
                 },
                 "pvcvk": {
-                  "content": "U"
+                  "content": "U",
+                  "x": 5.5,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "universe"
@@ -1641,7 +1748,9 @@
                   "fill": "#4A3D5C"
                 },
                 "pvcvk": {
-                  "content": "S"
+                  "content": "S",
+                  "x": 6,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "steercode-backend"
@@ -1665,7 +1774,9 @@
                   "fill": "#5C4A3D"
                 },
                 "pvcvk": {
-                  "content": "O"
+                  "content": "O",
+                  "x": 5.5,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "opencode"
@@ -1689,7 +1800,9 @@
                   "fill": "#5C4A3D"
                 },
                 "pvcvk": {
-                  "content": "O"
+                  "content": "O",
+                  "x": 5.5,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "openhands"
@@ -1713,7 +1826,9 @@
                   "fill": "#4A3D5C"
                 },
                 "pvcvk": {
-                  "content": "S"
+                  "content": "S",
+                  "x": 6,
+                  "y": 3.5
                 },
                 "iNUzb": {
                   "content": "software-agent-sdk"
@@ -2522,8 +2637,14 @@
                       },
                       "fill": "#262626"
                     },
+                    "6U044": {
+                      "x": 10,
+                      "y": 6
+                    },
                     "YzFnw": {
-                      "fill": "#6E7681"
+                      "fill": "#6E7681",
+                      "x": 48,
+                      "y": 7
                     },
                     "USoUp": {
                       "flipX": false,
@@ -2608,6 +2729,10 @@
                                 "fill": "#E6EDF3"
                               },
                               "descendants": {
+                                "YasV2": {
+                                  "x": 16,
+                                  "y": 12
+                                },
                                 "VDEOJ": {
                                   "fill": "#D97706",
                                   "stroke": {
@@ -2616,10 +2741,14 @@
                                   }
                                 },
                                 "0Ut4Y": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "OyQsV": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 48,
+                                  "y": 16
                                 }
                               }
                             },
@@ -2629,6 +2758,8 @@
                               "ref": "JCCO1",
                               "name": "tab2",
                               "fill": "transparent",
+                              "x": 124,
+                              "y": 0,
                               "descendants": {
                                 "1BUiB": {
                                   "fill": "#6E7681",
@@ -2638,7 +2769,9 @@
                                   }
                                 },
                                 "hCGAr": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "EmtI0": {
                                   "content": "API refactor",
@@ -2652,6 +2785,8 @@
                               "ref": "JCCO1",
                               "name": "tab3",
                               "fill": "transparent",
+                              "x": 261,
+                              "y": 0,
                               "descendants": {
                                 "1BUiB": {
                                   "fill": "#6E7681",
@@ -2661,7 +2796,9 @@
                                   }
                                 },
                                 "hCGAr": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "EmtI0": {
                                   "content": "Bug fix",
@@ -2740,7 +2877,11 @@
                               "descendants": {
                                 "ZsMjg": {
                                   "content": "// Update OPENAI_API_KEY in process.env and write auth.json for Codex CLI\n// This is necessary because Codex CLI reads from ~/.codex/auth.json, not just env vars\nprocess.env.OPENAI_API_KEY = apiKey;\nupdateCodexAuth();",
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "width": "fill_container",
+                                  "height": 0,
+                                  "x": 16,
+                                  "y": 12
                                 }
                               }
                             },
@@ -2852,7 +2993,11 @@
                               "descendants": {
                                 "ZsMjg": {
                                   "content": "// Change from:\nexport function updateCodexAuth(): void {\n  const apiKey = process.env.OPENAI_API_KEY;\n  // ...\n}\n\n// To:\nexport function updateCodexAuth(apiKey: string): void {\n  // ...\n}",
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "width": "fill_container",
+                                  "height": 0,
+                                  "x": 16,
+                                  "y": 12
                                 }
                               }
                             },
@@ -2990,10 +3135,24 @@
                                   "enabled": false
                                 }
                               },
+                              "width": "fill_container",
+                              "height": "fit_content",
                               "descendants": {
+                                "DwwXE": {
+                                  "width": "fill_container",
+                                  "height": 80,
+                                  "x": 16,
+                                  "y": 16
+                                },
                                 "mhSiy": {
                                   "fill": "#8B949E",
                                   "content": "Ask to make changes, @mention files, run /commands"
+                                },
+                                "BK7Sy": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "x": 16,
+                                  "y": 108
                                 },
                                 "stcWt": {
                                   "fill": "transparent"
@@ -3002,13 +3161,19 @@
                                   "fill": "#2E2E2E"
                                 },
                                 "WeOED": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 12,
+                                  "y": 6.5
                                 },
                                 "uy9hS": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 32,
+                                  "y": 6
                                 },
                                 "yV7Hv": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 72,
+                                  "y": 7.5
                                 },
                                 "wq7iM": {
                                   "fill": "#E6EDF3"
@@ -3045,7 +3210,9 @@
                                   "fill": "#2E2E2E"
                                 },
                                 "NkShR": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 8,
+                                  "y": 8
                                 }
                               }
                             }
@@ -3200,8 +3367,18 @@
                                 16
                               ],
                               "descendants": {
+                                "PUl6Q": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "x": 16,
+                                  "y": 10
+                                },
                                 "rQ7VA": {
                                   "content": "src/components/Sidebar.tsx"
+                                },
+                                "9b1Vs": {
+                                  "x": 315,
+                                  "y": 10.5
                                 },
                                 "rkd3j": {
                                   "content": "+45"
@@ -3386,8 +3563,42 @@
                       },
                       "fill": "#1E1E1E",
                       "descendants": {
+                        "zqWp1": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 0,
+                          "y": 0
+                        },
                         "rjtXW": {
                           "fill": "#2E2E2E"
+                        },
+                        "js3T3": {
+                          "x": 10,
+                          "y": 10
+                        },
+                        "15bsd": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 0,
+                          "y": 82
+                        },
+                        "Oks4I": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 0,
+                          "y": 146
+                        },
+                        "PONYE": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 0,
+                          "y": 210
+                        },
+                        "9LHrm": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 0,
+                          "y": 274
                         }
                       }
                     }
@@ -6460,679 +6671,10 @@
     },
     {
       "type": "frame",
-      "id": "oNm5O",
-      "x": 920,
-      "y": -928,
-      "name": "Workspaces Panel - Collapsed",
-      "clip": true,
-      "width": 56,
-      "height": 1100,
-      "fill": "#171717",
-      "layout": "vertical",
-      "children": [
-        {
-          "type": "frame",
-          "id": "OECwO",
-          "name": "Header",
-          "width": "fill_container",
-          "layout": "vertical",
-          "padding": [
-            10,
-            0
-          ],
-          "justifyContent": "center",
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "zJIMk",
-              "name": "Avatar",
-              "width": 28,
-              "height": 28,
-              "fill": {
-                "type": "image",
-                "enabled": true,
-                "url": "https://images.unsplash.com/photo-1769072057692-18ed7107d0e2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NDM0ODN8MHwxfHJhbmRvbXx8fHx8fHx8fDE3Njk0OTg4OTZ8&ixlib=rb-4.1.0&q=80&w=1080",
-                "mode": "fill"
-              },
-              "cornerRadius": 7
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "pWoa3",
-          "name": "Expand Row",
-          "width": "fill_container",
-          "padding": [
-            6,
-            0
-          ],
-          "justifyContent": "center",
-          "children": [
-            {
-              "type": "icon_font",
-              "id": "yusJi",
-              "name": "Expand",
-              "width": 18,
-              "height": 18,
-              "iconFontName": "panel-left-open",
-              "iconFontFamily": "lucide",
-              "fill": "#8B949E"
-            }
-          ]
-        },
-        {
-          "type": "rectangle",
-          "id": "g0xnB",
-          "name": "Divider",
-          "fill": "#2D2D2D",
-          "width": "fill_container",
-          "height": 1
-        },
-        {
-          "type": "frame",
-          "id": "lNoki",
-          "name": "Content",
-          "clip": true,
-          "width": "fill_container",
-          "height": "fill_container",
-          "layout": "vertical",
-          "gap": 2,
-          "padding": [
-            8,
-            0
-          ],
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "2lT4z",
-              "name": "sample-backend group",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 2,
-              "padding": [
-                4,
-                0
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "S2nIJ",
-                  "name": "E Badge",
-                  "width": 32,
-                  "height": 32,
-                  "fill": "#3D4F3D",
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "hIrqa",
-                      "name": "letter1",
-                      "fill": "#FFFFFF",
-                      "content": "E",
-                      "fontFamily": "Inter",
-                      "fontSize": 13,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "g8T1e",
-                  "name": "ws-restart",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "QQQBJ",
-                      "name": "wsIcon1",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "loader-circle",
-                      "iconFontFamily": "lucide",
-                      "fill": "#A371F7"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "KE9Pw",
-                  "name": "ws-fix-websocket",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "LkrA1",
-                      "name": "wsIcon2",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "eye",
-                      "iconFontFamily": "lucide",
-                      "fill": "#F59E0B"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "ub4sV",
-                  "name": "ws-fix-triple",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "GoaVU",
-                      "name": "wsIcon3",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-pull-request",
-                      "iconFontFamily": "lucide",
-                      "fill": "#A371F7"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "YaqGV",
-                  "name": "ws-chat-image",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "bZNal",
-                      "name": "wsIcon4",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "LGZi1",
-                  "name": "ws-secure-api",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "QtJSu",
-                      "name": "wsIcon5",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "NzLGM",
-                  "name": "ws-sidecar-mcp",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "7uhwp",
-                      "name": "wsIcon6",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-pull-request",
-                      "iconFontFamily": "lucide",
-                      "fill": "#A371F7"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "KzQP7",
-                  "name": "ws-terminal",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "bhYY9",
-                      "name": "wsIcon7",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "A7biw",
-                  "name": "ws-session-resume",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "O76y9",
-                      "name": "wsIcon8",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "Z2mho",
-                  "name": "ws-conductor",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "xoq7t",
-                      "name": "wsIcon9",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "8Ua9w",
-                  "name": "ws-simplify-claude",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "Hhh16",
-                      "name": "wsIcon10",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "YtidF",
-              "name": "Divider",
-              "fill": "#2D2D2D",
-              "width": 32,
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "gGsVN",
-              "name": "echo group",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 2,
-              "padding": [
-                4,
-                0
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "4exe1",
-                  "name": "E Badge 2",
-                  "width": 32,
-                  "height": 32,
-                  "fill": "#3D4F3D",
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "WNQ9V",
-                      "name": "letter2",
-                      "fill": "#FFFFFF",
-                      "content": "E",
-                      "fontFamily": "Inter",
-                      "fontSize": 13,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "nFdmw",
-                  "name": "ws-brisbane",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "kdlv8",
-                      "name": "wsEIcon1",
-                      "width": 16,
-                      "height": 16,
-                      "iconFontName": "git-branch",
-                      "iconFontFamily": "lucide",
-                      "fill": "#8B949E"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "W5lsb",
-                  "name": "ws-verify-sandbox",
-                  "width": 32,
-                  "height": 32,
-                  "cornerRadius": 6,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "K6PHq",
-                      "name": "wsEIcon2",
-                      "width": 8,
-                      "height": 8,
-                      "iconFontName": "circle",
-                      "iconFontFamily": "lucide",
-                      "fill": "#F85149"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "dntEL",
-              "name": "Divider",
-              "fill": "#2D2D2D",
-              "width": 32,
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "94ywO",
-              "name": "B Badge",
-              "width": 32,
-              "height": 32,
-              "fill": "#3D4A5C",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "Vdv9m",
-                  "name": "bIcon",
-                  "width": 14,
-                  "height": 14,
-                  "iconFontName": "folder",
-                  "iconFontFamily": "lucide",
-                  "fill": "#FFFFFF"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "iHwcD",
-              "name": "S Badge",
-              "width": 32,
-              "height": 32,
-              "fill": "#4A3D5C",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "64b6D",
-                  "name": "sLetter",
-                  "fill": "#FFFFFF",
-                  "content": "S",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "mJAkI",
-              "name": "U Badge",
-              "width": 32,
-              "height": 32,
-              "fill": "#453D5C",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "C3ds5",
-                  "name": "uLetter",
-                  "fill": "#FFFFFF",
-                  "content": "U",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "T1UcN",
-              "name": "S Badge 2",
-              "width": 32,
-              "height": 32,
-              "fill": "#4A3D5C",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "50xMb",
-                  "name": "s2Letter",
-                  "fill": "#FFFFFF",
-                  "content": "S",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "nxH8c",
-              "name": "O Badge",
-              "width": 32,
-              "height": 32,
-              "fill": "#5C4A3D",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "wfWYB",
-                  "name": "oLetter",
-                  "fill": "#FFFFFF",
-                  "content": "O",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "3zPZT",
-              "name": "O Badge 2",
-              "width": 32,
-              "height": 32,
-              "fill": "#5C4A3D",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "jbNfb",
-                  "name": "o2Letter",
-                  "fill": "#FFFFFF",
-                  "content": "O",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "yherW",
-              "name": "S Badge 3",
-              "width": 32,
-              "height": 32,
-              "fill": "#4A3D5C",
-              "cornerRadius": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "GjcBT",
-                  "name": "s3Letter",
-                  "fill": "#FFFFFF",
-                  "content": "S",
-                  "fontFamily": "Inter",
-                  "fontSize": 13,
-                  "fontWeight": "600"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "WWIBx",
-          "name": "Footer",
-          "width": "fill_container",
-          "fill": "#1c1c1c",
-          "layout": "vertical",
-          "gap": 12,
-          "padding": 12,
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "icon_font",
-              "id": "cq8jP",
-              "name": "Add Repo",
-              "width": 18,
-              "height": 18,
-              "iconFontName": "folder-plus",
-              "iconFontFamily": "lucide",
-              "fill": "#8B949E"
-            },
-            {
-              "type": "rectangle",
-              "id": "J1Cii",
-              "name": "Footer Divider",
-              "fill": "#2D2D2D",
-              "width": 32,
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "mpi7g",
-              "name": "Footer Icons",
-              "width": "fill_container",
-              "gap": 12,
-              "justifyContent": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "n1QzU",
-                  "name": "Help",
-                  "width": 16,
-                  "height": 16,
-                  "iconFontName": "help-circle",
-                  "iconFontFamily": "feather",
-                  "fill": "#8B949E"
-                },
-                {
-                  "type": "icon_font",
-                  "id": "rEvkS",
-                  "name": "Settings",
-                  "width": 16,
-                  "height": 16,
-                  "iconFontName": "settings",
-                  "iconFontFamily": "lucide",
-                  "fill": "#8B949E"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
       "id": "HqrS1",
       "x": 319,
       "y": -928,
-      "name": "Design Tokens",
+      "name": "Design Tokens - Dark",
       "theme": {
         "mode": "dark"
       },
@@ -7735,7 +7277,7 @@
                   "cornerRadius": 8,
                   "id": "F8y0K",
                   "name": "bdrSwatch1",
-                  "fill": "$bg-primary",
+                  "fill": "#171717",
                   "width": 40,
                   "height": 40,
                   "stroke": {
@@ -7788,7 +7330,7 @@
                   "cornerRadius": 8,
                   "id": "qqMFz",
                   "name": "bdrSwatch2",
-                  "fill": "$bg-primary",
+                  "fill": "#171717",
                   "width": 40,
                   "height": 40,
                   "stroke": {
@@ -9408,7 +8950,9 @@
                           "fill": "#3D4F3D"
                         },
                         "pvcvk": {
-                          "content": "E"
+                          "content": "E",
+                          "x": 6.5,
+                          "y": 3.5
                         },
                         "iNUzb": {
                           "content": "sample-backend"
@@ -9752,7 +9296,9 @@
                           "fill": "#3D4F3D"
                         },
                         "pvcvk": {
-                          "content": "E"
+                          "content": "E",
+                          "x": 6.5,
+                          "y": 3.5
                         },
                         "iNUzb": {
                           "content": "echo"
@@ -9891,7 +9437,9 @@
                       "fill": "#4A3D5C"
                     },
                     "pvcvk": {
-                      "content": "S"
+                      "content": "S",
+                      "x": 6,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "steercode-backend"
@@ -9909,7 +9457,9 @@
                       "fill": "#453D5C"
                     },
                     "pvcvk": {
-                      "content": "U"
+                      "content": "U",
+                      "x": 5.5,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "universe"
@@ -9927,7 +9477,9 @@
                       "fill": "#4A3D5C"
                     },
                     "pvcvk": {
-                      "content": "S"
+                      "content": "S",
+                      "x": 6,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "steercode-backend"
@@ -9945,7 +9497,9 @@
                       "fill": "#5C4A3D"
                     },
                     "pvcvk": {
-                      "content": "O"
+                      "content": "O",
+                      "x": 5.5,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "opencode"
@@ -9963,7 +9517,9 @@
                       "fill": "#5C4A3D"
                     },
                     "pvcvk": {
-                      "content": "O"
+                      "content": "O",
+                      "x": 5.5,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "openhands"
@@ -9981,7 +9537,9 @@
                       "fill": "#4A3D5C"
                     },
                     "pvcvk": {
-                      "content": "S"
+                      "content": "S",
+                      "x": 6,
+                      "y": 3.5
                     },
                     "iNUzb": {
                       "content": "software-agent-sdk"
@@ -10219,6 +9777,10 @@
                                     "fill": "#E6EDF3"
                                   },
                                   "descendants": {
+                                    "YasV2": {
+                                      "x": 16,
+                                      "y": 12
+                                    },
                                     "VDEOJ": {
                                       "fill": "#D97706",
                                       "stroke": {
@@ -10227,10 +9789,14 @@
                                       }
                                     },
                                     "0Ut4Y": {
-                                      "fill": "#FFFFFF"
+                                      "fill": "#FFFFFF",
+                                      "x": 3,
+                                      "y": 3
                                     },
                                     "OyQsV": {
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "x": 48,
+                                      "y": 16
                                     }
                                   }
                                 },
@@ -10240,6 +9806,8 @@
                                   "ref": "JCCO1",
                                   "name": "tab2",
                                   "fill": "transparent",
+                                  "x": 124,
+                                  "y": 0,
                                   "descendants": {
                                     "1BUiB": {
                                       "fill": "#6E7681",
@@ -10249,7 +9817,9 @@
                                       }
                                     },
                                     "hCGAr": {
-                                      "fill": "#FFFFFF"
+                                      "fill": "#FFFFFF",
+                                      "x": 3,
+                                      "y": 3
                                     },
                                     "EmtI0": {
                                       "content": "API refactor",
@@ -10263,6 +9833,8 @@
                                   "ref": "JCCO1",
                                   "name": "tab3",
                                   "fill": "transparent",
+                                  "x": 261,
+                                  "y": 0,
                                   "descendants": {
                                     "1BUiB": {
                                       "fill": "#6E7681",
@@ -10272,7 +9844,9 @@
                                       }
                                     },
                                     "hCGAr": {
-                                      "fill": "#FFFFFF"
+                                      "fill": "#FFFFFF",
+                                      "x": 3,
+                                      "y": 3
                                     },
                                     "EmtI0": {
                                       "content": "Bug fix",
@@ -10351,7 +9925,11 @@
                                   "descendants": {
                                     "ZsMjg": {
                                       "content": "// Update OPENAI_API_KEY in process.env and write auth.json for Codex CLI\n// This is necessary because Codex CLI reads from ~/.codex/auth.json, not just env vars\nprocess.env.OPENAI_API_KEY = apiKey;\nupdateCodexAuth();",
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "width": "fill_container",
+                                      "height": 0,
+                                      "x": 16,
+                                      "y": 12
                                     }
                                   }
                                 },
@@ -10463,7 +10041,11 @@
                                   "descendants": {
                                     "ZsMjg": {
                                       "content": "// Change from:\nexport function updateCodexAuth(): void {\n  const apiKey = process.env.OPENAI_API_KEY;\n  // ...\n}\n\n// To:\nexport function updateCodexAuth(apiKey: string): void {\n  // ...\n}",
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "width": "fill_container",
+                                      "height": 0,
+                                      "x": 16,
+                                      "y": 12
                                     }
                                   }
                                 },
@@ -10601,10 +10183,24 @@
                                       "enabled": false
                                     }
                                   },
+                                  "width": "fill_container",
+                                  "height": "fit_content",
                                   "descendants": {
+                                    "DwwXE": {
+                                      "width": "fill_container",
+                                      "height": 80,
+                                      "x": 16,
+                                      "y": 16
+                                    },
                                     "mhSiy": {
                                       "fill": "#8B949E",
                                       "content": "Ask to make changes, @mention files, run /commands"
+                                    },
+                                    "BK7Sy": {
+                                      "width": "fill_container",
+                                      "height": "fit_content",
+                                      "x": 16,
+                                      "y": 108
                                     },
                                     "stcWt": {
                                       "fill": "transparent"
@@ -10613,13 +10209,19 @@
                                       "fill": "#2E2E2E"
                                     },
                                     "WeOED": {
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "x": 12,
+                                      "y": 6.5
                                     },
                                     "uy9hS": {
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "x": 32,
+                                      "y": 6
                                     },
                                     "yV7Hv": {
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "x": 72,
+                                      "y": 7.5
                                     },
                                     "wq7iM": {
                                       "fill": "#E6EDF3"
@@ -10656,7 +10258,9 @@
                                       "fill": "#2E2E2E"
                                     },
                                     "NkShR": {
-                                      "fill": "#E6EDF3"
+                                      "fill": "#E6EDF3",
+                                      "x": 8,
+                                      "y": 8
                                     }
                                   }
                                 }
@@ -10811,8 +10415,18 @@
                                     16
                                   ],
                                   "descendants": {
+                                    "PUl6Q": {
+                                      "width": "fill_container",
+                                      "height": "fit_content",
+                                      "x": 16,
+                                      "y": 10
+                                    },
                                     "rQ7VA": {
                                       "content": "src/components/Sidebar.tsx"
+                                    },
+                                    "9b1Vs": {
+                                      "x": 315,
+                                      "y": 10.5
                                     },
                                     "rkd3j": {
                                       "content": "+45"
@@ -10992,6 +10606,10 @@
                           "descendants": {
                             "rjtXW": {
                               "fill": "#2E2E2E"
+                            },
+                            "js3T3": {
+                              "x": 10,
+                              "y": 10
                             }
                           }
                         }
@@ -12722,6 +12340,10 @@
                                 "fill": "#E6EDF3"
                               },
                               "descendants": {
+                                "YasV2": {
+                                  "x": 16,
+                                  "y": 12
+                                },
                                 "VDEOJ": {
                                   "fill": "#D97706",
                                   "stroke": {
@@ -12730,10 +12352,14 @@
                                   }
                                 },
                                 "0Ut4Y": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "OyQsV": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 48,
+                                  "y": 16
                                 }
                               }
                             },
@@ -12743,6 +12369,8 @@
                               "ref": "JCCO1",
                               "name": "tab2",
                               "fill": "transparent",
+                              "x": 124,
+                              "y": 0,
                               "descendants": {
                                 "1BUiB": {
                                   "fill": "#6E7681",
@@ -12752,7 +12380,9 @@
                                   }
                                 },
                                 "hCGAr": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "EmtI0": {
                                   "content": "API refactor",
@@ -12766,6 +12396,8 @@
                               "ref": "JCCO1",
                               "name": "tab3",
                               "fill": "transparent",
+                              "x": 261,
+                              "y": 0,
                               "descendants": {
                                 "1BUiB": {
                                   "fill": "#6E7681",
@@ -12775,7 +12407,9 @@
                                   }
                                 },
                                 "hCGAr": {
-                                  "fill": "#FFFFFF"
+                                  "fill": "#FFFFFF",
+                                  "x": 3,
+                                  "y": 3
                                 },
                                 "EmtI0": {
                                   "content": "Bug fix",
@@ -12854,7 +12488,11 @@
                               "descendants": {
                                 "ZsMjg": {
                                   "content": "// Update OPENAI_API_KEY in process.env and write auth.json for Codex CLI\n// This is necessary because Codex CLI reads from ~/.codex/auth.json, not just env vars\nprocess.env.OPENAI_API_KEY = apiKey;\nupdateCodexAuth();",
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "width": "fill_container",
+                                  "height": 0,
+                                  "x": 16,
+                                  "y": 12
                                 }
                               }
                             },
@@ -12966,7 +12604,11 @@
                               "descendants": {
                                 "ZsMjg": {
                                   "content": "// Change from:\nexport function updateCodexAuth(): void {\n  const apiKey = process.env.OPENAI_API_KEY;\n  // ...\n}\n\n// To:\nexport function updateCodexAuth(apiKey: string): void {\n  // ...\n}",
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "width": "fill_container",
+                                  "height": 0,
+                                  "x": 16,
+                                  "y": 12
                                 }
                               }
                             },
@@ -13104,10 +12746,24 @@
                                   "enabled": false
                                 }
                               },
+                              "width": "fill_container",
+                              "height": "fit_content",
                               "descendants": {
+                                "DwwXE": {
+                                  "width": "fill_container",
+                                  "height": 80,
+                                  "x": 16,
+                                  "y": 16
+                                },
                                 "mhSiy": {
                                   "fill": "#8B949E",
                                   "content": "Ask to make changes, @mention files, run /commands"
+                                },
+                                "BK7Sy": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "x": 16,
+                                  "y": 108
                                 },
                                 "stcWt": {
                                   "fill": "transparent"
@@ -13116,13 +12772,19 @@
                                   "fill": "#2E2E2E"
                                 },
                                 "WeOED": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 12,
+                                  "y": 6.5
                                 },
                                 "uy9hS": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 32,
+                                  "y": 6
                                 },
                                 "yV7Hv": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 72,
+                                  "y": 7.5
                                 },
                                 "wq7iM": {
                                   "fill": "#E6EDF3"
@@ -13159,7 +12821,9 @@
                                   "fill": "#2E2E2E"
                                 },
                                 "NkShR": {
-                                  "fill": "#E6EDF3"
+                                  "fill": "#E6EDF3",
+                                  "x": 8,
+                                  "y": 8
                                 }
                               }
                             }
@@ -14731,10 +14395,20 @@
                                 "fill": "#E6EDF3"
                               },
                               "descendants": {
+                                "PUl6Q": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "x": 16,
+                                  "y": 10
+                                },
                                 "rQ7VA": {
                                   "content": "src/utils/code_utils.ts",
                                   "fill": "#E6EDF3",
                                   "fontWeight": "500"
+                                },
+                                "9b1Vs": {
+                                  "x": 327,
+                                  "y": 10.5
                                 },
                                 "rkd3j": {
                                   "content": "+4"
@@ -14914,6 +14588,10 @@
                       "descendants": {
                         "rjtXW": {
                           "fill": "#2E2E2E"
+                        },
+                        "js3T3": {
+                          "x": 10,
+                          "y": 10
                         }
                       }
                     }
@@ -14989,6 +14667,12 @@
                 "fill": "#313131"
               }
             },
+            "HsBHJ": {
+              "width": "fill_container",
+              "height": "fill_container",
+              "x": 0,
+              "y": 0
+            },
             "Mtpqy": {
               "fill": "#8B949E"
             },
@@ -15047,6 +14731,10 @@
                         "fill": "#E6EDF3"
                       },
                       "descendants": {
+                        "YasV2": {
+                          "x": 16,
+                          "y": 12
+                        },
                         "VDEOJ": {
                           "fill": "#D97706",
                           "stroke": {
@@ -15055,10 +14743,14 @@
                           }
                         },
                         "0Ut4Y": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "OyQsV": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 48,
+                          "y": 16
                         }
                       }
                     },
@@ -15068,6 +14760,8 @@
                       "ref": "JCCO1",
                       "name": "tab2",
                       "fill": "transparent",
+                      "x": 124,
+                      "y": 0,
                       "descendants": {
                         "1BUiB": {
                           "fill": "#6E7681",
@@ -15077,7 +14771,9 @@
                           }
                         },
                         "hCGAr": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "EmtI0": {
                           "content": "API refactor",
@@ -15091,6 +14787,8 @@
                       "ref": "JCCO1",
                       "name": "tab3",
                       "fill": "transparent",
+                      "x": 261,
+                      "y": 0,
                       "descendants": {
                         "1BUiB": {
                           "fill": "#6E7681",
@@ -15100,7 +14798,9 @@
                           }
                         },
                         "hCGAr": {
-                          "fill": "#FFFFFF"
+                          "fill": "#FFFFFF",
+                          "x": 3,
+                          "y": 3
                         },
                         "EmtI0": {
                           "content": "Bug fix",
@@ -15179,7 +14879,11 @@
                       "descendants": {
                         "ZsMjg": {
                           "content": "// Update OPENAI_API_KEY in process.env and write auth.json for Codex CLI\n// This is necessary because Codex CLI reads from ~/.codex/auth.json, not just env vars\nprocess.env.OPENAI_API_KEY = apiKey;\nupdateCodexAuth();",
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "width": "fill_container",
+                          "height": 0,
+                          "x": 16,
+                          "y": 12
                         }
                       }
                     },
@@ -15291,7 +14995,11 @@
                       "descendants": {
                         "ZsMjg": {
                           "content": "// Change from:\nexport function updateCodexAuth(): void {\n  const apiKey = process.env.OPENAI_API_KEY;\n  // ...\n}\n\n// To:\nexport function updateCodexAuth(apiKey: string): void {\n  // ...\n}",
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "width": "fill_container",
+                          "height": 0,
+                          "x": 16,
+                          "y": 12
                         }
                       }
                     },
@@ -15429,10 +15137,24 @@
                           "enabled": false
                         }
                       },
+                      "width": "fill_container",
+                      "height": "fit_content",
                       "descendants": {
+                        "DwwXE": {
+                          "width": "fill_container",
+                          "height": 80,
+                          "x": 16,
+                          "y": 16
+                        },
                         "mhSiy": {
                           "fill": "#8B949E",
                           "content": "Ask to make changes, @mention files, run /commands"
+                        },
+                        "BK7Sy": {
+                          "width": "fill_container",
+                          "height": "fit_content",
+                          "x": 16,
+                          "y": 108
                         },
                         "stcWt": {
                           "fill": "transparent"
@@ -15441,13 +15163,19 @@
                           "fill": "#2E2E2E"
                         },
                         "WeOED": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 12,
+                          "y": 6.5
                         },
                         "uy9hS": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 32,
+                          "y": 6
                         },
                         "yV7Hv": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 72,
+                          "y": 7.5
                         },
                         "wq7iM": {
                           "fill": "#E6EDF3"
@@ -15484,7 +15212,9 @@
                           "fill": "#2E2E2E"
                         },
                         "NkShR": {
-                          "fill": "#E6EDF3"
+                          "fill": "#E6EDF3",
+                          "x": 8,
+                          "y": 8
                         }
                       }
                     }
@@ -16826,6 +16556,10 @@
               "descendants": {
                 "rjtXW": {
                   "fill": "#2E2E2E"
+                },
+                "js3T3": {
+                  "x": 10,
+                  "y": 10
                 }
               }
             }
@@ -17441,7 +17175,7 @@
                   "cornerRadius": 8,
                   "id": "pGqAi",
                   "name": "bdrSwatch1",
-                  "fill": "$bg-primary",
+                  "fill": "#FFFFFF",
                   "width": 40,
                   "height": 40,
                   "stroke": {
@@ -17494,7 +17228,7 @@
                   "cornerRadius": 8,
                   "id": "xZVi5",
                   "name": "bdrSwatch2",
-                  "fill": "$bg-primary",
+                  "fill": "#FFFFFF",
                   "width": 40,
                   "height": 40,
                   "stroke": {

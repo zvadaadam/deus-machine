@@ -29,10 +29,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       diffStats: {},
 
       // Actions
-      selectWorkspace: (workspace) =>
-        set({ selectedWorkspace: workspace }, false, "workspace/select"),
+      selectWorkspace: (workspace) => {
+        // DEBUG: trace what's clearing the selection
+        if (!workspace) {
+          console.trace("[workspace-store] selectWorkspace(null) called");
+        }
+        set({ selectedWorkspace: workspace }, false, "workspace/select");
+      },
 
-      clearSelection: () => set({ selectedWorkspace: null }, false, "workspace/clearSelection"),
+      clearSelection: () => {
+        console.trace("[workspace-store] clearSelection() called");
+        set({ selectedWorkspace: null }, false, "workspace/clearSelection");
+      },
 
       setDiffStats: (workspaceId, stats) =>
         set(

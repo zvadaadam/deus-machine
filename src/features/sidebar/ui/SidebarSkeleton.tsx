@@ -17,7 +17,7 @@ export function SidebarSkeleton() {
   return (
     <Sidebar
       variant="inset"
-      collapsible="icon"
+      collapsible="offcanvas"
       role="status"
       aria-busy="true"
       aria-label="Loading sidebar"
@@ -31,7 +31,7 @@ export function SidebarSkeleton() {
       </SidebarHeader>
 
       {/* Content Skeleton - Repository list */}
-      <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
+      <SidebarContent>
         <SidebarMenu className="gap-2 p-2">
           {Array.from({ length: 3 }, (_, index) => (
             <SidebarMenuItem key={index} className="space-y-2">

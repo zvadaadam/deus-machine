@@ -491,8 +491,8 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Browser Controls - h-11 (44px) to align with chat tabs row */}
-      <div className="border-border flex h-11 flex-shrink-0 items-center gap-2 border-b px-2">
+      {/* Browser Controls - h-9 (36px) to align with chat tabs row */}
+      <div className="border-border flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
         <Button
           variant="ghost"
           size="icon"

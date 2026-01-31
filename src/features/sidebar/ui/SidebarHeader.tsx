@@ -28,16 +28,7 @@ export function SidebarHeader({
 
   return (
     <SidebarHeaderUI className="p-2">
-      {/* Expanded: Horizontal row with avatar, name, and toggle */}
-      {/* Collapsed: Vertical stack with toggle on top, avatar below */}
-      <div
-        className={cn(
-          "flex items-center gap-2",
-          // Collapsed: vertical stack, centered
-          "group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2"
-        )}
-      >
-        {/* Toggle Button - Right side when expanded, top when collapsed */}
+      <div className="flex items-center gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -74,32 +65,15 @@ export function SidebarHeader({
           onClick={onOpenSettings}
           className={cn(
             "h-auto min-w-0 flex-1 justify-start gap-3 rounded-lg p-2",
-            "hover:bg-foreground/5",
-            // Collapsed: no flex-1, centered, no hover background
-            "group-data-[collapsible=icon]:flex-none",
-            "group-data-[collapsible=icon]:p-0",
-            "group-data-[collapsible=icon]:hover:bg-transparent"
+            "hover:bg-foreground/5"
           )}
         >
-          <Avatar
-            shape="square"
-            className={cn(
-              "h-8 w-8 shrink-0",
-              "transition-all duration-200 ease-out",
-              // Collapsed: subtle hover lift effect
-              "group-data-[collapsible=icon]:hover:scale-105 group-data-[collapsible=icon]:hover:shadow-sm"
-            )}
-          >
+          <Avatar shape="square" className="h-8 w-8 shrink-0">
             <AvatarFallback shape="square" className="text-xs">
               {initials}
             </AvatarFallback>
           </Avatar>
-          {/* Username - hidden when collapsed */}
-          <span
-            className={cn("truncate text-sm font-medium", "group-data-[collapsible=icon]:hidden")}
-          >
-            {profile.username}
-          </span>
+          <span className="truncate text-sm font-medium">{profile.username}</span>
         </Button>
       </div>
     </SidebarHeaderUI>

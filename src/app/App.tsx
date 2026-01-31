@@ -1,8 +1,11 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { ErrorBoundary } from "react-error-boundary";
+import type { ComponentType, ReactNode, ErrorInfo } from "react";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
 import { ErrorFallback, DashboardError } from "@/shared/components";
+import { reportError } from "@/shared/utils/errorReporting";
+import { isTauriEnv } from "@/platform/tauri";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -17,18 +20,45 @@ import { Toaster } from "@/components/ui/sonner";
  * The onReset callback clears failed queries so "Try Again" actually retries
  * data fetching, not just re-renders with cached error state.
  */
+type ConditionalErrorBoundaryProps = {
+  fallback: ComponentType<FallbackProps>;
+  onReset?: () => void;
+  onError?: (error: Error, info: ErrorInfo) => void;
+  children: ReactNode;
+};
+
+function ConditionalErrorBoundary({
+  fallback,
+  onReset,
+  onError,
+  children,
+}: ConditionalErrorBoundaryProps) {
+  // In web dev, let Vite's overlay handle render errors.
+  // In Tauri dev, keep the boundary since the overlay isn't reliable in the webview.
+  if (import.meta.env.DEV && !isTauriEnv) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ErrorBoundary FallbackComponent={fallback} onReset={onReset} onError={onError}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider>
       <QueryErrorResetBoundary>
         {({ reset }) => (
-          <ErrorBoundary
-            FallbackComponent={ErrorFallback}
+          <ConditionalErrorBoundary
+            fallback={ErrorFallback}
             onReset={reset}
             onError={(error, info) => {
-              // Log to console in all environments
-              console.error("[ErrorBoundary] Caught error:", error);
-              console.error("[ErrorBoundary] Component stack:", info.componentStack);
+              reportError(error, {
+                source: "react.error-boundary",
+                extra: { componentStack: info.componentStack },
+              });
 
               // TODO: Send to error tracking service in production
               // if (import.meta.env.PROD) {
@@ -42,16 +72,16 @@ function App() {
                   <Route
                     path="/"
                     element={
-                      <ErrorBoundary FallbackComponent={DashboardError} onReset={reset}>
+                      <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
                         <MainLayout />
-                      </ErrorBoundary>
+                      </ConditionalErrorBoundary>
                     }
                   />
                 </Routes>
               </BrowserRouter>
               <Toaster />
             </ThemeProvider>
-          </ErrorBoundary>
+          </ConditionalErrorBoundary>
         )}
       </QueryErrorResetBoundary>
     </QueryClientProvider>

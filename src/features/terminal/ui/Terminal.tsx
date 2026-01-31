@@ -1,53 +1,108 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 import { listen } from "@tauri-apps/api/event";
-import { ptyCommands } from "@/platform";
+import { ptyCommands, isTauriEnv } from "@/platform";
 import "xterm/css/xterm.css";
 import "./Terminal.css";
 
 interface TerminalProps {
   id: string;
   workspacePath: string;
-  onClose?: () => void;
+}
+
+// ANSI color palettes tuned for light and dark backgrounds
+const lightTheme = {
+  background: "", // filled from CSS var at runtime
+  foreground: "", // filled from CSS var at runtime
+  cursor: "#4a4e58",
+  black: "#3c3f4a",
+  red: "#c4302b",
+  green: "#168730",
+  yellow: "#9d7a00",
+  blue: "#1a6fb5",
+  magenta: "#a43faa",
+  cyan: "#0e8a8a",
+  white: "#f0f0f2",
+  brightBlack: "#6e7180",
+  brightRed: "#e05252",
+  brightGreen: "#1fa83e",
+  brightYellow: "#b89500",
+  brightBlue: "#2b8bd6",
+  brightMagenta: "#c05ec7",
+  brightCyan: "#12a5a5",
+  brightWhite: "#fafafa",
+};
+
+const darkTheme = {
+  background: "",
+  foreground: "",
+  cursor: "#d4d4d4",
+  black: "#000000",
+  red: "#cd3131",
+  green: "#0dbc79",
+  yellow: "#e5e510",
+  blue: "#2472c8",
+  magenta: "#bc3fbc",
+  cyan: "#11a8cd",
+  white: "#e5e5e5",
+  brightBlack: "#666666",
+  brightRed: "#f14c4c",
+  brightGreen: "#23d18b",
+  brightYellow: "#f5f543",
+  brightBlue: "#3b8eea",
+  brightMagenta: "#d670d6",
+  brightCyan: "#29b8db",
+  brightWhite: "#e5e5e5",
+};
+
+/** Convert any CSS color (including oklch) to hex via the Canvas API */
+function cssToHex(color: string): string | null {
+  try {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = color;
+    return ctx.fillStyle; // always returns #rrggbb
+  } catch {
+    return null;
+  }
+}
+
+/** Read the app's current theme CSS variables and build an xterm theme object */
+function getTerminalTheme() {
+  const styles = getComputedStyle(document.documentElement);
+  const isDark = document.documentElement.classList.contains("dark");
+  const base = isDark ? { ...darkTheme } : { ...lightTheme };
+
+  // Pull bg/fg from the design system so the terminal blends with the app
+  const mutedRaw = styles.getPropertyValue("--muted").trim();
+  const fgRaw = styles.getPropertyValue("--foreground").trim();
+  base.background = (mutedRaw && cssToHex(mutedRaw)) || (isDark ? "#2a2c35" : "#ecedf0");
+  base.foreground = (fgRaw && cssToHex(fgRaw)) || (isDark ? "#d4d4d4" : "#2a2c35");
+
+  return base;
 }
 
 export function Terminal({ id, workspacePath }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Create xterm instance
+    // Unique PTY id per effect invocation so StrictMode double-fire doesn't collide
+    const ptyId = `${id}-${Date.now()}`;
+    let disposed = false;
+    let ready = false;
+
+    // Create xterm instance with theme-aware colors
     const xterm = new XTerm({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize: 12,
       fontFamily: 'Suisse Intl Mono, Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-        black: "#000000",
-        red: "#cd3131",
-        green: "#0dbc79",
-        yellow: "#e5e510",
-        blue: "#2472c8",
-        magenta: "#bc3fbc",
-        cyan: "#11a8cd",
-        white: "#e5e5e5",
-        brightBlack: "#666666",
-        brightRed: "#f14c4c",
-        brightGreen: "#23d18b",
-        brightYellow: "#f5f543",
-        brightBlue: "#3b8eea",
-        brightMagenta: "#d670d6",
-        brightCyan: "#29b8db",
-        brightWhite: "#e5e5e5",
-      },
+      theme: getTerminalTheme(),
       allowProposedApi: true,
     });
 
@@ -63,28 +118,29 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
-    // Check if we're running in Tauri or browser
-    const isTauri = "__TAURI__" in window;
-
-    if (!isTauri) {
-      // Browser mode - show message that terminal requires Tauri app
-      xterm.write("\r\n\x1b[33m═══════════════════════════════════════════════════════\x1b[0m\r\n");
-      xterm.write("\r\n  \x1b[33m⚠️  Terminal not available in browser mode\x1b[0m\r\n\r\n");
-      xterm.write("  The terminal feature requires the Tauri desktop app.\r\n\r\n");
-      xterm.write("  \x1b[36mTo use the terminal:\x1b[0m\r\n");
+    if (!isTauriEnv) {
       xterm.write(
-        "  1. Install Rust: \x1b[36mcurl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\x1b[0m\r\n"
+        "\r\n  \x1b[90mTerminal requires the desktop app. Run \x1b[36mnpm run tauri:dev\x1b[90m to enable.\x1b[0m\r\n"
       );
-      xterm.write("  2. Build the app: \x1b[36mnpm run tauri:dev\x1b[0m\r\n\r\n");
-      xterm.write("\x1b[33m═══════════════════════════════════════════════════════\x1b[0m\r\n");
-      return;
+      return () => {
+        xterm.dispose();
+      };
     }
 
-    // Spawn PTY (only in Tauri mode)
-    const shell = process.platform === "win32" ? "powershell.exe" : "/bin/zsh";
+    // Forward terminal input to PTY
+    const inputDisposable = xterm.onData((data) => {
+      if (ready && !disposed) {
+        ptyCommands.write(ptyId, Array.from(new TextEncoder().encode(data))).catch((err) => {
+          console.error("Failed to write to PTY:", err);
+        });
+      }
+    });
+
+    // Spawn PTY
+    const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
     ptyCommands
       .spawn({
-        id,
+        id: ptyId,
         command: shell,
         args: [],
         cols: xterm.cols,
@@ -92,66 +148,51 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
         cwd: workspacePath,
       })
       .then(() => {
-        setIsReady(true);
+        if (!disposed) ready = true;
       })
       .catch((err) => {
-        console.error("Failed to spawn PTY:", err);
-        xterm.write(`\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n`);
+        if (!disposed) {
+          console.error("Failed to spawn PTY:", err);
+          xterm.write(`\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n`);
+        }
       });
 
     // Listen for PTY data
     const unlistenData = listen<{ id: string; data: number[] }>("pty-data", (event) => {
-      if (event.payload.id === id) {
-        const text = new TextDecoder().decode(new Uint8Array(event.payload.data));
-        xterm.write(text);
+      if (!disposed && event.payload.id === ptyId) {
+        xterm.write(new TextDecoder().decode(new Uint8Array(event.payload.data)));
       }
     });
 
     // Listen for PTY exit
     const unlistenExit = listen<{ id: string }>("pty-exit", (event) => {
-      if (event.payload.id === id) {
-        xterm.write("\r\n\x1b[33mTerminal session ended\x1b[0m\r\n");
+      if (!disposed && event.payload.id === ptyId) {
+        xterm.write("\r\n\x1b[90mSession ended\x1b[0m\r\n");
       }
     });
 
     // Handle resize
     const resizeObserver = new ResizeObserver(() => {
+      if (disposed) return;
       fitAddon.fit();
-      if (isReady) {
-        ptyCommands.resize(id, xterm.cols, xterm.rows).catch((err) => {
+      if (ready) {
+        ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
           console.error("Failed to resize PTY:", err);
         });
       }
     });
     resizeObserver.observe(terminalRef.current);
 
-    // Cleanup
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
+      inputDisposable.dispose();
       unlistenData.then((fn) => fn());
       unlistenExit.then((fn) => fn());
-      ptyCommands.kill(id).catch((err) => {
-        console.error("Failed to kill PTY:", err);
-      });
+      ptyCommands.kill(ptyId).catch(() => {});
       xterm.dispose();
     };
   }, [id, workspacePath]);
-
-  // Handle terminal input - tracks isReady changes
-  useEffect(() => {
-    if (!xtermRef.current) return;
-
-    const disposable = xtermRef.current.onData((data) => {
-      if (isReady) {
-        const bytes = new TextEncoder().encode(data);
-        ptyCommands.write(id, Array.from(bytes)).catch((err) => {
-          console.error("Failed to write to PTY:", err);
-        });
-      }
-    });
-
-    return () => disposable.dispose();
-  }, [isReady, id]);
 
   return (
     <div className="terminal-container">
