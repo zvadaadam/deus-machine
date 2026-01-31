@@ -160,8 +160,6 @@ export function RepositoryItem({
                 "group/badge",
                 // Force GPU acceleration with translateZ(0)
                 "translate-z-0 transform-gpu",
-                // Collapsed mode: remove padding and let button shrink to content
-                "group-data-[collapsible=icon]:!h-auto group-data-[collapsible=icon]:!w-auto group-data-[collapsible=icon]:!p-0",
                 // Hover states: lift for active, opacity for idle (GPU-accelerated only)
                 isActive && "transition-transform duration-200 ease-out hover:translate-y-[-2px]",
                 isIdle && "transition-opacity duration-200 ease-out hover:opacity-60"

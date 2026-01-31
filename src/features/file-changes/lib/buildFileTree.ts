@@ -10,16 +10,7 @@
  */
 
 import type { FileChangeTreeNode, FileChangeStatus } from "../types";
-
-/**
- * Input file change from the API
- */
-interface FileChange {
-  file: string;
-  file_path?: string;
-  additions: number;
-  deletions: number;
-}
+import type { FileChange } from "@/features/workspace/types";
 
 /**
  * Determine file status based on additions/deletions

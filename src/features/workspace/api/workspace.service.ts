@@ -6,7 +6,7 @@
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceQueryParams, PRStatus, DevServer } from "@/shared/types";
+import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
 
 export const WorkspaceService = {
   /**
@@ -84,17 +84,26 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch dev servers for a workspace
-   */
-  fetchDevServers: async (id: string): Promise<{ servers: DevServer[] }> => {
-    return apiClient.get<{ servers: DevServer[] }>(ENDPOINTS.WORKSPACE_DEV_SERVERS(id));
-  },
-
-  /**
    * Fetch system prompt for a workspace
    */
   fetchSystemPrompt: async (id: string): Promise<{ system_prompt: string }> => {
     return apiClient.get<{ system_prompt: string }>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id));
+  },
+
+  /**
+   * Fetch .pen design files in a workspace
+   */
+  fetchPenFiles: async (
+    id: string
+  ): Promise<{ files: Array<{ name: string; path: string }>; count: number }> => {
+    return apiClient.get(ENDPOINTS.WORKSPACE_PEN_FILES(id));
+  },
+
+  /**
+   * Open a .pen file in the Pencil desktop app
+   */
+  openPenFile: async (id: string, filePath: string): Promise<{ success: boolean }> => {
+    return apiClient.post(ENDPOINTS.WORKSPACE_OPEN_PEN_FILE(id), { filePath });
   },
 
   /**

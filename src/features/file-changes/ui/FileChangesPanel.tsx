@@ -131,23 +131,13 @@ export function FileChangesPanel({
     [onFileSelect]
   );
 
-  // Derive the display state for diff viewer
-  const diffDisplay = useMemo(() => {
-    if (!selectedFilePath) {
-      return { diff: "", additions: 0, deletions: 0 };
-    }
-    if (diffState.isLoading) {
-      return { diff: "Loading diff...", additions: 0, deletions: 0 };
-    }
-    if (diffState.error) {
-      return { diff: `Error loading diff: ${diffState.error}`, additions: 0, deletions: 0 };
-    }
-    return {
-      diff: diffState.diff,
+  const diffStats = useMemo(
+    () => ({
       additions: selectedFileInfo?.additions ?? 0,
       deletions: selectedFileInfo?.deletions ?? 0,
-    };
-  }, [selectedFilePath, diffState, selectedFileInfo]);
+    }),
+    [selectedFileInfo]
+  );
 
   // Empty state - no workspace
   if (!selectedWorkspace) {
@@ -215,12 +205,22 @@ export function FileChangesPanel({
       {/* Single file diff view */}
       <div className="flex-1 overflow-hidden">
         {selectedFilePath ? (
-          <DiffViewer
-            filePath={selectedFilePath}
-            diff={diffDisplay.diff}
-            additions={diffDisplay.additions}
-            deletions={diffDisplay.deletions}
-          />
+          diffState.isLoading ? (
+            <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+              Loading diff…
+            </div>
+          ) : diffState.error ? (
+            <div className="text-destructive flex h-full items-center justify-center text-sm">
+              Error loading diff: {diffState.error}
+            </div>
+          ) : (
+            <DiffViewer
+              filePath={selectedFilePath}
+              diff={diffState.diff}
+              additions={diffStats.additions}
+              deletions={diffStats.deletions}
+            />
+          )
         ) : (
           <div className="flex h-full items-center justify-center">
             <Empty className="border-0">

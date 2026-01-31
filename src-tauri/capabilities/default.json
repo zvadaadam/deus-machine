@@ -54,9 +54,6 @@
       "allow": [{ "path": "$HOME/**" }]
     },
     "shell:default",
-    "shell:allow-execute",
-    "shell:allow-spawn",
-    "shell:allow-open",
     "http:default",
     "notification:default",
     "notification:allow-notify",

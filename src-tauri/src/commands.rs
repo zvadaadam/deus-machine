@@ -4,7 +4,7 @@ use crate::socket::SocketManager;
 use crate::backend::BackendManager;
 use crate::browser::BrowserManager;
 use crate::files::{FILE_SCANNER, FileTreeResponse};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[tauri::command]
 pub async fn spawn_pty(
@@ -125,6 +125,9 @@ pub struct InstalledApp {
 
 // Shared app definitions (id, display name, app path)
 const APP_DEFINITIONS: &[(&str, &str, &str)] = &[
+    // File manager
+    ("finder", "Finder", "/System/Library/CoreServices/Finder.app"),
+
     // Code Editors
     ("cursor", "Cursor", "/Applications/Cursor.app"),
     ("vscode", "Visual Studio Code", "/Applications/Visual Studio Code.app"),
@@ -361,6 +364,73 @@ pub struct GitCloneResult {
     pub name: String,
 }
 
+fn resolve_home_dir() -> Option<PathBuf> {
+    if cfg!(windows) {
+        std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .or_else(|| {
+                let home_drive = std::env::var_os("HOMEDRIVE")?;
+                let home_path = std::env::var_os("HOMEPATH")?;
+                Some(PathBuf::from(format!("{}{}", home_drive.to_string_lossy(), home_path.to_string_lossy())))
+            })
+    } else {
+        std::env::var_os("HOME").map(PathBuf::from)
+    }
+}
+
+fn validate_git_clone_target(target: &Path) -> Result<PathBuf, String> {
+    if target.as_os_str().is_empty() {
+        return Err("Target path is required".to_string());
+    }
+
+    if !target.is_absolute() {
+        return Err("Target path must be absolute".to_string());
+    }
+
+    if target
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err("Target path must not contain '..' segments".to_string());
+    }
+
+    let home_dir = resolve_home_dir().ok_or_else(|| "Unable to resolve home directory".to_string())?;
+    let canonical_home = std::fs::canonicalize(&home_dir).unwrap_or(home_dir);
+
+    let parent = target
+        .parent()
+        .ok_or_else(|| "Target path must include a parent directory".to_string())?;
+    let canonical_parent = std::fs::canonicalize(parent)
+        .map_err(|e| format!("Invalid target path: {}", e))?;
+    let file_name = target
+        .file_name()
+        .ok_or_else(|| "Target path must include a directory name".to_string())?;
+    let canonical_target = canonical_parent.join(file_name);
+
+    if !canonical_target.starts_with(&canonical_home) {
+        return Err("Target path must be within your home directory".to_string());
+    }
+
+    Ok(canonical_target)
+}
+
+fn validate_git_clone_url(url: &str) -> Result<(), String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("Repository URL is required".to_string());
+    }
+
+    if url.starts_with("file://") || url.starts_with('/') || url.starts_with('\\') {
+        return Err("Only https:// or ssh URLs are allowed for cloning".to_string());
+    }
+
+    if url.starts_with("https://") || url.starts_with("ssh://") || url.starts_with("git@") {
+        return Ok(());
+    }
+
+    Err("Only https:// or ssh URLs are allowed for cloning".to_string())
+}
+
 /// Clone a git repository to a target directory with progress events.
 /// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
@@ -373,7 +443,9 @@ pub async fn git_clone(
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    let target = PathBuf::from(&target_path);
+    validate_git_clone_url(&url)?;
+
+    let target = validate_git_clone_target(Path::new(&target_path))?;
     let folder_name = target
         .file_name()
         .and_then(|n| n.to_str())
@@ -549,4 +621,3 @@ pub fn clear_file_cache() -> Result<String, String> {
     FILE_SCANNER.clear_cache();
     Ok("Cache cleared".to_string())
 }
-

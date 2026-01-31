@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Globe, GitBranch, Pencil, Sparkles, FileCode } from "lucide-react";
+import { X, Plus, GitBranch, Pencil, Sparkles, FileCode, PanelLeft } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSidebar } from "@/components/ui/sidebar";
 import { OpenInDropdown } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
 
@@ -81,6 +82,9 @@ export function MainContentTabBar({
   workspacePath,
   onBranchRename,
 }: Omit<MainContentTabsProps, "children">) {
+  const { state: sidebarState, toggleSidebar } = useSidebar();
+  const sidebarCollapsed = sidebarState === "collapsed";
+
   // Branch editing state
   const [isEditingBranch, setIsEditingBranch] = useState(false);
   const [branchInputValue, setBranchInputValue] = useState("");
@@ -151,9 +155,28 @@ export function MainContentTabBar({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-shrink-0 flex-col">
-        {/* ROW 1: Context Bar - Who & Where (48px) */}
-        <div className="border-border/50 bg-background/50 relative flex h-12 items-center justify-start border-b px-5 backdrop-blur-sm">
-          {/* Left: Breadcrumb - Repository / Branch (Editable) */}
+        {/* ROW 1: Context Bar - Who & Where (44px) */}
+        <div className="border-border/50 bg-background/50 relative flex h-11 items-center justify-start gap-2 border-b px-5 backdrop-blur-sm">
+          {/* Sidebar toggle - visible when sidebar is collapsed */}
+          {sidebarCollapsed && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Expand sidebar"
+                  onClick={toggleSidebar}
+                  className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 -ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200 ease-out"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Open sidebar (⌘B)</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Breadcrumb - Repository / Branch (Editable) */}
           {branch && (
             <div className="group flex items-center gap-1.5">
               <GitBranch className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
@@ -222,14 +245,14 @@ export function MainContentTabBar({
 
           {/* Right: Meta Actions - positioned absolutely to not affect centering */}
           {workspacePath && (
-            <div className="absolute right-5 flex items-center gap-2">
+            <div className="absolute right-5 flex items-center gap-3">
               <OpenInDropdown workspacePath={workspacePath} iconOnly />
             </div>
           )}
         </div>
 
-        {/* ROW 2: Navigation Bar - What (44px) */}
-        <div className="border-border/60 bg-background flex h-11 items-center border-b px-5">
+        {/* ROW 2: Navigation Bar - What (36px) */}
+        <div className="border-border/60 bg-background flex h-9 items-center border-b px-5">
           <div className="scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent flex min-w-0 flex-1 items-center overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
@@ -249,7 +272,7 @@ export function MainContentTabBar({
                   }}
                   className={cn(
                     "group relative flex items-center gap-1.5",
-                    "h-11 max-w-[200px] min-w-[120px] px-4",
+                    "h-9 max-w-[200px] min-w-[120px] px-4",
                     "cursor-pointer text-sm font-normal",
                     "transition-colors duration-200 ease-out",
                     isActive
@@ -312,7 +335,7 @@ export function MainContentTabBar({
                     onClick={handleAddTab}
                     className={cn(
                       "flex items-center justify-center",
-                      "h-11 flex-shrink-0 px-4",
+                      "h-9 flex-shrink-0 px-4",
                       "text-muted-foreground/60 hover:text-muted-foreground",
                       "hover:bg-muted/10",
                       "transition-all duration-200 ease-out"

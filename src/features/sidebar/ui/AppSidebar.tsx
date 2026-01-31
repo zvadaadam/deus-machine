@@ -15,7 +15,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
-import { cn } from "@/shared/lib/utils";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
@@ -33,7 +32,7 @@ export function AppSidebar({
   onArchive,
   profile = { username: "User" },
 }: AppSidebarProps) {
-  const { state, toggleSidebar } = useSidebar();
+  const { state, hoverOpen, toggleSidebar } = useSidebar();
   const { openSettingsModal } = useUIStore();
   const {
     collapsedRepos,
@@ -43,7 +42,8 @@ export function AppSidebar({
     reorderRepositories,
   } = useSidebarStore();
 
-  const isExpanded = state === "expanded";
+  // Sidebar content is visually expanded when permanently open OR hover-revealed
+  const isExpanded = state === "expanded" || hoverOpen;
 
   // Debounced navigation ref for keyboard nav
   const navigationTimeoutRef = React.useRef<NodeJS.Timeout>();
@@ -217,7 +217,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar variant="inset" collapsible="icon">
+    <Sidebar variant="inset" collapsible="offcanvas">
       <SidebarHeader
         profile={profile}
         onOpenSettings={openSettingsModal}
@@ -226,21 +226,13 @@ export function AppSidebar({
       />
 
       {/* Repositories List - Single tree for smooth animations */}
-      <SidebarContent className="group-data-[collapsible=icon]:overflow-visible">
+      <SidebarContent>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={orderedRepositories.map((r) => r.repo_id)}
             strategy={verticalListSortingStrategy}
           >
-            <SidebarMenu
-              className={cn(
-                "gap-2",
-                // Expanded: minimal horizontal padding for cleaner dense layout
-                "px-1 py-2",
-                // Collapsed: no horizontal padding, items center themselves
-                "group-data-[collapsible=icon]:px-0"
-              )}
-            >
+            <SidebarMenu className="gap-2 px-1 py-2">
               {orderedRepositories.map((repo) => (
                 <DraggableRepository
                   key={repo.repo_id}

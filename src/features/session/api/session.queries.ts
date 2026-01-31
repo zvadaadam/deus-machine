@@ -150,8 +150,12 @@ export function useSendMessage() {
       );
 
       // Create optimistic user message
+      const optimisticId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? `optimistic-${crypto.randomUUID()}`
+          : `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const optimisticMessage: Message = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         session_id: sessionId,
         role: "user",
         content: JSON.stringify({ content: [{ type: "text", text: content }] }),
@@ -159,30 +163,24 @@ export function useSendMessage() {
         sent_at: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<Message[]>(
-        queryKeys.sessions.messages(sessionId),
-        (old) => {
-          if (!old) return [optimisticMessage];
-          return produce(old, (draft) => {
-            draft.push(optimisticMessage);
-          });
-        }
-      );
+      queryClient.setQueryData<Message[]>(queryKeys.sessions.messages(sessionId), (old) => {
+        if (!old) return [optimisticMessage];
+        return produce(old, (draft) => {
+          draft.push(optimisticMessage);
+        });
+      });
 
       // Also update session status to "working"
       const previousSession = queryClient.getQueryData<Session>(
         queryKeys.sessions.detail(sessionId)
       );
 
-      queryClient.setQueryData<Session>(
-        queryKeys.sessions.detail(sessionId),
-        (old) => {
-          if (!old) return old;
-          return produce(old, (draft) => {
-            draft.status = "working";
-          });
-        }
-      );
+      queryClient.setQueryData<Session>(queryKeys.sessions.detail(sessionId), (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          draft.status = "working";
+        });
+      });
 
       return { previousMessages, previousSession };
     },

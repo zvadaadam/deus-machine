@@ -1,1 +1,1 @@
-export { TerminalPanel, Terminal, CollapsibleTerminalPanel } from "./ui";
+export { TerminalPanel, Terminal } from "./ui";

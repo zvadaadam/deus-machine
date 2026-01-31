@@ -1,14 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
-import { CollapsibleTerminalPanel } from "@/features/terminal";
+import { TerminalPanel } from "@/features/terminal";
 import { WelcomeView } from "@/features/repository";
 import {
   MainContentTabBar,
   useWorkspaceLayout,
   useFileChanges,
   WorkspaceService,
+  useResizeHandle,
 } from "@/features/workspace";
+import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
+import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
+import { PRStatusBar } from "@/features/workspace/ui/PRStatusBar";
+import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { FileChangesPanel } from "@/features/file-changes";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import { BrowserPanel } from "@/features/browser";
@@ -22,12 +28,14 @@ import {
   useSidebar,
 } from "@/components/ui";
 import { FolderOpen, ChevronsRight } from "lucide-react";
-import type { RightPanelTab } from "@/features/workspace/store";
+import { cn } from "@/shared/lib/utils";
+import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
-import type { Workspace } from "@/shared/types";
+import type { Workspace, PRStatus } from "@/shared/types";
 
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
+  prStatus: PRStatus | null;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
@@ -40,6 +48,7 @@ interface MainContentProps {
  */
 export function MainContent({
   selectedWorkspace,
+  prStatus,
   workspaceChatPanelRef,
   onCreateWorkspace,
   onOpenProject,
@@ -48,38 +57,42 @@ export function MainContent({
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
 
   // Workspace layout - reads directly from store, no bidirectional sync needed
+  const selectedWorkspaceId = selectedWorkspace?.id ?? null;
+
   const {
+    rightSideTab,
     rightPanelTab,
     rightPanelExpanded,
     selectedFilePath,
+    rightPanelWidth,
+    setRightSideTab,
     setRightPanelTab,
     setRightPanelExpanded,
     setSelectedFilePath,
-  } = useWorkspaceLayout(selectedWorkspace?.id ?? null);
+    setRightPanelWidth,
+  } = useWorkspaceLayout(selectedWorkspaceId);
 
   // Fetch file changes for the workspace
   const { data: fileChanges = [] } = useFileChanges(
-    selectedWorkspace?.id ?? null,
+    selectedWorkspaceId,
     selectedWorkspace?.session_status
   );
 
   // Callback to fetch diff for a specific file
   const fetchDiff = useCallback(
     async (filePath: string) => {
-      if (!selectedWorkspace) {
-        return { diff: "No workspace selected" };
+      if (!selectedWorkspaceId) {
+        throw new Error("No workspace selected");
       }
       try {
-        const data = await WorkspaceService.fetchFileDiff(selectedWorkspace.id, filePath);
+        const data = await WorkspaceService.fetchFileDiff(selectedWorkspaceId, filePath);
         return { diff: data.diff || "No diff available" };
       } catch (error) {
         console.error("Failed to fetch diff:", error);
-        return {
-          diff: `Error loading diff: ${error instanceof Error ? error.message : "Unknown error"}`,
-        };
+        throw error instanceof Error ? error : new Error("Unknown error");
       }
     },
-    [selectedWorkspace]
+    [selectedWorkspaceId]
   );
 
   // Selected file for file browser viewing (full file content from working tree)
@@ -93,6 +106,8 @@ export function MainContent({
     { id: "chat-1", label: "Chat #1", type: "chat", closeable: false },
   ]);
   const [activeMainTabId, setActiveMainTabId] = useState("chat-1");
+  const createPRHandlerRef = useRef<(() => void) | null>(null);
+  const [hasCreatePRHandler, setHasCreatePRHandler] = useState(false);
 
   /**
    * Sidebar Auto-Management for Right Panel Expansion
@@ -130,10 +145,16 @@ export function MainContent({
 
   // Track workspace changes - clear stale file selections
   const currentWorkspaceId = selectedWorkspace?.id ?? null;
-  if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
-    prevWorkspaceIdRef.current = currentWorkspaceId;
-    setBrowserSelectedFile(null);
-  }
+  useEffect(() => {
+    if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
+      prevWorkspaceIdRef.current = currentWorkspaceId;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBrowserSelectedFile(null);
+      createPRHandlerRef.current = null;
+
+      setHasCreatePRHandler(false);
+    }
+  }, [currentWorkspaceId]);
 
   // Validate selected file exists in current workspace
   useEffect(() => {
@@ -179,7 +200,7 @@ export function MainContent({
   // Monotonic chat index to avoid ID collisions after closes
   const nextChatIndexRef = useRef(2);
 
-  const handleMainTabAdd = () => {
+  const handleMainTabAdd = useCallback(() => {
     const idx = nextChatIndexRef.current++;
     const newId = `chat-${idx}`;
     const newTab: Tab = {
@@ -190,7 +211,24 @@ export function MainContent({
     };
     setMainTabs((prevTabs) => [...prevTabs, newTab]);
     setActiveMainTabId(newId);
-  };
+  }, []);
+
+  const handleCreatePR = useCallback(() => {
+    const handler = createPRHandlerRef.current;
+    if (!handler) {
+      toast.error("No active session available to create a PR.");
+      return;
+    }
+    handler();
+  }, []);
+
+  const handleOpenPR = useCallback(() => {
+    if (!prStatus?.pr_url) {
+      toast.error("PR link not available.");
+      return;
+    }
+    window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
+  }, [prStatus]);
 
   // Keyboard shortcut: Cmd+T to open new chat tab
   useEffect(() => {
@@ -212,22 +250,39 @@ export function MainContent({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedWorkspace]);
+  }, [handleMainTabAdd, selectedWorkspace]);
 
   /**
-   * Handle tab change in right panel
+   * Handle tab change in code panel
    */
-  const handleRightPanelTabChange = useCallback(
+  const handleCodeTabChange = useCallback(
     (tab: RightPanelTab) => {
       setRightPanelTab(tab);
+    },
+    [setRightPanelTab]
+  );
 
-      // Auto-expand for browser
-      if (tab === "browser" && !rightPanelExpanded) {
-        setRightPanelExpanded(true);
+  /**
+   * Handle tab change in right side panel
+   */
+  const handleRightSideTabChange = useCallback(
+    (tab: RightSideTab) => {
+      setRightSideTab(tab);
+      if (tab !== "code" && tab !== "browser") {
+        setSelectedFilePath(null);
       }
     },
-    [rightPanelExpanded, setRightPanelTab, setRightPanelExpanded]
+    [setRightSideTab, setSelectedFilePath]
   );
+
+  useEffect(() => {
+    if (rightSideTab === "browser" && !rightPanelExpanded) {
+      setRightPanelExpanded(true);
+    }
+    if (rightSideTab !== "code" && rightSideTab !== "browser" && rightPanelExpanded) {
+      setRightPanelExpanded(false);
+    }
+  }, [rightPanelExpanded, rightSideTab, setRightPanelExpanded]);
 
   /**
    * Collapse panel to narrow mode
@@ -235,188 +290,245 @@ export function MainContent({
   const handlePanelCollapse = useCallback(() => {
     setRightPanelExpanded(false);
     setSelectedFilePath(null);
-    if (rightPanelTab === "browser") {
-      setRightPanelTab("changes");
-    }
-  }, [rightPanelTab, setRightPanelExpanded, setSelectedFilePath, setRightPanelTab]);
+    setRightPanelWidth(null);
+  }, [setRightPanelExpanded, setSelectedFilePath, setRightPanelWidth]);
+
+  const panelWide = rightPanelExpanded && (rightSideTab === "code" || rightSideTab === "browser");
+
+  // Resize handle for dragging the chat/panel split
+  const { handleProps: resizeHandleProps, isDragging } = useResizeHandle({
+    onWidthChange: setRightPanelWidth,
+    enabled: panelWide,
+  });
+
+  // Right panel width: user-set pixels, auto flex, or narrow fixed
+  // No flexShrink: 0 — allows the panel to shrink when space is tight
+  // (e.g., sidebar opens while panel is large). CSS min-w-[450px] protects the sidecar.
+  const rightPanelStyle: React.CSSProperties | undefined =
+    panelWide && rightPanelWidth !== null ? { width: rightPanelWidth } : undefined;
 
   return (
     <SidebarInset className="min-w-0">
-      {/**
-       * CSS Grid Layout: Main Content | Right Panel
-       *
-       * Panel Modes:
-       * - Narrow (400px): File list, changes list
-       * - Wide (2fr, ~700px+): File diff viewer, browser
-       */}
       <div
         data-slot="main-content"
-        className="bg-background/40 border-border/5 min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-        style={{
-          display: "grid",
-          gridTemplateColumns: selectedWorkspace
-            ? rightPanelExpanded
-              ? "minmax(350px, 1fr) minmax(700px, 2fr)"
-              : "minmax(500px, 1fr) 400px"
-            : "1fr",
-          height: "100%",
-          gap: "0",
-        }}
+        className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
       >
-        {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
-        {selectedWorkspace ? (
-          <div className="border-border/40 flex h-full flex-col overflow-hidden border-r">
-            <MainContentTabBar
-              tabs={mainTabs}
-              activeTabId={activeMainTabId}
-              onTabChange={handleMainTabChange}
-              onTabClose={handleMainTabClose}
-              onTabAdd={handleMainTabAdd}
-              repositoryName={selectedWorkspace.root_path.split("/").filter(Boolean).pop()}
-              branch={selectedWorkspace.branch}
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              onBranchRename={handleBranchRename}
-            />
-
-            {/* Tab Content - Chat sessions */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {(() => {
-                const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
-                if (activeTab?.type === "chat") {
-                  return selectedWorkspace.active_session_id ? (
-                    <SessionPanel
-                      ref={workspaceChatPanelRef}
-                      sessionId={selectedWorkspace.active_session_id}
-                      embedded={true}
-                    />
-                  ) : null;
-                }
-                return null;
-              })()}
-            </div>
-          </div>
-        ) : (
-          <WelcomeView
-            onCreateWorkspace={onCreateWorkspace}
-            onOpenProject={onOpenProject}
-            onCloneRepository={onCloneRepository}
-          />
-        )}
-
-        {/* RIGHT PANEL - Unified system for Changes/Files/Browser/File Diffs */}
-        {selectedWorkspace && (
-          <div className="flex h-full flex-col overflow-hidden">
-            <Tabs
-              value={rightPanelTab}
-              onValueChange={(v) => handleRightPanelTabChange(v as RightPanelTab)}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        <div className="flex min-w-0 flex-1">
+          {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
+          {selectedWorkspace ? (
+            <div
+              className={cn(
+                "border-border/40 flex h-full flex-1 flex-col overflow-hidden",
+                panelWide ? "min-w-[300px]" : "min-w-0 border-r"
+              )}
             >
-              <div className="bg-background/50 border-border flex h-12 flex-shrink-0 items-center border-b backdrop-blur-sm">
-                <TabsList className="flex-1">
-                  <TabsTrigger value="changes" className="min-w-[88px] justify-center">
-                    Changes
-                  </TabsTrigger>
-                  <TabsTrigger value="files" className="min-w-[88px] justify-center">
-                    Files
-                  </TabsTrigger>
-                  <TabsTrigger value="browser" className="min-w-[88px] justify-center">
-                    Browser
-                  </TabsTrigger>
-                </TabsList>
+              <MainContentTabBar
+                tabs={mainTabs}
+                activeTabId={activeMainTabId}
+                onTabChange={handleMainTabChange}
+                onTabClose={handleMainTabClose}
+                onTabAdd={handleMainTabAdd}
+                repositoryName={selectedWorkspace.root_path.split("/").filter(Boolean).pop()}
+                branch={selectedWorkspace.branch}
+                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                onBranchRename={handleBranchRename}
+              />
 
-                {rightPanelExpanded && (
-                  <div className="border-border/30 flex h-full items-center border-l px-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 rounded-lg"
-                      onClick={handlePanelCollapse}
-                      title="Collapse panel"
-                    >
-                      <ChevronsRight className="h-[18px] w-[18px]" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tab Content */}
-              <>
-                {/* Changes Tab - New tree view with unified scroll */}
-                <TabsContent
-                  value="changes"
-                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
-                >
-                  <FileChangesPanel
-                    selectedWorkspace={selectedWorkspace}
-                    fileChanges={fileChanges}
-                    fetchDiff={fetchDiff}
-                    isExpanded={rightPanelExpanded}
-                    onFileSelect={(path) => {
-                      setSelectedFilePath(path);
-                      setRightPanelExpanded(true);
-                    }}
-                  />
-                </TabsContent>
-
-                {/* Files Tab */}
-                <TabsContent
-                  value="files"
-                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
-                >
-                  <div className="flex h-full overflow-hidden">
-                    <div
-                      className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                        rightPanelExpanded ? "border-border/40 w-[280px] border-r" : "flex-1"
-                      }`}
-                    >
-                      <FileBrowserPanel
-                        selectedWorkspace={selectedWorkspace}
-                        onFileClick={(path) => {
-                          setBrowserSelectedFile(path);
-                          setRightPanelExpanded(true);
+              {/* Tab Content - Chat sessions */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {(() => {
+                  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
+                  if (activeTab?.type === "chat") {
+                    return selectedWorkspace.active_session_id ? (
+                      <SessionPanel
+                        ref={workspaceChatPanelRef}
+                        sessionId={selectedWorkspace.active_session_id}
+                        embedded={true}
+                        onCreatePR={(handler) => {
+                          createPRHandlerRef.current = handler;
+                          setHasCreatePRHandler(true);
                         }}
                       />
-                    </div>
+                    ) : null;
+                  }
+                  return null;
+                })()}
+              </div>
+            </div>
+          ) : (
+            <WelcomeView
+              onCreateWorkspace={onCreateWorkspace}
+              onOpenProject={onOpenProject}
+              onCloneRepository={onCloneRepository}
+            />
+          )}
 
-                    {rightPanelExpanded && (
-                      <div className="animate-in slide-in-from-right-2 flex-1 overflow-hidden duration-300">
-                        {browserSelectedFile ? (
-                          <FileViewer filePath={browserSelectedFile} />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <div className="max-w-sm text-center">
-                              <FolderOpen className="text-muted-foreground/30 mx-auto mb-4 h-16 w-16" />
-                              <h3 className="text-foreground/60 mb-2 text-sm font-medium">
-                                Browse and select a file
-                              </h3>
-                              <p className="text-muted-foreground/50 text-xs">
-                                Explore the file tree and click on any file to view it
-                              </p>
-                            </div>
+          {/* RESIZE HANDLE - Drag to resize chat/panel split */}
+          {selectedWorkspace && panelWide && (
+            <div
+              {...resizeHandleProps}
+              className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
+              aria-label="Resize panels"
+              role="separator"
+              aria-orientation="vertical"
+            >
+              {/* Hit target for easier grabbing */}
+              <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
+              {/* Visual indicator line */}
+              <div
+                className={`absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease] ${
+                  isDragging
+                    ? "bg-primary/40 opacity-100"
+                    : "bg-border opacity-0 group-hover:opacity-100"
+                }`}
+              />
+            </div>
+          )}
+
+          {/* RIGHT PANEL - PR bar + Sidecar-driven panels */}
+          {selectedWorkspace && (
+            <div
+              className={cn(
+                "border-border/40 flex h-full flex-col",
+                panelWide
+                  ? rightPanelWidth !== null
+                    ? "min-w-[450px]"
+                    : "min-w-[450px] flex-1"
+                  : "min-w-0 border-l"
+              )}
+              style={rightPanelStyle}
+            >
+              <PRStatusBar
+                prStatus={prStatus}
+                onCreatePR={hasCreatePRHandler ? handleCreatePR : undefined}
+                onReviewPR={handleOpenPR}
+              />
+
+              <div className="flex min-h-0 flex-1 overflow-hidden">
+                <div
+                  className={`bg-background/50 border-border/40 flex h-full flex-col overflow-hidden backdrop-blur-sm ${
+                    !isDragging
+                      ? "transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                      : ""
+                  } ${panelWide ? "min-w-0 flex-1" : "w-[380px]"}`}
+                >
+                  {rightSideTab === "code" && (
+                    <Tabs
+                      value={rightPanelTab}
+                      onValueChange={(v) => handleCodeTabChange(v as RightPanelTab)}
+                      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                    >
+                      <div className="bg-background/50 border-border/40 flex h-9 flex-shrink-0 items-center border-b px-2">
+                        <TabsList className="flex-1 justify-start">
+                          <TabsTrigger value="changes" className="min-w-[88px] justify-center">
+                            Changes
+                          </TabsTrigger>
+                          <TabsTrigger value="files" className="min-w-[88px] justify-center">
+                            Files
+                          </TabsTrigger>
+                        </TabsList>
+
+                        {panelWide && (
+                          <div className="border-border/30 flex h-full items-center border-l px-3">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 rounded-lg"
+                              onClick={handlePanelCollapse}
+                              title="Collapse panel"
+                            >
+                              <ChevronsRight className="h-[18px] w-[18px]" />
+                            </Button>
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
 
-                {/* Browser Tab */}
-                <TabsContent
-                  value="browser"
-                  className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
-                >
-                  <BrowserPanel workspaceId={selectedWorkspace.id} />
-                </TabsContent>
-              </>
-            </Tabs>
+                      {/* Tab Content */}
+                      <>
+                        {/* Changes Tab - New tree view with unified scroll */}
+                        <TabsContent
+                          value="changes"
+                          className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
+                        >
+                          <FileChangesPanel
+                            selectedWorkspace={selectedWorkspace}
+                            fileChanges={fileChanges}
+                            fetchDiff={fetchDiff}
+                            isExpanded={panelWide}
+                            onFileSelect={(path) => {
+                              setSelectedFilePath(path);
+                              setRightPanelExpanded(true);
+                            }}
+                          />
+                        </TabsContent>
 
-            {/* Bottom Section: Collapsible Terminal */}
-            <CollapsibleTerminalPanel
-              workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-              workspaceName={selectedWorkspace.directory_name}
-            />
-          </div>
-        )}
+                        {/* Files Tab */}
+                        <TabsContent
+                          value="files"
+                          className="m-0 h-full overflow-hidden data-[state=inactive]:hidden"
+                        >
+                          <div className="flex h-full overflow-hidden">
+                            <div
+                              className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                                panelWide ? "border-border/40 w-[280px] border-r" : "flex-1"
+                              }`}
+                            >
+                              <FileBrowserPanel
+                                selectedWorkspace={selectedWorkspace}
+                                onFileClick={(path) => {
+                                  setBrowserSelectedFile(path);
+                                  setRightPanelExpanded(true);
+                                }}
+                              />
+                            </div>
+
+                            {panelWide && (
+                              <div className="animate-in slide-in-from-right-2 flex-1 overflow-hidden duration-300">
+                                {browserSelectedFile ? (
+                                  <FileViewer filePath={browserSelectedFile} />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center">
+                                    <div className="max-w-sm text-center">
+                                      <FolderOpen className="text-muted-foreground/30 mx-auto mb-4 h-16 w-16" />
+                                      <h3 className="text-foreground/60 mb-2 text-sm font-medium">
+                                        Browse and select a file
+                                      </h3>
+                                      <p className="text-muted-foreground/50 text-xs">
+                                        Explore the file tree and click on any file to view it
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TabsContent>
+                      </>
+                    </Tabs>
+                  )}
+
+                  {rightSideTab === "browser" && (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <BrowserPanel workspaceId={selectedWorkspace.id} />
+                    </div>
+                  )}
+
+                  {rightSideTab === "terminal" && (
+                    <TerminalPanel
+                      workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                    />
+                  )}
+
+                  {rightSideTab === "config" && <ConfigPanel />}
+
+                  {rightSideTab === "design" && <DesignPanel workspaceId={selectedWorkspace.id} />}
+                </div>
+
+                <RightSidecar activeTab={rightSideTab} onTabChange={handleRightSideTabChange} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </SidebarInset>
   );
