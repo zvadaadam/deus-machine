@@ -192,6 +192,16 @@ function resolveWorkspaceRelativePath(workspacePath, filePath) {
   return relative;
 }
 
+function getOpenCommand(target) {
+  if (process.platform === 'win32') {
+    return { cmd: 'cmd', args: ['/c', 'start', '', target] };
+  }
+  if (process.platform === 'darwin') {
+    return { cmd: 'open', args: [target] };
+  }
+  return { cmd: 'xdg-open', args: [target] };
+}
+
 // Initialize settings table if it doesn't exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
@@ -850,13 +860,12 @@ app.post('/api/workspaces/:id/open-pen-file', async (req, res) => {
     }
 
     const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-    const absolutePath = path.resolve(workspacePath, filePath);
-
-    // Security: ensure the resolved path stays within the workspace
-    if (!absolutePath.startsWith(workspacePath)) {
+    const safeRelativePath = resolveWorkspaceRelativePath(workspacePath, filePath);
+    if (!safeRelativePath) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
 
+    const absolutePath = path.resolve(workspacePath, safeRelativePath);
     if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ error: 'File not found' });
     }
@@ -892,7 +901,8 @@ app.post('/api/workspaces/:id/open-pen-file', async (req, res) => {
         if (didFallback) return;
         didFallback = true;
         console.warn('[pen] Pencil open failed, opening pencil.dev:', absolutePath);
-        const webChild = spawn('open', ['https://pencil.dev'], { stdio: 'ignore' });
+        const { cmd, args } = getOpenCommand('https://pencil.dev');
+        const webChild = spawn(cmd, args, { stdio: 'ignore' });
         webChild.unref();
       };
       child.on('error', fallbackToWeb);
@@ -902,7 +912,8 @@ app.post('/api/workspaces/:id/open-pen-file', async (req, res) => {
       child.unref();
     } else {
       console.warn('[pen] Pencil app not found, opening pencil.dev:', absolutePath);
-      const webChild = spawn('open', ['https://pencil.dev'], { stdio: 'ignore' });
+      const { cmd, args } = getOpenCommand('https://pencil.dev');
+      const webChild = spawn(cmd, args, { stdio: 'ignore' });
       webChild.unref();
     }
 

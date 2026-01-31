@@ -6,7 +6,7 @@
  * Double-click resets width to null (auto flex split).
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseResizeHandleOptions {
   /** Callback to persist new width (null = auto) */
@@ -35,6 +35,14 @@ export function useResizeHandle({
 }: UseResizeHandleOptions): UseResizeHandleReturn {
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    };
+  }, []);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -47,7 +55,11 @@ export function useResizeHandle({
       // The flex row containing chat + handle + right panel
       const handle = e.currentTarget as HTMLElement;
       const container = handle.parentElement;
-      if (!container) return;
+      if (!container) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        return;
+      }
 
       const onMouseMove = (moveEvent: MouseEvent) => {
         if (!isDraggingRef.current) return;
@@ -67,7 +79,7 @@ export function useResizeHandle({
         onWidthChange(Math.round(newRightWidth));
       };
 
-      const onMouseUp = () => {
+      const cleanup = () => {
         isDraggingRef.current = false;
         setIsDragging(false);
         document.body.style.cursor = "";
@@ -76,10 +88,16 @@ export function useResizeHandle({
         document.removeEventListener("mouseup", onMouseUp);
       };
 
+      const onMouseUp = () => {
+        cleanup();
+        cleanupRef.current = null;
+      };
+
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
+      cleanupRef.current = cleanup;
     },
     [enabled, minRightWidth, minLeftWidth, onWidthChange]
   );
