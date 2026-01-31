@@ -42,7 +42,6 @@ export function AppSidebar({
     reorderRepositories,
   } = useSidebarStore();
 
-  // Sidebar content is visually expanded when permanently open OR hover-revealed
   const isExpanded = state === "expanded" || hoverOpen;
 
   // Debounced navigation ref for keyboard nav

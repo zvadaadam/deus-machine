@@ -27,7 +27,7 @@ import {
   TabsContent,
   useSidebar,
 } from "@/components/ui";
-import { FolderOpen, ChevronsRight } from "lucide-react";
+import { FolderOpen, ChevronsRight, PanelLeft } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
@@ -54,7 +54,7 @@ export function MainContent({
   onOpenProject,
   onCloneRepository,
 }: MainContentProps) {
-  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const { open: sidebarOpen, setOpen: setSidebarOpen, toggleSidebar } = useSidebar();
 
   // Workspace layout - reads directly from store, no bidirectional sync needed
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
@@ -313,6 +313,18 @@ export function MainContent({
         data-slot="main-content"
         className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
       >
+        {/* Sidebar toggle - visible when sidebar is collapsed and no workspace tab bar is shown */}
+        {!sidebarOpen && !selectedWorkspace && (
+          <button
+            type="button"
+            aria-label="Expand sidebar"
+            onClick={toggleSidebar}
+            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 ease-out"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        )}
+
         <div className="flex min-w-0 flex-1">
           {/* MAIN CONTENT AREA - Browser-style tabs for chat sessions */}
           {selectedWorkspace ? (
@@ -376,11 +388,12 @@ export function MainContent({
               <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
               {/* Visual indicator line */}
               <div
-                className={`absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease] ${
+                className={cn(
+                  "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
                   isDragging
                     ? "bg-primary/40 opacity-100"
                     : "bg-border opacity-0 group-hover:opacity-100"
-                }`}
+                )}
               />
             </div>
           )}
@@ -406,11 +419,11 @@ export function MainContent({
 
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 <div
-                  className={`bg-background/50 border-border/40 flex h-full flex-col overflow-hidden backdrop-blur-sm ${
-                    !isDragging
-                      ? "transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-                      : ""
-                  } ${panelWide ? "min-w-0 flex-1" : "w-[380px]"}`}
+                  className={cn(
+                    "bg-background/50 border-border/40 flex h-full flex-col overflow-hidden backdrop-blur-sm",
+                    !isDragging && "transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+                    panelWide ? "min-w-0 flex-1" : "w-[380px]"
+                  )}
                 >
                   {rightSideTab === "code" && (
                     <Tabs
@@ -469,9 +482,10 @@ export function MainContent({
                         >
                           <div className="flex h-full overflow-hidden">
                             <div
-                              className={`flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                              className={cn(
+                                "flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
                                 panelWide ? "border-border/40 w-[280px] border-r" : "flex-1"
-                              }`}
+                              )}
                             >
                               <FileBrowserPanel
                                 selectedWorkspace={selectedWorkspace}
