@@ -16,10 +16,11 @@ import { cn } from "@/shared/lib/utils";
 
 export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file_path, offset, limit } = toolUse.input ?? {};
-  const language = file_path ? detectLanguageFromPath(file_path) : undefined;
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
 
   // Extract filename from path
-  const fileName = file_path?.split("/").pop() || file_path || "unknown";
+  const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
 
   // Count lines from result content
   const getLineCount = () => {
