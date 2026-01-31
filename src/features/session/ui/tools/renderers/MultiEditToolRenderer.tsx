@@ -23,9 +23,19 @@ interface Edit {
 }
 
 export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file_path, edits } = toolUse.input;
-  const editCount = edits?.length || 0;
-  const fileName = file_path.split("/").pop() || file_path;
+  const { file_path, edits } = toolUse.input ?? {};
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const safeEdits: Edit[] = Array.isArray(edits)
+    ? edits.filter(
+        (edit): edit is Edit =>
+          !!edit &&
+          typeof edit === "object" &&
+          typeof edit.old_string === "string" &&
+          typeof edit.new_string === "string"
+      )
+    : [];
+  const editCount = safeEdits.length;
+  const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
 
   // Single clipboard util + per-item key to localize feedback
   const { copy } = useCopyToClipboard();
@@ -40,7 +50,15 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="MultiEdit"
-      icon={<FilePenLine className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.MultiEdit)} />}
+      icon={
+        <FilePenLine
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.MultiEdit
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
@@ -49,12 +67,13 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
             {fileName}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
-            {" "}• {editCount} edit{editCount !== 1 ? "s" : ""}
+            {" "}
+            • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>
         </>
       )}
       renderContent={() => {
-        if (!edits || edits.length === 0) {
+        if (safeEdits.length === 0) {
           return (
             <div className="text-muted-foreground px-2 pb-2 text-xs italic">No edits provided</div>
           );
@@ -66,7 +85,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
               {editCount} edit{editCount !== 1 ? "s" : ""} to apply:
             </div>
 
-            {edits.map((edit: Edit, index: number) => (
+            {safeEdits.map((edit: Edit, index: number) => (
               <div key={index} className="space-y-1">
                 {/* Edit number header */}
                 <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">

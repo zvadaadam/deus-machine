@@ -13,7 +13,7 @@ import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { description, prompt, subagent_type } = toolUse.input;
+  const { description, prompt, subagent_type } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse result if it's an object
