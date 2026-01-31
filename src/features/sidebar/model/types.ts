@@ -41,6 +41,7 @@ export interface RepositoryItemProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onArchive?: (workspaceId: string) => void;
+  // Avoid mounting workspace list when sidebar is offcanvas-collapsed.
   sidebarExpanded: boolean;
   dragHandleProps?: {
     attributes?: Record<string, any>;
