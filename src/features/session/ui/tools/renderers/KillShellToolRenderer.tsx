@@ -13,7 +13,7 @@ import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { shell_id } = toolUse.input;
+  const { shell_id } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   return (
@@ -24,7 +24,7 @@ export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps
       toolResult={toolResult}
       renderSummary={() => (
         <span className="text-muted-foreground font-mono text-xs">
-          shell {shell_id.substring(0, 6)}
+          shell {shell_id?.substring(0, 6) ?? "..."}
         </span>
       )}
       renderContent={() => {

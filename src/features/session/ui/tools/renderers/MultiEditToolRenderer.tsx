@@ -23,9 +23,9 @@ interface Edit {
 }
 
 export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file_path, edits } = toolUse.input;
+  const { file_path, edits } = toolUse.input ?? {};
   const editCount = edits?.length || 0;
-  const fileName = file_path.split("/").pop() || file_path;
+  const fileName = file_path?.split("/").pop() || file_path || "unknown";
 
   // Single clipboard util + per-item key to localize feedback
   const { copy } = useCopyToClipboard();
@@ -40,7 +40,15 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="MultiEdit"
-      icon={<FilePenLine className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.MultiEdit)} />}
+      icon={
+        <FilePenLine
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.MultiEdit
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
@@ -49,7 +57,8 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
             {fileName}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
-            {" "}• {editCount} edit{editCount !== 1 ? "s" : ""}
+            {" "}
+            • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>
         </>
       )}
