@@ -4,3 +4,4 @@
  */
 
 export { useWorkspaceLayout } from "./useWorkspaceLayout";
+export { useResizeHandle } from "./useResizeHandle";

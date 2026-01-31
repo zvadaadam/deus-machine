@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauriEnv } from "@/platform/tauri";
 
 interface BrowserStatus {
   running: boolean;
@@ -7,16 +7,6 @@ interface BrowserStatus {
   authToken: string | null;
   error: string | null;
 }
-
-// Check if we're running in Tauri or web mode
-const isTauriMode = () => {
-  try {
-    const w = window as any;
-    return !!(w && (w.__TAURI__ || w.__TAURI_IPC__));
-  } catch {
-    return false;
-  }
-};
 
 const WEB_MODE_PORT = 3000;
 const WEB_HEALTH_URL = `http://localhost:${WEB_MODE_PORT}/health`;
@@ -42,7 +32,7 @@ export function useBrowser() {
   // Start dev-browser server (Tauri mode) or check for existing server (Web mode)
   const startServer = useCallback(async () => {
     try {
-      if (isTauriMode()) {
+      if (isTauriEnv) {
         // Tauri mode: start server via Rust backend
         // Use environment variable if available, otherwise use relative path
         const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH || "../../../dev-browser";
@@ -132,7 +122,7 @@ export function useBrowser() {
   // Stop browser server
   const stopServer = useCallback(async () => {
     try {
-      if (isTauriMode()) {
+      if (isTauriEnv) {
         await invoke("stop_browser_server");
       }
       // In web mode, we don't stop the server (it's external)
@@ -152,7 +142,7 @@ export function useBrowser() {
   // Check if server is running
   const checkStatus = useCallback(async () => {
     try {
-      if (isTauriMode()) {
+      if (isTauriEnv) {
         // Tauri mode: check via Rust backend
         const running = await invoke<boolean>("is_browser_running");
 

@@ -10,9 +10,11 @@
  * Usage:
  * ```typescript
  * const {
+ *   rightSideTab,
  *   rightPanelTab,
  *   rightPanelExpanded,
  *   selectedFilePath,
+ *   setRightSideTab,
  *   setRightPanelTab,
  *   setRightPanelExpanded,
  *   setSelectedFilePath,
@@ -22,29 +24,38 @@
 
 import { useCallback } from "react";
 import { useWorkspaceLayoutStore } from "../store/workspaceLayoutStore";
-import type { RightPanelTab } from "../store/workspaceLayoutStore";
+import type { RightPanelTab, RightSideTab } from "../store/workspaceLayoutStore";
 
 interface UseWorkspaceLayoutResult {
-  /** Current right panel tab (changes, files, browser) */
+  /** Current code panel tab (changes, files) */
   rightPanelTab: RightPanelTab;
+  /** Current right side panel tab (code, config, terminal, design, browser) */
+  rightSideTab: RightSideTab;
   /** Whether right panel is expanded (showing diff viewer) */
   rightPanelExpanded: boolean;
   /** Currently selected file path (for highlighting in tree) */
   selectedFilePath: string | null;
   /** Whether sidebar is collapsed */
   sidebarCollapsed: boolean;
+  /** User-set right panel width in pixels, or null for auto */
+  rightPanelWidth: number | null;
 
   /** Set the active right panel tab */
   setRightPanelTab: (tab: RightPanelTab) => void;
+  /** Set the active right side panel tab */
+  setRightSideTab: (tab: RightSideTab) => void;
   /** Set right panel expanded state */
   setRightPanelExpanded: (expanded: boolean) => void;
   /** Set selected file path */
   setSelectedFilePath: (path: string | null, source?: "changes" | "files") => void;
   /** Set sidebar collapsed state */
   setSidebarCollapsed: (collapsed: boolean) => void;
+  /** Set right panel width (null = auto) */
+  setRightPanelWidth: (width: number | null) => void;
   /** Update multiple layout properties at once */
   updateLayout: (updates: {
     rightPanelTab?: RightPanelTab;
+    rightSideTab?: RightSideTab;
     rightPanelExpanded?: boolean;
     selectedFilePath?: string | null;
     sidebarCollapsed?: boolean;
@@ -54,7 +65,9 @@ interface UseWorkspaceLayoutResult {
 const defaultLayout = {
   rightPanelExpanded: false,
   activeRightTab: "changes" as RightPanelTab,
+  activeRightSideTab: "code" as RightSideTab,
   selectedFile: null,
+  rightPanelWidth: null as number | null,
   sidebarCollapsed: false,
 };
 
@@ -71,6 +84,15 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     (tab: RightPanelTab) => {
       if (workspaceId) {
         setLayout(workspaceId, { activeRightTab: tab });
+      }
+    },
+    [workspaceId, setLayout]
+  );
+
+  const setRightSideTab = useCallback(
+    (tab: RightSideTab) => {
+      if (workspaceId) {
+        setLayout(workspaceId, { activeRightSideTab: tab });
       }
     },
     [workspaceId, setLayout]
@@ -105,9 +127,19 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
+  const setRightPanelWidth = useCallback(
+    (width: number | null) => {
+      if (workspaceId) {
+        setLayout(workspaceId, { rightPanelWidth: width });
+      }
+    },
+    [workspaceId, setLayout]
+  );
+
   const updateLayout = useCallback(
     (updates: {
       rightPanelTab?: RightPanelTab;
+      rightSideTab?: RightSideTab;
       rightPanelExpanded?: boolean;
       selectedFilePath?: string | null;
       sidebarCollapsed?: boolean;
@@ -118,6 +150,9 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
 
       if (updates.rightPanelTab !== undefined) {
         layoutUpdates.activeRightTab = updates.rightPanelTab;
+      }
+      if (updates.rightSideTab !== undefined) {
+        layoutUpdates.activeRightSideTab = updates.rightSideTab;
       }
       if (updates.rightPanelExpanded !== undefined) {
         layoutUpdates.rightPanelExpanded = updates.rightPanelExpanded;
@@ -136,18 +171,25 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
+  const normalizedRightPanelTab =
+    layout.activeRightTab === "files" ? "files" : ("changes" as RightPanelTab);
+
   return {
     // State (derived from store)
-    rightPanelTab: layout.activeRightTab,
+    rightPanelTab: normalizedRightPanelTab,
+    rightSideTab: layout.activeRightSideTab ?? defaultLayout.activeRightSideTab,
     rightPanelExpanded: layout.rightPanelExpanded,
     selectedFilePath: layout.selectedFile?.path ?? null,
     sidebarCollapsed: layout.sidebarCollapsed,
+    rightPanelWidth: layout.rightPanelWidth ?? null,
 
     // Stable callbacks
     setRightPanelTab,
+    setRightSideTab,
     setRightPanelExpanded,
     setSelectedFilePath,
     setSidebarCollapsed,
+    setRightPanelWidth,
     updateLayout,
   };
 }

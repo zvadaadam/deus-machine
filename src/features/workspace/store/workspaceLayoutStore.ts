@@ -13,7 +13,8 @@
  * {
  *   [workspaceId]: {
  *     rightPanelExpanded: boolean          // Panel in wide mode (file/browser open)
- *     activeRightTab: 'changes' | 'files' | 'browser'  // Which tab is active
+ *     activeRightTab: 'changes' | 'files'  // Code panel tab
+ *     activeRightSideTab: 'code' | 'config' | 'terminal' | 'design' | 'browser' // Sidecar panel
  *     selectedFile: { path: string, source: 'changes' | 'files' } | null
  *     sidebarCollapsed: boolean            // Left sidebar state
  *   }
@@ -23,7 +24,8 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 
-export type RightPanelTab = "changes" | "files" | "browser";
+export type RightPanelTab = "changes" | "files";
+export type RightSideTab = "code" | "config" | "terminal" | "design" | "browser";
 
 export interface SelectedFile {
   path: string;
@@ -33,8 +35,10 @@ export interface SelectedFile {
 interface WorkspaceLayoutState {
   rightPanelExpanded: boolean;
   activeRightTab: RightPanelTab;
+  activeRightSideTab: RightSideTab;
   selectedFile: SelectedFile | null;
   sidebarCollapsed: boolean;
+  rightPanelWidth: number | null; // User-set pixel width when expanded, null = auto (50/50 flex split)
 }
 
 interface WorkspaceLayoutStore {
@@ -65,6 +69,11 @@ interface WorkspaceLayoutStore {
   setActiveRightTab: (workspaceId: string, tab: RightPanelTab) => void;
 
   /**
+   * Switch active tab in right side panel
+   */
+  setActiveRightSideTab: (workspaceId: string, tab: RightSideTab) => void;
+
+  /**
    * Select a file to display in the panel
    */
   setSelectedFile: (workspaceId: string, file: SelectedFile | null) => void;
@@ -89,8 +98,18 @@ interface WorkspaceLayoutStore {
 const defaultLayout: WorkspaceLayoutState = {
   rightPanelExpanded: false,
   activeRightTab: "changes",
+  activeRightSideTab: "code",
   selectedFile: null,
   sidebarCollapsed: false,
+  rightPanelWidth: null,
+};
+
+type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
+  rightPanelWidth?: number | null;
+};
+
+type PersistedStateV1 = {
+  layouts?: Record<string, PersistedLayoutV1>;
 };
 
 export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
@@ -154,6 +173,21 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             "workspaceLayout/setActiveRightTab"
           ),
 
+        setActiveRightSideTab: (workspaceId, tab) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  activeRightSideTab: tab,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setActiveRightSideTab"
+          ),
+
         setSelectedFile: (workspaceId, file) =>
           set(
             (state) => ({
@@ -199,7 +233,30 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 1,
+        version: 2,
+        migrate: (persistedState: unknown, version: number) => {
+          const state: PersistedStateV1 =
+            typeof persistedState === "object" && persistedState !== null
+              ? (persistedState as PersistedStateV1)
+              : {};
+
+          if (version < 2 && state.layouts && typeof state.layouts === "object") {
+            const nextLayouts: Record<string, PersistedLayoutV1> = {};
+            for (const [key, layout] of Object.entries(state.layouts)) {
+              if (!layout || typeof layout !== "object") {
+                continue;
+              }
+              nextLayouts[key] = {
+                ...layout,
+                rightPanelWidth:
+                  "rightPanelWidth" in layout ? (layout.rightPanelWidth ?? null) : null,
+              };
+            }
+            return { ...state, layouts: nextLayouts } as WorkspaceLayoutStore;
+          }
+
+          return state as WorkspaceLayoutStore;
+        },
       }
     ),
     {
@@ -213,14 +270,15 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
  * Stable Actions - Call from anywhere without causing re-renders
  */
 export const workspaceLayoutActions = {
-  getLayout: (workspaceId: string) =>
-    useWorkspaceLayoutStore.getState().getLayout(workspaceId),
+  getLayout: (workspaceId: string) => useWorkspaceLayoutStore.getState().getLayout(workspaceId),
   setLayout: (workspaceId: string, layout: Partial<WorkspaceLayoutState>) =>
     useWorkspaceLayoutStore.getState().setLayout(workspaceId, layout),
   setRightPanelExpanded: (workspaceId: string, expanded: boolean) =>
     useWorkspaceLayoutStore.getState().setRightPanelExpanded(workspaceId, expanded),
   setActiveRightTab: (workspaceId: string, tab: RightPanelTab) =>
     useWorkspaceLayoutStore.getState().setActiveRightTab(workspaceId, tab),
+  setActiveRightSideTab: (workspaceId: string, tab: RightSideTab) =>
+    useWorkspaceLayoutStore.getState().setActiveRightSideTab(workspaceId, tab),
   setSelectedFile: (workspaceId: string, file: SelectedFile | null) =>
     useWorkspaceLayoutStore.getState().setSelectedFile(workspaceId, file),
   setSidebarCollapsed: (workspaceId: string, collapsed: boolean) =>

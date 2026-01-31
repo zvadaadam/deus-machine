@@ -154,9 +154,6 @@ export function getDisplayStatus(workspace: Workspace): DisplayStatus {
   if (sessionStatus === "compacting") {
     return "compacting";
   }
-  if (sessionStatus === "error") {
-    return "error";
-  }
   return "idle";
 }
 

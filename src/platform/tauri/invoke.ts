@@ -7,9 +7,12 @@
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen, type UnlistenFn } from "@tauri-apps/api/event";
+import { normalizeError, reportError } from "@/shared/utils/errorReporting";
 
 // Check if running in Tauri environment
-export const isTauriEnv = typeof window !== "undefined" && "__TAURI__" in window;
+export const isTauriEnv =
+  typeof window !== "undefined" &&
+  ("__TAURI__" in window || "__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window);
 
 /**
  * Invoke a Tauri command
@@ -24,7 +27,17 @@ export async function invoke<T = unknown>(
     throw new Error(`Tauri command not available in web mode: ${command}`);
   }
 
-  return tauriInvoke<T>(command, args);
+  try {
+    return await tauriInvoke<T>(command, args);
+  } catch (error) {
+    const normalized = normalizeError(error);
+    reportError(normalized, {
+      source: "tauri.invoke",
+      action: command,
+      extra: { argsKeys: args ? Object.keys(args) : undefined },
+    });
+    throw normalized;
+  }
 }
 
 /**

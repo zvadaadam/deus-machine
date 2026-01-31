@@ -9,7 +9,7 @@
  * - Fallback: Port 3333 if neither is available
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/platform/tauri";
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
@@ -58,6 +58,16 @@ const DISCOVERY_PORTS = [
 /**
  * Try to discover backend port by checking /api/health on common ports
  */
+async function isBackendHealthResponse(response: Response): Promise<boolean> {
+  if (!response.ok) return false;
+  try {
+    const data = await response.json();
+    return data?.app === "conductor-backend" && data?.status === "ok";
+  } catch {
+    return false;
+  }
+}
+
 async function discoverBackendPort(): Promise<number | null> {
   // Try localStorage first (fastest)
   const stored = localStorage.getItem("conductor_backend_port");
@@ -68,7 +78,7 @@ async function discoverBackendPort(): Promise<number | null> {
         method: "GET",
         signal: AbortSignal.timeout(1000),
       });
-      if (response.ok) {
+      if (await isBackendHealthResponse(response)) {
         if (import.meta.env.DEV) console.log(`[API] Found backend on stored port: ${port}`);
         return port;
       }
@@ -93,7 +103,7 @@ async function discoverBackendPort(): Promise<number | null> {
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
+      if (await isBackendHealthResponse(response)) {
         return port;
       }
     } catch (e) {
@@ -196,8 +206,9 @@ export const ENDPOINTS = {
   WORKSPACE_DIFF_FILE: (id: string, file: string) =>
     `/workspaces/${id}/diff-file?file=${encodeURIComponent(file)}`,
   WORKSPACE_PR_STATUS: (id: string) => `/workspaces/${id}/pr-status`,
-  WORKSPACE_DEV_SERVERS: (id: string) => `/workspaces/${id}/dev-servers`,
   WORKSPACE_SYSTEM_PROMPT: (id: string) => `/workspaces/${id}/system-prompt`,
+  WORKSPACE_PEN_FILES: (id: string) => `/workspaces/${id}/pen-files`,
+  WORKSPACE_OPEN_PEN_FILE: (id: string) => `/workspaces/${id}/open-pen-file`,
 
   // Session endpoints
   SESSIONS: "/sessions",

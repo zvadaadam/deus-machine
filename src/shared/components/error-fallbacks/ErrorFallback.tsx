@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { FallbackProps } from "react-error-boundary";
 import { Button } from "@/components/ui/button";
 
@@ -7,28 +8,71 @@ import { Button } from "@/components/ui/button";
  * Stack trace only visible in development.
  */
 export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyErrorDetails() {
+    if (!error) return;
+    const details = [
+      `Message: ${error.message}`,
+      error.stack ? `\nStack:\n${error.stack}` : "",
+    ].join("\n");
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(details);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = details;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Swallow copy errors; user can still read details.
+    }
+  }
+
   return (
-    <div className="bg-background text-foreground flex h-screen flex-col items-center justify-center p-8">
-      <div className="max-w-2xl text-center">
-        <div className="mb-4 text-5xl">&#x26A0;&#xFE0F;</div>
-        <h2 className="mb-4 text-2xl font-semibold">Something went wrong</h2>
-        <p className="text-muted-foreground mb-8">
-          The application encountered an unexpected error. You can try again or reload the page.
-        </p>
+    <div className="bg-background text-foreground flex min-h-screen items-center justify-center p-6">
+      <div className="bg-card/60 border-border/60 w-full max-w-2xl rounded-2xl border p-6 shadow-sm backdrop-blur">
+        <div className="flex items-start gap-4">
+          <div className="bg-destructive/10 text-destructive flex h-12 w-12 items-center justify-center rounded-full">
+            <span className="text-xl" aria-hidden="true">
+              &#x26A0;&#xFE0F;
+            </span>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold">Something went wrong</h2>
+            <p className="text-muted-foreground mt-1">
+              The application encountered an unexpected error. You can try again or reload.
+            </p>
+          </div>
+        </div>
 
         {/* Error details - only in development */}
-        {import.meta.env.DEV && error && (
-          <details className="mb-8 text-left">
-            <summary className="bg-muted mb-2 cursor-pointer rounded p-2 text-sm font-medium">
-              Error details (dev only)
+        {error && (
+          <details className="mt-5 text-left">
+            <summary className="bg-muted/60 hover:bg-muted cursor-pointer rounded-lg px-3 py-2 text-sm font-medium">
+              Error details
             </summary>
-            <div className="bg-muted max-h-48 overflow-auto rounded p-4 font-mono text-sm">
-              <strong className="text-foreground">Error:</strong>
+            <div className="bg-muted/50 max-h-56 overflow-auto rounded-lg p-4 font-mono text-xs">
+              <div className="mb-3 flex items-center justify-end">
+                <Button size="sm" variant="outline" onClick={copyErrorDetails}>
+                  {copied ? "Copied" : "Copy details"}
+                </Button>
+              </div>
+              <strong className="text-foreground">Message:</strong>
               <pre className="text-foreground/90 mt-2 whitespace-pre-wrap">{error.message}</pre>
-              {error.stack && (
+              {import.meta.env.DEV && error.stack && (
                 <>
                   <strong className="text-foreground mt-4 block">Stack trace:</strong>
-                  <pre className="text-muted-foreground mt-2 text-xs whitespace-pre-wrap">
+                  <pre className="text-muted-foreground mt-2 whitespace-pre-wrap">
                     {error.stack}
                   </pre>
                 </>
@@ -38,10 +82,10 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
         )}
 
         {/* Action buttons */}
-        <div className="flex justify-center gap-4">
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
           <Button onClick={resetErrorBoundary}>Try Again</Button>
           <Button onClick={() => window.location.reload()} variant="outline">
-            Reload Application
+            Reload
           </Button>
         </div>
       </div>
