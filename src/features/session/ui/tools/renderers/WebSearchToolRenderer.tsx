@@ -14,7 +14,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { query, allowed_domains, blocked_domains } = toolUse.input;
+  const { query, allowed_domains, blocked_domains } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse result content

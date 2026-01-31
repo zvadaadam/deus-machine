@@ -14,16 +14,23 @@ import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
 export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { command, description } = toolUse.input;
+  const { command, description } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Truncate command more aggressively when description exists (command is secondary)
-  const commandPreview = command.length > 35 ? command.substring(0, 35) + "..." : command;
+  const commandPreview = (() => {
+    if (!command) return "...";
+    return command.length > 35 ? `${command.slice(0, 35)}...` : command;
+  })();
 
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={<Terminal className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Bash)} />}
+      icon={
+        <Terminal
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Bash)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
@@ -31,16 +38,20 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
           {description ? (
             // Description exists: Description is hero, command is metadata
             <>
-              <span className={chatTheme.blocks.tool.contentHierarchy.emphasis}>
-                {description}
-              </span>
+              <span className={chatTheme.blocks.tool.contentHierarchy.emphasis}>{description}</span>
               <span className={cn(chatTheme.blocks.tool.contentHierarchy.metadata, "font-mono")}>
-                {" → "}{commandPreview}
+                {" → "}
+                {commandPreview}
               </span>
             </>
           ) : (
             // No description: Command is hero
-            <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-primary/15 text-primary rounded px-2 py-0.5 font-mono")}>
+            <span
+              className={cn(
+                chatTheme.blocks.tool.contentHierarchy.emphasis,
+                "bg-primary/15 text-primary rounded px-2 py-0.5 font-mono"
+              )}
+            >
               {commandPreview}
             </span>
           )}
@@ -66,7 +77,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
             )}
           >
             <code>
-              <span className="text-success font-semibold">$ {command}</span>
+              <span className="text-success font-semibold">$ {command ?? "..."}</span>
               {"\n"}
               {output}
             </code>

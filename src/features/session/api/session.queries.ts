@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SessionService } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Session, Message, SessionStatus } from "../types";
+import type { ContentBlock, Message, Session, SessionStatus, ToolUseBlock } from "../types";
 import { useMemo, useCallback } from "react";
 
 /**
@@ -61,6 +61,63 @@ export function useMessages(sessionId: string | null, sessionStatus?: SessionSta
   });
 }
 
+const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | string | null => {
+  if (Array.isArray(blocks)) {
+    let didChange = false;
+    const normalized = blocks.map((block) => {
+      if (block == null) {
+        didChange = true;
+        return "";
+      }
+
+      if (typeof block !== "object") {
+        if (typeof block === "string") {
+          return block;
+        }
+        didChange = true;
+        return String(block);
+      }
+
+      if (Array.isArray(block)) {
+        didChange = true;
+        return JSON.stringify(block);
+      }
+
+      if ((block as ContentBlock).type !== "tool_use") {
+        return block as ContentBlock;
+      }
+
+      const toolBlock = block as ToolUseBlock;
+      const input =
+        toolBlock.input && typeof toolBlock.input === "object" && !Array.isArray(toolBlock.input)
+          ? toolBlock.input
+          : {};
+
+      if (input === toolBlock.input) {
+        return toolBlock;
+      }
+
+      didChange = true;
+      return { ...toolBlock, input };
+    });
+
+    return didChange ? normalized : (blocks as (ContentBlock | string)[]);
+  }
+
+  if (blocks == null || typeof blocks === "string") {
+    return blocks;
+  }
+
+  if (typeof blocks === "object") {
+    if ("type" in blocks && typeof (blocks as { type?: unknown }).type === "string") {
+      return normalizeContentBlocks([blocks as ContentBlock]);
+    }
+    return JSON.stringify(blocks);
+  }
+
+  return String(blocks);
+};
+
 /**
  * Combined hook for session + messages + status
  * Replaces the complex useMessages hook
@@ -75,7 +132,9 @@ export function useSessionWithMessages(sessionId: string | null) {
   const parseContent = useCallback((content: string) => {
     try {
       const parsed = JSON.parse(content);
-      return parsed.message?.content || parsed.content || [];
+      // Use nullish coalescing to preserve explicit empty strings/arrays from the backend.
+      const blocks = parsed.message?.content ?? parsed.content ?? [];
+      return normalizeContentBlocks(blocks);
     } catch (error) {
       // If JSON.parse fails, treat it as plain text
       return [{ type: "text", text: content }];
