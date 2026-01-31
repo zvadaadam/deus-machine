@@ -12,7 +12,6 @@ import type { SidebarFooterProps } from "../model/types";
  */
 export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
   const { state, hoverOpen, isMobile } = useSidebar();
-  // Visually collapsed = state is collapsed AND not hover-revealed
   const isCollapsed = state === "collapsed" && !hoverOpen;
 
   // Tooltip only shows when visually collapsed AND not on mobile

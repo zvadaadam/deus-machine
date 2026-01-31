@@ -120,9 +120,6 @@ function SidebarProvider({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar]);
 
-  // data-state reflects PERMANENT open/close only, not hover-reveal.
-  // Hover-reveal uses data-hover-reveal for CSS targeting to avoid
-  // triggering SidebarInset margin/layout changes.
   const state = open ? "expanded" : "collapsed";
 
   const contextValue = React.useMemo<SidebarContextProps>(
@@ -203,8 +200,8 @@ function Sidebar({
   const openHover = React.useCallback(() => {
     if (!enableHoverReveal) return;
     clearHoverTimeout();
-    // Small delay to debounce accidental edge brushes
-    hoverTimeoutRef.current = window.setTimeout(() => setHoverOpen(true), 30);
+    // Small delay to prevent accidental edge brushes from opening the sidebar.
+    hoverTimeoutRef.current = window.setTimeout(() => setHoverOpen(true), 100);
   }, [clearHoverTimeout, enableHoverReveal, setHoverOpen]);
 
   const closeHover = React.useCallback(() => {
@@ -214,17 +211,13 @@ function Sidebar({
   }, [clearHoverTimeout, enableHoverReveal, setHoverOpen]);
 
   React.useEffect(() => {
-    return () => {
-      clearHoverTimeout();
-    };
+    return () => clearHoverTimeout();
   }, [clearHoverTimeout]);
 
   React.useEffect(() => {
     if (!open) return;
     clearHoverTimeout();
-    if (hoverOpen) {
-      setHoverOpen(false);
-    }
+    if (hoverOpen) setHoverOpen(false);
   }, [open, hoverOpen, clearHoverTimeout, setHoverOpen]);
 
   if (collapsible === "none") {
@@ -292,7 +285,6 @@ function Sidebar({
           onPointerLeave={closeHover}
         />
       )}
-      {/* Click-outside backdrop to dismiss hover-revealed sidebar */}
       {hoverOpen && (
         <div
           data-slot="sidebar-backdrop"
@@ -305,25 +297,37 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] delay-[60ms] duration-[180ms] ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-          "group-data-[collapsible=offcanvas]:w-0 group-data-[hover-reveal=true]:w-0",
+          "relative w-(--sidebar-width) bg-transparent transition-[width] ease-[cubic-bezier(.19,1,.22,1)]",
+          state === "expanded" ? "duration-[280ms]" : "duration-[200ms]",
+          "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180"
         )}
       />
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,box-shadow,translate] delay-[60ms] duration-[180ms] ease-[cubic-bezier(0.165,0.84,0.44,1)] md:flex",
-          // Hover-reveal: raise z-index, add shadow, use translateX to slide in
-          // (translateX avoids conflicting with the offcanvas left/right rules)
-          "group-data-[hover-reveal=true]:z-30 group-data-[hover-reveal=true]:shadow-2xl group-data-[hover-reveal=true]:delay-0 group-data-[hover-reveal=true]:duration-[250ms] group-data-[hover-reveal=true]:ease-[cubic-bezier(.23,1,.32,1)]",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,opacity,translate] md:flex",
+          // Unified ease-out-expo curve, duration varies by interaction
+          "ease-[cubic-bezier(.19,1,.22,1)]",
+          hoverOpen
+            ? "duration-[200ms]" // Flyout open
+            : state === "expanded"
+              ? "duration-[280ms]" // Normal open: layout reshaping, room to breathe
+              : "duration-[200ms]", // Close (normal + flyout dismiss)
+          // Collapsed positioning (off-screen)
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-          // Slide in via transform — works on top of the offcanvas left/right position
-          side === "left"
-            ? "group-data-[hover-reveal=true]:translate-x-[var(--sidebar-width)]"
-            : "group-data-[hover-reveal=true]:-translate-x-[var(--sidebar-width)]",
+          // Hidden when collapsed and NOT hover-revealed (prevents vibrancy bleed in Tauri)
+          state === "collapsed" && !hoverOpen && "pointer-events-none opacity-0",
+          // Hover-reveal: slide in, raise z-index, add shadow
+          hoverOpen &&
+            cn(
+              "pointer-events-auto z-30 opacity-100 shadow-2xl",
+              side === "left"
+                ? "translate-x-[var(--sidebar-width)]"
+                : "-translate-x-[var(--sidebar-width)]"
+            ),
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
             ? "p-2"
@@ -403,7 +407,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex w-full flex-1 flex-col",
+        "bg-background relative flex w-full flex-1 flex-col transition-[margin] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         // In Tauri, skip shadow for cleaner vibrancy look. In web, apply shadow-sm.
         !isTauri && "md:peer-data-[variant=inset]:shadow-sm",
