@@ -26,7 +26,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -592,10 +592,20 @@ function SidebarMenuButton({
 }: React.ComponentProps<"button"> & {
   asChild?: boolean;
   isActive?: boolean;
-  tooltip?: string | React.ComponentProps<typeof TooltipContent>;
+  tooltip?: string | { children?: React.ReactNode };
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button";
   const { isMobile, state, hoverOpen } = useSidebar();
+
+  const tooltipText =
+    typeof tooltip === "string"
+      ? tooltip
+      : typeof tooltip?.children === "string"
+        ? tooltip.children
+        : undefined;
+
+  const title =
+    tooltipText && state === "collapsed" && !hoverOpen && !isMobile ? tooltipText : undefined;
 
   const button = (
     <Comp
@@ -604,31 +614,12 @@ function SidebarMenuButton({
       data-size={size}
       data-active={isActive}
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+      title={title}
       {...props}
     />
   );
 
-  if (!tooltip) {
-    return button;
-  }
-
-  if (typeof tooltip === "string") {
-    tooltip = {
-      children: tooltip,
-    };
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent
-        side="right"
-        align="center"
-        hidden={state !== "collapsed" || hoverOpen || isMobile}
-        {...tooltip}
-      />
-    </Tooltip>
-  );
+  return button;
 }
 
 function SidebarMenuAction({

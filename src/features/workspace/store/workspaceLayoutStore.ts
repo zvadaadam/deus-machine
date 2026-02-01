@@ -38,7 +38,8 @@ interface WorkspaceLayoutState {
   activeRightSideTab: RightSideTab;
   selectedFile: SelectedFile | null;
   sidebarCollapsed: boolean;
-  rightPanelWidth: number | null; // User-set pixel width when expanded, null = auto (50/50 flex split)
+  rightPanelWidth: number | null; // User-set width for code panel, null = auto (50/50 flex split)
+  rightPanelWidthBrowser: number | null; // User-set width for browser panel
 }
 
 interface WorkspaceLayoutStore {
@@ -95,17 +96,19 @@ interface WorkspaceLayoutStore {
   resetAll: () => void;
 }
 
-const defaultLayout: WorkspaceLayoutState = {
+export const defaultLayout: WorkspaceLayoutState = {
   rightPanelExpanded: false,
   activeRightTab: "changes",
   activeRightSideTab: "code",
   selectedFile: null,
   sidebarCollapsed: false,
   rightPanelWidth: null,
+  rightPanelWidthBrowser: null,
 };
 
 type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
   rightPanelWidth?: number | null;
+  rightPanelWidthBrowser?: number | null;
 };
 
 type PersistedStateV1 = {
@@ -233,24 +236,36 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 2,
+        version: 3,
         migrate: (persistedState: unknown, version: number) => {
           const state: PersistedStateV1 =
             typeof persistedState === "object" && persistedState !== null
               ? (persistedState as PersistedStateV1)
               : {};
 
-          if (version < 2 && state.layouts && typeof state.layouts === "object") {
+          if (state.layouts && typeof state.layouts === "object") {
             const nextLayouts: Record<string, PersistedLayoutV1> = {};
             for (const [key, layout] of Object.entries(state.layouts)) {
               if (!layout || typeof layout !== "object") {
                 continue;
               }
-              nextLayouts[key] = {
+              const nextLayout: PersistedLayoutV1 = {
                 ...layout,
-                rightPanelWidth:
-                  "rightPanelWidth" in layout ? (layout.rightPanelWidth ?? null) : null,
               };
+
+              if (version < 2) {
+                nextLayout.rightPanelWidth =
+                  "rightPanelWidth" in layout ? (layout.rightPanelWidth ?? null) : null;
+              }
+
+              if (version < 3) {
+                nextLayout.rightPanelWidthBrowser =
+                  "rightPanelWidthBrowser" in layout
+                    ? (layout.rightPanelWidthBrowser ?? null)
+                    : null;
+              }
+
+              nextLayouts[key] = nextLayout;
             }
             return { ...state, layouts: nextLayouts } as WorkspaceLayoutStore;
           }
@@ -261,7 +276,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
     ),
     {
       name: "workspace-layout-store",
-      enabled: process.env.NODE_ENV === "development",
+      enabled: import.meta.env.DEV,
     }
   )
 );

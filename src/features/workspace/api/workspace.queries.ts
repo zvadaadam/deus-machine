@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { produce } from "immer";
 import { WorkspaceService } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
@@ -74,6 +74,14 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return Array.from(new Set(ids)).sort(); // stable order
   }, [repoGroups]);
 
+  // Ref to avoid stale closures when workspaceIds changes while timers are pending
+  const workspaceIdsRef = useRef(workspaceIds);
+
+  // Update ref in effect to avoid accessing ref during render
+  useEffect(() => {
+    workspaceIdsRef.current = workspaceIds;
+  }, [workspaceIds]);
+
   // Prime cache for first N and return aggregate
   const query = useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],
@@ -113,15 +121,16 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
             queryFn: () => WorkspaceService.fetchDiffStats(id),
           })
           .then(() => {
-            // Update aggregate cache with new data
+            // Update aggregate cache with new data (use ref for current workspaceIds)
+            const currentIds = workspaceIdsRef.current;
             const data = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
             if (data) {
               const existing =
                 queryClient.getQueryData<Record<string, DiffStats>>([
                   "bulk-diff-stats",
-                  workspaceIds,
+                  currentIds,
                 ]) || {};
-              queryClient.setQueryData(["bulk-diff-stats", workspaceIds], {
+              queryClient.setQueryData(["bulk-diff-stats", currentIds], {
                 ...existing,
                 [id]: data,
               });
@@ -187,7 +196,7 @@ export function useFileDiff(workspaceId: string | null, filePath: string | null)
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
-      return result.diff;
+      return result;
     },
     enabled: !!workspaceId && !!filePath,
     staleTime: 10000, // Cache for 10s since diffs are expensive
@@ -319,7 +328,7 @@ export function useUpdateSystemPrompt() {
 
     onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["workspaces", "system-prompt", variables.workspaceId],
+        queryKey: queryKeys.workspaces.systemPrompt(variables.workspaceId),
       });
     },
   });

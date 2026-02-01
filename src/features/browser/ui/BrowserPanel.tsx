@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Empty,
   EmptyHeader,
@@ -548,58 +547,38 @@ _You can ask me to modify this element, debug it, or help with related styling._
           </Button>
         </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={injectAutomation}
-              disabled={!currentUrl || !devBrowserStatus.running || injected}
-            >
-              <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-xs">{injected ? "Automation active" : "Inject automation"}</p>
-          </TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={injectAutomation}
+          disabled={!currentUrl || !devBrowserStatus.running || injected}
+          title={injected ? "Automation active" : "Inject automation"}
+        >
+          <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
+        </Button>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={toggleElementSelector}
-              disabled={!currentUrl || !injected || isCrossOrigin}
-              aria-pressed={selectorActive}
-            >
-              <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-xs">
-              {selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
-            </p>
-          </TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={toggleElementSelector}
+          disabled={!currentUrl || !injected || isCrossOrigin}
+          aria-pressed={selectorActive}
+          title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
+        >
+          <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
+        </Button>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setShowConsole(!showConsole)}
-            >
-              <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-xs">{showConsole ? "Hide console" : "Show console"}</p>
-          </TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => setShowConsole(!showConsole)}
+          title={showConsole ? "Hide console" : "Show console"}
+        >
+          <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
+        </Button>
 
         {/* Close button removed - now in panel header for consistency across all tabs */}
       </div>
@@ -697,36 +676,24 @@ _You can ask me to modify this element, debug it, or help with related styling._
               <span className="text-muted-foreground/60 text-xs">({consoleLogs.length})</span>
             </div>
             <div className="flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => setConsoleLogs([])}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Clear console</p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => setShowConsole(false)}
-                  >
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Close console</p>
-                </TooltipContent>
-              </Tooltip>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setConsoleLogs([])}
+                title="Clear console"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowConsole(false)}
+                title="Close console"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </Button>
             </div>
           </div>
 

@@ -9,4 +9,3 @@ export { FileChangesPanel } from "./FileChangesPanel";
 // Tree components
 export { FileChangeTree } from "./FileChangeTree";
 export { FileTreeNode } from "./FileTreeNode";
-export { FileStatusIcon } from "./FileStatusIcon";

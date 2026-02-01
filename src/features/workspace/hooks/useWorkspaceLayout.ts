@@ -23,7 +23,12 @@
  */
 
 import { useCallback } from "react";
-import { useWorkspaceLayoutStore } from "../store/workspaceLayoutStore";
+import { useShallow } from "zustand/react/shallow";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+  defaultLayout,
+} from "../store/workspaceLayoutStore";
 import type { RightPanelTab, RightSideTab } from "../store/workspaceLayoutStore";
 
 interface UseWorkspaceLayoutResult {
@@ -62,24 +67,20 @@ interface UseWorkspaceLayoutResult {
   }) => void;
 }
 
-const defaultLayout = {
-  rightPanelExpanded: false,
-  activeRightTab: "changes" as RightPanelTab,
-  activeRightSideTab: "code" as RightSideTab,
-  selectedFile: null,
-  rightPanelWidth: null as number | null,
-  sidebarCollapsed: false,
-};
-
 export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayoutResult {
-  // Subscribe directly to store state - this triggers re-renders when layout changes
-  // Note: Using a selector that accesses state.layouts[workspaceId] ensures proper reactivity
-  const layout = useWorkspaceLayoutStore((state) =>
-    workspaceId ? (state.layouts[workspaceId] ?? defaultLayout) : defaultLayout
+  // Subscribe directly to store state - this triggers re-renders when layout changes.
+  // useShallow prevents re-renders when setLayout creates a new object via spread
+  // but no field values actually changed (e.g., setRightPanelExpanded(true) when already true).
+  const layout = useWorkspaceLayoutStore(
+    useShallow((state) =>
+      workspaceId ? (state.layouts[workspaceId] ?? defaultLayout) : defaultLayout
+    )
   );
-  const setLayout = useWorkspaceLayoutStore((state) => state.setLayout);
+  // Use stable module-level actions instead of subscribing to store actions via selectors.
+  // This prevents unstable references from cascading through useCallback/useEffect chains.
+  const { setLayout } = workspaceLayoutActions;
 
-  // Stable callbacks for updating state
+  // Stable callbacks - only depend on workspaceId (setLayout is module-level stable)
   const setRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
       if (workspaceId) {
@@ -130,10 +131,15 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
   const setRightPanelWidth = useCallback(
     (width: number | null) => {
       if (workspaceId) {
-        setLayout(workspaceId, { rightPanelWidth: width });
+        const sideTab = layout.activeRightSideTab ?? defaultLayout.activeRightSideTab;
+        if (sideTab === "browser") {
+          setLayout(workspaceId, { rightPanelWidthBrowser: width });
+        } else {
+          setLayout(workspaceId, { rightPanelWidth: width });
+        }
       }
     },
-    [workspaceId, setLayout]
+    [workspaceId, setLayout, layout.activeRightSideTab]
   );
 
   const updateLayout = useCallback(
@@ -181,7 +187,10 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     rightPanelExpanded: layout.rightPanelExpanded,
     selectedFilePath: layout.selectedFile?.path ?? null,
     sidebarCollapsed: layout.sidebarCollapsed,
-    rightPanelWidth: layout.rightPanelWidth ?? null,
+    rightPanelWidth:
+      layout.activeRightSideTab === "browser"
+        ? (layout.rightPanelWidthBrowser ?? null)
+        : (layout.rightPanelWidth ?? null),
 
     // Stable callbacks
     setRightPanelTab,

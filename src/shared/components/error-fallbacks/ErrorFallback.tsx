@@ -9,11 +9,16 @@ import { Button } from "@/components/ui/button";
  */
 export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const [copied, setCopied] = useState(false);
+  const componentStack =
+    typeof window !== "undefined"
+      ? (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__
+      : undefined;
 
   async function copyErrorDetails() {
     if (!error) return;
     const details = [
       `Message: ${error.message}`,
+      componentStack ? `\nComponent stack:\n${componentStack}` : "",
       error.stack ? `\nStack:\n${error.stack}` : "",
     ].join("\n");
 
@@ -74,6 +79,14 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
                   <strong className="text-foreground mt-4 block">Stack trace:</strong>
                   <pre className="text-muted-foreground mt-2 whitespace-pre-wrap">
                     {error.stack}
+                  </pre>
+                </>
+              )}
+              {import.meta.env.DEV && componentStack && (
+                <>
+                  <strong className="text-foreground mt-4 block">Component stack:</strong>
+                  <pre className="text-muted-foreground mt-2 whitespace-pre-wrap">
+                    {componentStack}
                   </pre>
                 </>
               )}

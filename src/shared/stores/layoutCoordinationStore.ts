@@ -100,6 +100,9 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
       },
 
       onBrowserTabClose: () => {
+        // Read state before set() to get pre-close values
+        const state = get();
+
         set(
           {
             browserTabActive: false,
@@ -168,7 +171,7 @@ export const useLayoutCoordinationStore = create<LayoutCoordinationState>()(
     }),
     {
       name: "layout-coordination-store",
-      enabled: process.env.NODE_ENV === "development",
+      enabled: import.meta.env.DEV,
     }
   )
 );

@@ -106,6 +106,9 @@ export function useTreeState(
 
   // Track previous workspace to detect changes
   const prevWorkspaceIdRef = useRef<string | null | undefined>(undefined);
+  // Track whether auto-expand has been performed for the current workspace
+  // Prevents re-triggering auto-expand after user explicitly collapses all
+  const hasAutoExpandedRef = useRef(false);
 
   // Expanded paths state - initialize lazily
   const [expandedPaths, setExpandedPathsState] = useState<Set<string>>(() => {
@@ -123,13 +126,16 @@ export function useTreeState(
     if (prevWorkspaceIdRef.current === undefined) {
       prevWorkspaceIdRef.current = workspaceId;
 
-      // Auto-expand if we have nodes but no stored state
-      if (workspaceId && nodes.length > 0) {
+      // Mark auto-expand done if stored state exists, or auto-expand if nodes are ready
+      if (workspaceId) {
         const stored = loadFromStorage(workspaceId);
-        if (stored.size === 0) {
+        if (stored.size > 0) {
+          hasAutoExpandedRef.current = true; // Already has state, skip auto-expand
+        } else if (nodes.length > 0) {
           const autoExpand = new Set(getAutoExpandPaths(nodes, autoExpandDepth));
           setExpandedPathsState(autoExpand);
           saveToStorage(workspaceId, autoExpand);
+          hasAutoExpandedRef.current = true;
         }
       }
       return;
@@ -138,6 +144,7 @@ export function useTreeState(
     // Workspace changed
     if (workspaceId !== prevWorkspaceIdRef.current) {
       prevWorkspaceIdRef.current = workspaceId;
+      hasAutoExpandedRef.current = false; // Reset for new workspace
 
       if (!workspaceId) {
         setExpandedPathsState(new Set());
@@ -148,10 +155,12 @@ export function useTreeState(
       const stored = loadFromStorage(workspaceId);
       if (stored.size > 0) {
         setExpandedPathsState(stored);
+        hasAutoExpandedRef.current = true;
       } else if (nodes.length > 0) {
         const autoExpand = new Set(getAutoExpandPaths(nodes, autoExpandDepth));
         setExpandedPathsState(autoExpand);
         saveToStorage(workspaceId, autoExpand);
+        hasAutoExpandedRef.current = true;
       } else {
         setExpandedPathsState(new Set());
       }
@@ -159,11 +168,11 @@ export function useTreeState(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only react to workspace changes
   }, [workspaceId]);
 
-  // Auto-expand when nodes load for the first time
+  // Auto-expand when nodes load for the first time (e.g., async data arrived)
+  // Skip if auto-expand was already performed (including after user's collapse-all)
   useEffect(() => {
-    if (!workspaceId || nodes.length === 0) return;
+    if (!workspaceId || nodes.length === 0 || hasAutoExpandedRef.current) return;
 
-    // Check if we need to auto-expand (no stored state and currently empty)
     const stored = loadFromStorage(workspaceId);
     if (stored.size === 0 && expandedPaths.size === 0) {
       const autoExpand = new Set(getAutoExpandPaths(nodes, autoExpandDepth));
@@ -171,6 +180,7 @@ export function useTreeState(
         setExpandedPathsState(autoExpand);
         saveToStorage(workspaceId, autoExpand);
       }
+      hasAutoExpandedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-expand when node count changes, not on every node update
   }, [nodes.length]);
@@ -249,6 +259,7 @@ export function useTreeState(
   // Collapse all directories
   const collapseAll = useCallback(() => {
     setExpandedPathsState(new Set());
+    hasAutoExpandedRef.current = true; // Prevent auto-expand from re-triggering
     if (workspaceId) {
       saveToStorage(workspaceId, new Set());
     }
