@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
-import { useWorkingDuration } from "@/shared/hooks";
+import { useWorkingDuration, formatDuration } from "@/shared/hooks";
+import { PixelGrid } from "@/features/session/ui/PixelGrid";
 import { useDiffStats } from "@/features/workspace/api";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
@@ -17,8 +18,8 @@ import type { WorkspaceItemProps } from "../model/types";
 export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: WorkspaceItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  // Track working duration
-  const { formattedDuration } = useWorkingDuration({
+  // Track working duration (compact format — no tenths in sidebar)
+  const { duration } = useWorkingDuration({
     status: workspace.session_status,
     latestMessageSentAt: workspace.latest_message_sent_at,
   });
@@ -44,9 +45,9 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
     if (!status) return "Archived";
     if (status === "idle") return formatTime(workspace.updated_at);
 
-    // Show duration for working status
-    if (status === "working" && formattedDuration) {
-      return formattedDuration;
+    // Show duration for working status (no tenths in sidebar)
+    if (status === "working" && duration > 0) {
+      return formatDuration(duration, false);
     }
 
     const capitalized = status.charAt(0).toUpperCase() + status.slice(1);
@@ -104,10 +105,11 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
         onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <PulseRadiateIcon
-            isActive={workspace.session_status === "working"}
-            className={cn("h-4 w-4 shrink-0", statusConfig.text)}
-          />
+          {workspace.session_status === "working" ? (
+            <PixelGrid variant="generating" size={14} className="shrink-0" />
+          ) : (
+            <PulseRadiateIcon className={cn("h-4 w-4 shrink-0", statusConfig.text)} />
+          )}
           <div className="flex min-w-0 flex-col">
             {/* Branch name on top */}
             <span className="text-foreground truncate text-sm font-normal">{workspace.branch}</span>

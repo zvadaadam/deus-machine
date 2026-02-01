@@ -32,7 +32,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "windowEffects": {
-          "state": "followsWindowActiveState",
+          "state": "active",
           "effects": ["underWindowBackground"]
         }
       }

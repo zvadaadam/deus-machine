@@ -10,16 +10,13 @@ import {
   EmptyDescription,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
 import type { RefObject } from "react";
 import { useSession } from "../context";
-import { Square } from "lucide-react";
 import { useMemo } from "react";
-
-type MessageRole = Message["role"];
+import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
 // Pull spacing from theme for consistency
 const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
@@ -118,10 +115,9 @@ export function Chat({
   messagesEndRef,
   lastMessageRef,
   messagesContainerRef,
-  onStop,
   className,
 }: ChatProps) {
-  const { parseContent } = useSession();
+  const { parseContent, toolResultMap } = useSession();
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
@@ -147,6 +143,46 @@ export function Chat({
       return !(onlyToolResults || isEmpty);
     });
   }, [messages, parseContent]);
+
+  /**
+   * Derive agent sub-state from the last content block in the message stream.
+   * Maps to PixelGrid animation variant:
+   * - thinking: last block is ThinkingBlock (extended reasoning)
+   * - generating: last block is TextBlock (streaming text)
+   * - toolExecuting: last block is ToolUseBlock with no result yet
+   * - error: last tool result has is_error=true
+   */
+  const agentSubState = useMemo((): PixelGridVariant => {
+    if (sessionStatus !== "working") return "generating";
+
+    for (let i = renderableMessages.length - 1; i >= 0; i--) {
+      const msg = renderableMessages[i];
+      if (msg.role !== "assistant") continue;
+
+      const blocks = parseContent(msg.content);
+      if (!Array.isArray(blocks) || blocks.length === 0) continue;
+
+      const lastBlock = blocks[blocks.length - 1];
+      if (!lastBlock || typeof lastBlock === "string") return "generating";
+
+      switch (lastBlock.type) {
+        case "thinking":
+          return "thinking";
+        case "text":
+          return "generating";
+        case "tool_use": {
+          const result = toolResultMap.get(lastBlock.id);
+          if (result?.is_error) return "error";
+          if (!result) return "toolExecuting";
+          return "generating";
+        }
+        default:
+          return "generating";
+      }
+    }
+
+    return "generating";
+  }, [sessionStatus, renderableMessages, parseContent, toolResultMap]);
 
   /**
    * Group consecutive messages into turns
@@ -300,23 +336,12 @@ export function Chat({
               <div
                 role="status"
                 aria-live="polite"
-                aria-label={`Working for ${formattedDuration || "0 seconds"}`}
-                className={cn(
-                  "mr-auto flex items-center gap-2.5 px-3 py-2",
-                  "bg-success/10 border-success/30 rounded-lg border backdrop-blur-sm",
-                  "text-success shadow-sm",
-                  "animate-gentle-pulse motion-reduce:animate-none",
-                  indicatorMarginClass
-                )}
+                aria-label={`Working for ${formattedDuration || "0.0s"}`}
+                className={cn("mr-auto flex items-center gap-2 px-2 py-1.5", indicatorMarginClass)}
               >
-                {/* Spinner - shows activity */}
-                <div
-                  className="border-success/25 border-t-success h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-                {/* Timer - monospace prevents jumping, prominent size */}
-                <span className="font-mono text-sm font-semibold tracking-tight">
-                  {formattedDuration || "0s"}
+                <PixelGrid variant={agentSubState} size={15} className="flex-shrink-0" />
+                <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
+                  {formattedDuration || "0.0s"}
                 </span>
               </div>
             )}
