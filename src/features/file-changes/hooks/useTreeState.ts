@@ -126,16 +126,16 @@ export function useTreeState(
     if (prevWorkspaceIdRef.current === undefined) {
       prevWorkspaceIdRef.current = workspaceId;
 
-      // Auto-expand if we have nodes but no stored state
-      if (workspaceId && nodes.length > 0) {
+      // Mark auto-expand done if stored state exists, or auto-expand if nodes are ready
+      if (workspaceId) {
         const stored = loadFromStorage(workspaceId);
-        if (stored.size === 0) {
+        if (stored.size > 0) {
+          hasAutoExpandedRef.current = true; // Already has state, skip auto-expand
+        } else if (nodes.length > 0) {
           const autoExpand = new Set(getAutoExpandPaths(nodes, autoExpandDepth));
           setExpandedPathsState(autoExpand);
           saveToStorage(workspaceId, autoExpand);
           hasAutoExpandedRef.current = true;
-        } else {
-          hasAutoExpandedRef.current = true; // Already has state, skip auto-expand
         }
       }
       return;
