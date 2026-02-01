@@ -20,9 +20,19 @@ child.on('error', (err) => {
 });
 
 child.on('exit', (code, signal) => {
-  if (signal) process.kill(process.pid, signal);
-  else process.exit(code ?? 1);
+  if (signal) {
+    // Remove custom handlers so re-raise hits the default (terminate)
+    process.removeAllListeners('SIGINT');
+    process.removeAllListeners('SIGTERM');
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code ?? 1);
 });
 
-process.on('SIGINT', () => child.kill('SIGINT'));
-process.on('SIGTERM', () => child.kill('SIGTERM'));
+process.on('SIGINT', () => {
+  if (!child.killed) child.kill('SIGINT');
+});
+process.on('SIGTERM', () => {
+  if (!child.killed) child.kill('SIGTERM');
+});
