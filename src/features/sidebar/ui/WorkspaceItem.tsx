@@ -42,6 +42,8 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
   const { data: diffStats } = useDiffStats(workspace.id, workspace.session_status, {
     root_path: workspace.root_path,
     directory_name: workspace.directory_name,
+    parent_branch: workspace.parent_branch,
+    default_branch: workspace.default_branch,
   });
 
   const formatTime = (timestamp: string) => {
