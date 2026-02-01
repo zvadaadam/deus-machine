@@ -5,7 +5,7 @@ import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
 import type { Repo } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
-import { useKeyboardShortcuts, useZoom } from "@/shared/hooks";
+import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -88,6 +88,13 @@ export function MainLayout() {
 
   // Zoom (Cmd+=/Cmd+-/Cmd+0)
   useZoom();
+
+  // Track fullscreen state — toggles `.fullscreen` class on <html> for CSS
+  useIsFullscreen();
+
+  // Global drag zone — window-level mousedown in the top 48px triggers
+  // startDragging(), mirroring Arc's full-width transparent overlay approach.
+  useTauriDragZone();
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
