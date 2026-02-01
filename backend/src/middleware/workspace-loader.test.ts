@@ -9,7 +9,7 @@ vi.mock('../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import { withWorkspace } from './workspace-loader';
+import { withWorkspace, computeWorkspacePath } from './workspace-loader';
 
 const createTestApp = () => {
   const app = new Hono();
@@ -105,5 +105,60 @@ describe('withWorkspace middleware', () => {
 
     expect(mockDb.prepare).toHaveBeenCalled();
     expect(mockStmt.get).toHaveBeenCalledWith('ws-42');
+  });
+
+  it('computes legacy v3 path for storage_version 3 workspaces', async () => {
+    mockStmt.get.mockReturnValue({
+      id: 'ws-legacy',
+      root_path: '/Users/dev/projects/myrepo',
+      directory_name: 'athens',
+      default_branch: 'main',
+      storage_version: 3,
+      repo_name: 'myrepo',
+    });
+
+    const app = createTestApp();
+    const res = await app.request('/test/ws-legacy');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const os = await import('os');
+    expect(body.workspacePath).toBe(`${os.homedir()}/conductor/workspaces/myrepo/athens`);
+  });
+});
+
+describe('computeWorkspacePath', () => {
+  it('returns .conductor path for v2 storage version', () => {
+    expect(computeWorkspacePath({
+      root_path: '/repo',
+      directory_name: 'tokyo',
+      storage_version: 2,
+      repo_name: 'myrepo',
+    })).toBe('/repo/.conductor/tokyo');
+  });
+
+  it('returns .conductor path when storage_version is undefined', () => {
+    expect(computeWorkspacePath({
+      root_path: '/repo',
+      directory_name: 'tokyo',
+    })).toBe('/repo/.conductor/tokyo');
+  });
+
+  it('returns legacy ~/conductor/workspaces path for v3', async () => {
+    const os = await import('os');
+    expect(computeWorkspacePath({
+      root_path: '/some/path',
+      directory_name: 'athens',
+      storage_version: 3,
+      repo_name: 'devsbook',
+    })).toBe(`${os.homedir()}/conductor/workspaces/devsbook/athens`);
+  });
+
+  it('falls back to .conductor path if v3 but repo_name missing', () => {
+    expect(computeWorkspacePath({
+      root_path: '/repo',
+      directory_name: 'athens',
+      storage_version: 3,
+    })).toBe('/repo/.conductor/athens');
   });
 });
