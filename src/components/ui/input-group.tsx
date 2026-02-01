@@ -95,16 +95,13 @@ const inputGroupButtonVariants = cva("text-sm shadow-none flex gap-2 items-cente
   },
 });
 
-function InputGroupButton({
-  className,
-  type = "button",
-  variant = "ghost",
-  size = "xs",
-  ...props
-}: Omit<React.ComponentProps<typeof Button>, "size"> &
-  VariantProps<typeof inputGroupButtonVariants>) {
+const InputGroupButton = React.forwardRef<
+  HTMLButtonElement,
+  Omit<React.ComponentProps<typeof Button>, "size"> & VariantProps<typeof inputGroupButtonVariants>
+>(({ className, type = "button", variant = "ghost", size = "xs", ...props }, ref) => {
   return (
     <Button
+      ref={ref}
       type={type}
       data-size={size}
       variant={variant}
@@ -112,7 +109,9 @@ function InputGroupButton({
       {...props}
     />
   );
-}
+});
+
+InputGroupButton.displayName = "InputGroupButton";
 
 function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   return (

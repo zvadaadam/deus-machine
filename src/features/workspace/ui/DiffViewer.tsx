@@ -1,242 +1,70 @@
-import { useState, useEffect, useMemo } from "react";
-import { Copy, Check } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, type CSSProperties } from "react";
+import { Copy, Check, Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/shared/lib/utils";
-import {
-  parseDiff,
-  highlightDiffLine,
-  calculateSkippedLines,
-  type DiffHunk,
-  type DiffLine,
-} from "@/shared/lib/syntaxHighlighter";
-import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
-import { computeWordDiff, applyWordHighlights, type HighlightRange } from "@/shared/lib/wordDiff";
-import { useTheme } from "@/app/providers";
+import { Textarea } from "@/components/ui/textarea";
+import { FileDiff } from "@pierre/diffs/react";
+import type { DiffLineAnnotation } from "@pierre/diffs/react";
+import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
+import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
+import { useDiffOptions } from "@/shared/lib/diffOptions";
 
 interface DiffViewerProps {
   filePath?: string;
   diff?: string;
-  additions?: number;
-  deletions?: number;
+  oldContent?: string | null;
+  newContent?: string | null;
+  isLoading?: boolean;
+  error?: string | null;
+  onClose?: () => void;
 }
 
 /**
- * DiffViewer - Inline git diff viewer component
+ * DiffViewer - Git diff viewer powered by @pierre/diffs
  *
- * Design Philosophy (Jony Ive principles applied to diffs):
- * 1. **Hierarchy through contrast** - Changed content must announce itself
- *    - Light backgrounds for changed lines (GitHub pattern) - essential, not decorative
- *    - Context lines remain quiet and unobtrusive
+ * Renders unified diffs with syntax highlighting, word-level change detection,
+ * and hunk separators. Uses Shadow DOM for style isolation.
  *
- * 2. **Visual structure serves navigation**
- *    - Gap indicators show hidden code sections
- *    - Line numbers provide orientation
- *    - Syntax highlighting reveals code structure
- *
- * 3. **Confident design choices**
- *    - Full-strength backgrounds where they matter (additions/deletions)
- *    - No timid opacity on critical elements
- *    - Backgrounds ARE appropriate when they create essential hierarchy
- *
- * 4. **What the code changed is the hero**
- *    - Syntax highlighting shows structure
- *    - Clean typography maintains readability
- *    - Everything else supports this primary purpose
- *
- * Implementation:
- * - Two-pass rendering: syntax highlighting (Shiki) + word-level diff overlays
- * - Word-level highlights show exact changes within lines (saturated backgrounds)
- * - Performance optimized: O(n) greedy word matching, smart caching
+ * Data flow: Backend returns raw diff + file contents → FileDiff parses and renders
  */
-interface HighlightedDiffLine extends DiffLine {
-  highlightedCode: string;
+type CommentSide = "additions" | "deletions";
+
+interface DiffComment {
+  id: string;
+  lineNumber: number;
+  side: CommentSide;
+  text: string;
+  createdAt: string;
 }
 
-interface HighlightedHunk extends Omit<DiffHunk, "lines"> {
-  lines: HighlightedDiffLine[];
+interface DiffCommentDraft {
+  lineNumber: number;
+  side: CommentSide;
+  text: string;
+}
+
+interface DiffCommentMeta {
+  id: string;
+  text: string;
+  createdAt?: string;
+  isDraft?: boolean;
 }
 
 export function DiffViewer({
   filePath = "",
   diff = "",
-  additions = 0,
-  deletions = 0,
+  oldContent = null,
+  newContent = null,
+  isLoading: isLoadingProp = false,
+  error: errorProp = null,
+  onClose,
 }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const [highlightedHunks, setHighlightedHunks] = useState<HighlightedHunk[]>([]);
-  const [isHighlighting, setIsHighlighting] = useState(false);
+  const [comments, setComments] = useState<DiffComment[]>([]);
+  const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
-  // Use app theme provider instead of MutationObserver
-  const { actualTheme } = useTheme();
-  const shikiTheme = useMemo(
-    () => (actualTheme === "dark" ? "github-dark" : "github-light"),
-    [actualTheme]
-  );
+  const baseDiffOptions = useDiffOptions();
 
-  /**
-   * Extract filename and path context from full file path
-   * Example: "src/features/workspace/ui/DiffViewer.tsx"
-   * → path: "src/features/workspace/ui/"
-   * → filename: "DiffViewer.tsx"
-   */
-  const pathParts = filePath.split("/").filter((part) => part.length > 0);
-  const filename = pathParts.pop() || filePath;
-  const pathContext = pathParts.length > 0 ? pathParts.join("/") + "/" : "";
-
-  /**
-   * Detect programming language from file extension
-   * Used for syntax highlighting
-   */
-  const language = filePath ? detectLanguageFromPath(filePath) : "text";
-
-  /**
-   * Parse and highlight diff with syntax highlighting + word-level highlights
-   * Optimized for performance:
-   * - Only compute word diff for adjacent deletion-addition pairs
-   * - Skip word diff for very long lines (>200 chars)
-   * - Process in batches to avoid blocking
-   */
-  useEffect(() => {
-    let cancelled = false;
-
-    const highlightDiff = async () => {
-      // Skip highlighting for loading/error states
-      if (!diff || diff === "Loading diff..." || diff.startsWith("Error loading diff:")) {
-        if (!cancelled) setHighlightedHunks([]);
-        return;
-      }
-
-      if (!cancelled) setIsHighlighting(true);
-
-      try {
-        // Parse diff to extract code hunks (removes git metadata)
-        const hunks = parseDiff(diff);
-        const highlighted: HighlightedHunk[] = [];
-
-        // Highlight each hunk's lines with word-level precision
-        for (const hunk of hunks) {
-          const highlightedLines: HighlightedDiffLine[] = [];
-
-          // First pass: syntax highlight all lines with current theme
-          const syntaxHighlighted = await Promise.all(
-            hunk.lines.map(async (line) => ({
-              ...line,
-              syntaxHtml: await highlightDiffLine(line.content, language, shikiTheme),
-            }))
-          );
-
-          // Second pass: apply word-level highlights ONLY to adjacent deletion-addition pairs
-          const wordDiffCache = new Map<
-            number,
-            { oldRanges: HighlightRange[]; newRanges: HighlightRange[] }
-          >();
-
-          for (let i = 0; i < syntaxHighlighted.length; i++) {
-            const line = syntaxHighlighted[i];
-            let finalHtml = line.syntaxHtml;
-
-            // Only compute word diff for adjacent pairs and short lines
-            const MAX_LINE_LENGTH = 200;
-
-            if (line.type === "deletion" && i + 1 < syntaxHighlighted.length) {
-              const nextLine = syntaxHighlighted[i + 1];
-
-              // Only if next line is an addition AND both lines are reasonably short
-              if (
-                nextLine.type === "addition" &&
-                line.content.length < MAX_LINE_LENGTH &&
-                nextLine.content.length < MAX_LINE_LENGTH
-              ) {
-                // Compute word diff once and cache it
-                if (!wordDiffCache.has(i)) {
-                  const diffResult = computeWordDiff(line.content, nextLine.content);
-                  wordDiffCache.set(i, diffResult);
-                }
-
-                const { oldRanges } = wordDiffCache.get(i)!;
-
-                // Apply highlights only if there are meaningful differences
-                if (oldRanges.length > 0 && oldRanges.length < 10) {
-                  finalHtml = applyWordHighlights(
-                    line.syntaxHtml,
-                    line.content,
-                    oldRanges,
-                    "deletion"
-                  );
-                }
-              }
-            } else if (line.type === "addition" && i > 0) {
-              const prevLine = syntaxHighlighted[i - 1];
-
-              // Only if previous line is a deletion AND both lines are reasonably short
-              if (
-                prevLine.type === "deletion" &&
-                line.content.length < MAX_LINE_LENGTH &&
-                prevLine.content.length < MAX_LINE_LENGTH
-              ) {
-                // Use cached result from deletion
-                const cached = wordDiffCache.get(i - 1);
-                if (cached) {
-                  const { newRanges } = cached;
-
-                  // Apply highlights only if there are meaningful differences
-                  if (newRanges.length > 0 && newRanges.length < 10) {
-                    finalHtml = applyWordHighlights(
-                      line.syntaxHtml,
-                      line.content,
-                      newRanges,
-                      "addition"
-                    );
-                  }
-                }
-              }
-            }
-
-            highlightedLines.push({
-              ...line,
-              highlightedCode: finalHtml,
-            });
-          }
-
-          highlighted.push({
-            ...hunk,
-            lines: highlightedLines,
-          });
-        }
-
-        if (!cancelled) {
-          setHighlightedHunks(highlighted);
-          setIsHighlighting(false);
-        }
-      } catch (error) {
-        // Log error and show raw diff as fallback
-        console.error("[DiffViewer] Highlighting failed:", error);
-        if (!cancelled) {
-          // Create simple fallback with unhighlighted lines
-          const fallbackHunks = parseDiff(diff);
-          const fallbackHighlighted: HighlightedHunk[] = fallbackHunks.map((hunk) => ({
-            ...hunk,
-            lines: hunk.lines.map((line) => ({
-              ...line,
-              highlightedCode: line.content || "&nbsp;",
-            })),
-          }));
-          setHighlightedHunks(fallbackHighlighted);
-          setIsHighlighting(false);
-        }
-      }
-    };
-
-    highlightDiff();
-    return () => {
-      cancelled = true;
-    };
-  }, [diff, language, shikiTheme]);
-
-  /**
-   * Copy diff content to clipboard
-   */
   const handleCopyDiff = async () => {
     try {
       await navigator.clipboard.writeText(diff);
@@ -247,162 +75,414 @@ export function DiffViewer({
     }
   };
 
-  /**
-   * Render a single diff line with line numbers
-   * GitHub-inspired design using CSS variables:
-   * - Theme-aware backgrounds (--diff-addition-bg / --diff-deletion-bg)
-   * - Line numbers with gutter colors
-   * - Syntax-highlighted code
-   */
-  const renderDiffLine = (line: HighlightedDiffLine, index: number) => {
-    const { type, highlightedCode, oldLineNum, newLineNum } = line;
+  const isLoading = isLoadingProp;
+  const hasError = Boolean(errorProp);
+  const diffIsEmpty = diff.trim().length === 0;
+  const hasContent = !isLoading && !hasError && !diffIsEmpty;
 
-    // Display line number (prefer new line for additions, old line for deletions)
-    const lineNum = type === "deletion" ? oldLineNum : newLineNum;
+  const displayFileDiff = useMemo(() => {
+    if (!diff.trim()) return null;
+    const fallbackName = filePath || "file";
+    const diffPaths = extractDiffPaths(diff);
+    const oldName = diffPaths.oldPath || fallbackName;
+    const newName = diffPaths.newPath || fallbackName;
+    const oldFile: FileContents | null =
+      oldContent != null ? { name: oldName, contents: oldContent } : null;
+    const newFile: FileContents | null =
+      newContent != null ? { name: newName, contents: newContent } : null;
+    if (oldFile && newFile) {
+      try {
+        const generated = parseDiffFromFile(oldFile, newFile);
+        return applyDisplayNames(generated, fallbackName);
+      } catch (error) {
+        console.warn("Failed to generate full diff, falling back to patch diff", error);
+      }
+    }
+    try {
+      return applyDisplayNames(getSingularPatch(diff), fallbackName);
+    } catch (error) {
+      console.warn("Failed to parse patch diff", error);
+      return null;
+    }
+  }, [diff, filePath, newContent, oldContent]);
 
-    return (
-      <div
-        key={index}
-        data-line-type={type}
-        className={cn("relative flex items-start font-mono text-xs leading-relaxed", {
-          // Theme-aware backgrounds using CSS variables
-          "bg-[var(--diff-addition-bg)]": type === "addition",
-          "bg-[var(--diff-deletion-bg)]": type === "deletion",
-        })}
+  const canExpand = Boolean(displayFileDiff && !displayFileDiff.isPartial);
+
+  useEffect(() => {
+    // Reset comment state when file changes - intentional pattern for clearing related state
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setComments([]);
+    setDraftComment(null);
+    setShowAll(false);
+  }, [filePath]);
+
+  const diffOptions = useMemo(
+    () => ({
+      ...baseDiffOptions,
+      overflow: "scroll" as const,
+      disableFileHeader: true,
+      enableHoverUtility: hasContent,
+      expandUnchanged: showAll && canExpand,
+    }),
+    [baseDiffOptions, canExpand, hasContent, showAll]
+  );
+
+  const createCommentId = () =>
+    `comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const handleStartComment = useCallback(
+    (getHoveredLine: () => { lineNumber: number; side: CommentSide } | undefined) => {
+      const hovered = getHoveredLine();
+      if (!hovered) return;
+
+      setDraftComment((current) => {
+        if (current && current.lineNumber === hovered.lineNumber && current.side === hovered.side) {
+          return current;
+        }
+        return { lineNumber: hovered.lineNumber, side: hovered.side, text: "" };
+      });
+    },
+    []
+  );
+
+  const handleSaveDraft = useCallback(() => {
+    if (!draftComment) return;
+    const trimmed = draftComment.text.trim();
+    if (!trimmed) {
+      setDraftComment(null);
+      return;
+    }
+    const newComment: DiffComment = {
+      id: createCommentId(),
+      lineNumber: draftComment.lineNumber,
+      side: draftComment.side,
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+    setComments((prev) => [...prev, newComment]);
+    setDraftComment(null);
+  }, [draftComment]);
+
+  const handleCancelDraft = useCallback(() => {
+    setDraftComment(null);
+  }, []);
+
+  const handleRemoveComment = useCallback((id: string) => {
+    setComments((prev) => prev.filter((comment) => comment.id !== id));
+  }, []);
+
+  const formatCommentForChat = useCallback(
+    (comment: DiffComment, lineNumber: number, side: CommentSide) => {
+      const fileLabel = filePath || "file";
+      const sideLabel = side === "additions" ? "addition" : "deletion";
+      return [
+        "### 💬 Diff comment",
+        `- **File:** \`${fileLabel}\``,
+        `- **Line:** ${lineNumber} (${sideLabel})`,
+        "",
+        comment.text,
+      ].join("\n");
+    },
+    [filePath]
+  );
+
+  const handleSendToChat = useCallback(
+    (comment: DiffComment) => {
+      const text = formatCommentForChat(comment, comment.lineNumber, comment.side);
+      window.dispatchEvent(new CustomEvent("insert-to-chat", { detail: { text } }));
+    },
+    [formatCommentForChat]
+  );
+
+  const lineAnnotations = useMemo<DiffLineAnnotation<DiffCommentMeta>[]>(
+    () => [
+      ...comments.map((comment) => ({
+        side: comment.side,
+        lineNumber: comment.lineNumber,
+        metadata: {
+          id: comment.id,
+          text: comment.text,
+          createdAt: comment.createdAt,
+        },
+      })),
+      ...(draftComment
+        ? [
+            {
+              side: draftComment.side,
+              lineNumber: draftComment.lineNumber,
+              metadata: {
+                id: "draft",
+                text: draftComment.text,
+                isDraft: true,
+              },
+            },
+          ]
+        : []),
+    ],
+    [comments, draftComment]
+  );
+
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<DiffCommentMeta>) => {
+      const meta = annotation.metadata;
+      if (!meta) return null;
+
+      if (meta.isDraft) {
+        return (
+          <div className="diff-comment-card">
+            <Textarea
+              value={draftComment?.text ?? ""}
+              onChange={(event) =>
+                setDraftComment((current) =>
+                  current ? { ...current, text: event.target.value } : current
+                )
+              }
+              placeholder="Add a review comment…"
+              className="min-h-[88px] text-sm"
+            />
+            <div className="diff-comment-actions">
+              <Button
+                size="sm"
+                className="diff-comment-save"
+                onClick={handleSaveDraft}
+                disabled={!draftComment?.text.trim()}
+              >
+                Save comment
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleCancelDraft}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      const savedComment: DiffComment = {
+        id: meta.id,
+        lineNumber: annotation.lineNumber,
+        side: annotation.side,
+        text: meta.text,
+        createdAt: meta.createdAt ?? "",
+      };
+
+      return (
+        <div className="diff-comment-card">
+          <p className="diff-comment-text">{meta.text}</p>
+          <div className="diff-comment-actions">
+            <Button size="sm" variant="ghost" onClick={() => handleSendToChat(savedComment)}>
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+              Add to chat
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => handleRemoveComment(meta.id)}>
+              Remove
+            </Button>
+          </div>
+        </div>
+      );
+    },
+    [draftComment, handleCancelDraft, handleRemoveComment, handleSaveDraft, handleSendToChat]
+  );
+
+  const headerActions = (
+    <div className="diff-header-actions">
+      <button
+        type="button"
+        className="diff-header-btn"
+        onClick={() => setShowAll((prev) => !prev)}
+        disabled={!canExpand}
+        aria-pressed={showAll}
+        title={canExpand ? undefined : "Full file context unavailable"}
       >
-        {/* Line number - right-aligned, muted */}
-        <span
-          className={cn("w-12 flex-shrink-0 pr-4 text-right select-none", {
-            "bg-[var(--diff-addition-gutter)] text-[var(--diff-addition-text)]":
-              type === "addition",
-            "bg-[var(--diff-deletion-gutter)] text-[var(--diff-deletion-text)]":
-              type === "deletion",
-            "bg-[var(--diff-line-number-bg)] text-[var(--diff-line-number)]": type === "context",
-          })}
-        >
-          {lineNum}
-        </span>
-
-        {/* Code content - syntax highlighted with preserved whitespace */}
-        <span
-          className={cn("flex-1 py-0.5 pr-4 whitespace-pre", {
-            "text-foreground": type === "addition" || type === "deletion",
-            "text-foreground/80": type === "context",
-          })}
-          dangerouslySetInnerHTML={{ __html: highlightedCode }}
-        />
-      </div>
-    );
-  };
-
-  /**
-   * Render gap indicator between hunks
-   * Shows how many lines are hidden
-   */
-  const renderGapIndicator = (skippedLines: number, key: string) => {
-    if (skippedLines === 0) return null;
-
-    return (
-      <div
-        key={key}
-        className="text-muted-foreground/60 bg-muted/20 border-border/20 my-2 flex items-center gap-3 border-y px-4 py-3 text-xs"
+        {showAll ? "Collapse" : "Show all"}
+      </button>
+      <button
+        type="button"
+        className="diff-header-icon"
+        onClick={handleCopyDiff}
+        title={copied ? "Copied" : "Copy diff"}
       >
-        <div className="bg-border/20 h-px flex-1" />
-        <span className="font-mono">
-          {skippedLines} unchanged line{skippedLines !== 1 ? "s" : ""}
-        </span>
-        <div className="bg-border/20 h-px flex-1" />
-      </div>
-    );
-  };
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      {onClose && (
+        <button type="button" className="diff-header-icon" onClick={onClose} title="Close diff">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
 
-  const isLoading = diff === "Loading diff..." || isHighlighting;
-  const hasError = diff.startsWith("Error loading diff:") || diff === "No diff available";
+  const headerTitle = useMemo(() => {
+    if (!displayFileDiff) return null;
+    if (displayFileDiff.prevName) {
+      return (
+        <span className="diff-viewer-title">
+          <span className="diff-viewer-title-muted">{displayFileDiff.prevName}</span>
+          <ArrowRight className="h-3.5 w-3.5 opacity-60" />
+          <span>{displayFileDiff.name}</span>
+        </span>
+      );
+    }
+    return <span className="diff-viewer-title">{displayFileDiff.name}</span>;
+  }, [displayFileDiff]);
+
+  const diffContainerStyle = useMemo<CSSProperties>(
+    () => ({
+      height: "100%",
+      overflow: "auto",
+      fontSize: "12px",
+      lineHeight: "21px",
+      "--diffs-font-size": "12px",
+      "--diffs-line-height": "21px",
+    }),
+    []
+  );
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
-      {/* Header - Fixed at top, clean and purposeful */}
-      <div
-        className="border-border flex-shrink-0 border-b"
-        onMouseEnter={() => setIsHeaderHovered(true)}
-        onMouseLeave={() => setIsHeaderHovered(false)}
-      >
-        {/* File path - single line, no icon clutter */}
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          {/* Left: File path hierarchy */}
-          <div className="min-w-0 flex-1 font-mono text-sm">
-            {pathContext && <span className="text-muted-foreground/50">{pathContext}</span>}
-            <span className="text-foreground">{filename || "Untitled"}</span>
-          </div>
-
-          {/* Right: Stats + Copy button (appears on hover) */}
-          <div className="flex items-center gap-4">
-            {/* Stats: Just numbers, no labels */}
-            {(additions > 0 || deletions > 0) && (
-              <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
-                {additions > 0 && <span className="text-success/80">+{additions}</span>}
-                {deletions > 0 && <span className="text-destructive/80">−{deletions}</span>}
-              </div>
-            )}
-
-            {/* Copy button: Icon only, appears on hover */}
-            {!isLoading && !hasError && diff.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCopyDiff}
-                className={cn(
-                  "h-6 w-6 transition-opacity duration-200",
-                  isHeaderHovered || copied ? "opacity-100" : "opacity-0"
-                )}
-                title="Copy diff"
-              >
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
-            )}
-          </div>
+      {hasContent && displayFileDiff && (
+        <div className="diff-viewer-header">
+          <div className="min-w-0 flex-1">{headerTitle}</div>
+          {headerActions}
         </div>
-      </div>
+      )}
 
-      {/* Diff content - Scrollable with native overflow */}
-      <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+      {/* Diff content */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {isLoading ? (
-          <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="border-muted-foreground/20 border-t-muted-foreground/60 h-6 w-6 animate-spin rounded-full border-2" />
-              <span className="text-sm">Loading diff...</span>
+          <div className="flex h-full items-center justify-center px-6 py-10">
+            <div className="w-full max-w-none animate-pulse space-y-3">
+              <div className="bg-muted/40 h-4 w-32 rounded-full" />
+              {["w-4/5", "w-3/4", "w-5/6", "w-2/3", "w-4/6", "w-3/5"].map((width, index) => (
+                <div key={index} className="flex items-center gap-3">
+                  <div className="bg-muted/30 h-3 w-10 rounded" />
+                  <div className={`h-3 ${width} bg-muted/30 rounded`} />
+                </div>
+              ))}
             </div>
           </div>
         ) : hasError ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-              <p className="text-sm">{diff}</p>
+              <p className="text-sm">{errorProp}</p>
             </div>
           </div>
-        ) : diff.length === 0 ? (
+        ) : diffIsEmpty ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <p className="text-sm">No changes</p>
           </div>
-        ) : (
-          <div>
-            {highlightedHunks.map((hunk, hunkIndex) => {
-              // Calculate skipped lines between this and previous hunk
-              const skippedLines =
-                hunkIndex > 0 ? calculateSkippedLines(highlightedHunks[hunkIndex - 1], hunk) : 0;
-
-              return (
-                <div key={hunkIndex}>
-                  {/* Gap indicator if there are skipped lines */}
-                  {skippedLines > 0 && renderGapIndicator(skippedLines, `gap-${hunkIndex}`)}
-
-                  {/* Hunk lines */}
-                  <div>{hunk.lines.map((line, lineIndex) => renderDiffLine(line, lineIndex))}</div>
-                </div>
-              );
-            })}
+        ) : !displayFileDiff ? (
+          <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
+            <p className="text-sm">Unable to render diff</p>
           </div>
+        ) : (
+          <FileDiff
+            fileDiff={displayFileDiff}
+            options={diffOptions}
+            lineAnnotations={lineAnnotations}
+            renderAnnotation={renderAnnotation}
+            renderHoverUtility={(getHoveredLine) => (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleStartComment(getHoveredLine);
+                }}
+                className="diff-hover-action"
+                title="Add comment"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+            className="diffs-theme diffs-theme-compact"
+            style={diffContainerStyle}
+          />
         )}
       </div>
     </div>
   );
+}
+
+function applyDisplayNames(fileDiff: FileDiffMetadata, fallbackName: string): FileDiffMetadata {
+  const displayName = toBaseName(fileDiff.name || fallbackName);
+  const displayPrev = fileDiff.prevName ? toBaseName(fileDiff.prevName) : undefined;
+  return {
+    ...fileDiff,
+    name: displayName,
+    prevName: displayPrev,
+  };
+}
+
+function toBaseName(path: string): string {
+  const unquoted = path.startsWith('"') && path.endsWith('"') ? path.slice(1, -1) : path;
+  const cleaned = unquoted.replace(/^a\//, "").replace(/^b\//, "");
+  const parts = cleaned.split("/");
+  return parts[parts.length - 1] || cleaned;
+}
+
+function extractDiffPaths(diff: string): { oldPath?: string; newPath?: string } {
+  let oldPath: string | undefined;
+  let newPath: string | undefined;
+  const lines = diff.split("\n");
+  for (const line of lines) {
+    if (line.startsWith("rename from ")) {
+      oldPath = normalizeGitPath(line.slice("rename from ".length));
+      continue;
+    }
+    if (line.startsWith("rename to ")) {
+      newPath = normalizeGitPath(line.slice("rename to ".length));
+      continue;
+    }
+    if (line.startsWith("diff --git ")) {
+      const tokens = splitGitDiffTokens(line.slice("diff --git ".length));
+      if (!oldPath && tokens[0]) oldPath = normalizeGitPath(tokens[0]);
+      if (!newPath && tokens[1]) newPath = normalizeGitPath(tokens[1]);
+      continue;
+    }
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+      const match = line.match(/^(---|\+\+\+)\s+([^\t\r\n]+)(.*)$/);
+      if (!match) continue;
+      const [, prefix, fileName] = match;
+      if (fileName === "/dev/null") {
+        continue;
+      }
+      if (prefix === "---" && !oldPath) {
+        oldPath = normalizeGitPath(fileName);
+      } else if (prefix === "+++" && !newPath) {
+        newPath = normalizeGitPath(fileName);
+      }
+    }
+    if (oldPath && newPath) {
+      break;
+    }
+  }
+  return { oldPath, newPath };
+}
+
+function splitGitDiffTokens(value: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < value.length && tokens.length < 2) {
+    while (value[i] === " ") i += 1;
+    if (i >= value.length) break;
+    if (value[i] === '"') {
+      let end = i + 1;
+      while (end < value.length && value[end] !== '"') end += 1;
+      tokens.push(value.slice(i, Math.min(end + 1, value.length)));
+      i = end + 1;
+    } else {
+      let end = i;
+      while (end < value.length && value[end] !== " ") end += 1;
+      tokens.push(value.slice(i, end));
+      i = end + 1;
+    }
+  }
+  return tokens;
+}
+
+function normalizeGitPath(pathToken: string): string {
+  if (!pathToken) return pathToken;
+  const unquoted =
+    pathToken.startsWith('"') && pathToken.endsWith('"') ? pathToken.slice(1, -1) : pathToken;
+  return unquoted.replace(/^a\//, "").replace(/^b\//, "");
 }
