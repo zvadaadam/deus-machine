@@ -33,10 +33,6 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 
-// Detect Tauri environment for vibrancy support
-const isTauri =
-  typeof window !== "undefined" &&
-  (Boolean((window as any).__TAURI__) || Boolean((window as any).__TAURI_INTERNALS__));
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 type SidebarContextProps = {
@@ -159,9 +155,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper flex min-h-svh w-full",
-            // In Tauri, skip opaque background for vibrancy. In web, apply bg-sidebar.
-            !isTauri && "has-data-[variant=inset]:bg-sidebar",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
             className
           )}
           {...props}
@@ -224,9 +218,9 @@ function Sidebar({
     return (
       <div
         data-slot="sidebar"
+        data-sidebar="sidebar"
         className={cn(
-          "text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
-          !isTauri && "bg-sidebar",
+          "bg-sidebar text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
           className
         )}
         {...props}
@@ -243,10 +237,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className={cn(
-            "text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden",
-            !isTauri && "bg-sidebar"
-          )}
+          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -342,10 +333,8 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
           className={cn(
-            "flex h-full w-full flex-col",
-            "group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm",
-            // In Tauri, skip opaque background for vibrancy
-            !isTauri && "bg-sidebar"
+            "bg-sidebar flex h-full w-full flex-col",
+            "group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
           )}
         >
           {children}
@@ -409,8 +398,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
       className={cn(
         "bg-background relative flex w-full flex-1 flex-col transition-[margin] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
-        // In Tauri, skip shadow for cleaner vibrancy look. In web, apply shadow-sm.
-        !isTauri && "md:peer-data-[variant=inset]:shadow-sm",
+        "md:peer-data-[variant=inset]:shadow-sm",
         className
       )}
       {...props}

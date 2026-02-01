@@ -56,7 +56,7 @@ export function SidebarRowMain({
     <Comp
       className={cn(
         "flex min-w-0 flex-1 items-center gap-3",
-        indent === "workspace" && "pl-5",
+        indent === "workspace" && "pl-3",
         className
       )}
       {...props}
