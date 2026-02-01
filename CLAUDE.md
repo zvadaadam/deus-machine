@@ -141,10 +141,10 @@ We want to achieve a beautiful aesthetic design of a pro consumer product.
 
 Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 
-## State Managment
+## State Management
 
 - Using Zustand
-- Follow best practicies of using Zustant state managment
+- Follow best practices of using Zustand state management
 
 ## Styling
 

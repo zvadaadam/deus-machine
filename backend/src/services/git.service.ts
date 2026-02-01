@@ -72,7 +72,7 @@ export function resolveParentBranch(
 
   // Try remote branches first
   for (const branch of candidates) {
-    const ref = `origin/${branch}`;
+    const ref = branch.startsWith('origin/') ? branch : `origin/${branch}`;
     try {
       execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/${ref}`], {
         cwd: workspacePath, timeout: 2000
@@ -251,14 +251,9 @@ export function getDiffFiles(workspacePath: string, parentBranch: string): Array
 }
 
 export function getFileDiff(workspacePath: string, parentBranch: string, filePath: string): string {
-  try {
-    return execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--', filePath], {
-      cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
-    }).toString();
-  } catch (error) {
-    console.error('Failed to get file diff:', error);
-    return '';
-  }
+  return execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--', filePath], {
+    cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+  }).toString();
 }
 
 export function getOpenCommand(target: string): { cmd: string; args: string[] } {

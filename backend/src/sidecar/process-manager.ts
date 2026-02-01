@@ -41,13 +41,13 @@ export class ProcessManager extends EventEmitter {
   }
 
   async start(dbPath: string): Promise<{ pid: number; socketPath: string }> {
+    if (this.isStarting) {
+      throw new Error('Sidecar is already starting');
+    }
+
     if (this.isRunning()) {
       console.log(`[SIDECAR] Already running (PID: ${this.pid})`);
       return { pid: this.pid!, socketPath: this.socketPath! };
-    }
-
-    if (this.isStarting) {
-      throw new Error('Sidecar is already starting');
     }
 
     this.isStarting = true;

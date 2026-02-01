@@ -299,6 +299,12 @@ app.post('/workspaces', async (c) => {
   worktreeProcess.stdout.pipe(initLog);
   worktreeProcess.stderr.pipe(initLog);
 
+  worktreeProcess.on('error', (error) => {
+    console.error(`[WORKSPACE] Git worktree spawn error:`, error);
+    try { initLog.end(); } catch {}
+    db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
+  });
+
   worktreeProcess.on('close', (code) => {
     try { initLog.end(); } catch {}
     if (code === 0) {
