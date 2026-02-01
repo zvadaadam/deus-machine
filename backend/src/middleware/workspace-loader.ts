@@ -37,7 +37,8 @@ export const withWorkspace = createMiddleware(async (c, next) => {
   const db = getDatabase();
 
   const workspace = db.prepare(`
-    SELECT w.*, r.root_path, r.default_branch, r.storage_version, r.name as repo_name
+    SELECT w.*, w.initialization_parent_branch AS parent_branch,
+           r.root_path, r.default_branch, r.storage_version, r.name as repo_name
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     WHERE w.id = ?

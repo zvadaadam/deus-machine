@@ -43,7 +43,7 @@ app.get('/workspaces/by-repo', (c) => {
     SELECT
       w.id, w.repository_id, w.directory_name, w.branch, w.state,
       w.active_session_id, w.unread, w.created_at, w.updated_at,
-      w.parent_branch,
+      w.initialization_parent_branch AS parent_branch,
       r.name as repo_name, r.display_order as repo_display_order, r.root_path,
       r.default_branch, r.storage_version,
       s.status as session_status, s.is_compacting, s.context_token_count,
@@ -79,7 +79,8 @@ app.get('/workspaces/by-repo', (c) => {
 app.get('/workspaces/:id', (c) => {
   const db = getDatabase();
   const workspace = db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path, r.storage_version,
+    SELECT w.*, w.initialization_parent_branch AS parent_branch,
+           r.name as repo_name, r.root_path, r.storage_version,
            s.status as session_status, s.is_compacting, s.context_token_count,
            (SELECT sent_at FROM session_messages
             WHERE session_id = s.id AND role = 'user'
@@ -284,7 +285,7 @@ app.post('/workspaces', async (c) => {
   db.prepare(`
     INSERT INTO workspaces (
       id, repository_id, directory_name, branch, placeholder_branch_name,
-      parent_branch, state, initialization_log_path,
+      initialization_parent_branch, state, initialization_log_path,
       initialization_files_copied, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
@@ -317,7 +318,8 @@ app.post('/workspaces', async (c) => {
   });
 
   const workspace = db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path, r.storage_version
+    SELECT w.*, w.initialization_parent_branch AS parent_branch,
+           r.name as repo_name, r.root_path, r.storage_version
     FROM workspaces w LEFT JOIN repos r ON w.repository_id = r.id WHERE w.id = ?
   `).get(workspaceId) as any;
 
