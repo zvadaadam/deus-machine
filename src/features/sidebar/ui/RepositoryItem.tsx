@@ -101,46 +101,41 @@ export function RepositoryItem({
           )}
         >
           {dragHandleProps && <DragHandle {...dragHandleProps} />}
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              className="hover:bg-foreground/5 -m-2 h-auto flex-1 justify-between gap-2 rounded-md p-2 text-sm font-medium transition-colors duration-200"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="truncate">{getCleanRepoName(repository.repo_name)}</span>
-                {/* Status indicators when collapsed */}
-                {isCollapsed &&
-                  (() => {
-                    const unreadCount = getRepoUnreadCount(repository.workspaces);
-                    const hasWorking = repository.workspaces.some(
-                      (w) => w.session_status === "working"
-                    );
+          <CollapsibleTrigger className="hover:bg-foreground/5 -m-2 flex h-auto w-full items-center justify-between gap-2 rounded-md p-2 text-sm font-medium transition-colors duration-200">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate">{getCleanRepoName(repository.repo_name)}</span>
+              {/* Status indicators when collapsed */}
+              {isCollapsed &&
+                (() => {
+                  const repoUnreadCount = getRepoUnreadCount(repository.workspaces);
+                  const hasWorking = repository.workspaces.some(
+                    (w) => w.session_status === "working"
+                  );
 
-                    return (
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {/* Unread indicator - amber dot */}
-                        {unreadCount > 0 && (
-                          <div
-                            className="bg-status-unread h-2 w-2 rounded-full"
-                            title={`${unreadCount} unread`}
-                          />
-                        )}
-                        {/* Working indicator - primary dot */}
-                        {hasWorking && (
-                          <div className="bg-primary h-2 w-2 rounded-full" title="Working" />
-                        )}
-                      </div>
-                    );
-                  })()}
-              </div>
+                  return (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {/* Unread indicator - amber dot */}
+                      {repoUnreadCount > 0 && (
+                        <div
+                          className="bg-status-unread h-2 w-2 rounded-full"
+                          title={`${repoUnreadCount} unread`}
+                        />
+                      )}
+                      {/* Working indicator - primary dot */}
+                      {hasWorking && (
+                        <div className="bg-primary h-2 w-2 rounded-full" title="Working" />
+                      )}
+                    </div>
+                  );
+                })()}
+            </div>
 
-              <ChevronDown
-                className={cn(
-                  "text-sidebar-foreground/60 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
-                  isCollapsed && "-rotate-90"
-                )}
-              />
-            </Button>
+            <ChevronDown
+              className={cn(
+                "text-sidebar-foreground/60 h-4 w-4 shrink-0 transition-transform delay-[60ms] duration-[180ms] ease-out motion-reduce:transition-none",
+                isCollapsed && "-rotate-90"
+              )}
+            />
           </CollapsibleTrigger>
         </div>
 
@@ -152,154 +147,145 @@ export function RepositoryItem({
             !sidebarExpanded ? "opacity-100" : "pointer-events-none absolute opacity-0"
           )}
         >
-          <CollapsibleTrigger asChild>
-            <SidebarMenuButton
-              className={cn(
-                // GPU-accelerated only: transform + opacity, no layout properties
-                "relative flex h-8 items-center justify-center overflow-visible text-sm",
-                "group/badge",
-                // Force GPU acceleration with translateZ(0)
-                "translate-z-0 transform-gpu",
-                // Hover states: lift for active, opacity for idle (GPU-accelerated only)
-                isActive && "transition-transform duration-200 ease-out hover:translate-y-[-2px]",
-                isIdle && "transition-opacity duration-200 ease-out hover:opacity-60"
-              )}
-              tooltip={{
-                children: (() => {
-                  // Build status parts: errors, needs review, working (no idle)
-                  const parts: string[] = [];
-                  if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
-                  if (unreadCount > 0) parts.push(`${unreadCount} needs review`);
-                  if (workingCount > 0) parts.push(`${workingCount} working`);
-
-                  return (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-medium">{repository.repo_name}</span>
-                      {parts.length > 0 && <span className="opacity-60">{parts.join(" • ")}</span>}
-                    </div>
-                  );
-                })(),
-              }}
-              onClick={handleClick}
-            >
-              <div className="relative flex items-center justify-center overflow-visible">
-                {/* Spinner ring for working state - visible rotating arc shows progress */}
-                {workingCount > 0 && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <svg
-                      className="animate-subtle-spin absolute h-[36px] w-[36px] motion-reduce:animate-none"
-                      style={{ willChange: "transform" }}
-                      viewBox="0 0 36 36"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <circle
-                        cx="18"
-                        cy="18"
-                        r="16"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeDasharray="40 60"
-                        strokeLinecap="round"
-                        className={cn(
-                          "opacity-60",
-                          ringColor === "working" && "text-status-working",
-                          ringColor === "unread" && "text-status-unread",
-                          ringColor === "error" && "text-destructive"
-                        )}
-                      />
-                    </svg>
-                  </div>
-                )}
-
-                {/* Main repository badge with ring - 32px (size-8) matches shadcn design */}
-                <div
-                  className={cn(
-                    "relative flex h-8 w-8 items-center justify-center text-xs font-medium",
-                    "rounded-lg",
-                    "translate-z-0 transform-gpu",
-                    // Only transition border-color (not shadow/layout) - fast and smooth
-                    "transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                    // Active repos: Full brightness with status ring
-                    isActive && [
-                      "bg-foreground/5",
-                      "border-2",
-                      // Ring color hierarchy: error > unread > working
-                      ringColor === "error" && "border-destructive",
-                      ringColor === "unread" && "border-status-unread",
-                      ringColor === "working" && "border-status-working/60",
-                    ],
-                    // Idle repos: Reduced presence, no ring
-                    isIdle && ["bg-sidebar", "text-sidebar-foreground/30"]
-                  )}
-                  style={
-                    // Use pseudo-element for glow via CSS variable (GPU-accelerated via opacity animation)
-                    workingCount > 0 && isActive && ringColor === "working"
-                      ? {
-                          willChange: "opacity",
-                        }
-                      : undefined
-                  }
-                >
-                  {/* Breathing glow using pseudo-element (GPU-accelerated) */}
-                  {workingCount > 0 && isActive && ringColor === "working" && (
-                    <div
-                      className="animate-breathing-glow pointer-events-none absolute inset-[-2px] rounded-[10px] motion-reduce:animate-none"
-                      style={{
-                        background:
-                          "radial-gradient(circle, color-mix(in oklch, var(--status-working) 25%, transparent) 0%, transparent 70%)",
-                        willChange: "opacity",
-                      }}
-                    />
-                  )}
-
-                  {/* Center content: working count OR initials */}
-                  {workingCount > 0 ? (
-                    <span
+          <SidebarMenuButton
+            className={cn(
+              // GPU-accelerated only: transform + opacity, no layout properties
+              "relative flex h-8 items-center justify-center overflow-visible text-sm",
+              "group/badge",
+              // Force GPU acceleration with translateZ(0)
+              "translate-z-0 transform-gpu",
+              // Hover states: lift for active, opacity for idle (GPU-accelerated only)
+              isActive && "transition-transform duration-200 ease-out hover:translate-y-[-2px]",
+              isIdle && "transition-opacity duration-200 ease-out hover:opacity-60"
+            )}
+            tooltip={(() => {
+              const parts: string[] = [];
+              if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? "s" : ""}`);
+              if (unreadCount > 0) parts.push(`${unreadCount} needs review`);
+              if (workingCount > 0) parts.push(`${workingCount} working`);
+              return parts.length > 0
+                ? `${repository.repo_name} — ${parts.join(" • ")}`
+                : repository.repo_name;
+            })()}
+            onClick={handleClick}
+          >
+            <div className="relative flex items-center justify-center overflow-visible">
+              {/* Spinner ring for working state - visible rotating arc shows progress */}
+              {workingCount > 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <svg
+                    className="animate-subtle-spin absolute h-[36px] w-[36px] motion-reduce:animate-none"
+                    style={{ willChange: "transform" }}
+                    viewBox="0 0 36 36"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeDasharray="40 60"
+                      strokeLinecap="round"
                       className={cn(
-                        "relative z-10 text-xs font-bold tabular-nums",
-                        // Number color matches ring color for visual unity
+                        "opacity-60",
                         ringColor === "working" && "text-status-working",
                         ringColor === "unread" && "text-status-unread",
                         ringColor === "error" && "text-destructive"
                       )}
-                    >
-                      {workingCount}
-                    </span>
-                  ) : (
-                    <span
-                      className={cn(
-                        "relative z-10 text-xs font-medium",
-                        // Inherit parent opacity for idle repos, full brightness for active
-                        isIdle ? "text-sidebar-foreground/30" : "text-sidebar-foreground"
-                      )}
-                    >
-                      {getRepoInitials(repository.repo_name)}
-                    </span>
-                  )}
+                    />
+                  </svg>
                 </div>
+              )}
 
-                {/* Corner badge for unread (Slack-style notification) */}
-                {unreadCount > 0 && (
+              {/* Main repository badge with ring - 32px (size-8) matches shadcn design */}
+              <div
+                className={cn(
+                  "relative flex h-8 w-8 items-center justify-center text-xs font-medium",
+                  "rounded-lg",
+                  "translate-z-0 transform-gpu",
+                  // Only transition border-color (not shadow/layout) - fast and smooth
+                  "transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                  // Active repos: Full brightness with status ring
+                  isActive && [
+                    "bg-foreground/5",
+                    "border-2",
+                    // Ring color hierarchy: error > unread > working
+                    ringColor === "error" && "border-destructive",
+                    ringColor === "unread" && "border-status-unread",
+                    ringColor === "working" && "border-status-working/60",
+                  ],
+                  // Idle repos: Reduced presence, no ring
+                  isIdle && ["bg-sidebar", "text-sidebar-foreground/30"]
+                )}
+                style={
+                  // Use pseudo-element for glow via CSS variable (GPU-accelerated via opacity animation)
+                  workingCount > 0 && isActive && ringColor === "working"
+                    ? {
+                        willChange: "opacity",
+                      }
+                    : undefined
+                }
+              >
+                {/* Breathing glow using pseudo-element (GPU-accelerated) */}
+                {workingCount > 0 && isActive && ringColor === "working" && (
+                  <div
+                    className="animate-breathing-glow pointer-events-none absolute inset-[-2px] rounded-[10px] motion-reduce:animate-none"
+                    style={{
+                      background:
+                        "radial-gradient(circle, color-mix(in oklch, var(--status-working) 25%, transparent) 0%, transparent 70%)",
+                      willChange: "opacity",
+                    }}
+                  />
+                )}
+
+                {/* Center content: working count OR initials */}
+                {workingCount > 0 ? (
                   <span
                     className={cn(
-                      "absolute -top-1 -right-1",
-                      "flex h-[18px] min-w-[18px] items-center justify-center",
-                      "text-2xs rounded-full px-1 font-bold",
-                      "border-sidebar z-20 border-2",
-                      "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
-                      "animate-in zoom-in-50",
-                      "bg-status-unread text-status-unread-fg",
-                      "shadow-[0_2px_8px_color-mix(in_oklch,var(--status-unread)_30%,transparent)]"
+                      "relative z-10 text-xs font-bold tabular-nums",
+                      // Number color matches ring color for visual unity
+                      ringColor === "working" && "text-status-working",
+                      ringColor === "unread" && "text-status-unread",
+                      ringColor === "error" && "text-destructive"
                     )}
-                    aria-label={`${unreadCount} unread workspace${unreadCount > 1 ? "s" : ""}`}
                   >
-                    {unreadCount}
+                    {workingCount}
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "relative z-10 text-xs font-medium",
+                      // Inherit parent opacity for idle repos, full brightness for active
+                      isIdle ? "text-sidebar-foreground/30" : "text-sidebar-foreground"
+                    )}
+                  >
+                    {getRepoInitials(repository.repo_name)}
                   </span>
                 )}
               </div>
-            </SidebarMenuButton>
-          </CollapsibleTrigger>
+
+              {/* Corner badge for unread (Slack-style notification) */}
+              {unreadCount > 0 && (
+                <span
+                  className={cn(
+                    "absolute -top-1 -right-1",
+                    "flex h-[18px] min-w-[18px] items-center justify-center",
+                    "text-2xs rounded-full px-1 font-bold",
+                    "border-sidebar z-20 border-2",
+                    "transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)]",
+                    "animate-in zoom-in-50",
+                    "bg-status-unread text-status-unread-fg",
+                    "shadow-[0_2px_8px_color-mix(in_oklch,var(--status-unread)_30%,transparent)]"
+                  )}
+                  aria-label={`${unreadCount} unread workspace${unreadCount > 1 ? "s" : ""}`}
+                >
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+          </SidebarMenuButton>
         </div>
       </SidebarMenuItem>
       <CollapsibleContent>

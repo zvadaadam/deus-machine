@@ -42,7 +42,7 @@ export function RepoGroup({
   return (
     <SidebarGroup>
       <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
-        <SidebarGroupLabel asChild>
+        <SidebarGroupLabel>
           <CollapsibleTrigger className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold transition-colors duration-200">
             <ChevronDown
               className={cn(

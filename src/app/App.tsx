@@ -5,7 +5,6 @@ import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
 import { ErrorFallback, DashboardError } from "@/shared/components";
 import { reportError } from "@/shared/utils/errorReporting";
-import { isTauriEnv } from "@/platform/tauri";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -33,12 +32,6 @@ function ConditionalErrorBoundary({
   onError,
   children,
 }: ConditionalErrorBoundaryProps) {
-  // In web dev, let Vite's overlay handle render errors.
-  // In Tauri dev, keep the boundary since the overlay isn't reliable in the webview.
-  if (import.meta.env.DEV && !isTauriEnv) {
-    return <>{children}</>;
-  }
-
   return (
     <ErrorBoundary FallbackComponent={fallback} onReset={onReset} onError={onError}>
       {children}
@@ -59,6 +52,10 @@ function App() {
                 source: "react.error-boundary",
                 extra: { componentStack: info.componentStack },
               });
+              if (typeof window !== "undefined") {
+                (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
+                  info.componentStack;
+              }
 
               // TODO: Send to error tracking service in production
               // if (import.meta.env.PROD) {

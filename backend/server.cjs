@@ -192,6 +192,117 @@ function resolveWorkspaceRelativePath(workspacePath, filePath) {
   return relative;
 }
 
+function normalizeGitPath(pathToken) {
+  if (!pathToken || typeof pathToken !== 'string') return null;
+  let cleaned = pathToken.trim();
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  if (cleaned.startsWith('a/')) {
+    cleaned = cleaned.slice(2);
+  } else if (cleaned.startsWith('b/')) {
+    cleaned = cleaned.slice(2);
+  }
+  return cleaned;
+}
+
+function splitGitDiffTokens(value) {
+  if (!value) return [];
+  const tokens = [];
+  let i = 0;
+  while (i < value.length && tokens.length < 2) {
+    while (value[i] === ' ') i += 1;
+    if (i >= value.length) break;
+    if (value[i] === '"') {
+      let end = i + 1;
+      while (end < value.length && value[end] !== '"') end += 1;
+      tokens.push(value.slice(i + 1, Math.min(end, value.length)));
+      i = end + 1;
+    } else {
+      let end = i;
+      while (end < value.length && value[end] !== ' ') end += 1;
+      tokens.push(value.slice(i, end));
+      i = end + 1;
+    }
+  }
+  return tokens;
+}
+
+function extractDiffInfo(diffOutput) {
+  let oldPath = null;
+  let newPath = null;
+  let isNew = false;
+  let isDeleted = false;
+
+  for (const line of diffOutput.split('\n')) {
+    if (line.startsWith('diff --git ')) {
+      const tokens = splitGitDiffTokens(line.slice('diff --git '.length));
+      if (tokens[0]) oldPath = normalizeGitPath(tokens[0]);
+      if (tokens[1]) newPath = normalizeGitPath(tokens[1]);
+      continue;
+    }
+    if (line.startsWith('rename from ')) {
+      oldPath = normalizeGitPath(line.slice('rename from '.length));
+      continue;
+    }
+    if (line.startsWith('rename to ')) {
+      newPath = normalizeGitPath(line.slice('rename to '.length));
+      continue;
+    }
+    if (line.startsWith('new file mode')) {
+      isNew = true;
+      continue;
+    }
+    if (line.startsWith('deleted file mode')) {
+      isDeleted = true;
+      continue;
+    }
+    if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+      const match = line.match(/^(---|\+\+\+)\s+([^\t\r\n]+)(.*)$/);
+      if (!match) continue;
+      const [, prefix, fileName] = match;
+      if (fileName === '/dev/null') {
+        if (prefix === '---') isNew = true;
+        if (prefix === '+++') isDeleted = true;
+        continue;
+      }
+      if (prefix === '---' && !oldPath) {
+        oldPath = normalizeGitPath(fileName);
+      } else if (prefix === '+++' && !newPath) {
+        newPath = normalizeGitPath(fileName);
+      }
+    }
+  }
+
+  return { oldPath, newPath, isNew, isDeleted };
+}
+
+function getGitFileContent(workspacePath, ref, filePath) {
+  if (!filePath) return null;
+  try {
+    return execFileSync('git', ['show', `${ref}:${filePath}`], {
+      cwd: workspacePath,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 5000
+    }).toString();
+  } catch {
+    return null;
+  }
+}
+
+function getMergeBase(workspacePath, parentBranch) {
+  try {
+    return execFileSync('git', ['merge-base', parentBranch, 'HEAD'], {
+      cwd: workspacePath,
+      encoding: 'utf-8',
+      timeout: 5000
+    }).toString().trim();
+  } catch {
+    return parentBranch;
+  }
+}
+
 function getOpenCommand(target) {
   if (process.platform === 'win32') {
     return { cmd: 'cmd', args: ['/c', 'start', '', target] };
@@ -217,14 +328,23 @@ console.log('✅ All modules loaded successfully');
 // GLOBAL ERROR HANDLERS
 //============================================================================
 
-// Handle uncaught exceptions to prevent silent crashes
+// Handle uncaught exceptions - exit gracefully and let process manager restart
 process.on('uncaughtException', (error, origin) => {
   console.error('\n❌ [FATAL] Uncaught Exception:');
   console.error('Origin:', origin);
   console.error('Error:', error);
   console.error('Stack:', error.stack);
   console.error('Time:', new Date().toISOString());
-  // Don't exit - try to keep server running
+  // Process may be in an undefined state after uncaught exception.
+  // Clean up and exit; the process manager (Tauri sidecar) will restart us.
+  try {
+    stopSidecar();
+    stopAllClaudeSessions();
+    closeDatabase();
+  } catch {
+    // Best-effort cleanup
+  }
+  process.exit(1);
 });
 
 // Handle unhandled promise rejections
@@ -696,9 +816,35 @@ app.get('/api/workspaces/:id/diff-file', async (req, res) => {
         }
       ).toString();
 
+      const diffInfo = extractDiffInfo(output);
+      const mergeBase = getMergeBase(workspacePath, parentBranch);
+      const safeOldPath =
+        resolveWorkspaceRelativePath(workspacePath, diffInfo.oldPath || safeFilePath) ||
+        safeFilePath;
+      const safeNewPath =
+        resolveWorkspaceRelativePath(workspacePath, diffInfo.newPath || safeFilePath) ||
+        safeFilePath;
+
+      let oldContent = null;
+      let newContent = null;
+
+      if (diffInfo.isNew) {
+        oldContent = '';
+      } else {
+        oldContent = getGitFileContent(workspacePath, mergeBase, safeOldPath);
+      }
+
+      if (diffInfo.isDeleted) {
+        newContent = '';
+      } else {
+        newContent = getGitFileContent(workspacePath, 'HEAD', safeNewPath);
+      }
+
       res.json({
         file,
-        diff: output
+        diff: output,
+        old_content: oldContent,
+        new_content: newContent
       });
     } catch (gitError) {
       // Structured error response with details for debugging
@@ -950,7 +1096,19 @@ app.post('/api/workspaces', async (req, res) => {
     const workspace_name = generateUniqueCityName(db);
     const parent_branch = repo.default_branch || 'main';
     const workspaceId = randomUUID();
-    const placeholderBranchName = `zvadaadam/${workspace_name}`;
+    // Derive branch prefix from git config or fall back to a generic prefix
+    let branchPrefix = 'workspace';
+    try {
+      const gitUser = require('child_process')
+        .execSync('git config user.name', { cwd: repo.path, encoding: 'utf8' })
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '-');
+      if (gitUser) branchPrefix = gitUser;
+    } catch {
+      // Fall back to generic prefix if git config is not available
+    }
+    const placeholderBranchName = `${branchPrefix}/${workspace_name}`;
 
     const tmpDir = os.tmpdir();
     const initLogPath = path.join(tmpDir, `conductor-${Date.now()}-init.log`);
@@ -1382,7 +1540,12 @@ app.post('/api/sidecar/command', (req, res) => {
 //============================================================================
 
 const server = app.listen(PORT, () => {
-  const actualPort = server.address().port;
+  const addr = server.address();
+  if (!addr || typeof addr === 'string') {
+    console.error('❌ Failed to get server address');
+    process.exit(1);
+  }
+  const actualPort = addr.port;
   actualServerPort = actualPort; // Store port globally for health endpoint
 
   // Output port in machine-readable format for Rust to capture
@@ -1399,6 +1562,11 @@ const server = app.listen(PORT, () => {
   startSidecar(DB_PATH);
 
   console.log('✅ Server ready!\n');
+});
+
+server.on('error', (err) => {
+  console.error('❌ Failed to start server:', err.message);
+  process.exit(1);
 });
 
 // Graceful shutdown

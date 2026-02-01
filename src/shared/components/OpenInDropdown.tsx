@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExternalLink, ChevronRight } from "lucide-react";
 
 interface InstalledApp {
@@ -83,65 +83,72 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
     return null;
   }
 
-  const dropdownMenu = (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant={iconOnly ? "ghost" : "outline"}
-          size={iconOnly ? "icon" : "sm"}
-          className={
-            iconOnly
-              ? "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200 ease-out"
-              : "gap-2 px-3"
-          }
-          onPointerEnter={handleOpen}
-          onPointerLeave={handleClose}
+  const triggerButton = (
+    <Button
+      variant={iconOnly ? "ghost" : "outline"}
+      size={iconOnly ? "icon" : "sm"}
+      className={
+        iconOnly
+          ? "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200 ease-out"
+          : "gap-2 px-3"
+      }
+      onPointerEnter={handleOpen}
+      onPointerLeave={handleClose}
+    >
+      <ExternalLink className="h-4 w-4" />
+      {!iconOnly && (
+        <>
+          <span className="text-sm">Open in</span>
+          <ChevronRight
+            className={`text-muted-foreground h-4 w-4 transition-transform duration-200 ease-out ${
+              open ? "rotate-90" : "rotate-0"
+            }`}
+          />
+        </>
+      )}
+    </Button>
+  );
+
+  const menuContent = (
+    <DropdownMenuContent
+      align="end"
+      sideOffset={2}
+      className="min-w-[140px]"
+      onPointerEnter={handleOpen}
+      onPointerLeave={handleClose}
+    >
+      {installedApps.map((app) => (
+        <DropdownMenuItem
+          key={app.id}
+          onClick={() => handleOpenInApp(app.id)}
+          className="cursor-pointer"
         >
-          <ExternalLink className="h-4 w-4" />
-          {!iconOnly && (
-            <>
-              <span className="text-sm">Open in</span>
-              <ChevronRight
-                className={`text-muted-foreground h-4 w-4 transition-transform duration-200 ease-out ${
-                  open ? "rotate-90" : "rotate-0"
-                }`}
-              />
-            </>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        sideOffset={2}
-        className="min-w-[140px]"
-        onPointerEnter={handleOpen}
-        onPointerLeave={handleClose}
-      >
-        {installedApps.map((app) => (
-          <DropdownMenuItem
-            key={app.id}
-            onClick={() => handleOpenInApp(app.id)}
-            className="cursor-pointer"
-          >
-            {app.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {app.name}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuContent>
   );
 
   if (iconOnly) {
     return (
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>{dropdownMenu}</TooltipTrigger>
+      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+        <Tooltip delayDuration={200}>
+          <DropdownMenuTrigger asChild>
+            <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
+          </DropdownMenuTrigger>
           <TooltipContent side="bottom">
             <p className="text-xs">Open in Finder, VSCode, Cursor...</p>
           </TooltipContent>
         </Tooltip>
-      </TooltipProvider>
+        {menuContent}
+      </DropdownMenu>
     );
   }
 
-  return dropdownMenu;
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
+      {menuContent}
+    </DropdownMenu>
+  );
 }
