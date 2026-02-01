@@ -663,6 +663,12 @@ body {
   -webkit-backdrop-filter: none !important;
 }
 
+/* Tauri overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).
+ * Removed in fullscreen since macOS hides traffic lights. See useTauriDragZone for drag logic. */
+.tauri:not(.fullscreen) [data-slot="sidebar-header"] {
+  padding-top: 32px;
+}
+
 /* Promote interactive sidebar elements to GPU layers (prevents hover flicker) */
 .tauri [data-slot="sidebar-menu-button"],
 .tauri [data-slot="sidebar-menu-action"],
