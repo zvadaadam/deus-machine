@@ -86,6 +86,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
         map.set(w.id, {
           root_path: w.root_path,
           directory_name: w.directory_name,
+          workspace_path: w.workspace_path,
           parent_branch: w.parent_branch,
           default_branch: w.default_branch,
         });
@@ -111,13 +112,15 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     staleTime: 1000,
     queryFn: async () => {
       const first5 = workspaceIds.slice(0, 5);
-      const firstResults = await Promise.all(
+      const settled = await Promise.allSettled(
         first5.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
       );
 
-      // Cache first 5 results immediately
+      // Cache successful results (don't let one failure block others)
       first5.forEach((id, i) => {
-        queryClient.setQueryData(queryKeys.workspaces.diffStats(id), firstResults[i]);
+        if (settled[i].status === "fulfilled") {
+          queryClient.setQueryData(queryKeys.workspaces.diffStats(id), settled[i].value);
+        }
       });
 
       // Aggregate from cache (includes any previously prefetched items)

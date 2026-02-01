@@ -3,10 +3,14 @@
 // Preserves `node backend/server.cjs` interface for dev.sh and Rust backend.rs.
 const { spawn } = require('child_process');
 const path = require('path');
+const { pathToFileURL } = require('url');
+
+// Resolve tsx/esm absolutely so the bootstrap works regardless of CWD
+const tsxEsm = pathToFileURL(require.resolve('tsx/esm')).href;
 
 const child = spawn(
   process.execPath,
-  ['--import', 'tsx/esm', path.join(__dirname, 'src/server.ts')],
+  ['--import', tsxEsm, path.join(__dirname, 'src/server.ts')],
   { stdio: 'inherit', env: process.env }
 );
 
