@@ -345,7 +345,7 @@ export function MainContent({
     <SidebarInset className="min-w-0">
       <div
         data-slot="main-content"
-        className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border"
       >
         {/* Sidebar toggle - visible when sidebar is collapsed and no workspace tab bar is shown */}
         {!sidebarOpen && !selectedWorkspace && (
@@ -455,7 +455,8 @@ export function MainContent({
                 <div
                   className={cn(
                     "bg-background/50 border-border/40 flex h-full flex-col overflow-hidden backdrop-blur-sm",
-                    !isDragging && "transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+                    !isDragging &&
+                      "transition-[width,flex,min-width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
                     panelWide ? "min-w-0 flex-1" : "w-[380px]"
                   )}
                 >
@@ -520,7 +521,7 @@ export function MainContent({
                           <div className="flex h-full overflow-hidden">
                             <div
                               className={cn(
-                                "flex flex-shrink-0 flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+                                "flex flex-shrink-0 flex-col overflow-hidden transition-[width,flex] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
                                 panelWide ? "border-border/40 w-[280px] border-r" : "flex-1"
                               )}
                             >

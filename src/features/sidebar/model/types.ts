@@ -78,4 +78,5 @@ export interface SidebarHeaderProps {
  */
 export interface SidebarFooterProps {
   onAddRepository?: () => void;
+  onOpenSettings?: () => void;
 }

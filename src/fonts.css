@@ -1,3 +1,22 @@
+/* Self-hosted Inter variable font (OFL licensed)
+ * Variable font covers weights 100-900 in a single file.
+ * See: https://github.com/rsms/inter */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/InterVariable.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2-variations");
+}
+
 /* OLD: Helvetica Neue font family (commented out, replaced by Suisse Intl) */
 /* @font-face {
   font-family: 'Helvetica Neue';
