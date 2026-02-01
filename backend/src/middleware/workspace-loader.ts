@@ -15,11 +15,12 @@ export interface WorkspaceContext {
  * - storage_version 2 (current): {root_path}/.conductor/{directory_name}
  */
 export function computeWorkspacePath(ws: {
-  root_path: string;
-  directory_name: string;
+  root_path?: string | null;
+  directory_name?: string | null;
   storage_version?: number;
-  repo_name?: string;
+  repo_name?: string | null;
 }): string {
+  if (!ws.root_path || !ws.directory_name) return '';
   if (ws.storage_version === 3 && ws.repo_name) {
     return path.join(os.homedir(), 'conductor', 'workspaces', ws.repo_name, ws.directory_name);
   }
