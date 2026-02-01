@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { produce } from "immer";
-import { WorkspaceService } from "./workspace.service";
+import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
@@ -46,10 +46,14 @@ export function useStats() {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useDiffStats(workspaceId: string | null, sessionStatus?: string | null) {
+export function useDiffStats(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
+    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!, workspace),
     enabled: !!workspaceId,
     staleTime: 30000, // 30 seconds for idle workspaces
     // ✅ Poll ONLY when workspace is actively working
@@ -74,13 +78,32 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return Array.from(new Set(ids)).sort(); // stable order
   }, [repoGroups]);
 
+  // Build workspace info map for Tauri fast path (enables 5-20ms vs 50-200ms HTTP)
+  const workspaceInfoMap = useMemo(() => {
+    const map = new Map<string, WorkspaceGitInfo>();
+    repoGroups.forEach((g) => {
+      g.workspaces.forEach((w) => {
+        map.set(w.id, {
+          root_path: w.root_path,
+          directory_name: w.directory_name,
+          workspace_path: w.workspace_path,
+          parent_branch: w.parent_branch,
+          default_branch: w.default_branch,
+        });
+      });
+    });
+    return map;
+  }, [repoGroups]);
+
   // Ref to avoid stale closures when workspaceIds changes while timers are pending
   const workspaceIdsRef = useRef(workspaceIds);
+  const workspaceInfoMapRef = useRef(workspaceInfoMap);
 
   // Update ref in effect to avoid accessing ref during render
   useEffect(() => {
     workspaceIdsRef.current = workspaceIds;
-  }, [workspaceIds]);
+    workspaceInfoMapRef.current = workspaceInfoMap;
+  }, [workspaceIds, workspaceInfoMap]);
 
   // Prime cache for first N and return aggregate
   const query = useQuery({
@@ -89,13 +112,15 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     staleTime: 1000,
     queryFn: async () => {
       const first5 = workspaceIds.slice(0, 5);
-      const firstResults = await Promise.all(
-        first5.map((id) => WorkspaceService.fetchDiffStats(id))
+      const settled = await Promise.allSettled(
+        first5.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
       );
 
-      // Cache first 5 results immediately
+      // Cache successful results (don't let one failure block others)
       first5.forEach((id, i) => {
-        queryClient.setQueryData(queryKeys.workspaces.diffStats(id), firstResults[i]);
+        if (settled[i].status === "fulfilled") {
+          queryClient.setQueryData(queryKeys.workspaces.diffStats(id), settled[i].value);
+        }
       });
 
       // Aggregate from cache (includes any previously prefetched items)
@@ -118,7 +143,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
         queryClient
           .prefetchQuery({
             queryKey: queryKeys.workspaces.diffStats(id),
-            queryFn: () => WorkspaceService.fetchDiffStats(id),
+            queryFn: () => WorkspaceService.fetchDiffStats(id, workspaceInfoMapRef.current.get(id)),
           })
           .then(() => {
             // Update aggregate cache with new data (use ref for current workspaceIds)
@@ -158,11 +183,15 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useFileChanges(workspaceId: string | null, sessionStatus?: string | null) {
+export function useFileChanges(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchDiffFiles(workspaceId!);
+      const result = await WorkspaceService.fetchDiffFiles(workspaceId!, workspace);
       return result.files || [];
     },
     enabled: !!workspaceId,
@@ -191,11 +220,15 @@ export function usePRStatus(workspaceId: string | null) {
 /**
  * Fetch specific file diff
  */
-export function useFileDiff(workspaceId: string | null, filePath: string | null) {
+export function useFileDiff(
+  workspaceId: string | null,
+  filePath: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
+      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!, workspace);
       return result;
     },
     enabled: !!workspaceId && !!filePath,

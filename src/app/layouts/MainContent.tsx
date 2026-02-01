@@ -11,6 +11,7 @@ import {
   WorkspaceService,
   useResizeHandle,
 } from "@/features/workspace";
+import type { WorkspaceGitInfo } from "@/features/workspace";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { PRStatusBar } from "@/features/workspace/ui/PRStatusBar";
@@ -64,10 +65,23 @@ export function MainContent({
     setRightPanelWidth,
   } = useWorkspaceLayout(selectedWorkspaceId);
 
+  // Workspace git info for direct Tauri IPC path (bypasses Node.js HTTP)
+  const workspaceGitInfo: WorkspaceGitInfo | undefined = useMemo(
+    () =>
+      selectedWorkspace
+        ? {
+            root_path: selectedWorkspace.root_path,
+            directory_name: selectedWorkspace.directory_name,
+          }
+        : undefined,
+    [selectedWorkspace?.root_path, selectedWorkspace?.directory_name]
+  );
+
   // Fetch file changes for the workspace
   const { data: fileChangesData } = useFileChanges(
     selectedWorkspaceId,
-    selectedWorkspace?.session_status
+    selectedWorkspace?.session_status,
+    workspaceGitInfo
   );
   // Stable empty array reference to prevent unnecessary re-renders in child effects
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
@@ -79,7 +93,11 @@ export function MainContent({
         throw new Error("No workspace selected");
       }
       try {
-        const data = await WorkspaceService.fetchFileDiff(selectedWorkspaceId, filePath);
+        const data = await WorkspaceService.fetchFileDiff(
+          selectedWorkspaceId,
+          filePath,
+          workspaceGitInfo
+        );
         return {
           diff: data.diff ?? "",
           oldContent: data.oldContent ?? null,
@@ -90,7 +108,7 @@ export function MainContent({
         throw error instanceof Error ? error : new Error("Unknown error");
       }
     },
-    [selectedWorkspaceId]
+    [selectedWorkspaceId, workspaceGitInfo]
   );
 
   // Selected file for file browser viewing (full file content from working tree)
@@ -358,7 +376,7 @@ export function MainContent({
                 onTabAdd={handleMainTabAdd}
                 repositoryName={selectedWorkspace.root_path.split("/").filter(Boolean).pop()}
                 branch={selectedWorkspace.branch}
-                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                workspacePath={selectedWorkspace.workspace_path}
                 onBranchRename={handleBranchRename}
               />
 
@@ -540,7 +558,9 @@ export function MainContent({
                                 <FileBrowserPanel
                                   selectedWorkspace={selectedWorkspace}
                                   onFileClick={(path) => {
-                                    setBrowserSelectedFile(path);
+                                    // Construct absolute path from relative path returned by Rust scanner
+                                    const absolutePath = `${selectedWorkspace!.workspace_path}/${path}`;
+                                    setBrowserSelectedFile(absolutePath);
                                     setRightPanelExpanded(true);
                                   }}
                                 />
@@ -579,9 +599,7 @@ export function MainContent({
                   )}
 
                   {rightSideTab === "terminal" && (
-                    <TerminalPanel
-                      workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                    />
+                    <TerminalPanel workspacePath={selectedWorkspace.workspace_path} />
                   )}
 
                   {rightSideTab === "config" && <ConfigPanel />}

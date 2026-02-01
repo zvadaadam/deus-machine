@@ -8,9 +8,85 @@ We treat AI chat as a first-class citizen here, code it secondary.
 
 # TechStack
 
-This is a desktop app built with Tauri app.
-It runs a backend which communicates with Claude Code CLI.
-Also has this small Rust backend which manages it.
+Desktop app built with Tauri (Rust) + React frontend + Node.js backend.
+
+## System Architecture
+
+```
+Frontend (React + Zustand + React Query)
+    │
+    ├── Tauri IPC ──→ Rust Backend (src-tauri/)
+    │                  ├── Git operations (libgit2 — fast, stateless)
+    │                  ├── File scanning (.gitignore-aware, cached)
+    │                  ├── Terminal / PTY sessions
+    │                  ├── Process lifecycle (Node.js backend, dev-browser)
+    │                  └── Socket relay (sidecar ↔ Tauri events)
+    │
+    └── HTTP REST ──→ Node.js Backend (backend/)
+                       ├── Database (SQLite — repos, workspaces, sessions, messages)
+                       ├── Claude Code CLI orchestration (per-session processes)
+                       ├── Workspace creation (git worktree + DB coordination)
+                       ├── Config management (MCP servers, agents, hooks)
+                       └── External services (GitHub PR status via gh CLI)
+```
+
+## Rust vs Node.js Boundary
+
+- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O.
+- **Node.js (Hono backend):** Business logic. Database reads/writes. External service calls (Claude CLI, GitHub API). Anything that needs DB state or orchestrates multiple steps.
+- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js.
+
+## Rust Backend Structure (src-tauri/)
+
+```
+src-tauri/src/
+├── main.rs              App init, plugin registration, lifecycle hooks
+├── lib.rs               Module exports
+├── commands/
+│   ├── mod.rs           Re-exports all command modules
+│   ├── pty.rs           Terminal: spawn, resize, write, kill
+│   ├── socket.rs        Sidecar: connect, send, receive, disconnect
+│   ├── backend.rs       Backend port discovery
+│   ├── browser.rs       Dev-browser: start, stop, port, auth, status
+│   ├── apps.rs          App detection: get_installed_apps, open_in_app
+│   ├── files.rs         File scanning: scan, invalidate_cache, clear_cache
+│   └── git.rs           Git Tauri commands (diff, status, branch, content)
+├── backend.rs           Node.js backend process manager
+├── browser.rs           Dev-browser process manager
+├── pty.rs               PTY session manager
+├── socket.rs            Unix socket client (sidecar IPC)
+├── files.rs             File scanner with 30s cache
+└── git.rs               Core git operations via libgit2
+```
+
+## Node.js Backend Structure (backend/)
+
+```
+backend/src/
+├── server.ts            Hono app factory, mounts all routes under /api
+├── lib/
+│   ├── database.ts      SQLite connection (better-sqlite3)
+│   ├── errors.ts        AppError, NotFoundError, ValidationError, ConflictError
+│   └── message-sanitizer.ts  JSON message safety for Claude responses
+├── middleware/
+│   ├── error-handler.ts Global error → JSON response mapper
+│   └── workspace-loader.ts  Loads workspace by :id, sets path on context
+├── services/
+│   ├── claude.service.ts  Spawns Claude CLI, manages per-session processes
+│   ├── git.service.ts     Git utilities (web-mode fallback, workspace creation)
+│   ├── config.service.ts  File-based config (~/.conductor/)
+│   ├── settings.service.ts  SQLite key-value settings
+│   └── workspace.service.ts  City name generator for workspaces
+├── routes/
+│   ├── workspaces.ts    CRUD + diff endpoints (diff routes use Rust in desktop)
+│   ├── sessions.ts      Session CRUD + message sending (triggers Claude CLI)
+│   ├── repos.ts         Repository management
+│   ├── config.ts        MCP servers, commands, agents, hooks CRUD
+│   ├── settings.ts      Key-value settings
+│   ├── stats.ts         System statistics
+│   └── health.ts        Health check + port discovery
+└── sidecar/             IPC bridge: Node.js ↔ Rust via Unix socket
+```
 
 # RUNNING THE APP
 
@@ -65,10 +141,10 @@ We want to achieve a beautiful aesthetic design of a pro consumer product.
 
 Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 
-## State Managment
+## State Management
 
 - Using Zustand
-- Follow best practicies of using Zustant state managment
+- Follow best practices of using Zustand state management
 
 ## Styling
 

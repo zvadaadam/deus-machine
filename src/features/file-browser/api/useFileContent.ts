@@ -1,10 +1,10 @@
 /**
  * Hook for reading file content from working tree
- * Uses Tauri FS plugin for native file access
+ * Uses Rust command for native file access (bypasses Tauri FS plugin scope)
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@/platform/tauri";
 
 /**
  * Read file content from the working tree (current disk state)
@@ -20,7 +20,7 @@ export function useFileContent(filePath: string | null) {
         console.log("[useFileContent] Reading file:", filePath);
       }
 
-      const content = await readTextFile(filePath);
+      const content = await invoke<string>("read_text_file", { filePath });
       return content;
     },
     enabled: !!filePath,
