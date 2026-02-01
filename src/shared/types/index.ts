@@ -6,8 +6,7 @@
  * import { Workspace, Message, ApiResponse } from '@/shared/types';
  */
 
-// Note: Workspace types moved to features/workspace/types.ts
-// Re-export for backward compatibility (to be removed later)
+// Re-export everything from shared types
 export type {
   Workspace,
   WorkspaceState,
@@ -16,11 +15,6 @@ export type {
   FileChange,
   FileEdit,
   FileChangeGroup,
-} from "@/features/workspace";
-
-// Note: Session types moved to features/session/types.ts
-// Re-export for backward compatibility (to be removed later)
-export type {
   Message,
   MessageRole,
   MessageContent,
@@ -31,20 +25,19 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-} from "@/features/session";
-
-// Note: Repo and Stats types moved to features/repository/types.ts
-// Re-export for backward compatibility (to be removed later)
-export type { Repo, Stats } from "@/features/repository";
-
-// API types
-export type {
+  Repo,
+  Stats,
+  Settings,
+  MCPServer,
+  Command,
+  Agent,
+  Hook,
+  SettingsSection,
   ApiResponse,
   ApiError,
   PaginationParams,
   PaginatedResponse,
   WorkspaceQueryParams,
-} from "./api.types";
-
-// GitHub types
-export type { PRStatus, DevServer } from "./github.types";
+  PRStatus,
+  DevServer,
+} from "@shared/types";

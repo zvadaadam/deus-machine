@@ -113,6 +113,10 @@ fn main() {
             commands::invalidate_file_cache,
             commands::clear_file_cache,
             commands::git_clone,
+            commands::git_diff_stats,
+            commands::git_diff_files,
+            commands::git_diff_file,
+            commands::git_detect_default_branch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

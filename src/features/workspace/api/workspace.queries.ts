@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { produce } from "immer";
-import { WorkspaceService } from "./workspace.service";
+import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
@@ -46,10 +46,14 @@ export function useStats() {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useDiffStats(workspaceId: string | null, sessionStatus?: string | null) {
+export function useDiffStats(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
+    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!, workspace),
     enabled: !!workspaceId,
     staleTime: 30000, // 30 seconds for idle workspaces
     // ✅ Poll ONLY when workspace is actively working
@@ -158,11 +162,15 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * - Polling only happens when workspace is actively working (96-100% reduction)
  * - Future: Implement file system events to eliminate polling on desktop
  */
-export function useFileChanges(workspaceId: string | null, sessionStatus?: string | null) {
+export function useFileChanges(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchDiffFiles(workspaceId!);
+      const result = await WorkspaceService.fetchDiffFiles(workspaceId!, workspace);
       return result.files || [];
     },
     enabled: !!workspaceId,
@@ -191,11 +199,15 @@ export function usePRStatus(workspaceId: string | null) {
 /**
  * Fetch specific file diff
  */
-export function useFileDiff(workspaceId: string | null, filePath: string | null) {
+export function useFileDiff(
+  workspaceId: string | null,
+  filePath: string | null,
+  workspace?: WorkspaceGitInfo
+) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
+      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!, workspace);
       return result;
     },
     enabled: !!workspaceId && !!filePath,

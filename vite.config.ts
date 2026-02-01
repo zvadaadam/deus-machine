@@ -10,15 +10,16 @@ export default defineConfig(async () => ({
   // Path aliases - FSD-Lite Architecture
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/app': path.resolve(__dirname, './src/app'),
-      '@/features': path.resolve(__dirname, './src/features'),
-      '@/platform': path.resolve(__dirname, './src/platform'),
-      '@/shared': path.resolve(__dirname, './src/shared'),
-      '@/components': path.resolve(__dirname, './src/components'),
-      '@/lib': path.resolve(__dirname, './src/shared/lib'),
-      '@/hooks': path.resolve(__dirname, './src/shared/hooks'),
-      '@/ui': path.resolve(__dirname, './src/components/ui'),
+      "@": path.resolve(__dirname, "./src"),
+      "@/app": path.resolve(__dirname, "./src/app"),
+      "@/features": path.resolve(__dirname, "./src/features"),
+      "@/platform": path.resolve(__dirname, "./src/platform"),
+      "@/shared": path.resolve(__dirname, "./src/shared"),
+      "@/components": path.resolve(__dirname, "./src/components"),
+      "@/lib": path.resolve(__dirname, "./src/shared/lib"),
+      "@/hooks": path.resolve(__dirname, "./src/shared/hooks"),
+      "@/ui": path.resolve(__dirname, "./src/components/ui"),
+      "@shared": path.resolve(__dirname, "./shared"),
     },
   },
 
