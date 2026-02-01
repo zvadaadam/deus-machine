@@ -18,7 +18,7 @@ interface SidecarConfig {
 
 export class ProcessManager extends EventEmitter {
   private config: SidecarConfig;
-  process: ChildProcess | null = null;
+  private process: ChildProcess | null = null;
   private pid: number | null = null;
   private socketPath: string | null = null;
   private isStarting = false;
@@ -149,6 +149,12 @@ export class ProcessManager extends EventEmitter {
 
     this.socketPath = null;
     this.pid = null;
+  }
+
+  kill(signal: NodeJS.Signals = 'SIGTERM'): void {
+    if (this.process) {
+      this.process.kill(signal);
+    }
   }
 
   enableAutoRestart(): void {

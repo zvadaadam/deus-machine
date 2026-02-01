@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn } from 'child_process';
+import { spawn, execFileSync, execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { withWorkspace } from '../middleware/workspace-loader';
@@ -43,7 +43,9 @@ app.get('/workspaces/by-repo', (c) => {
     SELECT
       w.id, w.repository_id, w.directory_name, w.branch, w.state,
       w.active_session_id, w.unread, w.created_at, w.updated_at,
+      w.parent_branch,
       r.name as repo_name, r.display_order as repo_display_order, r.root_path,
+      r.default_branch,
       s.status as session_status, s.is_compacting, s.context_token_count,
       s.unread_count as session_unread,
       (SELECT sent_at FROM session_messages
@@ -165,7 +167,6 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
 app.get('/workspaces/:id/pr-status', withWorkspace, (c) => {
   const workspacePath = c.get('workspacePath') as string;
   try {
-    const { execFileSync } = require('child_process');
     const output = execFileSync('gh', ['pr', 'view', '--json', 'number,title,url,mergeable'], {
       cwd: workspacePath, encoding: 'utf-8', timeout: 5000
     }).toString().trim();
@@ -271,8 +272,7 @@ app.post('/workspaces', async (c) => {
 
   let branchPrefix = 'workspace';
   try {
-    const { execSync } = require('child_process');
-    const gitUser = execSync('git config user.name', { cwd: repo.path, encoding: 'utf8' })
+    const gitUser = execSync('git config user.name', { cwd: repo.root_path, encoding: 'utf8' })
       .trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     if (gitUser) branchPrefix = gitUser;
   } catch {}

@@ -251,9 +251,14 @@ export function getDiffFiles(workspacePath: string, parentBranch: string): Array
 }
 
 export function getFileDiff(workspacePath: string, parentBranch: string, filePath: string): string {
-  return execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--', filePath], {
-    cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
-  }).toString();
+  try {
+    return execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--', filePath], {
+      cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+    }).toString();
+  } catch (error) {
+    console.error('Failed to get file diff:', error);
+    return '';
+  }
 }
 
 export function getOpenCommand(target: string): { cmd: string; args: string[] } {

@@ -14,6 +14,7 @@ export class SocketManager extends EventEmitter {
   private client: net.Socket | null = null;
   private socketPath: string | null = null;
   private isConnecting = false;
+  private wasConnected = false;
   private reconnectAttempts = 0;
   private reconnectInterval: number;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +44,7 @@ export class SocketManager extends EventEmitter {
       this.client = net.connect(socketPath, () => {
         console.log('[SOCKET] Connected');
         this.isConnecting = false;
+        this.wasConnected = true;
         this.reconnectAttempts = 0;
         this.reconnectInterval = this.config.RECONNECT_INTERVAL;
         this.emit('connected');
@@ -50,14 +52,14 @@ export class SocketManager extends EventEmitter {
 
       this.client.on('error', (err: Error) => {
         console.error('[SOCKET] Error:', err.message);
-        this.client = null;
         this.isConnecting = false;
         this._scheduleReconnect();
       });
 
       this.client.on('close', () => {
         console.log('[SOCKET] Closed');
-        const wasConnected = this.client !== null;
+        const wasConnected = this.wasConnected;
+        this.wasConnected = false;
         this.client = null;
         this.isConnecting = false;
         this.emit('closed');
