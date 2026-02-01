@@ -1,4 +1,4 @@
-import { FolderPlus, HelpCircle, Settings } from "lucide-react";
+import { FolderPlus, Settings } from "lucide-react";
 import { SidebarFooter as SidebarFooterUI } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -9,7 +9,7 @@ import type { SidebarFooterProps } from "../model/types";
  * Displays "Add Repository" button
  * Structure mirrors SidebarHeader for consistency
  */
-export function SidebarFooter({ onAddRepository, onOpenSettings, onOpenHelp }: SidebarFooterProps) {
+export function SidebarFooter({ onAddRepository, onOpenSettings }: SidebarFooterProps) {
   return (
     <SidebarFooterUI className="flex-row items-center">
       <Button
@@ -24,26 +24,15 @@ export function SidebarFooter({ onAddRepository, onOpenSettings, onOpenHelp }: S
         <FolderPlus className="h-4 w-4 shrink-0" />
         <span className="text-[13px]">Add repository</span>
       </Button>
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Help"
-          onClick={onOpenHelp}
-          className="text-muted-foreground h-8 w-8"
-        >
-          <HelpCircle className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Settings"
-          onClick={onOpenSettings}
-          className="text-muted-foreground h-8 w-8"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Settings"
+        onClick={onOpenSettings}
+        className="text-muted-foreground h-8 w-8"
+      >
+        <Settings className="h-4 w-4" />
+      </Button>
     </SidebarFooterUI>
   );
 }
