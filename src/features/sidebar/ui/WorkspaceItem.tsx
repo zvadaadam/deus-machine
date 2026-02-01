@@ -1,5 +1,5 @@
 import { Archive, CircleDot, Eye, GitBranch, GitPullRequest } from "lucide-react";
-import { SidebarMenuSubItem } from "@/components/ui/sidebar";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
@@ -87,7 +87,7 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
   })();
 
   return (
-    <SidebarMenuSubItem>
+    <li>
       <SidebarRow
         variant="workspace"
         isActive={isActive}
@@ -158,6 +158,6 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
           </Button>
         ) : null}
       </SidebarRow>
-    </SidebarMenuSubItem>
+    </li>
   );
 }

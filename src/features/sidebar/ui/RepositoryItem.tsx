@@ -1,5 +1,5 @@
 import { ChevronDown, MoreHorizontal, Plus } from "lucide-react";
-import { SidebarMenuItem, SidebarMenuSub, SidebarMenuSubItem } from "@/components/ui/sidebar";
+import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
@@ -70,7 +70,7 @@ export function RepositoryItem({
                 size="icon"
                 aria-label={`New workspace in ${repoName}`}
                 onClick={() => onNewWorkspace(repository.repo_id)}
-                className="text-muted-foreground/60 hover:bg-foreground/5 hover:text-muted-foreground h-5 w-5"
+                className="text-muted-foreground/60 hover:text-muted-foreground h-5 w-5"
               >
                 <Plus className="h-3 w-3" />
               </Button>
@@ -78,7 +78,7 @@ export function RepositoryItem({
                 variant="ghost"
                 size="icon"
                 aria-label={`Repository actions for ${repoName}`}
-                className="text-muted-foreground/60 hover:bg-foreground/5 hover:text-muted-foreground h-5 w-5"
+                className="text-muted-foreground/60 hover:text-muted-foreground h-5 w-5"
               >
                 <MoreHorizontal className="h-3 w-3" />
               </Button>
@@ -87,7 +87,7 @@ export function RepositoryItem({
         </SidebarRow>
       </SidebarMenuItem>
       <CollapsibleContent>
-        <SidebarMenuSub className="mx-0 translate-x-0 gap-1 border-l-0 px-0 py-0">
+        <ul className="flex min-w-0 flex-col gap-1">
           {sidebarExpanded &&
             (() => {
               const sortedWorkspaces = sortByStatusPriority(
@@ -96,7 +96,7 @@ export function RepositoryItem({
 
               return (
                 <>
-                  <SidebarMenuSubItem>
+                  <li>
                     <SidebarRow
                       variant="action"
                       asChild
@@ -112,7 +112,7 @@ export function RepositoryItem({
                         </SidebarRowMain>
                       </button>
                     </SidebarRow>
-                  </SidebarMenuSubItem>
+                  </li>
 
                   {sortedWorkspaces.map((workspace) => (
                     <WorkspaceItem
@@ -126,7 +126,7 @@ export function RepositoryItem({
                 </>
               );
             })()}
-        </SidebarMenuSub>
+        </ul>
       </CollapsibleContent>
     </Collapsible>
   );

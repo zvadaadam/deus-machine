@@ -518,15 +518,19 @@ body {
   transition-duration: 200ms;
 }
 
-/* Tauri desktop-only styles - Arc browser-style vibrancy
- * Requires: transparent:true + underWindowBackground effect in tauri.conf.json
- * The blur comes from macOS underWindowBackground, not CSS backdrop-filter.
- * We only need transparent/tinted backgrounds on structural layout slots.
- */
+/* Tauri desktop vibrancy
+ *
+ * Architecture (3 layers):
+ *   1. macOS native underWindowBackground provides blur of desktop
+ *   2. sidebar-wrapper: single 45% tint (covers sidebar + inset gap uniformly)
+ *   3. main-content: opaque — everything between wrapper and main-content is transparent
+ *
+ * Requires tauri.conf.json: "transparent": true + "windowEffects": ["underWindowBackground"]
+ * Components use normal Tailwind classes (bg-sidebar, bg-background); CSS !important overrides. */
+
 .tauri body {
   background: transparent;
 }
-
 .tauri #root {
   background: transparent;
   position: fixed;
@@ -534,43 +538,52 @@ body {
   max-width: none;
 }
 
-/* Structural transparency - layout containers must be clear for vibrancy */
-.tauri [data-slot="sidebar-wrapper"],
+/* Layer 2: single vibrancy tint on the outermost wrapper */
+.tauri [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 80%, transparent) !important;
+}
+
+/* Transparent pass-through so the wrapper tint shows uniformly */
 .tauri [data-slot="sidebar-inset"],
 .tauri [data-slot="sidebar-gap"],
-.tauri [data-slot="sidebar-container"] {
+.tauri [data-slot="sidebar-container"],
+.tauri [data-slot="sidebar"],
+.tauri [data-slot="sidebar-header"],
+.tauri [data-slot="sidebar-footer"],
+.tauri [data-sidebar="sidebar"] {
   background: transparent !important;
 }
 
-/* Sidebar content: 5% tint for visual hierarchy */
-.tauri [data-slot="sidebar"],
-.tauri [data-slot="sidebar-inner"],
-.tauri [data-sidebar="sidebar"] {
-  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
-  background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
+/* Layer 3: main content is opaque */
+.tauri [data-slot="main-content"] {
+  background: var(--background) !important;
 }
 
-/* Main content: light tint, no CSS blur (native vibrancy handles it) */
-.tauri [data-slot="main-content"] {
-  background: color-mix(in oklch, var(--background) 10%, transparent) !important;
+/* CSS backdrop-filter conflicts with native CABackdropLayer */
+.tauri * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Hover-reveal overlay: opaque + CSS blur for readability over content.
- * macOS vibrancy only blurs the desktop, not the app's own content,
- * so we need CSS backdrop-filter when sidebar overlays the workspace.
- */
+/* Promote interactive sidebar elements to GPU layers (prevents hover flicker) */
+.tauri [data-slot="sidebar-menu-button"],
+.tauri [data-slot="sidebar-menu-action"],
+.tauri [data-slot="sidebar-group-action"],
+.tauri [data-slot="sidebar-menu-sub-button"] {
+  transform: translateZ(0);
+}
+
+/* Hover-reveal: near-opaque overlay when sidebar flies out over content */
 [data-hover-reveal="true"] [data-slot="sidebar-container"] {
   background: color-mix(in oklch, var(--sidebar) 82%, transparent) !important;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
-
-[data-hover-reveal="true"] [data-slot="sidebar-inner"],
+.tauri [data-hover-reveal="true"] [data-slot="sidebar-container"] {
+  background: color-mix(in oklch, var(--sidebar) 92%, transparent) !important;
+}
 [data-hover-reveal="true"] [data-sidebar="sidebar"] {
   background: transparent !important;
-  background-color: transparent !important;
 }
 
 /* Custom utilities */
@@ -585,15 +598,15 @@ body {
   }
 }
 
-/* Arc browser-style frosted glass vibrancy */
-/* Note: Universal background is applied to #root (line 88) */
-/* Desktop: Tauri's native window effects handle blur */
-/* Web: backdrop-blur applied to child panels */
+/* Frosted glass vibrancy utilities */
+/* Desktop: Tauri's native underWindowBackground handles blur */
+/* Web: CSS backdrop-filter applied to child panels */
 
 /* Main container background - for modals, dialogs */
 .vibrancy-bg {
   background-color: color-mix(in oklch, var(--background) 95%, transparent);
   backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }
@@ -602,6 +615,7 @@ body {
 .vibrancy-panel {
   background-color: color-mix(in oklch, var(--background) 30%, transparent);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }

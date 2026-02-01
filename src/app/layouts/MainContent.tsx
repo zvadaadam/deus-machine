@@ -327,7 +327,7 @@ export function MainContent({
     <SidebarInset className="min-w-0">
       <div
         data-slot="main-content"
-        className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border backdrop-blur-[20px]"
+        className="bg-background/40 border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border"
       >
         {/* Sidebar toggle - visible when sidebar is collapsed and no workspace tab bar is shown */}
         {!sidebarOpen && !selectedWorkspace && (

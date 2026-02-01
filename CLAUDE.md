@@ -560,6 +560,37 @@ src/components/ui/              ← Shadcn base primitives only
 
 Test if the backend or frontend works using the browser tool or running tests.
 
+### Debugging Frontend Layout & Spacing Issues
+
+Spacing and styling bugs are **never diagnosed from a single file**. The root cause almost always lives in a parent, grandparent, or sibling container. Before touching any CSS, you must **visualize the structure and backtrack the full component tree**.
+
+#### The Rule: Draw the Divs First
+
+Before changing any Tailwind classes, **outline every element** to see the actual box boundaries:
+
+```css
+/* Temporary — paste in DevTools or add to global.css while debugging */
+* {
+  outline: 1px solid rgba(255, 0, 0, 0.3) !important;
+}
+```
+
+This reveals hidden padding, unexpected gaps, and wrapper divs contributing spacing you can't see in code alone.
+
+#### The Rule: Backtrack Across Files
+
+A visual section often spans 3-5 source files (`Page → Layout → Sidebar → SidebarItem → Avatar`). You **must read every file in the chain** — parent containers, the element itself, and its children. Check:
+
+- **Parent/grandparent** containers for `p-*`, `gap-*`, flex alignment
+- **Shadcn base components** (`src/components/ui/`) for built-in padding you inherit — always open the actual source file and read the CVA variants
+- **CVA variant defaults** — components like `Button` apply default size/variant classes you don't see at the call site. Read `button.tsx`, `sidebar.tsx`, etc. to know what classes are baked in (e.g., `h-9 px-4 has-[>svg]:px-3` on every default-size Button)
+- **Conditional selectors from base components** — `has-[>svg]:px-3` on Button activates when there's a child SVG (icons). Your `px-1` override won't help because the conditional selector has higher specificity. You must override with the **exact same modifier**: `has-[>svg]:px-1`, not `has-[&>svg]:px-1` (different modifier = twMerge won't merge them)
+- **Siblings** whose margin or flex-grow steals space
+- **`cn()` / twMerge** — only merges classes with **identical modifiers**. `has-[>svg]:px-3` and `has-[&>svg]:px-1` coexist instead of overriding. Always match the exact modifier string from the base component
+- **Compound spacing** — parent `p-4` + child `m-2` + flex `gap-3` = 36px, not the 16px you expected
+
+Never fix a spacing issue by only reading the file where the element is rendered. Always trace up and down the tree — and always open the base component source files to see what default classes you're inheriting.
+
 ## Documentation Policy
 
 **CRITICAL:** Documentation lives IN the code, not in separate markdown files!
