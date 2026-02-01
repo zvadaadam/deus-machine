@@ -25,6 +25,8 @@ export interface Workspace {
   updated_at: string;
   repo_name: string;
   root_path: string;
+  /** Computed filesystem path to the workspace directory */
+  workspace_path: string;
   parent_branch?: string;
   default_branch?: string;
   unread: number;

@@ -1,11 +1,29 @@
 import { createMiddleware } from 'hono/factory';
 import path from 'path';
+import os from 'os';
 import { getDatabase } from '../lib/database';
 import { NotFoundError } from '../lib/errors';
 
 export interface WorkspaceContext {
   workspace: any;
   workspacePath: string;
+}
+
+/**
+ * Compute the filesystem path for a workspace based on storage version.
+ * - storage_version 3 (legacy): ~/conductor/workspaces/{repo_name}/{directory_name}
+ * - storage_version 2 (current): {root_path}/.conductor/{directory_name}
+ */
+export function computeWorkspacePath(ws: {
+  root_path: string;
+  directory_name: string;
+  storage_version?: number;
+  repo_name?: string;
+}): string {
+  if (ws.storage_version === 3 && ws.repo_name) {
+    return path.join(os.homedir(), 'conductor', 'workspaces', ws.repo_name, ws.directory_name);
+  }
+  return path.join(ws.root_path, '.conductor', ws.directory_name);
 }
 
 /**
@@ -18,7 +36,7 @@ export const withWorkspace = createMiddleware(async (c, next) => {
   const db = getDatabase();
 
   const workspace = db.prepare(`
-    SELECT w.*, r.root_path, r.default_branch
+    SELECT w.*, r.root_path, r.default_branch, r.storage_version, r.name as repo_name
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     WHERE w.id = ?
@@ -28,7 +46,7 @@ export const withWorkspace = createMiddleware(async (c, next) => {
     throw new NotFoundError('Workspace not found');
   }
 
-  const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
+  const workspacePath = computeWorkspacePath(workspace);
 
   c.set('workspace', workspace);
   c.set('workspacePath', workspacePath);

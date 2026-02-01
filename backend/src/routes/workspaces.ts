@@ -5,7 +5,7 @@ import os from 'os';
 import { spawn, execFileSync, execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
-import { withWorkspace } from '../middleware/workspace-loader';
+import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
 import * as gitService from '../services/git.service';
 import { generateUniqueCityName } from '../services/workspace.service';
@@ -19,7 +19,7 @@ app.get('/workspaces', (c) => {
     SELECT
       w.id, w.directory_name, w.branch, w.state, w.active_session_id,
       w.unread, w.created_at, w.updated_at,
-      r.name as repo_name, r.root_path,
+      r.name as repo_name, r.root_path, r.storage_version,
       s.status as session_status, s.is_compacting, s.context_token_count,
       s.unread_count as session_unread,
       (SELECT sent_at FROM session_messages
@@ -31,7 +31,7 @@ app.get('/workspaces', (c) => {
     ORDER BY w.updated_at DESC
     LIMIT 100
   `).all();
-  return c.json(workspaces);
+  return c.json((workspaces as any[]).map(ws => ({ ...ws, workspace_path: computeWorkspacePath(ws) })));
 });
 
 app.get('/workspaces/by-repo', (c) => {
@@ -45,7 +45,7 @@ app.get('/workspaces/by-repo', (c) => {
       w.active_session_id, w.unread, w.created_at, w.updated_at,
       w.parent_branch,
       r.name as repo_name, r.display_order as repo_display_order, r.root_path,
-      r.default_branch,
+      r.default_branch, r.storage_version,
       s.status as session_status, s.is_compacting, s.context_token_count,
       s.unread_count as session_unread,
       (SELECT sent_at FROM session_messages
@@ -69,7 +69,7 @@ app.get('/workspaces/by-repo', (c) => {
         workspaces: []
       };
     }
-    grouped[repoId].workspaces.push(workspace);
+    grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
   });
 
   const result = Object.values(grouped).sort((a: any, b: any) => a.display_order - b.display_order);
@@ -79,7 +79,7 @@ app.get('/workspaces/by-repo', (c) => {
 app.get('/workspaces/:id', (c) => {
   const db = getDatabase();
   const workspace = db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path,
+    SELECT w.*, r.name as repo_name, r.root_path, r.storage_version,
            s.status as session_status, s.is_compacting, s.context_token_count,
            (SELECT sent_at FROM session_messages
             WHERE session_id = s.id AND role = 'user'
@@ -88,10 +88,10 @@ app.get('/workspaces/:id', (c) => {
     LEFT JOIN repos r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.active_session_id = s.id
     WHERE w.id = ?
-  `).get(c.req.param('id'));
+  `).get(c.req.param('id')) as any;
 
   if (!workspace) throw new NotFoundError('Workspace not found');
-  return c.json(workspace);
+  return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
 app.patch('/workspaces/:id', async (c) => {
@@ -317,11 +317,11 @@ app.post('/workspaces', async (c) => {
   });
 
   const workspace = db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path
+    SELECT w.*, r.name as repo_name, r.root_path, r.storage_version
     FROM workspaces w LEFT JOIN repos r ON w.repository_id = r.id WHERE w.id = ?
-  `).get(workspaceId);
+  `).get(workspaceId) as any;
 
-  return c.json(workspace);
+  return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
 export default app;

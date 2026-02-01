@@ -14,11 +14,13 @@ import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
 export interface WorkspaceGitInfo {
   root_path: string;
   directory_name: string;
+  workspace_path?: string;
   parent_branch?: string;
   default_branch?: string;
 }
 
 function getWorkspacePath(ws: WorkspaceGitInfo): string {
+  if (ws.workspace_path) return ws.workspace_path;
   return `${ws.root_path}/.conductor/${ws.directory_name}`;
 }
 

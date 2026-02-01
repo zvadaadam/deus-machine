@@ -376,7 +376,7 @@ export function MainContent({
                 onTabAdd={handleMainTabAdd}
                 repositoryName={selectedWorkspace.root_path.split("/").filter(Boolean).pop()}
                 branch={selectedWorkspace.branch}
-                workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
+                workspacePath={selectedWorkspace.workspace_path}
                 onBranchRename={handleBranchRename}
               />
 
@@ -559,7 +559,7 @@ export function MainContent({
                                   selectedWorkspace={selectedWorkspace}
                                   onFileClick={(path) => {
                                     // Construct absolute path from relative path returned by Rust scanner
-                                    const absolutePath = `${selectedWorkspace!.root_path}/.conductor/${selectedWorkspace!.directory_name}/${path}`;
+                                    const absolutePath = `${selectedWorkspace!.workspace_path}/${path}`;
                                     setBrowserSelectedFile(absolutePath);
                                     setRightPanelExpanded(true);
                                   }}
@@ -599,9 +599,7 @@ export function MainContent({
                   )}
 
                   {rightSideTab === "terminal" && (
-                    <TerminalPanel
-                      workspacePath={`${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`}
-                    />
+                    <TerminalPanel workspacePath={selectedWorkspace.workspace_path} />
                   )}
 
                   {rightSideTab === "config" && <ConfigPanel />}
