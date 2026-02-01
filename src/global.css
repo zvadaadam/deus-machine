@@ -77,8 +77,7 @@
   /* Font families - Using Suisse Intl for both sans and mono */
   /* Tailwind v4 utilities (font-sans, font-mono) use these variables */
   --font-sans:
-    "Suisse Intl", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
 
   /* Legacy aliases for backward compatibility */
@@ -515,7 +514,7 @@ body {
   width: 100%;
   margin: 0;
   padding: 0;
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }
 
@@ -595,7 +594,7 @@ body {
 .vibrancy-bg {
   background-color: color-mix(in oklch, var(--background) 95%, transparent);
   backdrop-filter: blur(24px);
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }
 
@@ -603,7 +602,7 @@ body {
 .vibrancy-panel {
   background-color: color-mix(in oklch, var(--background) 30%, transparent);
   backdrop-filter: blur(4px);
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-property: color, border-color, text-decoration-color, fill, stroke;
   transition-duration: 200ms;
 }
 
@@ -628,6 +627,17 @@ body {
 
 .scrollbar-vibrancy::-webkit-scrollbar-thumb:active {
   background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+}
+
+/* Hide scrollbars (keep scroll behavior) */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 /* Global scrollbar styles - applies to all scrollable elements */

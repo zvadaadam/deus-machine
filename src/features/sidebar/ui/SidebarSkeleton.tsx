@@ -18,35 +18,48 @@ export function SidebarSkeleton() {
     <Sidebar
       variant="inset"
       collapsible="offcanvas"
+      className="p-0"
       role="status"
       aria-busy="true"
       aria-label="Loading sidebar"
     >
       {/* Header Skeleton - matches SidebarHeader structure */}
-      <SidebarHeader className="p-2">
-        <div className="flex items-center gap-3 rounded-lg p-2">
-          <Skeleton className="size-8 flex-shrink-0 rounded-full" />
-          <Skeleton className="h-4 flex-1" />
+      <SidebarHeader className="px-2 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-1 items-center gap-2">
+            <Skeleton className="size-6 flex-shrink-0 rounded-md" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <Skeleton className="size-8 rounded-md" />
         </div>
       </SidebarHeader>
 
       {/* Content Skeleton - Repository list */}
-      <SidebarContent>
-        <SidebarMenu className="gap-2 p-2">
+      <SidebarContent className="scrollbar-hidden">
+        <SidebarMenu className="gap-1 px-2 py-2">
           {Array.from({ length: 3 }, (_, index) => (
             <SidebarMenuItem key={index} className="space-y-2">
               {/* Repository header */}
-              <div className="flex items-center gap-2 px-2 py-2">
-                <Skeleton className="size-4 flex-shrink-0" />
-                <Skeleton className="h-4 flex-1" />
+              <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                <div className="flex flex-1 items-center gap-2">
+                  <Skeleton className="size-5 flex-shrink-0 rounded-sm" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <Skeleton className="size-7 rounded-md" />
+                  <Skeleton className="size-7 rounded-md" />
+                </div>
               </div>
 
               {/* Workspace items (2 per repo) */}
-              <div className="space-y-1 pl-4">
+              <div className="space-y-2 pl-2">
                 {Array.from({ length: 2 }, (_, wsIndex) => (
-                  <div key={wsIndex} className="flex items-center gap-2 px-2 py-2">
-                    <Skeleton className="size-3 flex-shrink-0 rounded-sm" />
-                    <Skeleton className="h-3 flex-1" />
+                  <div key={wsIndex} className="flex items-center gap-3 px-3 py-2">
+                    <Skeleton className="size-4 flex-shrink-0 rounded-sm" />
+                    <div className="flex flex-1 flex-col gap-1">
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -56,8 +69,12 @@ export function SidebarSkeleton() {
       </SidebarContent>
 
       {/* Footer Skeleton - matches SidebarFooter structure */}
-      <SidebarFooter className="p-2 pt-0">
-        <Skeleton className="h-8 w-full rounded-md" />
+      <SidebarFooter className="border-sidebar-border border-t px-2 py-2">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 flex-1 rounded-md" />
+          <Skeleton className="size-8 rounded-md" />
+          <Skeleton className="size-8 rounded-md" />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

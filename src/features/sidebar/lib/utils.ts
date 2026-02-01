@@ -26,12 +26,13 @@ export function getRepoInitials(repoName: string): string {
  */
 export function getRepoColor(repoName: string): { bg: string; text: string } {
   const hash = repoName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  // Use semantic tokens from design system for theme consistency
+  // Use semantic tokens so colors follow the design system theme.
   const schemes = [
-    { bg: "bg-primary/10", text: "text-primary" },
-    { bg: "bg-secondary/10", text: "text-secondary-foreground" },
-    { bg: "bg-accent/10", text: "text-accent-foreground" },
+    { bg: "bg-primary/20", text: "text-primary" },
+    { bg: "bg-secondary/30", text: "text-secondary-foreground" },
+    { bg: "bg-accent/30", text: "text-accent-foreground" },
     { bg: "bg-muted", text: "text-muted-foreground" },
+    { bg: "bg-sidebar-accent", text: "text-sidebar-foreground" },
   ];
   return schemes[hash % schemes.length];
 }
