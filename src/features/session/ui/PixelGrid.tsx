@@ -26,7 +26,7 @@ interface PixelGridProps {
 }
 
 // Per-cell animation config: keyframe name, duration, delay
-// null = cell stays dim (opacity 0.15)
+// null = cell stays off (opacity 0)
 type CellAnim = { name: string; dur: string; del: string } | null;
 
 interface VariantConfig {
