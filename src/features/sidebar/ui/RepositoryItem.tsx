@@ -1,4 +1,4 @@
-import { ChevronDown, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -73,14 +73,6 @@ export function RepositoryItem({
                 className="text-muted-foreground/60 hover:text-muted-foreground h-5 w-5"
               >
                 <Plus className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Repository actions for ${repoName}`}
-                className="text-muted-foreground/60 hover:text-muted-foreground h-5 w-5"
-              >
-                <MoreHorizontal className="h-3 w-3" />
               </Button>
             </SidebarRowRight>
           )}

@@ -9,6 +9,23 @@ import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot, SidebarRowMain } from "./SidebarRow";
 
+/** Returns the appropriate status icon as a JSX element (not a component type)
+ *  so React reconciles correctly without remounting the DOM node each render. */
+function getStatusIcon(status: string, isArchived: boolean, className: string) {
+  if (isArchived) return <Archive className={className} />;
+  switch (status) {
+    case "error":
+      return <CircleDot className={className} />;
+    case "unread":
+      return <Eye className={className} />;
+    case "compacting":
+      return <GitPullRequest className={className} />;
+    case "idle":
+    default:
+      return <GitBranch className={className} />;
+  }
+}
+
 /**
  * WorkspaceItem Component
  * Displays a single workspace with status, changes, and archive functionality
@@ -71,21 +88,6 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
   const isArchived = workspace.state === "archived";
   const canArchive = !isArchived && !!onArchive;
 
-  const StatusIcon = (() => {
-    if (isArchived) return Archive;
-    switch (displayStatus) {
-      case "error":
-        return CircleDot;
-      case "unread":
-        return Eye;
-      case "compacting":
-        return GitPullRequest;
-      case "idle":
-      default:
-        return GitBranch;
-    }
-  })();
-
   return (
     <li>
       <SidebarRow
@@ -110,9 +112,11 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
             {displayStatus === "working" ? (
               <PixelGrid variant="generating" size={14} />
             ) : (
-              <StatusIcon
-                className={cn("h-4 w-4", isArchived ? "text-muted-foreground" : statusTextClass)}
-              />
+              getStatusIcon(
+                displayStatus,
+                isArchived,
+                cn("h-4 w-4", isArchived ? "text-muted-foreground" : statusTextClass)
+              )
             )}
           </SidebarRowIconSlot>
           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-3">

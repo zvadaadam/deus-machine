@@ -51,8 +51,9 @@ async function applyZoom(level: number) {
 export function useZoom() {
   const zoomRef = useRef(getStoredZoom());
 
-  // Restore persisted zoom on mount
+  // Restore persisted zoom on mount (Tauri only)
   useEffect(() => {
+    if (!isTauriEnv) return;
     applyZoom(zoomRef.current);
   }, []);
 
@@ -77,6 +78,9 @@ export function useZoom() {
   }, []);
 
   useEffect(() => {
+    // Only intercept zoom shortcuts in Tauri; let browser handle its own native zoom
+    if (!isTauriEnv) return;
+
     function handleKeyDown(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
 
