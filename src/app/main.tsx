@@ -12,6 +12,12 @@ if (
   document.documentElement.classList.add("tauri");
 }
 
+// Window focus/blur tracking — toggles .window-inactive for vibrancy dimming
+window.addEventListener("focus", () =>
+  document.documentElement.classList.remove("window-inactive")
+);
+window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
+
 if (typeof window !== "undefined") {
   const w = window as Window & { __conductorErrorHandlers__?: boolean };
   if (!w.__conductorErrorHandlers__) {

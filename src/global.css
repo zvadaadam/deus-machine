@@ -393,6 +393,16 @@
   --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: oklch(0.64 0.12 210 / 0.4);
 
+  /* Vibrancy tint system (inspired by Arc/Dia multi-layer compositing) */
+  --sidebar-tint-opacity: 75%;
+  --sidebar-tint-strong: 85%;
+  --content-tint-opacity: 92%;
+  --sidebar-wash: oklch(0.97 0.01 210);
+
+  /* Content area border/shadow (Arc: SidebarBorderColor light=rgba(0,0,0,0.05), InnerShadowView) */
+  --content-border-opacity: 5%;
+  --content-shadow-opacity: 3%;
+
   /* Diff viewer colors - Graphite Aqua (Light Mode) */
   --diff-addition-bg: oklch(0.94 0.05 150);
   --diff-addition-gutter: oklch(0.88 0.09 150);
@@ -467,6 +477,18 @@
   --sidebar-border: oklch(0.24 0 0);
   --sidebar-ring: oklch(0.74 0.12 210 / 0.45);
 
+  /* Vibrancy tint system (dark — Dia uses 0.60 for content; we use 0.78 as
+   * a middle ground since our content area is larger and fully transparent
+   * would be distracting. Sidebar tint is more aggressive in dark to show blur.) */
+  --sidebar-tint-opacity: 70%;
+  --sidebar-tint-strong: 88%;
+  --content-tint-opacity: 78%;
+  --sidebar-wash: oklch(0.14 0.01 210);
+
+  /* Content area border/shadow (Arc: SidebarBorderColor dark=rgba(1,1,1,0.30)) */
+  --content-border-opacity: 15%;
+  --content-shadow-opacity: 6%;
+
   /* Diff viewer colors - Graphite Aqua (Dark Mode) */
   --diff-addition-bg: oklch(0.22 0.07 150);
   --diff-addition-gutter: oklch(0.18 0.09 150);
@@ -538,9 +560,51 @@ body {
   max-width: none;
 }
 
-/* Layer 2: single vibrancy tint on the outermost wrapper */
+/* Layer 2: vibrancy tint on the outermost wrapper (variable-driven) */
 .tauri [data-slot="sidebar-wrapper"] {
-  background: color-mix(in oklch, var(--sidebar) 80%, transparent) !important;
+  position: relative;
+  background: color-mix(
+    in oklch,
+    var(--sidebar) var(--sidebar-tint-opacity),
+    transparent
+  ) !important;
+  transition: background 200ms ease;
+}
+
+/* Gradient wash overlay — breaks the flat monochrome look (Dia's WindowTint/BaseGradient) */
+.tauri [data-slot="sidebar-wrapper"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--sidebar-wash) 25%, transparent) 0%,
+    transparent 100%
+  );
+  transition: opacity 200ms ease;
+}
+
+/* Grain noise texture — 155x155 Gaussian noise PNG tile (matching Arc/Dia's grain dimensions).
+ * Separate file instead of inline base64 to keep CSS clean.
+ * mix-blend-mode: soft-light avoids blowing out highlights (Arc uses alpha blending, not overlay). */
+.tauri [data-slot="sidebar-wrapper"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  z-index: 1;
+  background-image: url("./assets/grain.png");
+  background-repeat: repeat;
+  mix-blend-mode: soft-light;
+}
+
+/* Ensure sidebar children sit above the pseudo-element overlays */
+.tauri [data-slot="sidebar-wrapper"] > * {
+  position: relative;
+  z-index: 2;
 }
 
 /* Transparent pass-through so the wrapper tint shows uniformly */
@@ -554,9 +618,40 @@ body {
   background: transparent !important;
 }
 
-/* Layer 3: main content is opaque */
+/* SidebarInset — enhanced drop shadow (inspired by Arc's CellDropShadow pre-rendered shadow).
+ * Two-layer shadow: crisp near-shadow for edge definition + diffuse far-shadow for depth. */
+.tauri [data-slot="sidebar-inset"] {
+  box-shadow:
+    0 1px 3px 0 color-mix(in oklch, var(--foreground) 4%, transparent),
+    0 4px 12px -2px color-mix(in oklch, var(--foreground) 3%, transparent) !important;
+  transition: box-shadow 200ms ease;
+}
+
+/* Layer 3: main content — semi-translucent with inner shadow depth.
+ * Double-border: 1px outer (from Tailwind border class) + 0.5px inner ring (box-shadow).
+ * Inner shadow at top edge for recessed depth (Arc's InnerShadowView).
+ * Border opacity varies by theme: subtle in light (5%), visible in dark (15%). */
 .tauri [data-slot="main-content"] {
-  background: var(--background) !important;
+  background: color-mix(
+    in oklch,
+    var(--background) var(--content-tint-opacity),
+    transparent
+  ) !important;
+  border-color: color-mix(
+    in oklch,
+    var(--foreground) var(--content-border-opacity),
+    transparent
+  ) !important;
+  box-shadow:
+    /* Inner shadow — top-edge depth (Arc's InnerShadowView) */
+    inset 0 1px 3px 0
+      color-mix(in oklch, var(--foreground) var(--content-shadow-opacity), transparent),
+    /* Inner hairline ring — 0.5px for crisp double-border effect */ inset 0 0 0 0.5px
+      color-mix(in oklch, var(--foreground) var(--content-border-opacity), transparent);
+  transition:
+    background 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
 }
 
 /* Prevent CSS backdrop-filter from conflicting with native CABackdropLayer on sidebar */
@@ -583,10 +678,30 @@ body {
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 .tauri [data-hover-reveal="true"] [data-slot="sidebar-container"] {
-  background: color-mix(in oklch, var(--sidebar) 92%, transparent) !important;
+  background: color-mix(
+    in oklch,
+    var(--sidebar) var(--sidebar-tint-strong),
+    transparent
+  ) !important;
 }
 [data-hover-reveal="true"] [data-sidebar="sidebar"] {
   background: transparent !important;
+}
+
+/* Window inactive state — dim vibrancy when Tauri window loses focus (like Arc/Dia) */
+.tauri.window-inactive [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 88%, transparent) !important;
+}
+.tauri.window-inactive [data-slot="sidebar-wrapper"]::after {
+  opacity: 0.5;
+}
+.tauri.window-inactive [data-slot="sidebar-inset"] {
+  box-shadow: 0 1px 2px 0 color-mix(in oklch, var(--foreground) 2%, transparent) !important;
+}
+.tauri.window-inactive [data-slot="main-content"] {
+  box-shadow:
+    inset 0 0.5px 1px 0 color-mix(in oklch, var(--foreground) 2%, transparent),
+    inset 0 0 0 0.5px color-mix(in oklch, var(--foreground) 3%, transparent);
 }
 
 /* Custom utilities */
