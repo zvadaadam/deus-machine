@@ -78,13 +78,31 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return Array.from(new Set(ids)).sort(); // stable order
   }, [repoGroups]);
 
+  // Build workspace info map for Tauri fast path (enables 5-20ms vs 50-200ms HTTP)
+  const workspaceInfoMap = useMemo(() => {
+    const map = new Map<string, WorkspaceGitInfo>();
+    repoGroups.forEach((g) => {
+      g.workspaces.forEach((w) => {
+        map.set(w.id, {
+          root_path: w.root_path,
+          directory_name: w.directory_name,
+          parent_branch: w.parent_branch,
+          default_branch: w.default_branch,
+        });
+      });
+    });
+    return map;
+  }, [repoGroups]);
+
   // Ref to avoid stale closures when workspaceIds changes while timers are pending
   const workspaceIdsRef = useRef(workspaceIds);
+  const workspaceInfoMapRef = useRef(workspaceInfoMap);
 
   // Update ref in effect to avoid accessing ref during render
   useEffect(() => {
     workspaceIdsRef.current = workspaceIds;
-  }, [workspaceIds]);
+    workspaceInfoMapRef.current = workspaceInfoMap;
+  }, [workspaceIds, workspaceInfoMap]);
 
   // Prime cache for first N and return aggregate
   const query = useQuery({
@@ -94,7 +112,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     queryFn: async () => {
       const first5 = workspaceIds.slice(0, 5);
       const firstResults = await Promise.all(
-        first5.map((id) => WorkspaceService.fetchDiffStats(id))
+        first5.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
       );
 
       // Cache first 5 results immediately
@@ -122,7 +140,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
         queryClient
           .prefetchQuery({
             queryKey: queryKeys.workspaces.diffStats(id),
-            queryFn: () => WorkspaceService.fetchDiffStats(id),
+            queryFn: () => WorkspaceService.fetchDiffStats(id, workspaceInfoMapRef.current.get(id)),
           })
           .then(() => {
             // Update aggregate cache with new data (use ref for current workspaceIds)

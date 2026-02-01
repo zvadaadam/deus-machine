@@ -12,7 +12,7 @@ const CITY_NAMES = [
   'houston', 'dallas', 'toronto', 'dar-es-salaam', 'miami', 'belo-horizonte', 'singapore',
   'philadelphia', 'atlanta', 'fukuoka', 'khartoum', 'barcelona', 'johannesburg', 'qingdao',
   'dalian', 'washington', 'yangon', 'alexandria', 'jinan', 'guadalajara', 'amman', 'kabul',
-  'hartford', 'richmond', 'worcester', 'mumbai', 'freetown', 'montevideo', 'pattaya',
+  'hartford', 'richmond', 'worcester', 'brisbane', 'freetown', 'montevideo', 'pattaya',
 ];
 
 export function generateUniqueCityName(db: Database.Database): string {

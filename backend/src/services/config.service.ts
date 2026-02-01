@@ -9,6 +9,13 @@ const AGENTS_DIR = path.join(CLAUDE_DIR, 'agents');
 const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
 const SETTINGS_LOCAL_PATH = path.join(CLAUDE_DIR, 'settings.local.json');
 
+function sanitizeName(name: string): string {
+  if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+    throw new Error('Invalid name: must be alphanumeric, hyphens, or underscores only');
+  }
+  return name;
+}
+
 function ensureDirectories(): void {
   const dirs = [CLAUDE_DIR, path.dirname(MCP_CONFIG_PATH), COMMANDS_DIR, AGENTS_DIR];
   dirs.forEach(dir => {
@@ -90,6 +97,7 @@ export function getCommands(): Array<{ name: string; description: string; conten
 
 export function saveCommand(name: string, content: string): boolean {
   try {
+    name = sanitizeName(name);
     const filePath = path.join(COMMANDS_DIR, `${name}.md`);
     fs.writeFileSync(filePath, content);
     return true;
@@ -101,6 +109,7 @@ export function saveCommand(name: string, content: string): boolean {
 
 export function deleteCommand(name: string): boolean {
   try {
+    name = sanitizeName(name);
     const filePath = path.join(COMMANDS_DIR, `${name}.md`);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -137,6 +146,7 @@ export function getAgents(): Array<{ id: string; name?: string; description?: st
 
 export function saveAgent(id: string, agentData: Record<string, any>): boolean {
   try {
+    id = sanitizeName(id);
     const filePath = path.join(AGENTS_DIR, `${id}.json`);
     fs.writeFileSync(filePath, JSON.stringify(agentData, null, 2));
     return true;
@@ -148,6 +158,7 @@ export function saveAgent(id: string, agentData: Record<string, any>): boolean {
 
 export function deleteAgent(id: string): boolean {
   try {
+    id = sanitizeName(id);
     const filePath = path.join(AGENTS_DIR, `${id}.json`);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);

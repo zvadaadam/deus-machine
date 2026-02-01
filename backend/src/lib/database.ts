@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
 const DB_PATH = path.join(
   process.env.HOME!,
@@ -11,6 +12,12 @@ let dbInstance: Database.Database | null = null;
 function initDatabase(): Database.Database {
   if (dbInstance) {
     return dbInstance;
+  }
+
+  // Ensure parent directory exists (first launch)
+  const dbDir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
   }
 
   console.log('Opening database:', DB_PATH);

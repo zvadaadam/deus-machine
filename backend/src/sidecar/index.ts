@@ -61,7 +61,7 @@ class SidecarManager {
     this.healthMonitor.on('unhealthy', () => {
       console.log('[SIDECAR] Health check failed - attempting restart...');
       if (this.processManager.isRunning()) {
-        this.processManager.process!.kill('SIGTERM');
+        this.processManager.kill('SIGTERM');
       }
     });
 
