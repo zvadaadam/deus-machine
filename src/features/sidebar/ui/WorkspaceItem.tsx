@@ -25,7 +25,11 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
   });
 
   // Fetch diff stats with conditional polling based on session status
-  const { data: diffStats } = useDiffStats(workspace.id, workspace.session_status);
+  // Pass workspace git info for direct Tauri IPC path (bypasses Node.js HTTP)
+  const { data: diffStats } = useDiffStats(workspace.id, workspace.session_status, {
+    root_path: workspace.root_path,
+    directory_name: workspace.directory_name,
+  });
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);

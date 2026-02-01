@@ -25,7 +25,8 @@
       "@/components/*": ["src/components/*"],
       "@/lib/*": ["src/shared/lib/*"],
       "@/hooks/*": ["src/shared/hooks/*"],
-      "@/ui/*": ["src/components/ui/*"]
+      "@/ui/*": ["src/components/ui/*"],
+      "@shared/*": ["shared/*"]
     },
 
     /* Linting */
@@ -34,6 +35,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
+  "include": ["src", "shared"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

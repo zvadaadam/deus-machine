@@ -4,8 +4,8 @@ pub mod backend;
 pub mod socket;
 pub mod browser;
 pub mod files;
+pub mod git;
 
-pub use commands::*;
 pub use pty::*;
 pub use backend::*;
 pub use socket::*;
