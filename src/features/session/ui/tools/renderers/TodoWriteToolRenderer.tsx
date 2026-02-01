@@ -20,8 +20,19 @@ interface Todo {
   status: "pending" | "in_progress" | "completed";
 }
 
+const isTodo = (value: unknown): value is Todo => {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as Todo).content === "string" &&
+    typeof (value as Todo).activeForm === "string" &&
+    ["pending", "in_progress", "completed"].includes((value as Todo).status)
+  );
+};
+
 export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const todos: Todo[] = toolUse.input.todos || [];
+  const todosInput = toolUse.input?.todos;
+  const todos: Todo[] = Array.isArray(todosInput) ? todosInput.filter(isTodo) : [];
 
   // Find current or next task
   const inProgressTask = todos.find((t) => t.status === "in_progress");
@@ -67,7 +78,15 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Todo"
-      icon={<ListChecks className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.TodoWrite)} />}
+      icon={
+        <ListChecks
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.TodoWrite
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => <span className="text-muted-foreground text-xs">{currentTaskText}</span>}

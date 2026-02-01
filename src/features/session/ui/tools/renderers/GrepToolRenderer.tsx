@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { pattern, path, output_mode, glob, type: fileType } = toolUse.input;
+  const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Count matches from result
@@ -43,12 +43,21 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Grep"
-      icon={<Search className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)} />}
+      icon={
+        <Search
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-info/15 text-info rounded px-2 py-0.5 font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-info/15 text-info rounded px-2 py-0.5 font-mono"
+            )}
+          >
             {pattern}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>

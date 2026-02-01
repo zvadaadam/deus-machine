@@ -18,10 +18,19 @@ interface Edit {
 }
 
 export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const file_path = (toolUse.input?.file_path as string) ?? "";
-  const edits = toolUse.input?.edits as Edit[] | undefined;
-  const editCount = edits?.length || 0;
-  const fileName = file_path ? file_path.split("/").pop() || file_path : "unknown";
+  const { file_path, edits } = toolUse.input ?? {};
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const safeEdits: Edit[] = Array.isArray(edits)
+    ? edits.filter(
+        (edit): edit is Edit =>
+          !!edit &&
+          typeof edit === "object" &&
+          typeof edit.old_string === "string" &&
+          typeof edit.new_string === "string"
+      )
+    : [];
+  const editCount = safeEdits.length;
+  const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
 
   return (
     <BaseToolRenderer
@@ -44,12 +53,12 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
             {" "}
-            &bull; {editCount} edit{editCount !== 1 ? "s" : ""}
+            • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>
         </>
       )}
       renderContent={() => {
-        if (!edits || edits.length === 0) {
+        if (safeEdits.length === 0) {
           return (
             <div className="text-muted-foreground px-2 pb-2 text-xs italic">No edits provided</div>
           );
@@ -57,7 +66,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
 
         return (
           <div className="space-y-3 px-2 pb-2">
-            {edits.map((edit: Edit, index: number) => (
+            {safeEdits.map((edit: Edit, index: number) => (
               <div key={index} className="space-y-1">
                 {editCount > 1 && (
                   <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
@@ -69,7 +78,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
                 <UnifiedDiff
                   oldString={edit.old_string}
                   newString={edit.new_string}
-                  fileName={file_path}
+                  fileName={safeFilePath}
                   maxHeight="300px"
                 />
               </div>

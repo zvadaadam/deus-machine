@@ -533,9 +533,9 @@ body {
   background: color-mix(in oklch, var(--background) 15%, transparent) !important;
 }
 
-/* Tauri: Hover-reveal sidebar needs opaque background when overlaying content
+/* Tauri: Hover-reveal sidebar needs opaque background when overlaying content.
  * macOS vibrancy only blurs the desktop, not the app's own content underneath,
- * so we use CSS backdrop-filter + a solid tinted background for the overlay
+ * so we use CSS backdrop-filter + a solid tinted background for the overlay.
  */
 [data-hover-reveal="true"] [data-slot="sidebar-container"] {
   background: color-mix(in oklch, var(--sidebar) 82%, transparent) !important;

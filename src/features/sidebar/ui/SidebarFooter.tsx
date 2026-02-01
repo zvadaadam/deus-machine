@@ -11,7 +11,6 @@ import type { SidebarFooterProps } from "../model/types";
  */
 export function SidebarFooter({ onAddRepository }: SidebarFooterProps) {
   const { state, hoverOpen, isMobile } = useSidebar();
-  // Visually collapsed = state is collapsed AND not hover-revealed
   const isCollapsed = state === "collapsed" && !hoverOpen;
 
   const addRepoTitle = isCollapsed && !isMobile ? "Add Repository" : undefined;

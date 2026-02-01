@@ -15,7 +15,7 @@ import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
 export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { path } = toolUse.input;
+  const { path } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse directory listing
@@ -42,12 +42,16 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const isDirectory = (item: string) => item.endsWith("/");
 
   // Extract directory name from path
-  const dirName = path.split("/").pop() || path;
+  const dirName = path?.split("/").pop() || path || "unknown";
 
   return (
     <BaseToolRenderer
       toolName="LS"
-      icon={<FolderOpen className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.LS)} />}
+      icon={
+        <FolderOpen
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.LS)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
@@ -56,7 +60,8 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
             {dirName}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
-            {" "}• {hasListings ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "empty"}
+            {" "}
+            • {hasListings ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "empty"}
           </span>
         </>
       )}
