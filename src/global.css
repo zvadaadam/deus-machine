@@ -260,25 +260,86 @@
   }
 }
 
+/* Pixel Grid - 3x3 agent status indicator animations
+ * Uses CSS custom properties set on the grid container:
+ *   --pixel-glow        : color
+ *   --pixel-peak-opacity : max cell opacity (default 1)
+ *   --pixel-glow-blur    : box-shadow blur radius (default 4px)
+ *   --pixel-glow-spread  : box-shadow spread (default 1px)
+ */
+@keyframes pixel-wave {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: var(--pixel-peak-opacity, 1);
+    transform: scale(1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
+@keyframes pixel-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  20% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  40% {
+    opacity: 0;
+  }
+}
+
+@keyframes pixel-snake {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pixel-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: var(--pixel-peak-opacity, 1);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
 /* Design tokens & base styles - Graphite × Aqua Theme */
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.98 0.007 255); /* Clean graphite paper */
-  --foreground: oklch(0.2 0.02 255); /* Deep slate text */
-  --card: oklch(0.95 0.01 255); /* Soft graphite card */
-  --card-foreground: oklch(0.2 0.02 255);
-  --popover: oklch(0.95 0.01 255);
-  --popover-foreground: oklch(0.2 0.02 255);
+  --background: oklch(0.98 0 0); /* Neutral paper */
+  --foreground: oklch(0.2 0 0); /* True black text */
+  --card: oklch(0.95 0 0); /* Neutral card */
+  --card-foreground: oklch(0.2 0 0);
+  --popover: oklch(0.95 0 0);
+  --popover-foreground: oklch(0.2 0 0);
   --primary: oklch(0.64 0.12 210); /* Aqua accent */
-  --primary-foreground: oklch(0.98 0.01 210);
-  --secondary: oklch(0.93 0.012 255);
-  --secondary-foreground: oklch(0.2 0.02 255);
-  --muted: oklch(0.94 0.01 255);
-  --muted-foreground: oklch(0.5 0.02 255);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.93 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.92 0.04 210);
-  --accent-foreground: oklch(0.2 0.02 255);
+  --accent-foreground: oklch(0.2 0 0);
   --destructive: oklch(0.6 0.22 25); /* Coral red */
-  --destructive-foreground: oklch(0.98 0.01 95);
+  --destructive-foreground: oklch(0.98 0 0);
 
   /* Semantic state colors (stable across themes) */
   --success: oklch(0.63 0.16 150); /* Emerald green */
@@ -318,19 +379,19 @@
   --z-tooltip: 1200;
   --z-notification: 1300;
 
-  --border: oklch(0.88 0.012 255); /* Graphite border */
-  --input: oklch(0.88 0.012 255);
-  --input-surface: oklch(0.99 0.006 255);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.88 0 0);
+  --input-surface: oklch(0.99 0 0);
   --ring: oklch(0.64 0.12 210 / 0.4);
 
   /* Sidebar colors */
-  --sidebar: oklch(0.97 0.008 255); /* Light graphite */
-  --sidebar-foreground: oklch(0.38 0.02 255);
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.38 0 0);
   --sidebar-primary: oklch(0.64 0.12 210);
-  --sidebar-primary-foreground: oklch(0.98 0.01 210);
-  --sidebar-accent: oklch(0.93 0.015 255);
-  --sidebar-accent-foreground: oklch(0.2 0.02 255);
-  --sidebar-border: oklch(0.9 0.012 255);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: oklch(0.64 0.12 210 / 0.4);
 
   /* Diff viewer colors - Graphite Aqua (Light Mode) */
@@ -344,27 +405,27 @@
   --diff-deletion-word: oklch(0.8 0.14 25);
   --diff-deletion-text: oklch(0.42 0.14 25);
 
-  --diff-line-number: oklch(0.5 0.02 255);
-  --diff-line-number-bg: oklch(0.94 0.008 255);
+  --diff-line-number: oklch(0.5 0 0);
+  --diff-line-number-bg: oklch(0.94 0 0);
 }
 
 .dark {
-  --background: oklch(0.12 0.02 255); /* Deep graphite */
-  --foreground: oklch(0.92 0.02 255); /* Cool text */
-  --card: oklch(0.16 0.02 255);
-  --card-foreground: oklch(0.92 0.02 255);
-  --popover: oklch(0.16 0.02 255);
-  --popover-foreground: oklch(0.92 0.02 255);
+  --background: oklch(0.12 0 0); /* True dark */
+  --foreground: oklch(0.92 0 0);
+  --card: oklch(0.16 0 0);
+  --card-foreground: oklch(0.92 0 0);
+  --popover: oklch(0.16 0 0);
+  --popover-foreground: oklch(0.92 0 0);
   --primary: oklch(0.74 0.12 210); /* Aqua accent */
-  --primary-foreground: oklch(0.12 0.02 255);
-  --secondary: oklch(0.22 0.02 255);
-  --secondary-foreground: oklch(0.92 0.02 255);
-  --muted: oklch(0.24 0.02 255);
-  --muted-foreground: oklch(0.68 0.02 255);
+  --primary-foreground: oklch(0.12 0 0);
+  --secondary: oklch(0.22 0 0);
+  --secondary-foreground: oklch(0.92 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.68 0 0);
   --accent: oklch(0.26 0.06 210);
-  --accent-foreground: oklch(0.92 0.02 255);
+  --accent-foreground: oklch(0.92 0 0);
   --destructive: oklch(0.65 0.22 25);
-  --destructive-foreground: oklch(0.98 0.01 95);
+  --destructive-foreground: oklch(0.98 0 0);
 
   /* Semantic state colors - optimized for dark mode */
   --success: oklch(0.72 0.18 150);
@@ -393,18 +454,18 @@
   --file-markup: oklch(0.66 0.2 45);
   --file-image: oklch(0.68 0.2 335);
 
-  --border: oklch(0.24 0.02 255);
-  --input: oklch(0.24 0.02 255);
-  --input-surface: oklch(0.2 0.02 255);
+  --border: oklch(0.24 0 0);
+  --input: oklch(0.24 0 0);
+  --input-surface: oklch(0.2 0 0);
   --ring: oklch(0.74 0.12 210 / 0.45);
 
-  --sidebar: oklch(0.14 0.02 255);
-  --sidebar-foreground: oklch(0.86 0.02 255);
+  --sidebar: oklch(0.14 0 0);
+  --sidebar-foreground: oklch(0.86 0 0);
   --sidebar-primary: oklch(0.74 0.12 210);
-  --sidebar-primary-foreground: oklch(0.12 0.02 255);
-  --sidebar-accent: oklch(0.24 0.02 255);
-  --sidebar-accent-foreground: oklch(0.92 0.02 255);
-  --sidebar-border: oklch(0.24 0.02 255);
+  --sidebar-primary-foreground: oklch(0.12 0 0);
+  --sidebar-accent: oklch(0.24 0 0);
+  --sidebar-accent-foreground: oklch(0.92 0 0);
+  --sidebar-border: oklch(0.24 0 0);
   --sidebar-ring: oklch(0.74 0.12 210 / 0.45);
 
   /* Diff viewer colors - Graphite Aqua (Dark Mode) */
@@ -418,8 +479,8 @@
   --diff-deletion-word: oklch(0.32 0.17 25);
   --diff-deletion-text: oklch(0.74 0.17 25);
 
-  --diff-line-number: oklch(0.5 0.02 255);
-  --diff-line-number-bg: oklch(0.16 0.015 255);
+  --diff-line-number: oklch(0.5 0 0);
+  --diff-line-number-bg: oklch(0.16 0 0);
 }
 
 /* Apply semantic border color to all elements with border utilities */
@@ -459,8 +520,9 @@ body {
 }
 
 /* Tauri desktop-only styles - Arc browser-style vibrancy
- * "Vibrancy" = frosted glass transparency where wallpaper shows through
- * Requires: window transparent:true + underWindowBackground effect in tauri.conf.json
+ * Requires: transparent:true + underWindowBackground effect in tauri.conf.json
+ * The blur comes from macOS underWindowBackground, not CSS backdrop-filter.
+ * We only need transparent/tinted backgrounds on structural layout slots.
  */
 .tauri body {
   background: transparent;
@@ -473,28 +535,15 @@ body {
   max-width: none;
 }
 
-/* Tauri: Make sidebar wrapper transparent for vibrancy */
-.tauri [data-slot="sidebar-wrapper"] {
+/* Structural transparency - layout containers must be clear for vibrancy */
+.tauri [data-slot="sidebar-wrapper"],
+.tauri [data-slot="sidebar-inset"],
+.tauri [data-slot="sidebar-gap"],
+.tauri [data-slot="sidebar-container"] {
   background: transparent !important;
 }
 
-/* Tauri: Make sidebar inset fully transparent - vibrancy comes from window */
-.tauri [data-slot="sidebar-inset"] {
-  background: transparent !important;
-}
-
-/* Tauri: Make the main content area almost transparent for vibrancy
- * A subtle tint helps distinguish content area from sidebar
- */
-.tauri [data-slot="main-content"] {
-  background: color-mix(in oklch, var(--background) 15%, transparent) !important;
-}
-
-/* Tauri: Make sidebar almost fully transparent to let window vibrancy show through
- * The blur comes from macOS underWindowBackground effect, not CSS backdrop-filter
- * We only add a very subtle tint (5%) for visual hierarchy
- * Use both background and background-color for maximum specificity
- */
+/* Sidebar content: 5% tint for visual hierarchy */
 .tauri [data-slot="sidebar"],
 .tauri [data-slot="sidebar-inner"],
 .tauri [data-sidebar="sidebar"] {
@@ -502,40 +551,16 @@ body {
   background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
 }
 
-/* Tauri: Make sidebar-gap transparent */
-.tauri [data-slot="sidebar-gap"] {
-  background: transparent !important;
+/* Main content: light tint, no CSS blur (native vibrancy handles it) */
+.tauri [data-slot="main-content"] {
+  background: color-mix(in oklch, var(--background) 10%, transparent) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-/* Tauri: Make sidebar-container transparent */
-.tauri [data-slot="sidebar-container"] {
-  background: transparent !important;
-}
-
-/* Tauri: Override sidebar backgrounds at wrapper level
- * The SidebarProvider has has-data-[variant=inset]:bg-sidebar which adds opaque background
- * We need to make all sidebar containers transparent for vibrancy to show through
- */
-.tauri [data-slot="sidebar-wrapper"]:has([data-variant="inset"]) {
-  background: transparent !important;
-}
-
-/* Tauri: Nuclear option - override ANY element with bg-sidebar class
- * Uses [class*="bg-sidebar"] to catch Tailwind variants like has-data-[variant=inset]:bg-sidebar
- */
-.tauri [class*="bg-sidebar"] {
-  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
-  background-color: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
-}
-
-/* Tauri: Also catch-all for any bg-sidebar or bg-background that might block vibrancy */
-.tauri [class*="bg-background"] {
-  background: color-mix(in oklch, var(--background) 15%, transparent) !important;
-}
-
-/* Tauri: Hover-reveal sidebar needs opaque background when overlaying content.
- * macOS vibrancy only blurs the desktop, not the app's own content underneath,
- * so we use CSS backdrop-filter + a solid tinted background for the overlay.
+/* Hover-reveal overlay: opaque + CSS blur for readability over content.
+ * macOS vibrancy only blurs the desktop, not the app's own content,
+ * so we need CSS backdrop-filter when sidebar overlays the workspace.
  */
 [data-hover-reveal="true"] [data-slot="sidebar-container"] {
   background: color-mix(in oklch, var(--sidebar) 82%, transparent) !important;
@@ -547,25 +572,6 @@ body {
 [data-hover-reveal="true"] [data-sidebar="sidebar"] {
   background: transparent !important;
   background-color: transparent !important;
-}
-
-/* Tauri: Handle Tailwind opacity variants (bg-background/40, bg-muted/30, etc.)
- * Tailwind may use escaped slashes in class names, so we match both patterns
- * Keep these very transparent for vibrancy
- */
-.tauri [class*="bg-background/"],
-.tauri [class*="bg-background\\/"] {
-  background: color-mix(in oklch, var(--background) 10%, transparent) !important;
-}
-
-.tauri [class*="bg-sidebar/"],
-.tauri [class*="bg-sidebar\\/"] {
-  background: color-mix(in oklch, var(--sidebar) 5%, transparent) !important;
-}
-
-.tauri [class*="bg-muted/"],
-.tauri [class*="bg-muted\\/"] {
-  background: color-mix(in oklch, var(--muted) 10%, transparent) !important;
 }
 
 /* Custom utilities */
