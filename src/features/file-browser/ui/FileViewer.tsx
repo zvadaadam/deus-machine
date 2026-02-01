@@ -58,6 +58,7 @@ export function FileViewer({ filePath }: FileViewerProps) {
     staleTime: Infinity, // Don't refetch highlighting for same content
   });
 
+  const isEmpty = content != null && content.length === 0;
   const lines = content?.split("\n") || [];
   const isLoading = isContentLoading || isHighlighting;
 
@@ -163,7 +164,7 @@ export function FileViewer({ filePath }: FileViewerProps) {
               </p>
             </div>
           </div>
-        ) : lines.length === 0 ? (
+        ) : isEmpty || lines.length === 0 ? (
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <p className="text-sm">Empty file</p>
           </div>

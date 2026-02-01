@@ -14,6 +14,11 @@ const child = spawn(
   { stdio: 'inherit', env: process.env }
 );
 
+child.on('error', (err) => {
+  console.error('[BOOTSTRAP] Failed to start backend:', err.message);
+  process.exit(1);
+});
+
 child.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 1);
