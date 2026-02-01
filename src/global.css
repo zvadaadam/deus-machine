@@ -568,19 +568,8 @@ body {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Tauri overlay titlebar: traffic-light clearance + drag zone.
- * Traffic lights positioned at (16, 18) via trafficLightPosition in tauri.conf.json.
- * Bottom edge of traffic lights ≈ y:30.
- *
- * Sidebar header: 32px padding-top clears traffic lights. The padding area
- * is part of the global drag zone handled by useTauriDragZone (a window-level
- * mousedown listener for the top 48px, mirroring Arc's transparent overlay).
- *
- * Main content: NO padding — the context bar (h-11 / 44px) sits at the
- * very top. useTauriDragZone covers it too, so dragging works across the
- * full window width without per-element onMouseDown handlers.
- *
- * macOS hides traffic lights in fullscreen → padding removed via .fullscreen. */
+/* Tauri overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).
+ * Removed in fullscreen since macOS hides traffic lights. See useTauriDragZone for drag logic. */
 .tauri:not(.fullscreen) [data-slot="sidebar-header"] {
   padding-top: 32px;
 }

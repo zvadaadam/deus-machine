@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { isTauriEnv } from "@/platform/tauri";
 
+/** macOS updates fullscreen state slightly after the resize event fires;
+ *  this delay lets the animation settle before we re-poll. */
+const FULLSCREEN_SETTLE_MS = 80;
+
 /**
  * Tracks Tauri window fullscreen state and toggles a `.fullscreen` class on
  * `<html>`, mirroring the existing `.tauri` class pattern from main.tsx.
@@ -37,9 +41,7 @@ export function useIsFullscreen(): boolean {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
         unlisten = await getCurrentWindow().onResized(() => {
-          // Small delay — macOS updates fullscreen state slightly after the
-          // resize event fires during the fullscreen animation.
-          setTimeout(check, 80);
+          setTimeout(check, FULLSCREEN_SETTLE_MS);
         });
       } catch {
         // Not in Tauri environment

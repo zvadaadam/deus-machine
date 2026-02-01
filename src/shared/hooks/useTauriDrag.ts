@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { isTauriEnv } from "@/platform/tauri";
 
 /**
@@ -6,7 +6,7 @@ import { isTauriEnv } from "@/platform/tauri";
  * triggering a window drag. Matches buttons, links, inputs, and ARIA roles.
  */
 const INTERACTIVE_SELECTOR =
-  'button, a, input, select, textarea, [role="button"], [role="link"], [data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-action"]';
+  'button, a, input, select, textarea, [role="button"], [role="link"], [role="tab"], [data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-action"]';
 
 /**
  * Eagerly cache the Tauri window module at import time so that
@@ -23,28 +23,6 @@ if (isTauriEnv) {
   import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
     _startDragging = () => getCurrentWindow().startDragging();
   });
-}
-
-/**
- * Returns an `onMouseDown` handler that initiates Tauri window dragging.
- *
- * Uses `getCurrentWindow().startDragging()` instead of `data-tauri-drag-region`
- * because the attribute only applies to the exact element it is set on — any
- * click that lands on a child (even non-interactive text spans) falls through.
- * The manual approach lets us use `closest()` to only skip truly interactive
- * elements, making the drag region much more reliable.
- */
-export function useTauriDrag() {
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!_startDragging || e.button !== 0) return;
-
-    const target = e.target as HTMLElement;
-    if (target.closest(INTERACTIVE_SELECTOR)) return;
-
-    _startDragging();
-  }, []);
-
-  return { onMouseDown };
 }
 
 /**
