@@ -1,23 +1,19 @@
-import { useState } from "react";
-import { Archive } from "lucide-react";
+import { Archive, CircleDot, Eye, GitBranch, GitPullRequest } from "lucide-react";
 import { SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { TextShimmer } from "@/components/ui/text-shimmer";
-import { PulseRadiateIcon } from "@/components/pulse-radiate-icon";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { PixelGrid } from "@/features/session/ui/PixelGrid";
 import { useDiffStats } from "@/features/workspace/api";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
+import { SidebarRow, SidebarRowIconSlot, SidebarRowMain } from "./SidebarRow";
 
 /**
  * WorkspaceItem Component
  * Displays a single workspace with status, changes, and archive functionality
  */
 export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: WorkspaceItemProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
   // Track working duration (compact format — no tenths in sidebar)
   const { duration } = useWorkingDuration({
     status: workspace.session_status,
@@ -36,31 +32,30 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
     const diffDays = Math.floor(diffHours / 24);
 
     if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    return `${diffDays}d`;
-  };
-
-  const getStatusText = (status: string | null | undefined) => {
-    if (!status) return "Archived";
-    if (status === "idle") return formatTime(workspace.updated_at);
-
-    // Show duration for working status (no tenths in sidebar)
-    if (status === "working" && duration > 0) {
-      return formatDuration(duration, false);
-    }
-
-    const capitalized = status.charAt(0).toUpperCase() + status.slice(1);
-    return shouldShimmer(status) ? `${capitalized}...` : capitalized;
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
   };
 
   // Get the display status (handles unread, working, idle, etc.)
   const displayStatus = getDisplayStatus(workspace);
   const statusConfig = STATUS_CONFIG[displayStatus];
+  const statusTextClass = statusConfig.text;
 
-  const shouldShimmer = (status: string | null | undefined) => {
-    return status === "working" || status === "compacting";
+  const getStatusText = () => {
+    if (workspace.state === "archived" || !workspace.session_status) return "Archived";
+    if (displayStatus === "idle") return formatTime(workspace.updated_at);
+    if (displayStatus === "unread") return "Needs review";
+    if (displayStatus === "working") {
+      return duration > 0 ? formatDuration(duration, false) : STATUS_CONFIG.working.labelActive;
+    }
+    if (displayStatus === "compacting") return STATUS_CONFIG.compacting.labelActive;
+    if (displayStatus === "error") return STATUS_CONFIG.error.label;
+    return STATUS_CONFIG[displayStatus].label;
   };
+
+  const statusText = getStatusText();
+  const showStatusDot = Boolean(workspace.directory_name && statusText);
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
@@ -74,24 +69,32 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
   };
 
   const isArchived = workspace.state === "archived";
-  const showArchiveButton = isHovered && !isArchived && !!onArchive;
+  const canArchive = !isArchived && !!onArchive;
+
+  const StatusIcon = (() => {
+    if (isArchived) return Archive;
+    switch (displayStatus) {
+      case "error":
+        return CircleDot;
+      case "unread":
+        return Eye;
+      case "compacting":
+        return GitPullRequest;
+      case "idle":
+      default:
+        return GitBranch;
+    }
+  })();
 
   return (
     <SidebarMenuSubItem>
-      <div
+      <SidebarRow
+        variant="workspace"
+        isActive={isActive}
         role="button"
         tabIndex={0}
         data-workspace-id={workspace.id}
-        className={cn(
-          // Base layout
-          "relative mb-1 flex min-h-[56px] items-center justify-between gap-3 px-2 py-3",
-          "cursor-pointer rounded-lg",
-          "transition-all duration-[80ms] ease-out",
-
-          // State-based backgrounds - subtle surface elevation
-          isActive && "bg-foreground/5",
-          !isActive && "hover:bg-foreground/5"
-        )}
+        className="cursor-pointer"
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
         onClick={onClick}
@@ -101,77 +104,60 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
         onKeyUp={(e) => {
           if (e.key === "Enter" || e.key === " ") onClick();
         }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="flex min-w-0 items-center gap-3">
-          {workspace.session_status === "working" ? (
-            <PixelGrid variant="generating" size={14} className="shrink-0" />
-          ) : (
-            <PulseRadiateIcon className={cn("h-4 w-4 shrink-0", statusConfig.text)} />
-          )}
-          <div className="flex min-w-0 flex-col">
-            {/* Branch name on top */}
-            <span className="text-foreground truncate text-sm font-normal">{workspace.branch}</span>
-            {/* Directory name and status on bottom */}
-            <div className="flex min-w-0 items-center gap-0">
-              <span className="text-muted-foreground/60 truncate text-xs">
+        <SidebarRowMain indent="workspace" className="items-start">
+          <SidebarRowIconSlot className="mt-0.5">
+            {displayStatus === "working" ? (
+              <PixelGrid variant="generating" size={14} />
+            ) : (
+              <StatusIcon
+                className={cn("h-4 w-4", isArchived ? "text-muted-foreground" : statusTextClass)}
+              />
+            )}
+          </SidebarRowIconSlot>
+          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-3">
+            <span className="text-foreground truncate text-[13px] font-normal">
+              {workspace.branch}
+            </span>
+            {hasChanges ? (
+              <div
+                className={cn(
+                  "flex items-center gap-2 self-start justify-self-end pr-1 text-xs font-medium transition-opacity",
+                  canArchive && "group-hover/sidebar-row:opacity-0"
+                )}
+              >
+                {additions > 0 && <span className="text-success">+{additions}</span>}
+                {deletions > 0 && <span className="text-destructive">-{deletions}</span>}
+              </div>
+            ) : null}
+            <div className="col-span-2 flex min-w-0 items-center gap-1">
+              <span className="text-muted-foreground/70 truncate text-xs">
                 {workspace.directory_name}
               </span>
-              <span className="text-muted-foreground/60 shrink-0 text-xs">・</span>
-              {shouldShimmer(workspace.session_status) ? (
-                <TextShimmer
-                  as="span"
-                  duration={2}
-                  className="shrink-0 text-xs"
-                  color={
-                    workspace.session_status === "working"
-                      ? "var(--status-working)"
-                      : "var(--status-compacting)"
-                  }
-                  gradientColor={
-                    workspace.session_status === "working"
-                      ? "color-mix(in oklch, var(--status-working) 60%, white)"
-                      : "color-mix(in oklch, var(--status-compacting) 60%, white)"
-                  }
-                >
-                  {getStatusText(workspace.session_status)}
-                </TextShimmer>
-              ) : (
-                <span className={cn("shrink-0 text-xs", statusConfig.text)}>
-                  {getStatusText(workspace.session_status)}
-                </span>
+              {showStatusDot && <span className="text-muted-foreground/60 text-xs">·</span>}
+              {statusText && (
+                <span className={cn("shrink-0 text-xs", statusTextClass)}>{statusText}</span>
               )}
             </div>
           </div>
-        </div>
-        {showArchiveButton ? (
+        </SidebarRowMain>
+        {canArchive ? (
           <Button
             variant="ghost"
             size="sm"
             onClick={handleArchive}
             aria-label={`Archive workspace ${workspace.branch}`}
             title="Archive workspace"
-            className="text-muted-foreground hover:text-foreground h-7 px-2"
+            className={cn(
+              "text-muted-foreground hover:text-foreground h-7 px-2",
+              "absolute top-2 right-1 opacity-0 transition-opacity",
+              "group-hover/sidebar-row:opacity-100"
+            )}
           >
             <Archive className="h-3.5 w-3.5" />
           </Button>
-        ) : hasChanges ? (
-          /* File changes badge for workspaces with changes */
-          <div className="flex shrink-0 items-center gap-1 rounded border px-1">
-            {additions > 0 && (
-              <span className="text-2xs text-success inline-flex items-center rounded py-0.5 font-mono font-normal whitespace-nowrap">
-                +{additions}
-              </span>
-            )}
-            {deletions > 0 && (
-              <span className="text-2xs text-destructive inline-flex items-center rounded py-0.5 font-mono font-normal whitespace-nowrap">
-                -{deletions}
-              </span>
-            )}
-          </div>
         ) : null}
-      </div>
+      </SidebarRow>
     </SidebarMenuSubItem>
   );
 }
