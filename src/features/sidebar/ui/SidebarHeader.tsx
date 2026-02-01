@@ -2,7 +2,6 @@ import { PanelLeft } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type { SidebarHeaderProps } from "../model/types";
 
@@ -20,43 +19,30 @@ export function SidebarHeader({
   const { isMobile } = useSidebar();
   const initials = profile.username.slice(0, 2).toUpperCase();
 
-  // Show tooltip on desktop to help users discover the keyboard shortcut
-  const showTooltip = !isMobile;
-
   // Platform-aware modifier key for keyboard shortcut display
   const modKey = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘" : "Ctrl+";
+  const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
 
   return (
     <SidebarHeaderUI className="p-2">
       <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleSidebar}
-              aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-              className={cn(
-                "h-8 w-8 shrink-0",
-                // Expanded: filled/active state, positioned at end
-                isExpanded && "bg-foreground/5 text-foreground hover:bg-foreground/10 order-last",
-                // Collapsed: outline/inactive state, positioned at top
-                !isExpanded &&
-                  "text-muted-foreground hover:bg-foreground/5 hover:text-foreground order-first"
-              )}
-            >
-              <PanelLeft className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          {showTooltip && (
-            <TooltipContent side="right" align="center">
-              <p className="flex items-center gap-2 text-xs">
-                <span>{isExpanded ? "Collapse" : "Expand"} sidebar</span>
-                <kbd className="font-mono text-xs opacity-60">{modKey}B</kbd>
-              </p>
-            </TooltipContent>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleSidebar}
+          aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+          title={!isMobile ? toggleTitle : undefined}
+          className={cn(
+            "h-8 w-8 shrink-0",
+            // Expanded: filled/active state, positioned at end
+            isExpanded && "bg-foreground/5 text-foreground hover:bg-foreground/10 order-last",
+            // Collapsed: outline/inactive state, positioned at top
+            !isExpanded &&
+              "text-muted-foreground hover:bg-foreground/5 hover:text-foreground order-first"
           )}
-        </Tooltip>
+        >
+          <PanelLeft className="h-4 w-4" />
+        </Button>
 
         {/* Settings Button - Avatar + Name */}
         <Button

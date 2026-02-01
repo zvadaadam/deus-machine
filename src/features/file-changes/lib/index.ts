@@ -3,4 +3,4 @@
  * Barrel exports for utility functions
  */
 
-export { buildFileTree, getFilePaths, findNodeByPath, getAutoExpandPaths } from "./buildFileTree";
+export { buildFileTree, getAutoExpandPaths } from "./buildFileTree";

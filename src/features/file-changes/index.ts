@@ -4,24 +4,16 @@
  */
 
 // Types
-export type {
-  FileChangeStatus,
-  FileChangeTreeNode,
-  HighlightedDiffLine,
-  HighlightedHunk,
-  FileDiffData,
-  TreeState,
-  WordDiffCacheEntry,
-} from "./types";
+export type { FileChangeStatus, FileChangeTreeNode } from "./types";
 
 // Constants
-export { DIFF_VIEWER, FILE_TREE, ANIMATION } from "./constants";
+export { FILE_TREE } from "./constants";
 
 // UI Components
-export { FileChangesPanel, FileChangeTree, FileTreeNode, FileStatusIcon } from "./ui";
+export { FileChangesPanel, FileChangeTree, FileTreeNode } from "./ui";
 
 // Hooks
 export { useTreeState } from "./hooks";
 
 // Utilities
-export { buildFileTree, getFilePaths, findNodeByPath, getAutoExpandPaths } from "./lib";
+export { buildFileTree, getAutoExpandPaths } from "./lib";

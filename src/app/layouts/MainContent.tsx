@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
@@ -18,16 +18,8 @@ import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { FileChangesPanel } from "@/features/file-changes";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import { BrowserPanel } from "@/features/browser";
-import {
-  Button,
-  SidebarInset,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  useSidebar,
-} from "@/components/ui";
-import { FolderOpen, ChevronsRight, PanelLeft } from "lucide-react";
+import { SidebarInset, Tabs, TabsContent, useSidebar } from "@/components/ui";
+import { FolderOpen, PanelLeft } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
@@ -73,10 +65,12 @@ export function MainContent({
   } = useWorkspaceLayout(selectedWorkspaceId);
 
   // Fetch file changes for the workspace
-  const { data: fileChanges = [] } = useFileChanges(
+  const { data: fileChangesData } = useFileChanges(
     selectedWorkspaceId,
     selectedWorkspace?.session_status
   );
+  // Stable empty array reference to prevent unnecessary re-renders in child effects
+  const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
   // Callback to fetch diff for a specific file
   const fetchDiff = useCallback(
@@ -86,7 +80,11 @@ export function MainContent({
       }
       try {
         const data = await WorkspaceService.fetchFileDiff(selectedWorkspaceId, filePath);
-        return { diff: data.diff || "No diff available" };
+        return {
+          diff: data.diff ?? "",
+          oldContent: data.oldContent ?? null,
+          newContent: data.newContent ?? null,
+        };
       } catch (error) {
         console.error("Failed to fetch diff:", error);
         throw error instanceof Error ? error : new Error("Unknown error");
@@ -148,7 +146,7 @@ export function MainContent({
   useEffect(() => {
     if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
       prevWorkspaceIdRef.current = currentWorkspaceId;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+
       setBrowserSelectedFile(null);
       createPRHandlerRef.current = null;
 
@@ -253,6 +251,22 @@ export function MainContent({
   }, [handleMainTabAdd, selectedWorkspace]);
 
   /**
+   * Handle file selection from FileChangesPanel.
+   * Memoized to prevent unstable callback reference from re-triggering child effects.
+   */
+  const handleFileSelect = useCallback(
+    (path: string | null) => {
+      setSelectedFilePath(path);
+      // Only update if actually changing — prevents unnecessary store writes
+      // that create new object references and cascade re-renders
+      if (!rightPanelExpanded) {
+        setRightPanelExpanded(true);
+      }
+    },
+    [setSelectedFilePath, setRightPanelExpanded, rightPanelExpanded]
+  );
+
+  /**
    * Handle tab change in code panel
    */
   const handleCodeTabChange = useCallback(
@@ -282,7 +296,9 @@ export function MainContent({
     if (rightSideTab !== "code" && rightSideTab !== "browser" && rightPanelExpanded) {
       setRightPanelExpanded(false);
     }
-  }, [rightPanelExpanded, rightSideTab, setRightPanelExpanded]);
+    // setRightPanelExpanded is a stable callback (module-level action), safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rightPanelExpanded, rightSideTab]);
 
   /**
    * Collapse panel to narrow mode
@@ -431,32 +447,6 @@ export function MainContent({
                       onValueChange={(v) => handleCodeTabChange(v as RightPanelTab)}
                       className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     >
-                      <div className="bg-background/50 border-border/40 flex h-9 flex-shrink-0 items-center border-b px-2">
-                        <TabsList className="flex-1 justify-start">
-                          <TabsTrigger value="changes" className="min-w-[88px] justify-center">
-                            Changes
-                          </TabsTrigger>
-                          <TabsTrigger value="files" className="min-w-[88px] justify-center">
-                            Files
-                          </TabsTrigger>
-                        </TabsList>
-
-                        {panelWide && (
-                          <div className="border-border/30 flex h-full items-center border-l px-3">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 rounded-lg"
-                              onClick={handlePanelCollapse}
-                              title="Collapse panel"
-                            >
-                              <ChevronsRight className="h-[18px] w-[18px]" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Tab Content */}
                       <>
                         {/* Changes Tab - New tree view with unified scroll */}
                         <TabsContent
@@ -468,10 +458,39 @@ export function MainContent({
                             fileChanges={fileChanges}
                             fetchDiff={fetchDiff}
                             isExpanded={panelWide}
-                            onFileSelect={(path) => {
-                              setSelectedFilePath(path);
-                              setRightPanelExpanded(true);
-                            }}
+                            onFileSelect={handleFileSelect}
+                            onDiffClose={handlePanelCollapse}
+                            headerSlot={
+                              <div className="border-border/40 flex h-9 flex-shrink-0 items-center gap-1 border-b px-2">
+                                <button
+                                  onClick={() => handleCodeTabChange("changes")}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                                    rightPanelTab === "changes"
+                                      ? "bg-accent text-foreground font-medium"
+                                      : "text-muted-foreground/60 hover:text-muted-foreground"
+                                  )}
+                                >
+                                  Changes
+                                  {fileChanges.length > 0 && (
+                                    <span className="bg-muted-foreground/20 text-muted-foreground rounded px-1.5 py-0.5 text-[10px] leading-none font-medium">
+                                      {fileChanges.length}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleCodeTabChange("files")}
+                                  className={cn(
+                                    "inline-flex items-center rounded-md px-2.5 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                                    rightPanelTab === "files"
+                                      ? "bg-accent text-foreground font-medium"
+                                      : "text-muted-foreground/60 hover:text-muted-foreground"
+                                  )}
+                                >
+                                  All files
+                                </button>
+                              </div>
+                            }
                           />
                         </TabsContent>
 
@@ -483,17 +502,48 @@ export function MainContent({
                           <div className="flex h-full overflow-hidden">
                             <div
                               className={cn(
-                                "flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+                                "flex flex-shrink-0 flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
                                 panelWide ? "border-border/40 w-[280px] border-r" : "flex-1"
                               )}
                             >
-                              <FileBrowserPanel
-                                selectedWorkspace={selectedWorkspace}
-                                onFileClick={(path) => {
-                                  setBrowserSelectedFile(path);
-                                  setRightPanelExpanded(true);
-                                }}
-                              />
+                              <div className="border-border/40 flex h-9 flex-shrink-0 items-center gap-1 border-b px-2">
+                                <button
+                                  onClick={() => handleCodeTabChange("changes")}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                                    rightPanelTab === "changes"
+                                      ? "bg-accent text-foreground font-medium"
+                                      : "text-muted-foreground/60 hover:text-muted-foreground"
+                                  )}
+                                >
+                                  Changes
+                                  {fileChanges.length > 0 && (
+                                    <span className="bg-muted-foreground/20 text-muted-foreground rounded px-1.5 py-0.5 text-[10px] leading-none font-medium">
+                                      {fileChanges.length}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleCodeTabChange("files")}
+                                  className={cn(
+                                    "inline-flex items-center rounded-md px-2.5 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                                    rightPanelTab === "files"
+                                      ? "bg-accent text-foreground font-medium"
+                                      : "text-muted-foreground/60 hover:text-muted-foreground"
+                                  )}
+                                >
+                                  All files
+                                </button>
+                              </div>
+                              <div className="flex-1 overflow-hidden">
+                                <FileBrowserPanel
+                                  selectedWorkspace={selectedWorkspace}
+                                  onFileClick={(path) => {
+                                    setBrowserSelectedFile(path);
+                                    setRightPanelExpanded(true);
+                                  }}
+                                />
+                              </div>
                             </div>
 
                             {panelWide && (

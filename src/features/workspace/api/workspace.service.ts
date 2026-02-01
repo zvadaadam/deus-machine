@@ -51,8 +51,20 @@ export const WorkspaceService = {
   /**
    * Fetch diff for a specific file
    */
-  fetchFileDiff: async (id: string, file: string): Promise<{ diff: string }> => {
-    return apiClient.get<{ diff: string }>(ENDPOINTS.WORKSPACE_DIFF_FILE(id, file));
+  fetchFileDiff: async (
+    id: string,
+    file: string
+  ): Promise<{ diff: string; oldContent: string | null; newContent: string | null }> => {
+    const data = await apiClient.get<{
+      diff: string;
+      old_content?: string | null;
+      new_content?: string | null;
+    }>(ENDPOINTS.WORKSPACE_DIFF_FILE(id, file));
+    return {
+      diff: data.diff ?? "",
+      oldContent: data.old_content ?? null,
+      newContent: data.new_content ?? null,
+    };
   },
 
   /**

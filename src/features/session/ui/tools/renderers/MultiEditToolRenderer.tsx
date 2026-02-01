@@ -1,18 +1,13 @@
 /**
- * MultiEdit Tool Renderer (REFACTORED with BaseToolRenderer)
+ * MultiEdit Tool Renderer
  *
- * Specialized renderer for the MultiEdit tool (multiple edits to one file)
- * Shows all edits with before/after diffs
- *
- * BEFORE: 176 LOC
- * AFTER: ~115 LOC
+ * Renders multiple edits to one file, each as a proper unified diff
+ * powered by @pierre/diffs.
  */
 
-import { useState } from "react";
-import { FilePenLine, Copy, Check } from "lucide-react";
+import { FilePenLine } from "lucide-react";
 import { BaseToolRenderer } from "../components";
-import { FilePathDisplay } from "../components/FilePathDisplay";
-import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { UnifiedDiff } from "../components/UnifiedDiff";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
@@ -36,16 +31,6 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
     : [];
   const editCount = safeEdits.length;
   const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
-
-  // Single clipboard util + per-item key to localize feedback
-  const { copy } = useCopyToClipboard();
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const handleCopy = (key: string, text: string) => {
-    copy(text);
-    setCopiedKey(key);
-    window.setTimeout(() => setCopiedKey(null), 1500);
-  };
 
   return (
     <BaseToolRenderer
@@ -81,71 +66,21 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
 
         return (
           <div className="space-y-3 px-2 pb-2">
-            <div className="text-muted-foreground text-xs">
-              {editCount} edit{editCount !== 1 ? "s" : ""} to apply:
-            </div>
-
             {safeEdits.map((edit: Edit, index: number) => (
               <div key={index} className="space-y-1">
-                {/* Edit number header */}
-                <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
-                  <span className="bg-muted rounded px-1.5 py-0.5">
-                    Edit {index + 1}/{editCount}
-                  </span>
-                </div>
-
-                {/* Side-by-side diff */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {/* Before (old_string) */}
-                  <div className="space-y-1">
-                    <div className="bg-destructive/10 border-l-destructive flex items-center justify-between rounded-t border-l-2 px-2 py-1">
-                      <span className="text-destructive font-medium">Before</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopy(`old-${index}`, edit.old_string);
-                        }}
-                        className="hover:bg-destructive/20 rounded p-1 transition-colors"
-                        title="Copy before"
-                        aria-label="Copy before text"
-                      >
-                        {copiedKey === `old-${index}` ? (
-                          <Check className="text-destructive h-3 w-3" />
-                        ) : (
-                          <Copy className="text-destructive h-3 w-3" />
-                        )}
-                      </button>
-                    </div>
-                    <pre className="bg-destructive/5 border-destructive/20 text-destructive-foreground overflow-x-auto rounded-b border p-2 font-mono break-words whitespace-pre-wrap">
-                      {edit.old_string}
-                    </pre>
+                {editCount > 1 && (
+                  <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                    <span className="bg-muted rounded px-1.5 py-0.5">
+                      Edit {index + 1}/{editCount}
+                    </span>
                   </div>
-
-                  {/* After (new_string) */}
-                  <div className="space-y-1">
-                    <div className="bg-success/10 border-l-success flex items-center justify-between rounded-t border-l-2 px-2 py-1">
-                      <span className="text-success font-medium">After</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopy(`new-${index}`, edit.new_string);
-                        }}
-                        className="hover:bg-success/20 rounded p-1 transition-colors"
-                        title="Copy after"
-                        aria-label="Copy after text"
-                      >
-                        {copiedKey === `new-${index}` ? (
-                          <Check className="text-success h-3 w-3" />
-                        ) : (
-                          <Copy className="text-success h-3 w-3" />
-                        )}
-                      </button>
-                    </div>
-                    <pre className="bg-success/5 border-success/20 text-success-foreground overflow-x-auto rounded-b border p-2 font-mono break-words whitespace-pre-wrap">
-                      {edit.new_string}
-                    </pre>
-                  </div>
-                </div>
+                )}
+                <UnifiedDiff
+                  oldString={edit.old_string}
+                  newString={edit.new_string}
+                  fileName={safeFilePath}
+                  maxHeight="300px"
+                />
               </div>
             ))}
           </div>
