@@ -44,10 +44,6 @@ export function AppSidebar({
 
   const isExpanded = state === "expanded" || hoverOpen;
 
-  // Debounced navigation ref for keyboard nav
-  const navigationTimeoutRef = React.useRef<NodeJS.Timeout>();
-  const lastNavigationRef = React.useRef<{ workspace: any; repoId: string } | null>(null);
-
   // Apply priority-based sorting, then custom ordering
   // Priority logic: unread/error → working → idle, then user's manual order within each priority
   const orderedRepositories = React.useMemo(() => {
@@ -70,117 +66,6 @@ export function AppSidebar({
       return 0;
     });
   }, [repositories, repositoryOrder, reorderRepositories]);
-
-  // Flatten all workspaces with repo info for keyboard navigation
-  const allWorkspaces = React.useMemo(() => {
-    return orderedRepositories.flatMap((repo) =>
-      repo.workspaces.map((workspace) => ({
-        workspace,
-        repoId: repo.repo_id,
-      }))
-    );
-  }, [orderedRepositories]);
-
-  // Keyboard navigation for workspaces (Up/Down arrows)
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if no input/textarea is focused
-      const activeElement = document.activeElement;
-      const isInputFocused =
-        activeElement?.tagName === "INPUT" ||
-        activeElement?.tagName === "TEXTAREA" ||
-        activeElement?.getAttribute("contenteditable") === "true";
-
-      if (isInputFocused) return;
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      if (!allWorkspaces.length) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Remove focus rings
-      if (activeElement instanceof HTMLElement) {
-        activeElement.blur();
-      }
-
-      // Use last navigation target if debouncing, otherwise use actual selected
-      const currentWorkspaceId = lastNavigationRef.current?.workspace.id || selectedWorkspaceId;
-      let targetItem;
-
-      // Cmd/Ctrl + Arrow: Jump between repositories
-      if (e.metaKey || e.ctrlKey) {
-        const currentIndex = allWorkspaces.findIndex((w) => w.workspace.id === currentWorkspaceId);
-        const currentRepoId = currentIndex >= 0 ? allWorkspaces[currentIndex].repoId : null;
-
-        if (e.key === "ArrowDown") {
-          // Find first workspace of next repo
-          const nextRepoIndex =
-            currentIndex >= 0
-              ? allWorkspaces.findIndex((w, i) => i > currentIndex && w.repoId !== currentRepoId)
-              : 0;
-          targetItem = nextRepoIndex >= 0 ? allWorkspaces[nextRepoIndex] : allWorkspaces[0];
-        } else {
-          // Find first workspace of previous repo
-          let prevRepoIndex = -1;
-          for (let i = currentIndex - 1; i >= 0; i--) {
-            if (allWorkspaces[i].repoId !== currentRepoId) {
-              // Found different repo, now find its first workspace
-              const targetRepoId = allWorkspaces[i].repoId;
-              prevRepoIndex = allWorkspaces.findIndex((w) => w.repoId === targetRepoId);
-              break;
-            }
-          }
-          targetItem =
-            prevRepoIndex >= 0
-              ? allWorkspaces[prevRepoIndex]
-              : allWorkspaces[allWorkspaces.length - 1];
-        }
-      } else {
-        // Normal arrow: Navigate within all workspaces
-        const currentIndex = allWorkspaces.findIndex((w) => w.workspace.id === currentWorkspaceId);
-
-        if (e.key === "ArrowDown") {
-          const nextIndex = currentIndex < allWorkspaces.length - 1 ? currentIndex + 1 : 0;
-          targetItem = allWorkspaces[nextIndex];
-        } else {
-          const prevIndex = currentIndex > 0 ? currentIndex - 1 : allWorkspaces.length - 1;
-          targetItem = allWorkspaces[prevIndex];
-        }
-      }
-
-      // Store this navigation for next keypress
-      lastNavigationRef.current = targetItem;
-
-      // If target workspace's repo is collapsed, expand it immediately
-      if (collapsedRepos.has(targetItem.repoId)) {
-        toggleRepoCollapse(targetItem.repoId);
-      }
-
-      // Scroll to it on next frame
-      requestAnimationFrame(() => {
-        const element = document.querySelector(`[data-workspace-id="${targetItem.workspace.id}"]`);
-        if (element) {
-          element.scrollIntoView({ behavior: "instant", block: "nearest" });
-        }
-      });
-
-      // Debounce workspace selection (150ms captures natural pause between scanning vs arriving)
-      clearTimeout(navigationTimeoutRef.current);
-      navigationTimeoutRef.current = setTimeout(() => {
-        // Wrap in startTransition to keep UI responsive during content loading
-        React.startTransition(() => {
-          onWorkspaceClick(targetItem.workspace);
-          lastNavigationRef.current = null; // Clear after selection completes
-        });
-      }, 150);
-    };
-
-    window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown, { capture: true });
-      clearTimeout(navigationTimeoutRef.current);
-    };
-  }, [allWorkspaces, selectedWorkspaceId, onWorkspaceClick, collapsedRepos, toggleRepoCollapse]);
 
   // Sensors for drag detection (mouse, touch, keyboard)
   const sensors = useSensors(
@@ -216,7 +101,7 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar variant="inset" collapsible="offcanvas">
+    <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
       <SidebarHeader
         profile={profile}
         onOpenSettings={openSettingsModal}
@@ -225,13 +110,13 @@ export function AppSidebar({
       />
 
       {/* Repositories List - Single tree for smooth animations */}
-      <SidebarContent>
+      <SidebarContent className="scrollbar-hidden">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={orderedRepositories.map((r) => r.repo_id)}
             strategy={verticalListSortingStrategy}
           >
-            <SidebarMenu className="gap-2 px-1 py-2">
+            <SidebarMenu className="gap-1 px-2 py-2">
               {orderedRepositories.map((repo) => (
                 <DraggableRepository
                   key={repo.repo_id}
@@ -251,7 +136,7 @@ export function AppSidebar({
         </DndContext>
       </SidebarContent>
 
-      <SidebarFooter onAddRepository={onAddRepository} />
+      <SidebarFooter onAddRepository={onAddRepository} onOpenSettings={openSettingsModal} />
     </Sidebar>
   );
 }

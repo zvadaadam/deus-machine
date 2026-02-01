@@ -5,7 +5,7 @@ import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
 import type { Repo } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsModal } from "@/features/settings";
-import { useKeyboardShortcuts } from "@/shared/hooks";
+import { useKeyboardShortcuts, useZoom } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -85,6 +85,9 @@ export function MainLayout() {
   const archiveWorkspaceMutation = useArchiveWorkspace();
   const addRepoMutation = useAddRepo();
   const updateSystemPromptMutation = useUpdateSystemPrompt();
+
+  // Zoom (Cmd+=/Cmd+-/Cmd+0)
+  useZoom();
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -253,8 +256,8 @@ export function MainLayout() {
       className="h-screen"
       style={
         {
-          "--sidebar-width": "280px",
-          "--sidebar-width-mobile": "280px",
+          "--sidebar-width": "340px",
+          "--sidebar-width-mobile": "340px",
         } as React.CSSProperties
       }
     >
@@ -262,7 +265,7 @@ export function MainLayout() {
       {loading ? (
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
-        <Sidebar variant="inset" collapsible="offcanvas">
+        <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
           <SidebarContent className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3 text-center">
               <FolderOpen
