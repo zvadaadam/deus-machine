@@ -259,6 +259,7 @@ export function useTreeState(
   // Collapse all directories
   const collapseAll = useCallback(() => {
     setExpandedPathsState(new Set());
+    hasAutoExpandedRef.current = true; // Prevent auto-expand from re-triggering
     if (workspaceId) {
       saveToStorage(workspaceId, new Set());
     }
