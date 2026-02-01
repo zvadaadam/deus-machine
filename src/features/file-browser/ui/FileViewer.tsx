@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { highlightDiffLine } from "@/shared/lib/syntaxHighlighter";
+import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { useTheme } from "@/app/providers";
 import { useFileContent } from "../api/useFileContent";
@@ -50,17 +50,10 @@ export function FileViewer({ filePath }: FileViewerProps) {
   // Fetch file content from disk
   const { data: content, isLoading: isContentLoading, error } = useFileContent(filePath);
 
-  // Split content into lines and highlight
+  // Highlight entire file at once (single Shiki call instead of per-line)
   const { data: highlightedLines, isLoading: isHighlighting } = useQuery({
     queryKey: ["file-highlight", filePath, content, shikiTheme],
-    queryFn: async () => {
-      if (!content) return [];
-      const lines = content.split("\n");
-      const highlighted = await Promise.all(
-        lines.map((line) => highlightDiffLine(line, language, shikiTheme))
-      );
-      return highlighted;
-    },
+    queryFn: () => highlightFileLines(content!, language, shikiTheme),
     enabled: !!content,
     staleTime: Infinity, // Don't refetch highlighting for same content
   });
@@ -162,7 +155,11 @@ export function FileViewer({ filePath }: FileViewerProps) {
           <div className="text-muted-foreground/60 flex h-64 items-center justify-center">
             <div className="flex max-w-sm flex-col items-center gap-2 text-center">
               <p className="text-sm">
-                {error instanceof Error ? error.message : "Failed to load file"}
+                {error instanceof Error
+                  ? error.message
+                  : typeof error === "string"
+                    ? error
+                    : "Failed to load file"}
               </p>
             </div>
           </div>

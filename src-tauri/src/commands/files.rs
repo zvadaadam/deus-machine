@@ -1,5 +1,13 @@
 use crate::files::{FILE_SCANNER, FileTreeResponse};
 
+/// Read a text file from disk and return its content
+#[tauri::command]
+pub fn read_text_file(file_path: String) -> Result<String, String> {
+    std::fs::read_to_string(&file_path).map_err(|e| {
+        format!("Failed to read {}: {}", file_path, e)
+    })
+}
+
 /// Scan workspace directory and return file tree
 #[tauri::command]
 pub fn scan_workspace_files(workspace_path: String) -> Result<FileTreeResponse, String> {
