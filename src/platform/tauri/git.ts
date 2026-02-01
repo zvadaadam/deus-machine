@@ -32,9 +32,9 @@ export function gitDiffStats(
   defaultBranch: string
 ): Promise<TauriDiffStats> {
   return invoke<TauriDiffStats>("git_diff_stats", {
-    workspace_path: workspacePath,
-    parent_branch: parentBranch,
-    default_branch: defaultBranch,
+    workspacePath,
+    parentBranch,
+    defaultBranch,
   });
 }
 
@@ -44,9 +44,9 @@ export function gitDiffFiles(
   defaultBranch: string
 ): Promise<TauriDiffFile[]> {
   return invoke<TauriDiffFile[]>("git_diff_files", {
-    workspace_path: workspacePath,
-    parent_branch: parentBranch,
-    default_branch: defaultBranch,
+    workspacePath,
+    parentBranch,
+    defaultBranch,
   });
 }
 
@@ -57,15 +57,15 @@ export function gitDiffFile(
   filePath: string
 ): Promise<TauriFileDiff> {
   return invoke<TauriFileDiff>("git_diff_file", {
-    workspace_path: workspacePath,
-    parent_branch: parentBranch,
-    default_branch: defaultBranch,
-    file_path: filePath,
+    workspacePath,
+    parentBranch,
+    defaultBranch,
+    filePath,
   });
 }
 
 export function gitDetectDefaultBranch(rootPath: string): Promise<string> {
   return invoke<string>("git_detect_default_branch", {
-    root_path: rootPath,
+    rootPath,
   });
 }

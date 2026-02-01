@@ -558,7 +558,9 @@ export function MainContent({
                                 <FileBrowserPanel
                                   selectedWorkspace={selectedWorkspace}
                                   onFileClick={(path) => {
-                                    setBrowserSelectedFile(path);
+                                    // Construct absolute path from relative path returned by Rust scanner
+                                    const absolutePath = `${selectedWorkspace!.root_path}/.conductor/${selectedWorkspace!.directory_name}/${path}`;
+                                    setBrowserSelectedFile(absolutePath);
                                     setRightPanelExpanded(true);
                                   }}
                                 />
