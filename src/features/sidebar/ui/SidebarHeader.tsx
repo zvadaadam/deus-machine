@@ -1,4 +1,4 @@
-import { PanelLeft } from "lucide-react";
+import { ChevronDown, PanelLeftClose } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -24,44 +24,39 @@ export function SidebarHeader({
   const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
 
   return (
-    <SidebarHeaderUI className="p-2">
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleSidebar}
-          aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-          title={!isMobile ? toggleTitle : undefined}
-          className={cn(
-            "h-8 w-8 shrink-0",
-            // Expanded: filled/active state, positioned at end
-            isExpanded && "bg-foreground/5 text-foreground hover:bg-foreground/10 order-last",
-            // Collapsed: outline/inactive state, positioned at top
-            !isExpanded &&
-              "text-muted-foreground hover:bg-foreground/5 hover:text-foreground order-first"
-          )}
-        >
-          <PanelLeft className="h-4 w-4" />
-        </Button>
+    <SidebarHeaderUI className="flex-row items-center justify-between py-2.5">
+      <Button
+        variant="ghost"
+        aria-label="Open settings"
+        onClick={onOpenSettings}
+        className={cn(
+          "flex min-w-0 flex-1 items-center justify-start gap-2 rounded-md px-1 py-1.5",
+          "has-[>svg]:px-1"
+        )}
+      >
+        <Avatar shape="square" className="h-7 w-7 shrink-0 rounded-md">
+          <AvatarFallback shape="square" className="rounded-md text-[11px] font-semibold">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        {isExpanded && (
+          <>
+            <span className="truncate text-sm font-semibold">{profile.username}</span>
+            <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
+          </>
+        )}
+      </Button>
 
-        {/* Settings Button - Avatar + Name */}
-        <Button
-          variant="ghost"
-          aria-label="Open settings"
-          onClick={onOpenSettings}
-          className={cn(
-            "h-auto min-w-0 flex-1 justify-start gap-3 rounded-lg p-2",
-            "hover:bg-foreground/5"
-          )}
-        >
-          <Avatar shape="square" className="h-8 w-8 shrink-0">
-            <AvatarFallback shape="square" className="text-xs">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <span className="truncate text-sm font-medium">{profile.username}</span>
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggleSidebar}
+        aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+        title={!isMobile ? toggleTitle : undefined}
+        className={cn("text-muted-foreground h-8 w-8 shrink-0", !isExpanded && "opacity-80")}
+      >
+        <PanelLeftClose className="h-4 w-4" />
+      </Button>
     </SidebarHeaderUI>
   );
 }
