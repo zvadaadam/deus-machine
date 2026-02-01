@@ -510,6 +510,68 @@ src/
 - Follow single responsibility principle
 - Keep component files focused and maintainable
 
+### Component Architecture — Encapsulate, Don't Scatter
+
+When building a new piece of UI, think about **what owns the concern**. If a visual element has its own data logic, state, or non-trivial rendering — it should be a **component**, not utility functions wired together in the parent.
+
+#### The Rule: Encapsulate Self-Contained Concerns
+
+**Ask yourself:** Does this piece of UI involve multiple steps (fetching/deriving data, computing styles, handling fallbacks, managing state)? If yes, it's a component.
+
+```tsx
+// ❌ BAD — Parent does all the work, utilities are just dumb helpers
+function ParentItem({ repo }) {
+  const owner = getRepoOwner(repo.name);
+  const avatarUrl = getGitHubAvatarUrl(owner);
+  const fallbackColor = getRepoFallbackColor(repo.name, isDark);
+  const initial = repo.name[0].toUpperCase();
+
+  return (
+    <Avatar>
+      {avatarUrl && <AvatarImage src={avatarUrl} />}
+      <AvatarFallback style={{ backgroundColor: fallbackColor.bg }}>{initial}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+// ✅ GOOD — Self-contained component owns its concern entirely
+function ParentItem({ repo }) {
+  return <RepoAvatar repoName={repo.name} />;
+}
+```
+
+**Why the first approach is worse:**
+
+- Parent now knows about GitHub URL patterns, OKLCH color math, theme detection, and fallback logic
+- If you need the same avatar elsewhere, you copy-paste all that wiring
+- Testing requires mocking multiple utilities in the parent's test
+- The parent's responsibility is layout/interaction — not avatar rendering
+
+#### When to Extract a Component vs Keep Inline
+
+**Extract into its own component when:**
+
+- It combines data derivation + rendering (e.g., fetch URL → try image → fallback to letter)
+- It has its own internal state or hooks (e.g., `useTheme()`, `useState`)
+- It's likely reusable in other parts of the app
+- The logic is 10+ lines and distracts from the parent's main purpose
+
+**Keep inline when:**
+
+- It's pure layout (a `<div>` with some flex classes)
+- It's a one-liner with no logic (e.g., `<Badge>{status}</Badge>`)
+- It only makes sense in this specific parent context
+
+#### Where New Components Live
+
+```
+src/features/{feature}/ui/     ← Feature-scoped components (default choice)
+src/components/custom/          ← Cross-feature reusable compositions
+src/components/ui/              ← Shadcn base primitives only
+```
+
+**Default to feature-scoped.** Only promote to `components/custom/` when a second feature actually needs it. Don't prematurely generalize.
+
 ## Animations Guidelines
 
 ### Keep your animations fast
@@ -573,6 +635,37 @@ src/
 ## Testing
 
 Test if the backend or frontend works using the browser tool or running tests.
+
+### Debugging Frontend Layout & Spacing Issues
+
+Spacing and styling bugs are **never diagnosed from a single file**. The root cause almost always lives in a parent, grandparent, or sibling container. Before touching any CSS, you must **visualize the structure and backtrack the full component tree**.
+
+#### The Rule: Draw the Divs First
+
+Before changing any Tailwind classes, **outline every element** to see the actual box boundaries:
+
+```css
+/* Temporary — paste in DevTools or add to global.css while debugging */
+* {
+  outline: 1px solid rgba(255, 0, 0, 0.3) !important;
+}
+```
+
+This reveals hidden padding, unexpected gaps, and wrapper divs contributing spacing you can't see in code alone.
+
+#### The Rule: Backtrack Across Files
+
+A visual section often spans 3-5 source files (`Page → Layout → Sidebar → SidebarItem → Avatar`). You **must read every file in the chain** — parent containers, the element itself, and its children. Check:
+
+- **Parent/grandparent** containers for `p-*`, `gap-*`, flex alignment
+- **Shadcn base components** (`src/components/ui/`) for built-in padding you inherit — always open the actual source file and read the CVA variants
+- **CVA variant defaults** — components like `Button` apply default size/variant classes you don't see at the call site. Read `button.tsx`, `sidebar.tsx`, etc. to know what classes are baked in (e.g., `h-9 px-4 has-[>svg]:px-3` on every default-size Button)
+- **Conditional selectors from base components** — `has-[>svg]:px-3` on Button activates when there's a child SVG (icons). Your `px-1` override won't help because the conditional selector has higher specificity. You must override with the **exact same modifier**: `has-[>svg]:px-1`, not `has-[&>svg]:px-1` (different modifier = twMerge won't merge them)
+- **Siblings** whose margin or flex-grow steals space
+- **`cn()` / twMerge** — only merges classes with **identical modifiers**. `has-[>svg]:px-3` and `has-[&>svg]:px-1` coexist instead of overriding. Always match the exact modifier string from the base component
+- **Compound spacing** — parent `p-4` + child `m-2` + flex `gap-3` = 36px, not the 16px you expected
+
+Never fix a spacing issue by only reading the file where the element is rendered. Always trace up and down the tree — and always open the base component source files to see what default classes you're inheriting.
 
 ## Documentation Policy
 
