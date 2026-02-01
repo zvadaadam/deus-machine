@@ -15,28 +15,43 @@ import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
 export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { file_path, content } = toolUse.input;
-  const fileName = file_path.split("/").pop() || file_path;
-  const lineCount = content.split("\n").length;
+  const { file_path, content } = toolUse.input ?? {};
+  const safeFilePath = typeof file_path === "string" ? file_path : "";
+  const safeContent = typeof content === "string" ? content : "";
+  const fileName = safeFilePath ? (safeFilePath.split("/").pop() ?? safeFilePath) : "unknown";
+  const lineCount = safeContent ? safeContent.split("\n").length : 0;
+  const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
 
   return (
     <BaseToolRenderer
       toolName="Write"
-      icon={<FilePlus className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Write)} />}
+      icon={
+        <FilePlus
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Write)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "bg-muted/60 rounded px-1.5 py-0.5 font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {fileName}
           </span>
-          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}> • {lineCount} lines</span>
+          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+            {" "}
+            • {lineCount} lines
+          </span>
         </>
       )}
       renderContent={() => (
         <CodeBlock
-          code={content}
-          language={detectLanguageFromPath(file_path)}
+          code={safeContent}
+          language={language}
           showLineNumbers={true}
           maxHeight="300px"
         />

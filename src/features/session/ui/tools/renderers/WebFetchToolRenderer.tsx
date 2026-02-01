@@ -14,7 +14,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { url, prompt } = toolUse.input;
+  const { url, prompt } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse result content

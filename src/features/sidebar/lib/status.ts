@@ -14,7 +14,9 @@ import type { Workspace } from "@/features/workspace/types";
  * Display status extends SessionStatus with derived states
  * 'unread' is derived from workspace.unread or session.unread_count
  */
-export type DisplayStatus = SessionStatus | "unread";
+export type DisplayStatus =
+  | Exclude<SessionStatus, "needs_plan_response" | "needs_response">
+  | "unread";
 
 /**
  * Priority levels for sorting (higher = more urgent)
@@ -143,8 +145,7 @@ export function getDisplayStatus(workspace: Workspace): DisplayStatus {
 
   // 3) Map session status to display status
   // Handle statuses that don't have direct UI mappings
-  // Cast to string to handle runtime values not in TypeScript type definition
-  const sessionStatus = workspace.session_status as string;
+  const sessionStatus = workspace.session_status;
   if (sessionStatus === "needs_plan_response" || sessionStatus === "needs_response") {
     return "unread"; // Treat as needing attention
   }

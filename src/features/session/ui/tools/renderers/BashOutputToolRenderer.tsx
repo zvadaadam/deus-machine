@@ -15,7 +15,7 @@ import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
 export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
-  const { bash_id, filter } = toolUse.input;
+  const { bash_id, filter } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse output content
@@ -32,13 +32,21 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
   return (
     <BaseToolRenderer
       toolName="Process"
-      icon={<Activity className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.BashOutput)} />}
+      icon={
+        <Activity
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.BashOutput
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
         <span className="font-mono">
-          {bash_id.substring(0, 6)}
-          {filter ? ` • filtered` : ""} • {" "}
+          {bash_id?.substring(0, 6) ?? "..."}
+          {filter ? ` • filtered` : ""} •{" "}
           {hasOutput ? `${lineCount} line${lineCount !== 1 ? "s" : ""}` : "no output"}
         </span>
       )}

@@ -14,7 +14,14 @@ export type MessageRole = "user" | "assistant";
  *
  * @see src/features/sidebar/lib/status.ts for status derivation logic
  */
-export type SessionStatus = "idle" | "working" | "compacting" | "error";
+// Backend can also emit "needs_response" and "needs_plan_response" when awaiting user input.
+export type SessionStatus =
+  | "idle"
+  | "working"
+  | "compacting"
+  | "error"
+  | "needs_response"
+  | "needs_plan_response";
 
 /**
  * Base message entity
