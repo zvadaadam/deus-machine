@@ -5,8 +5,24 @@
 
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
+import { isTauriAvailable } from "@/platform/tauri/invoke";
+import { gitDiffStats, gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
+
+/** Workspace data needed for Tauri git commands (subset of Workspace) */
+export interface WorkspaceGitInfo {
+  root_path: string;
+  directory_name: string;
+  workspace_path?: string;
+  parent_branch?: string;
+  default_branch?: string;
+}
+
+function getWorkspacePath(ws: WorkspaceGitInfo): string {
+  if (ws.workspace_path) return ws.workspace_path;
+  return `${ws.root_path}/.conductor/${ws.directory_name}`;
+}
 
 export const WorkspaceService = {
   /**
@@ -35,26 +51,64 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch diff statistics for a workspace
+   * Fetch diff statistics for a workspace.
+   * Uses Rust/libgit2 via Tauri IPC when available (5-20ms),
+   * falls back to Node.js HTTP when in web mode (50-200ms).
    */
-  fetchDiffStats: async (id: string): Promise<DiffStats> => {
+  fetchDiffStats: async (id: string, workspace?: WorkspaceGitInfo): Promise<DiffStats> => {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+      return gitDiffStats(
+        getWorkspacePath(workspace),
+        workspace.parent_branch || "",
+        workspace.default_branch || ""
+      );
+    }
     return apiClient.get<DiffStats>(ENDPOINTS.WORKSPACE_DIFF_STATS(id));
   },
 
   /**
-   * Fetch file changes for a workspace
+   * Fetch file changes for a workspace.
+   * Uses Rust/libgit2 via Tauri IPC when available,
+   * falls back to Node.js HTTP when in web mode.
    */
-  fetchDiffFiles: async (id: string): Promise<{ files: FileChange[] }> => {
+  fetchDiffFiles: async (
+    id: string,
+    workspace?: WorkspaceGitInfo
+  ): Promise<{ files: FileChange[] }> => {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+      const files = await gitDiffFiles(
+        getWorkspacePath(workspace),
+        workspace.parent_branch || "",
+        workspace.default_branch || ""
+      );
+      return { files: files as FileChange[] };
+    }
     return apiClient.get<{ files: FileChange[] }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
   },
 
   /**
-   * Fetch diff for a specific file
+   * Fetch diff for a specific file.
+   * Uses Rust/libgit2 via Tauri IPC when available,
+   * falls back to Node.js HTTP when in web mode.
    */
   fetchFileDiff: async (
     id: string,
-    file: string
+    file: string,
+    workspace?: WorkspaceGitInfo
   ): Promise<{ diff: string; oldContent: string | null; newContent: string | null }> => {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+      const data = await gitDiffFile(
+        getWorkspacePath(workspace),
+        workspace.parent_branch || "",
+        workspace.default_branch || "",
+        file
+      );
+      return {
+        diff: data.diff ?? "",
+        oldContent: data.old_content ?? null,
+        newContent: data.new_content ?? null,
+      };
+    }
     const data = await apiClient.get<{
       diff: string;
       old_content?: string | null;

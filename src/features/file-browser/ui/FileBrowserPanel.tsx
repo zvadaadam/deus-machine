@@ -28,9 +28,7 @@ export function FileBrowserPanel({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Use Rust-based file scanning
-  const workspacePath = selectedWorkspace
-    ? `${selectedWorkspace.root_path}/.conductor/${selectedWorkspace.directory_name}`
-    : null;
+  const workspacePath = selectedWorkspace?.workspace_path ?? null;
 
   const { data, isLoading, error, refetch } = useFilesRust(workspacePath);
 

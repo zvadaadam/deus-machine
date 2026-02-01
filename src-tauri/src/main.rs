@@ -109,10 +109,15 @@ fn main() {
             commands::get_browser_port,
             commands::get_browser_auth_token,
             commands::is_browser_running,
+            commands::read_text_file,
             commands::scan_workspace_files,
             commands::invalidate_file_cache,
             commands::clear_file_cache,
             commands::git_clone,
+            commands::git_diff_stats,
+            commands::git_diff_files,
+            commands::git_diff_file,
+            commands::git_detect_default_branch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
