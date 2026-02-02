@@ -135,13 +135,11 @@ describe('canUseTool - workspace path validation', () => {
       expect(result.behavior).toBe('allow');
     });
 
-    it('prefix collision: workspace-other passes startsWith check', async () => {
-      // Known issue: "/workspace-other" starts with "/workspace"
-      // This documents current behavior - consider adding trailing slash check
+    it('denies edits to sibling directories with matching prefix', async () => {
       const result = await canUseTool(sessionId, 'Edit', {
         file_path: '/Users/test/project/workspace-other/file.ts',
       }, workspacePath);
-      expect(result.behavior).toBe('allow');
+      expect(result.behavior).toBe('deny');
     });
   });
 });

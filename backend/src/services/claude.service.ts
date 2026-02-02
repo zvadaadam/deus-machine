@@ -36,7 +36,7 @@ export async function canUseTool(
     const filePath = input.file_path || input.notebook_path || '';
 
     if (filePath) {
-      const normalizedWorkingDir = path.resolve(workspacePath);
+      const normalizedWorkingDir = path.resolve(workspacePath) + path.sep;
       const normalizedFilePath = path.resolve(filePath);
 
       if (!normalizedFilePath.startsWith(normalizedWorkingDir)) {
