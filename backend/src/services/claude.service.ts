@@ -20,7 +20,7 @@ const claudeSessions = new Map<string, SessionInfo>();
  * Permission handler for Claude CLI tool usage requests.
  * Validates file editing operations are within workspace boundaries.
  */
-async function canUseTool(
+export async function canUseTool(
   _sessionId: string,
   toolName: string,
   input: Record<string, any>,

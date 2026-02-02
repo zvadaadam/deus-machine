@@ -1,3 +1,5 @@
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
 vi.mock('child_process', () => ({
   execFileSync: vi.fn(),
 }));
@@ -15,7 +17,7 @@ import {
   getGitFileContent,
   verifyBranchExists,
   detectDefaultBranch,
-} from './git.service';
+} from '../../services/git.service';
 
 import {
   SIMPLE_MODIFY_DIFF,
@@ -26,7 +28,7 @@ import {
   NUMSTAT_OUTPUT,
   SHORTSTAT_OUTPUT,
   SHORTSTAT_SINGLE,
-} from '../test/fixtures/git-diffs';
+} from '../fixtures/git-diffs';
 
 const mockExecFileSync = vi.mocked(execFileSync);
 

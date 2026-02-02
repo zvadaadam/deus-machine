@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
-import { generateUniqueCityName, CITY_NAMES } from './workspace.service';
+import { vi, describe, it, expect } from 'vitest';
+import { generateUniqueCityName, CITY_NAMES } from '../../services/workspace.service';
 
 function createMockDb(existingNames: string[] = []) {
   return {

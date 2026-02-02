@@ -1,6 +1,6 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { errorHandler } from '../middleware/error-handler';
+import { errorHandler } from '../../middleware/error-handler';
 
 const mockStmt = {
   all: vi.fn(() => []),
@@ -12,11 +12,11 @@ const mockDb = {
   transaction: vi.fn((fn: Function) => fn),
 };
 
-vi.mock('../lib/database', () => ({
+vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-vi.mock('../services/git.service', () => ({
+vi.mock('../../services/git.service', () => ({
   detectDefaultBranch: vi.fn(() => 'main'),
 }));
 
@@ -41,7 +41,7 @@ vi.mock('crypto', () => ({
   randomUUID: vi.fn(() => 'test-uuid-1234'),
 }));
 
-import reposRoutes from './repos';
+import reposRoutes from '../../routes/repos';
 
 // Wrap the sub-app with error handler like the real app does
 const app = new Hono();
@@ -133,7 +133,7 @@ describe('POST /repos', () => {
   });
 
   it('calls detectDefaultBranch with the given path', async () => {
-    const { detectDefaultBranch } = await import('../services/git.service');
+    const { detectDefaultBranch } = await import('../../services/git.service');
 
     mockStmt.get
       .mockReturnValueOnce(undefined)

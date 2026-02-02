@@ -1,19 +1,19 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockDb = {};
-vi.mock('../lib/database', () => ({
+vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-vi.mock('../sidecar', () => ({
+vi.mock('../../sidecar', () => ({
   getSidecarStatus: vi.fn(() => ({ running: true, connected: true })),
 }));
 
-vi.mock('../server', () => ({
+vi.mock('../../server', () => ({
   getServerPort: vi.fn(() => 3000),
 }));
 
-import app from './health';
+import app from '../../routes/health';
 
 beforeEach(() => {
   vi.clearAllMocks();
