@@ -1,13 +1,13 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockStmt = { get: vi.fn(() => ({ count: 42 })) };
 const mockDb = { prepare: vi.fn(() => mockStmt) };
 
-vi.mock('../lib/database', () => ({
+vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import app from './stats';
+import app from '../../routes/stats';
 
 beforeEach(() => {
   vi.clearAllMocks();

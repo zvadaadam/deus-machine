@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockStmt = {
   all: vi.fn(() => []),
@@ -9,11 +9,11 @@ const mockDb = {
   prepare: vi.fn(() => mockStmt),
 };
 
-vi.mock('../lib/database', () => ({
+vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import { getAllSettings, saveSetting } from './settings.service';
+import { getAllSettings, saveSetting } from '../../services/settings.service';
 
 beforeEach(() => {
   vi.clearAllMocks();

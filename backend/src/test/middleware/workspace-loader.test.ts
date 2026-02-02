@@ -1,15 +1,15 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { errorHandler } from './error-handler';
+import { errorHandler } from '../../middleware/error-handler';
 
 const mockStmt = { get: vi.fn() };
 const mockDb = { prepare: vi.fn(() => mockStmt) };
 
-vi.mock('../lib/database', () => ({
+vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import { withWorkspace, computeWorkspacePath } from './workspace-loader';
+import { withWorkspace, computeWorkspacePath } from '../../middleware/workspace-loader';
 
 const createTestApp = () => {
   const app = new Hono();
