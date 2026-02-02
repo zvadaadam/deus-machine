@@ -128,11 +128,12 @@ describe('canUseTool - workspace path validation', () => {
   });
 
   describe('edge cases', () => {
-    it('allows edits when workspacePath is empty', async () => {
+    it('denies edits when workspacePath is empty (defense-in-depth)', async () => {
       const result = await canUseTool(sessionId, 'Edit', {
         file_path: '/some/path.ts',
       }, '');
-      expect(result.behavior).toBe('allow');
+      expect(result.behavior).toBe('deny');
+      expect(result.message).toContain('workspace path');
     });
 
     it('denies edits to sibling directories with matching prefix', async () => {

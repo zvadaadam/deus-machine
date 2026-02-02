@@ -32,7 +32,17 @@ export async function canUseTool(
 
   const editTools = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit'];
 
-  if (editTools.includes(toolName) && workspacePath) {
+  if (editTools.includes(toolName)) {
+    // Defense-in-depth: deny edits when workspace context is missing.
+    // Callers (routes/sessions.ts) validate workspacePath before reaching here,
+    // but this function shouldn't rely on that — missing context = deny.
+    if (!workspacePath) {
+      return {
+        behavior: 'deny',
+        message: 'Cannot allow file edits without a configured workspace path',
+      };
+    }
+
     const filePath = input.file_path || input.notebook_path || '';
 
     if (filePath) {
