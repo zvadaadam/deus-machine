@@ -1,14 +1,14 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { errorHandler } from '../middleware/error-handler';
+import { errorHandler } from '../../middleware/error-handler';
 
-vi.mock('../services/settings.service', () => ({
+vi.mock('../../services/settings.service', () => ({
   getAllSettings: vi.fn(() => ({ theme: 'dark', lang: 'en' })),
   saveSetting: vi.fn(),
 }));
 
-import settingsRoutes from './settings';
-import { getAllSettings, saveSetting } from '../services/settings.service';
+import settingsRoutes from '../../routes/settings';
+import { getAllSettings, saveSetting } from '../../services/settings.service';
 
 // Wrap the sub-app with error handler like the real app does
 const app = new Hono();

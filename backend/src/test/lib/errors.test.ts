@@ -1,4 +1,5 @@
-import { AppError, NotFoundError, ValidationError, ConflictError } from './errors';
+import { describe, it, expect } from 'vitest';
+import { AppError, NotFoundError, ValidationError, ConflictError } from '../../lib/errors';
 
 describe('AppError', () => {
   it('sets statusCode, message, and details', () => {

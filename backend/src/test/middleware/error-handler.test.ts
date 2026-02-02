@@ -1,6 +1,7 @@
+import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { errorHandler } from './error-handler';
-import { NotFoundError, ValidationError, ConflictError, AppError } from '../lib/errors';
+import { errorHandler } from '../../middleware/error-handler';
+import { NotFoundError, ValidationError, ConflictError, AppError } from '../../lib/errors';
 
 const createTestApp = () => {
   const app = new Hono();
