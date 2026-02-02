@@ -281,12 +281,12 @@ describe('SocketManager', () => {
 
   describe('reconnection backoff', () => {
     it('increases reconnect interval with backoff multiplier', async () => {
-      // Make connect fail on first attempt, succeed on second
+      // Make connect fail on first two attempts to observe backoff
       let callCount = 0;
       vi.mocked(net.connect).mockImplementation((_path: any) => {
         callCount++;
         const sock = createFakeSocket();
-        if (callCount === 1) {
+        if (callCount <= 2) {
           process.nextTick(() => sock.emit('error', new Error('fail')));
         }
         return sock as any;
@@ -295,11 +295,18 @@ describe('SocketManager', () => {
       manager.connect('/tmp/test.sock');
       await vi.advanceTimersByTimeAsync(0);
 
-      // First reconnect at 1000ms
+      // First reconnect at 1000ms (RECONNECT_INTERVAL)
       vi.advanceTimersByTime(999);
       expect(callCount).toBe(1);
       vi.advanceTimersByTime(1);
       expect(callCount).toBe(2);
+      await vi.advanceTimersByTimeAsync(0); // flush error → schedule backoff timer
+
+      // Second reconnect at 1500ms (1000 × 1.5 RECONNECT_BACKOFF)
+      vi.advanceTimersByTime(1499);
+      expect(callCount).toBe(2);
+      vi.advanceTimersByTime(1);
+      expect(callCount).toBe(3);
     });
   });
 });
