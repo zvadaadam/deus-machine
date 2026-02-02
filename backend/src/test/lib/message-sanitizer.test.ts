@@ -1,9 +1,10 @@
+import { describe, it, expect } from 'vitest';
 import {
   isValidJsonString,
   prepareMessageContent,
   parseMessageContent,
   detectControlCharacters,
-} from './message-sanitizer';
+} from '../../lib/message-sanitizer';
 
 describe('isValidJsonString', () => {
   it('returns true for a normal string', () => {

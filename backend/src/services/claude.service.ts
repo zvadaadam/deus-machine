@@ -20,7 +20,7 @@ const claudeSessions = new Map<string, SessionInfo>();
  * Permission handler for Claude CLI tool usage requests.
  * Validates file editing operations are within workspace boundaries.
  */
-async function canUseTool(
+export async function canUseTool(
   _sessionId: string,
   toolName: string,
   input: Record<string, any>,
@@ -32,11 +32,21 @@ async function canUseTool(
 
   const editTools = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit'];
 
-  if (editTools.includes(toolName) && workspacePath) {
+  if (editTools.includes(toolName)) {
+    // Defense-in-depth: deny edits when workspace context is missing.
+    // Callers (routes/sessions.ts) validate workspacePath before reaching here,
+    // but this function shouldn't rely on that — missing context = deny.
+    if (!workspacePath) {
+      return {
+        behavior: 'deny',
+        message: 'Cannot allow file edits without a configured workspace path',
+      };
+    }
+
     const filePath = input.file_path || input.notebook_path || '';
 
     if (filePath) {
-      const normalizedWorkingDir = path.resolve(workspacePath);
+      const normalizedWorkingDir = path.resolve(workspacePath) + path.sep;
       const normalizedFilePath = path.resolve(filePath);
 
       if (!normalizedFilePath.startsWith(normalizedWorkingDir)) {

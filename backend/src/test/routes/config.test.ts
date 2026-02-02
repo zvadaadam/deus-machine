@@ -1,8 +1,8 @@
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { errorHandler } from '../middleware/error-handler';
+import { errorHandler } from '../../middleware/error-handler';
 
-vi.mock('../services/config.service', () => ({
+vi.mock('../../services/config.service', () => ({
   getMcpServers: vi.fn(() => [{ name: 'test-server' }]),
   saveMcpServers: vi.fn(() => true),
   getCommands: vi.fn(() => [{ name: 'test', content: 'echo test' }]),
@@ -15,8 +15,8 @@ vi.mock('../services/config.service', () => ({
   saveHooks: vi.fn(() => true),
 }));
 
-import configRoutes from './config';
-import { saveMcpServers, saveCommand, saveAgent } from '../services/config.service';
+import configRoutes from '../../routes/config';
+import { saveMcpServers, saveCommand, saveAgent } from '../../services/config.service';
 
 // Wrap the sub-app with error handler like the real app does
 const app = new Hono();
