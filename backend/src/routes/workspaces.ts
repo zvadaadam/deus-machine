@@ -22,9 +22,7 @@ app.get('/workspaces', (c) => {
       r.name as repo_name, r.root_path, r.storage_version,
       s.status as session_status, s.is_compacting, s.context_token_count,
       s.unread_count as session_unread,
-      (SELECT sent_at FROM session_messages
-       WHERE session_id = s.id AND role = 'user'
-       ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
+      s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -37,7 +35,7 @@ app.get('/workspaces', (c) => {
 app.get('/workspaces/by-repo', (c) => {
   const db = getDatabase();
   const state = c.req.query('state');
-  const stateFilter = state ? "AND w.state = ?" : "";
+  const stateFilter = state ? "WHERE w.state = ?" : "";
 
   const workspaces = db.prepare(`
     SELECT
@@ -48,9 +46,7 @@ app.get('/workspaces/by-repo', (c) => {
       r.default_branch, r.storage_version,
       s.status as session_status, s.is_compacting, s.context_token_count,
       s.unread_count as session_unread,
-      (SELECT sent_at FROM session_messages
-       WHERE session_id = s.id AND role = 'user'
-       ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
+      s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -82,9 +78,7 @@ app.get('/workspaces/:id', (c) => {
     SELECT w.*, w.initialization_parent_branch AS parent_branch,
            r.name as repo_name, r.root_path, r.storage_version,
            s.status as session_status, s.is_compacting, s.context_token_count,
-           (SELECT sent_at FROM session_messages
-            WHERE session_id = s.id AND role = 'user'
-            ORDER BY created_at DESC LIMIT 1) as latest_message_sent_at
+           s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     LEFT JOIN sessions s ON w.active_session_id = s.id
@@ -148,7 +142,11 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
     else { oldContent = gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath); }
 
     if (diffInfo.isDeleted) { newContent = ''; }
-    else { newContent = gitService.getGitFileContent(workspacePath, 'HEAD', safeNewPath); }
+    else {
+      // Read from working directory (not HEAD) since we diff merge-base against workdir
+      try { newContent = fs.readFileSync(path.resolve(workspacePath, safeNewPath), 'utf-8'); }
+      catch { newContent = gitService.getGitFileContent(workspacePath, 'HEAD', safeNewPath); }
+    }
 
     return c.json({ file, diff: output, old_content: oldContent, new_content: newContent });
   } catch (gitError: any) {

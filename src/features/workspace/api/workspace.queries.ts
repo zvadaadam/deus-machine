@@ -3,8 +3,8 @@
  * TanStack Query hooks for workspace-related data fetching
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { produce } from "immer";
 import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
@@ -19,20 +19,21 @@ export function useWorkspacesByRepo(state: string = "ready") {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
-    refetchInterval: API_CONFIG.POLL_INTERVAL,
-    staleTime: 1000,
+    refetchInterval: 10_000,
+    staleTime: 5000,
   });
 }
 
 /**
  * Fetch global stats with polling
+ * Stats counters change slowly — no need for real-time accuracy
  */
 export function useStats() {
   return useQuery({
     queryKey: queryKeys.stats.all,
     queryFn: () => RepoService.fetchStats(),
-    refetchInterval: API_CONFIG.POLL_INTERVAL,
-    staleTime: 1000,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
 }
 
@@ -66,19 +67,18 @@ export function useDiffStats(
 }
 
 /**
- * Fetch diff stats for multiple workspaces (progressive loading)
- * This replaces the complex progressive loading logic from useDiffStats hook
+ * Fetch diff stats for all sidebar workspaces in bulk.
+ *
+ * Replaces per-item useDiffStats() in the sidebar (N hooks → 1 query).
+ * - Initial load: fetches ALL workspaces in parallel batches of 15
+ * - Polling: only re-fetches workspaces with session_status === "working" (5s)
+ * - Idle: no polling (staleTime 30s, refetch on window focus)
+ * - On workspace list change: seeds from per-workspace cache, fetches only missing/working
  */
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
 
-  // Stable, de-duplicated IDs for keying and effects
-  const workspaceIds = useMemo(() => {
-    const ids = repoGroups.flatMap((g) => g.workspaces.map((w) => w.id));
-    return Array.from(new Set(ids)).sort(); // stable order
-  }, [repoGroups]);
-
-  // Build workspace info map for Tauri fast path (enables 5-20ms vs 50-200ms HTTP)
+  // Build workspace info map for Tauri fast path (5-20ms IPC vs 50-200ms HTTP)
   const workspaceInfoMap = useMemo(() => {
     const map = new Map<string, WorkspaceGitInfo>();
     repoGroups.forEach((g) => {
@@ -95,82 +95,68 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return map;
   }, [repoGroups]);
 
-  // Ref to avoid stale closures when workspaceIds changes while timers are pending
-  const workspaceIdsRef = useRef(workspaceIds);
-  const workspaceInfoMapRef = useRef(workspaceInfoMap);
+  // Stable, de-duplicated IDs for query key
+  const workspaceIds = useMemo(() => {
+    const ids = repoGroups.flatMap((g) => g.workspaces.map((w) => w.id));
+    return Array.from(new Set(ids)).sort();
+  }, [repoGroups]);
 
-  // Update ref in effect to avoid accessing ref during render
-  useEffect(() => {
-    workspaceIdsRef.current = workspaceIds;
-    workspaceInfoMapRef.current = workspaceInfoMap;
-  }, [workspaceIds, workspaceInfoMap]);
+  // IDs of workspaces with active sessions — only these need polling
+  const workingIds = useMemo(() => {
+    return repoGroups
+      .flatMap((g) => g.workspaces)
+      .filter((w) => w.session_status === "working")
+      .map((w) => w.id);
+  }, [repoGroups]);
 
-  // Prime cache for first N and return aggregate
-  const query = useQuery({
+  const hasWorkingWorkspaces = workingIds.length > 0;
+
+  return useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],
     enabled: workspaceIds.length > 0,
-    staleTime: 1000,
+    staleTime: 30_000,
+    // Preserve previous data when workspaceIds change (avoids undefined flash)
+    placeholderData: keepPreviousData,
+    // Poll only when workspaces are actively working (Claude editing files)
+    refetchInterval: hasWorkingWorkspaces ? 5000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async () => {
-      const first5 = workspaceIds.slice(0, 5);
-      const settled = await Promise.allSettled(
-        first5.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
-      );
+      // Seed from per-workspace cache (survives query key changes)
+      const results: Record<string, DiffStats> = {};
+      for (const id of workspaceIds) {
+        const cached = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
+        if (cached) results[id] = cached;
+      }
 
-      // Cache successful results (don't let one failure block others)
-      first5.forEach((id, i) => {
-        if (settled[i].status === "fulfilled") {
-          queryClient.setQueryData(queryKeys.workspaces.diffStats(id), settled[i].value);
-        }
-      });
+      // Fetch: missing workspaces + working workspaces (need fresh data)
+      const missingIds = workspaceIds.filter((id) => !(id in results));
+      const idsToFetch = [...new Set([...missingIds, ...workingIds])];
 
-      // Aggregate from cache (includes any previously prefetched items)
-      const aggregate: Record<string, DiffStats> = {};
-      workspaceIds.forEach((id) => {
-        const stats = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
-        if (stats) aggregate[id] = stats;
-      });
+      if (idsToFetch.length === 0) {
+        return results;
+      }
 
-      return aggregate;
+      // Parallel batches of 15 — balances throughput vs resource pressure
+      const BATCH_SIZE = 15;
+      for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
+        const batch = idsToFetch.slice(i, i + BATCH_SIZE);
+        const settled = await Promise.allSettled(
+          batch.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
+        );
+
+        batch.forEach((id, j) => {
+          if (settled[j].status === "fulfilled") {
+            results[id] = settled[j].value;
+            // Update per-workspace cache (for detail panel useDiffStats consumers)
+            queryClient.setQueryData(queryKeys.workspaces.diffStats(id), settled[j].value);
+          }
+        });
+      }
+
+      return results;
     },
   });
-
-  // Stagger prefetch for remaining IDs with cleanup
-  useEffect(() => {
-    if (workspaceIds.length <= 5) return;
-
-    const timers = workspaceIds.slice(5).map((id, idx) => {
-      return setTimeout(() => {
-        queryClient
-          .prefetchQuery({
-            queryKey: queryKeys.workspaces.diffStats(id),
-            queryFn: () => WorkspaceService.fetchDiffStats(id, workspaceInfoMapRef.current.get(id)),
-          })
-          .then(() => {
-            // Update aggregate cache with new data (use ref for current workspaceIds)
-            const currentIds = workspaceIdsRef.current;
-            const data = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
-            if (data) {
-              const existing =
-                queryClient.getQueryData<Record<string, DiffStats>>([
-                  "bulk-diff-stats",
-                  currentIds,
-                ]) || {};
-              queryClient.setQueryData(["bulk-diff-stats", currentIds], {
-                ...existing,
-                [id]: data,
-              });
-            }
-          });
-      }, idx * 200);
-    });
-
-    // Cleanup timers on unmount or when workspaceIds change
-    return () => {
-      timers.forEach(clearTimeout);
-    };
-  }, [workspaceIds, queryClient]);
-
-  return query;
 }
 
 /**

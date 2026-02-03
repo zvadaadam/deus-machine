@@ -5,7 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
-import { SessionService } from "./session.service";
+import { SessionService, type PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { ContentBlock, Message, Session, SessionStatus, ToolUseBlock } from "../types";
 import { useMemo, useCallback } from "react";
@@ -23,11 +23,17 @@ export function useSession(sessionId: string | null) {
     queryKey: queryKeys.sessions.detail(sessionId || ""),
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
-    // Dynamic polling: faster when working, slower when idle
-    // TODO: Disable on desktop once session status events are implemented
+    // Desktop: useSessionEvents invalidates on session:message events, but
+    // status transitions (working → idle) can happen without a message event
+    // (e.g., Claude completes, process crashes). Keep a low-frequency fallback
+    // poll until session:status-changed events are implemented.
+    // Web: Poll at standard intervals.
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      return session?.status === "working" ? 2000 : 5000;
+      if (typeof window !== "undefined" && "__TAURI__" in window) {
+        return session?.status === "working" ? 5000 : false;
+      }
+      return session?.status === "working" ? 2000 : 10_000;
     },
     staleTime: 10000, // 10 seconds (was 500ms)
   });
@@ -37,12 +43,17 @@ export function useSession(sessionId: string | null) {
  * Fetch messages for a session with smart fallback
  * - Desktop (Tauri): Real-time events, no polling
  * - Web (Browser): Smart polling when session is working
+ *
+ * Returns Message[] via `select` so downstream consumers are unchanged.
+ * Raw cache holds PaginatedMessages for optimistic updates.
  */
 export function useMessages(sessionId: string | null, sessionStatus?: SessionStatus) {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     queryFn: () => SessionService.fetchMessages(sessionId!),
     enabled: !!sessionId,
+    // Use select to unwrap messages array for downstream consumers
+    select: (data: PaginatedMessages) => data.messages,
     // ✅ Smart fallback: Events in Tauri, polling in browser
     refetchInterval: (query) => {
       // Desktop mode (Tauri): Events handle updates, no polling
@@ -59,6 +70,8 @@ export function useMessages(sessionId: string | null, sessionStatus?: SessionSta
     },
     staleTime: 30000, // 30 seconds
   });
+
+  return query;
 }
 
 const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | string | null => {
@@ -204,12 +217,13 @@ export function useSendMessage() {
       SessionService.sendMessage(sessionId, content),
 
     // Optimistic update: Add user message to chat immediately
+    // Note: Cache holds PaginatedMessages shape, not raw Message[]
     onMutate: async ({ sessionId, content }) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });
 
-      const previousMessages = queryClient.getQueryData<Message[]>(
+      const previousData = queryClient.getQueryData<PaginatedMessages>(
         queryKeys.sessions.messages(sessionId)
       );
 
@@ -227,10 +241,10 @@ export function useSendMessage() {
         sent_at: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<Message[]>(queryKeys.sessions.messages(sessionId), (old) => {
-        if (!old) return [optimisticMessage];
+      queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
+        if (!old) return { messages: [optimisticMessage], has_older: false, has_newer: false };
         return produce(old, (draft) => {
-          draft.push(optimisticMessage);
+          draft.messages.push(optimisticMessage);
         });
       });
 
@@ -246,14 +260,14 @@ export function useSendMessage() {
         });
       });
 
-      return { previousMessages, previousSession };
+      return { previousData, previousSession };
     },
 
     onError: (_err, variables, context) => {
-      if (context?.previousMessages) {
+      if (context?.previousData) {
         queryClient.setQueryData(
           queryKeys.sessions.messages(variables.sessionId),
-          context.previousMessages
+          context.previousData
         );
       }
       if (context?.previousSession) {

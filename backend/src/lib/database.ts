@@ -26,6 +26,8 @@ function initDatabase(): Database.Database {
     dbInstance = new Database(DB_PATH);
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('foreign_keys = ON');
+    dbInstance.pragma('busy_timeout = 5000');
+    dbInstance.pragma('optimize');
 
     // Ensure settings table exists
     dbInstance.exec(`
@@ -54,6 +56,7 @@ function getDatabase(): Database.Database {
 function closeDatabase(): void {
   if (dbInstance) {
     console.log('Closing database connection');
+    dbInstance.pragma('optimize');
     dbInstance.close();
     dbInstance = null;
   }

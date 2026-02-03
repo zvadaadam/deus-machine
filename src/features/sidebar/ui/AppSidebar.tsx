@@ -30,17 +30,16 @@ export function AppSidebar({
   onNewWorkspace,
   onAddRepository,
   onArchive,
+  diffStatsMap,
   profile = { username: "User" },
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar } = useSidebar();
-  const { openSettingsModal } = useUIStore();
-  const {
-    collapsedRepos,
-    toggleRepoCollapse,
-    repositoryOrder,
-    setRepositoryOrder,
-    reorderRepositories,
-  } = useSidebarStore();
+  const openSettingsModal = useUIStore((s) => s.openSettingsModal);
+  const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
+  const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
+  const repositoryOrder = useSidebarStore((s) => s.repositoryOrder);
+  const setRepositoryOrder = useSidebarStore((s) => s.setRepositoryOrder);
+  const reorderRepositories = useSidebarStore((s) => s.reorderRepositories);
 
   const isExpanded = state === "expanded" || hoverOpen;
 
@@ -127,6 +126,7 @@ export function AppSidebar({
                   onWorkspaceClick={onWorkspaceClick}
                   onNewWorkspace={onNewWorkspace}
                   onArchive={onArchive}
+                  diffStatsMap={diffStatsMap}
                   sidebarExpanded={isExpanded}
                   dragDisabled={!isExpanded}
                 />
