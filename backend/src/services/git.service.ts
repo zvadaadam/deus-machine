@@ -237,10 +237,20 @@ function countFileLines(filePath: string): number {
   try {
     const stat = fs.statSync(filePath);
     if (stat.size > 10 * 1024 * 1024) return 0;
-    const content = fs.readFileSync(filePath, 'utf-8');
-    // Skip binary files (contain null bytes)
-    if (content.includes('\0')) return 0;
-    return (content.match(/\n/g) || []).length;
+    const buf = fs.readFileSync(filePath);
+    // Detect binary files (null bytes in first 8KB) — matches Rust + route pattern
+    const sample = buf.subarray(0, 8192);
+    if (sample.includes(0)) return 0;
+    // Count lines (not newlines) to match git's line-counting semantics.
+    // A file without a trailing newline still has its last line counted.
+    if (buf.length === 0) return 0;
+    let count = 0;
+    for (let i = 0; i < buf.length; i++) {
+      if (buf[i] === 0x0a) count++;
+    }
+    // If file doesn't end with a newline, the last line is still a line
+    if (buf[buf.length - 1] !== 0x0a) count++;
+    return count;
   } catch {
     return 0;
   }
@@ -312,10 +322,16 @@ export function getDiffFiles(workspacePath: string, parentBranch: string): Array
  * Falls back to `--no-index` for untracked files.
  */
 export function getFileDiff(workspacePath: string, parentBranch: string, filePath: string): string {
+  // Defense-in-depth: validate even though callers should already sanitize
+  const safePath = resolveWorkspaceRelativePath(workspacePath, filePath);
+  if (!safePath) {
+    throw new Error(`Invalid file path: ${filePath}`);
+  }
+
   const mergeBase = getMergeBase(workspacePath, parentBranch);
 
   // Diff merge-base against working directory for tracked files
-  const output = execFileSync('git', ['diff', mergeBase, '--', filePath], {
+  const output = execFileSync('git', ['diff', mergeBase, '--', safePath], {
     cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
   }).toString();
 
@@ -324,7 +340,7 @@ export function getFileDiff(workspacePath: string, parentBranch: string, filePat
   // File might be untracked — use --no-index to generate a diff from /dev/null
   // git diff --no-index exits with code 1 when differences exist, so catch the error
   try {
-    return execFileSync('git', ['diff', '--no-index', '--', '/dev/null', filePath], {
+    return execFileSync('git', ['diff', '--no-index', '--', '/dev/null', safePath], {
       cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
     }).toString();
   } catch (e: any) {
