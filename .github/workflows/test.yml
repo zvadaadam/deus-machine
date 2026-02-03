@@ -55,10 +55,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run tests
         run: npx vitest run --config backend/vitest.config.ts
