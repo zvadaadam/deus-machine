@@ -232,13 +232,15 @@ function getUntrackedFiles(workspacePath: string): string[] {
   }
 }
 
-/** Counts newlines in a file. Returns 0 for binary or unreadable files. */
+/** Counts newlines in a file. Returns 0 for binary, oversized, or unreadable files. */
 function countFileLines(filePath: string): number {
   try {
+    const stat = fs.statSync(filePath);
+    if (stat.size > 10 * 1024 * 1024) return 0;
     const content = fs.readFileSync(filePath, 'utf-8');
     // Skip binary files (contain null bytes)
     if (content.includes('\0')) return 0;
-    return content.split('\n').length;
+    return (content.match(/\n/g) || []).length;
   } catch {
     return 0;
   }
