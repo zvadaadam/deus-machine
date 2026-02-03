@@ -30,11 +30,59 @@ Frontend (React + Zustand + React Query)
                        └── External services (GitHub PR status via gh CLI)
 ```
 
+## Database: Shared with Production OpenDevs
+
+**Critical context**: Our app currently opens the **production OpenDevs app's database** directly:
+
+```
+~/Library/Application Support/com.conductor.app/conductor.db
+```
+
+The production OpenDevs binary (Rust/sqlx) owns the schema — its 75+ migrations created all 8 tables, 46 evolved columns, 8 indexes, 5 auto-update triggers, and the `last_user_message_at` denormalization on sessions. Our `initDatabase()` (`backend/src/lib/database.ts`) only creates a `settings` table and enables WAL mode. Everything else is inherited.
+
+**What this means for development:**
+
+- Indexes, triggers, and denormalized columns **already exist** — use them in queries
+- `sessions.last_user_message_at` is already populated — use it instead of correlated subqueries
+- `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session and Codex support
+- If the production app updates its schema, we get those changes automatically
+- If the production app isn't installed, our app will fail (no tables except `settings`)
+
+**Transition plan**: When we break away to our own database, `initDatabase()` will detect whether it's a production DB (has `_sqlx_migrations` table) or a fresh DB, and run a collapsed v1 schema that recreates the full production schema in one pass. See `.context/research/database-transition-strategy.md` for the full collapsed schema SQL and migration logic.
+
 ## Rust vs Node.js Boundary
 
 - **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O.
 - **Node.js (Hono backend):** Business logic. Database reads/writes. External service calls (Claude CLI, GitHub API). Anything that needs DB state or orchestrates multiple steps.
 - **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js.
+
+### Moving the Read Layer to Rust (Long-Term Direction)
+
+This app is data-heavy: tens of repos, hundreds of workspaces, multiple concurrent agent sessions streaming in real-time. Routing every read through `Frontend → HTTP → Node.js → SQLite → HTTP → Frontend` adds per-request latency that compounds at scale. The long-term direction is to **move most DB reads to typed Rust Tauri commands** accessed via direct IPC, while Node.js stays focused on orchestration-heavy writes and external service coordination.
+
+```
+Frontend → Tauri IPC → Rust (typed query) → SQLite    ← reads (fast, direct)
+Frontend → HTTP REST → Node.js → SQLite                ← writes + orchestration
+```
+
+**What belongs in Rust (reads):**
+
+- Workspace status, session state, message fetching — anything the UI polls or renders frequently
+- List queries (all workspaces, all sessions for a workspace, recent messages)
+- Any read where the HTTP round-trip is noticeable
+
+**What stays in Node.js (writes + orchestration):**
+
+- Multi-step operations (create workspace = DB insert + git worktree + state transitions)
+- Operations that coordinate with external services (Claude CLI spawn, GitHub API)
+- Complex writes that involve business logic validation across multiple tables
+
+**Implementation rules:**
+
+- All Rust queries use typed structs and `sqlx::query_as!` — never raw SQL strings from the frontend
+- The frontend calls `invoke("get_workspace_status", { id })`, never constructs SQL
+- Rust commands are stateless reads: `(params) → data`. No business logic, no multi-step coordination
+- Node.js keeps its service layer for anything that needs orchestration
 
 ## Rust Backend Structure (src-tauri/)
 
@@ -59,11 +107,19 @@ src-tauri/src/
 └── git.rs               Core git operations via libgit2
 ```
 
+### Git Diff Semantics (src-tauri/src/git.rs)
+
+- **Branch resolution** (`resolve_parent_branch`): Always prefers **remote** (`origin/{branch}`) over local. Worktrees are created from remote branches, so diffs must be against the upstream target. Never change this to local-first.
+- **Diff computation** (`get_diff_stats`, `get_changed_files`, `get_file_patch`): Uses `diff_tree_to_workdir_with_index` (not `diff_tree_to_tree`). This diffs the merge-base tree against the **working directory**, capturing committed + staged + unstaged + untracked changes. AI agents often leave uncommitted changes — `diff_tree_to_tree` would miss them entirely.
+- **Untracked files**: Diff options include `include_untracked(true)`, `recurse_untracked_dirs(true)`, `show_untracked_content(true)` so new files created by agents count toward diff stats.
+- **Tauri IPC fallback**: Frontend `workspace.service.ts` wraps all Rust git calls in try-catch and falls through to HTTP when Tauri IPC fails (e.g., worktree deleted, HEAD missing).
+
 ## Node.js Backend Structure (backend/)
 
 ```
 backend/src/
-├── server.ts            Hono app factory, mounts all routes under /api
+├── app.ts               Hono app factory, mounts all routes under /api
+├── server.ts            Entry point, starts Hono via @hono/node-server
 ├── lib/
 │   ├── database.ts      SQLite connection (better-sqlite3)
 │   ├── errors.ts        AppError, NotFoundError, ValidationError, ConflictError
@@ -84,8 +140,14 @@ backend/src/
 │   ├── config.ts        MCP servers, commands, agents, hooks CRUD
 │   ├── settings.ts      Key-value settings
 │   ├── stats.ts         System statistics
-│   └── health.ts        Health check + port discovery
+│   ├── health.ts        Health check + port discovery
+│   └── sidecar.ts       Sidecar status & command forwarding
 └── sidecar/             IPC bridge: Node.js ↔ Rust via Unix socket
+    ├── index.ts           SidecarManager (process + socket + health coordination)
+    ├── process-manager.ts Sidecar process lifecycle
+    ├── socket-manager.ts  Unix socket client management
+    ├── health-monitor.ts  Keepalive + reconnection logic
+    └── message-handler.ts Message parsing and routing
 ```
 
 # RUNNING THE APP
@@ -143,8 +205,12 @@ Design inspiration from Linear, Vercel, Stripe, Airbnb, or Perplexity.
 
 ## State Management
 
-- Using Zustand
-- Follow best practices of using Zustand state management
+Two-layer approach with clear separation of concerns:
+
+- **Zustand** — UI state only (modals, selections, layout, sidebar). Fast, synchronous, local-first.
+- **TanStack Query (React Query v5)** — Server/API state (workspaces, sessions, repos, messages, settings). Handles caching (5-min stale time), polling, optimistic mutations, and error/retry logic.
+
+Each feature has its own query hooks in `src/features/{feature}/api/{feature}.queries.ts` and services in `src/features/{feature}/api/{feature}.service.ts`. Never mix: Zustand stores should not duplicate server data that TanStack Query already manages.
 
 ## Styling
 
@@ -489,13 +555,15 @@ button:not(:disabled),
 ```
 src/
 ├── components/
-│   ├── ui/              ← Shadcn base components (EDIT FREELY)
-│   │   ├── button.tsx   ← Add variants, change defaults
-│   │   ├── badge.tsx    ← Adjust colors, add shapes
-│   │   └── ...
-│   └── custom/          ← App-specific compositions
-│       ├── DangerButton.tsx      ← Product-specific variants
-│       └── ConfirmDialog.tsx     ← Domain patterns
+│   └── ui/              ← Shadcn base components (EDIT FREELY)
+│       ├── button.tsx   ← Add variants, change defaults
+│       ├── badge.tsx    ← Adjust colors, add shapes
+│       └── ...
+├── shared/
+│   └── components/      ← Cross-feature reusable compositions
+├── features/
+│   └── {feature}/ui/    ← Feature-scoped components (default)
+└── platform/            ← Platform abstraction (Tauri IPC, socket)
 ```
 
 #### Real Examples from This Project
@@ -566,11 +634,11 @@ function ParentItem({ repo }) {
 
 ```
 src/features/{feature}/ui/     ← Feature-scoped components (default choice)
-src/components/custom/          ← Cross-feature reusable compositions
+src/shared/components/          ← Cross-feature reusable compositions
 src/components/ui/              ← Shadcn base primitives only
 ```
 
-**Default to feature-scoped.** Only promote to `components/custom/` when a second feature actually needs it. Don't prematurely generalize.
+**Default to feature-scoped.** Only promote to `shared/components/` when a second feature actually needs it. Don't prematurely generalize.
 
 ## Animations Guidelines
 
@@ -625,12 +693,11 @@ src/components/ui/              ← Shadcn base primitives only
 - Do not animate drag gestures using CSS variables.
 - Do not animate blur values higher than 20px.
 - Use `will-change` to optimize your animation, but use it only for: `transform`, `opacity`, `clipPath`, `filter`.
-- When using Motion/Framer Motion use `transform` instead of `x` or `y` if you need animations to be hardware accelerated.
 
-### Spring animations
+### Animation Strategy: CSS-First
 
-- Default to spring animations when using Framer Motion.
-- Avoid using bouncy spring animations unless you are working with drag gestures.
+- **Primary approach:** CSS/Tailwind animations and transitions. The codebase uses `@keyframes` in `global.css` and Tailwind's built-in animation utilities.
+- **Framer Motion:** Available but use sparingly — only when CSS can't handle the interaction (gesture-driven animations, layout animations, shared element transitions). Most animations should be pure CSS.
 
 ## Testing
 
@@ -697,6 +764,120 @@ Never fix a spacing issue by only reading the file where the element is rendered
 - ARCHITECTURE.md: High-level system design, message flows
 - README.md: Project overview, quick start, tech stack
 - DEVELOPMENT.md: How to run the app, troubleshooting
+
+## Performance Guidelines
+
+This app manages tens of repos and hundreds of workspaces with multiple concurrent agent sessions. At that scale, naive patterns compound into real bottlenecks. Every agent working on this codebase must follow these rules.
+
+### Request Volume at Scale (Example)
+
+At 50 repos / 200+ workspaces / 10 active sessions, these are the hot pollers that dominate steady-state load. Numbers below are rough estimates and should be validated with telemetry, but they illustrate the order of magnitude.
+
+| Interval | Source                                                | Estimated queries/sec |
+| -------- | ----------------------------------------------------- | --------------------- |
+| 2s       | `useWorkspacesByRepo` (list + per-row latest message) | ~100/s                |
+| 2s       | `useStats` (8 full table scans)                       | ~4/s                  |
+| 2-5s     | `useSession` per active session (x10)                 | ~3-5/s                |
+| 5s       | `useDiffStats` per working workspace                  | ~2/s                  |
+| 5s       | `useFileChanges` per working workspace                | ~2/s                  |
+
+The single biggest offender is the N+1 pattern in the workspace list. Fixing that and de-duplicating polls yields immediate wins.
+
+### Database Rules
+
+**Required indexes** — any new table or query pattern must have proper indexes. The production DB already has 8 indexes (see "Database: Shared with Production OpenDevs" above). When we create our own DB, these must be included in the v1 schema. For any new query pattern, add an index:
+
+```sql
+-- Already exist in production DB:
+-- idx_sessions_workspace_id, idx_session_messages_sent_at,
+-- idx_session_messages_cancelled_at, idx_session_messages_turn_id,
+-- idx_attachments_session_id, idx_attachments_session_message_id,
+-- idx_attachments_is_draft, idx_diff_comments_workspace
+
+-- Our additions (for our own DB init):
+CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_role ON session_messages(session_id, role, created_at DESC);
+```
+
+**No N+1 queries** — never run a subquery per row in a list endpoint. The workspace list currently runs a `latest_message_sent_at` correlated subquery even though `sessions.last_user_message_at` already exists in the production DB. **Use it directly**: `s.last_user_message_at as latest_message_sent_at`. When our code inserts a user message, it must also update this column. Prefer denormalization for frequently-JOINed aggregates over CTEs or window functions — it's simpler and proven at scale. When adding new list endpoints, always fetch related data in a single query or a batched second query, never in a loop.
+
+**Paginate large collections** — session messages, file lists, and any unbounded collection must support pagination. Never return all rows from a table that can grow indefinitely. Default page size: 50-100 items.
+
+**Consolidate count queries** — `GET /stats` currently runs 8 separate `COUNT(*)` full table scans. Aggregate queries should combine into a single query where possible, and results should be cached with short TTL (5-10s) for frequently polled endpoints.
+
+**Auto-update triggers for `updated_at`** — every table with an `updated_at` column should have an `AFTER UPDATE` trigger that sets it automatically. This eliminates bugs where application code forgets to set the timestamp. Pattern (from production):
+
+```sql
+CREATE TRIGGER IF NOT EXISTS update_{table}_updated_at AFTER UPDATE ON {table}
+BEGIN UPDATE {table} SET updated_at = datetime('now') WHERE id = NEW.id; END;
+```
+
+**PRAGMA optimize** — run `PRAGMA optimize;` on app startup (after migrations) and on graceful shutdown. This updates SQLite's internal statistics for better query planning.
+
+**Column deprecation** — when removing a column, rename it with `DEPRECATED_` prefix (`ALTER TABLE x RENAME COLUMN old TO DEPRECATED_old`) instead of dropping it. This preserves data safety and is the pattern used in the production app's 75+ migrations.
+
+### Polling Discipline
+
+**Events over polling** — on desktop (Tauri), prefer event-driven invalidation over polling. Currently only `session:message` uses Tauri events. Workspace state changes, session status changes, and new workspace creation should also emit events to eliminate polling.
+
+**Polling budget** — the app should never exceed ~5 HTTP requests/second in steady state (all sources combined). Current state violates this: `useWorkspacesByRepo` (every 2s) + `useStats` (every 2s) + per-session polls = ~110 queries/s at scale.
+
+**Polling frequency rules:**
+
+- **2s polling**: Only for the single active/selected workspace's session when status is "working"
+- **5-10s polling**: For sidebar workspace list (or replace with events)
+- **30s+ / on-demand**: For everything else (settings, repos, config, PR status)
+- **Never poll**: Data that can use Tauri events (messages on desktop, workspace state changes)
+
+**Conditional polling** — always gate polling on relevant state. `useDiffStats` already does this (only polls when session is "working"). Apply the same pattern everywhere: don't poll idle workspaces, don't poll settings, don't poll repos.
+
+### Frontend Rendering Rules
+
+**Virtualize all unbounded lists** — any list that can grow beyond ~30 items must use virtualization (`@tanstack/react-virtual`). This applies to:
+
+- Sidebar workspace/repo list
+- Chat message list
+- File tree / file change list
+- Any future list of agents, logs, or search results
+
+**Zustand selector discipline** — never subscribe to an entire store. Always use individual selectors:
+
+```tsx
+// ❌ BAD — re-renders on ANY store change
+const { collapsedRepos, toggleRepoCollapse } = useSidebarStore();
+
+// ✅ GOOD — re-renders only when collapsedRepos changes
+const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
+const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
+```
+
+Use `useShallow` from zustand when selecting objects/arrays that are structurally equal but referentially different.
+
+**Memoize list item components** — wrap components rendered inside `.map()` loops with `React.memo()` when they receive stable props. This prevents the entire list from re-rendering when a sibling changes.
+
+**Batch related queries** — don't fire N independent queries from N list items. Use a single bulk endpoint or batch hook. `useBulkDiffStats` exists for this — prefer it over per-item `useDiffStats` in list views.
+
+### Git + Subprocess Discipline
+
+Git polling can dwarf DB time when scaled across many workspaces. Treat git calls as expensive and de-duplicate aggressively.
+
+- Avoid per-item hooks that spawn git processes. Use bulk endpoints (one call per repo/workspace interval) and fan-out results in the UI.
+- Cache diff/file-change results with a short TTL (5-10s) and reuse across components.
+- Cap concurrent git subprocesses and queue excess work to prevent CPU spikes and I/O contention.
+
+### Read-Layer Migration Priority
+
+When moving reads from Node.js HTTP to Rust Tauri IPC (see "Moving the Read Layer to Rust" above), prioritize by polling frequency:
+
+1. **First**: `GET /workspaces/by-repo` — polled every 2s, heaviest query (N+1 + joins)
+2. **Second**: `GET /stats` — polled every 2s, 8 full table scans
+3. **Third**: `GET /sessions/:id` — polled every 2-5s per active session
+4. **Fourth**: `GET /sessions/:id/messages` — polled every 2s in web mode
+5. **Later**: On-demand reads (repos, settings, config, PR status)
+
+Each migration should also fix the underlying query (add indexes, eliminate N+1, add pagination) — moving a bad query to Rust just makes it a faster bad query.
 
 ## AVOID AT ALL COST
 

@@ -57,11 +57,15 @@ export const WorkspaceService = {
    */
   fetchDiffStats: async (id: string, workspace?: WorkspaceGitInfo): Promise<DiffStats> => {
     if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
-      return gitDiffStats(
-        getWorkspacePath(workspace),
-        workspace.parent_branch || "",
-        workspace.default_branch || ""
-      );
+      try {
+        return await gitDiffStats(
+          getWorkspacePath(workspace),
+          workspace.parent_branch || "",
+          workspace.default_branch || ""
+        );
+      } catch {
+        // Rust git failed (e.g., worktree deleted) — fall through to HTTP
+      }
     }
     return apiClient.get<DiffStats>(ENDPOINTS.WORKSPACE_DIFF_STATS(id));
   },
@@ -76,12 +80,16 @@ export const WorkspaceService = {
     workspace?: WorkspaceGitInfo
   ): Promise<{ files: FileChange[] }> => {
     if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
-      const files = await gitDiffFiles(
-        getWorkspacePath(workspace),
-        workspace.parent_branch || "",
-        workspace.default_branch || ""
-      );
-      return { files: files as FileChange[] };
+      try {
+        const files = await gitDiffFiles(
+          getWorkspacePath(workspace),
+          workspace.parent_branch || "",
+          workspace.default_branch || ""
+        );
+        return { files: files as FileChange[] };
+      } catch {
+        // Rust git failed — fall through to HTTP
+      }
     }
     return apiClient.get<{ files: FileChange[] }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
   },
@@ -97,17 +105,21 @@ export const WorkspaceService = {
     workspace?: WorkspaceGitInfo
   ): Promise<{ diff: string; oldContent: string | null; newContent: string | null }> => {
     if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
-      const data = await gitDiffFile(
-        getWorkspacePath(workspace),
-        workspace.parent_branch || "",
-        workspace.default_branch || "",
-        file
-      );
-      return {
-        diff: data.diff ?? "",
-        oldContent: data.old_content ?? null,
-        newContent: data.new_content ?? null,
-      };
+      try {
+        const data = await gitDiffFile(
+          getWorkspacePath(workspace),
+          workspace.parent_branch || "",
+          workspace.default_branch || "",
+          file
+        );
+        return {
+          diff: data.diff ?? "",
+          oldContent: data.old_content ?? null,
+          newContent: data.new_content ?? null,
+        };
+      } catch {
+        // Rust git failed — fall through to HTTP
+      }
     }
     const data = await apiClient.get<{
       diff: string;

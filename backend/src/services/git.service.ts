@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 
 const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
@@ -219,41 +220,134 @@ export function getMergeBase(workspacePath: string, parentBranch: string): strin
   }
 }
 
-export function getDiffStats(workspacePath: string, parentBranch: string): { additions: number; deletions: number } {
+/** Returns untracked files (not ignored, not staged) in the workspace. */
+function getUntrackedFiles(workspacePath: string): string[] {
   try {
-    const output = execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--shortstat'], {
+    const output = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
       cwd: workspacePath, encoding: 'utf-8', timeout: 5000
     }).toString().trim();
-
-    const additions = output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || '0';
-    const deletions = output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || '0';
-    return { additions: parseInt(additions, 10), deletions: parseInt(deletions, 10) };
-  } catch {
-    return { additions: 0, deletions: 0 };
-  }
-}
-
-export function getDiffFiles(workspacePath: string, parentBranch: string): Array<{ file: string; additions: number; deletions: number }> {
-  try {
-    const output = execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--numstat'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
-
-    if (!output) return [];
-
-    return output.split('\n').map(line => {
-      const [additions, deletions, file] = line.split('\t');
-      return { file, additions: parseInt(additions, 10) || 0, deletions: parseInt(deletions, 10) || 0 };
-    });
+    return output ? output.split('\n') : [];
   } catch {
     return [];
   }
 }
 
+/** Counts newlines in a file. Returns 0 for binary, oversized, or unreadable files. */
+function countFileLines(filePath: string): number {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size > 10 * 1024 * 1024) return 0;
+    const buf = fs.readFileSync(filePath);
+    // Detect binary files (null bytes in first 8KB) — matches Rust + route pattern
+    const sample = buf.subarray(0, 8192);
+    if (sample.includes(0)) return 0;
+    // Count lines (not newlines) to match git's line-counting semantics.
+    // A file without a trailing newline still has its last line counted.
+    if (buf.length === 0) return 0;
+    let count = 0;
+    for (let i = 0; i < buf.length; i++) {
+      if (buf[i] === 0x0a) count++;
+    }
+    // If file doesn't end with a newline, the last line is still a line
+    if (buf[buf.length - 1] !== 0x0a) count++;
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Aggregate diff stats (additions/deletions) from merge-base to working directory.
+ * Uses `git diff <merge-base>` (without HEAD) to include committed + staged + unstaged
+ * changes to tracked files. Separately counts untracked file lines as additions.
+ */
+export function getDiffStats(workspacePath: string, parentBranch: string): { additions: number; deletions: number } {
+  try {
+    const mergeBase = getMergeBase(workspacePath, parentBranch);
+
+    // Diff merge-base against working directory (committed + staged + unstaged tracked changes)
+    const output = execFileSync('git', ['diff', mergeBase, '--shortstat'], {
+      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
+    }).toString().trim();
+
+    let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || '0', 10);
+    const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || '0', 10);
+
+    // Add untracked files (each line counts as an addition)
+    for (const file of getUntrackedFiles(workspacePath)) {
+      additions += countFileLines(path.join(workspacePath, file));
+    }
+
+    return { additions, deletions };
+  } catch {
+    return { additions: 0, deletions: 0 };
+  }
+}
+
+/**
+ * Per-file change list from merge-base to working directory.
+ * Includes tracked changes (committed + staged + unstaged) and untracked files.
+ */
+export function getDiffFiles(workspacePath: string, parentBranch: string): Array<{ file: string; additions: number; deletions: number }> {
+  try {
+    const mergeBase = getMergeBase(workspacePath, parentBranch);
+    const files: Array<{ file: string; additions: number; deletions: number }> = [];
+
+    // Tracked changes: diff merge-base against working directory
+    const output = execFileSync('git', ['diff', mergeBase, '--numstat'], {
+      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
+    }).toString().trim();
+
+    if (output) {
+      for (const line of output.split('\n')) {
+        const [additions, deletions, file] = line.split('\t');
+        files.push({ file, additions: parseInt(additions, 10) || 0, deletions: parseInt(deletions, 10) || 0 });
+      }
+    }
+
+    // Untracked files: count lines as additions
+    for (const file of getUntrackedFiles(workspacePath)) {
+      const lineCount = countFileLines(path.join(workspacePath, file));
+      files.push({ file, additions: lineCount, deletions: 0 });
+    }
+
+    return files;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Unified diff patch for a single file from merge-base to working directory.
+ * Falls back to `--no-index` for untracked files.
+ */
 export function getFileDiff(workspacePath: string, parentBranch: string, filePath: string): string {
-  return execFileSync('git', ['diff', `${parentBranch}...HEAD`, '--', filePath], {
+  // Defense-in-depth: validate even though callers should already sanitize
+  const safePath = resolveWorkspaceRelativePath(workspacePath, filePath);
+  if (!safePath) {
+    throw new Error(`Invalid file path: ${filePath}`);
+  }
+
+  const mergeBase = getMergeBase(workspacePath, parentBranch);
+
+  // Diff merge-base against working directory for tracked files
+  const output = execFileSync('git', ['diff', mergeBase, '--', safePath], {
     cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
   }).toString();
+
+  if (output) return output;
+
+  // File might be untracked — use --no-index to generate a diff from /dev/null
+  // git diff --no-index exits with code 1 when differences exist, so catch the error
+  try {
+    return execFileSync('git', ['diff', '--no-index', '--', '/dev/null', safePath], {
+      cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+    }).toString();
+  } catch (e: any) {
+    // Exit code 1 = differences found (expected); stdout contains the diff
+    if (e.stdout) return e.stdout.toString();
+    throw e;
+  }
 }
 
 export function getOpenCommand(target: string): { cmd: string; args: string[] } {

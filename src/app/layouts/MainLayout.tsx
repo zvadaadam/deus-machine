@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
@@ -9,6 +9,7 @@ import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone } from
 import {
   useWorkspacesByRepo,
   useStats,
+  useBulkDiffStats,
   usePRStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
@@ -32,15 +33,13 @@ export function MainLayout() {
   const selectedWorkspace = useWorkspaceStore((state) => state.selectedWorkspace);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
 
-  const {
-    showNewWorkspaceModal,
-    showSystemPromptModal,
-    showSettingsModal,
-    openNewWorkspaceModal,
-    closeNewWorkspaceModal,
-    closeSystemPromptModal,
-    closeSettingsModal,
-  } = useUIStore();
+  const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
+  const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
+  const showSettingsModal = useUIStore((s) => s.showSettingsModal);
+  const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
+  const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
+  const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
+  const closeSettingsModal = useUIStore((s) => s.closeSettingsModal);
 
   // TanStack Query hooks - automatic polling and caching
   const workspacesQuery = useWorkspacesByRepo("ready");
@@ -48,6 +47,9 @@ export function MainLayout() {
 
   const repoGroups = workspacesQuery.data || [];
   const loading = workspacesQuery.isLoading || statsQuery.isLoading;
+
+  // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
+  const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
 
   // Local component state
   const [selectedRepoId, setSelectedRepoId] = useState("");
@@ -133,17 +135,29 @@ export function MainLayout() {
     return () => window.removeEventListener("insert-to-chat", handleInsertToChat);
   }, []);
 
-  async function archiveWorkspace(workspaceId: string) {
-    try {
-      await archiveWorkspaceMutation.mutateAsync(workspaceId);
-      if (selectedWorkspace?.id === workspaceId) {
-        selectWorkspace(null);
+  // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
+  // change frequently (every render / every workspace click), so we capture
+  // them in refs to keep the callback identity stable. This matters because
+  // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
+  const archiveMutationRef = useRef(archiveWorkspaceMutation);
+  archiveMutationRef.current = archiveWorkspaceMutation;
+  const selectedWorkspaceRef = useRef(selectedWorkspace);
+  selectedWorkspaceRef.current = selectedWorkspace;
+
+  const archiveWorkspace = useCallback(
+    async (workspaceId: string) => {
+      try {
+        await archiveMutationRef.current.mutateAsync(workspaceId);
+        if (selectedWorkspaceRef.current?.id === workspaceId) {
+          selectWorkspace(null);
+        }
+      } catch (error) {
+        console.error("Error archiving workspace:", error);
+        toast.error(extractErrorMessage(error));
       }
-    } catch (error) {
-      console.error("Error archiving workspace:", error);
-      toast.error(extractErrorMessage(error));
-    }
-  }
+    },
+    [selectWorkspace]
+  );
 
   async function createWorkspace() {
     if (!selectedRepoId) {
@@ -164,16 +178,22 @@ export function MainLayout() {
     }
   }
 
-  function handleWorkspaceClick(workspace: Workspace) {
-    selectWorkspace(workspace);
-  }
+  const handleWorkspaceClick = useCallback(
+    (workspace: Workspace) => {
+      selectWorkspace(workspace);
+    },
+    [selectWorkspace]
+  );
 
-  function handleNewWorkspace(repoId?: string) {
-    if (repoId) {
-      setSelectedRepoId(repoId);
-    }
-    openNewWorkspaceModal();
-  }
+  const handleNewWorkspace = useCallback(
+    (repoId?: string) => {
+      if (repoId) {
+        setSelectedRepoId(repoId);
+      }
+      openNewWorkspaceModal();
+    },
+    [openNewWorkspaceModal]
+  );
 
   async function saveSystemPrompt(newPrompt: string) {
     if (!selectedWorkspace) return;
@@ -299,6 +319,7 @@ export function MainLayout() {
         <AppSidebar
           repositories={repoGroups}
           selectedWorkspaceId={selectedWorkspace?.id || null}
+          diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
           onAddRepository={handleOpenProject}
