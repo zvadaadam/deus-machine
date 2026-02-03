@@ -144,8 +144,14 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
     if (diffInfo.isDeleted) { newContent = ''; }
     else {
       // Read from working directory (not HEAD) since we diff merge-base against workdir
-      try { newContent = fs.readFileSync(path.resolve(workspacePath, safeNewPath), 'utf-8'); }
-      catch { newContent = gitService.getGitFileContent(workspacePath, 'HEAD', safeNewPath); }
+      try {
+        const buf = fs.readFileSync(path.resolve(workspacePath, safeNewPath));
+        // Detect binary files (null bytes in first 8KB)
+        const sample = buf.subarray(0, 8192);
+        newContent = sample.includes(0) ? null : buf.toString('utf-8');
+      } catch {
+        newContent = gitService.getGitFileContent(workspacePath, 'HEAD', safeNewPath);
+      }
     }
 
     return c.json({ file, diff: output, old_content: oldContent, new_content: newContent });

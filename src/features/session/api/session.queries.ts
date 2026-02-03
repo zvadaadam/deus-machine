@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SessionService, type PaginatedMessages } from "./session.service";
+import { isTauriEnv } from "@/platform/tauri";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { ContentBlock, Message, Session, SessionStatus, ToolUseBlock } from "../types";
 import { useMemo, useCallback } from "react";
@@ -30,7 +31,7 @@ export function useSession(sessionId: string | null) {
     // Web: Poll at standard intervals.
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      if (typeof window !== "undefined" && "__TAURI__" in window) {
+      if (isTauriEnv) {
         return session?.status === "working" ? 5000 : false;
       }
       return session?.status === "working" ? 2000 : 10_000;
@@ -57,7 +58,7 @@ export function useMessages(sessionId: string | null, sessionStatus?: SessionSta
     // ✅ Smart fallback: Events in Tauri, polling in browser
     refetchInterval: (query) => {
       // Desktop mode (Tauri): Events handle updates, no polling
-      if (typeof window !== "undefined" && "__TAURI__" in window) {
+      if (isTauriEnv) {
         return false;
       }
 
