@@ -301,7 +301,22 @@ pub fn git_diff_file(
     let diff = git::get_file_patch(&workspace_path, &resolved, &file_path)?;
     let merge_base = git::get_merge_base(&workspace_path, &resolved)?;
     let old_content = git::get_git_file_content(&workspace_path, &merge_base, &file_path)?;
-    let new_content = git::get_git_file_content(&workspace_path, "HEAD", &file_path)?;
+
+    // Read from working directory (not HEAD) since diffs compare merge-base against workdir.
+    // Matches the Node.js fallback in backend/src/routes/workspaces.ts.
+    let workdir_path = std::path::PathBuf::from(&workspace_path).join(&file_path);
+    let new_content = match std::fs::read(&workdir_path) {
+        Ok(bytes) => {
+            // Detect binary files (null bytes in first 8KB)
+            let sample_len = bytes.len().min(8192);
+            if bytes[..sample_len].iter().any(|&b| b == 0) {
+                None
+            } else {
+                String::from_utf8(bytes).ok()
+            }
+        }
+        Err(_) => git::get_git_file_content(&workspace_path, "HEAD", &file_path)?,
+    };
     Ok(FileDiffResponse { file: file_path, diff, old_content, new_content })
 }
 
