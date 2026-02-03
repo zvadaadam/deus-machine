@@ -102,12 +102,12 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         className="cursor-pointer"
         aria-current={isActive ? "page" : undefined}
         aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
-        onClick={onClick}
+        onClick={() => onClick(workspace)}
         onKeyDown={(e) => {
           if (e.key === " ") e.preventDefault();
         }}
         onKeyUp={(e) => {
-          if (e.key === "Enter" || e.key === " ") onClick();
+          if (e.key === "Enter" || e.key === " ") onClick(workspace);
         }}
       >
         <SidebarRowMain indent="workspace" className="items-start">
