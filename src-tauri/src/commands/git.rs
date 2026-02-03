@@ -85,6 +85,48 @@ fn validate_git_clone_url(url: &str) -> Result<(), String> {
     Err("Only https:// or ssh URLs are allowed for cloning".to_string())
 }
 
+/// Validate that file_path resolves to a location within workspace_path.
+/// Prevents path traversal attacks (e.g. "../../etc/passwd") by canonicalizing
+/// the joined path and verifying it remains under the workspace root.
+/// Returns the validated absolute path, or an error if traversal is detected.
+fn validate_workspace_path(workspace_path: &str, file_path: &str) -> Result<PathBuf, String> {
+    let workspace = Path::new(workspace_path);
+    let joined = workspace.join(file_path);
+
+    // Canonicalize to resolve all ".." segments and symlinks.
+    // If the file doesn't exist yet (e.g. untracked/new files), canonicalize
+    // the parent directory and append the filename.
+    let canonical = if joined.exists() {
+        joined
+            .canonicalize()
+            .map_err(|e| format!("Failed to resolve path: {}", e))?
+    } else {
+        let parent = joined
+            .parent()
+            .ok_or_else(|| "Invalid file path".to_string())?;
+        let file_name = joined
+            .file_name()
+            .ok_or_else(|| "Invalid file name".to_string())?;
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|e| format!("Failed to resolve parent path: {}", e))?;
+        canonical_parent.join(file_name)
+    };
+
+    let canonical_workspace = workspace
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve workspace path: {}", e))?;
+
+    if !canonical.starts_with(&canonical_workspace) {
+        return Err(format!(
+            "Path traversal detected: '{}' escapes workspace",
+            file_path
+        ));
+    }
+
+    Ok(canonical)
+}
+
 /// Clone a git repository to a target directory with progress events.
 /// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
@@ -304,7 +346,8 @@ pub fn git_diff_file(
 
     // Read from working directory (not HEAD) since diffs compare merge-base against workdir.
     // Matches the Node.js fallback in backend/src/routes/workspaces.ts.
-    let workdir_path = std::path::PathBuf::from(&workspace_path).join(&file_path);
+    // Validate that file_path doesn't escape the workspace (prevents path traversal).
+    let workdir_path = validate_workspace_path(&workspace_path, &file_path)?;
     let new_content = match std::fs::read(&workdir_path) {
         Ok(bytes) => {
             // Detect binary files (null bytes in first 8KB)
