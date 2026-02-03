@@ -23,6 +23,7 @@ export function RepositoryItem({
   onWorkspaceClick,
   onNewWorkspace,
   onArchive,
+  diffStatsMap,
   sidebarExpanded,
   dragHandleProps,
 }: RepositoryItemProps) {
@@ -111,6 +112,7 @@ export function RepositoryItem({
                       key={workspace.id}
                       workspace={workspace}
                       isActive={workspace.id === selectedWorkspaceId}
+                      diffStats={diffStatsMap?.[workspace.id]}
                       onClick={() => onWorkspaceClick(workspace)}
                       onArchive={onArchive}
                     />

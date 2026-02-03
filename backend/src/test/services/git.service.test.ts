@@ -173,7 +173,13 @@ describe('exec-dependent functions', () => {
 
   describe('getDiffStats', () => {
     it('parses shortstat output correctly', () => {
-      mockExecFileSync.mockReturnValue(SHORTSTAT_OUTPUT);
+      mockExecFileSync.mockImplementation((...args: any[]) => {
+        const gitArgs = args[1] as string[];
+        if (gitArgs.includes('merge-base')) return 'abc123\n';
+        if (gitArgs.includes('--shortstat')) return SHORTSTAT_OUTPUT;
+        if (gitArgs.includes('--others')) return '';
+        return '';
+      });
       const result = getDiffStats('/workspace', 'origin/main');
       expect(result).toEqual({ additions: 13, deletions: 20 });
     });
@@ -185,7 +191,13 @@ describe('exec-dependent functions', () => {
     });
 
     it('parses single insertion shortstat', () => {
-      mockExecFileSync.mockReturnValue(SHORTSTAT_SINGLE);
+      mockExecFileSync.mockImplementation((...args: any[]) => {
+        const gitArgs = args[1] as string[];
+        if (gitArgs.includes('merge-base')) return 'abc123\n';
+        if (gitArgs.includes('--shortstat')) return SHORTSTAT_SINGLE;
+        if (gitArgs.includes('--others')) return '';
+        return '';
+      });
       const result = getDiffStats('/workspace', 'origin/main');
       expect(result).toEqual({ additions: 1, deletions: 0 });
     });
@@ -193,7 +205,13 @@ describe('exec-dependent functions', () => {
 
   describe('getDiffFiles', () => {
     it('parses numstat output into file array', () => {
-      mockExecFileSync.mockReturnValue(NUMSTAT_OUTPUT);
+      mockExecFileSync.mockImplementation((...args: any[]) => {
+        const gitArgs = args[1] as string[];
+        if (gitArgs.includes('merge-base')) return 'abc123\n';
+        if (gitArgs.includes('--numstat')) return NUMSTAT_OUTPUT;
+        if (gitArgs.includes('--others')) return '';
+        return '';
+      });
       const result = getDiffFiles('/workspace', 'origin/main');
       expect(result).toHaveLength(3);
       expect(result[0]).toEqual({ file: 'src/app.ts', additions: 10, deletions: 5 });

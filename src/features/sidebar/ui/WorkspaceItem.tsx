@@ -1,10 +1,10 @@
+import React from "react";
 import { Archive, CircleDot, Eye, GitBranch, GitPullRequest } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { PixelGrid } from "@/features/session/ui/PixelGrid";
-import { useDiffStats } from "@/features/workspace/api";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
 import { SidebarRow, SidebarRowIconSlot, SidebarRowMain } from "./SidebarRow";
@@ -30,21 +30,17 @@ function getStatusIcon(status: string, isArchived: boolean, className: string) {
  * WorkspaceItem Component
  * Displays a single workspace with status, changes, and archive functionality
  */
-export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: WorkspaceItemProps) {
+export const WorkspaceItem = React.memo(function WorkspaceItem({
+  workspace,
+  isActive,
+  diffStats,
+  onClick,
+  onArchive,
+}: WorkspaceItemProps) {
   // Track working duration (compact format — no tenths in sidebar)
   const { duration } = useWorkingDuration({
     status: workspace.session_status,
     latestMessageSentAt: workspace.latest_message_sent_at,
-  });
-
-  // Fetch diff stats with conditional polling based on session status
-  // Pass workspace git info for direct Tauri IPC path (bypasses Node.js HTTP)
-  const { data: diffStats } = useDiffStats(workspace.id, workspace.session_status, {
-    root_path: workspace.root_path,
-    directory_name: workspace.directory_name,
-    workspace_path: workspace.workspace_path,
-    parent_branch: workspace.parent_branch,
-    default_branch: workspace.default_branch,
   });
 
   const formatTime = (timestamp: string) => {
@@ -171,4 +167,4 @@ export function WorkspaceItem({ workspace, isActive, onClick, onArchive }: Works
       </SidebarRow>
     </li>
   );
-}
+});

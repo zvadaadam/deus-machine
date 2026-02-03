@@ -1,6 +1,17 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-const mockStmt = { get: vi.fn(() => ({ count: 42 })) };
+const mockStmt = {
+  get: vi.fn(() => ({
+    workspaces: 42,
+    workspaces_ready: 42,
+    workspaces_archived: 42,
+    repos: 42,
+    sessions: 42,
+    sessions_idle: 42,
+    sessions_working: 42,
+    messages: 42,
+  })),
+};
 const mockDb = { prepare: vi.fn(() => mockStmt) };
 
 vi.mock('../../lib/database', () => ({
@@ -42,8 +53,8 @@ describe('GET /stats', () => {
     expect(body.messages).toBe(42);
   });
 
-  it('calls db.prepare 8 times for each count query', async () => {
+  it('calls db.prepare once with a single consolidated query', async () => {
     await app.request('/stats');
-    expect(mockDb.prepare).toHaveBeenCalledTimes(8);
+    expect(mockDb.prepare).toHaveBeenCalledTimes(1);
   });
 });

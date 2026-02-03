@@ -286,7 +286,7 @@ pub fn git_diff_files(
     default_branch: String,
 ) -> Result<Vec<DiffFileResponse>, String> {
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
-    let files = git::get_diff_files(&workspace_path, &resolved)?;
+    let files = git::get_changed_files(&workspace_path, &resolved)?;
     Ok(files.into_iter().map(|f| DiffFileResponse { file: f.file, additions: f.additions, deletions: f.deletions }).collect())
 }
 
@@ -298,7 +298,7 @@ pub fn git_diff_file(
     file_path: String,
 ) -> Result<FileDiffResponse, String> {
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
-    let diff = git::get_file_diff(&workspace_path, &resolved, &file_path)?;
+    let diff = git::get_file_patch(&workspace_path, &resolved, &file_path)?;
     let merge_base = git::get_merge_base(&workspace_path, &resolved)?;
     let old_content = git::get_git_file_content(&workspace_path, &merge_base, &file_path)?;
     let new_content = git::get_git_file_content(&workspace_path, "HEAD", &file_path)?;
