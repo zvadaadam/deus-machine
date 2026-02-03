@@ -5,16 +5,17 @@ const app = new Hono();
 
 app.get('/stats', (c) => {
   const db = getDatabase();
-  const stats = {
-    workspaces: (db.prepare('SELECT COUNT(*) as count FROM workspaces').get() as any).count,
-    workspaces_ready: (db.prepare("SELECT COUNT(*) as count FROM workspaces WHERE state = 'ready'").get() as any).count,
-    workspaces_archived: (db.prepare("SELECT COUNT(*) as count FROM workspaces WHERE state = 'archived'").get() as any).count,
-    repos: (db.prepare('SELECT COUNT(*) as count FROM repos').get() as any).count,
-    sessions: (db.prepare('SELECT COUNT(*) as count FROM sessions').get() as any).count,
-    sessions_idle: (db.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'idle'").get() as any).count,
-    sessions_working: (db.prepare("SELECT COUNT(*) as count FROM sessions WHERE status = 'working'").get() as any).count,
-    messages: (db.prepare('SELECT COUNT(*) as count FROM session_messages').get() as any).count
-  };
+  const stats = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM workspaces) as workspaces,
+      (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
+      (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
+      (SELECT COUNT(*) FROM repos) as repos,
+      (SELECT COUNT(*) FROM sessions) as sessions,
+      (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
+      (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
+      (SELECT COUNT(*) FROM session_messages) as messages
+  `).get();
   return c.json(stats);
 });
 

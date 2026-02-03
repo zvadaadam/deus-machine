@@ -1,21 +1,29 @@
-/**
- * Git Operations Module
- *
- * Pure git2-based operations for diff computation, branch resolution,
- * and file content retrieval. These are stateless functions that open
- * the repository on each call (fast -- libgit2 caches internally).
- *
- * MERGE-BASE SEMANTICS:
- * All diffs use three-dot merge-base semantics (equivalent to `git diff parent...HEAD`).
- * This means we:
- *   1. Find the merge base between parent and HEAD
- *   2. Diff from merge_base tree to HEAD tree
- * Using the parent tree directly would include changes from both sides.
- *
- * CACHING:
- * Branch resolution results are cached with a 5-second TTL to avoid
- * repeated ref lookups during rapid UI interactions (e.g., polling).
- */
+// Git Operations Module
+//
+// Pure git2-based operations for diff computation, branch resolution,
+// and file content retrieval. These are stateless functions that open
+// the repository on each call (fast -- libgit2 caches internally).
+//
+// DIFF SEMANTICS:
+// All diffs compare the merge-base tree to the WORKING DIRECTORY (not HEAD).
+// This captures committed + staged + unstaged + untracked changes -- important
+// because AI agents often leave uncommitted working tree changes.
+//
+// Steps:
+//   1. resolve_parent_branch() -> finds upstream ref (prefers origin/*, never local-first)
+//   2. get_merge_base_tree()   -> finds fork point (merge-base of HEAD and upstream)
+//   3. diff_tree_to_workdir_with_index(merge_base_tree) -> all changes since fork
+//
+// PUBLIC API (called from commands/git.rs):
+//   - get_diff_stats()         -> aggregate { additions, deletions } counts
+//   - get_changed_files()         -> per-file list: [{ file, additions, deletions }]
+//   - get_file_patch()          -> unified diff patch for a single file
+//   - get_git_file_content()   -> file content at a specific ref
+//   - get_merge_base()         -> merge-base commit SHA
+//
+// CACHING:
+// Branch resolution results are cached with a 5-second TTL to avoid
+// repeated ref lookups during rapid UI interactions (e.g., polling).
 
 use git2::{DiffFormat, DiffOptions, Repository};
 use lazy_static::lazy_static;
@@ -127,12 +135,14 @@ fn resolve_branch_tree<'a>(
 }
 
 // ---------------------------------------------------------------------------
-// 1. resolve_parent_branch
+// 1. resolve_parent_branch — find the upstream ref to diff against
 // ---------------------------------------------------------------------------
 
 /// Determine the best parent branch for diff comparisons.
 ///
 /// Tries remote branches first (`origin/{name}`), then local (`refs/heads/{name}`).
+/// Remote is preferred because worktrees are created from remote branches and
+/// diffs should show what changed relative to the upstream target.
 /// Candidate order: `parent_branch`, `default_branch`, "main", "master", "develop".
 /// Results are cached for 5 seconds.
 pub fn resolve_parent_branch(
@@ -176,7 +186,8 @@ pub fn resolve_parent_branch(
     }
 
     for candidate in &candidates {
-        // Try remote first (origin/{candidate})
+        // Try remote first (origin/{candidate}) — worktrees are created from
+        // remote branches, so diffs should be against the upstream target.
         let remote_ref = if candidate.starts_with("origin/") {
             format!("refs/remotes/{}", candidate)
         } else if candidate.starts_with("refs/") {
@@ -195,7 +206,7 @@ pub fn resolve_parent_branch(
             return result;
         }
 
-        // Try local (refs/heads/{candidate})
+        // Fall back to local (refs/heads/{candidate})
         if !candidate.starts_with("origin/") && !candidate.starts_with("refs/") {
             let local_ref = format!("refs/heads/{}", candidate);
             if repo.find_reference(&local_ref).is_ok() {
@@ -213,24 +224,27 @@ pub fn resolve_parent_branch(
 }
 
 // ---------------------------------------------------------------------------
-// 2. get_diff_stats
+// 2. get_diff_stats — aggregate { additions, deletions } for sidebar badges
 // ---------------------------------------------------------------------------
 
-/// Get aggregate addition/deletion counts between the merge-base and HEAD.
+/// Get aggregate addition/deletion counts between the merge-base and the
+/// current working directory state (committed + staged + unstaged + untracked).
+///
+/// Uses `diff_tree_to_workdir_with_index` so that uncommitted changes made by
+/// AI agents are included in sidebar diff stats badges.
 pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffStats, String> {
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
-    let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
-    let head_tree = head
-        .peel_to_tree()
-        .map_err(|e| format!("Failed to peel HEAD to tree: {}", e))?;
-
-    // Use merge-base semantics (three-dot diff)
     let base_tree = get_merge_base_tree(&repo, parent_branch)?;
 
+    let mut opts = DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    opts.show_untracked_content(true);
+
     let diff = repo
-        .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), None)
+        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
     let stats = diff
@@ -244,26 +258,27 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
 }
 
 // ---------------------------------------------------------------------------
-// 3. get_diff_files
+// 3. get_changed_files — per-file change list for the "Changes" tab
 // ---------------------------------------------------------------------------
 
-/// Get per-file addition/deletion counts between the merge-base and HEAD.
-pub fn get_diff_files(
+/// Get per-file addition/deletion counts between the merge-base and the
+/// current working directory state (committed + staged + unstaged + untracked).
+pub fn get_changed_files(
     workspace_path: &str,
     parent_branch: &str,
 ) -> Result<Vec<DiffFile>, String> {
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
-    let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
-    let head_tree = head
-        .peel_to_tree()
-        .map_err(|e| format!("Failed to peel HEAD to tree: {}", e))?;
-
     let base_tree = get_merge_base_tree(&repo, parent_branch)?;
 
+    let mut opts = DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    opts.show_untracked_content(true);
+
     let diff = repo
-        .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), None)
+        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
     let mut files: Vec<DiffFile> = Vec::new();
@@ -315,11 +330,12 @@ pub fn get_diff_files(
 }
 
 // ---------------------------------------------------------------------------
-// 4. get_file_diff
+// 4. get_file_patch — unified diff patch for a single file
 // ---------------------------------------------------------------------------
 
-/// Get the unified diff patch for a single file between merge-base and HEAD.
-pub fn get_file_diff(
+/// Get the unified diff patch for a single file between the merge-base and
+/// the current working directory state.
+pub fn get_file_patch(
     workspace_path: &str,
     parent_branch: &str,
     file_path: &str,
@@ -327,19 +343,17 @@ pub fn get_file_diff(
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
-    let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
-    let head_tree = head
-        .peel_to_tree()
-        .map_err(|e| format!("Failed to peel HEAD to tree: {}", e))?;
-
     let base_tree = get_merge_base_tree(&repo, parent_branch)?;
 
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(file_path);
     diff_opts.context_lines(3);
+    diff_opts.include_untracked(true);
+    diff_opts.recurse_untracked_dirs(true);
+    diff_opts.show_untracked_content(true);
 
     let diff = repo
-        .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), Some(&mut diff_opts))
+        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut diff_opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
     // Build patch as raw bytes then decode lossily (handles binary/invalid UTF-8)
@@ -540,13 +554,17 @@ fn resolve_branch_oid(repo: &Repository, branch: &str) -> Result<git2::Oid, Stri
         .ok_or_else(|| format!("Reference '{}' has no target OID", ref_name))
 }
 
-/// Get the tree at the merge-base of HEAD and the given parent branch.
+/// Get the tree at the fork point — where this workspace diverged from the
+/// upstream branch. This is the baseline for all diff operations.
 ///
-/// This implements three-dot merge-base semantics:
-///   merge_base = merge_base(HEAD, parent)
-///   tree = commit_at(merge_base).tree()
+/// Implements merge-base semantics:
+///   fork_point = merge_base(HEAD, upstream)
+///   tree = commit_at(fork_point).tree()
 ///
-/// Falls back to the parent branch tree directly if merge-base fails
+/// All diff functions compare this tree to the working directory, giving
+/// "everything that changed since we forked."
+///
+/// Falls back to the upstream branch tree directly if merge-base fails
 /// (e.g., unrelated histories).
 fn get_merge_base_tree<'a>(
     repo: &'a Repository,
@@ -757,14 +775,14 @@ mod tests {
     }
 
     #[test]
-    fn get_diff_files_invalid_repo_returns_error() {
-        let result = get_diff_files("/nonexistent/path", "main");
+    fn get_changed_files_invalid_repo_returns_error() {
+        let result = get_changed_files("/nonexistent/path", "main");
         assert!(result.is_err());
     }
 
     #[test]
-    fn get_file_diff_invalid_repo_returns_error() {
-        let result = get_file_diff("/nonexistent/path", "main", "README.md");
+    fn get_file_patch_invalid_repo_returns_error() {
+        let result = get_file_patch("/nonexistent/path", "main", "README.md");
         assert!(result.is_err());
     }
 
@@ -906,13 +924,13 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // get_diff_files with real repos
+    // get_changed_files with real repos
     // -----------------------------------------------------------------------
 
     #[test]
-    fn get_diff_files_lists_changed_files() {
+    fn get_changed_files_lists_changed_files() {
         let (_dir, path) = create_diverged_repo();
-        let files = get_diff_files(&path, "main").unwrap();
+        let files = get_changed_files(&path, "main").unwrap();
 
         let file_names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
 
@@ -935,9 +953,9 @@ mod tests {
     }
 
     #[test]
-    fn get_diff_files_returns_per_file_stats() {
+    fn get_changed_files_returns_per_file_stats() {
         let (_dir, path) = create_diverged_repo();
-        let files = get_diff_files(&path, "main").unwrap();
+        let files = get_changed_files(&path, "main").unwrap();
 
         let new_file = files.iter().find(|f| f.file == "new_file.txt").unwrap();
         assert!(new_file.additions > 0, "new_file.txt should have additions");
@@ -949,20 +967,20 @@ mod tests {
     }
 
     #[test]
-    fn get_diff_files_no_changes_returns_empty() {
+    fn get_changed_files_no_changes_returns_empty() {
         let (_dir, path) = create_simple_repo();
-        let files = get_diff_files(&path, "main").unwrap();
+        let files = get_changed_files(&path, "main").unwrap();
         assert!(files.is_empty());
     }
 
     // -----------------------------------------------------------------------
-    // get_file_diff with real repos
+    // get_file_patch with real repos
     // -----------------------------------------------------------------------
 
     #[test]
-    fn get_file_diff_returns_patch_for_modified_file() {
+    fn get_file_patch_returns_patch_for_modified_file() {
         let (_dir, path) = create_diverged_repo();
-        let diff = get_file_diff(&path, "main", "README.md").unwrap();
+        let diff = get_file_patch(&path, "main", "README.md").unwrap();
         // Should contain the added line
         assert!(
             diff.contains("updated line"),
@@ -972,9 +990,9 @@ mod tests {
     }
 
     #[test]
-    fn get_file_diff_returns_patch_for_new_file() {
+    fn get_file_patch_returns_patch_for_new_file() {
         let (_dir, path) = create_diverged_repo();
-        let diff = get_file_diff(&path, "main", "new_file.txt").unwrap();
+        let diff = get_file_patch(&path, "main", "new_file.txt").unwrap();
         assert!(
             diff.contains("brand new content"),
             "Diff for new file should contain its content, got: {}",
@@ -983,9 +1001,9 @@ mod tests {
     }
 
     #[test]
-    fn get_file_diff_returns_empty_for_unchanged_file() {
+    fn get_file_patch_returns_empty_for_unchanged_file() {
         let (_dir, path) = create_simple_repo();
-        let diff = get_file_diff(&path, "main", "README.md").unwrap();
+        let diff = get_file_patch(&path, "main", "README.md").unwrap();
         assert!(diff.is_empty(), "Expected empty diff, got: {}", diff);
     }
 
@@ -1102,7 +1120,7 @@ mod tests {
     fn full_diff_workflow_stats_match_files() {
         let (_dir, path) = create_diverged_repo();
         let stats = get_diff_stats(&path, "main").unwrap();
-        let files = get_diff_files(&path, "main").unwrap();
+        let files = get_changed_files(&path, "main").unwrap();
 
         // Sum of per-file stats should equal aggregate stats
         let total_additions: u32 = files.iter().map(|f| f.additions).sum();
@@ -1160,5 +1178,193 @@ mod tests {
         // But deleted at HEAD
         let new = get_git_file_content(&path, "HEAD", "src/lib.rs").unwrap();
         assert_eq!(new, None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Working directory diff tests
+    //
+    // These verify that diffs capture uncommitted, staged, and untracked
+    // changes — the core behavior added when switching from
+    // diff_tree_to_tree to diff_tree_to_workdir_with_index.
+    // -----------------------------------------------------------------------
+
+    /// Create a repo where HEAD == main (no committed divergence), but the
+    /// working directory has modifications and untracked files.
+    /// Tree-to-tree diffs would show zero changes; workdir diffs must detect them.
+    fn create_repo_with_workdir_changes() -> (TempDir, String) {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_str().unwrap().to_string();
+        let repo = Repository::init(&path).unwrap();
+
+        // Initial commit on main
+        fs::write(dir.path().join("README.md"), "hello world\n").unwrap();
+        fs::write(dir.path().join("existing.txt"), "line one\nline two\n").unwrap();
+        let oid = commit_all(&repo, "Initial commit");
+
+        // Ensure branch is named "main"
+        repo.branch("main", &repo.find_commit(oid).unwrap(), true)
+            .unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+
+        // Create feature branch at same commit (no divergence)
+        repo.branch("feature", &repo.find_commit(oid).unwrap(), false)
+            .unwrap();
+        repo.set_head("refs/heads/feature").unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .unwrap();
+
+        // --- Working directory changes (NOT committed) ---
+        // Modify a tracked file
+        fs::write(
+            dir.path().join("existing.txt"),
+            "line one\nline two\nline three\n",
+        )
+        .unwrap();
+        // Create an untracked file
+        fs::write(dir.path().join("untracked.txt"), "new untracked content\n").unwrap();
+
+        (dir, path)
+    }
+
+    #[test]
+    fn workdir_diff_detects_changes_even_without_commits() {
+        // KEY TEST: HEAD and main point to the same commit, but there are
+        // working directory changes. Old tree-to-tree diffs would return 0/0.
+        let (_dir, path) = create_repo_with_workdir_changes();
+
+        // Verify HEAD and main share the same commit (no committed divergence)
+        let merge_base = get_merge_base(&path, "main").unwrap();
+        let repo = Repository::open(&path).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        let base = repo
+            .find_commit(git2::Oid::from_str(&merge_base).unwrap())
+            .unwrap();
+        assert_eq!(
+            head.id(),
+            base.id(),
+            "HEAD and merge-base should be the same commit"
+        );
+
+        // Despite same commit, diff should show working directory changes
+        let stats = get_diff_stats(&path, "main").unwrap();
+        assert!(
+            stats.additions > 0,
+            "Workdir diff should detect uncommitted changes even when HEAD == merge-base, got additions={}",
+            stats.additions
+        );
+
+        let files = get_changed_files(&path, "main").unwrap();
+        assert!(
+            !files.is_empty(),
+            "Workdir diff should list changed files even when HEAD == merge-base"
+        );
+    }
+
+    #[test]
+    fn get_diff_stats_includes_uncommitted_modifications() {
+        let (_dir, path) = create_repo_with_workdir_changes();
+        let stats = get_diff_stats(&path, "main").unwrap();
+        // existing.txt: +1 line ("line three\n"), untracked.txt: +1 line
+        assert!(
+            stats.additions >= 2,
+            "Expected at least 2 additions (uncommitted + untracked), got {}",
+            stats.additions
+        );
+    }
+
+    #[test]
+    fn get_changed_files_includes_uncommitted_modification() {
+        let (_dir, path) = create_repo_with_workdir_changes();
+        let files = get_changed_files(&path, "main").unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        assert!(
+            names.contains(&"existing.txt"),
+            "Expected uncommitted modified file in {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn get_changed_files_includes_untracked_file() {
+        let (_dir, path) = create_repo_with_workdir_changes();
+        let files = get_changed_files(&path, "main").unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        assert!(
+            names.contains(&"untracked.txt"),
+            "Expected untracked file in {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn get_file_patch_includes_uncommitted_modification() {
+        let (_dir, path) = create_repo_with_workdir_changes();
+        let diff = get_file_patch(&path, "main", "existing.txt").unwrap();
+        assert!(
+            diff.contains("line three"),
+            "Patch should contain uncommitted change 'line three', got: {}",
+            diff
+        );
+    }
+
+    #[test]
+    fn get_file_patch_includes_untracked_file_content() {
+        let (_dir, path) = create_repo_with_workdir_changes();
+        let diff = get_file_patch(&path, "main", "untracked.txt").unwrap();
+        assert!(
+            diff.contains("new untracked content"),
+            "Patch should contain untracked file content, got: {}",
+            diff
+        );
+    }
+
+    #[test]
+    fn get_diff_stats_includes_staged_uncommitted_changes() {
+        let (dir, path) = create_repo_with_workdir_changes();
+        let repo = Repository::open(&path).unwrap();
+
+        // Stage a new file (git add) but don't commit
+        fs::write(dir.path().join("staged.txt"), "staged content\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index
+            .add_path(std::path::Path::new("staged.txt"))
+            .unwrap();
+        index.write().unwrap();
+
+        let stats = get_diff_stats(&path, "main").unwrap();
+        // staged.txt (1 line) + existing.txt (1 line) + untracked.txt (1 line) = at least 3
+        assert!(
+            stats.additions >= 3,
+            "Expected at least 3 additions (uncommitted + staged + untracked), got {}",
+            stats.additions
+        );
+
+        let files = get_changed_files(&path, "main").unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        assert!(
+            names.contains(&"staged.txt"),
+            "Expected staged file in {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn get_diff_stats_combines_committed_and_uncommitted() {
+        let (dir, path) = create_diverged_repo();
+
+        // Diverged repo has committed changes — capture baseline
+        let committed_stats = get_diff_stats(&path, "main").unwrap();
+        let committed_additions = committed_stats.additions;
+
+        // Add an uncommitted untracked file on top
+        fs::write(dir.path().join("extra.txt"), "extra line\n").unwrap();
+
+        let total_stats = get_diff_stats(&path, "main").unwrap();
+        assert!(
+            total_stats.additions > committed_additions,
+            "Expected more additions after uncommitted change: {} should be > {}",
+            total_stats.additions,
+            committed_additions
+        );
     }
 }

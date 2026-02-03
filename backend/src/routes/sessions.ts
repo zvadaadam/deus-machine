@@ -39,10 +39,68 @@ app.get('/sessions/:id', (c) => {
 
 app.get('/sessions/:id/messages', (c) => {
   const db = getDatabase();
-  const messages = db.prepare(`
-    SELECT * FROM session_messages WHERE session_id = ? ORDER BY created_at ASC
-  `).all(c.req.param('id'));
-  return c.json(messages);
+  const sessionId = c.req.param('id');
+  // Default limit high enough to avoid silent truncation until pagination UI is built.
+  // Cap at 5000 to prevent unbounded responses.
+  const limit = Math.min(Number(c.req.query('limit')) || 5000, 5000);
+  const before = c.req.query('before'); // cursor: sent_at value (ms precision)
+  const after = c.req.query('after');   // cursor: sent_at value (ms precision)
+
+  // Cursors use `sent_at` (millisecond precision from JS Date.toISOString()) instead of
+  // `created_at` (second precision from SQLite datetime('now')) to avoid skipping
+  // messages that arrive in the same second. The existing idx_session_messages_sent_at
+  // index on (session_id, sent_at) covers these queries.
+  let query: string;
+  let params: any[];
+
+  if (before) {
+    // Fetch older messages (before a cursor), return in ASC order
+    query = `
+      SELECT * FROM (
+        SELECT * FROM session_messages
+        WHERE session_id = ? AND sent_at < ?
+        ORDER BY sent_at DESC
+        LIMIT ?
+      ) sub ORDER BY sent_at ASC
+    `;
+    params = [sessionId, before, limit];
+  } else if (after) {
+    // Fetch newer messages (after a cursor)
+    query = `
+      SELECT * FROM session_messages
+      WHERE session_id = ? AND sent_at > ?
+      ORDER BY sent_at ASC
+      LIMIT ?
+    `;
+    params = [sessionId, after, limit];
+  } else {
+    // Default: fetch the most recent messages
+    query = `
+      SELECT * FROM (
+        SELECT * FROM session_messages
+        WHERE session_id = ?
+        ORDER BY sent_at DESC
+        LIMIT ?
+      ) sub ORDER BY sent_at ASC
+    `;
+    params = [sessionId, limit];
+  }
+
+  const messages = db.prepare(query).all(...params);
+
+  // Check if there are older/newer messages
+  const oldest = messages.length > 0 ? (messages[0] as any).sent_at : null;
+  const newest = messages.length > 0 ? (messages[messages.length - 1] as any).sent_at : null;
+
+  const has_older = oldest
+    ? !!(db.prepare('SELECT 1 FROM session_messages WHERE session_id = ? AND sent_at < ? LIMIT 1').get(sessionId, oldest))
+    : false;
+
+  const has_newer = newest
+    ? !!(db.prepare('SELECT 1 FROM session_messages WHERE session_id = ? AND sent_at > ? LIMIT 1').get(sessionId, newest))
+    : false;
+
+  return c.json({ messages, has_older, has_newer });
 });
 
 app.post('/sessions/:id/messages', async (c) => {
@@ -71,7 +129,7 @@ app.post('/sessions/:id/messages', async (c) => {
     VALUES (?, ?, 'user', ?, datetime('now'), ?, 'sonnet', ?)
   `).run(messageId, sessionId, content, sentAt, lastAssistantMessage?.sdk_message_id || null);
 
-  db.prepare("UPDATE sessions SET status = 'working', updated_at = datetime('now') WHERE id = ?").run(sessionId);
+  db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
 
   const workspace = db.prepare(`
     SELECT w.*, r.root_path FROM workspaces w

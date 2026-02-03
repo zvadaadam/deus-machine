@@ -85,6 +85,54 @@ fn validate_git_clone_url(url: &str) -> Result<(), String> {
     Err("Only https:// or ssh URLs are allowed for cloning".to_string())
 }
 
+/// Validate that file_path resolves to a location within workspace_path.
+/// Prevents path traversal attacks (e.g. "../../etc/passwd") by canonicalizing
+/// the joined path and verifying it remains under the workspace root.
+/// Returns the validated absolute path, or an error if traversal is detected.
+fn validate_workspace_path(workspace_path: &str, file_path: &str) -> Result<PathBuf, String> {
+    let workspace = Path::new(workspace_path);
+    let joined = workspace.join(file_path);
+
+    // Canonicalize to resolve all ".." segments and symlinks.
+    // If the path doesn't exist (new, untracked, or deleted files where the
+    // parent directory may also be gone), walk up to the nearest existing
+    // ancestor, canonicalize that, then re-append the missing components.
+    let canonical = if joined.exists() {
+        joined
+            .canonicalize()
+            .map_err(|e| format!("Failed to resolve path: {}", e))?
+    } else {
+        let mut ancestor = joined.as_path();
+        let mut suffix = PathBuf::new();
+        while !ancestor.exists() {
+            let name = ancestor
+                .file_name()
+                .ok_or_else(|| "Invalid file path".to_string())?;
+            suffix = PathBuf::from(name).join(&suffix);
+            ancestor = ancestor
+                .parent()
+                .ok_or_else(|| "Invalid file path".to_string())?;
+        }
+        let canonical_ancestor = ancestor
+            .canonicalize()
+            .map_err(|e| format!("Failed to resolve parent path: {}", e))?;
+        canonical_ancestor.join(suffix)
+    };
+
+    let canonical_workspace = workspace
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve workspace path: {}", e))?;
+
+    if !canonical.starts_with(&canonical_workspace) {
+        return Err(format!(
+            "Path traversal detected: '{}' escapes workspace",
+            file_path
+        ));
+    }
+
+    Ok(canonical)
+}
+
 /// Clone a git repository to a target directory with progress events.
 /// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
@@ -286,7 +334,7 @@ pub fn git_diff_files(
     default_branch: String,
 ) -> Result<Vec<DiffFileResponse>, String> {
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
-    let files = git::get_diff_files(&workspace_path, &resolved)?;
+    let files = git::get_changed_files(&workspace_path, &resolved)?;
     Ok(files.into_iter().map(|f| DiffFileResponse { file: f.file, additions: f.additions, deletions: f.deletions }).collect())
 }
 
@@ -298,10 +346,26 @@ pub fn git_diff_file(
     file_path: String,
 ) -> Result<FileDiffResponse, String> {
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
-    let diff = git::get_file_diff(&workspace_path, &resolved, &file_path)?;
+    let diff = git::get_file_patch(&workspace_path, &resolved, &file_path)?;
     let merge_base = git::get_merge_base(&workspace_path, &resolved)?;
     let old_content = git::get_git_file_content(&workspace_path, &merge_base, &file_path)?;
-    let new_content = git::get_git_file_content(&workspace_path, "HEAD", &file_path)?;
+
+    // Read from working directory (not HEAD) since diffs compare merge-base against workdir.
+    // Matches the Node.js fallback in backend/src/routes/workspaces.ts.
+    // Validate that file_path doesn't escape the workspace (prevents path traversal).
+    let workdir_path = validate_workspace_path(&workspace_path, &file_path)?;
+    let new_content = match std::fs::read(&workdir_path) {
+        Ok(bytes) => {
+            // Detect binary files (null bytes in first 8KB)
+            let sample_len = bytes.len().min(8192);
+            if bytes[..sample_len].iter().any(|&b| b == 0) {
+                None
+            } else {
+                String::from_utf8(bytes).ok()
+            }
+        }
+        Err(_) => git::get_git_file_content(&workspace_path, "HEAD", &file_path)?,
+    };
     Ok(FileDiffResponse { file: file_path, diff, old_content, new_content })
 }
 
