@@ -94,23 +94,29 @@ fn validate_workspace_path(workspace_path: &str, file_path: &str) -> Result<Path
     let joined = workspace.join(file_path);
 
     // Canonicalize to resolve all ".." segments and symlinks.
-    // If the file doesn't exist yet (e.g. untracked/new files), canonicalize
-    // the parent directory and append the filename.
+    // If the path doesn't exist (new, untracked, or deleted files where the
+    // parent directory may also be gone), walk up to the nearest existing
+    // ancestor, canonicalize that, then re-append the missing components.
     let canonical = if joined.exists() {
         joined
             .canonicalize()
             .map_err(|e| format!("Failed to resolve path: {}", e))?
     } else {
-        let parent = joined
-            .parent()
-            .ok_or_else(|| "Invalid file path".to_string())?;
-        let file_name = joined
-            .file_name()
-            .ok_or_else(|| "Invalid file name".to_string())?;
-        let canonical_parent = parent
+        let mut ancestor = joined.as_path();
+        let mut suffix = PathBuf::new();
+        while !ancestor.exists() {
+            let name = ancestor
+                .file_name()
+                .ok_or_else(|| "Invalid file path".to_string())?;
+            suffix = PathBuf::from(name).join(&suffix);
+            ancestor = ancestor
+                .parent()
+                .ok_or_else(|| "Invalid file path".to_string())?;
+        }
+        let canonical_ancestor = ancestor
             .canonicalize()
             .map_err(|e| format!("Failed to resolve parent path: {}", e))?;
-        canonical_parent.join(file_name)
+        canonical_ancestor.join(suffix)
     };
 
     let canonical_workspace = workspace
