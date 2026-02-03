@@ -113,7 +113,7 @@ export function RepositoryItem({
                       workspace={workspace}
                       isActive={workspace.id === selectedWorkspaceId}
                       diffStats={diffStatsMap?.[workspace.id]}
-                      onClick={() => onWorkspaceClick(workspace)}
+                      onClick={onWorkspaceClick}
                       onArchive={onArchive}
                     />
                   ))}

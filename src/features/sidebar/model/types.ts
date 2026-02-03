@@ -59,7 +59,7 @@ export interface WorkspaceItemProps {
   workspace: Workspace;
   isActive: boolean;
   diffStats?: DiffStats;
-  onClick: () => void;
+  onClick: (workspace: Workspace) => void;
   onArchive?: (workspaceId: string) => void;
 }
 
