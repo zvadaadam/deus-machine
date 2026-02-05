@@ -5,10 +5,6 @@ vi.mock('../../lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-vi.mock('../../sidecar', () => ({
-  getSidecarStatus: vi.fn(() => ({ running: true, connected: true })),
-}));
-
 vi.mock('../../server', () => ({
   getServerPort: vi.fn(() => 3000),
 }));
@@ -20,14 +16,19 @@ beforeEach(() => {
 });
 
 describe('GET /health', () => {
-  it('returns 200 with full health status', async () => {
+  it('returns 200 with health status', async () => {
     const res = await app.request('/health');
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('ok');
     expect(body.database).toBe('connected');
-    expect(body.sidecar).toBe('running');
-    expect(body.socket).toBe('connected');
+  });
+
+  it('does not include sidecar status (managed by Rust)', async () => {
+    const res = await app.request('/health');
+    const body = await res.json();
+    expect(body.sidecar).toBeUndefined();
+    expect(body.socket).toBeUndefined();
   });
 
   it('includes app name as conductor-backend', async () => {

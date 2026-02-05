@@ -1,8 +1,13 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
-import { startSidecar, stopSidecar } from './sidecar';
-import { stopAllClaudeSessions } from './services/claude.service';
+
+/**
+ * Conductor Backend Server
+ *
+ * Handles workspace CRUD, sessions, repos, config, and stats.
+ * Agent runtime (Claude SDK) is now managed by sidecar-v2 (Rust-spawned).
+ */
 
 // Initialize database
 const db = initDatabase();
@@ -32,11 +37,6 @@ const server = serve({
   console.log('\nConductor Backend Server');
   console.log(`API Server: http://localhost:${info.port}`);
   console.log(`Database: ${DB_PATH}`);
-
-  // Start sidecar with backend port
-  process.env.BACKEND_PORT = info.port.toString();
-  startSidecar(DB_PATH);
-
   console.log('Server ready!\n');
 });
 
@@ -44,8 +44,6 @@ const server = serve({
 process.on('uncaughtException', (error, origin) => {
   console.error('[FATAL] Uncaught Exception:', origin, error);
   try {
-    stopSidecar();
-    stopAllClaudeSessions();
     closeDatabase();
   } catch {
     // Best-effort cleanup
@@ -60,8 +58,6 @@ process.on('unhandledRejection', (reason) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\nShutting down...');
-  stopSidecar();
-  stopAllClaudeSessions();
   closeDatabase();
   process.exit(0);
 }

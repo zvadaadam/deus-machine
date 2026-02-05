@@ -1,0 +1,323 @@
+// sidecar/frontend-client.ts
+// Singleton facade over the RPC connection that exposes typed methods
+// for every message the sidecar exchanges with the Conductor frontend.
+
+import type { RpcConnection } from "./rpc-connection";
+import {
+  FRONTEND_NOTIFICATIONS,
+  FRONTEND_RPC_METHODS,
+  SIDECAR_METHODS,
+  SIDECAR_NOTIFICATIONS,
+  isQueryRequest,
+  isCancelRequest,
+  isClaudeAuthRequest,
+  isWorkspaceInitRequest,
+  isContextUsageRequest,
+  isUpdatePermissionModeRequest,
+  isResetGeneratorRequest,
+} from "./protocol";
+import type {
+  QueryRequest,
+  CancelRequest,
+  ClaudeAuthRequest,
+  WorkspaceInitRequest,
+  ContextUsageRequest,
+  UpdatePermissionModeRequest,
+  ResetGeneratorRequest,
+  MessageResponse,
+  ErrorResponse,
+  EnterPlanModeNotification,
+} from "./protocol";
+
+// ============================================================================
+// Request/Response shapes for the MCP-facing RPC calls
+// ============================================================================
+
+export interface AskUserQuestionRequest {
+  sessionId: string;
+  questions: Array<{
+    question: string;
+    options: string[];
+    multiSelect?: boolean;
+  }>;
+}
+export interface AskUserQuestionResponse {
+  answers: Array<string | string[]>;
+}
+
+export interface GetDiffRequest {
+  sessionId: string;
+  file?: string;
+  stat?: boolean;
+}
+export interface GetDiffResponse {
+  diff?: string;
+  error?: string;
+}
+
+export interface DiffCommentRequest {
+  sessionId: string;
+  comments: Array<{
+    file: string;
+    lineNumber: number;
+    body: string;
+  }>;
+}
+export interface DiffCommentResponse {
+  success: boolean;
+}
+
+export interface GetTerminalOutputRequest {
+  sessionId: string;
+  source?: "spotlight" | "run_script" | "terminal" | "auto";
+  maxLines?: number;
+}
+export interface GetTerminalOutputResponse {
+  output?: string;
+  source: "spotlight" | "run_script" | "terminal" | "none";
+  isRunning?: boolean;
+  error?: string;
+}
+
+export interface ExitPlanModeRequest {
+  sessionId: string;
+  toolInput: unknown;
+}
+export interface ExitPlanModeResponse {
+  approved: boolean;
+  turnId?: string;
+}
+
+// ============================================================================
+// Timeout defaults (milliseconds)
+// ============================================================================
+
+/** Timeout for user-facing requests that require human interaction.
+ *  2 minutes allows users time to read multi-option questions and deliberate.
+ *  There is no UI countdown, so this must be generous. */
+const USER_FACING_TIMEOUT_MS = 120_000;
+
+/** Timeout for data-fetching requests that should resolve quickly */
+const DATA_QUERY_TIMEOUT_MS = 10_000;
+
+// ============================================================================
+// FrontendClient class
+// ============================================================================
+
+class FrontendClientClass {
+  private tunnel?: RpcConnection;
+
+  attachTunnel(tunnel: RpcConnection): void {
+    if (this.tunnel) {
+      console.log("[FrontendClient] Replacing existing tunnel — old connection will be abandoned");
+    }
+    this.tunnel = tunnel;
+  }
+
+  /**
+   * Detach a specific tunnel. Only clears if the provided tunnel is the current one,
+   * preventing a closing old connection from wiping out a newer replacement.
+   */
+  detachTunnel(tunnel?: RpcConnection): void {
+    if (tunnel && this.tunnel !== tunnel) {
+      console.log("[FrontendClient] Ignoring detach for stale tunnel");
+      return;
+    }
+    this.tunnel = undefined;
+  }
+
+  // ==========================================================================
+  // OUTGOING NOTIFICATIONS (sidecar -> frontend)
+  // ==========================================================================
+
+  sendMessage(response: MessageResponse): void {
+    try {
+      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.MESSAGE, response);
+    } catch (err) {
+      console.error("[FrontendClient] sendMessage failed (frontend likely disconnected):", err);
+    }
+  }
+
+  sendError(response: ErrorResponse): void {
+    try {
+      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.QUERY_ERROR, response);
+    } catch (err) {
+      console.error("[FrontendClient] sendError failed (frontend likely disconnected):", err);
+    }
+  }
+
+  sendEnterPlanModeNotification(response: EnterPlanModeNotification): void {
+    try {
+      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE, response);
+    } catch (err) {
+      console.error("[FrontendClient] sendEnterPlanModeNotification failed:", err);
+    }
+  }
+
+  // ==========================================================================
+  // OUTGOING REQUESTS (sidecar -> frontend, with timeout)
+  // ==========================================================================
+
+  async requestExitPlanMode(request: ExitPlanModeRequest): Promise<ExitPlanModeResponse> {
+    return this.withTimeout<ExitPlanModeResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,
+        request
+      ) as Promise<ExitPlanModeResponse>,
+      USER_FACING_TIMEOUT_MS,
+      "requestExitPlanMode"
+    );
+  }
+
+  async requestAskUserQuestion(request: AskUserQuestionRequest): Promise<AskUserQuestionResponse> {
+    return this.withTimeout<AskUserQuestionResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.ASK_USER_QUESTION,
+        request
+      ) as Promise<AskUserQuestionResponse>,
+      USER_FACING_TIMEOUT_MS,
+      "requestAskUserQuestion"
+    );
+  }
+
+  async requestGetDiff(request: GetDiffRequest): Promise<GetDiffResponse> {
+    return this.withTimeout<GetDiffResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.GET_DIFF,
+        request
+      ) as Promise<GetDiffResponse>,
+      DATA_QUERY_TIMEOUT_MS,
+      "requestGetDiff"
+    );
+  }
+
+  async requestDiffComment(request: DiffCommentRequest): Promise<DiffCommentResponse> {
+    return this.withTimeout<DiffCommentResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.DIFF_COMMENT,
+        request
+      ) as Promise<DiffCommentResponse>,
+      DATA_QUERY_TIMEOUT_MS,
+      "requestDiffComment"
+    );
+  }
+
+  async requestGetTerminalOutput(
+    request: GetTerminalOutputRequest
+  ): Promise<GetTerminalOutputResponse> {
+    return this.withTimeout<GetTerminalOutputResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT,
+        request
+      ) as Promise<GetTerminalOutputResponse>,
+      DATA_QUERY_TIMEOUT_MS,
+      "requestGetTerminalOutput"
+    );
+  }
+
+  // ==========================================================================
+  // INCOMING EVENTS (frontend -> sidecar)
+  // ==========================================================================
+
+  onQuery(handler: (request: Omit<QueryRequest, "type">) => Promise<void>): void {
+    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.QUERY, async (params) => {
+      if (!isQueryRequest(params)) return undefined;
+      const { type: _, ...input } = params;
+      await handler(input);
+      return undefined;
+    });
+  }
+
+  onCancel(handler: (request: Omit<CancelRequest, "type">) => void): void {
+    this.requireTunnel().addMethod(SIDECAR_METHODS.CANCEL, (params) => {
+      if (!isCancelRequest(params)) return Promise.resolve(undefined);
+      const { type: _, ...input } = params;
+      handler(input);
+      return Promise.resolve(undefined);
+    });
+  }
+
+  onClaudeAuth(handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>): void {
+    this.requireTunnel().addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
+      if (!isClaudeAuthRequest(params)) {
+        return Promise.reject(new Error("Invalid claudeAuth request"));
+      }
+      const { type: _, ...input } = params;
+      return handler(input);
+    });
+  }
+
+  onWorkspaceInit(handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>): void {
+    this.requireTunnel().addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
+      if (!isWorkspaceInitRequest(params)) {
+        return Promise.reject(new Error("Invalid workspaceInit request"));
+      }
+      const { type: _, ...input } = params;
+      return handler(input);
+    });
+  }
+
+  onContextUsage(handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>): void {
+    this.requireTunnel().addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
+      if (!isContextUsageRequest(params)) {
+        return Promise.reject(new Error("Invalid contextUsage request"));
+      }
+      const { type: _, ...input } = params;
+      return handler(input);
+    });
+  }
+
+  onUpdatePermissionMode(
+    handler: (request: Omit<UpdatePermissionModeRequest, "type">) => void
+  ): void {
+    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE, (params) => {
+      if (!isUpdatePermissionModeRequest(params)) return Promise.resolve(undefined);
+      const { type: _, ...input } = params;
+      handler(input);
+      return Promise.resolve(undefined);
+    });
+  }
+
+  onResetGenerator(handler: (request: Omit<ResetGeneratorRequest, "type">) => void): void {
+    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
+      if (!isResetGeneratorRequest(params)) return Promise.resolve(undefined);
+      const { type: _, ...input } = params;
+      handler(input);
+      return Promise.resolve(undefined);
+    });
+  }
+
+  // ==========================================================================
+  // Internal helpers
+  // ==========================================================================
+
+  private requireTunnel(): RpcConnection {
+    if (!this.tunnel) {
+      throw new Error("FrontendClient tunnel not attached.");
+    }
+    return this.tunnel;
+  }
+
+  /**
+   * Race a tunnel request against a timeout. Rejects with a descriptive
+   * error if the frontend does not respond within `ms` milliseconds.
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(
+          new Error(`[FrontendClient] ${label} timed out after ${ms}ms -- frontend did not respond`)
+        );
+      }, ms);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timerId !== undefined) clearTimeout(timerId);
+    });
+  }
+}
+
+/** Singleton instance shared across the entire sidecar process */
+export const FrontendClient = new FrontendClientClass();

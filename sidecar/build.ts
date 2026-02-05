@@ -1,0 +1,47 @@
+// sidecar/build.ts
+// esbuild script to bundle the sidecar into a single CJS file.
+// Run: npx tsx sidecar/build.ts
+
+import { build } from "esbuild";
+import * as path from "path";
+
+const sidecarDir = path.dirname(new URL(import.meta.url).pathname);
+
+build({
+  entryPoints: [path.join(sidecarDir, "index.ts")],
+  bundle: true,
+  platform: "node",
+  target: "node20",
+  format: "cjs",
+  outfile: path.join(sidecarDir, "..", "src-tauri", "resources", "bin", "index.bundled.cjs"),
+  external: [
+    // Node.js built-ins
+    "net",
+    "fs",
+    "path",
+    "os",
+    "util",
+    "child_process",
+    "string_decoder",
+    "crypto",
+    "events",
+    "stream",
+    "buffer",
+    "tty",
+    "url",
+    "http",
+    "https",
+    // Heavy native dependencies — loaded at runtime
+    "better-sqlite3",
+  ],
+  minify: false,
+  sourcemap: false,
+  logLevel: "info",
+})
+  .then(() => {
+    console.log("Sidecar-v2 build complete!");
+  })
+  .catch((error) => {
+    console.error("Build failed:", error);
+    process.exit(1);
+  });
