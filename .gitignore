@@ -13,7 +13,8 @@ build/
 # Tauri
 src-tauri/target/
 src-tauri/WixTools/
-# Note: src-tauri/sidecar/index.bundled.js is kept in git (pre-built from original OpenDevs)
+# Sidecar build artifact (built via `npm run build:sidecar`)
+src-tauri/resources/bin/index.bundled.cjs
 
 # Misc
 .DS_Store
