@@ -2,9 +2,9 @@
 // Handles message persistence for assistant messages from Claude SDK.
 // Also updates session status when queries complete.
 
-import { randomUUID } from 'crypto';
-import { getDatabase } from './index';
-import { prepareMessageContent } from './message-sanitizer';
+import { randomUUID } from "crypto";
+import { getDatabase } from "./index";
+import { prepareMessageContent } from "./message-sanitizer";
 
 /**
  * Save an assistant message to the database.
@@ -17,7 +17,7 @@ import { prepareMessageContent } from './message-sanitizer';
 export function saveAssistantMessage(
   sessionId: string,
   message: { id?: string; role?: string; content?: unknown },
-  model: string = 'sonnet'
+  model: string = "sonnet"
 ): string {
   const db = getDatabase();
   const messageId = randomUUID();
@@ -33,17 +33,12 @@ export function saveAssistantMessage(
   }
 
   try {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, sdk_message_id)
       VALUES (?, ?, 'assistant', ?, datetime('now'), ?, ?, ?)
-    `).run(
-      messageId,
-      sessionId,
-      prepared.content,
-      sentAt,
-      model,
-      message.id || null
-    );
+    `
+    ).run(messageId, sessionId, prepared.content, sentAt, model, message.id || null);
 
     console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
   } catch (error) {
@@ -60,13 +55,17 @@ export function saveAssistantMessage(
  * @param sessionId - The session ID
  * @param status - The new status ('idle', 'working', 'error')
  */
-export function updateSessionStatus(sessionId: string, status: string): void {
+export type SessionStatus = "idle" | "working" | "error";
+
+export function updateSessionStatus(sessionId: string, status: SessionStatus): void {
   const db = getDatabase();
 
   try {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE sessions SET status = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(status, sessionId);
+    `
+    ).run(status, sessionId);
 
     console.log(`[SESSION-WRITER] Updated session ${sessionId} status to '${status}'`);
   } catch (error) {
@@ -84,9 +83,11 @@ export function updateLastUserMessageAt(sessionId: string): void {
   const db = getDatabase();
 
   try {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE sessions SET last_user_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
-    `).run(sessionId);
+    `
+    ).run(sessionId);
   } catch (error) {
     console.error(`[SESSION-WRITER] Failed to update last_user_message_at:`, error);
   }
@@ -100,6 +101,6 @@ export function updateLastUserMessageAt(sessionId: string): void {
  */
 export function sessionExists(sessionId: string): boolean {
   const db = getDatabase();
-  const result = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
+  const result = db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
   return !!result;
 }

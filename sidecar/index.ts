@@ -13,6 +13,7 @@ import { StringDecoder } from "string_decoder";
 
 import { RpcConnection } from "./rpc-connection";
 import { FrontendClient } from "./frontend-client";
+import { closeDatabase } from "./db/index";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 
@@ -218,7 +219,7 @@ class UnifiedSidecar {
     socket.on("close", (hadError) => {
       console.log(`Client disconnected, hadError: ${hadError}`);
       rpcTunnel.stop();
-      FrontendClient.detachTunnel();
+      FrontendClient.detachTunnel(rpcTunnel);
     });
   }
 
@@ -234,15 +235,16 @@ class UnifiedSidecar {
           resolve();
           return;
         }
-        const childPids = stdout.trim().split("\n").filter((pid) => pid);
+        const childPids = stdout
+          .trim()
+          .split("\n")
+          .filter((pid) => pid);
         if (childPids.length === 0) {
           console.log("[CLEANUP] No child processes to kill");
           resolve();
           return;
         }
-        console.log(
-          `[CLEANUP] Found ${childPids.length} child processes: ${childPids.join(", ")}`
-        );
+        console.log(`[CLEANUP] Found ${childPids.length} child processes: ${childPids.join(", ")}`);
         childPids.forEach((pid) => {
           try {
             process.kill(Number(pid), "SIGTERM");
@@ -259,6 +261,11 @@ class UnifiedSidecar {
 
   private async cleanup(): Promise<void> {
     await this.killRemainingClaudeProcesses();
+    try {
+      closeDatabase();
+    } catch (err) {
+      console.error("[CLEANUP] Failed to close database:", err);
+    }
     if (fs.existsSync(this.socketPath)) {
       fs.unlinkSync(this.socketPath);
       console.log("[CLEANUP] Removed socket file");

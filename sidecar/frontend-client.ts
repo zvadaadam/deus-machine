@@ -108,10 +108,21 @@ class FrontendClientClass {
   private tunnel?: RpcConnection;
 
   attachTunnel(tunnel: RpcConnection): void {
+    if (this.tunnel) {
+      console.log("[FrontendClient] Replacing existing tunnel — old connection will be abandoned");
+    }
     this.tunnel = tunnel;
   }
 
-  detachTunnel(): void {
+  /**
+   * Detach a specific tunnel. Only clears if the provided tunnel is the current one,
+   * preventing a closing old connection from wiping out a newer replacement.
+   */
+  detachTunnel(tunnel?: RpcConnection): void {
+    if (tunnel && this.tunnel !== tunnel) {
+      console.log("[FrontendClient] Ignoring detach for stale tunnel");
+      return;
+    }
     this.tunnel = undefined;
   }
 

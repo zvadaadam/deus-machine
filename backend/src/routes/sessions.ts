@@ -123,7 +123,7 @@ app.get('/sessions/:id/messages', (c) => {
 app.post('/sessions/:id/messages', async (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
-  const { content } = await c.req.json();
+  const { content, model } = await c.req.json();
 
   if (!content || typeof content !== 'string') {
     throw new ValidationError('content is required and must be a string');
@@ -134,6 +134,7 @@ app.post('/sessions/:id/messages', async (c) => {
 
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
+  const messageModel = (typeof model === 'string' && model) ? model : 'sonnet';
 
   const lastAssistantMessage = db.prepare(`
     SELECT sdk_message_id FROM session_messages
@@ -141,12 +142,16 @@ app.post('/sessions/:id/messages', async (c) => {
     ORDER BY created_at DESC LIMIT 1
   `).get(sessionId) as any;
 
-  db.prepare(`
-    INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, last_assistant_message_id)
-    VALUES (?, ?, 'user', ?, datetime('now'), ?, 'sonnet', ?)
-  `).run(messageId, sessionId, content, sentAt, lastAssistantMessage?.sdk_message_id || null);
+  const insertMessageAndUpdateSession = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, last_assistant_message_id)
+      VALUES (?, ?, 'user', ?, datetime('now'), ?, ?, ?)
+    `).run(messageId, sessionId, content, sentAt, messageModel, lastAssistantMessage?.sdk_message_id || null);
 
-  db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
+    db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
+  });
+
+  insertMessageAndUpdateSession();
 
   const createdMessage = db.prepare('SELECT * FROM session_messages WHERE id = ?').get(messageId);
   return c.json(createdMessage);

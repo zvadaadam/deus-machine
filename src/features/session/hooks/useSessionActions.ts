@@ -93,6 +93,15 @@ export function useSessionActions({
   const stopSession = useCallback(async () => {
     if (!window.confirm("Stop the current Claude Code session?")) return;
     try {
+      // Cancel the sidecar agent first so it stops consuming API tokens
+      if (isTauriEnv) {
+        try {
+          await socketService.cancelQuery(sessionId);
+        } catch (cancelError) {
+          console.error("[useSessionActions] Cancel query failed:", cancelError);
+        }
+      }
+      // Then update DB status to idle
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
       console.error("Failed to stop session:", error);

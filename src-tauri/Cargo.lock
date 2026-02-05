@@ -550,6 +550,7 @@ dependencies = [
  "glob",
  "ignore",
  "lazy_static",
+ "libc",
  "parking_lot",
  "portable-pty",
  "serde",
