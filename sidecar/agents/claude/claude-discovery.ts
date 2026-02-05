@@ -2,7 +2,7 @@
 // Claude executable discovery and initialization state.
 
 import * as path from "path";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { FrontendClient } from "../../frontend-client";
 
 // ============================================================================
@@ -52,7 +52,7 @@ export function initializeClaude(): { success: boolean; error?: string } {
         .filter((p) => !p.includes("node_modules"))
         .join(":");
     }
-    const resolved = execSync(`${shell} -l -c "command -v claude"`, {
+    const resolved = execFileSync(shell, ["-l", "-c", "command -v claude"], {
       encoding: "utf-8",
       timeout: 5000,
       env: cleanEnv,

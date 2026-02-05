@@ -18,7 +18,7 @@ export function saveAssistantMessage(
   sessionId: string,
   message: { id?: string; role?: string; content?: unknown },
   model: string = "sonnet"
-): string {
+): string | null {
   const db = getDatabase();
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
@@ -28,8 +28,7 @@ export function saveAssistantMessage(
 
   if (!prepared.success) {
     console.error(`[SESSION-WRITER] Failed to prepare message content: ${prepared.error}`);
-    // Still return the messageId even on failure (for tracking)
-    return messageId;
+    return null;
   }
 
   try {
@@ -41,11 +40,11 @@ export function saveAssistantMessage(
     ).run(messageId, sessionId, prepared.content, sentAt, model, message.id || null);
 
     console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
+    return messageId;
   } catch (error) {
     console.error(`[SESSION-WRITER] Failed to save assistant message:`, error);
+    return null;
   }
-
-  return messageId;
 }
 
 /**

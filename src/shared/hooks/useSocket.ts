@@ -21,11 +21,9 @@ export function useSocket() {
 
     connectSocket();
 
-    return () => {
-      if (socketConnected) {
-        socketService.disconnect();
-      }
-    };
+    // No cleanup: socketService is a singleton shared across the app.
+    // Disconnecting here would kill the connection for all consumers
+    // when any single component using this hook unmounts.
   }, []);
 
   return {

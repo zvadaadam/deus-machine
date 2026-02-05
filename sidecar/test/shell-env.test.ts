@@ -120,6 +120,10 @@ describe("getShellEnvironment", () => {
       expect.any(Object)
     );
 
-    process.env.SHELL = originalShell;
+    if (originalShell === undefined) {
+      delete process.env.SHELL;
+    } else {
+      process.env.SHELL = originalShell;
+    }
   });
 });
