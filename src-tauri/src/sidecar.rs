@@ -128,14 +128,50 @@ impl SidecarManager {
         }
     }
 
-    /// Stop the sidecar process
+    /// Stop the sidecar process gracefully.
+    ///
+    /// Sends SIGTERM first to allow cleanup (close DB, remove socket, kill child processes),
+    /// waits up to 3 seconds, then sends SIGKILL as a fallback.
     pub fn stop(&self) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
         if let Some(mut child) = process.take() {
-            println!("[SIDECAR] Stopping sidecar (PID: {})", child.id());
-            child.kill().context("Failed to kill sidecar process")?;
-            child.wait().ok(); // Wait for process to finish
+            let pid = child.id();
+            println!("[SIDECAR] Stopping sidecar (PID: {})", pid);
+
+            // Send SIGTERM first for graceful shutdown (allows sidecar to close DB, remove socket, kill child processes)
+            #[cfg(unix)]
+            {
+                // SAFETY: libc::kill with a valid pid is safe. SIGTERM is a standard graceful shutdown signal.
+                unsafe { libc::kill(pid as i32, libc::SIGTERM); }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = child.kill();
+            }
+
+            // Wait up to 3 seconds for graceful exit
+            let start = std::time::Instant::now();
+            let timeout = std::time::Duration::from_secs(3);
+            let exited = loop {
+                match child.try_wait() {
+                    Ok(Some(_)) => break true,
+                    Ok(None) => {
+                        if start.elapsed() >= timeout {
+                            break false;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(_) => break true,
+                }
+            };
+
+            if !exited {
+                println!("[SIDECAR] SIGTERM timeout, sending SIGKILL");
+                let _ = child.kill();
+                child.wait().ok();
+            }
+
             println!("[SIDECAR] Sidecar stopped");
         }
 

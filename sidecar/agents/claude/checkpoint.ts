@@ -3,7 +3,7 @@
 // These checkpoints allow Conductor to offer undo/revert for each AI turn.
 // Stored as private git refs under refs/conductor-checkpoints/.
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 /**
  * Creates a start or end checkpoint for a given session turn.
@@ -38,11 +38,10 @@ export function createCheckpoint(
 
   try {
     // Create a tree object from the current working directory state
-    // First, stash the index state
-    const headRef = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
+    const headRef = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf-8" }).trim();
 
     // Create a tree from the index (staged changes)
-    const indexTree = execSync("git write-tree", { cwd, encoding: "utf-8" }).trim();
+    const indexTree = execFileSync("git", ["write-tree"], { cwd, encoding: "utf-8" }).trim();
 
     // Create a checkpoint commit message with metadata
     const commitMessage = [
@@ -52,14 +51,15 @@ export function createCheckpoint(
       `created ${new Date().toISOString()}`,
     ].join("\n");
 
-    // Create the commit object
-    const commitHash = execSync(
-      `git commit-tree ${indexTree} -p ${headRef} -m "${commitMessage.replace(/"/g, '\\"')}"`,
+    // Create the commit object (using arg array avoids shell injection)
+    const commitHash = execFileSync(
+      "git",
+      ["commit-tree", indexTree, "-p", headRef, "-m", commitMessage],
       { cwd, encoding: "utf-8" }
     ).trim();
 
     // Store it as a ref
-    execSync(`git update-ref ${refName} ${commitHash}`, { cwd, encoding: "utf-8" });
+    execFileSync("git", ["update-ref", refName, commitHash], { cwd, encoding: "utf-8" });
 
     console.log(`${logPrefix} Created ${checkpointType} checkpoint: ${commitHash.substring(0, 8)}`);
   } catch (error: any) {

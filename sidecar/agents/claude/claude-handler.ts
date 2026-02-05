@@ -100,15 +100,15 @@ export class ClaudeAgentHandler implements AgentHandler {
           console.log(
             `Model changed from ${session.currentModel} to ${options.model}, using setModel callback`
           );
-          void query
-            .setModel(mappedModel)
-            .then(() => {
-              const updatedSession = getSession(sessionId);
-              if (updatedSession) updatedSession.currentModel = options.model;
-            })
-            .catch((error: Error) => {
-              console.error(`Failed to update model: ${error.message}`);
-            });
+          try {
+            await query.setModel(mappedModel);
+            const updatedSession = getSession(sessionId);
+            if (updatedSession) updatedSession.currentModel = options.model;
+          } catch (error) {
+            console.error(
+              `Failed to update model: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
         }
       }
 
@@ -181,28 +181,20 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     if (session && query && session.generator) {
       console.log(`Interrupting query for session ${sessionId}`);
-      await query
-        .interrupt()
-        .then(() => {
-          if (session.turnId && session.cwd) {
-            createCheckpoint(sessionId, session.turnId, "end", session.cwd, "claudeHandler");
-          }
-          FrontendClient.sendError({
-            id: sessionId,
-            type: "error",
-            error: "aborted by user",
-            agentType: "claude",
-          });
-          console.log(`Terminating session ${sessionId} on cancel`);
-          terminateSession(sessionId);
-        })
-        .catch((error: Error) => {
-          console.error(
-            `[handleClaudeCancel] Error during cancel interrupt for session ${sessionId}:`,
-            error
-          );
-        });
-      deleteSession(sessionId);
+      try {
+        await query.interrupt();
+        if (session.turnId && session.cwd) {
+          createCheckpoint(sessionId, session.turnId, "end", session.cwd, "claudeHandler");
+        }
+      } catch (error) {
+        console.error(
+          `[handleClaudeCancel] Error during cancel interrupt for session ${sessionId}:`,
+          error
+        );
+      }
+      // Signal the generator to terminate — the finally block in processWithGenerator
+      // is the sole owner of cleanup (deleteQuery + deleteSession) to avoid races.
+      terminateSession(sessionId);
     } else {
       console.log(`No active session found for ${sessionId} to cancel`);
     }
@@ -494,7 +486,9 @@ export class ClaudeAgentHandler implements AgentHandler {
     } catch (error) {
       console.error(`[${generatorId}] Error in Claude query:`, error);
 
-      if (!(error instanceof Error && error.name === "AbortError")) {
+      const isAbort = error instanceof Error && error.name === "AbortError";
+
+      if (!isAbort) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
@@ -502,6 +496,9 @@ export class ClaudeAgentHandler implements AgentHandler {
           agentType: "claude",
         });
       }
+
+      // Update DB status so session doesn't stay stuck as "working"
+      updateSessionStatus(sessionId, isAbort ? "idle" : "error");
     } finally {
       deleteQuery(sessionId);
       deleteSession(sessionId);
