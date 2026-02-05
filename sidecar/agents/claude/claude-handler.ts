@@ -400,7 +400,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (waitingForMessage) {
         const resolver = waitingForMessage;
         waitingForMessage = null;
-        resolver(messageQueue.shift());
+        resolver(messageQueue.shift()!);
       }
     };
 

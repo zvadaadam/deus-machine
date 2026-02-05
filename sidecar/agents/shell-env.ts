@@ -2,7 +2,7 @@
 // Captures the user's login-shell environment so child processes (Claude SDK)
 // inherit PATH, NVM, pyenv, etc. without manual configuration.
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { stripVTControlCharacters } from "util";
 
 let shellEnvironment: Record<string, string> | null = null;
@@ -16,9 +16,7 @@ function parseEnv(output: string): Record<string, string> {
   }
 
   const env: Record<string, string> = {};
-  for (const line of stripVTControlCharacters(envSection)
-    .split("\n")
-    .filter(Boolean)) {
+  for (const line of stripVTControlCharacters(envSection).split("\n").filter(Boolean)) {
     const separatorIndex = line.indexOf("=");
     if (separatorIndex > 0) {
       const key = line.substring(0, separatorIndex);
@@ -53,7 +51,7 @@ export function getShellEnvironment(): Record<string, string> {
   const shell = process.env.SHELL || "/bin/zsh";
   const command = `echo -n "${DELIMITER}"; env; echo -n "${DELIMITER}"; exit`;
 
-  const output = execSync(`${shell} -ilc '${command}'`, {
+  const output = execFileSync(shell, ["-ilc", command], {
     encoding: "utf8",
     timeout: 5_000,
     env: {
