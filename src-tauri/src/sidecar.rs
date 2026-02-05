@@ -111,13 +111,15 @@ impl SidecarManager {
         if let Some(ref mut child) = *process {
             match child.try_wait() {
                 Ok(Some(_status)) => {
-                    // Process has exited — clean up
+                    // Process has exited — clean up both handles
                     *process = None;
+                    *self.socket_path.lock().unwrap() = None;
                     false
                 }
                 Ok(None) => true,    // Still running
                 Err(_) => {
                     *process = None;
+                    *self.socket_path.lock().unwrap() = None;
                     false
                 }
             }
