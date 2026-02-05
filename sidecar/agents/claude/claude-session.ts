@@ -2,12 +2,15 @@
 // Session state management for Claude agent: active sessions, queries,
 // settings comparison, termination, and session reuse logic.
 
+import type { Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { QueryOptions } from "../agent-handler";
+
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface SessionState {
-  generator?: AsyncIterator<any>;
+  generator?: AsyncIterator<SDKMessage>;
   sendMessage?: (message: string) => void;
   sendTerminate?: () => void;
   currentSettings?: {
@@ -27,7 +30,7 @@ export interface SessionState {
 // ============================================================================
 
 const activeSessions = new Map<string, SessionState>();
-const queries = new Map<string, any>();
+const queries = new Map<string, Query>();
 
 // ============================================================================
 // Public API
@@ -45,11 +48,11 @@ export function deleteSession(sessionId: string): void {
   activeSessions.delete(sessionId);
 }
 
-export function getQuery(sessionId: string): any {
+export function getQuery(sessionId: string): Query | undefined {
   return queries.get(sessionId);
 }
 
-export function setQuery(sessionId: string, query: any): void {
+export function setQuery(sessionId: string, query: Query): void {
   queries.set(sessionId, query);
 }
 
@@ -63,12 +66,11 @@ export function deleteQuery(sessionId: string): void {
  */
 export function settingsChanged(
   oldSettings: SessionState["currentSettings"],
-  newSettings: any
+  newSettings: QueryOptions | undefined
 ): boolean {
   if (!oldSettings) return true;
 
-  const normalizeValue = (val: any) =>
-    val === null || val === undefined ? undefined : val;
+  const normalizeValue = (val: any) => (val === null || val === undefined ? undefined : val);
 
   if (normalizeValue(oldSettings.claudeEnvVars) !== normalizeValue(newSettings?.claudeEnvVars)) {
     return true;

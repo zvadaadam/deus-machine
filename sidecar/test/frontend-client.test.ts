@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "../protocol";
-import { buildMessageResponse, buildErrorResponse, buildEnterPlanModeNotification } from "./builders";
+import {
+  buildMessageResponse,
+  buildErrorResponse,
+  buildEnterPlanModeNotification,
+} from "./builders";
 
 // We need to test FrontendClient which is a singleton. To get a fresh instance
 // per test we re-import the module.
@@ -104,10 +108,7 @@ describe("FrontendClient", () => {
       const notif = buildEnterPlanModeNotification();
       FrontendClient.sendEnterPlanModeNotification(notif);
 
-      expect(mockTunnel.notify).toHaveBeenCalledWith(
-        FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE,
-        notif
-      );
+      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE, notif);
     });
   });
 
@@ -132,7 +133,7 @@ describe("FrontendClient", () => {
       expect(result).toEqual({ approved: true, turnId: "turn-1" });
     });
 
-    it("rejects on timeout (30s)", async () => {
+    it("rejects on timeout (120s)", async () => {
       FrontendClient.attachTunnel(mockTunnel);
       mockTunnel.request.mockReturnValue(new Promise(() => {})); // never resolves
 
@@ -141,8 +142,8 @@ describe("FrontendClient", () => {
         toolInput: {},
       });
 
-      vi.advanceTimersByTime(30_001);
-      await expect(promise).rejects.toThrow("timed out after 30000ms");
+      vi.advanceTimersByTime(120_001);
+      await expect(promise).rejects.toThrow("timed out after 120000ms");
     });
   });
 

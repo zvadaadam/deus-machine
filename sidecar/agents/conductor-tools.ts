@@ -1,4 +1,4 @@
-// sidecar/agents/mcp-server.ts
+// sidecar/agents/conductor-tools.ts
 // Defines the "conductor" MCP server that exposes workspace-aware tools
 // (AskUserQuestion, GetWorkspaceDiff, DiffComment, GetTerminalOutput)
 // to the Claude Agent SDK running inside OpenDevs.
@@ -110,9 +110,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
           stat: z
             .boolean()
             .optional()
-            .describe(
-              "If true, return git diff --stat style output with per-file statistics"
-            ),
+            .describe("If true, return git diff --stat style output with per-file statistics"),
         },
         async (args) => {
           console.log(`[conductorMCPServer] getDiff invoked for session ${sessionId}`);
@@ -206,9 +204,7 @@ Returns the terminal output along with information about what type of terminal i
 
           if (response.error) {
             return {
-              content: [
-                { type: "text", text: `Error getting terminal output: ${response.error}` },
-              ],
+              content: [{ type: "text", text: `Error getting terminal output: ${response.error}` }],
             };
           }
 
@@ -236,7 +232,9 @@ Returns the terminal output along with information about what type of terminal i
             content: [
               {
                 type: "text",
-                text: response.output ? header + response.output : `${header}No output available yet.`,
+                text: response.output
+                  ? header + response.output
+                  : `${header}No output available yet.`,
               },
             ],
           };

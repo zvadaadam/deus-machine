@@ -92,8 +92,10 @@ export interface ExitPlanModeResponse {
 // Timeout defaults (milliseconds)
 // ============================================================================
 
-/** Timeout for user-facing requests that require human interaction */
-const USER_FACING_TIMEOUT_MS = 30_000;
+/** Timeout for user-facing requests that require human interaction.
+ *  2 minutes allows users time to read multi-option questions and deliberate.
+ *  There is no UI countdown, so this must be generous. */
+const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
@@ -147,7 +149,10 @@ class FrontendClientClass {
 
   async requestExitPlanMode(request: ExitPlanModeRequest): Promise<ExitPlanModeResponse> {
     return this.withTimeout<ExitPlanModeResponse>(
-      this.requireTunnel().request(FRONTEND_RPC_METHODS.EXIT_PLAN_MODE, request) as Promise<ExitPlanModeResponse>,
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,
+        request
+      ) as Promise<ExitPlanModeResponse>,
       USER_FACING_TIMEOUT_MS,
       "requestExitPlanMode"
     );
@@ -155,7 +160,10 @@ class FrontendClientClass {
 
   async requestAskUserQuestion(request: AskUserQuestionRequest): Promise<AskUserQuestionResponse> {
     return this.withTimeout<AskUserQuestionResponse>(
-      this.requireTunnel().request(FRONTEND_RPC_METHODS.ASK_USER_QUESTION, request) as Promise<AskUserQuestionResponse>,
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.ASK_USER_QUESTION,
+        request
+      ) as Promise<AskUserQuestionResponse>,
       USER_FACING_TIMEOUT_MS,
       "requestAskUserQuestion"
     );
@@ -163,7 +171,10 @@ class FrontendClientClass {
 
   async requestGetDiff(request: GetDiffRequest): Promise<GetDiffResponse> {
     return this.withTimeout<GetDiffResponse>(
-      this.requireTunnel().request(FRONTEND_RPC_METHODS.GET_DIFF, request) as Promise<GetDiffResponse>,
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.GET_DIFF,
+        request
+      ) as Promise<GetDiffResponse>,
       DATA_QUERY_TIMEOUT_MS,
       "requestGetDiff"
     );
@@ -171,7 +182,10 @@ class FrontendClientClass {
 
   async requestDiffComment(request: DiffCommentRequest): Promise<DiffCommentResponse> {
     return this.withTimeout<DiffCommentResponse>(
-      this.requireTunnel().request(FRONTEND_RPC_METHODS.DIFF_COMMENT, request) as Promise<DiffCommentResponse>,
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.DIFF_COMMENT,
+        request
+      ) as Promise<DiffCommentResponse>,
       DATA_QUERY_TIMEOUT_MS,
       "requestDiffComment"
     );
@@ -181,7 +195,10 @@ class FrontendClientClass {
     request: GetTerminalOutputRequest
   ): Promise<GetTerminalOutputResponse> {
     return this.withTimeout<GetTerminalOutputResponse>(
-      this.requireTunnel().request(FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT, request) as Promise<GetTerminalOutputResponse>,
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT,
+        request
+      ) as Promise<GetTerminalOutputResponse>,
       DATA_QUERY_TIMEOUT_MS,
       "requestGetTerminalOutput"
     );
@@ -280,9 +297,7 @@ class FrontendClientClass {
     const timeout = new Promise<never>((_, reject) => {
       timerId = setTimeout(() => {
         reject(
-          new Error(
-            `[FrontendClient] ${label} timed out after ${ms}ms -- frontend did not respond`
-          )
+          new Error(`[FrontendClient] ${label} timed out after ${ms}ms -- frontend did not respond`)
         );
       }, ms);
     });

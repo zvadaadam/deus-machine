@@ -66,6 +66,12 @@ export function useSessionActions({
             toast.error(
               "Failed to start agent. Your message was saved but the agent may not process it."
             );
+            // Reset session status from 'working' back to 'idle' since the agent never started
+            try {
+              await stopSessionMutation.mutateAsync(sessionId);
+            } catch {
+              // Best-effort cleanup — session may already be idle
+            }
           }
         }
 
@@ -74,7 +80,14 @@ export function useSessionActions({
         console.error("Failed to send message:", error);
       }
     },
-    [messageInput, sendMessageMutation, sessionId, workspacePath, onMessageSent]
+    [
+      messageInput,
+      sendMessageMutation,
+      stopSessionMutation,
+      sessionId,
+      workspacePath,
+      onMessageSent,
+    ]
   );
 
   const stopSession = useCallback(async () => {
