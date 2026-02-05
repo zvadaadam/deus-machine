@@ -40,6 +40,7 @@ chrono = "0.4"
 parking_lot = "0.12"
 lazy_static = "1.4"
 git2 = "0.19"
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

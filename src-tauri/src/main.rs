@@ -7,6 +7,7 @@ use conductor_lib::{
     backend::BackendManager,
     browser::BrowserManager,
     pty::PtyManager,
+    sidecar::SidecarManager,
     socket::SocketManager,
 };
 
@@ -23,6 +24,7 @@ fn main() {
         .manage(BackendManager::new())
         .manage(BrowserManager::new())
         .manage(PtyManager::new())
+        .manage(SidecarManager::new())
         .manage(SocketManager::new())
         .setup(|app| {
             // Set app handle for PTY manager so it can emit events
@@ -43,29 +45,24 @@ fn main() {
             // In prod: resources/backend/server.cjs (bundled in app)
             let backend_path = if cfg!(dev) {
                 // Development mode - resolve relative to the executable
-                let exe_dir = std::env::current_exe()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
+                let exe_dir = exe.ancestors()
+                    .nth(4)
+                    .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
                     .to_path_buf();
                 exe_dir.join("backend/server.cjs")
             } else {
                 // Production mode
                 app.path()
                     .resource_dir()
-                    .unwrap()
+                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
                     .join("backend/server.cjs")
             };
 
             println!("[TAURI] Starting backend from: {}", backend_path.display());
 
-            match backend_manager.start(backend_path) {
+            match backend_manager.start(backend_path.clone()) {
                 Ok(_) => {
                     if let Some(port) = backend_manager.get_port() {
                         println!("[TAURI] Backend started successfully on port {}", port);
@@ -79,13 +76,97 @@ fn main() {
                 }
             }
 
+            // Start sidecar-v2 (agent runtime)
+            let sidecar_manager: tauri::State<SidecarManager> = app.state();
+
+            // Determine sidecar path and database path
+            let exe_dir = if cfg!(dev) {
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
+                exe.ancestors()
+                    .nth(4)
+                    .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
+                    .to_path_buf()
+            } else {
+                app.path()
+                    .resource_dir()
+                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
+            };
+
+            // Sidecar path: resources/bin/index.bundled.cjs
+            // In dev: relative to working directory
+            // In prod: relative to resource_dir (Contents/Resources/)
+            let sidecar_path = if cfg!(dev) {
+                exe_dir.join("src-tauri/resources/bin/index.bundled.cjs")
+            } else {
+                exe_dir.join("bin/index.bundled.cjs")
+            };
+
+            // Database path (production OpenDevs app database)
+            let home_dir = std::env::var("HOME")
+                .ok()
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| {
+                    // Fallback: use /tmp as a safe default that always exists
+                    eprintln!("[TAURI] WARNING: HOME environment variable not set, using /tmp fallback");
+                    "/tmp".to_string()
+                });
+
+            let db_path = format!(
+                "{}/Library/Application Support/com.conductor.app/conductor.db",
+                home_dir
+            );
+
+            println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
+            println!("[TAURI] Using database at: {}", db_path);
+
+            match sidecar_manager.start(sidecar_path, &db_path) {
+                Ok(_) => {
+                    if let Some(socket_path) = sidecar_manager.get_socket_path() {
+                        println!("[TAURI] ✅ Sidecar started, socket: {}", socket_path);
+
+                        // Retry connection with backoff — sidecar may not be accepting connections yet
+                        let mut connected = false;
+                        for attempt in 1..=5 {
+                            match socket_manager.connect(socket_path.clone()) {
+                                Ok(_) => {
+                                    println!("[TAURI] ✅ Socket connected to sidecar (attempt {})", attempt);
+                                    connected = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    if attempt < 5 {
+                                        println!("[TAURI] Socket connect attempt {} failed: {}, retrying...", attempt, e);
+                                        std::thread::sleep(std::time::Duration::from_millis(200 * attempt as u64));
+                                    } else {
+                                        eprintln!("[TAURI] Failed to connect socket after {} attempts: {}", attempt, e);
+                                    }
+                                }
+                            }
+                        }
+                        if !connected {
+                            eprintln!("[TAURI] ⚠️ Could not connect to sidecar socket — agent features may not work");
+                        }
+                    } else {
+                        println!("[TAURI] Sidecar started (socket path detection pending)");
+                    }
+                },
+                Err(e) => {
+                    eprintln!("[TAURI] Failed to start sidecar: {}", e);
+                    eprintln!("[TAURI] App will continue but agent features will not work");
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Stop backend and browser when window closes
+                // Stop backend, sidecar, and browser when window closes
                 let backend_manager: tauri::State<BackendManager> = window.state();
                 backend_manager.stop().ok();
+
+                let sidecar_manager: tauri::State<SidecarManager> = window.state();
+                sidecar_manager.stop().ok();
 
                 let browser_manager: tauri::State<BrowserManager> = window.state();
                 browser_manager.stop().ok();
@@ -101,6 +182,7 @@ fn main() {
             commands::receive_sidecar_message,
             commands::disconnect_from_sidecar,
             commands::is_sidecar_connected,
+            commands::get_sidecar_socket_path,
             commands::get_backend_port,
             commands::get_installed_apps,
             commands::open_in_app,

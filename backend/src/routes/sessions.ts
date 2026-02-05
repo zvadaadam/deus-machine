@@ -1,9 +1,19 @@
 import { Hono } from 'hono';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { NotFoundError, ValidationError } from '../lib/errors';
-import { startClaudeSession, sendToClaudeSession, stopClaudeSession } from '../services/claude.service';
+
+/**
+ * Session Routes
+ *
+ * Sessions are associated with workspaces. Agent runtime (Claude SDK)
+ * is managed by sidecar-v2 (Rust-spawned). This route handles:
+ * - Session CRUD
+ * - User message persistence
+ * - Session status updates
+ *
+ * Frontend communicates with sidecar-v2 via Tauri IPC for agent queries.
+ */
 
 const app = new Hono();
 
@@ -103,10 +113,17 @@ app.get('/sessions/:id/messages', (c) => {
   return c.json({ messages, has_older, has_newer });
 });
 
+/**
+ * POST /sessions/:id/messages
+ *
+ * Saves user message to database and updates session status.
+ * Agent query is initiated via Tauri IPC → sidecar-v2, not here.
+ * Returns immediately after DB write.
+ */
 app.post('/sessions/:id/messages', async (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
-  const { content } = await c.req.json();
+  const { content, model } = await c.req.json();
 
   if (!content || typeof content !== 'string') {
     throw new ValidationError('content is required and must be a string');
@@ -117,6 +134,7 @@ app.post('/sessions/:id/messages', async (c) => {
 
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
+  const messageModel = (typeof model === 'string' && model) ? model : 'sonnet';
 
   const lastAssistantMessage = db.prepare(`
     SELECT sdk_message_id FROM session_messages
@@ -124,31 +142,27 @@ app.post('/sessions/:id/messages', async (c) => {
     ORDER BY created_at DESC LIMIT 1
   `).get(sessionId) as any;
 
-  db.prepare(`
-    INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, last_assistant_message_id)
-    VALUES (?, ?, 'user', ?, datetime('now'), ?, 'sonnet', ?)
-  `).run(messageId, sessionId, content, sentAt, lastAssistantMessage?.sdk_message_id || null);
+  const insertMessageAndUpdateSession = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, last_assistant_message_id)
+      VALUES (?, ?, 'user', ?, datetime('now'), ?, ?, ?)
+    `).run(messageId, sessionId, content, sentAt, messageModel, lastAssistantMessage?.sdk_message_id || null);
 
-  db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
+    db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
+  });
 
-  const workspace = db.prepare(`
-    SELECT w.*, r.root_path FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    WHERE w.active_session_id = ?
-  `).get(sessionId) as any;
-
-  if (!workspace || !workspace.root_path || !workspace.directory_name) {
-    throw new ValidationError('Workspace not found for session');
-  }
-
-  const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-  startClaudeSession(sessionId, workspacePath);
-  sendToClaudeSession(sessionId, content);
+  insertMessageAndUpdateSession();
 
   const createdMessage = db.prepare('SELECT * FROM session_messages WHERE id = ?').get(messageId);
   return c.json(createdMessage);
 });
 
+/**
+ * POST /sessions/:id/stop
+ *
+ * Marks session as idle and cancels latest user message.
+ * Actual agent cancellation is done via Tauri IPC → sidecar-v2.
+ */
 app.post('/sessions/:id/stop', (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
@@ -166,7 +180,6 @@ app.post('/sessions/:id/stop', (c) => {
     db.prepare("UPDATE session_messages SET cancelled_at = datetime('now') WHERE id = ?").run(latestUserMessage.id);
   }
 
-  stopClaudeSession(sessionId);
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
 
   const updatedSession = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
