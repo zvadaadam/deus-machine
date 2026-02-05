@@ -10,6 +10,7 @@ import { createOpenDevsMCPServer } from "../conductor-tools";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { getSession } from "./claude-session";
+import type { QueryOptions } from "../agent-handler";
 
 // ============================================================================
 // Constants
@@ -30,10 +31,7 @@ export const DEFAULT_SETTING_SOURCES = ["user", "project", "local"];
  * Creates the canUseTool callback for a Claude session.
  * Handles ExitPlanMode approval and file path guards.
  */
-export function createCanUseTool(
-  sessionId: string,
-  workingDirectory: string | undefined
-) {
+export function createCanUseTool(sessionId: string, workingDirectory: string | undefined) {
   return async (toolName: string, input: any, _toolOptions: any) => {
     // Handle plan mode exit approval
     if (toolName === "ExitPlanMode") {
@@ -71,9 +69,7 @@ export function createCanUseTool(
         return {
           behavior: "allow",
           updatedInput: input,
-          updatedPermissions: [
-            { type: "setMode", mode: "default", destination: "session" },
-          ],
+          updatedPermissions: [{ type: "setMode", mode: "default", destination: "session" }],
         };
       } else {
         return {
@@ -108,9 +104,7 @@ export function createCanUseTool(
 
           if (
             !allAllowedDirs.some(
-              (dir) =>
-                normalizedFilePath === dir ||
-                normalizedFilePath.startsWith(dir + path.sep)
+              (dir) => normalizedFilePath === dir || normalizedFilePath.startsWith(dir + path.sep)
             )
           ) {
             console.log(
@@ -193,8 +187,8 @@ export function createHooks(sessionId: string) {
 export function buildSdkOptions(
   sessionId: string,
   env: Record<string, string>,
-  options: any
-): any {
+  options: QueryOptions
+) {
   const modelToUse = mapModelForProvider(options?.model, env);
   const workingDirectory = options?.cwd;
   const permissionMode = options?.permissionMode;

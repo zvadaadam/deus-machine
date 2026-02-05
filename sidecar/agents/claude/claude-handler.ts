@@ -6,7 +6,7 @@ import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
-import type { AgentHandler } from "../agent-handler";
+import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
   initializeClaude,
@@ -66,7 +66,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     return initializeClaude();
   }
 
-  async handleQuery(sessionId: string, prompt: string, options: any): Promise<void> {
+  async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
     console.log("Handling Claude query request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
@@ -383,7 +383,7 @@ export class ClaudeAgentHandler implements AgentHandler {
   private async processWithGenerator(
     sessionId: string,
     initialPrompt: string,
-    options: any
+    options: QueryOptions
   ): Promise<void> {
     const generatorId = `${sessionId}/${Date.now()}`;
     const session = getSession(sessionId);
@@ -421,7 +421,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Build environment using shared env-builder
       const envForClaude = buildAgentEnvironment({
         claudeEnvVars: options?.claudeEnvVars,
-        conductorEnv: options?.conductorEnv as Record<string, string>,
+        conductorEnv: options?.conductorEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });

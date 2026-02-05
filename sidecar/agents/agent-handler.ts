@@ -3,7 +3,10 @@
 // Each agent type (claude, codex, etc.) implements AgentHandler and
 // registers itself in the registry during sidecar startup.
 
-import type { AgentType } from "../protocol";
+import type { AgentType, QueryRequest } from "../protocol";
+
+/** Options passed to handleQuery, validated by QueryRequestSchema in protocol.ts */
+export type QueryOptions = QueryRequest["options"];
 
 /**
  * Common interface for all agent handlers.
@@ -19,7 +22,7 @@ export interface AgentHandler {
 
   initialize(): { success: boolean; error?: string };
 
-  handleQuery(sessionId: string, prompt: string, options: any): Promise<void>;
+  handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void>;
 
   handleCancel(sessionId: string): Promise<void>;
 
