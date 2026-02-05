@@ -12,6 +12,7 @@
  */
 
 import { useCallback } from "react";
+import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
 import { socketService } from "@/platform/socket";
 import { isTauriEnv } from "@/platform/tauri";
@@ -62,7 +63,9 @@ export function useSessionActions({
             });
           } catch (socketError) {
             console.error("[useSessionActions] Socket query failed:", socketError);
-            // Don't throw - the HTTP save succeeded, we just couldn't trigger the agent
+            toast.error(
+              "Failed to start agent. Your message was saved but the agent may not process it."
+            );
           }
         }
 

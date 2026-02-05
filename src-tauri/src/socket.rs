@@ -25,12 +25,21 @@
  * PERFORMANCE FIX (2025-10-26):
  * - Was: Busy-wait loop checking connection every 100ms (high CPU when disconnected)
  * - Now: Sleep 1s when disconnected, 100ms when connected (90% CPU reduction)
+ *
+ * DATA CORRUPTION FIX (2026-02-05):
+ * - Was: Two independent BufReaders on the same fd (event listener via try_clone()
+ *   and receive() via direct stream read) raced for bytes, causing JSON-RPC
+ *   responses to be consumed by the wrong reader — data loss on cancelQuery(),
+ *   getClaudeAuth(), workspaceInit() while streaming was active.
+ * - Now: ALL reads go through the single event listener thread. JSON-RPC responses
+ *   (messages with an "id" field) are dispatched via mpsc channel to receive().
+ *   Notifications (no "id") are emitted as Tauri events as before.
  */
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -39,12 +48,20 @@ use serde_json::Value;
 /**
  * Socket Manager State
  *
- * Maintains connection to the sidecar Unix socket
+ * Maintains connection to the sidecar Unix socket.
+ *
+ * All reads are funneled through the event listener thread to prevent
+ * data corruption from concurrent BufReaders on the same fd.
+ * JSON-RPC responses (with "id") are dispatched to response_rx for receive().
+ * JSON-RPC notifications (without "id") are emitted as Tauri events.
  */
 pub struct SocketManager {
     socket_path: Mutex<Option<PathBuf>>,
     stream: Arc<Mutex<Option<UnixStream>>>,
     app_handle: Arc<Mutex<Option<AppHandle>>>,
+    /// Channel receiver for JSON-RPC responses routed from the event listener.
+    /// Created fresh in start_event_listener(), cleared in disconnect().
+    response_rx: Arc<Mutex<Option<mpsc::Receiver<String>>>>,
 }
 
 impl SocketManager {
@@ -53,6 +70,7 @@ impl SocketManager {
             socket_path: Mutex::new(None),
             stream: Arc::new(Mutex::new(None)),
             app_handle: Arc::new(Mutex::new(None)),
+            response_rx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -88,7 +106,7 @@ impl SocketManager {
             Ok(stream) => {
                 *self.stream.lock().unwrap() = Some(stream);
                 *self.socket_path.lock().unwrap() = Some(path);
-                println!("[SOCKET] 🔌 Connected to {}", socket_path);
+                println!("[SOCKET] Connected to {}", socket_path);
                 Ok(())
             }
             Err(e) => Err(format!("Failed to connect to socket: {}", e)),
@@ -120,23 +138,33 @@ impl SocketManager {
     }
 
     /**
-     * Receive NDJSON message from sidecar
+     * Receive a JSON-RPC response from sidecar
      *
-     * @returns Next line from socket as string
+     * Instead of reading from the socket directly (which would race with the
+     * event listener thread), this reads from the mpsc response channel that
+     * the event listener populates with JSON-RPC response messages (those with
+     * an "id" field).
+     *
+     * Uses a 30-second timeout to avoid hanging forever if the sidecar dies.
      */
     pub fn receive(&self) -> Result<String, String> {
-        let stream_lock = self.stream.lock().unwrap();
+        let rx_lock = self.response_rx.lock().unwrap();
 
-        match stream_lock.as_ref() {
-            Some(stream) => {
-                let mut reader = BufReader::new(stream);
-                let mut line = String::new();
-                reader
-                    .read_line(&mut line)
-                    .map_err(|e| format!("Failed to read from socket: {}", e))?;
-                Ok(line.trim_end().to_string())
+        match rx_lock.as_ref() {
+            Some(rx) => {
+                // Use recv_timeout to avoid blocking forever if sidecar dies
+                // or the connection is dropped while we're waiting.
+                rx.recv_timeout(Duration::from_secs(30))
+                    .map_err(|e| match e {
+                        mpsc::RecvTimeoutError::Timeout => {
+                            "Timed out waiting for response from sidecar (30s)".to_string()
+                        }
+                        mpsc::RecvTimeoutError::Disconnected => {
+                            "Response channel disconnected (event listener stopped)".to_string()
+                        }
+                    })
             }
-            None => Err("Not connected to socket".to_string()),
+            None => Err("Not connected to socket (no response channel)".to_string()),
         }
     }
 
@@ -144,17 +172,26 @@ impl SocketManager {
      * Start listening for broadcast events from sidecar-v2
      * Runs in background thread and emits Tauri events to frontend
      *
-     * Parses JSON-RPC 2.0 notifications from sidecar-v2:
-     * - {"jsonrpc":"2.0","method":"message","params":{...}} → "session:message" event
-     * - {"jsonrpc":"2.0","method":"queryError","params":{...}} → "session:error" event
-     * - {"jsonrpc":"2.0","method":"enterPlanModeNotification","params":{...}} → "session:enter-plan-mode" event
+     * ALL socket reads are funneled through this single thread to prevent
+     * data corruption from concurrent BufReaders on the same fd.
+     *
+     * Parses JSON-RPC 2.0 messages from sidecar-v2:
+     * - Notifications (no "id"): emitted as Tauri events
+     *   - {"jsonrpc":"2.0","method":"message","params":{...}} → "session:message" event
+     *   - {"jsonrpc":"2.0","method":"queryError","params":{...}} → "session:error" event
+     *   - {"jsonrpc":"2.0","method":"enterPlanModeNotification","params":{...}} → "session:enter-plan-mode" event
+     * - Responses (has "id"): dispatched to mpsc channel for receive()
      */
     pub fn start_event_listener(&self) {
+        // Create the mpsc channel for routing JSON-RPC responses to receive()
+        let (response_tx, response_rx) = mpsc::channel::<String>();
+        *self.response_rx.lock().unwrap() = Some(response_rx);
+
         let stream = Arc::clone(&self.stream);
         let app_handle = Arc::clone(&self.app_handle);
 
         thread::spawn(move || {
-            println!("[SOCKET] 📡 Event listener started (JSON-RPC 2.0 mode)");
+            println!("[SOCKET] Event listener started (JSON-RPC 2.0 mode)");
 
             loop {
                 // Check if we have a connection
@@ -171,10 +208,23 @@ impl SocketManager {
                             Ok(line) => {
                                 // Try to parse as JSON-RPC 2.0 message
                                 if let Ok(rpc_msg) = serde_json::from_str::<Value>(&line) {
-                                    // Check for JSON-RPC 2.0 notification (no "id" field)
-                                    if rpc_msg.get("jsonrpc").and_then(|v| v.as_str()) == Some("2.0")
-                                        && rpc_msg.get("id").is_none()
-                                    {
+                                    let is_jsonrpc = rpc_msg.get("jsonrpc")
+                                        .and_then(|v| v.as_str()) == Some("2.0");
+
+                                    if !is_jsonrpc {
+                                        continue;
+                                    }
+
+                                    // Dispatch based on whether the message has an "id" field:
+                                    // - With "id": JSON-RPC response → send to receive() via mpsc
+                                    // - Without "id": JSON-RPC notification → emit Tauri event
+                                    if rpc_msg.get("id").is_some() {
+                                        // Response message — route to receive() via channel.
+                                        // If the receiver is dropped (e.g., nobody called receive()),
+                                        // we just drop the response silently.
+                                        let _ = response_tx.send(line);
+                                    } else {
+                                        // Notification — emit as Tauri event
                                         let method = rpc_msg.get("method")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("unknown");
@@ -188,25 +238,24 @@ impl SocketManager {
                                             "queryError" => "session:error",
                                             "enterPlanModeNotification" => "session:enter-plan-mode",
                                             _ => {
-                                                println!("[SOCKET] ⚠️ Unknown RPC method: {}", method);
+                                                println!("[SOCKET] Unknown RPC method: {}", method);
                                                 continue;
                                             }
                                         };
 
-                                        println!("[SOCKET] 📢 {} → {}", method, event_name);
+                                        println!("[SOCKET] {} -> {}", method, event_name);
 
                                         // Emit to frontend via Tauri
                                         if let Some(handle) = app_handle.lock().unwrap().as_ref() {
                                             if let Err(e) = handle.emit(event_name, params) {
-                                                eprintln!("[SOCKET] ❌ Failed to emit event: {}", e);
+                                                eprintln!("[SOCKET] Failed to emit event: {}", e);
                                             }
                                         }
                                     }
-                                    // JSON-RPC requests/responses are handled by send/receive methods
                                 }
                             }
                             Err(e) => {
-                                eprintln!("[SOCKET] ❌ Error reading line: {}", e);
+                                eprintln!("[SOCKET] Error reading line: {}", e);
                                 break; // Connection lost, exit loop
                             }
                         }
@@ -228,7 +277,10 @@ impl SocketManager {
     pub fn disconnect(&self) -> Result<(), String> {
         *self.stream.lock().unwrap() = None;
         *self.socket_path.lock().unwrap() = None;
-        println!("[SOCKET] 🔌 Disconnected");
+        // Clear the response channel so receive() returns an error immediately
+        // instead of blocking on a stale channel.
+        *self.response_rx.lock().unwrap() = None;
+        println!("[SOCKET] Disconnected");
         Ok(())
     }
 

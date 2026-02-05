@@ -102,9 +102,28 @@ impl SidecarManager {
     }
 
     /// Check if sidecar is running
+    ///
+    /// Uses try_wait() to detect if the child process has crashed or exited,
+    /// rather than just checking if we have a process handle. This prevents
+    /// stale process handles from reporting a running state.
     pub fn is_running(&self) -> bool {
-        let process = self.process.lock().unwrap();
-        process.is_some()
+        let mut process = self.process.lock().unwrap();
+        if let Some(ref mut child) = *process {
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process has exited — clean up
+                    *process = None;
+                    false
+                }
+                Ok(None) => true,    // Still running
+                Err(_) => {
+                    *process = None;
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     /// Stop the sidecar process
