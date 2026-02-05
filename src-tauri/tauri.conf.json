@@ -11,7 +11,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": ["../backend/**/*.cjs"],
+    "resources": [
+      "../backend/**/*.cjs",
+      "resources/bin/index.bundled.cjs"
+    ],
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "10.13"

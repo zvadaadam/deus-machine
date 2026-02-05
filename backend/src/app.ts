@@ -7,7 +7,6 @@ import sessionRoutes from './routes/sessions';
 import repoRoutes from './routes/repos';
 import configRoutes from './routes/config';
 import settingsRoutes from './routes/settings';
-import sidecarRoutes from './routes/sidecar';
 import statsRoutes from './routes/stats';
 
 export function createApp() {
@@ -17,13 +16,13 @@ export function createApp() {
   app.use('*', cors());
 
   // Mount route groups
+  // Note: Sidecar routes removed - agent runtime now managed by sidecar-v2 (Rust-spawned)
   app.route('/api', healthRoutes);
   app.route('/api', workspaceRoutes);
   app.route('/api', sessionRoutes);
   app.route('/api', repoRoutes);
   app.route('/api', configRoutes);
   app.route('/api', settingsRoutes);
-  app.route('/api', sidecarRoutes);
   app.route('/api', statsRoutes);
 
   // Centralized error handling

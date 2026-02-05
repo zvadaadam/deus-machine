@@ -389,6 +389,7 @@ export function MainContent({
                       <SessionPanel
                         ref={workspaceChatPanelRef}
                         sessionId={selectedWorkspace.active_session_id}
+                        workspacePath={selectedWorkspace.workspace_path}
                         embedded={true}
                         onCreatePR={(handler) => {
                           createPRHandlerRef.current = handler;

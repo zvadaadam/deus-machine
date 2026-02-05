@@ -4,4 +4,4 @@
  */
 
 export { socketService } from "./socketService";
-export type { SocketMessage, SocketResponse } from "./socketService";
+export type { QueryOptions } from "./socketService";
