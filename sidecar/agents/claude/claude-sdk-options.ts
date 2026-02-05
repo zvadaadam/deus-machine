@@ -4,6 +4,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
 import { createConductorMCPServer } from "../conductor-tools";
@@ -188,12 +189,12 @@ export function buildSdkOptions(
   sessionId: string,
   env: Record<string, string>,
   options: QueryOptions
-) {
+): Options {
   const modelToUse = mapModelForProvider(options?.model, env);
   const workingDirectory = options?.cwd;
   const permissionMode = options?.permissionMode;
 
-  const sdkOptions: any = {
+  const sdkOptions: Record<string, unknown> = {
     maxTurns: options?.maxTurns || 1_000,
     model: modelToUse,
     maxThinkingTokens: options?.maxThinkingTokens,
@@ -228,5 +229,5 @@ export function buildSdkOptions(
     };
   }
 
-  return sdkOptions;
+  return sdkOptions as unknown as Options;
 }

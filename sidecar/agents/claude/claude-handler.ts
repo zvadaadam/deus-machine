@@ -202,7 +202,6 @@ export class ClaudeAgentHandler implements AgentHandler {
             error
           );
         });
-      deleteQuery(sessionId);
       deleteSession(sessionId);
     } else {
       console.log(`No active session found for ${sessionId} to cancel`);
@@ -300,14 +299,20 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     const contextUsageQuery = claudeSDK({ prompt: "/context", options: sdkOptions });
 
-    for await (const message of contextUsageQuery) {
-      if ((message as any).type !== "user") continue;
-      return {
-        type: "context_usage",
-        id: sessionId,
-        agentType: "claude",
-        contextUsageData: message,
-      };
+    try {
+      for await (const message of contextUsageQuery) {
+        if (message.type !== "user") continue;
+        return {
+          type: "context_usage",
+          id: sessionId,
+          agentType: "claude",
+          contextUsageData: message,
+        };
+      }
+    } finally {
+      void contextUsageQuery.interrupt().catch((error: Error) => {
+        console.error(`[getContextUsage] Error during interrupt:`, error);
+      });
     }
 
     throw new Error("No user message found in context usage response");
@@ -394,7 +399,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     // --- Message queue for multi-turn conversations ---
     const messageQueue: string[] = [initialPrompt];
-    let waitingForMessage: ((msg: string | undefined) => void) | null = null;
+    let waitingForMessage: ((msg: string) => void) | null = null;
     let asyncIterableTerminated = false;
 
     session.sendMessage = (message: string) => {
@@ -436,7 +441,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           if (messageQueue.length > 0) {
             message = messageQueue.shift();
           } else {
-            message = await new Promise<string | undefined>((resolve) => {
+            message = await new Promise<string>((resolve) => {
               waitingForMessage = resolve;
             });
           }
