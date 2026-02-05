@@ -3,13 +3,22 @@
  *
  * Centralizes all session action handlers (send, stop, compact, create PR).
  * Extracted from SessionPanel to reduce component complexity.
+ *
+ * Message Flow (sidecar-v2 architecture):
+ * 1. User clicks send → HTTP POST saves user message to DB
+ * 2. After HTTP success → socketService.sendQuery() triggers agent via sidecar-v2
+ * 3. Sidecar-v2 streams response → saves to DB → emits Tauri events
+ * 4. useSessionEvents receives events → invalidates React Query cache → UI updates
  */
 
 import { useCallback } from "react";
 import { useSendMessage, useStopSession } from "../api/session.queries";
+import { socketService } from "@/platform/socket";
+import { isTauriEnv } from "@/platform/tauri";
 
 interface UseSessionActionsProps {
   sessionId: string;
+  workspacePath: string;
   messageInput: string;
   onMessageSent?: () => void;
 }
@@ -27,6 +36,7 @@ interface UseSessionActionsReturn {
 
 export function useSessionActions({
   sessionId,
+  workspacePath,
   messageInput,
   onMessageSent,
 }: UseSessionActionsProps): UseSessionActionsReturn {
@@ -39,13 +49,29 @@ export function useSessionActions({
       if (!content || sendMessageMutation.isPending) return;
 
       try {
+        // Step 1: Save user message to DB via HTTP
         await sendMessageMutation.mutateAsync({ sessionId, content });
+
+        // Step 2: Trigger agent query via sidecar-v2 socket (Tauri only)
+        // In web mode, there's no direct sidecar connection
+        if (isTauriEnv) {
+          try {
+            await socketService.sendQuery(sessionId, content, {
+              cwd: workspacePath,
+              // TODO: Pass model, permissionMode, and other settings from session
+            });
+          } catch (socketError) {
+            console.error("[useSessionActions] Socket query failed:", socketError);
+            // Don't throw - the HTTP save succeeded, we just couldn't trigger the agent
+          }
+        }
+
         onMessageSent?.();
       } catch (error) {
         console.error("Failed to send message:", error);
       }
     },
-    [messageInput, sendMessageMutation, sessionId, onMessageSent]
+    [messageInput, sendMessageMutation, sessionId, workspacePath, onMessageSent]
   );
 
   const stopSession = useCallback(async () => {

@@ -1,9 +1,19 @@
 import { Hono } from 'hono';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { NotFoundError, ValidationError } from '../lib/errors';
-import { startClaudeSession, sendToClaudeSession, stopClaudeSession } from '../services/claude.service';
+
+/**
+ * Session Routes
+ *
+ * Sessions are associated with workspaces. Agent runtime (Claude SDK)
+ * is managed by sidecar-v2 (Rust-spawned). This route handles:
+ * - Session CRUD
+ * - User message persistence
+ * - Session status updates
+ *
+ * Frontend communicates with sidecar-v2 via Tauri IPC for agent queries.
+ */
 
 const app = new Hono();
 
@@ -103,6 +113,13 @@ app.get('/sessions/:id/messages', (c) => {
   return c.json({ messages, has_older, has_newer });
 });
 
+/**
+ * POST /sessions/:id/messages
+ *
+ * Saves user message to database and updates session status.
+ * Agent query is initiated via Tauri IPC → sidecar-v2, not here.
+ * Returns immediately after DB write.
+ */
 app.post('/sessions/:id/messages', async (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
@@ -131,24 +148,16 @@ app.post('/sessions/:id/messages', async (c) => {
 
   db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
 
-  const workspace = db.prepare(`
-    SELECT w.*, r.root_path FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    WHERE w.active_session_id = ?
-  `).get(sessionId) as any;
-
-  if (!workspace || !workspace.root_path || !workspace.directory_name) {
-    throw new ValidationError('Workspace not found for session');
-  }
-
-  const workspacePath = path.join(workspace.root_path, '.conductor', workspace.directory_name);
-  startClaudeSession(sessionId, workspacePath);
-  sendToClaudeSession(sessionId, content);
-
   const createdMessage = db.prepare('SELECT * FROM session_messages WHERE id = ?').get(messageId);
   return c.json(createdMessage);
 });
 
+/**
+ * POST /sessions/:id/stop
+ *
+ * Marks session as idle and cancels latest user message.
+ * Actual agent cancellation is done via Tauri IPC → sidecar-v2.
+ */
 app.post('/sessions/:id/stop', (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
@@ -166,7 +175,6 @@ app.post('/sessions/:id/stop', (c) => {
     db.prepare("UPDATE session_messages SET cancelled_at = datetime('now') WHERE id = ?").run(latestUserMessage.id);
   }
 
-  stopClaudeSession(sessionId);
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
 
   const updatedSession = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);

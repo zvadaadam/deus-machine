@@ -1,14 +1,20 @@
 /**
- * Unix Domain Socket Client for Sidecar Communication
+ * Unix Domain Socket Client for Sidecar-v2 Communication
  *
- * Connects to the Node.js sidecar Unix socket for real-time
- * communication with Claude CLI.
+ * Connects to the Node.js sidecar-v2 Unix socket for real-time
+ * communication with agent runtime (Claude SDK, Codex, etc.).
  *
  * ARCHITECTURE (Event Flow):
- * Claude responds → Backend saves to DB → Backend emits to Sidecar
- * → Sidecar broadcasts via Unix socket → Rust listener (here) reads
- * → Rust emits Tauri event → Frontend React hook invalidates cache
+ * Frontend → Tauri IPC → Rust socket relay → Sidecar-v2 → Claude SDK
+ * Claude responds → Sidecar-v2 saves to DB → Sidecar-v2 JSON-RPC notify
+ * → Rust listener (here) reads → Rust emits Tauri event → Frontend
  * → UI updates instantly (<100ms latency)
+ *
+ * PROTOCOL: JSON-RPC 2.0 over newline-delimited JSON (NDJSON)
+ * Notifications from sidecar-v2:
+ * - "message": Agent message (streaming responses)
+ * - "queryError": Query error notification
+ * - "enterPlanModeNotification": Plan mode entry
  *
  * DESIGN DECISION - Why Unix Socket vs HTTP SSE:
  * - Infrastructure already existed (sidecar uses Unix socket)
@@ -64,6 +70,19 @@ impl SocketManager {
      */
     pub fn connect(&self, socket_path: String) -> Result<(), String> {
         let path = PathBuf::from(&socket_path);
+
+        // Skip if already connected to the same socket path.
+        // This prevents the frontend's useSocket() from creating a second
+        // connection that splits reads (event listener) and writes (send).
+        {
+            let current_path = self.socket_path.lock().unwrap();
+            if let Some(ref existing) = *current_path {
+                if existing == &path {
+                    println!("[SOCKET] Already connected to {}", socket_path);
+                    return Ok(());
+                }
+            }
+        }
 
         match UnixStream::connect(&path) {
             Ok(stream) => {
@@ -122,15 +141,20 @@ impl SocketManager {
     }
 
     /**
-     * Start listening for broadcast events from sidecar
+     * Start listening for broadcast events from sidecar-v2
      * Runs in background thread and emits Tauri events to frontend
+     *
+     * Parses JSON-RPC 2.0 notifications from sidecar-v2:
+     * - {"jsonrpc":"2.0","method":"message","params":{...}} → "session:message" event
+     * - {"jsonrpc":"2.0","method":"queryError","params":{...}} → "session:error" event
+     * - {"jsonrpc":"2.0","method":"enterPlanModeNotification","params":{...}} → "session:enter-plan-mode" event
      */
     pub fn start_event_listener(&self) {
         let stream = Arc::clone(&self.stream);
         let app_handle = Arc::clone(&self.app_handle);
 
         thread::spawn(move || {
-            println!("[SOCKET] 📡 Event listener started");
+            println!("[SOCKET] 📡 Event listener started (JSON-RPC 2.0 mode)");
 
             loop {
                 // Check if we have a connection
@@ -145,26 +169,40 @@ impl SocketManager {
                     for line in reader.lines() {
                         match line {
                             Ok(line) => {
-                                // Try to parse as JSON event
-                                if let Ok(event) = serde_json::from_str::<Value>(&line) {
-                                    // Check if it's a frontend_event type
-                                    if event.get("type").and_then(|v| v.as_str()) == Some("frontend_event") {
-                                        let event_name = event.get("event")
+                                // Try to parse as JSON-RPC 2.0 message
+                                if let Ok(rpc_msg) = serde_json::from_str::<Value>(&line) {
+                                    // Check for JSON-RPC 2.0 notification (no "id" field)
+                                    if rpc_msg.get("jsonrpc").and_then(|v| v.as_str()) == Some("2.0")
+                                        && rpc_msg.get("id").is_none()
+                                    {
+                                        let method = rpc_msg.get("method")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("unknown");
 
-                                        let payload = event.get("payload").cloned()
+                                        let params = rpc_msg.get("params").cloned()
                                             .unwrap_or(Value::Null);
 
-                                        println!("[SOCKET] 📢 Received event: {}", event_name);
+                                        // Map JSON-RPC methods to Tauri event names
+                                        let event_name = match method {
+                                            "message" => "session:message",
+                                            "queryError" => "session:error",
+                                            "enterPlanModeNotification" => "session:enter-plan-mode",
+                                            _ => {
+                                                println!("[SOCKET] ⚠️ Unknown RPC method: {}", method);
+                                                continue;
+                                            }
+                                        };
+
+                                        println!("[SOCKET] 📢 {} → {}", method, event_name);
 
                                         // Emit to frontend via Tauri
                                         if let Some(handle) = app_handle.lock().unwrap().as_ref() {
-                                            if let Err(e) = handle.emit(event_name, payload) {
+                                            if let Err(e) = handle.emit(event_name, params) {
                                                 eprintln!("[SOCKET] ❌ Failed to emit event: {}", e);
                                             }
                                         }
                                     }
+                                    // JSON-RPC requests/responses are handled by send/receive methods
                                 }
                             }
                             Err(e) => {

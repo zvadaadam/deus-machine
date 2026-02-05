@@ -32,6 +32,10 @@
     "// test": "🧪 Run E2E test suite - requires backend running",
     "test:backend": "vitest run --config backend/vitest.config.ts",
     "test:backend:watch": "vitest --config backend/vitest.config.ts",
+    "test:sidecar": "vitest run --config sidecar/vitest.config.ts",
+    "test:sidecar:watch": "vitest --config sidecar/vitest.config.ts",
+    "build:sidecar": "npx tsx sidecar/build.ts",
+    "// build:sidecar": "📦 Bundle the sidecar agent runtime to src-tauri/resources/bin/",
     "//8": "═══════════════════════════════════════════════════════════════",
     "// CODE FORMATTING": "",
     "//9": "═══════════════════════════════════════════════════════════════",
@@ -48,7 +52,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.0.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.31",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-python": "^6.1.6",
     "@codemirror/state": "^6.4.1",
@@ -91,6 +95,7 @@
     "framer-motion": "^12.23.24",
     "hono": "^4.11.7",
     "immer": "^11.0.1",
+    "json-rpc-2.0": "^1.7.1",
     "lucide-react": "^0.546.0",
     "next-themes": "^0.4.6",
     "react": "^18.3.1",

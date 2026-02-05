@@ -19,15 +19,36 @@ Frontend (React + Zustand + React Query)
     │                  ├── Git operations (libgit2 — fast, stateless)
     │                  ├── File scanning (.gitignore-aware, cached)
     │                  ├── Terminal / PTY sessions
-    │                  ├── Process lifecycle (Node.js backend, dev-browser)
+    │                  ├── Process lifecycle (Node.js backend, sidecar, dev-browser)
     │                  └── Socket relay (sidecar ↔ Tauri events)
     │
-    └── HTTP REST ──→ Node.js Backend (backend/)
-                       ├── Database (SQLite — repos, workspaces, sessions, messages)
-                       ├── Claude Code CLI orchestration (per-session processes)
-                       ├── Workspace creation (git worktree + DB coordination)
-                       ├── Config management (MCP servers, agents, hooks)
-                       └── External services (GitHub PR status via gh CLI)
+    ├── HTTP REST ──→ Node.js Backend (backend/)
+    │                  ├── Database (SQLite — repos, workspaces, sessions, user messages)
+    │                  ├── Workspace creation (git worktree + DB coordination)
+    │                  ├── Config management (MCP servers, agents, hooks)
+    │                  └── External services (GitHub PR status via gh CLI)
+    │
+    └── Socket ────→ Sidecar (sidecar/)
+                       ├── Claude Agent SDK (streaming responses)
+                       ├── Message transformation (SDK → DB format)
+                       ├── Assistant message persistence (direct SQLite writes)
+                       └── Real-time notifications → Rust → Tauri events → Frontend
+```
+
+### Message Flow
+
+```
+User sends message:
+  Frontend → HTTP POST → Backend saves user message to DB
+          → socketService.sendQuery() → Rust socket relay → Sidecar
+
+Sidecar processes:
+  Sidecar → Claude Agent SDK → streaming response
+         → transforms message → saves to SQLite (better-sqlite3)
+         → FrontendClient.sendMessage() → Rust socket → Tauri event
+
+Frontend receives:
+  Tauri event → useSessionEvents hook → invalidates React Query → UI updates
 ```
 
 ## Database: Shared with Production OpenDevs
@@ -52,9 +73,10 @@ The production OpenDevs binary (Rust/sqlx) owns the schema — its 75+ migration
 
 ## Rust vs Node.js Boundary
 
-- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O.
-- **Node.js (Hono backend):** Business logic. Database reads/writes. External service calls (Claude CLI, GitHub API). Anything that needs DB state or orchestrates multiple steps.
-- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js.
+- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O, socket relay.
+- **Node.js (Hono backend):** Business logic. Database reads/writes (repos, workspaces, user messages). Config management. External services (GitHub API via gh CLI).
+- **Node.js (Sidecar):** Claude Agent SDK integration. Message transformation. Assistant message persistence. Real-time streaming to frontend.
+- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js. If it involves Claude SDK streaming, it goes in the sidecar.
 
 ### Moving the Read Layer to Rust (Long-Term Direction)
 
@@ -74,8 +96,9 @@ Frontend → HTTP REST → Node.js → SQLite                ← writes + orches
 **What stays in Node.js (writes + orchestration):**
 
 - Multi-step operations (create workspace = DB insert + git worktree + state transitions)
-- Operations that coordinate with external services (Claude CLI spawn, GitHub API)
+- Operations that coordinate with external services (GitHub API)
 - Complex writes that involve business logic validation across multiple tables
+- User message saving (triggers sidecar query via frontend socket)
 
 **Implementation rules:**
 
@@ -87,24 +110,29 @@ Frontend → HTTP REST → Node.js → SQLite                ← writes + orches
 ## Rust Backend Structure (src-tauri/)
 
 ```
-src-tauri/src/
-├── main.rs              App init, plugin registration, lifecycle hooks
-├── lib.rs               Module exports
-├── commands/
-│   ├── mod.rs           Re-exports all command modules
-│   ├── pty.rs           Terminal: spawn, resize, write, kill
-│   ├── socket.rs        Sidecar: connect, send, receive, disconnect
-│   ├── backend.rs       Backend port discovery
-│   ├── browser.rs       Dev-browser: start, stop, port, auth, status
-│   ├── apps.rs          App detection: get_installed_apps, open_in_app
-│   ├── files.rs         File scanning: scan, invalidate_cache, clear_cache
-│   └── git.rs           Git Tauri commands (diff, status, branch, content)
-├── backend.rs           Node.js backend process manager
-├── browser.rs           Dev-browser process manager
-├── pty.rs               PTY session manager
-├── socket.rs            Unix socket client (sidecar IPC)
-├── files.rs             File scanner with 30s cache
-└── git.rs               Core git operations via libgit2
+src-tauri/
+├── src/
+│   ├── main.rs              App init, plugin registration, lifecycle hooks
+│   ├── lib.rs               Module exports
+│   ├── commands/
+│   │   ├── mod.rs           Re-exports all command modules
+│   │   ├── pty.rs           Terminal: spawn, resize, write, kill
+│   │   ├── socket.rs        Sidecar: connect, send, receive, disconnect
+│   │   ├── backend.rs       Backend port discovery
+│   │   ├── browser.rs       Dev-browser: start, stop, port, auth, status
+│   │   ├── apps.rs          App detection: get_installed_apps, open_in_app
+│   │   ├── files.rs         File scanning: scan, invalidate_cache, clear_cache
+│   │   └── git.rs           Git Tauri commands (diff, status, branch, content)
+│   ├── backend.rs           Node.js backend process manager
+│   ├── browser.rs           Dev-browser process manager
+│   ├── sidecar.rs           Sidecar process manager (spawns Node.js sidecar)
+│   ├── pty.rs               PTY session manager
+│   ├── socket.rs            Unix socket client (sidecar IPC relay)
+│   ├── files.rs             File scanner with 30s cache
+│   └── git.rs               Core git operations via libgit2
+└── resources/
+    └── bin/
+        └── index.bundled.cjs  Sidecar bundle (built from sidecar/)
 ```
 
 ### Git Diff Semantics (src-tauri/src/git.rs)
@@ -128,26 +156,64 @@ backend/src/
 │   ├── error-handler.ts Global error → JSON response mapper
 │   └── workspace-loader.ts  Loads workspace by :id, sets path on context
 ├── services/
-│   ├── claude.service.ts  Spawns Claude CLI, manages per-session processes
+│   ├── claude.service.ts  Tool permission checking (canUseTool)
 │   ├── git.service.ts     Git utilities (web-mode fallback, workspace creation)
 │   ├── config.service.ts  File-based config (~/.conductor/)
 │   ├── settings.service.ts  SQLite key-value settings
 │   └── workspace.service.ts  City name generator for workspaces
-├── routes/
-│   ├── workspaces.ts    CRUD + diff endpoints (diff routes use Rust in desktop)
-│   ├── sessions.ts      Session CRUD + message sending (triggers Claude CLI)
-│   ├── repos.ts         Repository management
-│   ├── config.ts        MCP servers, commands, agents, hooks CRUD
-│   ├── settings.ts      Key-value settings
-│   ├── stats.ts         System statistics
-│   ├── health.ts        Health check + port discovery
-│   └── sidecar.ts       Sidecar status & command forwarding
-└── sidecar/             IPC bridge: Node.js ↔ Rust via Unix socket
-    ├── index.ts           SidecarManager (process + socket + health coordination)
-    ├── process-manager.ts Sidecar process lifecycle
-    ├── socket-manager.ts  Unix socket client management
-    ├── health-monitor.ts  Keepalive + reconnection logic
-    └── message-handler.ts Message parsing and routing
+└── routes/
+    ├── workspaces.ts    CRUD + diff endpoints (diff routes use Rust in desktop)
+    ├── sessions.ts      Session CRUD + user message saving
+    ├── repos.ts         Repository management
+    ├── config.ts        MCP servers, commands, agents, hooks CRUD
+    ├── settings.ts      Key-value settings
+    ├── stats.ts         System statistics
+    └── health.ts        Health check + port discovery
+```
+
+## Sidecar Structure (sidecar/)
+
+The sidecar runs as a separate Node.js process, managed by Rust. It handles Claude Agent SDK communication and streams responses back to the frontend via Tauri events.
+
+**Why a separate process?** The sidecar uses native modules (`better-sqlite3`) for direct DB writes and needs to run independently of the backend for clean separation of concerns.
+
+**Bundling approach:** Uses `bundle.resources` in `tauri.conf.json` (not `externalBin`) because Node.js scripts with native modules can't be compiled to standalone binaries. The bundle includes the pre-built `index.bundled.cjs` file.
+
+```
+sidecar/
+├── index.ts             Entry point, JSON-RPC server over Unix socket
+├── build.ts             esbuild config → outputs to src-tauri/resources/bin/
+├── vitest.config.ts     Test configuration
+├── package.json         Sidecar-specific dependencies
+├── rpc-connection.ts    Bidirectional JSON-RPC 2.0 peer over Unix socket
+├── frontend-client.ts   FrontendClient: typed notifications → Rust → Tauri events
+├── protocol.ts          Shared message type definitions
+├── agents/
+│   ├── agent-handler.ts   Abstract agent handler interface + registry
+│   ├── env-builder.ts     Shell environment builder for agent processes
+│   ├── shell-env.ts       Host shell environment detection
+│   ├── conductor-tools.ts OpenDevs MCP tools (AskUser, Diff, Terminal, etc.)
+│   └── claude/
+│       ├── claude-handler.ts    Claude Agent SDK integration
+│       ├── claude-discovery.ts  Claude CLI executable discovery
+│       ├── claude-sdk-options.ts SDK query options builder
+│       ├── claude-session.ts    Session state management
+│       ├── claude-models.ts     Model configuration
+│       └── checkpoint.ts        Git checkpoint creation
+├── db/
+│   ├── index.ts         SQLite connection (better-sqlite3, WAL mode)
+│   ├── session-writer.ts  saveAssistantMessage, updateSessionStatus
+│   └── message-sanitizer.ts  JSON safety for Claude responses
+└── test/
+    └── ...              Unit tests for each module
+```
+
+### Key npm Scripts
+
+```bash
+npm run build:sidecar    # Build sidecar → src-tauri/resources/bin/index.bundled.cjs
+npm run test:sidecar     # Run sidecar tests (198 tests)
+npm run test:sidecar:watch  # Watch mode for sidecar tests
 ```
 
 # RUNNING THE APP

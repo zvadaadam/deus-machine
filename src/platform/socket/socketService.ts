@@ -1,38 +1,55 @@
 /**
  * Unix Socket Service
  *
- * Real-time communication with Claude CLI via Unix Domain Socket
+ * Real-time communication with sidecar-v2 via Unix Domain Socket
  *
  * Architecture:
- * React → Tauri invoke → Rust → Unix Socket → Node Sidecar → Claude CLI
+ * React → Tauri invoke → Rust → Unix Socket → Sidecar-v2 → Claude SDK
+ *
+ * Protocol: JSON-RPC 2.0 over NDJSON
  *
  * Note: In web mode (non-Tauri), this service is disabled and returns mock responses
  */
 
 import { invoke, isTauriEnv } from "@/platform/tauri";
 
-export interface SocketMessage {
-  command: string;
-  [key: string]: any;
+/** JSON-RPC 2.0 request structure */
+interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  method: string;
+  params: Record<string, unknown>;
+  id?: string | number;
 }
 
-export interface SocketResponse {
-  success?: boolean;
-  error?: string;
-  [key: string]: any;
+/** Agent query options */
+export interface QueryOptions {
+  cwd: string;
+  model?: string;
+  maxThinkingTokens?: number;
+  turnId?: string;
+  permissionMode?: string;
+  claudeEnvVars?: string;
+  ghToken?: string;
+  additionalDirectories?: string[];
+  chromeEnabled?: boolean;
+  strictDataPrivacy?: boolean;
+  shouldResetGenerator?: boolean;
+  resume?: string;
 }
 
 /**
  * Unix Socket Service (Singleton)
+ *
+ * Manages JSON-RPC 2.0 communication with sidecar-v2
  */
 class UnixSocketService {
   private socketPath: string | null = null;
   private connected: boolean = false;
-  // Reserved for future message handling implementation
-  // private messageHandlers: Map<string, (data: any) => void> = new Map();
+  private rpcIdCounter: number = 0;
 
   /**
-   * Initialize connection to sidecar Unix socket
+   * Initialize connection to sidecar-v2 Unix socket
+   * Socket path is obtained from Rust SidecarManager (auto-discovered on startup)
    */
   async connect(): Promise<void> {
     // Skip in web mode (non-Tauri)
@@ -43,23 +60,29 @@ class UnixSocketService {
     }
 
     try {
-      // 1. Get socket path from backend (using dynamic port)
-      const { getBaseURL } = await import("@/shared/config/api.config");
-      const baseURL = await getBaseURL();
-      const response = await fetch(`${baseURL}/sidecar/status`);
-      const status = await response.json();
-
-      if (!status.socketPath) {
-        throw new Error("Socket path not available");
+      // Check if Rust already connected during app startup (avoids double-connection bug)
+      const alreadyConnected = await invoke<boolean>("is_sidecar_connected");
+      if (alreadyConnected) {
+        this.socketPath = await invoke<string | null>("get_sidecar_socket_path");
+        this.connected = true;
+        if (import.meta.env.DEV) console.log("[SOCKET] ✅ Already connected (Rust auto-connected)");
+        return;
       }
 
-      this.socketPath = status.socketPath;
+      // Get socket path from Rust SidecarManager (not HTTP endpoint)
+      const socketPath = await invoke<string | null>("get_sidecar_socket_path");
 
-      // 2. Connect via Tauri Rust (using platform wrapper)
+      if (!socketPath) {
+        throw new Error("Sidecar socket path not available (sidecar-v2 may not be running)");
+      }
+
+      this.socketPath = socketPath;
+
+      // Connect via Tauri Rust
       await invoke("connect_to_sidecar", { socketPath: this.socketPath });
 
       this.connected = true;
-      if (import.meta.env.DEV) console.log("[SOCKET] ✅ Connected to:", this.socketPath);
+      if (import.meta.env.DEV) console.log("[SOCKET] ✅ Connected to sidecar-v2:", this.socketPath);
     } catch (error) {
       console.error("[SOCKET] ❌ Connection failed:", error);
       throw error;
@@ -67,68 +90,161 @@ class UnixSocketService {
   }
 
   /**
-   * Send message to sidecar
+   * Send JSON-RPC notification (fire-and-forget)
    */
-  async send(message: SocketMessage): Promise<SocketResponse> {
-    if (!this.connected) {
-      throw new Error("Not connected to socket");
+  async notify(method: string, params: Record<string, unknown>): Promise<void> {
+    if (!this.connected && isTauriEnv) {
+      await this.connect();
     }
 
+    if (!this.connected) {
+      throw new Error("Not connected to sidecar socket");
+    }
+
+    const request: JsonRpcRequest = {
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
+
     try {
-      // Send NDJSON message via Rust (using platform wrapper)
-      const messageStr = JSON.stringify(message);
+      const messageStr = JSON.stringify(request);
       await invoke("send_sidecar_message", { message: messageStr });
-
-      // Receive response
-      const responseStr = await invoke<string>("receive_sidecar_message");
-      const response = JSON.parse(responseStr);
-
-      return response;
     } catch (error) {
-      console.error("[SOCKET] ❌ Send failed:", error);
+      console.error("[SOCKET] ❌ Notification failed:", error);
       throw error;
     }
   }
 
   /**
-   * Start Claude session
+   * Send JSON-RPC request (expects response)
    */
-  async startSession(sessionId: string, workspacePath: string): Promise<SocketResponse> {
-    return this.send({
-      command: "start_session",
-      sessionId,
-      workspacePath,
+  async request<T>(method: string, params: Record<string, unknown>): Promise<T> {
+    if (!this.connected && isTauriEnv) {
+      await this.connect();
+    }
+
+    if (!this.connected) {
+      throw new Error("Not connected to sidecar socket");
+    }
+
+    const id = ++this.rpcIdCounter;
+    const request: JsonRpcRequest = {
+      jsonrpc: "2.0",
+      method,
+      params,
+      id,
+    };
+
+    try {
+      const messageStr = JSON.stringify(request);
+      await invoke("send_sidecar_message", { message: messageStr });
+
+      // Wait for response
+      const responseStr = await invoke<string>("receive_sidecar_message");
+      const response = JSON.parse(responseStr);
+
+      if (response.error) {
+        throw new Error(response.error.message || "RPC error");
+      }
+
+      return response.result as T;
+    } catch (error) {
+      console.error("[SOCKET] ❌ Request failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send agent query to sidecar-v2
+   *
+   * This sends a "query" notification to start a Claude session.
+   * Responses are received via Tauri events (session:message).
+   */
+  async sendQuery(
+    sessionId: string,
+    prompt: string,
+    options: QueryOptions,
+    agentType: "claude" | "codex" = "claude"
+  ): Promise<void> {
+    await this.notify("query", {
+      type: "query",
+      id: sessionId,
+      agentType,
+      prompt,
+      options,
+    });
+
+    if (import.meta.env.DEV)
+      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8));
+  }
+
+  /**
+   * Cancel an active query
+   */
+  async cancelQuery(sessionId: string, agentType: "claude" | "codex" = "claude"): Promise<void> {
+    await this.request("cancel", {
+      type: "cancel",
+      id: sessionId,
+      agentType,
+    });
+
+    if (import.meta.env.DEV) console.log("[SOCKET] 🛑 Query cancelled:", sessionId.substring(0, 8));
+  }
+
+  /**
+   * Request Claude authentication info
+   */
+  async getClaudeAuth(sessionId: string, cwd: string): Promise<unknown> {
+    return this.request("claudeAuth", {
+      type: "claude_auth",
+      id: sessionId,
+      agentType: "claude",
+      options: { cwd },
     });
   }
 
   /**
-   * Send message to Claude
+   * Initialize workspace (get slash commands, MCP servers)
    */
-  async sendMessage(sessionId: string, content: string): Promise<SocketResponse> {
-    return this.send({
-      command: "send_message",
-      sessionId,
-      content,
+  async workspaceInit(
+    sessionId: string,
+    cwd: string,
+    ghToken?: string,
+    claudeEnvVars?: string
+  ): Promise<unknown> {
+    return this.request("workspaceInit", {
+      type: "workspace_init",
+      id: sessionId,
+      agentType: "claude",
+      options: { cwd, ghToken, claudeEnvVars },
     });
   }
 
   /**
-   * Stop Claude session
+   * Update permission mode for a session
    */
-  async stopSession(sessionId: string): Promise<SocketResponse> {
-    return this.send({
-      command: "stop_session",
-      sessionId,
+  async updatePermissionMode(
+    sessionId: string,
+    permissionMode: string,
+    agentType: "claude" | "codex" = "claude"
+  ): Promise<void> {
+    await this.notify("updatePermissionMode", {
+      type: "update_permission_mode",
+      id: sessionId,
+      agentType,
+      permissionMode,
     });
   }
 
   /**
-   * Get session messages
+   * Reset generator for a session
    */
-  async getMessages(sessionId: string): Promise<SocketResponse> {
-    return this.send({
-      command: "get_messages",
-      sessionId,
+  async resetGenerator(sessionId: string, agentType: "claude" | "codex" = "claude"): Promise<void> {
+    await this.notify("resetGenerator", {
+      type: "reset_generator",
+      id: sessionId,
+      agentType,
     });
   }
 

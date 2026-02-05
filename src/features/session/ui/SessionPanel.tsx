@@ -11,6 +11,7 @@ const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
 interface SessionPanelProps {
   sessionId: string;
+  workspacePath: string;
   onClose?: () => void;
   embedded?: boolean;
   onCompact?: (handler: () => void) => void;
@@ -23,7 +24,7 @@ export interface SessionPanelRef {
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
-  ({ sessionId, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
+  ({ sessionId, workspacePath, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
     const messagesEndRef = useRef<HTMLDivElement>(null); // Empty div at end for scrolling to bottom
     const lastMessageRef = useRef<HTMLDivElement>(null); // Last message element for scrolling to top
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Session actions using custom hook
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
+      workspacePath,
       messageInput,
       onMessageSent: () => setMessageInput(""),
     });

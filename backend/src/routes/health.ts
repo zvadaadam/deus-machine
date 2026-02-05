@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { getSidecarStatus } from '../sidecar';
 import { getDatabase } from '../lib/database';
 import { getServerPort } from '../server';
 
@@ -7,15 +6,13 @@ const app = new Hono();
 
 app.get('/health', (c) => {
   const db = getDatabase();
-  const sidecarStatus = getSidecarStatus();
+  // Note: Sidecar status removed - sidecar-v2 is managed by Rust, status via Tauri commands
   return c.json({
     app: 'conductor-backend',
     status: 'ok',
     port: getServerPort(),
     timestamp: new Date().toISOString(),
     database: db ? 'connected' : 'disconnected',
-    sidecar: sidecarStatus.running ? 'running' : 'stopped',
-    socket: sidecarStatus.connected ? 'connected' : 'disconnected'
   });
 });
 
