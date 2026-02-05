@@ -43,6 +43,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Create sidecar placeholder
+        run: mkdir -p src-tauri/resources/bin && touch src-tauri/resources/bin/index.bundled.cjs
+
       - name: Run tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
