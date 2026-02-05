@@ -56,6 +56,33 @@ function safeStringify(obj: unknown, indent?: number): string {
 }
 
 // ============================================================================
+// RPC parameter types
+// ============================================================================
+
+interface ClaudeAuthParams {
+  id: string;
+  cwd: string;
+}
+
+interface WorkspaceInitParams {
+  id: string;
+  cwd: string;
+  ghToken?: string;
+  claudeEnvVars?: string;
+}
+
+interface ContextUsageRequest {
+  id: string;
+  options: { cwd: string; claudeSessionId: string };
+}
+
+interface WorkspaceInitOptions {
+  cwd: string;
+  ghToken?: string;
+  claudeEnvVars?: string;
+}
+
+// ============================================================================
 // ClaudeAgentHandler
 // ============================================================================
 
@@ -213,7 +240,7 @@ export class ClaudeAgentHandler implements AgentHandler {
   // Claude-specific RPC methods (not part of AgentHandler interface)
   // ==========================================================================
 
-  async claudeAuth(params: { id: string; cwd: string }) {
+  async claudeAuth(params: ClaudeAuthParams) {
     const { accountInfo, error } = await this.getClaudeAccountInfo(params.cwd);
     return {
       id: params.id,
@@ -224,12 +251,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     };
   }
 
-  async workspaceInit(params: {
-    id: string;
-    cwd: string;
-    ghToken?: string;
-    claudeEnvVars?: string;
-  }) {
+  async workspaceInit(params: WorkspaceInitParams) {
     const { slashCommands, mcpServers, error } = await this.getClaudeWorkspaceInitData({
       cwd: params.cwd,
       ghToken: params.ghToken,
@@ -267,10 +289,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
   }
 
-  async getContextUsage(request: {
-    id: string;
-    options: { cwd: string; claudeSessionId: string };
-  }) {
+  async getContextUsage(request: ContextUsageRequest) {
     const { id: sessionId, options } = request;
     const claudeSessionId = options.claudeSessionId;
 
@@ -302,9 +321,11 @@ export class ClaudeAgentHandler implements AgentHandler {
         };
       }
     } finally {
-      void contextUsageQuery.interrupt().catch((error: Error) => {
+      try {
+        await contextUsageQuery.interrupt();
+      } catch (error) {
         console.error(`[getContextUsage] Error during interrupt:`, error);
-      });
+      }
     }
 
     throw new Error("No user message found in context usage response");
@@ -315,61 +336,57 @@ export class ClaudeAgentHandler implements AgentHandler {
   // ==========================================================================
 
   private async getClaudeAccountInfo(cwd: string) {
+    const emptyPromptInput = (async function* () {})();
+    const sdkOptions = {
+      cwd,
+      pathToClaudeCodeExecutable: getClaudeExecutablePath(),
+      systemPrompt: DEFAULT_PROMPT,
+    };
+    const queryResult = claudeSDK({
+      prompt: emptyPromptInput,
+      options: sdkOptions,
+    });
     try {
-      const emptyPromptInput = (async function* () {})();
-      const sdkOptions = {
-        cwd,
-        pathToClaudeCodeExecutable: getClaudeExecutablePath(),
-        systemPrompt: DEFAULT_PROMPT,
-      };
-      const queryResult = claudeSDK({
-        prompt: emptyPromptInput,
-        options: sdkOptions,
-      });
       const accountInfo = await queryResult.accountInfo();
-      void queryResult.interrupt().catch((error: Error) => {
-        console.error(`[getClaudeAccountInfo] Error during interrupt:`, error);
-      });
       return { accountInfo };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      void queryResult.interrupt().catch((error: Error) => {
+        console.error(`[getClaudeAccountInfo] Error during interrupt:`, error);
+      });
     }
   }
 
-  private async getClaudeWorkspaceInitData(options: {
-    cwd: string;
-    ghToken?: string;
-    claudeEnvVars?: string;
-  }) {
+  private async getClaudeWorkspaceInitData(options: WorkspaceInitOptions) {
+    const envForClaude = buildAgentEnvironment({
+      claudeEnvVars: options.claudeEnvVars,
+      ghToken: options.ghToken,
+    });
+
+    const emptyPromptInput = (async function* () {})();
+    const sdkOptions = {
+      cwd: options.cwd,
+      pathToClaudeCodeExecutable: getClaudeExecutablePath(),
+      systemPrompt: DEFAULT_PROMPT,
+      settingSources: DEFAULT_SETTING_SOURCES,
+      env: envForClaude,
+    };
+
+    const queryResult = claudeSDK({ prompt: emptyPromptInput, options: sdkOptions });
     try {
-      const envForClaude = buildAgentEnvironment({
-        claudeEnvVars: options.claudeEnvVars,
-        ghToken: options.ghToken,
-      });
-
-      const emptyPromptInput = (async function* () {})();
-      const sdkOptions = {
-        cwd: options.cwd,
-        pathToClaudeCodeExecutable: getClaudeExecutablePath(),
-        systemPrompt: DEFAULT_PROMPT,
-        settingSources: DEFAULT_SETTING_SOURCES,
-        env: envForClaude,
-      };
-
-      const queryResult = claudeSDK({ prompt: emptyPromptInput, options: sdkOptions });
-
       const [slashCommands, mcpServers] = await Promise.all([
         queryResult.supportedCommands(),
         queryResult.mcpServerStatus(),
       ]);
 
-      void queryResult.interrupt().catch((error: Error) => {
-        console.error(`[getClaudeWorkspaceInitData] Error during interrupt:`, error);
-      });
-
       return { slashCommands, mcpServers };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      void queryResult.interrupt().catch((error: Error) => {
+        console.error(`[getClaudeWorkspaceInitData] Error during interrupt:`, error);
+      });
     }
   }
 
@@ -458,8 +475,17 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Stream messages back to the frontend and persist to DB
       for await (const message of queryResult) {
         if (message) {
-          const messageStr = safeStringify(message);
-          const cleanMessage = JSON.parse(messageStr);
+          let cleanMessage: Record<string, unknown>;
+          try {
+            const messageStr = safeStringify(message);
+            cleanMessage = JSON.parse(messageStr);
+          } catch (parseError) {
+            console.error(
+              `[${generatorId}] Failed to serialize/parse SDK message, skipping:`,
+              parseError instanceof Error ? parseError.message : String(parseError)
+            );
+            continue;
+          }
 
           // Send to frontend via JSON-RPC notification
           FrontendClient.sendMessage({
@@ -472,7 +498,11 @@ export class ClaudeAgentHandler implements AgentHandler {
           // Persist assistant messages to database
           if (cleanMessage.type === "assistant" && cleanMessage.message) {
             const model = options?.model || "sonnet";
-            saveAssistantMessage(sessionId, cleanMessage.message, model);
+            saveAssistantMessage(
+              sessionId,
+              cleanMessage.message as { id?: string; role?: string; content?: unknown },
+              model
+            );
           }
 
           // Update session status when query completes successfully
@@ -482,6 +512,9 @@ export class ClaudeAgentHandler implements AgentHandler {
         }
       }
 
+      // Normal completion — ensure session is marked idle
+      // (covers the case where SDK ends without a "result/success" message)
+      updateSessionStatus(sessionId, "idle");
       console.log(`[${generatorId}] Session completed: ${sessionId}`);
     } catch (error) {
       console.error(`[${generatorId}] Error in Claude query:`, error);
@@ -500,8 +533,14 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Update DB status so session doesn't stay stuck as "working"
       updateSessionStatus(sessionId, isAbort ? "idle" : "error");
     } finally {
-      deleteQuery(sessionId);
-      deleteSession(sessionId);
+      // Only clean up if this generator still owns the session.
+      // A rapid re-query can replace the session before this finally runs;
+      // blindly deleting would wipe the new session's state.
+      const currentSession = getSession(sessionId);
+      if (!currentSession || currentSession === session) {
+        deleteQuery(sessionId);
+        deleteSession(sessionId);
+      }
     }
   }
 }

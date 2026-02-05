@@ -40,14 +40,20 @@ impl SidecarManager {
 
         println!("[SIDECAR] Starting sidecar-v2 at {}", sidecar_path.display());
 
-        // Spawn sidecar with stdout captured to read the socket path
+        // Runtime dependency: Node.js must be installed and available in PATH.
+        // The sidecar is a Node.js script (not a compiled binary) because it uses
+        // native modules (better-sqlite3) that can't be bundled into a standalone
+        // executable. Node.js is NOT bundled with the app.
         let mut child = Command::new("node")
             .arg(&sidecar_path)
             .env("DATABASE_PATH", db_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .context(format!("Failed to start sidecar at {}", sidecar_path.display()))?;
+            .context(format!(
+                "Failed to spawn sidecar at {}. Ensure Node.js is installed and available in PATH.",
+                sidecar_path.display()
+            ))?;
 
         println!("[SIDECAR] Sidecar started with PID: {}", child.id());
 
@@ -79,6 +85,10 @@ impl SidecarManager {
         });
 
         *process = Some(child);
+
+        // Drop the process mutex before polling to avoid holding it for up to 10s.
+        // Other threads (is_running, stop) need the lock during this period.
+        drop(process);
 
         // Wait for socket path to be detected (with timeout)
         let start = std::time::Instant::now();
@@ -169,8 +179,10 @@ impl SidecarManager {
             if !exited {
                 println!("[SIDECAR] SIGTERM timeout, sending SIGKILL");
                 let _ = child.kill();
-                child.wait().ok();
             }
+
+            // Always reap the child to prevent zombie processes
+            child.wait().ok();
 
             println!("[SIDECAR] Sidecar stopped");
         }

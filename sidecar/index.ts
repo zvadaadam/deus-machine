@@ -102,20 +102,28 @@ class UnifiedSidecar {
     });
 
     // Graceful shutdown handlers
-    process.on("SIGINT", () => {
+    process.on("SIGINT", async () => {
       console.log("\n[SIGNAL] Received SIGINT, shutting down gracefully...");
-      void this.cleanup().then(() => {
+      try {
+        await this.cleanup();
         console.log("[SIGNAL] Cleanup complete, exiting process");
+      } catch (error) {
+        console.error("[SIGNAL] Cleanup failed:", error);
+      } finally {
         process.exit(0);
-      });
+      }
     });
 
-    process.on("SIGTERM", () => {
+    process.on("SIGTERM", async () => {
       console.log("\n[SIGNAL] Received SIGTERM, shutting down gracefully...");
-      void this.cleanup().then(() => {
+      try {
+        await this.cleanup();
         console.log("[SIGNAL] Cleanup complete, exiting process");
+      } catch (error) {
+        console.error("[SIGNAL] Cleanup failed:", error);
+      } finally {
         process.exit(0);
-      });
+      }
     });
   }
 
@@ -181,9 +189,9 @@ class UnifiedSidecar {
       if (agent) agent.handleReset(request.id);
     });
 
-    socket.on("close", () => {
-      rpcTunnel.stop();
-    });
+    // Note: socket "close" handler is in handleConnection() which also calls
+    // rpcTunnel.stop() and FrontendClient.detachTunnel(). No need for a
+    // duplicate handler here.
   }
 
   /**

@@ -44,6 +44,9 @@ export class RpcConnection {
     });
 
     const client = new JSONRPCClient((payload) => {
+      if (this.socket.destroyed) {
+        return Promise.reject(new Error("Socket is destroyed"));
+      }
       try {
         this.socket.write(JSON.stringify(payload) + "\n");
         return Promise.resolve();
@@ -90,11 +93,9 @@ export class RpcConnection {
       return false;
     }
 
-    void this.peer
-      .receiveAndSend(payload, undefined, undefined)
-      .catch((e) => {
-        console.error("[RpcConnection] Failed to handle message:", e);
-      });
+    void this.peer.receiveAndSend(payload, undefined, undefined).catch((e) => {
+      console.error("[RpcConnection] Failed to handle message:", e);
+    });
     return true;
   }
 

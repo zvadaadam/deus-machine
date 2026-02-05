@@ -102,6 +102,16 @@ impl SocketManager {
             }
         }
 
+        // Disconnect existing connection before connecting to a different path
+        // to avoid leaking the old stream and stale response channel.
+        {
+            let has_existing = self.stream.lock().unwrap().is_some();
+            if has_existing {
+                println!("[SOCKET] Disconnecting from previous socket before connecting to new path");
+                let _ = self.disconnect();
+            }
+        }
+
         match UnixStream::connect(&path) {
             Ok(stream) => {
                 *self.stream.lock().unwrap() = Some(stream);
@@ -256,6 +266,9 @@ impl SocketManager {
                             }
                             Err(e) => {
                                 eprintln!("[SOCKET] Error reading line: {}", e);
+                                // Clear the stream so we don't spin in a tight loop
+                                // trying to read from a broken connection
+                                *stream.lock().unwrap() = None;
                                 break; // Connection lost, exit loop
                             }
                         }
