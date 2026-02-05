@@ -45,23 +45,18 @@ fn main() {
             // In prod: resources/backend/server.cjs (bundled in app)
             let backend_path = if cfg!(dev) {
                 // Development mode - resolve relative to the executable
-                let exe_dir = std::env::current_exe()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
+                let exe_dir = exe.ancestors()
+                    .nth(4)
+                    .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
                     .to_path_buf();
                 exe_dir.join("backend/server.cjs")
             } else {
                 // Production mode
                 app.path()
                     .resource_dir()
-                    .unwrap()
+                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
                     .join("backend/server.cjs")
             };
 
@@ -86,21 +81,16 @@ fn main() {
 
             // Determine sidecar path and database path
             let exe_dir = if cfg!(dev) {
-                std::env::current_exe()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
+                exe.ancestors()
+                    .nth(4)
+                    .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
                     .to_path_buf()
             } else {
                 app.path()
                     .resource_dir()
-                    .unwrap()
+                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
             };
 
             // Sidecar path: resources/bin/index.bundled.cjs
@@ -113,9 +103,18 @@ fn main() {
             };
 
             // Database path (production OpenDevs app database)
+            let home_dir = std::env::var("HOME")
+                .ok()
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| {
+                    // Fallback: use /tmp as a safe default that always exists
+                    eprintln!("[TAURI] WARNING: HOME environment variable not set, using /tmp fallback");
+                    "/tmp".to_string()
+                });
+
             let db_path = format!(
                 "{}/Library/Application Support/com.conductor.app/conductor.db",
-                std::env::var("HOME").unwrap_or_default()
+                home_dir
             );
 
             println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
@@ -126,14 +125,27 @@ fn main() {
                     if let Some(socket_path) = sidecar_manager.get_socket_path() {
                         println!("[TAURI] ✅ Sidecar started, socket: {}", socket_path);
 
-                        // Auto-connect the socket manager to sidecar
-                        match socket_manager.connect(socket_path.clone()) {
-                            Ok(_) => {
-                                println!("[TAURI] ✅ Socket connected to sidecar");
+                        // Retry connection with backoff — sidecar may not be accepting connections yet
+                        let mut connected = false;
+                        for attempt in 1..=5 {
+                            match socket_manager.connect(socket_path.clone()) {
+                                Ok(_) => {
+                                    println!("[TAURI] ✅ Socket connected to sidecar (attempt {})", attempt);
+                                    connected = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    if attempt < 5 {
+                                        println!("[TAURI] Socket connect attempt {} failed: {}, retrying...", attempt, e);
+                                        std::thread::sleep(std::time::Duration::from_millis(200 * attempt as u64));
+                                    } else {
+                                        eprintln!("[TAURI] Failed to connect socket after {} attempts: {}", attempt, e);
+                                    }
+                                }
                             }
-                            Err(e) => {
-                                eprintln!("[TAURI] Failed to connect socket: {}", e);
-                            }
+                        }
+                        if !connected {
+                            eprintln!("[TAURI] ⚠️ Could not connect to sidecar socket — agent features may not work");
                         }
                     } else {
                         println!("[TAURI] Sidecar started (socket path detection pending)");

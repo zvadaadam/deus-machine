@@ -8,7 +8,11 @@ import { createCheckpoint } from "./checkpoint";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
-import { initializeClaude, blockIfNotInitialized, getClaudeExecutablePath } from "./claude-discovery";
+import {
+  initializeClaude,
+  blockIfNotInitialized,
+  getClaudeExecutablePath,
+} from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { buildSdkOptions, DEFAULT_PROMPT, DEFAULT_SETTING_SOURCES } from "./claude-sdk-options";
 import {
@@ -66,7 +70,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     console.log("Handling Claude query request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
-    let session = getSession(sessionId);
+    const session = getSession(sessionId);
     const modelChanged = session?.currentModel !== options.model;
     const maxThinkingTokensChanged =
       session?.currentMaxThinkingTokens !== options.maxThinkingTokens;
@@ -133,7 +137,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       // Push the new prompt into the existing generator
-      session!.sendMessage!(prompt);
+      const sendFn = session?.sendMessage;
+      if (!sendFn) return; // Narrowing guard — should never happen after canUseExistingGenerator check
+      sendFn(prompt);
     } else {
       const reason = !session
         ? "new session"
