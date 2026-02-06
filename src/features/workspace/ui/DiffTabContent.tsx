@@ -15,7 +15,7 @@ interface DiffTabContentProps {
   workspaceId: string;
   filePath: string;
   workspaceGitInfo: WorkspaceGitInfo;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export function DiffTabContent({

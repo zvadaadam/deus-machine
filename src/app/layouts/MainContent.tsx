@@ -1,15 +1,15 @@
 /**
  * Main Content — layout orchestrator.
  *
- * Renders ChatArea (left) + resize handle + RightSidePanel (right).
- * Owns only layout-level concerns: resize handle, chatAreaRef bridge
- * for opening diff/file tabs, and createPRHandler bridge.
+ * Horizontal split: ChatArea (left, flex-1) + RightSidePanel (right, 380px).
+ * Diffs open as tabs inside ChatArea (VS Code pattern).
  *
- * Resize handle only active when browser tab expands the right panel.
- * Diffs/files open as tabs in ChatArea (VS Code pattern).
+ * Horizontal resize handle is enabled when:
+ * - Browser tab is active in the right panel (panel expands to flex-1)
+ * - A diff tab is active in ChatArea (allows narrowing the file list)
  */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useResizeHandle } from "@/features/workspace";
@@ -50,18 +50,34 @@ export function MainContent({
   // Right side expansion state (only true for browser tab)
   const [rightSideExpanded, setRightSideExpanded] = useState(false);
 
-  // ChatArea ref — for opening diff/file tabs from RightSidePanel
+  // Diff tab active state (for enabling resize handle)
+  const [diffTabActive, setDiffTabActive] = useState(false);
+
+  // ChatArea ref — for opening file/diff tabs from RightSidePanel
   const chatAreaRef = useRef<ChatAreaRef>(null);
 
-  // Resize handle for chat/right-side split (only active in browser mode)
-  const { handleProps: resizeHandleProps, isDragging } = useResizeHandle({
-    onWidthChange: setRightPanelWidth,
-    enabled: rightSideExpanded,
+  // --- Resize handle ---
+  // Enabled when browser tab is active (panel expands) OR diff tab is active (file list resizable)
+  const resizeEnabled = rightSideExpanded || diffTabActive;
+
+  const { handleProps: hResizeProps, isDragging: hDragging } = useResizeHandle({
+    onSizeChange: setRightPanelWidth,
+    enabled: resizeEnabled,
+    direction: "horizontal",
+    // Allow narrower file list when viewing diffs
+    minSecondarySize: diffTabActive ? 200 : 380,
+    minPrimarySize: diffTabActive ? 400 : 200,
   });
 
-  // Right side width: user-set pixels (browser mode) or auto
+  // --- Handlers ---
+
+  const handleDiffTabActiveChange = useCallback((isActive: boolean) => {
+    setDiffTabActive(isActive);
+  }, []);
+
+  // Right side width: user-set pixels or auto
   const rightSideStyle: React.CSSProperties | undefined =
-    rightSideExpanded && rightPanelWidth !== null
+    (rightSideExpanded || diffTabActive) && rightPanelWidth !== null
       ? { width: rightPanelWidth, flexShrink: 0 }
       : undefined;
 
@@ -86,18 +102,19 @@ export function MainContent({
         <div className="flex min-w-0 flex-1">
           {selectedWorkspace ? (
             <>
-              {/* Chat panel — also renders diff/file tabs */}
+              {/* Chat area — chat, file, and diff tabs */}
               <ChatArea
                 ref={chatAreaRef}
                 workspace={selectedWorkspace}
                 workspaceChatPanelRef={workspaceChatPanelRef}
                 onCreatePRHandlerChange={setCreatePRHandler}
+                onDiffTabActiveChange={handleDiffTabActiveChange}
               />
 
-              {/* Resize handle — only between chat and expanded browser panel */}
-              {rightSideExpanded && (
+              {/* Horizontal resize handle — enabled for browser OR diff tab */}
+              {resizeEnabled && (
                 <div
-                  {...resizeHandleProps}
+                  {...hResizeProps}
                   className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
                   aria-label="Resize panels"
                   role="separator"
@@ -107,7 +124,7 @@ export function MainContent({
                   <div
                     className={cn(
                       "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
-                      isDragging
+                      hDragging
                         ? "bg-primary/40 opacity-100"
                         : "bg-border opacity-0 group-hover:opacity-100"
                     )}
