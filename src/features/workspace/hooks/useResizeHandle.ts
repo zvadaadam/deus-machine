@@ -82,8 +82,9 @@ export function useResizeHandle({
               ? moveEvent.clientX - rect.left
               : moveEvent.clientY - rect.top;
           let newPrimarySize = mouseOffset;
-          newPrimarySize = Math.max(newPrimarySize, minPrimarySize);
-          newPrimarySize = Math.min(newPrimarySize, totalSize - minSecondarySize);
+          const maxPrimarySize = Math.max(0, totalSize - minSecondarySize);
+          newPrimarySize = Math.max(newPrimarySize, Math.min(minPrimarySize, maxPrimarySize));
+          newPrimarySize = Math.min(newPrimarySize, maxPrimarySize);
           onSizeChange(Math.round(newPrimarySize));
         } else {
           // Secondary mode (default): report right/bottom panel size
@@ -95,8 +96,12 @@ export function useResizeHandle({
             const mouseY = moveEvent.clientY - rect.top;
             newSecondarySize = rect.height - mouseY;
           }
-          newSecondarySize = Math.max(newSecondarySize, minSecondarySize);
-          newSecondarySize = Math.min(newSecondarySize, totalSize - minPrimarySize);
+          const maxSecondarySize = Math.max(0, totalSize - minPrimarySize);
+          newSecondarySize = Math.max(
+            newSecondarySize,
+            Math.min(minSecondarySize, maxSecondarySize)
+          );
+          newSecondarySize = Math.min(newSecondarySize, maxSecondarySize);
           onSizeChange(Math.round(newSecondarySize));
         }
       };

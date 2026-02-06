@@ -670,7 +670,7 @@ body {
 [data-resizing] [data-slot="sidebar-gap"],
 [data-resizing] [data-slot="sidebar-container"],
 [data-resizing] [data-slot="sidebar-inset"] {
-  transition: none !important;
+  transition: none;
 }
 
 /* Tauri overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).

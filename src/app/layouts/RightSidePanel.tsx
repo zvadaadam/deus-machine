@@ -97,7 +97,9 @@ export function RightSidePanel({
 
   const handleBrowserFileClick = useCallback(
     (path: string) => {
-      onOpenFilePreview(`${workspace.workspace_path}/${path}`);
+      const base = workspace.workspace_path.replace(/\/+$/, "");
+      const rel = path.replace(/^\/+/, "");
+      onOpenFilePreview(`${base}/${rel}`);
     },
     [onOpenFilePreview, workspace.workspace_path]
   );
