@@ -496,12 +496,14 @@ export class ClaudeAgentHandler implements AgentHandler {
           });
 
           // Persist assistant messages to database
+          // Normalized content in `content`, raw SDK message in `full_message`
           if (cleanMessage.type === "assistant" && cleanMessage.message) {
             const model = options?.model || "sonnet";
             saveAssistantMessage(
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
               model,
+              cleanMessage,
               typeof cleanMessage.parent_tool_use_id === "string"
                 ? cleanMessage.parent_tool_use_id
                 : null
@@ -517,7 +519,8 @@ export class ClaudeAgentHandler implements AgentHandler {
             saveAssistantMessage(
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
-              model
+              model,
+              cleanMessage
             );
           }
 

@@ -16,6 +16,7 @@ import { FrontendClient } from "./frontend-client";
 import { closeDatabase } from "./db/index";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
+import { CodexAgentHandler } from "./agents/codex/codex-handler";
 
 // ============================================================================
 // Logging
@@ -293,6 +294,7 @@ class UnifiedSidecar {
 
     // Register all agent handlers
     registerAgent(new ClaudeAgentHandler());
+    registerAgent(new CodexAgentHandler());
 
     // Initialize all registered agents
     console.log("Initializing agent handlers...");
