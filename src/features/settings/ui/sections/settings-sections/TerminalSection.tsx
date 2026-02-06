@@ -57,8 +57,15 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
           value={fontSize}
           onChange={(e) => {
             const value = parseInt(e.target.value, 10);
-            const newFontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
-            setFontSize(newFontSize);
+            if (!isNaN(value)) {
+              setFontSize(value);
+            }
+          }}
+          onBlur={() => {
+            const clamped = Math.min(24, Math.max(8, fontSize));
+            if (clamped !== fontSize) {
+              setFontSize(clamped);
+            }
           }}
         />
       </div>
