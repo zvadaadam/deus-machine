@@ -8,16 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import type { SettingsSectionProps } from "./types";
 
 export function TerminalSection({ settings, saveSetting }: SettingsSectionProps) {
   const [fontSize, setFontSize] = useState(settings.terminal_font_size ?? 12);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync if settings update externally
-  useEffect(() => {
-    setFontSize(settings.terminal_font_size ?? 12);
-  }, [settings.terminal_font_size]);
 
   // Debounce saveSetting for font size
   useEffect(() => {
@@ -38,44 +34,65 @@ export function TerminalSection({ settings, saveSetting }: SettingsSectionProps)
   }, [fontSize, settings.terminal_font_size, saveSetting]);
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Terminal Settings</h3>
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold">Terminal</h3>
+        <p className="text-muted-foreground mt-1 text-[13px]">
+          Terminal appearance and editor integration.
+        </p>
+      </div>
 
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="font-size">Font size</Label>
-          <Input
-            id="font-size"
-            type="number"
-            min="8"
-            max="24"
-            step="1"
-            value={fontSize}
-            onChange={(e) => {
-              const value = parseInt(e.target.value, 10);
-              const newFontSize = isNaN(value) || value < 8 || value > 24 ? 12 : value;
-              setFontSize(newFontSize);
-            }}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="font-size" className="text-sm">
+          Font size
+        </Label>
+        <p className="text-muted-foreground text-[13px]">Size in pixels (8 - 24).</p>
+        <Input
+          id="font-size"
+          type="number"
+          min="8"
+          max="24"
+          step="1"
+          className="w-24"
+          value={fontSize}
+          onChange={(e) => {
+            const value = parseInt(e.target.value, 10);
+            if (!isNaN(value)) {
+              setFontSize(value);
+            }
+          }}
+          onBlur={() => {
+            const clamped = Math.min(24, Math.max(8, fontSize));
+            if (clamped !== fontSize) {
+              setFontSize(clamped);
+            }
+          }}
+        />
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="default-editor">Default editor</Label>
-          <Select
-            value={settings.default_open_in ?? "cursor"}
-            onValueChange={(value) => saveSetting("default_open_in", value)}
-          >
-            <SelectTrigger id="default-editor">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cursor">Cursor</SelectItem>
-              <SelectItem value="vscode">VS Code</SelectItem>
-              <SelectItem value="sublime">Sublime Text</SelectItem>
-              <SelectItem value="vim">Vim</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <Separator />
+
+      <div className="space-y-2">
+        <Label htmlFor="default-editor" className="text-sm">
+          Default editor
+        </Label>
+        <p className="text-muted-foreground text-[13px]">
+          Which editor to use when opening files from the app.
+        </p>
+        <Select
+          value={settings.default_open_in ?? "cursor"}
+          onValueChange={(value) => saveSetting("default_open_in", value)}
+        >
+          <SelectTrigger id="default-editor" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="cursor">Cursor</SelectItem>
+            <SelectItem value="vscode">VS Code</SelectItem>
+            <SelectItem value="sublime">Sublime Text</SelectItem>
+            <SelectItem value="vim">Vim</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

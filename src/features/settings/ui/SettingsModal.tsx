@@ -1,20 +1,24 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Settings2,
+  User,
+  Terminal,
+  Plug,
+  Command,
+  Bot,
+  BrainCircuit,
+  Webhook,
+  Globe,
+  FlaskConical,
+  Loader2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTheme } from "@/app/providers";
 import {
   useSettings,
@@ -31,18 +35,59 @@ import {
   MemorySection,
   ProviderSection,
 } from "./sections";
-import type { Settings, MCPServer, Command, Agent, Hook, SettingsSection } from "../types";
+import type { SettingsSection } from "../types";
 
 interface SettingsModalProps {
   show: boolean;
   onClose: () => void;
 }
 
+interface NavItem {
+  id: SettingsSection;
+  label: string;
+  icon: LucideIcon;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Preferences",
+    items: [
+      { id: "general", label: "General", icon: Settings2 },
+      { id: "account", label: "Account", icon: User },
+    ],
+  },
+  {
+    label: "AI & Tools",
+    items: [
+      { id: "provider", label: "Provider", icon: Globe },
+      { id: "mcp", label: "MCP Servers", icon: Plug },
+      { id: "commands", label: "Commands", icon: Command },
+      { id: "agents", label: "Agents", icon: Bot },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { id: "terminal", label: "Terminal", icon: Terminal },
+      { id: "memory", label: "Memory", icon: BrainCircuit },
+      { id: "hooks", label: "Hooks", icon: Webhook },
+    ],
+  },
+  {
+    label: "Advanced",
+    items: [{ id: "experimental", label: "Experimental", icon: FlaskConical }],
+  },
+];
+
 export function SettingsModal({ show, onClose }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
 
-  // TanStack Query hooks - automatic loading and caching
   const settingsQuery = useSettings();
   const mcpServersQuery = useMCPServers();
   const commandsQuery = useCommands();
@@ -58,7 +103,7 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
   const loading = settingsQuery.isLoading;
   const saving = updateSettingsMutation.isPending;
 
-  async function saveSetting(key: string, value: any) {
+  async function saveSetting(key: string, value: unknown) {
     try {
       await updateSettingsMutation.mutateAsync({ [key]: value });
     } catch (error) {
@@ -70,34 +115,36 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
   }
 
   function renderNavigation() {
-    const sections: { id: SettingsSection; label: string; icon: string }[] = [
-      { id: "general", label: "General", icon: "⚙️" },
-      { id: "account", label: "Account", icon: "👤" },
-      { id: "terminal", label: "Terminal", icon: "💻" },
-      { id: "mcp", label: "MCP", icon: "🔌" },
-      { id: "commands", label: "Commands", icon: "📝" },
-      { id: "agents", label: "Agents", icon: "🤖" },
-      { id: "memory", label: "Memory", icon: "🧠" },
-      { id: "hooks", label: "Hooks", icon: "🪝" },
-      { id: "provider", label: "Provider", icon: "🌐" },
-      { id: "experimental", label: "Experimental", icon: "🧪" },
-    ];
-
     return (
-      <nav className="border-border w-50 border-r pr-4">
-        <ScrollArea className="h-[500px]">
-          <div className="space-y-1">
-            {sections.map((section) => (
-              <Button
-                key={section.id}
-                variant={activeSection === section.id ? "default" : "ghost"}
-                className="w-full justify-start gap-2 text-sm"
-                size="sm"
-                onClick={() => setActiveSection(section.id)}
-              >
-                <span>{section.icon}</span>
-                <span>{section.label}</span>
-              </Button>
+      <nav className="border-border w-52 shrink-0 border-r pr-2">
+        <ScrollArea className="h-[560px]">
+          <div className="space-y-4 py-1">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="text-muted-foreground/70 mb-1 px-3 text-[11px] font-medium tracking-wider uppercase">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActive = activeSection === item.id;
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveSection(item.id)}
+                        className={`ease flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors duration-150 ${
+                          isActive
+                            ? "bg-accent text-foreground font-medium"
+                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         </ScrollArea>
@@ -107,22 +154,20 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
   function renderMCP() {
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">MCP Servers</h3>
-          <p className="text-muted-foreground text-xs">Configure Model Context Protocol servers</p>
-        </div>
+      <div className="space-y-5">
+        <SectionHeader
+          title="MCP Servers"
+          description="Model Context Protocol servers extend agent capabilities with external tools and data sources."
+        />
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {mcpServers.length === 0 ? (
-            <div className="bg-muted/30 rounded-lg border border-dashed px-4 py-8 text-center">
-              <p className="text-muted-foreground text-sm">No MCP servers configured</p>
-            </div>
+            <EmptyState message="No MCP servers configured" />
           ) : (
             mcpServers.map((server, index) => (
-              <div key={index} className="rounded-lg border p-3">
-                <h4 className="mb-2 text-sm font-medium">{server.name}</h4>
-                <code className="bg-muted block overflow-x-auto rounded p-1 text-xs">
+              <div key={index} className="border-border/60 rounded-lg border p-3">
+                <p className="text-sm font-medium">{server.name}</p>
+                <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded px-2 py-1 text-xs">
                   {server.command}
                 </code>
               </div>
@@ -135,24 +180,20 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
   function renderCommands() {
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Custom Commands</h3>
-          <p className="text-muted-foreground text-xs">
-            Slash commands for frequently used prompts
-          </p>
-        </div>
+      <div className="space-y-5">
+        <SectionHeader
+          title="Custom Commands"
+          description="Slash commands for frequently used prompts and workflows."
+        />
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {commands.length === 0 ? (
-            <div className="bg-muted/30 rounded-lg border border-dashed px-4 py-8 text-center">
-              <p className="text-muted-foreground text-sm">No custom commands defined</p>
-            </div>
+            <EmptyState message="No custom commands defined" />
           ) : (
             commands.map((cmd, index) => (
-              <div key={index} className="rounded-lg border p-3">
-                <h4 className="text-sm font-medium">/{cmd.name}</h4>
-                <p className="text-muted-foreground text-xs">{cmd.description}</p>
+              <div key={index} className="border-border/60 rounded-lg border p-3">
+                <p className="text-sm font-medium">/{cmd.name}</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">{cmd.description}</p>
               </div>
             ))
           )}
@@ -163,31 +204,29 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
   function renderAgents() {
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Agent Configuration</h3>
-          <p className="text-muted-foreground text-xs">
-            Specialized agents with specific tool access
-          </p>
-        </div>
+      <div className="space-y-5">
+        <SectionHeader
+          title="Agent Configuration"
+          description="Specialized agents with specific tool access and capabilities."
+        />
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {agents.length === 0 ? (
-            <div className="bg-muted/30 rounded-lg border border-dashed px-4 py-8 text-center">
-              <p className="text-muted-foreground text-sm">Using default agents</p>
-            </div>
+            <EmptyState message="Using default agents" />
           ) : (
             agents.map((agent, index) => (
-              <div key={index} className="rounded-lg border p-3">
-                <h4 className="text-sm font-medium">{agent.name}</h4>
-                <p className="text-muted-foreground mb-2 text-xs">{agent.description}</p>
-                <div className="flex flex-wrap gap-1">
-                  {agent.tools?.map((tool, i) => (
-                    <span key={i} className="bg-success/10 rounded px-1.5 py-0.5 text-xs">
-                      {tool}
-                    </span>
-                  ))}
-                </div>
+              <div key={index} className="border-border/60 rounded-lg border p-3">
+                <p className="text-sm font-medium">{agent.name}</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">{agent.description}</p>
+                {agent.tools?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {agent.tools.map((tool, i) => (
+                      <Badge key={i} variant="secondary" className="text-[11px] font-normal">
+                        {tool}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -200,22 +239,20 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
     const hookEntries = Object.entries(hooks);
 
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Hooks Configuration</h3>
-          <p className="text-muted-foreground text-xs">Run custom commands in response to events</p>
-        </div>
+      <div className="space-y-5">
+        <SectionHeader
+          title="Hooks"
+          description="Run custom shell commands in response to application events."
+        />
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {hookEntries.length === 0 ? (
-            <div className="bg-muted/30 rounded-lg border border-dashed px-4 py-8 text-center">
-              <p className="text-muted-foreground text-sm">No hooks configured</p>
-            </div>
+            <EmptyState message="No hooks configured" />
           ) : (
             hookEntries.map(([event, command]) => (
-              <div key={event} className="rounded-lg border p-3">
-                <h4 className="mb-2 text-sm font-medium">{event}</h4>
-                <code className="bg-muted block overflow-x-auto rounded p-1 text-xs">
+              <div key={event} className="border-border/60 rounded-lg border p-3">
+                <p className="text-sm font-medium">{event}</p>
+                <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded px-2 py-1 text-xs">
                   {command}
                 </code>
               </div>
@@ -228,37 +265,36 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
   function renderExperimental() {
     return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Experimental Features</h3>
+      <div className="space-y-5">
+        <SectionHeader
+          title="Experimental"
+          description="Features under development. These may be unstable or change without notice."
+        />
 
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <Checkbox
+        <div className="space-y-1">
+          <SettingRow
+            id="right-panel"
+            label="Show right panel"
+            description="Display the secondary panel alongside the chat view."
+          >
+            <Switch
               id="right-panel"
               checked={settings.right_panel_visible ?? true}
-              onCheckedChange={(checked) => saveSetting("right_panel_visible", checked === true)}
+              onCheckedChange={(checked) => saveSetting("right_panel_visible", checked)}
             />
-            <Label htmlFor="right-panel" className="cursor-pointer text-sm">
-              Show right panel
-            </Label>
-          </div>
+          </SettingRow>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
+          <SettingRow
+            id="split-view"
+            label="Use split view"
+            description="Show two workspaces side by side."
+          >
+            <Switch
               id="split-view"
               checked={settings.using_split_view ?? false}
-              onCheckedChange={(checked) => saveSetting("using_split_view", checked === true)}
+              onCheckedChange={(checked) => saveSetting("using_split_view", checked)}
             />
-            <Label htmlFor="split-view" className="cursor-pointer text-sm">
-              Use split view
-            </Label>
-          </div>
-
-          <div className="border-warning bg-warning/10 rounded border p-3">
-            <p className="text-warning-foreground text-xs">
-              ⚠️ Experimental features may be unstable
-            </p>
-          </div>
+          </SettingRow>
         </div>
       </div>
     );
@@ -267,8 +303,8 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
   function renderContent() {
     if (loading) {
       return (
-        <div className="flex h-100 items-center justify-center">
-          <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+        <div className="flex h-80 items-center justify-center">
+          <Loader2 className="text-muted-foreground size-5 animate-spin" />
         </div>
       );
     }
@@ -303,19 +339,63 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
   return (
     <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] max-w-[900px] p-0">
-        <DialogHeader className="p-6 pb-4">
+      <DialogContent className="max-h-[85vh] max-w-3xl p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center justify-between">
             <span>Settings</span>
             {saving && <span className="text-muted-foreground text-sm font-normal">Saving...</span>}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-6 px-6 pb-6">
+        <div className="flex px-6 pb-6">
           {renderNavigation()}
-          <ScrollArea className="h-[500px] flex-1 pr-4">{renderContent()}</ScrollArea>
+          <ScrollArea className="h-[560px] flex-1 pl-6">{renderContent()}</ScrollArea>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Reusable section header with title + description */
+function SectionHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="text-muted-foreground mt-1 text-[13px]">{description}</p>
+    </div>
+  );
+}
+
+/** Reusable empty state placeholder */
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="border-border/60 bg-muted/20 rounded-lg border border-dashed px-4 py-8 text-center">
+      <p className="text-muted-foreground text-sm">{message}</p>
+    </div>
+  );
+}
+
+/** Reusable horizontal setting row: label+description on left, control on right */
+export function SettingRow({
+  id,
+  label,
+  description,
+  children,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg px-1 py-3">
+      <div className="min-w-0 flex-1">
+        <Label htmlFor={id} className="cursor-pointer text-sm">
+          {label}
+        </Label>
+        {description && <p className="text-muted-foreground mt-0.5 text-[13px]">{description}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
   );
 }
