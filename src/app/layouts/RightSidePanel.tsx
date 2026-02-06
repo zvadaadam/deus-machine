@@ -35,6 +35,8 @@ interface RightSidePanelProps {
   onOpenDiffTab: (filePath: string) => void;
   /** Open a file viewer tab in the chat area */
   onOpenFileTab: (filePath: string) => void;
+  /** Compact mode — narrower panel when diff viewer is active */
+  compact?: boolean;
 }
 
 export function RightSidePanel({
@@ -46,6 +48,7 @@ export function RightSidePanel({
   rightSideStyle,
   onOpenDiffTab,
   onOpenFileTab,
+  compact,
 }: RightSidePanelProps) {
   const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
     workspace.id
@@ -126,8 +129,8 @@ export function RightSidePanel({
     <div
       className={cn(
         "border-border/40 flex h-full min-w-0 flex-col border-l",
-        rightSideExpanded && "min-w-[380px]",
-        rightSideExpanded && rightPanelWidth === null && "flex-1"
+        !compact && rightSideExpanded && "min-w-[380px]",
+        !compact && rightSideExpanded && rightPanelWidth === null && "flex-1"
       )}
       style={rightSideStyle}
     >
@@ -142,7 +145,7 @@ export function RightSidePanel({
         <div
           className={cn(
             "bg-background/50 flex h-full flex-col overflow-hidden backdrop-blur-sm",
-            rightSideTab === "browser" ? "flex-1" : "w-[380px]"
+            compact ? "w-[200px]" : rightSideTab === "browser" ? "flex-1" : "w-[380px]"
           )}
         >
           {rightSideTab === "code" && (
