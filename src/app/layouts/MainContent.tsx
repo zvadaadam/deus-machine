@@ -3,27 +3,32 @@
  *
  * Three layout modes:
  * 1. Normal:  ChatArea (flex-1) + RightSidePanel (380px + 56px sidecar)
- * 2. Diff:    ChatArea (flex-1, min 300px) <resize> DiffViewer + RightSidePanel (compact 200px)
+ * 2. Code:    ChatArea (flex-1, min 300px) <resize> Viewer <resize> RightSidePanel (compact) + Sidecar
  * 3. Browser: ChatArea (flex-1) <resize> RightSidePanel (expanded, resizable)
  *
- * When diff opens, sidebar auto-collapses on narrow screens (<1400px)
- * and restores when diff closes. ESC closes the diff panel.
+ * When the middle panel opens, sidebar auto-collapses on screens narrower
+ * than 1680px and restores when it closes. ESC closes the middle panel.
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
-import { useWorkspaceLayout, useResizeHandle } from "@/features/workspace";
+import { useWorkspaceLayout, useResizeHandle, useFileChanges } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
+import { FileViewer } from "@/features/file-browser";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { PanelLeft } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
-import { SCREEN_WIDTH_THRESHOLD } from "@/shared/stores/layoutCoordinationStore";
+import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace, PRStatus } from "@/shared/types";
 import { ChatArea } from "./ChatArea";
-import type { ChatAreaRef } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
+
+/** Sidebar auto-collapses when opening middle panel on screens narrower than this */
+const SIDEBAR_COLLAPSE_THRESHOLD = 1680;
+
+/** Union type for the single active view in the middle panel */
+type MiddlePanelView = { type: "diff"; filePath: string } | { type: "file"; filePath: string };
 
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
@@ -53,25 +58,24 @@ export function MainContent({
   // Right side expansion state (browser tab only)
   const [rightSideExpanded, setRightSideExpanded] = useState(false);
 
-  // Diff state — file path drives the diff panel visibility
-  const [activeDiffFilePath, setActiveDiffFilePath] = useState<string | null>(null);
-  const [diffSectionWidth, setDiffSectionWidth] = useState<number | null>(null);
-  // Sidebar state saved before diff auto-collapse, restored on close
-  const [sidebarBeforeDiff, setSidebarBeforeDiff] = useState<boolean | null>(null);
+  // --- Middle panel state (single active view) ---
+  const [middlePanel, setMiddlePanel] = useState<MiddlePanelView | null>(null);
+  const [middlePanelWidth, setMiddlePanelWidth] = useState<number | null>(null);
+  const [compactPanelWidth, setCompactPanelWidth] = useState<number | null>(null);
+  // Sidebar state saved before auto-collapse, restored on close
+  const [sidebarBeforePanel, setSidebarBeforePanel] = useState<boolean | null>(null);
 
-  // ChatArea ref — for opening file tabs from RightSidePanel
-  const chatAreaRef = useRef<ChatAreaRef>(null);
-
-  // Reset diff state when workspace changes (React-recommended render-time pattern)
+  // Reset state when workspace changes (React-recommended render-time pattern)
   const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
   if (prevWorkspaceIdRef.current !== selectedWorkspaceId) {
     prevWorkspaceIdRef.current = selectedWorkspaceId;
-    if (activeDiffFilePath !== null) setActiveDiffFilePath(null);
-    if (diffSectionWidth !== null) setDiffSectionWidth(null);
-    if (sidebarBeforeDiff !== null) setSidebarBeforeDiff(null);
+    if (middlePanel !== null) setMiddlePanel(null);
+    if (middlePanelWidth !== null) setMiddlePanelWidth(null);
+    if (compactPanelWidth !== null) setCompactPanelWidth(null);
+    if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
   }
 
-  const diffActive = !!activeDiffFilePath;
+  const middlePanelActive = middlePanel !== null;
 
   // Workspace git info for DiffTabContent
   const workspaceGitInfo: WorkspaceGitInfo | null = useMemo(
@@ -85,44 +89,97 @@ export function MainContent({
     [selectedWorkspace]
   );
 
-  // --- Diff handlers ---
+  // File changes for prev/next navigation
+  const { data: fileChangesData } = useFileChanges(
+    selectedWorkspaceId,
+    selectedWorkspace?.session_status,
+    workspaceGitInfo ?? undefined
+  );
+  const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
+
+  // --- Middle panel operations ---
+
+  /** Collapse sidebar on narrow screens, saving state for restoration */
+  const collapseSidebarForPanel = useCallback(() => {
+    setSidebarBeforePanel((prev) => {
+      if (prev === null) {
+        if (window.innerWidth < SIDEBAR_COLLAPSE_THRESHOLD && sidebarOpen) {
+          setSidebarOpen(false);
+        }
+        return sidebarOpen;
+      }
+      return prev;
+    });
+  }, [sidebarOpen, setSidebarOpen]);
 
   const handleOpenDiff = useCallback(
     (filePath: string) => {
-      // Save sidebar state once (first diff open in this session)
-      setSidebarBeforeDiff((prev) => {
-        if (prev === null) {
-          // Auto-collapse sidebar on narrow screens
-          if (window.innerWidth < SCREEN_WIDTH_THRESHOLD && sidebarOpen) {
-            setSidebarOpen(false);
-          }
-          return sidebarOpen;
-        }
-        return prev;
-      });
-      setActiveDiffFilePath(filePath);
+      collapseSidebarForPanel();
+      setMiddlePanel({ type: "diff", filePath });
     },
-    [sidebarOpen, setSidebarOpen]
+    [collapseSidebarForPanel]
   );
 
-  const handleCloseDiff = useCallback(() => {
-    setActiveDiffFilePath(null);
-    setDiffSectionWidth(null);
-    // Restore sidebar to pre-diff state
-    setSidebarBeforeDiff((prev) => {
-      if (prev !== null) {
-        setSidebarOpen(prev);
-      }
+  const handleOpenFilePreview = useCallback(
+    (filePath: string) => {
+      collapseSidebarForPanel();
+      setMiddlePanel({ type: "file", filePath });
+    },
+    [collapseSidebarForPanel]
+  );
+
+  const handleCloseMiddlePanel = useCallback(() => {
+    setMiddlePanel(null);
+    setMiddlePanelWidth(null);
+    setCompactPanelWidth(null);
+    setSidebarBeforePanel((prev) => {
+      if (prev !== null) setSidebarOpen(prev);
       return null;
     });
   }, [setSidebarOpen]);
 
-  // ESC closes the diff panel
+  // --- Prev/next file navigation for diff views ---
+
+  const { onPrevFile, onNextFile, fileIndex, fileCount } = useMemo(() => {
+    if (!middlePanel || middlePanel.type !== "diff" || fileChanges.length === 0) {
+      return {
+        onPrevFile: undefined,
+        onNextFile: undefined,
+        fileIndex: undefined,
+        fileCount: undefined,
+      };
+    }
+
+    const currentPath = middlePanel.filePath;
+    const idx = fileChanges.findIndex((fc) => fc.file === currentPath);
+    if (idx === -1) {
+      return {
+        onPrevFile: undefined,
+        onNextFile: undefined,
+        fileIndex: undefined,
+        fileCount: undefined,
+      };
+    }
+
+    return {
+      fileIndex: idx,
+      fileCount: fileChanges.length,
+      onPrevFile:
+        idx > 0
+          ? () => setMiddlePanel({ type: "diff", filePath: fileChanges[idx - 1].file })
+          : undefined,
+      onNextFile:
+        idx < fileChanges.length - 1
+          ? () => setMiddlePanel({ type: "diff", filePath: fileChanges[idx + 1].file })
+          : undefined,
+    };
+  }, [middlePanel, fileChanges]);
+
+  // ESC closes the middle panel
   useEffect(() => {
-    if (!activeDiffFilePath) return;
+    if (!middlePanelActive) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Don't close if user is in a text field
       const ae = document.activeElement as HTMLElement | null;
       if (
         ae &&
@@ -132,27 +189,36 @@ export function MainContent({
           ae.getAttribute("role") === "textbox")
       )
         return;
-      handleCloseDiff();
+      handleCloseMiddlePanel();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeDiffFilePath, handleCloseDiff]);
+  }, [middlePanelActive, handleCloseMiddlePanel]);
 
   // --- Resize handles ---
 
-  // Diff mode: resize between chat and (diff + compact right panel)
-  const { handleProps: diffResizeProps, isDragging: diffDragging } = useResizeHandle({
-    onSizeChange: setDiffSectionWidth,
-    enabled: diffActive,
+  // Middle panel mode: resize between chat and (viewer + compact right panel)
+  const { handleProps: middlePanelResizeProps, isDragging: middlePanelDragging } = useResizeHandle({
+    onSizeChange: setMiddlePanelWidth,
+    enabled: middlePanelActive,
     direction: "horizontal",
-    minSecondarySize: 460, // ~200px compact panel + 56px sidecar + ~200px min diff
+    minSecondarySize: 436, // ~160px compact panel + 56px sidecar + ~220px min viewer
     minPrimarySize: 300, // min chat width
+  });
+
+  // Compact panel resize: between viewer and compact right panel (file list + sidecar)
+  const { handleProps: compactResizeProps, isDragging: compactDragging } = useResizeHandle({
+    onSizeChange: setCompactPanelWidth,
+    enabled: middlePanelActive,
+    direction: "horizontal",
+    minSecondarySize: 160, // min compact panel width
+    minPrimarySize: 300, // min viewer width
   });
 
   // Browser mode: resize between chat area and expanded right panel
   const { handleProps: browserResizeProps, isDragging: browserDragging } = useResizeHandle({
     onSizeChange: setRightPanelWidth,
-    enabled: rightSideExpanded && !diffActive,
+    enabled: rightSideExpanded && !middlePanelActive,
     direction: "horizontal",
     minSecondarySize: 380,
     minPrimarySize: 200,
@@ -160,15 +226,15 @@ export function MainContent({
 
   // --- Computed styles ---
 
-  // Browser mode right side style (no diff)
+  // Browser mode right side style (no middle panel)
   const browserRightSideStyle: React.CSSProperties | undefined =
-    rightSideExpanded && !diffActive && rightPanelWidth !== null
+    rightSideExpanded && !middlePanelActive && rightPanelWidth !== null
       ? { width: rightPanelWidth, flexShrink: 0 }
       : undefined;
 
-  // Diff section style (diff viewer + compact right panel combined)
-  const diffSectionStyle: React.CSSProperties =
-    diffSectionWidth !== null ? { width: diffSectionWidth, flexShrink: 0 } : { flex: "2 1 0%" };
+  // Middle panel section style (viewer + compact right panel combined)
+  const middlePanelStyle: React.CSSProperties =
+    middlePanelWidth !== null ? { width: middlePanelWidth, flexShrink: 0 } : { flex: "2 1 0%" };
 
   return (
     <SidebarInset className="min-w-0">
@@ -176,7 +242,7 @@ export function MainContent({
         data-slot="main-content"
         className="bg-background border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border"
       >
-        {/* Sidebar toggle — visible when sidebar collapsed and no workspace tab bar */}
+        {/* Sidebar toggle — visible when sidebar collapsed and no workspace */}
         {!sidebarOpen && !selectedWorkspace && (
           <button
             type="button"
@@ -191,53 +257,61 @@ export function MainContent({
         <div className="flex min-w-0 flex-1">
           {selectedWorkspace ? (
             <>
-              {/* Chat area — always visible, shrinks when diff is active */}
+              {/* Chat area — always visible, shrinks when middle panel is active */}
               <div
                 className="flex min-w-0 flex-col overflow-hidden"
-                style={diffActive ? { flex: "1 1 0%", minWidth: 300 } : { flex: "1 1 auto" }}
+                style={middlePanelActive ? { flex: "1 1 0%", minWidth: 300 } : { flex: "1 1 auto" }}
               >
                 <ChatArea
-                  ref={chatAreaRef}
                   workspace={selectedWorkspace}
                   workspaceChatPanelRef={workspaceChatPanelRef}
                   onCreatePRHandlerChange={setCreatePRHandler}
                 />
               </div>
 
-              {diffActive && workspaceGitInfo ? (
+              {middlePanelActive && workspaceGitInfo ? (
                 <>
-                  {/* Diff resize handle — between chat and diff section */}
-                  <div
-                    {...diffResizeProps}
-                    className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
-                    aria-label="Resize panels"
-                    role="separator"
-                    aria-orientation="vertical"
-                  >
-                    <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
-                    <div
-                      className={cn(
-                        "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
-                        diffDragging
-                          ? "bg-primary/40 opacity-100"
-                          : "bg-border opacity-0 group-hover:opacity-100"
-                      )}
-                    />
-                  </div>
+                  {/* Middle panel resize handle — between chat and viewer section */}
+                  <ResizeHandle
+                    handleProps={middlePanelResizeProps}
+                    isDragging={middlePanelDragging}
+                    label="Resize panels"
+                  />
 
-                  {/* Diff section: viewer + compact right panel */}
-                  <div className="flex h-full min-w-0 overflow-hidden" style={diffSectionStyle}>
-                    {/* Diff viewer — takes remaining space */}
+                  {/* Middle panel section: viewer + compact right panel */}
+                  <div
+                    className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] overflow-hidden"
+                    style={middlePanelStyle}
+                  >
+                    {/* Code viewer (diff or file preview) */}
                     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                      <DiffTabContent
-                        workspaceId={selectedWorkspace.id}
-                        filePath={activeDiffFilePath}
-                        workspaceGitInfo={workspaceGitInfo}
-                        onClose={handleCloseDiff}
-                      />
+                      {middlePanel.type === "diff" ? (
+                        <DiffTabContent
+                          workspaceId={selectedWorkspace.id}
+                          filePath={middlePanel.filePath}
+                          workspaceGitInfo={workspaceGitInfo}
+                          onClose={handleCloseMiddlePanel}
+                          onPrevFile={onPrevFile}
+                          onNextFile={onNextFile}
+                          fileIndex={fileIndex}
+                          fileCount={fileCount}
+                        />
+                      ) : (
+                        <FileViewer
+                          filePath={middlePanel.filePath}
+                          onClose={handleCloseMiddlePanel}
+                        />
+                      )}
                     </div>
 
-                    {/* Compact right panel */}
+                    {/* Compact panel resize handle — between viewer and file list */}
+                    <ResizeHandle
+                      handleProps={compactResizeProps}
+                      isDragging={compactDragging}
+                      label="Resize file list"
+                    />
+
+                    {/* Compact right panel (file list + sidecar) */}
                     <RightSidePanel
                       workspace={selectedWorkspace}
                       prStatus={prStatus}
@@ -246,8 +320,9 @@ export function MainContent({
                       rightPanelWidth={null}
                       rightSideStyle={undefined}
                       onOpenDiffTab={handleOpenDiff}
-                      onOpenFileTab={(path) => chatAreaRef.current?.openFileTab(path)}
+                      onOpenFilePreview={handleOpenFilePreview}
                       compact
+                      compactWidth={compactPanelWidth}
                     />
                   </div>
                 </>
@@ -255,23 +330,11 @@ export function MainContent({
                 <>
                   {/* Browser resize handle — enabled when browser tab expands */}
                   {rightSideExpanded && (
-                    <div
-                      {...browserResizeProps}
-                      className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
-                      aria-label="Resize panels"
-                      role="separator"
-                      aria-orientation="vertical"
-                    >
-                      <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
-                      <div
-                        className={cn(
-                          "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
-                          browserDragging
-                            ? "bg-primary/40 opacity-100"
-                            : "bg-border opacity-0 group-hover:opacity-100"
-                        )}
-                      />
-                    </div>
+                    <ResizeHandle
+                      handleProps={browserResizeProps}
+                      isDragging={browserDragging}
+                      label="Resize panels"
+                    />
                   )}
 
                   {/* Normal right panel */}
@@ -283,7 +346,7 @@ export function MainContent({
                     rightPanelWidth={rightPanelWidth}
                     rightSideStyle={browserRightSideStyle}
                     onOpenDiffTab={handleOpenDiff}
-                    onOpenFileTab={(path) => chatAreaRef.current?.openFileTab(path)}
+                    onOpenFilePreview={handleOpenFilePreview}
                   />
                 </>
               )}

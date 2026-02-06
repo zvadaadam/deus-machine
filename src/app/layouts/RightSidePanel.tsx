@@ -1,7 +1,7 @@
 /**
  * Right Side Panel — narrow sidebar with file tree, sidecar tabs, and PR actions.
  *
- * Diffs/file viewing now open as tabs in the ChatArea (VS Code pattern).
+ * Diffs and file previews open in the middle panel (side-by-side with chat).
  * This panel stays at fixed width except when browser tab is active.
  *
  * Layout: [Content panel (file tree/browser/terminal)] [Sidecar tabs]
@@ -31,12 +31,14 @@ interface RightSidePanelProps {
   rightPanelWidth: number | null;
   /** Inline style for custom width (browser mode) */
   rightSideStyle?: React.CSSProperties;
-  /** Open a diff tab in the chat area */
+  /** Open a diff in the middle panel */
   onOpenDiffTab: (filePath: string) => void;
-  /** Open a file viewer tab in the chat area */
-  onOpenFileTab: (filePath: string) => void;
+  /** Open a file preview in the middle panel */
+  onOpenFilePreview: (filePath: string) => void;
   /** Compact mode — narrower panel when diff viewer is active */
   compact?: boolean;
+  /** Custom width for the compact content panel (from resize handle) */
+  compactWidth?: number | null;
 }
 
 export function RightSidePanel({
@@ -47,8 +49,9 @@ export function RightSidePanel({
   rightPanelWidth,
   rightSideStyle,
   onOpenDiffTab,
-  onOpenFileTab,
+  onOpenFilePreview,
   compact,
+  compactWidth,
 }: RightSidePanelProps) {
   const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
     workspace.id
@@ -94,9 +97,9 @@ export function RightSidePanel({
 
   const handleBrowserFileClick = useCallback(
     (path: string) => {
-      onOpenFileTab(`${workspace.workspace_path}/${path}`);
+      onOpenFilePreview(`${workspace.workspace_path}/${path}`);
     },
-    [onOpenFileTab, workspace.workspace_path]
+    [onOpenFilePreview, workspace.workspace_path]
   );
 
   const handleCodeTabChange = useCallback(
@@ -128,7 +131,8 @@ export function RightSidePanel({
   return (
     <div
       className={cn(
-        "border-border/40 flex h-full min-w-0 flex-col border-l",
+        "flex h-full min-w-0 flex-col",
+        !compact && "border-border/40 border-l",
         !compact && rightSideExpanded && "min-w-[380px]",
         !compact && rightSideExpanded && rightPanelWidth === null && "flex-1"
       )}
@@ -138,6 +142,7 @@ export function RightSidePanel({
         prStatus={prStatus}
         onCreatePR={createPRHandler ? handleCreatePR : undefined}
         onReviewPR={handleOpenPR}
+        compact={compact}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -145,10 +150,20 @@ export function RightSidePanel({
         <div
           className={cn(
             "bg-background/50 flex h-full flex-col overflow-hidden backdrop-blur-sm",
-            compact ? "w-[200px]" : rightSideTab === "browser" ? "flex-1" : "w-[380px]"
+            compact
+              ? compactWidth == null
+                ? "w-[220px]"
+                : undefined
+              : rightSideTab === "browser"
+                ? "flex-1"
+                : "w-[380px]"
           )}
+          style={
+            compact && compactWidth != null ? { width: compactWidth, flexShrink: 0 } : undefined
+          }
         >
-          {rightSideTab === "code" && (
+          {/* In compact mode, force code tab content regardless of sidecar selection */}
+          {(compact ? true : rightSideTab === "code") && (
             <CodePanelContent
               workspace={workspace}
               fileChanges={fileChanges}
@@ -159,18 +174,22 @@ export function RightSidePanel({
             />
           )}
 
-          {rightSideTab === "browser" && <BrowserPanel workspaceId={workspace.id} />}
+          {!compact && rightSideTab === "browser" && <BrowserPanel workspaceId={workspace.id} />}
 
-          {rightSideTab === "terminal" && (
+          {!compact && rightSideTab === "terminal" && (
             <TerminalPanel workspacePath={workspace.workspace_path} />
           )}
 
-          {rightSideTab === "config" && <ConfigPanel />}
+          {!compact && rightSideTab === "config" && <ConfigPanel />}
 
-          {rightSideTab === "design" && <DesignPanel workspaceId={workspace.id} />}
+          {!compact && rightSideTab === "design" && <DesignPanel workspaceId={workspace.id} />}
         </div>
 
-        <RightSidecar activeTab={rightSideTab} onTabChange={handleRightSideTabChange} />
+        <RightSidecar
+          activeTab={rightSideTab}
+          onTabChange={handleRightSideTabChange}
+          compact={compact}
+        />
       </div>
     </div>
   );

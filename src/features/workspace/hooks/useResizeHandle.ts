@@ -16,6 +16,10 @@ interface UseResizeHandleOptions {
   enabled: boolean;
   /** Resize direction: horizontal = left/right split, vertical = top/bottom split */
   direction?: "horizontal" | "vertical";
+  /** Which panel the reported size refers to.
+   *  "secondary" (default) = right/bottom panel width/height.
+   *  "primary" = left/top panel width/height (useful for sidebar resize). */
+  mode?: "secondary" | "primary";
   /** Min size of the secondary (right or bottom) panel in pixels */
   minSecondarySize?: number;
   /** Min size of the primary (left or top) panel in pixels */
@@ -34,6 +38,7 @@ export function useResizeHandle({
   onSizeChange,
   enabled,
   direction = "horizontal",
+  mode = "secondary",
   minSecondarySize = 380,
   minPrimarySize = 200,
 }: UseResizeHandleOptions): UseResizeHandleReturn {
@@ -68,24 +73,32 @@ export function useResizeHandle({
         if (!isDraggingRef.current) return;
 
         const rect = container.getBoundingClientRect();
-
-        let newSecondarySize: number;
-        if (direction === "horizontal") {
-          // Right panel width = container width - mouse X offset
-          const mouseX = moveEvent.clientX - rect.left;
-          newSecondarySize = rect.width - mouseX;
-        } else {
-          // Bottom panel height = container height - mouse Y offset
-          const mouseY = moveEvent.clientY - rect.top;
-          newSecondarySize = rect.height - mouseY;
-        }
-
-        // Clamp to constraints
         const totalSize = direction === "horizontal" ? rect.width : rect.height;
-        newSecondarySize = Math.max(newSecondarySize, minSecondarySize);
-        newSecondarySize = Math.min(newSecondarySize, totalSize - minPrimarySize);
 
-        onSizeChange(Math.round(newSecondarySize));
+        if (mode === "primary") {
+          // Primary mode: report left/top panel size
+          const mouseOffset =
+            direction === "horizontal"
+              ? moveEvent.clientX - rect.left
+              : moveEvent.clientY - rect.top;
+          let newPrimarySize = mouseOffset;
+          newPrimarySize = Math.max(newPrimarySize, minPrimarySize);
+          newPrimarySize = Math.min(newPrimarySize, totalSize - minSecondarySize);
+          onSizeChange(Math.round(newPrimarySize));
+        } else {
+          // Secondary mode (default): report right/bottom panel size
+          let newSecondarySize: number;
+          if (direction === "horizontal") {
+            const mouseX = moveEvent.clientX - rect.left;
+            newSecondarySize = rect.width - mouseX;
+          } else {
+            const mouseY = moveEvent.clientY - rect.top;
+            newSecondarySize = rect.height - mouseY;
+          }
+          newSecondarySize = Math.max(newSecondarySize, minSecondarySize);
+          newSecondarySize = Math.min(newSecondarySize, totalSize - minPrimarySize);
+          onSizeChange(Math.round(newSecondarySize));
+        }
       };
 
       const cleanup = () => {
@@ -108,7 +121,7 @@ export function useResizeHandle({
       document.addEventListener("mouseup", onMouseUp);
       cleanupRef.current = cleanup;
     },
-    [enabled, direction, minSecondarySize, minPrimarySize, onSizeChange]
+    [enabled, direction, mode, minSecondarySize, minPrimarySize, onSizeChange]
   );
 
   const handleDoubleClick = useCallback(() => {
