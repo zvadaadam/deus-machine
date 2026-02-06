@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Settings, MCPServer, Command, Agent, Hook } from "../types";
+import type { Settings, MCPServer, Command, Agent } from "../types";
 
 /**
  * Fetch all settings
@@ -54,17 +54,6 @@ export function useAgents() {
 }
 
 /**
- * Fetch hooks configuration
- */
-export function useHooks() {
-  return useQuery({
-    queryKey: queryKeys.settings.hooks,
-    queryFn: () => SettingsService.fetchFileConfig<Hook>("hooks"),
-    staleTime: 30000,
-  });
-}
-
-/**
  * Update settings mutation with optimistic update
  */
 export function useUpdateSettings() {
@@ -79,15 +68,12 @@ export function useUpdateSettings() {
 
       const previousSettings = queryClient.getQueryData<Settings>(queryKeys.settings.all);
 
-      queryClient.setQueryData<Settings>(
-        queryKeys.settings.all,
-        (old) => {
-          if (!old) return old;
-          return produce(old, (draft) => {
-            Object.assign(draft, newSettings);
-          });
-        }
-      );
+      queryClient.setQueryData<Settings>(queryKeys.settings.all, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          Object.assign(draft, newSettings);
+        });
+      });
 
       return { previousSettings };
     },
@@ -100,18 +86,6 @@ export function useUpdateSettings() {
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
-    },
-  });
-}
-
-/**
- * Clear conversation memory mutation
- */
-export function useClearMemory() {
-  return useMutation({
-    mutationFn: async () => {
-      const { MemoryService } = await import("./memory.service");
-      return MemoryService.clear();
     },
   });
 }

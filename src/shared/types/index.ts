@@ -31,7 +31,6 @@ export type {
   MCPServer,
   Command,
   Agent,
-  Hook,
   SettingsSection,
   ApiResponse,
   ApiError,

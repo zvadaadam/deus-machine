@@ -32,7 +32,7 @@ export type {
 export type { Repo, Stats } from "./repository";
 
 // Settings types
-export type { Settings, MCPServer, Command, Agent, Hook, SettingsSection } from "./settings";
+export type { Settings, MCPServer, Command, Agent, SettingsSection } from "./settings";
 
 // API types
 export type {

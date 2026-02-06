@@ -11,11 +11,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import type { SettingsSectionProps } from "./types";
 
-export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
+export function AISection({ settings, saveSetting }: SettingsSectionProps) {
   // Controlled state for custom endpoint with debounced save
   const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? "");
 
-  // Browser-compatible timeout ref (ReturnType<typeof setTimeout> works in both Node and browser)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track latest typed value and last successfully saved value for safe unmount flush
@@ -36,35 +35,53 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       saveSetting("custom_endpoint", value);
-      lastSavedRef.current = value; // Track what was saved
+      lastSavedRef.current = value;
     }, 500);
   };
 
   // Cleanup timeout on unmount and flush pending changes to prevent data loss
   useEffect(() => {
     return () => {
-      // Clear pending timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
 
-      // Flush any unsaved changes ONLY on unmount (compare latest vs last saved)
       if (latestValueRef.current !== lastSavedRef.current) {
         saveSetting("custom_endpoint", latestValueRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps = only runs on mount/unmount, preventing infinite loop
+  }, []);
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-base font-semibold">Provider</h3>
+        <h3 className="text-base font-semibold">AI</h3>
         <p className="text-muted-foreground mt-1 text-[13px]">
-          Configure your Claude API provider and default model.
+          Configure your Claude API provider, model, and credentials.
         </p>
       </div>
 
+      {/* API Key */}
+      <div className="space-y-2">
+        <Label htmlFor="api-key" className="text-sm">
+          Anthropic API key
+        </Label>
+        <p className="text-muted-foreground text-[13px]">
+          Used for direct API access. Stored locally on your machine.
+        </p>
+        <Input
+          id="api-key"
+          type="password"
+          defaultValue={settings.anthropic_api_key ?? ""}
+          onBlur={(e) => saveSetting("anthropic_api_key", e.currentTarget.value)}
+          placeholder="sk-ant-api03-..."
+        />
+      </div>
+
+      <Separator />
+
+      {/* Provider */}
       <div className="space-y-2">
         <Label htmlFor="provider" className="text-sm">
           Provider
@@ -88,6 +105,7 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
 
       <Separator />
 
+      {/* Model */}
       <div className="space-y-2">
         <Label htmlFor="model" className="text-sm">
           Default model
@@ -101,13 +119,14 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="sonnet">Claude 3.5 Sonnet</SelectItem>
-            <SelectItem value="opus">Claude 3 Opus</SelectItem>
-            <SelectItem value="haiku">Claude 3.5 Haiku</SelectItem>
+            <SelectItem value="sonnet">Claude Sonnet 4.5</SelectItem>
+            <SelectItem value="opus">Claude Opus 4.6</SelectItem>
+            <SelectItem value="haiku">Claude Haiku 4.5</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
+      {/* Custom endpoint (conditional) */}
       {settings.claude_provider === "custom" && (
         <>
           <Separator />
