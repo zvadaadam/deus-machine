@@ -9,6 +9,8 @@ interface PRStatusBarProps {
   onReviewPR?: () => void;
   onMergePR?: () => void;
   className?: string;
+  /** Compact mode — hides PR title to fit narrow panel */
+  compact?: boolean;
 }
 
 export function PRStatusBar({
@@ -17,6 +19,7 @@ export function PRStatusBar({
   onReviewPR,
   onMergePR,
   className,
+  compact,
 }: PRStatusBarProps) {
   const hasPR = Boolean(prStatus?.has_pr && prStatus?.pr_number);
   const prLabel = prStatus?.pr_number ? `PR #${prStatus.pr_number}` : "No PR";
@@ -39,7 +42,7 @@ export function PRStatusBar({
           <GitPullRequest className="text-primary h-3.5 w-3.5" />
           <span className="truncate">{prLabel}</span>
         </div>
-        {hasPR && prStatus?.pr_title && (
+        {!compact && hasPR && prStatus?.pr_title && (
           <span className="text-muted-foreground/70 max-w-[200px] truncate text-xs">
             {prStatus.pr_title}
           </span>
