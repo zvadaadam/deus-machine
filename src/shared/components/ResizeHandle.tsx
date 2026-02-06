@@ -31,7 +31,7 @@ export function ResizeHandle({ handleProps, isDragging, label }: ResizeHandlePro
         className={cn(
           "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2",
           "via-border bg-gradient-to-b from-transparent to-transparent",
-          "transition-[colors,opacity] duration-200 ease-[ease]",
+          "transition-colors transition-opacity duration-200 ease-out",
           isDragging
             ? "via-foreground/25 opacity-100"
             : "group-hover:via-foreground/25 opacity-0 group-hover:opacity-100"

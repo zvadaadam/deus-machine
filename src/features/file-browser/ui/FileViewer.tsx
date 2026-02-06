@@ -128,6 +128,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
                 onClick={handleCopy}
                 className="text-muted-foreground hover:text-foreground h-6 w-6"
                 title="Copy file content"
+                aria-label="Copy file content"
               >
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
@@ -141,6 +142,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
                 onClick={onClose}
                 className="text-muted-foreground hover:text-foreground h-6 w-6"
                 title="Close file preview"
+                aria-label="Close file preview"
               >
                 <X className="h-3.5 w-3.5" />
               </Button>
