@@ -47,6 +47,5 @@ export const queryKeys = {
     mcpServers: ["settings", "mcp-servers"] as const,
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
-    hooks: ["settings", "hooks"] as const,
   },
 } as const;
