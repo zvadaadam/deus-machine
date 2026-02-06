@@ -30,8 +30,8 @@ interface UseResizeHandleReturn {
 export function useResizeHandle({
   onWidthChange,
   enabled,
-  minRightWidth = 450,
-  minLeftWidth = 350,
+  minRightWidth = 380,
+  minLeftWidth = 200,
 }: UseResizeHandleOptions): UseResizeHandleReturn {
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);

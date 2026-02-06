@@ -1,25 +1,10 @@
 /**
  * File Changes Panel
- * Main component for the file changes view
- *
- * Simple design: Click file → see diff
- *
- * Layout:
- * ┌─────────────┬───────────────────────┐
- * │ File Tree   │   Single File Diff    │
- * │  (280px)    │      (flexible)       │
- * │             │                       │
- * │ ▼ src/      │ ┌─────────────────┐   │
- * │   ▼ comp/   │ │ Button.tsx     │   │
- * │     Button  │ │ +5 -2          │   │
- * │     Input   │ │ [diff content] │   │
- * │             │ └─────────────────┘   │
- * └─────────────┴───────────────────────┘
+ * Renders the file change tree. Diff viewing is handled externally by MainContent.
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { FileChangeTree } from "./FileChangeTree";
-import { DiffViewer } from "@/features/workspace/ui/DiffViewer";
 import { Sparkles, FileCode } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { buildFileTree } from "../lib/buildFileTree";
@@ -32,34 +17,19 @@ interface FileChangesPanelProps {
   selectedWorkspace: Workspace | null;
   /** File changes from API */
   fileChanges: FileChange[];
-  /** Function to fetch diff for a file */
-  fetchDiff: (filePath: string) => Promise<{
-    diff: string;
-    additions?: number;
-    deletions?: number;
-    oldContent?: string | null;
-    newContent?: string | null;
-  }>;
-  /** Whether panel is expanded (showing diff view) */
-  isExpanded?: boolean;
   /** Callback when a file is selected */
   onFileSelect?: (path: string | null) => void;
-  /** Callback when diff viewer requests close */
-  onDiffClose?: () => void;
   /** Optional header slot rendered above the file tree */
   headerSlot?: React.ReactNode;
 }
 
 /**
- * File changes panel with tree sidebar and single file diff view
+ * File changes panel - renders file tree only. Diff viewing is handled by MainContent.
  */
 export function FileChangesPanel({
   selectedWorkspace,
   fileChanges,
-  fetchDiff,
-  isExpanded = true,
   onFileSelect,
-  onDiffClose,
   headerSlot,
 }: FileChangesPanelProps) {
   // Build file tree from flat changes
@@ -85,55 +55,6 @@ export function FileChangesPanel({
     }
   }, [currentWorkspaceId]);
 
-  // Diff state for selected file
-  const [diffState, setDiffState] = useState<{
-    diff: string;
-    isLoading: boolean;
-    error?: string;
-    oldContent?: string | null;
-    newContent?: string | null;
-  }>({ diff: "", isLoading: false });
-
-  // Fetch diff when selected file changes
-  useEffect(() => {
-    if (!selectedFilePath) {
-      return;
-    }
-
-    let cancelled = false;
-
-    // Start loading - intentional for async data fetching pattern
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDiffState({ diff: "", isLoading: true, oldContent: null, newContent: null });
-
-    fetchDiff(selectedFilePath)
-      .then((result) => {
-        if (!cancelled) {
-          setDiffState({
-            diff: result.diff,
-            isLoading: false,
-            oldContent: result.oldContent ?? null,
-            newContent: result.newContent ?? null,
-          });
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setDiffState({
-            diff: "",
-            isLoading: false,
-            error: err?.message || "Failed to load diff",
-            oldContent: null,
-            newContent: null,
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedFilePath, fetchDiff]);
-
   // Handle file selection from tree
   const handleTreeSelect = useCallback(
     (path: string) => {
@@ -142,20 +63,6 @@ export function FileChangesPanel({
     },
     [onFileSelect]
   );
-
-  // Auto-select first file when expanded with changes but no selection
-  useEffect(() => {
-    if (isExpanded && fileChanges.length > 0 && !selectedFilePath) {
-      const firstChange = fileChanges[0];
-      const firstFile = firstChange.file || firstChange.file_path || "";
-      if (firstFile) {
-        // Auto-select first file on expansion - intentional pattern for initializing state
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedFilePath(firstFile);
-        onFileSelect?.(firstFile);
-      }
-    }
-  }, [isExpanded, fileChanges, selectedFilePath, onFileSelect]);
 
   // Empty state - no workspace
   if (!selectedWorkspace) {
@@ -195,58 +102,18 @@ export function FileChangesPanel({
     );
   }
 
-  // Collapsed mode - tree only
-  if (!isExpanded) {
-    return (
-      <div className="flex h-full flex-col overflow-hidden">
-        {headerSlot}
-        <div className="flex-1 overflow-y-auto">
-          <FileChangeTree
-            nodes={fileTree}
-            expandedPaths={expandedPaths}
-            selectedPath={selectedFilePath}
-            onToggle={toggleExpanded}
-            onSelect={handleTreeSelect}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Expanded mode - tree + single file diff view
+  // Tree view only — diff is rendered in MainContent's middle panel
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* File tree sidebar */}
-      <div className="border-border/40 flex w-[280px] flex-shrink-0 flex-col overflow-hidden border-r">
-        {headerSlot}
-        <div className="flex-1 overflow-y-auto">
-          <FileChangeTree
-            nodes={fileTree}
-            expandedPaths={expandedPaths}
-            selectedPath={selectedFilePath}
-            onToggle={toggleExpanded}
-            onSelect={handleTreeSelect}
-          />
-        </div>
-      </div>
-
-      {/* Single file diff view */}
-      <div className="flex-1 overflow-hidden">
-        {selectedFilePath && (
-          <DiffViewer
-            filePath={selectedFilePath}
-            diff={diffState.diff}
-            isLoading={diffState.isLoading}
-            error={diffState.error}
-            oldContent={diffState.oldContent ?? null}
-            newContent={diffState.newContent ?? null}
-            onClose={() => {
-              setSelectedFilePath(null);
-              onFileSelect?.(null);
-              onDiffClose?.();
-            }}
-          />
-        )}
+    <div className="flex h-full flex-col overflow-hidden">
+      {headerSlot}
+      <div className="flex-1 overflow-y-auto">
+        <FileChangeTree
+          nodes={fileTree}
+          expandedPaths={expandedPaths}
+          selectedPath={selectedFilePath}
+          onToggle={toggleExpanded}
+          onSelect={handleTreeSelect}
+        />
       </div>
     </div>
   );
