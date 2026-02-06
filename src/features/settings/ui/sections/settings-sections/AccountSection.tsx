@@ -1,15 +1,24 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import type { SettingsSectionProps } from "./types";
 
 export function AccountSection({ settings, saveSetting }: SettingsSectionProps) {
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Account Settings</h3>
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold">Account</h3>
+        <p className="text-muted-foreground mt-1 text-[13px]">
+          Your profile information and API credentials.
+        </p>
+      </div>
 
+      {/* Profile */}
       <div className="space-y-3">
         <div className="space-y-2">
-          <Label htmlFor="user-name">Name</Label>
+          <Label htmlFor="user-name" className="text-sm">
+            Name
+          </Label>
           <Input
             id="user-name"
             defaultValue={settings.user_name ?? ""}
@@ -19,7 +28,9 @@ export function AccountSection({ settings, saveSetting }: SettingsSectionProps) 
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="user-email">Email</Label>
+          <Label htmlFor="user-email" className="text-sm">
+            Email
+          </Label>
           <Input
             id="user-email"
             type="email"
@@ -30,7 +41,9 @@ export function AccountSection({ settings, saveSetting }: SettingsSectionProps) 
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="github-username">GitHub Username</Label>
+          <Label htmlFor="github-username" className="text-sm">
+            GitHub username
+          </Label>
           <Input
             id="github-username"
             defaultValue={settings.user_github_username ?? ""}
@@ -38,17 +51,25 @@ export function AccountSection({ settings, saveSetting }: SettingsSectionProps) 
             placeholder="github-username"
           />
         </div>
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="api-key">Anthropic API Key</Label>
-          <Input
-            id="api-key"
-            type="password"
-            defaultValue={settings.anthropic_api_key ?? ""}
-            onBlur={(e) => saveSetting("anthropic_api_key", e.currentTarget.value)}
-            placeholder="sk-ant-api03-..."
-          />
-        </div>
+      <Separator />
+
+      {/* API Key */}
+      <div className="space-y-2">
+        <Label htmlFor="api-key" className="text-sm">
+          Anthropic API key
+        </Label>
+        <p className="text-muted-foreground text-[13px]">
+          Used for direct API access. Stored locally on your machine.
+        </p>
+        <Input
+          id="api-key"
+          type="password"
+          defaultValue={settings.anthropic_api_key ?? ""}
+          onBlur={(e) => saveSetting("anthropic_api_key", e.currentTarget.value)}
+          placeholder="sk-ant-api03-..."
+        />
       </div>
     </div>
   );
