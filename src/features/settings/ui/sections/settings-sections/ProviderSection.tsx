@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import type { SettingsSectionProps } from "./types";
 
 export function ProviderSection({ settings, saveSetting }: SettingsSectionProps) {
@@ -54,49 +55,69 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps = only runs on mount/unmount, preventing infinite loop
+
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Provider Settings</h3>
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold">Provider</h3>
+        <p className="text-muted-foreground mt-1 text-[13px]">
+          Configure your Claude API provider and default model.
+        </p>
+      </div>
 
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="provider">Provider</Label>
-          <Select
-            value={settings.claude_provider ?? "anthropic"}
-            onValueChange={(value) => saveSetting("claude_provider", value)}
-          >
-            <SelectTrigger id="provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
-              <SelectItem value="custom">Custom Endpoint</SelectItem>
-              <SelectItem value="bedrock">AWS Bedrock</SelectItem>
-              <SelectItem value="vertex">Google Vertex AI</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="provider" className="text-sm">
+          Provider
+        </Label>
+        <p className="text-muted-foreground text-[13px]">Where API requests are routed.</p>
+        <Select
+          value={settings.claude_provider ?? "anthropic"}
+          onValueChange={(value) => saveSetting("claude_provider", value)}
+        >
+          <SelectTrigger id="provider" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
+            <SelectItem value="custom">Custom Endpoint</SelectItem>
+            <SelectItem value="bedrock">AWS Bedrock</SelectItem>
+            <SelectItem value="vertex">Google Vertex AI</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="model">Default Model</Label>
-          <Select
-            value={settings.claude_model ?? "sonnet"}
-            onValueChange={(value) => saveSetting("claude_model", value)}
-          >
-            <SelectTrigger id="model">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="sonnet">Claude 3.5 Sonnet</SelectItem>
-              <SelectItem value="opus">Claude 3 Opus</SelectItem>
-              <SelectItem value="haiku">Claude 3.5 Haiku</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <Separator />
 
-        {settings.claude_provider === "custom" && (
+      <div className="space-y-2">
+        <Label htmlFor="model" className="text-sm">
+          Default model
+        </Label>
+        <p className="text-muted-foreground text-[13px]">The model used for new conversations.</p>
+        <Select
+          value={settings.claude_model ?? "sonnet"}
+          onValueChange={(value) => saveSetting("claude_model", value)}
+        >
+          <SelectTrigger id="model" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sonnet">Claude 3.5 Sonnet</SelectItem>
+            <SelectItem value="opus">Claude 3 Opus</SelectItem>
+            <SelectItem value="haiku">Claude 3.5 Haiku</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {settings.claude_provider === "custom" && (
+        <>
+          <Separator />
           <div className="space-y-2">
-            <Label htmlFor="custom-endpoint">Custom Endpoint URL</Label>
+            <Label htmlFor="custom-endpoint" className="text-sm">
+              Custom endpoint URL
+            </Label>
+            <p className="text-muted-foreground text-[13px]">
+              The base URL for your custom Claude-compatible API.
+            </p>
             <Input
               id="custom-endpoint"
               type="url"
@@ -105,8 +126,8 @@ export function ProviderSection({ settings, saveSetting }: SettingsSectionProps)
               onChange={(e) => handleEndpointChange(e.target.value)}
             />
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
