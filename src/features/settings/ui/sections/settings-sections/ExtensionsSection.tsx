@@ -62,8 +62,8 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
                 <p className="text-muted-foreground mt-0.5 text-xs">{agent.description}</p>
                 {agent.tools?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {agent.tools.map((tool, i) => (
-                      <Badge key={i} variant="secondary" className="text-[11px] font-normal">
+                    {agent.tools.map((tool) => (
+                      <Badge key={tool} variant="secondary" className="text-[11px] font-normal">
                         {tool}
                       </Badge>
                     ))}
