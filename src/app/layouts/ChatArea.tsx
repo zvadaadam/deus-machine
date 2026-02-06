@@ -1,72 +1,41 @@
 /**
- * Chat Area — owns tab management, keyboard shortcuts, and content rendering.
+ * Chat Area — owns chat tab management, keyboard shortcuts, and session rendering.
  *
- * Supports chat, file, and diff tabs. Diff tabs open when user clicks a
- * changed file in the right panel (VS Code pattern: diff in editor area,
- * file list stays in sidebar).
+ * Supports chat and file tabs only. Diff viewing is handled by MainContent
+ * as a side panel (horizontal split), visible simultaneously with chat.
  *
- * Exposes openFileTab and openDiffTab via ref for integration with RightSidePanel.
+ * Exposes openFileTab via ref for file browser integration.
  */
 
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { MainContentTabBar } from "@/features/workspace";
-import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
 import { FileViewer } from "@/features/file-browser";
-import type { WorkspaceGitInfo } from "@/features/workspace";
 import type { Workspace } from "@/shared/types";
 import type { Tab } from "@/features/workspace/ui/MainContentTabs";
 
 /** Imperative methods exposed to parent via ref */
 export interface ChatAreaRef {
   openFileTab: (filePath: string) => void;
-  openDiffTab: (filePath: string) => void;
 }
 
 interface ChatAreaProps {
   workspace: Workspace;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreatePRHandlerChange: (handler: (() => void) | null) => void;
-  /** Notifies parent when active tab type changes to/from "diff" (for resize handle) */
-  onDiffTabActiveChange?: (isActive: boolean) => void;
 }
 
 export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea(
-  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange, onDiffTabActiveChange },
+  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange },
   ref
 ) {
-  // Tab state — chat + file + diff tabs
+  // Tab state — chat + file tabs only
   const [mainTabs, setMainTabs] = useState<Tab[]>([
     { id: "chat-1", label: "Chat #1", type: "chat", closeable: false },
   ]);
   const [activeMainTabId, setActiveMainTabId] = useState("chat-1");
   const nextChatIndexRef = useRef(2);
-
-  // Workspace git info for diff tab queries
-  const workspaceGitInfo: WorkspaceGitInfo = useMemo(
-    () => ({
-      root_path: workspace.root_path,
-      directory_name: workspace.directory_name,
-    }),
-    [workspace.root_path, workspace.directory_name]
-  );
-
-  // --- Notify parent when active tab is a diff tab ---
-  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
-  const isDiffTabActive = activeTab?.type === "diff";
-
-  useEffect(() => {
-    onDiffTabActiveChange?.(isDiffTabActive);
-  }, [isDiffTabActive, onDiffTabActiveChange]);
 
   // --- Tab handlers ---
 
@@ -100,7 +69,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     setActiveMainTabId(newId);
   }, []);
 
-  // --- Imperative methods for opening tabs ---
+  // --- Imperative method for opening file tabs ---
 
   const openFileTab = useCallback((filePath: string) => {
     const tabId = `file-${filePath}`;
@@ -122,27 +91,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     });
   }, []);
 
-  const openDiffTab = useCallback((filePath: string) => {
-    const tabId = `diff-${filePath}`;
-    setMainTabs((prev) => {
-      if (prev.some((t) => t.id === tabId)) {
-        setActiveMainTabId(tabId);
-        return prev;
-      }
-      const fileName = filePath.split("/").pop() || filePath;
-      const newTab: Tab = {
-        id: tabId,
-        label: fileName,
-        type: "diff",
-        closeable: true,
-        data: { filePath },
-      };
-      setActiveMainTabId(tabId);
-      return [...prev, newTab];
-    });
-  }, []);
-
-  useImperativeHandle(ref, () => ({ openFileTab, openDiffTab }), [openFileTab, openDiffTab]);
+  useImperativeHandle(ref, () => ({ openFileTab }), [openFileTab]);
 
   // --- Keyboard shortcuts ---
 
@@ -173,6 +122,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
 
   // --- Render ---
 
+  const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <MainContentTabBar
@@ -195,22 +146,13 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             sessionId={workspace.active_session_id}
             workspacePath={workspace.workspace_path}
             embedded={true}
-            onCreatePR={(handler) => onCreatePRHandlerChange(handler)}
+            onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
           />
         )}
 
         {/* File tab — full file viewer */}
         {activeTab?.type === "file" && activeTab.data?.filePath && (
           <FileViewer filePath={activeTab.data.filePath} />
-        )}
-
-        {/* Diff tab — horizontal diff viewer */}
-        {activeTab?.type === "diff" && activeTab.data?.filePath && (
-          <DiffTabContent
-            workspaceId={workspace.id}
-            filePath={activeTab.data.filePath}
-            workspaceGitInfo={workspaceGitInfo}
-          />
         )}
       </div>
     </div>

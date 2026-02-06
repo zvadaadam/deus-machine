@@ -1,21 +1,25 @@
 /**
  * Main Content — layout orchestrator.
  *
- * Horizontal split: ChatArea (left, flex-1) + RightSidePanel (right, 380px).
- * Diffs open as tabs inside ChatArea (VS Code pattern).
+ * Three layout modes:
+ * 1. Normal:  ChatArea (flex-1) + RightSidePanel (380px + 56px sidecar)
+ * 2. Diff:    ChatArea (flex-1, min 300px) <resize> DiffViewer + RightSidePanel (compact 200px)
+ * 3. Browser: ChatArea (flex-1) <resize> RightSidePanel (expanded, resizable)
  *
- * Horizontal resize handle is enabled when:
- * - Browser tab is active in the right panel (panel expands to flex-1)
- * - A diff tab is active in ChatArea (allows narrowing the file list)
+ * When diff opens, sidebar auto-collapses on narrow screens (<1400px)
+ * and restores when diff closes. ESC closes the diff panel.
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useResizeHandle } from "@/features/workspace";
+import type { WorkspaceGitInfo } from "@/features/workspace";
+import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { PanelLeft } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { SCREEN_WIDTH_THRESHOLD } from "@/shared/stores/layoutCoordinationStore";
 import type { Workspace, PRStatus } from "@/shared/types";
 import { ChatArea } from "./ChatArea";
 import type { ChatAreaRef } from "./ChatArea";
@@ -38,48 +42,133 @@ export function MainContent({
   onOpenProject,
   onCloneRepository,
 }: MainContentProps) {
-  const { open: sidebarOpen, toggleSidebar } = useSidebar();
+  const { open: sidebarOpen, setOpen: setSidebarOpen, toggleSidebar } = useSidebar();
 
-  // Layout state — only what MainContent needs for orchestration
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const { rightPanelWidth, setRightPanelWidth } = useWorkspaceLayout(selectedWorkspaceId);
 
   // PR handler bridge: ChatArea sets it, RightSidePanel consumes it
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
 
-  // Right side expansion state (only true for browser tab)
+  // Right side expansion state (browser tab only)
   const [rightSideExpanded, setRightSideExpanded] = useState(false);
 
-  // Diff tab active state (for enabling resize handle)
-  const [diffTabActive, setDiffTabActive] = useState(false);
+  // Diff state — file path drives the diff panel visibility
+  const [activeDiffFilePath, setActiveDiffFilePath] = useState<string | null>(null);
+  const [diffSectionWidth, setDiffSectionWidth] = useState<number | null>(null);
+  // Sidebar state saved before diff auto-collapse, restored on close
+  const [sidebarBeforeDiff, setSidebarBeforeDiff] = useState<boolean | null>(null);
 
-  // ChatArea ref — for opening file/diff tabs from RightSidePanel
+  // ChatArea ref — for opening file tabs from RightSidePanel
   const chatAreaRef = useRef<ChatAreaRef>(null);
 
-  // --- Resize handle ---
-  // Enabled when browser tab is active (panel expands) OR diff tab is active (file list resizable)
-  const resizeEnabled = rightSideExpanded || diffTabActive;
+  // Reset diff state when workspace changes (React-recommended render-time pattern)
+  const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
+  if (prevWorkspaceIdRef.current !== selectedWorkspaceId) {
+    prevWorkspaceIdRef.current = selectedWorkspaceId;
+    if (activeDiffFilePath !== null) setActiveDiffFilePath(null);
+    if (diffSectionWidth !== null) setDiffSectionWidth(null);
+    if (sidebarBeforeDiff !== null) setSidebarBeforeDiff(null);
+  }
 
-  const { handleProps: hResizeProps, isDragging: hDragging } = useResizeHandle({
-    onSizeChange: setRightPanelWidth,
-    enabled: resizeEnabled,
+  const diffActive = !!activeDiffFilePath;
+
+  // Workspace git info for DiffTabContent
+  const workspaceGitInfo: WorkspaceGitInfo | null = useMemo(
+    () =>
+      selectedWorkspace
+        ? {
+            root_path: selectedWorkspace.root_path,
+            directory_name: selectedWorkspace.directory_name,
+          }
+        : null,
+    [selectedWorkspace]
+  );
+
+  // --- Diff handlers ---
+
+  const handleOpenDiff = useCallback(
+    (filePath: string) => {
+      // Save sidebar state once (first diff open in this session)
+      setSidebarBeforeDiff((prev) => {
+        if (prev === null) {
+          // Auto-collapse sidebar on narrow screens
+          if (window.innerWidth < SCREEN_WIDTH_THRESHOLD && sidebarOpen) {
+            setSidebarOpen(false);
+          }
+          return sidebarOpen;
+        }
+        return prev;
+      });
+      setActiveDiffFilePath(filePath);
+    },
+    [sidebarOpen, setSidebarOpen]
+  );
+
+  const handleCloseDiff = useCallback(() => {
+    setActiveDiffFilePath(null);
+    setDiffSectionWidth(null);
+    // Restore sidebar to pre-diff state
+    setSidebarBeforeDiff((prev) => {
+      if (prev !== null) {
+        setSidebarOpen(prev);
+      }
+      return null;
+    });
+  }, [setSidebarOpen]);
+
+  // ESC closes the diff panel
+  useEffect(() => {
+    if (!activeDiffFilePath) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Don't close if user is in a text field
+      const ae = document.activeElement as HTMLElement | null;
+      if (
+        ae &&
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.isContentEditable ||
+          ae.getAttribute("role") === "textbox")
+      )
+        return;
+      handleCloseDiff();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [activeDiffFilePath, handleCloseDiff]);
+
+  // --- Resize handles ---
+
+  // Diff mode: resize between chat and (diff + compact right panel)
+  const { handleProps: diffResizeProps, isDragging: diffDragging } = useResizeHandle({
+    onSizeChange: setDiffSectionWidth,
+    enabled: diffActive,
     direction: "horizontal",
-    // Allow narrower file list when viewing diffs
-    minSecondarySize: diffTabActive ? 200 : 380,
-    minPrimarySize: diffTabActive ? 400 : 200,
+    minSecondarySize: 460, // ~200px compact panel + 56px sidecar + ~200px min diff
+    minPrimarySize: 300, // min chat width
   });
 
-  // --- Handlers ---
+  // Browser mode: resize between chat area and expanded right panel
+  const { handleProps: browserResizeProps, isDragging: browserDragging } = useResizeHandle({
+    onSizeChange: setRightPanelWidth,
+    enabled: rightSideExpanded && !diffActive,
+    direction: "horizontal",
+    minSecondarySize: 380,
+    minPrimarySize: 200,
+  });
 
-  const handleDiffTabActiveChange = useCallback((isActive: boolean) => {
-    setDiffTabActive(isActive);
-  }, []);
+  // --- Computed styles ---
 
-  // Right side width: user-set pixels or auto
-  const rightSideStyle: React.CSSProperties | undefined =
-    (rightSideExpanded || diffTabActive) && rightPanelWidth !== null
+  // Browser mode right side style (no diff)
+  const browserRightSideStyle: React.CSSProperties | undefined =
+    rightSideExpanded && !diffActive && rightPanelWidth !== null
       ? { width: rightPanelWidth, flexShrink: 0 }
       : undefined;
+
+  // Diff section style (diff viewer + compact right panel combined)
+  const diffSectionStyle: React.CSSProperties =
+    diffSectionWidth !== null ? { width: diffSectionWidth, flexShrink: 0 } : { flex: "2 1 0%" };
 
   return (
     <SidebarInset className="min-w-0">
@@ -102,47 +191,102 @@ export function MainContent({
         <div className="flex min-w-0 flex-1">
           {selectedWorkspace ? (
             <>
-              {/* Chat area — chat, file, and diff tabs */}
-              <ChatArea
-                ref={chatAreaRef}
-                workspace={selectedWorkspace}
-                workspaceChatPanelRef={workspaceChatPanelRef}
-                onCreatePRHandlerChange={setCreatePRHandler}
-                onDiffTabActiveChange={handleDiffTabActiveChange}
-              />
+              {/* Chat area — always visible, shrinks when diff is active */}
+              <div
+                className="flex min-w-0 flex-col overflow-hidden"
+                style={diffActive ? { flex: "1 1 0%", minWidth: 300 } : { flex: "1 1 auto" }}
+              >
+                <ChatArea
+                  ref={chatAreaRef}
+                  workspace={selectedWorkspace}
+                  workspaceChatPanelRef={workspaceChatPanelRef}
+                  onCreatePRHandlerChange={setCreatePRHandler}
+                />
+              </div>
 
-              {/* Horizontal resize handle — enabled for browser OR diff tab */}
-              {resizeEnabled && (
-                <div
-                  {...hResizeProps}
-                  className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
-                  aria-label="Resize panels"
-                  role="separator"
-                  aria-orientation="vertical"
-                >
-                  <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
+              {diffActive && workspaceGitInfo ? (
+                <>
+                  {/* Diff resize handle — between chat and diff section */}
                   <div
-                    className={cn(
-                      "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
-                      hDragging
-                        ? "bg-primary/40 opacity-100"
-                        : "bg-border opacity-0 group-hover:opacity-100"
-                    )}
-                  />
-                </div>
-              )}
+                    {...diffResizeProps}
+                    className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
+                    aria-label="Resize panels"
+                    role="separator"
+                    aria-orientation="vertical"
+                  >
+                    <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
+                    <div
+                      className={cn(
+                        "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
+                        diffDragging
+                          ? "bg-primary/40 opacity-100"
+                          : "bg-border opacity-0 group-hover:opacity-100"
+                      )}
+                    />
+                  </div>
 
-              {/* Right side panel — file tree + sidecar tabs */}
-              <RightSidePanel
-                workspace={selectedWorkspace}
-                prStatus={prStatus}
-                createPRHandler={createPRHandler}
-                onExpandedChange={setRightSideExpanded}
-                rightPanelWidth={rightPanelWidth}
-                rightSideStyle={rightSideStyle}
-                onOpenDiffTab={(path) => chatAreaRef.current?.openDiffTab(path)}
-                onOpenFileTab={(path) => chatAreaRef.current?.openFileTab(path)}
-              />
+                  {/* Diff section: viewer + compact right panel */}
+                  <div className="flex h-full min-w-0 overflow-hidden" style={diffSectionStyle}>
+                    {/* Diff viewer — takes remaining space */}
+                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                      <DiffTabContent
+                        workspaceId={selectedWorkspace.id}
+                        filePath={activeDiffFilePath}
+                        workspaceGitInfo={workspaceGitInfo}
+                        onClose={handleCloseDiff}
+                      />
+                    </div>
+
+                    {/* Compact right panel */}
+                    <RightSidePanel
+                      workspace={selectedWorkspace}
+                      prStatus={prStatus}
+                      createPRHandler={createPRHandler}
+                      onExpandedChange={setRightSideExpanded}
+                      rightPanelWidth={null}
+                      rightSideStyle={undefined}
+                      onOpenDiffTab={handleOpenDiff}
+                      onOpenFileTab={(path) => chatAreaRef.current?.openFileTab(path)}
+                      compact
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Browser resize handle — enabled when browser tab expands */}
+                  {rightSideExpanded && (
+                    <div
+                      {...browserResizeProps}
+                      className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
+                      aria-label="Resize panels"
+                      role="separator"
+                      aria-orientation="vertical"
+                    >
+                      <div className="absolute inset-y-0 w-3 -translate-x-1/2" />
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-full transition-opacity duration-200 ease-[ease]",
+                          browserDragging
+                            ? "bg-primary/40 opacity-100"
+                            : "bg-border opacity-0 group-hover:opacity-100"
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {/* Normal right panel */}
+                  <RightSidePanel
+                    workspace={selectedWorkspace}
+                    prStatus={prStatus}
+                    createPRHandler={createPRHandler}
+                    onExpandedChange={setRightSideExpanded}
+                    rightPanelWidth={rightPanelWidth}
+                    rightSideStyle={browserRightSideStyle}
+                    onOpenDiffTab={handleOpenDiff}
+                    onOpenFileTab={(path) => chatAreaRef.current?.openFileTab(path)}
+                  />
+                </>
+              )}
             </>
           ) : (
             <WelcomeView
