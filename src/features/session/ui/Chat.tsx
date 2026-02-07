@@ -117,7 +117,7 @@ export function Chat({
   messagesContainerRef,
   className,
 }: ChatProps) {
-  const { parseContent, toolResultMap } = useSession();
+  const { parseContent, toolResultMap, parentToolUseMap } = useSession();
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
@@ -128,6 +128,9 @@ export function Chat({
   // Memoize message filtering to avoid re-parsing JSON on every render
   const renderableMessages = useMemo(() => {
     return messages.filter((message) => {
+      // Skip subagent messages — they render nested under Task tool blocks
+      if (parentToolUseMap.has(message.id)) return false;
+
       const contentBlocks = parseContent(message.content);
       const isArray = Array.isArray(contentBlocks);
       const onlyToolResults =
@@ -142,7 +145,7 @@ export function Chat({
         (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
       return !(onlyToolResults || isEmpty);
     });
-  }, [messages, parseContent]);
+  }, [messages, parseContent, parentToolUseMap]);
 
   /**
    * Derive agent sub-state from the last content block in the message stream.

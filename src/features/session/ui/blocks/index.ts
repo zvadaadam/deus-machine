@@ -3,3 +3,5 @@ export { TextBlock } from "./TextBlock";
 export { ToolUseBlock } from "./ToolUseBlock";
 export { ToolResultBlock } from "./ToolResultBlock";
 export { ThinkingBlock } from "./ThinkingBlock";
+export { SubagentGroupBlock } from "./SubagentGroupBlock";
+export { SubagentMessageList } from "./SubagentMessageList";

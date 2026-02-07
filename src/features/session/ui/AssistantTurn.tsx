@@ -67,10 +67,12 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
         />
       )}
 
-      {/* Collapsible section - intermediate messages and tool calls */}
+      {/* Collapsible section - intermediate messages and tool calls.
+          forceMount keeps children in the DOM when collapsed so SubagentGroupBlock
+          retains its internal expand/collapse state across turn toggles. */}
       {hiddenMessages.length > 0 && (
         <Collapsible open={isExpanded}>
-          <CollapsibleContent>
+          <CollapsibleContent forceMount className="data-[state=closed]:hidden">
             <div className="flex min-w-0 flex-col gap-1">
               {hiddenMessages.map((message) => (
                 <MessageItem
