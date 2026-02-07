@@ -146,6 +146,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             sessionId={workspace.active_session_id}
             workspacePath={workspace.workspace_path}
             embedded={true}
+            // Wrap in `() =>` so React stores handler as state, not call it as updater
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
           />
         )}
