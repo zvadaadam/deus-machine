@@ -14,12 +14,15 @@
  */
 
 import { createContext, useContext, ReactNode, useMemo } from "react";
-import type { ContentBlock } from "../types";
+import type { ContentBlock, Message, SessionStatus } from "../types";
 import type { ToolResultMap } from "../ui/chat-types";
 
 interface SessionContextValue {
   parseContent: (content: string) => (ContentBlock | string)[] | string | null;
   toolResultMap: ToolResultMap;
+  parentToolUseMap: Map<string, string>;     // messageId → parentToolUseId
+  subagentMessages: Map<string, Message[]>;  // toolUseId → child messages
+  sessionStatus: SessionStatus;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -27,17 +30,31 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 interface SessionProviderProps {
   parseContent: (content: string) => (ContentBlock | string)[] | string | null;
   toolResultMap: ToolResultMap;
+  parentToolUseMap: Map<string, string>;
+  subagentMessages: Map<string, Message[]>;
+  sessionStatus: SessionStatus;
   children: ReactNode;
 }
 
-export function SessionProvider({ parseContent, toolResultMap, children }: SessionProviderProps) {
+export function SessionProvider({
+  parseContent,
+  toolResultMap,
+  parentToolUseMap,
+  subagentMessages,
+  sessionStatus,
+  children,
+}: SessionProviderProps) {
   // Memoize context value to prevent unnecessary re-renders
   // React uses Object.is() to compare values, so new object {} !== {} even if contents are same
-  const value = useMemo(() => ({ parseContent, toolResultMap }), [parseContent, toolResultMap]);
+  const value = useMemo(
+    () => ({ parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus }),
+    [parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus]
+  );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSession(): SessionContextValue {
   const context = useContext(SessionContext);
   if (!context) {

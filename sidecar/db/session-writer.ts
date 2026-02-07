@@ -17,14 +17,19 @@ import { prepareMessageContent } from "./message-sanitizer";
 export function saveAssistantMessage(
   sessionId: string,
   message: { id?: string; role?: string; content?: unknown },
-  model: string = "sonnet"
+  model: string = "sonnet",
+  parentToolUseId: string | null = null
 ): string | null {
   const db = getDatabase();
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
 
   // Prepare the message content (sanitize for JSON integrity)
-  const prepared = prepareMessageContent({ message });
+  // Include parent_tool_use_id in the envelope so frontend can identify subagent messages
+  const contentEnvelope = parentToolUseId
+    ? { message, parent_tool_use_id: parentToolUseId }
+    : { message };
+  const prepared = prepareMessageContent(contentEnvelope);
 
   if (!prepared.success) {
     console.error(`[SESSION-WRITER] Failed to prepare message content: ${prepared.error}`);

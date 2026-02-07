@@ -52,7 +52,6 @@ export function BaseToolRenderer({
   renderSummary,
 }: BaseToolRendererProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [isHovered, setIsHovered] = useState(false);
   const isError = toolResult?.is_error;
 
   // Minimal design: Error-only status (assume success by default)
@@ -62,14 +61,13 @@ export function BaseToolRenderer({
 
   return (
     <div className="flex flex-col gap-1">
-      {/* Header - Minimal, no borders or backgrounds */}
+      {/* Header - Minimal, no borders or backgrounds.
+          Uses CSS group hover for icon swap (no re-renders on mouse enter/leave). */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "flex items-center gap-2 px-2 py-1.5 text-sm",
+          "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
           "transition-opacity duration-200 ease-out",
           "hover:opacity-70",
@@ -85,7 +83,7 @@ export function BaseToolRenderer({
             <div
               className={cn(
                 "absolute left-0 top-0 transition-opacity duration-50",
-                isHovered || isExpanded ? "opacity-0" : "opacity-100"
+                isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
               {icon}
@@ -96,7 +94,7 @@ export function BaseToolRenderer({
               className={cn(
                 "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
                 isExpanded && "rotate-90",
-                isHovered || isExpanded ? "opacity-100" : "opacity-0"
+                isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
               aria-hidden="true"
             />

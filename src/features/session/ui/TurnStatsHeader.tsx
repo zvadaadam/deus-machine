@@ -29,7 +29,7 @@ export function TurnStatsHeader({
   onClick,
   hiddenMessageCount,
 }: TurnStatsHeaderProps) {
-  const { toolCount, filesChanged } = stats;
+  const { toolCount, subagentCount, filesChanged } = stats;
 
   return (
     <button
@@ -68,6 +68,18 @@ export function TurnStatsHeader({
             <span className="text-muted-foreground truncate font-normal">
               {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
             </span>
+
+            {/* Subagent count (only if > 0) */}
+            {subagentCount > 0 && (
+              <>
+                <span className="text-muted-foreground/40" aria-hidden="true">
+                  •
+                </span>
+                <span className="text-muted-foreground truncate">
+                  {subagentCount} subagent{subagentCount !== 1 ? "s" : ""}
+                </span>
+              </>
+            )}
 
             {/* Secondary metric: Tool calls (only if > 0) */}
             {toolCount > 0 && (

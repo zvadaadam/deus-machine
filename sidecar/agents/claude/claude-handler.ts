@@ -501,7 +501,8 @@ export class ClaudeAgentHandler implements AgentHandler {
             saveAssistantMessage(
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
-              model
+              model,
+              typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null
             );
           }
 
