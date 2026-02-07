@@ -16,17 +16,52 @@ import {
   useSystemPrompt,
   useUpdateSystemPrompt,
 } from "@/features/workspace/api";
+import { useResizeHandle } from "@/features/workspace";
 import { useRepos, useAddRepo } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
-import { Button, SidebarProvider, Sidebar, SidebarContent } from "@/components/ui";
+import { Button, SidebarProvider, Sidebar, SidebarContent, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { invoke } from "@/platform/tauri";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
+
+/**
+ * SidebarResizeHandle — drag handle on the sidebar's right edge.
+ * Must be rendered inside SidebarProvider to access sidebar open state.
+ * Reports isDragging so the parent can disable sidebar CSS transitions during resize.
+ */
+function SidebarResizeHandle({
+  onSizeChange,
+  onDraggingChange,
+}: {
+  onSizeChange: (size: number | null) => void;
+  onDraggingChange: (dragging: boolean) => void;
+}) {
+  const { open } = useSidebar();
+
+  const { handleProps, isDragging } = useResizeHandle({
+    onSizeChange,
+    enabled: open,
+    direction: "horizontal",
+    mode: "primary",
+    minPrimarySize: 200,
+    minSecondarySize: 400,
+  });
+
+  // Notify parent of drag state changes to disable sidebar transitions
+  useEffect(() => {
+    onDraggingChange(isDragging);
+  }, [isDragging, onDraggingChange]);
+
+  if (!open) return null;
+
+  return <ResizeHandle handleProps={handleProps} isDragging={isDragging} label="Resize sidebar" />;
+}
 
 export function MainLayout() {
   // Zustand stores - Global state
@@ -57,6 +92,11 @@ export function MainLayout() {
   const [cloning, setCloning] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
+
+  // Sidebar resize: null = default 340px, number = user-set width
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+  // Tracks drag state to disable sidebar CSS transitions during resize
+  const [sidebarDragging, setSidebarDragging] = useState(false);
 
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
@@ -281,9 +321,10 @@ export function MainLayout() {
   return (
     <SidebarProvider
       className="h-screen"
+      data-resizing={sidebarDragging || undefined}
       style={
         {
-          "--sidebar-width": "340px",
+          "--sidebar-width": sidebarWidth ? `${sidebarWidth}px` : "340px",
           "--sidebar-width-mobile": "340px",
         } as React.CSSProperties
       }
@@ -327,6 +368,9 @@ export function MainLayout() {
           profile={{ username }}
         />
       )}
+
+      {/* Sidebar resize handle */}
+      <SidebarResizeHandle onSizeChange={setSidebarWidth} onDraggingChange={setSidebarDragging} />
 
       {/* Main Content */}
       <MainContent

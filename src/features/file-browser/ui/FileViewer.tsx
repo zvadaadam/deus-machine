@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, Loader2 } from "lucide-react";
+import { Copy, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/shared/lib/utils";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { useTheme } from "@/app/providers";
@@ -10,6 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 
 interface FileViewerProps {
   filePath: string;
+  /** Optional close handler — renders a close button in the header */
+  onClose?: () => void;
 }
 
 /**
@@ -24,9 +25,8 @@ interface FileViewerProps {
  * - Copy button
  * - Loading/error states
  */
-export function FileViewer({ filePath }: FileViewerProps) {
+export function FileViewer({ filePath, onClose }: FileViewerProps) {
   const [copied, setCopied] = useState(false);
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
 
   // Use app theme provider for syntax highlighting
   const { actualTheme } = useTheme();
@@ -100,13 +100,9 @@ export function FileViewer({ filePath }: FileViewerProps) {
 
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
-      {/* Header - Fixed at top */}
-      <div
-        className="border-border flex-shrink-0 border-b"
-        onMouseEnter={() => setIsHeaderHovered(true)}
-        onMouseLeave={() => setIsHeaderHovered(false)}
-      >
-        <div className="flex items-center justify-between gap-4 px-4 py-2.5">
+      {/* Header - Fixed at top, h-10 matches DiffViewer */}
+      <div className="border-border flex-shrink-0 border-b">
+        <div className="flex h-10 items-center justify-between gap-4 px-4">
           {/* Left: File path hierarchy */}
           <div className="min-w-0 flex-1 text-xs">
             {pathContext && (
@@ -115,8 +111,8 @@ export function FileViewer({ filePath }: FileViewerProps) {
             <span className="text-foreground font-medium">{filename || "Untitled"}</span>
           </div>
 
-          {/* Right: Line count + Copy button */}
-          <div className="flex items-center gap-4">
+          {/* Right: Line count + Copy + Close buttons */}
+          <div className="flex items-center gap-2">
             {/* Line count */}
             {!isLoading && !error && lines.length > 0 && (
               <span className="text-2xs text-muted-foreground/50 font-mono tabular-nums">
@@ -124,19 +120,31 @@ export function FileViewer({ filePath }: FileViewerProps) {
               </span>
             )}
 
-            {/* Copy button: appears on hover */}
+            {/* Copy button */}
             {!isLoading && !error && content && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleCopy}
-                className={cn(
-                  "h-6 w-6 transition-opacity duration-200",
-                  isHeaderHovered || copied ? "opacity-100" : "opacity-0"
-                )}
+                className="text-muted-foreground hover:text-foreground h-6 w-6"
                 title="Copy file content"
+                aria-label="Copy file content"
               >
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            )}
+
+            {/* Close button */}
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground h-6 w-6"
+                title="Close file preview"
+                aria-label="Close file preview"
+              >
+                <X className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>

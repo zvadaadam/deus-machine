@@ -1,5 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, GitBranch, Pencil, Sparkles, FileCode, PanelLeft } from "lucide-react";
+import {
+  X,
+  Plus,
+  GitBranch,
+  Pencil,
+  Sparkles,
+  FileCode,
+  GitCompareArrows,
+  PanelLeft,
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
 import { OpenInDropdown } from "@/shared/components";
@@ -142,14 +151,17 @@ export function MainContentTabBar({
     }
   };
 
-  // Get icon for tab type - Sparkles for chat (AI), FileCode for files
+  // Get icon for tab type - Sparkles for chat (AI), GitCompareArrows for diffs, FileCode for files
   const getTabIcon = (type: Tab["type"]) => {
     const iconClass = cn(TAB_STYLES.ICON_SIZE, "flex-shrink-0 opacity-60");
-    return type === "chat" ? (
-      <Sparkles className={iconClass} />
-    ) : (
-      <FileCode className={iconClass} />
-    );
+    switch (type) {
+      case "chat":
+        return <Sparkles className={iconClass} />;
+      case "diff":
+        return <GitCompareArrows className={iconClass} />;
+      default:
+        return <FileCode className={iconClass} />;
+    }
   };
 
   return (

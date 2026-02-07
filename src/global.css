@@ -663,6 +663,16 @@ body {
   -webkit-backdrop-filter: none !important;
 }
 
+/* Disable sidebar CSS transitions during drag-resize so width follows
+ * the mouse instantly. Transitions re-enable when drag ends (data-resizing removed).
+ * This targets sidebar-gap (width), sidebar-container (width + position),
+ * and sidebar-inset (margin) — the three elements that animate on open/close. */
+[data-resizing] [data-slot="sidebar-gap"],
+[data-resizing] [data-slot="sidebar-container"],
+[data-resizing] [data-slot="sidebar-inset"] {
+  transition: none;
+}
+
 /* Tauri overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).
  * Removed in fullscreen since macOS hides traffic lights. See useTauriDragZone for drag logic. */
 .tauri:not(.fullscreen) [data-slot="sidebar-header"] {
@@ -940,7 +950,9 @@ diffs-container.diffs-theme-compact {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 12px;
+  height: 36px;
+  padding-inline: 12px;
+  flex-shrink: 0;
   background: var(--background);
   border-bottom: 1px solid var(--border);
 }
