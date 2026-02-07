@@ -13,6 +13,7 @@ import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from "@/sha
 
 export interface TurnStats {
   toolCount: number;
+  subagentCount: number;
   filesChanged: number;
   errorCount: number;
   toolBreakdown: Record<string, number>; // e.g., { Edit: 3, Read: 2, Bash: 3 }
@@ -38,6 +39,7 @@ export function calculateTurnStats(
 ): TurnStats {
   const stats: TurnStats = {
     toolCount: 0,
+    subagentCount: 0,
     filesChanged: 0,
     errorCount: 0,
     toolBreakdown: {},
@@ -64,6 +66,11 @@ export function calculateTurnStats(
       if (block.type === "tool_use") {
         const toolUse = block as ToolUseBlock;
         stats.toolCount++;
+
+        // Count subagents (Task tool_use blocks)
+        if (toolUse.name === "Task") {
+          stats.subagentCount++;
+        }
 
         // Track tool breakdown
         stats.toolBreakdown[toolUse.name] = (stats.toolBreakdown[toolUse.name] || 0) + 1;
