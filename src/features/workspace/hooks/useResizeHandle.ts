@@ -1,22 +1,29 @@
 /**
- * useResizeHandle — Drag-to-resize logic for the chat/right-panel split.
+ * useResizeHandle — Drag-to-resize logic for panel splits.
  *
- * Tracks mousedown → mousemove → mouseup on a vertical handle element.
+ * Supports both horizontal (left/right, col-resize) and vertical (top/bottom, row-resize).
+ * Tracks mousedown → mousemove → mouseup on a handle element.
  * Returns props to spread onto the handle and an isDragging flag for styling.
- * Double-click resets width to null (auto flex split).
+ * Double-click resets size to null (auto flex split).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseResizeHandleOptions {
-  /** Callback to persist new width (null = auto) */
-  onWidthChange: (width: number | null) => void;
-  /** Whether resizing is enabled (only when panel is in wide mode) */
+  /** Callback to persist new size in pixels (null = auto) */
+  onSizeChange: (size: number | null) => void;
+  /** Whether resizing is enabled */
   enabled: boolean;
-  /** Min width of the right panel area in pixels */
-  minRightWidth?: number;
-  /** Min width of the left (chat) area in pixels */
-  minLeftWidth?: number;
+  /** Resize direction: horizontal = left/right split, vertical = top/bottom split */
+  direction?: "horizontal" | "vertical";
+  /** Which panel the reported size refers to.
+   *  "secondary" (default) = right/bottom panel width/height.
+   *  "primary" = left/top panel width/height (useful for sidebar resize). */
+  mode?: "secondary" | "primary";
+  /** Min size of the secondary (right or bottom) panel in pixels */
+  minSecondarySize?: number;
+  /** Min size of the primary (left or top) panel in pixels */
+  minPrimarySize?: number;
 }
 
 interface UseResizeHandleReturn {
@@ -28,10 +35,12 @@ interface UseResizeHandleReturn {
 }
 
 export function useResizeHandle({
-  onWidthChange,
+  onSizeChange,
   enabled,
-  minRightWidth = 450,
-  minLeftWidth = 350,
+  direction = "horizontal",
+  mode = "secondary",
+  minSecondarySize = 380,
+  minPrimarySize = 200,
 }: UseResizeHandleOptions): UseResizeHandleReturn {
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -52,7 +61,6 @@ export function useResizeHandle({
       isDraggingRef.current = true;
       setIsDragging(true);
 
-      // The flex row containing chat + handle + right panel
       const handle = e.currentTarget as HTMLElement;
       const container = handle.parentElement;
       if (!container) {
@@ -64,19 +72,38 @@ export function useResizeHandle({
       const onMouseMove = (moveEvent: MouseEvent) => {
         if (!isDraggingRef.current) return;
 
-        const containerRect = container.getBoundingClientRect();
-        const containerWidth = containerRect.width;
+        const rect = container.getBoundingClientRect();
+        const totalSize = direction === "horizontal" ? rect.width : rect.height;
 
-        // Mouse position relative to container left edge
-        const mouseX = moveEvent.clientX - containerRect.left;
-        // Right panel width = total container width - mouse position
-        let newRightWidth = containerWidth - mouseX;
-
-        // Clamp to constraints
-        newRightWidth = Math.max(newRightWidth, minRightWidth);
-        newRightWidth = Math.min(newRightWidth, containerWidth - minLeftWidth);
-
-        onWidthChange(Math.round(newRightWidth));
+        if (mode === "primary") {
+          // Primary mode: report left/top panel size
+          const mouseOffset =
+            direction === "horizontal"
+              ? moveEvent.clientX - rect.left
+              : moveEvent.clientY - rect.top;
+          let newPrimarySize = mouseOffset;
+          const maxPrimarySize = Math.max(0, totalSize - minSecondarySize);
+          newPrimarySize = Math.max(newPrimarySize, Math.min(minPrimarySize, maxPrimarySize));
+          newPrimarySize = Math.min(newPrimarySize, maxPrimarySize);
+          onSizeChange(Math.round(newPrimarySize));
+        } else {
+          // Secondary mode (default): report right/bottom panel size
+          let newSecondarySize: number;
+          if (direction === "horizontal") {
+            const mouseX = moveEvent.clientX - rect.left;
+            newSecondarySize = rect.width - mouseX;
+          } else {
+            const mouseY = moveEvent.clientY - rect.top;
+            newSecondarySize = rect.height - mouseY;
+          }
+          const maxSecondarySize = Math.max(0, totalSize - minPrimarySize);
+          newSecondarySize = Math.max(
+            newSecondarySize,
+            Math.min(minSecondarySize, maxSecondarySize)
+          );
+          newSecondarySize = Math.min(newSecondarySize, maxSecondarySize);
+          onSizeChange(Math.round(newSecondarySize));
+        }
       };
 
       const cleanup = () => {
@@ -93,19 +120,19 @@ export function useResizeHandle({
         cleanupRef.current = null;
       };
 
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
       document.body.style.userSelect = "none";
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
       cleanupRef.current = cleanup;
     },
-    [enabled, minRightWidth, minLeftWidth, onWidthChange]
+    [enabled, direction, mode, minSecondarySize, minPrimarySize, onSizeChange]
   );
 
   const handleDoubleClick = useCallback(() => {
     if (!enabled) return;
-    onWidthChange(null);
-  }, [enabled, onWidthChange]);
+    onSizeChange(null);
+  }, [enabled, onSizeChange]);
 
   return {
     handleProps: {
