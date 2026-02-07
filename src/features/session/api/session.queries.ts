@@ -56,7 +56,7 @@ export function useMessages(sessionId: string | null, sessionStatus?: SessionSta
     // Use select to unwrap messages array for downstream consumers
     select: (data: PaginatedMessages) => data.messages,
     // ✅ Smart fallback: Events in Tauri, polling in browser
-    refetchInterval: (query) => {
+    refetchInterval: () => {
       // Desktop mode (Tauri): Events handle updates, no polling
       if (isTauriEnv) {
         return false;
@@ -154,30 +154,63 @@ export function useSessionWithMessages(sessionId: string | null) {
       // Use nullish coalescing to preserve explicit empty strings/arrays from the backend.
       const blocks = parsed.message?.content ?? parsed.content ?? [];
       return normalizeContentBlocks(blocks);
-    } catch (error) {
+    } catch {
       // If JSON.parse fails, treat it as plain text
       return [{ type: "text", text: content }];
     }
   }, []); // Empty deps - pure function with no external dependencies
 
-  // Build tool result map
-  const toolResultMap = useMemo(() => {
-    const map = new Map();
-    if (!messagesQuery.data) return map;
+  // Build tool result map AND parent_tool_use_id map in a single pass.
+  // Both require JSON.parse of the outer envelope — merging avoids parsing twice per message.
+  const { toolResultMap, parentToolUseMap } = useMemo(() => {
+    const resultMap = new Map();
+    const parentMap = new Map<string, string>();
+    if (!messagesQuery.data) return { toolResultMap: resultMap, parentToolUseMap: parentMap };
 
-    messagesQuery.data.forEach((message: Message) => {
-      const contentBlocks = parseContent(message.content);
-      if (Array.isArray(contentBlocks)) {
-        contentBlocks.forEach((block: any) => {
-          if (block.type === "tool_result" && block.tool_use_id) {
-            map.set(block.tool_use_id, block);
+    messagesQuery.data.forEach((msg: Message) => {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(msg.content);
+      } catch {
+        return;
+      }
+
+      // Extract parent_tool_use_id from outer envelope (subagent messages)
+      if (typeof parsed.parent_tool_use_id === "string") {
+        parentMap.set(msg.id, parsed.parent_tool_use_id);
+      }
+
+      // Extract tool_result blocks for linking tool_use → tool_result
+      const blocks = normalizeContentBlocks(
+        (parsed.message as Record<string, unknown> | undefined)?.content ?? parsed.content ?? []
+      );
+      if (Array.isArray(blocks)) {
+        blocks.forEach((block) => {
+          if (typeof block === "object" && block && "type" in block && "tool_use_id" in block && block.type === "tool_result") {
+            resultMap.set((block as { tool_use_id: string }).tool_use_id, block as ToolResultBlock);
           }
         });
       }
     });
 
-    return map;
+    return { toolResultMap: resultMap, parentToolUseMap: parentMap };
   }, [messagesQuery.data]);
+
+  // Group subagent messages by their parent Task tool_use_id
+  const subagentMessages = useMemo(() => {
+    const map = new Map<string, Message[]>();
+    if (!messagesQuery.data) return map;
+
+    messagesQuery.data.forEach((msg: Message) => {
+      const parentId = parentToolUseMap.get(msg.id);
+      if (parentId) {
+        if (!map.has(parentId)) map.set(parentId, []);
+        map.get(parentId)!.push(msg);
+      }
+    });
+
+    return map;
+  }, [messagesQuery.data, parentToolUseMap]);
 
   // Get latest user message's sent_at for duration tracking
   const latestMessageSentAt = useMemo(() => {
@@ -201,6 +234,8 @@ export function useSessionWithMessages(sessionId: string | null) {
     error: sessionQuery.error || messagesQuery.error,
     parseContent,
     toolResultMap,
+    parentToolUseMap,
+    subagentMessages,
   };
 }
 

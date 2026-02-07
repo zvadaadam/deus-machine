@@ -45,6 +45,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       loading,
       parseContent,
       toolResultMap,
+      parentToolUseMap,
+      subagentMessages,
     } = useSessionWithMessages(sessionId);
 
     // DEBUG: Log session data
@@ -149,7 +151,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // If embedded, render without overlay but with message input
     if (embedded) {
       return (
-        <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
+        <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap} parentToolUseMap={parentToolUseMap} subagentMessages={subagentMessages} sessionStatus={sessionStatus}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
             <div
@@ -220,7 +222,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           <div className="flex flex-1 overflow-hidden">
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
-              <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap}>
+              <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap} parentToolUseMap={parentToolUseMap} subagentMessages={subagentMessages} sessionStatus={sessionStatus}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
                   {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
                   <div
