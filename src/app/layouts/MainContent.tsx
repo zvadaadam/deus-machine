@@ -54,7 +54,9 @@ export function MainContent({
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const { rightPanelWidth, setRightPanelWidth } = useWorkspaceLayout(selectedWorkspaceId);
 
-  // PR handler bridge: ChatArea sets it, RightSidePanel consumes it
+  // PR handler bridge: ChatArea sets it, RightSidePanel consumes it.
+  // Setter must be called as `setCreatePRHandler(() => handler)` — passing a
+  // function directly causes React to invoke it as a state updater (see bf516c6).
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
 
   // Right side expansion state (browser tab only)
