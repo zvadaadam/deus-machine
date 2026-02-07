@@ -39,6 +39,8 @@ interface RightSidePanelProps {
   compact?: boolean;
   /** Custom width for the compact content panel (from resize handle) */
   compactWidth?: number | null;
+  /** Hide PRStatusBar (rendered by parent instead for header alignment) */
+  hidePRStatus?: boolean;
 }
 
 export function RightSidePanel({
@@ -52,6 +54,7 @@ export function RightSidePanel({
   onOpenFilePreview,
   compact,
   compactWidth,
+  hidePRStatus,
 }: RightSidePanelProps) {
   const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
     workspace.id
@@ -140,12 +143,14 @@ export function RightSidePanel({
       )}
       style={rightSideStyle}
     >
-      <PRStatusBar
-        prStatus={prStatus}
-        onCreatePR={createPRHandler ? handleCreatePR : undefined}
-        onReviewPR={handleOpenPR}
-        compact={compact}
-      />
+      {!hidePRStatus && (
+        <PRStatusBar
+          prStatus={prStatus}
+          onCreatePR={createPRHandler ? handleCreatePR : undefined}
+          onReviewPR={handleOpenPR}
+          compact={compact}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Content panel: file tree, browser, terminal, config, design */}
