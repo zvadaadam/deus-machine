@@ -16,9 +16,11 @@ import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useResizeHandle, useFileChanges } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
+import { PRStatusBar } from "@/features/workspace/ui/PRStatusBar";
 import { FileViewer } from "@/features/file-browser";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { PanelLeft } from "lucide-react";
+import { toast } from "sonner";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace, PRStatus } from "@/shared/types";
 import { ChatArea } from "./ChatArea";
@@ -137,6 +139,24 @@ export function MainContent({
       return null;
     });
   }, [setSidebarOpen]);
+
+  // --- PR actions for the aligned PRStatusBar above the middle panel ---
+
+  const handleCreatePR = useCallback(() => {
+    if (!createPRHandler) {
+      toast.error("No active session available to create a PR.");
+      return;
+    }
+    createPRHandler();
+  }, [createPRHandler]);
+
+  const handleOpenPR = useCallback(() => {
+    if (!prStatus?.pr_url) {
+      toast.error("PR link not available.");
+      return;
+    }
+    window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
+  }, [prStatus]);
 
   // --- Prev/next file navigation for diff views ---
 
@@ -278,52 +298,64 @@ export function MainContent({
                     label="Resize panels"
                   />
 
-                  {/* Middle panel section: viewer + compact right panel */}
+                  {/* Middle panel section: PRStatusBar + (viewer | compact right panel) */}
                   <div
-                    className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] overflow-hidden"
+                    className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden"
                     style={middlePanelStyle}
                   >
-                    {/* Code viewer (diff or file preview) */}
-                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                      {middlePanel.type === "diff" ? (
-                        <DiffTabContent
-                          workspaceId={selectedWorkspace.id}
-                          filePath={middlePanel.filePath}
-                          workspaceGitInfo={workspaceGitInfo}
-                          onClose={handleCloseMiddlePanel}
-                          onPrevFile={onPrevFile}
-                          onNextFile={onNextFile}
-                          fileIndex={fileIndex}
-                          fileCount={fileCount}
-                        />
-                      ) : (
-                        <FileViewer
-                          filePath={middlePanel.filePath}
-                          onClose={handleCloseMiddlePanel}
-                        />
-                      )}
-                    </div>
-
-                    {/* Compact panel resize handle — between viewer and file list */}
-                    <ResizeHandle
-                      handleProps={compactResizeProps}
-                      isDragging={compactDragging}
-                      label="Resize file list"
-                    />
-
-                    {/* Compact right panel (file list + sidecar) */}
-                    <RightSidePanel
-                      workspace={selectedWorkspace}
+                    {/* PRStatusBar — aligned with chat header row 1 */}
+                    <PRStatusBar
                       prStatus={prStatus}
-                      createPRHandler={createPRHandler}
-                      onExpandedChange={setRightSideExpanded}
-                      rightPanelWidth={null}
-                      rightSideStyle={undefined}
-                      onOpenDiffTab={handleOpenDiff}
-                      onOpenFilePreview={handleOpenFilePreview}
+                      onCreatePR={createPRHandler ? handleCreatePR : undefined}
+                      onReviewPR={handleOpenPR}
                       compact
-                      compactWidth={compactPanelWidth}
                     />
+
+                    {/* Horizontal content: viewer + compact right panel */}
+                    <div className="flex min-h-0 flex-1 overflow-hidden">
+                      {/* Code viewer (diff or file preview) */}
+                      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                        {middlePanel.type === "diff" ? (
+                          <DiffTabContent
+                            workspaceId={selectedWorkspace.id}
+                            filePath={middlePanel.filePath}
+                            workspaceGitInfo={workspaceGitInfo}
+                            onClose={handleCloseMiddlePanel}
+                            onPrevFile={onPrevFile}
+                            onNextFile={onNextFile}
+                            fileIndex={fileIndex}
+                            fileCount={fileCount}
+                          />
+                        ) : (
+                          <FileViewer
+                            filePath={middlePanel.filePath}
+                            onClose={handleCloseMiddlePanel}
+                          />
+                        )}
+                      </div>
+
+                      {/* Compact panel resize handle — between viewer and file list */}
+                      <ResizeHandle
+                        handleProps={compactResizeProps}
+                        isDragging={compactDragging}
+                        label="Resize file list"
+                      />
+
+                      {/* Compact right panel (file list + sidecar, PRStatusBar hidden) */}
+                      <RightSidePanel
+                        workspace={selectedWorkspace}
+                        prStatus={prStatus}
+                        createPRHandler={createPRHandler}
+                        onExpandedChange={setRightSideExpanded}
+                        rightPanelWidth={null}
+                        rightSideStyle={undefined}
+                        onOpenDiffTab={handleOpenDiff}
+                        onOpenFilePreview={handleOpenFilePreview}
+                        compact
+                        compactWidth={compactPanelWidth}
+                        hidePRStatus
+                      />
+                    </div>
                   </div>
                 </>
               ) : (

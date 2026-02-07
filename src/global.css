@@ -950,7 +950,9 @@ diffs-container.diffs-theme-compact {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 12px;
+  height: 36px;
+  padding-inline: 12px;
+  flex-shrink: 0;
   background: var(--background);
   border-bottom: 1px solid var(--border);
 }
