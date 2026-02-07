@@ -146,7 +146,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             sessionId={workspace.active_session_id}
             workspacePath={workspace.workspace_path}
             embedded={true}
-            onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
+            onCreatePR={(handler) => onCreatePRHandlerChange(handler)}
           />
         )}
 
