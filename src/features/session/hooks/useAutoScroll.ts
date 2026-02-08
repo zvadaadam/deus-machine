@@ -193,7 +193,7 @@ export function useAutoScroll({
       observer.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [messagesContainerRef, messagesEndRef]);
+  }, [messagesContainerRef]);
 
   // --- Scroll event listener: detect manual user scrolling ---
   useEffect(() => {
