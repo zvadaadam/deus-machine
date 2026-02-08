@@ -1,6 +1,8 @@
 // sidecar/agents/codex/codex-adapter.ts
 // Codex adapter — converts Codex SDK ThreadEvents into ContentBlock[].
 //
+// STATUS: Active — wired into codex-handler.ts, used in production.
+//
 // Codex uses a fundamentally different event model than Claude:
 // - Items instead of content blocks (agent_message, command_execution, file_change, etc.)
 // - Explicit lifecycle events (thread.started, turn.started/completed/failed)
@@ -9,14 +11,16 @@
 // The Codex binary already accumulates begin/delta/end protocol events into
 // clean ThreadEvent objects, so we only need to handle the high-level events.
 //
-// Mapping (inspired by Echo backend's codex.ts adapter):
+// Tool name mapping is designed to match the frontend's ToolRegistry (case-sensitive):
 //   agent_message    → TextBlock
 //   reasoning        → ThinkingBlock
 //   command_execution → ToolUseBlock("Bash") + ToolResultBlock
 //   file_change      → ToolUseBlock("Write"/"Edit"/"Bash") + ToolResultBlock per file
-//   mcp_tool_call    → ToolUseBlock("{server}:{tool}") + ToolResultBlock
+//   mcp_tool_call    → ToolUseBlock("{server}:{tool}") + ToolResultBlock (falls back to default renderer)
 //   web_search       → ignored (not rendered)
 //   todo_list        → ignored (not rendered)
+//
+// Reference: Echo backend's codex adapter at sample-backend/src/messages/adapters/codex.ts
 
 import type { ContentBlock } from "../../../shared/types/session";
 import type { EventTransformer, TransformResult, TokenUsage } from "../adapters/types";

@@ -1,7 +1,19 @@
 // sidecar/agents/adapters/types.ts
 // Shared interfaces for agent message adapters.
-// Each agent (Claude, Codex) implements EventTransformer to convert
+// Each agent (Claude, Codex, future agents) implements EventTransformer to convert
 // its SDK events into our unified ContentBlock[] format.
+//
+// Design inspired by Echo backend's adapter pattern (sample-backend/src/messages/adapters/types.ts).
+// Echo uses a richer Part-based model with tool state machines and delta emission.
+// We use ContentBlock[] directly since our frontend already renders that format.
+//
+// Current state:
+// - Codex adapter: actively used in codex-handler.ts (accumulates blocks, saves per-query)
+// - Claude adapter: scaffolding only (not wired in — Claude SDK already emits ContentBlock[])
+//
+// Future direction: when we add streaming normalization (unified streaming events for all agents),
+// this interface may evolve to support delta emission (Echo's message.part.delta pattern) and
+// tool state transitions (pending → running → completed).
 
 import type { ContentBlock } from "../../../shared/types/session";
 

@@ -1,11 +1,37 @@
 // sidecar/agents/claude/claude-adapter.ts
 // Claude Code adapter — converts Claude Agent SDK events into ContentBlock[].
 //
-// Claude SDK messages already contain ContentBlock-compatible content arrays,
-// so this adapter is mostly pass-through extraction. The main work is:
-// 1. Extracting content blocks from the { type: "assistant", message: { content: [...] } } envelope
-// 2. Completing tool_result blocks from { type: "user" } events
-// 3. Tracking token usage from "result" events
+// STATUS: Scaffolding — not wired into claude-handler.ts yet.
+//
+// Currently the Claude handler passes raw SDK messages directly to saveAssistantMessage()
+// because Claude SDK already emits ContentBlock-compatible content arrays. This adapter
+// exists as scaffolding for when we need:
+//
+// 1. Unified streaming normalization — emit the same event shape for Claude and Codex
+//    to the frontend, instead of raw agent-specific events (see Echo backend's
+//    message.part.delta vs message.part separation)
+//
+// 2. Stream event handling — Claude SDK also emits lower-level `stream_event` types
+//    (content_block_start, content_block_delta, content_block_stop, input_json_delta)
+//    that enable real-time tool input streaming. Echo's claude-code.ts adapter buffers
+//    partial JSON fragments from input_json_delta and reassembles them on content_block_stop.
+//    This adapter only handles high-level events (assistant, user, result) — stream events
+//    would need to be added here.
+//
+// 3. Batch-per-turn persistence — accumulate all blocks across events, save once at turn
+//    end (like codex-handler already does). Currently claude-handler saves per-SDK-event
+//    (N rows per turn), which works but differs from the Codex pattern.
+//
+// 4. Tool state tracking — pending → running → completed transitions for UI indicators
+//    (Echo uses a 7-state DB model for full approval flow tracking).
+//
+// Reference: Echo backend's adapter at sample-backend/src/messages/adapters/claude-code.ts
+// implements the full version of this pattern with stream event buffering and delta emission.
+//
+// What this adapter handles today (high-level events only):
+// - "assistant" events: extract content blocks from the SDK message envelope
+// - "user" events: extract tool_result blocks to complete tool_use ↔ tool_result pairs
+// - "result" events: capture token usage and error status
 
 import type { ContentBlock } from "../../../shared/types/session";
 import type { EventTransformer, TransformResult, TokenUsage } from "../adapters/types";
@@ -71,11 +97,17 @@ export type ClaudeSDKEvent =
 /**
  * Creates a Claude event transformer.
  *
- * For Claude, the transformation is thin:
+ * For Claude, the transformation is thin because the SDK already emits ContentBlock[]:
  * - "assistant" events: extract the content blocks array directly
  * - "user" events: extract tool_result blocks to complete tool pairs
  * - "result" events: capture token usage and error status
  * - All other events: ignored for persistence (forwarded raw for streaming)
+ *
+ * Lifecycle caveat: this accumulator grows unboundedly across a multi-turn session.
+ * Claude's handler uses a long-lived async generator — the same generator processes
+ * turns 1, 2, 3, etc. If wired in, a new transformer must be created per turn (not
+ * per session), or allBlocks must be cleared between turns. The Codex adapter doesn't
+ * have this issue because Codex spawns a fresh child process per query.
  */
 export function createClaudeTransformer(): EventTransformer<ClaudeSDKEvent> {
   const allBlocks: ContentBlock[] = [];
