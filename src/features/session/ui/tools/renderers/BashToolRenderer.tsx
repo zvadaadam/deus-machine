@@ -75,7 +75,7 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
               "overflow-x-auto rounded-lg px-3 py-2 whitespace-pre-wrap",
               "max-h-[400px] overflow-y-auto border",
               isError
-                ? "bg-destructive/15 text-destructive-foreground border-destructive/30"
+                ? "bg-destructive/5 text-foreground/70 border-destructive/15"
                 : "bg-muted/80 text-foreground border-border/60"
             )}
           >

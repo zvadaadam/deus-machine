@@ -85,7 +85,7 @@ export function SubagentGroupBlock({
                 {/* Cpu icon — hides on hover or expanded */}
                 <div
                   className={cn(
-                    "absolute left-0 top-0 transition-opacity duration-50",
+                    "absolute top-0 left-0 transition-opacity duration-50",
                     isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
                   )}
                 >
@@ -95,7 +95,7 @@ export function SubagentGroupBlock({
                 {/* Chevron — shows on hover or expanded */}
                 <ChevronRight
                   className={cn(
-                    "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
+                    "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-all duration-50",
                     isExpanded && "rotate-90",
                     isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
@@ -130,9 +130,7 @@ export function SubagentGroupBlock({
           )}
 
           {/* Error status */}
-          {isError && (
-            <span className="text-destructive text-xs font-medium">✗ Error</span>
-          )}
+          {isError && <span className="text-destructive/70 text-xs font-normal">Error</span>}
         </div>
       </button>
 

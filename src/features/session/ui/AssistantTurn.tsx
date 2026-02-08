@@ -5,9 +5,9 @@
  * A turn = all assistant messages between user messages.
  *
  * Behavior:
- * - Latest turn: Expanded by default (user sees everything)
+ * - Latest turn while working: Expanded (user sees tool calls in real-time)
+ * - Latest turn when done: Auto-collapses with smooth animation (only summary visible)
  * - Previous turns: Collapsed by default (user sees summary + stats)
- * - Header always visible for multi-message turns (predictable, gives user control)
  * - Click header to toggle expand/collapse at any time
  *
  * Structure:
@@ -39,8 +39,11 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
   // User can manually toggle, but defaults to isLatest
   const [isManuallyExpanded, setIsManuallyExpanded] = useState<boolean | null>(null);
 
-  // Determine if expanded: manual override OR default to isLatest
-  const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest;
+  // Determine if expanded: manual override OR default to isLatest AND isWorking.
+  // While working: expanded so user sees tool calls in real-time.
+  // When done: auto-collapses to show only the summary message (final text).
+  // User can always click the header to re-expand.
+  const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest && isWorking;
 
   // Calculate statistics for this turn (memoized to avoid recalculation)
   const stats = useMemo(
@@ -69,20 +72,23 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
 
       {/* Collapsible section - intermediate messages and tool calls.
           forceMount keeps children in the DOM when collapsed so SubagentGroupBlock
-          retains its internal expand/collapse state across turn toggles. */}
+          retains its internal expand/collapse state across turn toggles.
+          Uses CSS grid rows trick for smooth height animation (see global.css). */}
       {hiddenMessages.length > 0 && (
         <Collapsible open={isExpanded}>
-          <CollapsibleContent forceMount className="data-[state=closed]:hidden">
-            <div className="flex min-w-0 flex-col gap-1">
-              {hiddenMessages.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  isLatestAssistant={false} // Not the latest, so text is muted
-                  isLastInTurn={false} // Not the last in turn
-                  isWorking={false} // Hidden messages are always complete
-                />
-              ))}
+          <CollapsibleContent forceMount className="turn-collapsible">
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex min-w-0 flex-col gap-1">
+                {hiddenMessages.map((message) => (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    isLatestAssistant={false}
+                    isLastInTurn={false}
+                    isWorking={false}
+                  />
+                ))}
+              </div>
             </div>
           </CollapsibleContent>
         </Collapsible>
