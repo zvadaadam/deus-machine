@@ -13,7 +13,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
-export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { command, description } = toolUse.input ?? {};
   const commandText = typeof command === "string" ? command : "";
   const isError = toolResult?.is_error;
@@ -34,6 +34,7 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
           {description ? (
@@ -70,7 +71,8 @@ export function BashToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
         return (
           <pre
             className={cn(
-              "overflow-x-auto rounded-lg p-4 font-mono text-sm whitespace-pre-wrap",
+              chatTheme.blocks.tool.contentHierarchy.mono,
+              "overflow-x-auto rounded-lg px-3 py-2 whitespace-pre-wrap",
               "max-h-[400px] overflow-y-auto border",
               isError
                 ? "bg-destructive/15 text-destructive-foreground border-destructive/30"

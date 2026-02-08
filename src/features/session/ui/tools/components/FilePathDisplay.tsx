@@ -66,7 +66,15 @@ export function FilePathDisplay({ path, className }: FilePathDisplayProps) {
       )}
     >
       {getFileIcon(path)}
-      <span className="text-foreground/80 font-mono text-xs font-medium break-all">{path}</span>
+      {/* RTL trick: When path overflows, truncation shows the filename (end)
+          instead of the root directory (start). Much more useful at a glance. */}
+      <span
+        className="text-foreground/80 block min-w-0 truncate font-mono text-xs font-medium"
+        dir="rtl"
+        title={path}
+      >
+        {path}
+      </span>
     </div>
   );
 }

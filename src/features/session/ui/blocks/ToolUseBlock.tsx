@@ -28,12 +28,16 @@ interface ToolUseBlockProps {
 function ToolRendererWrapper({
   block,
   toolResult,
+  isLoading,
 }: {
   block: ToolUseBlockType;
   toolResult?: ToolResultBlock;
+  isLoading?: boolean;
 }) {
+  // Get renderer at this level (component-to-component, not during render)
   const Renderer = toolRegistry.getRenderer(block.name);
-  return <Renderer toolUse={block} toolResult={toolResult} />;
+  // eslint-disable-next-line react-hooks/static-components
+  return <Renderer toolUse={block} toolResult={toolResult} isLoading={isLoading} />;
 }
 
 export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
@@ -68,9 +72,17 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
     );
   }
 
+  const isLoading = !toolResult;
+
   return (
-    <div className="my-1">
-      <ToolRendererWrapper block={block} toolResult={toolResult} />
+    <div
+      className="my-1"
+      style={{
+        contain: "paint",
+        animation: "chat-content-appear 250ms cubic-bezier(.16,1,.3,1) both",
+      }}
+    >
+      <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />
     </div>
   );
 }

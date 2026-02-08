@@ -7,14 +7,14 @@
  * AFTER: ~65 LOC
  */
 
-import { Search } from "lucide-react";
+import { SearchCode } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { CopyButton } from "../components/CopyButton";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
-export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -44,12 +44,13 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
     <BaseToolRenderer
       toolName="Grep"
       icon={
-        <Search
+        <SearchCode
           className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)}
         />
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
           <span

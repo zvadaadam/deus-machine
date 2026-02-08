@@ -97,11 +97,13 @@ export const chatTheme = {
         info: "border-l-2 border-l-info",
         warning: "border-l-2 border-l-warning",
       },
-      // Content hierarchy for tool outputs
+      // Content hierarchy for tool outputs (matches Cursor's 12px/11px system)
       contentHierarchy: {
         metadata: "text-xs text-muted-foreground font-normal", // 12px, muted - secondary info
         body: "text-sm text-foreground", // 14px, standard - main content
-        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-2 py-2", // 10px, bold - important content
+        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-1.5 py-0.5", // 12px, mono - filenames, commands
+        mono: "text-xs font-mono text-foreground leading-5", // 12px, mono - terminal/code output (Cursor: 12px, line-height 1.25)
+        summary: "text-muted-foreground truncate text-xs", // 12px, muted - collapsed summary text
       },
     },
 
@@ -165,11 +167,21 @@ export const chatTheme = {
   },
 
   // Animation variants
+  // CSS-first: These are reference tokens. Actual animations use @keyframes in global.css:
+  //   chat-message-enter  (assistant: 150ms opacity only, ease-out) — subtle, Cursor-inspired
+  //   chat-user-enter     (user: 150ms translateX 4px, ease-out) — gentle directional hint
+  //   chat-block-fade     (content blocks: 200ms opacity, ease-out-cubic)
+  // seenMessageIds ref in Chat.tsx prevents re-animation on refetch.
   animations: {
     messageEnter: {
-      initial: { opacity: 0, y: 10 },
-      animate: { opacity: 1, y: 0 },
-      transition: { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }, // ease-out-cubic
+      initial: { opacity: 0 },
+      animate: { opacity: 1 },
+      transition: { duration: 0.15, ease: "ease-out" },
+    },
+    userEnter: {
+      initial: { opacity: 0, x: 4 },
+      animate: { opacity: 1, x: 0 },
+      transition: { duration: 0.15, ease: "ease-out" },
     },
     toolExpand: {
       initial: { height: 0, opacity: 0 },
@@ -214,7 +226,7 @@ export const chatTheme = {
     truncate: "truncate",
     rounded: "rounded-xl",
     shadow: "shadow-sm",
-    transition: "transition-colors duration-200 ease-out motion-reduce:transition-none",
+    transition: "transition-colors duration-100 ease-in motion-reduce:transition-none",
   },
 
   // Tool icon theme - semantic colors based on action type

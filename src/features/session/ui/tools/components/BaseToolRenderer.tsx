@@ -30,6 +30,7 @@ export interface BaseToolRendererProps {
 
   // Behavior
   defaultExpanded?: boolean;
+  isLoading?: boolean; // True when tool result is pending (shimmer effect)
 
   // Content rendering (choose one)
   children?: ReactNode; // NEW API: Single children slot
@@ -47,6 +48,7 @@ export function BaseToolRenderer({
   toolUse,
   toolResult,
   defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
+  isLoading = false,
   children,
   renderContent,
   renderSummary,
@@ -67,10 +69,10 @@ export function BaseToolRenderer({
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "group flex items-center gap-2 px-2 py-1.5 text-sm",
+          "group flex items-center gap-2 px-2 py-1.5 text-xs",
           "w-full cursor-pointer text-left",
-          "transition-opacity duration-200 ease-out",
-          "hover:opacity-70",
+          "transition-opacity duration-100 ease-in",
+          "opacity-80 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
         aria-expanded={isExpanded}
@@ -82,17 +84,17 @@ export function BaseToolRenderer({
             {/* Tool icon - default state (hides on hover or when expanded) */}
             <div
               className={cn(
-                "absolute left-0 top-0 transition-opacity duration-50",
+                "absolute top-0 left-0 transition-opacity duration-100 ease-in",
                 isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
               {icon}
             </div>
 
-            {/* Chevron - shows on hover or when expanded (fast like table row hover) */}
+            {/* Chevron - shows on hover or when expanded (Cursor: 0.1s ease-in) */}
             <ChevronRight
               className={cn(
-                "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-50",
+                "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-all duration-100 ease-in",
                 isExpanded && "rotate-90",
                 isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
@@ -100,8 +102,16 @@ export function BaseToolRenderer({
             />
           </div>
 
-          {/* Tool name - truncate if too long (reduced weight for hierarchy) */}
-          <span className="text-muted-foreground truncate font-normal">{toolName}</span>
+          {/* Tool name — shimmer when loading (Cursor "make-shine" pattern).
+              Cursor uses --cursor-text-secondary for tool names, 12px/400. */}
+          <span
+            className={cn(
+              "text-muted-foreground truncate font-normal",
+              isLoading ? "tool-loading-shimmer" : "text-foreground/70"
+            )}
+          >
+            {toolName}
+          </span>
 
           {/* Status indicator (error only) */}
           {status && <span className={status.className}>{status.text}</span>}
@@ -117,7 +127,7 @@ export function BaseToolRenderer({
 
       {/* Expanded content - indented, no duplication */}
       {isExpanded && (
-        <div className="mt-1 ml-5">
+        <div className="mt-0.5 ml-6">
           {/* NEW API: children */}
           {children}
 
@@ -128,7 +138,7 @@ export function BaseToolRenderer({
 
       {/* Error Display - Always Visible When Error */}
       {isError && toolResult && (
-        <div className="mt-1 ml-5">
+        <div className="mt-0.5 ml-6">
           <ToolError content={toolResult.content} />
         </div>
       )}
