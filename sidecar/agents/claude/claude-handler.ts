@@ -502,7 +502,22 @@ export class ClaudeAgentHandler implements AgentHandler {
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
               model,
-              typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null
+              typeof cleanMessage.parent_tool_use_id === "string"
+                ? cleanMessage.parent_tool_use_id
+                : null
+            );
+          }
+
+          // Persist tool result messages (SDK "user" type = tool execution outputs).
+          // These contain tool_result blocks the frontend needs for expanded tool content.
+          // Chat.tsx already filters tool_result-only messages from the visible list;
+          // these rows only feed toolResultMap for tool block detail views.
+          if (cleanMessage.type === "user" && cleanMessage.message) {
+            const model = options?.model || "sonnet";
+            saveAssistantMessage(
+              sessionId,
+              cleanMessage.message as { id?: string; role?: string; content?: unknown },
+              model
             );
           }
 

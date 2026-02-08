@@ -8,22 +8,33 @@
  * AFTER: ~55 LOC
  */
 
-import { XCircle, Terminal } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
+import { cn } from "@/shared/lib/utils";
 
-export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function KillShellToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { shell_id } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   return (
     <BaseToolRenderer
       toolName="Kill Background Process"
-      icon={<XCircle className="text-muted-foreground/70 h-4 w-4" />}
+      icon={
+        <XCircle
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.KillShell
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
-        <span className="text-muted-foreground font-mono text-xs">
+        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
           shell {shell_id?.substring(0, 6) ?? "..."}
         </span>
       )}
@@ -37,7 +48,7 @@ export function KillShellToolRenderer({ toolUse, toolResult }: ToolRendererProps
                 Background process terminated successfully
               </div>
             ) : (
-              <div className="text-destructive-foreground bg-destructive/10 border-destructive/30 rounded border p-2 font-mono text-xs">
+              <div className="text-foreground/70 bg-destructive/5 border-destructive/15 rounded border p-2 font-mono text-xs">
                 {typeof toolResult.content === "object"
                   ? JSON.stringify(toolResult.content, null, 2)
                   : toolResult.content}

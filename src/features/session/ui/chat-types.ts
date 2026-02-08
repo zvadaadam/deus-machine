@@ -18,6 +18,7 @@ export type ToolResultMap = Map<string, ToolResultBlock>;
 export interface ToolRendererProps {
   toolUse: ToolUseBlock;
   toolResult?: ToolResultBlock;
+  isLoading?: boolean;
 }
 
 /**

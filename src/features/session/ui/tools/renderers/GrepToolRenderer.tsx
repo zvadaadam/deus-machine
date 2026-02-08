@@ -7,14 +7,13 @@
  * AFTER: ~65 LOC
  */
 
-import { Search } from "lucide-react";
+import { SearchCode } from "lucide-react";
 import { BaseToolRenderer } from "../components";
-import { CopyButton } from "../components/CopyButton";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
-export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -44,12 +43,13 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
     <BaseToolRenderer
       toolName="Grep"
       icon={
-        <Search
+        <SearchCode
           className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)}
         />
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
           <span
@@ -80,7 +80,7 @@ export function GrepToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
                 chatTheme.blocks.tool.content,
                 "scrollbar-vibrancy max-h-[300px] overflow-y-auto",
                 isError
-                  ? "bg-destructive/10 text-destructive border-destructive/30 border"
+                  ? "bg-destructive/5 text-foreground/70 border-destructive/15 border"
                   : "bg-muted/50 text-foreground border-border border"
               )}
             >

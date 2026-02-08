@@ -30,7 +30,7 @@ const isTodo = (value: unknown): value is Todo => {
   );
 };
 
-export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const todosInput = toolUse.input?.todos;
   const todos: Todo[] = Array.isArray(todosInput) ? todosInput.filter(isTodo) : [];
 
@@ -89,7 +89,10 @@ export function TodoWriteToolRenderer({ toolUse, toolResult }: ToolRendererProps
       }
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => <span className="text-muted-foreground text-xs">{currentTaskText}</span>}
+      isLoading={isLoading}
+      renderSummary={() => (
+        <span className={chatTheme.blocks.tool.contentHierarchy.summary}>{currentTaskText}</span>
+      )}
       renderContent={() => (
         <div className="space-y-1 px-2 pb-2">
           {todos.map((todo, index) => (
