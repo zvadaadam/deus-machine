@@ -11,9 +11,10 @@
 import { Search } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
+import { chatTheme } from "../../theme";
 import type { ToolRendererProps } from "../../chat-types";
 
-export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { query, allowed_domains, blocked_domains } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -36,11 +37,20 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
   return (
     <BaseToolRenderer
       toolName="Web Search"
-      icon={<Search className="text-muted-foreground/70 h-4 w-4" />}
+      icon={
+        <Search
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.WebSearch
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate text-xs">
+        <span className={chatTheme.blocks.tool.contentHierarchy.summary}>
           "{query}"{filterText}
         </span>
       )}
@@ -57,9 +67,10 @@ export function WebSearchToolRenderer({ toolUse, toolResult }: ToolRendererProps
           <div className="px-2 pb-2">
             <div
               className={cn(
-                "overflow-x-auto rounded p-3",
+                chatTheme.blocks.tool.contentHierarchy.mono,
+                "overflow-x-auto rounded px-3 py-2",
                 "bg-muted/50 border-border border",
-                "max-h-96 overflow-y-auto text-sm"
+                "max-h-96 overflow-y-auto"
               )}
             >
               <pre className="m-0 break-words whitespace-pre-wrap">{result}</pre>

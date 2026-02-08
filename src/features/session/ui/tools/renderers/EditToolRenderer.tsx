@@ -13,8 +13,9 @@ import { BaseToolRenderer, UnifiedDiff } from "../components";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
+import { computeDiffStats } from "../utils/computeDiffStats";
 
-export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function EditToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const input = toolUse?.input ?? {};
   const filePath = typeof input.file_path === "string" ? input.file_path : "unknown file";
   const oldString = typeof input.old_string === "string" ? input.old_string : "";
@@ -23,11 +24,7 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   // Extract filename for collapsed summary
   const fileName = filePath.split("/").pop() || filePath;
 
-  // Calculate diff stats
-  const oldLines = oldString.split("\n").length;
-  const newLines = newString.split("\n").length;
-  const added = Math.max(0, newLines - oldLines);
-  const removed = Math.max(0, oldLines - newLines);
+  const { added, removed } = computeDiffStats(oldString, newString);
 
   return (
     <BaseToolRenderer
@@ -39,16 +36,21 @@ export function EditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {fileName}
           </span>
           {(added > 0 || removed > 0) && (
-            <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
-              {" ⋅ "}
-              <span className="text-success font-semibold">+{added}</span>{" "}
-              <span className="text-destructive font-semibold">-{removed}</span>
+            <span className="ml-1.5 inline-flex items-center gap-1 text-[11px] tabular-nums">
+              <span className="text-success">+{added}</span>
+              <span className="text-destructive">-{removed}</span>
             </span>
           )}
         </>

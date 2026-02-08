@@ -2,7 +2,7 @@
  * PixelGrid - 3x3 animated pixel grid for agent status indication
  *
  * Each variant represents a different agent processing phase:
- * - thinking: Wave columns (blue) - deliberate reasoning
+ * - thinking: Tiered breathing (blue) - core pulses big, edges medium, corners subtle
  * - generating: Random sparkle (green) - creative text generation
  * - toolExecuting: Snake walk (amber) - methodical tool execution
  * - error: Cross pulse (red) - tool execution failed
@@ -35,19 +35,22 @@ interface VariantConfig {
 }
 
 const VARIANTS: Record<PixelGridVariant, VariantConfig> = {
-  // Wave columns - cells in same column share delay, creates left-to-right wave
+  // Tiered breathing effect - core pulses big, edges medium, corners subtle
+  // Negative delays start mid-cycle so all dots are already in motion on first render
+  // Irrational-ish duration ratios between tiers prevent obvious looping patterns
+  // Grid layout: [0:corner][1:edge][2:corner] / [3:edge][4:center][5:edge] / [6:corner][7:edge][8:corner]
   thinking: {
     color: "var(--primary)",
     cells: [
-      { name: "pixel-wave", dur: "1.5s", del: "0s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.2s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.4s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.2s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.4s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.2s" },
-      { name: "pixel-wave", dur: "1.5s", del: "0.4s" },
+      { name: "pixel-think-subtle", dur: "3.1s", del: "-0.7s" },
+      { name: "pixel-think-support", dur: "2.2s", del: "-1.3s" },
+      { name: "pixel-think-subtle", dur: "3.5s", del: "-2.1s" },
+      { name: "pixel-think-support", dur: "2.4s", del: "-0.4s" },
+      { name: "pixel-think-core", dur: "1.8s", del: "-0.9s" },
+      { name: "pixel-think-support", dur: "2.6s", del: "-1.7s" },
+      { name: "pixel-think-subtle", dur: "2.9s", del: "-1.1s" },
+      { name: "pixel-think-support", dur: "2.0s", del: "-0.5s" },
+      { name: "pixel-think-subtle", dur: "3.3s", del: "-1.9s" },
     ],
   },
 

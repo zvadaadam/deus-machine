@@ -11,13 +11,14 @@ import { UnifiedDiff } from "../components/UnifiedDiff";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
+import { computeDiffStats } from "../utils/computeDiffStats";
 
 interface Edit {
   old_string: string;
   new_string: string;
 }
 
-export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { file_path, edits } = toolUse.input ?? {};
   const safeFilePath = typeof file_path === "string" ? file_path : "";
   const safeEdits: Edit[] = Array.isArray(edits)
@@ -31,6 +32,15 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
     : [];
   const editCount = safeEdits.length;
   const fileName = safeFilePath ? safeFilePath.split("/").pop() || safeFilePath : "unknown";
+
+  // Aggregate diff stats across all edits
+  const totalStats = safeEdits.reduce(
+    (acc, edit) => {
+      const stats = computeDiffStats(edit.old_string, edit.new_string);
+      return { added: acc.added + stats.added, removed: acc.removed + stats.removed };
+    },
+    { added: 0, removed: 0 }
+  );
 
   return (
     <BaseToolRenderer
@@ -46,15 +56,27 @@ export function MultiEditToolRenderer({ toolUse, toolResult }: ToolRendererProps
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {fileName}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
             {" "}
             • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>
+          {(totalStats.added > 0 || totalStats.removed > 0) && (
+            <span className="ml-1.5 inline-flex items-center gap-1 text-[11px] tabular-nums">
+              <span className="text-success">+{totalStats.added}</span>
+              <span className="text-destructive">-{totalStats.removed}</span>
+            </span>
+          )}
         </>
       )}
       renderContent={() => {

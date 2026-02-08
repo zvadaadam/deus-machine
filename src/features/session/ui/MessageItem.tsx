@@ -10,7 +10,7 @@ import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
-import { Copy, RotateCcw, ChevronDown, ChevronUp, User } from "lucide-react";
+import { Copy, ChevronDown, ChevronUp, User } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
@@ -185,7 +185,13 @@ export const MessageItem = memo(function MessageItem({
 
   // User messages - iMessage style with avatar above bubble, far right
   return (
-    <div key={message.id} className="group relative flex flex-col items-end">
+    <div
+      key={message.id}
+      className={cn(
+        "group relative flex flex-col items-end transition-opacity duration-200",
+        isWorking && "opacity-60"
+      )}
+    >
       {/* User avatar - above the bubble, far right */}
       <div
         className="bg-primary flex size-6 flex-shrink-0 items-center justify-center rounded-md"

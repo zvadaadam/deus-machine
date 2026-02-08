@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Chat, MessageInput } from ".";
 import { useSocket } from "@/shared/hooks";
-import { useAutoScroll, useSessionActions, useSessionEvents } from "../hooks";
+import { useSessionActions, useSessionEvents } from "../hooks";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
-import { X, ChevronDown } from "lucide-react";
+import { X } from "lucide-react";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -25,10 +25,6 @@ export interface SessionPanelRef {
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   ({ sessionId, workspacePath, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
-    const messagesEndRef = useRef<HTMLDivElement>(null); // Empty div at end for scrolling to bottom
-    const lastMessageRef = useRef<HTMLDivElement>(null); // Last message element for scrolling to top
-    const messagesContainerRef = useRef<HTMLDivElement>(null);
-
     // Custom hooks (useSocket manages socket connection lifecycle)
     useSocket();
 
@@ -97,12 +93,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onMessageSent: () => setMessageInput(""),
     });
 
-    const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
-      messages,
-      messagesContainerRef,
-      messagesEndRef,
-    });
-
     // Expose action handlers to parent
     useEffect(() => {
       onCompact?.(compactConversation);
@@ -125,70 +115,41 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       [setMessageInput]
     );
 
-    // Scroll to bottom button (shared between embedded and modal views)
-    const scrollToBottomButton = (
-      <div
-        className={`pointer-events-auto absolute right-6 bottom-20 z-10 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
-          showScrollButton
-            ? "scale-100 opacity-100"
-            : "pointer-events-none scale-90 opacity-0 motion-reduce:scale-100"
-        }`}
-      >
-        <Button
-          variant="secondary"
-          size="icon"
-          className="rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
-          onClick={handleScrollToBottomClick}
-          title="Scroll to bottom"
-          aria-label="Scroll to bottom"
-          aria-controls="chat-messages"
-        >
-          <ChevronDown className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-    );
-
     // If embedded, render without overlay but with message input
     if (embedded) {
       return (
-        <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap} parentToolUseMap={parentToolUseMap} subagentMessages={subagentMessages} sessionStatus={sessionStatus}>
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
-            <div
-              className={`${CONTENT_WIDTH_CLASSES} relative mx-auto flex min-h-0 flex-1 flex-col`}
-            >
-              <Chat
-                messages={messages}
-                loading={loading}
-                sessionStatus={sessionStatus}
-                latestMessageSentAt={latestMessageSentAt}
-                messagesEndRef={messagesEndRef}
-                lastMessageRef={lastMessageRef}
-                messagesContainerRef={messagesContainerRef}
-                onStop={stopSession}
-              />
+        <SessionProvider
+          parseContent={parseContent}
+          toolResultMap={toolResultMap}
+          parentToolUseMap={parentToolUseMap}
+          subagentMessages={subagentMessages}
+          sessionStatus={sessionStatus}
+        >
+          <div className={`${CONTENT_WIDTH_CLASSES} flex min-h-0 flex-1 flex-col`}>
+            <Chat
+              messages={messages}
+              loading={loading}
+              sessionStatus={sessionStatus}
+              latestMessageSentAt={latestMessageSentAt}
+              onStop={stopSession}
+            />
 
-              {/* Scroll to bottom button */}
-              {scrollToBottomButton}
-
-              {/* Message Input - Sticky at bottom */}
-              <MessageInput
-                messageInput={messageInput}
-                sending={sending}
-                sessionStatus={sessionStatus}
-                embedded={true}
-                model={model}
-                thinkingLevel={thinkingLevel}
-                mcpServers={mcpServers}
-                contextTokenCount={contextTokenCount}
-                onMessageChange={setMessageInput}
-                onSend={() => sendMessage()}
-                onStop={stopSession}
-                onModelChange={handleModelChange}
-                onThinkingLevelChange={handleThinkingLevelChange}
-                onAttachmentClick={handleAttachmentClick}
-              />
-            </div>
+            <MessageInput
+              messageInput={messageInput}
+              sending={sending}
+              sessionStatus={sessionStatus}
+              embedded={true}
+              model={model}
+              thinkingLevel={thinkingLevel}
+              mcpServers={mcpServers}
+              contextTokenCount={contextTokenCount}
+              onMessageChange={setMessageInput}
+              onSend={() => sendMessage()}
+              onStop={stopSession}
+              onModelChange={handleModelChange}
+              onThinkingLevelChange={handleThinkingLevelChange}
+              onAttachmentClick={handleAttachmentClick}
+            />
           </div>
         </SessionProvider>
       );
@@ -222,48 +183,42 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           <div className="flex flex-1 overflow-hidden">
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
-              <SessionProvider parseContent={parseContent} toolResultMap={toolResultMap} parentToolUseMap={parentToolUseMap} subagentMessages={subagentMessages} sessionStatus={sessionStatus}>
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                  {/* Removed redundant flex wrapper - CLAUDE.md: Avoid Unnecessary Flex Nesting */}
-                  <div
-                    className={`${CONTENT_WIDTH_CLASSES} relative mx-auto flex min-h-0 flex-1 flex-col`}
-                  >
-                    <Chat
-                      messages={messages}
-                      loading={loading}
-                      sessionStatus={sessionStatus}
-                      latestMessageSentAt={latestMessageSentAt}
-                      messagesEndRef={messagesEndRef}
-                      lastMessageRef={lastMessageRef}
-                      messagesContainerRef={messagesContainerRef}
-                      onStop={stopSession}
-                    />
+              <SessionProvider
+                parseContent={parseContent}
+                toolResultMap={toolResultMap}
+                parentToolUseMap={parentToolUseMap}
+                subagentMessages={subagentMessages}
+                sessionStatus={sessionStatus}
+              >
+                <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
+                  <Chat
+                    messages={messages}
+                    loading={loading}
+                    sessionStatus={sessionStatus}
+                    latestMessageSentAt={latestMessageSentAt}
+                    onStop={stopSession}
+                  />
 
-                    {/* Scroll to bottom button */}
-                    {scrollToBottomButton}
-
-                    {/* Message Input - Sticky at bottom */}
-                    <MessageInput
-                      messageInput={messageInput}
-                      sending={sending}
-                      isCompacting={isCompacting}
-                      sessionStatus={sessionStatus}
-                      embedded={false}
-                      model={model}
-                      thinkingLevel={thinkingLevel}
-                      showCompactButton={showCompactButton}
-                      mcpServers={mcpServers}
-                      contextTokenCount={contextTokenCount}
-                      onMessageChange={setMessageInput}
-                      onSend={() => sendMessage()}
-                      onCompact={compactConversation}
-                      onCreatePR={createPR}
-                      onStop={stopSession}
-                      onModelChange={handleModelChange}
-                      onThinkingLevelChange={handleThinkingLevelChange}
-                      onAttachmentClick={handleAttachmentClick}
-                    />
-                  </div>
+                  <MessageInput
+                    messageInput={messageInput}
+                    sending={sending}
+                    isCompacting={isCompacting}
+                    sessionStatus={sessionStatus}
+                    embedded={false}
+                    model={model}
+                    thinkingLevel={thinkingLevel}
+                    showCompactButton={showCompactButton}
+                    mcpServers={mcpServers}
+                    contextTokenCount={contextTokenCount}
+                    onMessageChange={setMessageInput}
+                    onSend={() => sendMessage()}
+                    onCompact={compactConversation}
+                    onCreatePR={createPR}
+                    onStop={stopSession}
+                    onModelChange={handleModelChange}
+                    onThinkingLevelChange={handleThinkingLevelChange}
+                    onAttachmentClick={handleAttachmentClick}
+                  />
                 </div>
               </SessionProvider>
             </div>

@@ -8,13 +8,13 @@
  * AFTER: ~75 LOC
  */
 
-import { Terminal, Activity } from "lucide-react";
+import { Activity } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
-export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function BashOutputToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { bash_id, filter } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -43,8 +43,9 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
-        <span className="font-mono">
+        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
           {bash_id?.substring(0, 6) ?? "..."}
           {filter ? ` • filtered` : ""} •{" "}
           {hasOutput ? `${lineCount} line${lineCount !== 1 ? "s" : ""}` : "no output"}
@@ -62,18 +63,15 @@ export function BashOutputToolRenderer({ toolUse, toolResult }: ToolRendererProp
 
         // Output display
         return (
-          <div className="px-2 pb-2">
-            <div className="text-muted-foreground mb-1 text-xs">Output:</div>
-            <div
-              className={cn(
-                "overflow-x-auto rounded p-3 font-mono text-xs",
-                "bg-sidebar-accent/90 text-success",
-                "border-border border shadow-sm",
-                "max-h-96 overflow-y-auto"
-              )}
-            >
-              <pre className="m-0 break-words whitespace-pre-wrap">{output}</pre>
-            </div>
+          <div
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.mono,
+              "overflow-x-auto rounded px-3 py-2",
+              "bg-muted/50 border-border border",
+              "max-h-96 overflow-y-auto"
+            )}
+          >
+            <pre className="m-0 break-words whitespace-pre-wrap">{output}</pre>
           </div>
         );
       }}
