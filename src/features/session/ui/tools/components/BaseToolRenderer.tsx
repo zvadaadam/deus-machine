@@ -53,12 +53,18 @@ export function BaseToolRenderer({
   renderContent,
   renderSummary,
 }: BaseToolRendererProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const isError = toolResult?.is_error;
 
-  // Minimal design: Error-only status (assume success by default)
+  // Manual override: null = derive from data, boolean = user clicked.
+  // Auto-expands on error without useEffect (derived state pattern).
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded || !!isError;
+
+  // Error-only status — subtle, not alarming. Agents encounter errors frequently
+  // (build failures, missing files, retries) and continue working. Cursor uses
+  // a muted red label inline with the tool name, not a badge or banner.
   const status = isError
-    ? { text: "✗ Error", className: "text-destructive text-xs font-medium" }
+    ? { text: "Error", className: "text-destructive/70 text-xs font-normal" }
     : null;
 
   return (
@@ -67,7 +73,7 @@ export function BaseToolRenderer({
           Uses CSS group hover for icon swap (no re-renders on mouse enter/leave). */}
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => setManualExpanded(!isExpanded)}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-xs",
           "w-full cursor-pointer text-left",
@@ -125,21 +131,18 @@ export function BaseToolRenderer({
         </div>
       </button>
 
-      {/* Expanded content - indented, no duplication */}
+      {/* Expanded content — error lives inside the collapsible body (like Cursor).
+          The header "Error" label is the always-visible cue; details are behind the click. */}
       {isExpanded && (
         <div className="mt-0.5 ml-6">
+          {/* Error display — inside collapse, not always-visible */}
+          {isError && toolResult && <ToolError content={toolResult.content} />}
+
           {/* NEW API: children */}
           {children}
 
           {/* OLD API: renderContent */}
           {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
-        </div>
-      )}
-
-      {/* Error Display - Always Visible When Error */}
-      {isError && toolResult && (
-        <div className="mt-0.5 ml-6">
-          <ToolError content={toolResult.content} />
         </div>
       )}
     </div>

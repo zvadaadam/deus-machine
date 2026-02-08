@@ -397,6 +397,25 @@
   animation: tool-shimmer 2s linear infinite;
 }
 
+/* Turn collapse/expand — CSS grid rows trick for smooth height animation.
+   Only animates grid-template-rows + opacity (no height/max-height). */
+.turn-collapsible {
+  display: grid;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
+    opacity 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.turn-collapsible[data-state="open"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.turn-collapsible[data-state="closed"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
 /* Tiered thinking animations - organic breathing effect */
 /* Core (center cell): largest amplitude, fastest, most opaque */
 @keyframes pixel-think-core {

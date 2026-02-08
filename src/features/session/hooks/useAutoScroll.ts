@@ -132,10 +132,12 @@ export function useAutoScroll({
         const isVisible = entry.isIntersecting && entry.intersectionRatio > 0.1;
         sentinelVisibleRef.current = isVisible;
 
-        // Only act on visibility changes when NOT in a programmatic scroll.
-        // During SCROLLING_TO_BOTTOM the settle timer handles the transition.
-        if (scrollStateRef.current !== "SCROLLING_TO_BOTTOM") {
-          transitionTo(isVisible ? "AT_BOTTOM" : "READING_HISTORY");
+        // Only RE-ENGAGE (→ AT_BOTTOM) from the IO, never disengage (→ READING_HISTORY).
+        // Content growth pushes the sentinel out of view — the IO sees "not visible"
+        // but that's NOT the user scrolling up. Disengagement is handled exclusively
+        // by the scroll listener detecting actual upward scrolls.
+        if (isVisible && scrollStateRef.current !== "SCROLLING_TO_BOTTOM") {
+          transitionTo("AT_BOTTOM");
         }
       },
       {
@@ -164,11 +166,16 @@ export function useAutoScroll({
       // in the same frame (e.g., several markdown blocks rendering at once).
       if (rafId !== null) return;
 
+      // Capture scroll intent NOW, before the IO can react to the layout change.
+      // Per spec, ResizeObserver fires before IntersectionObserver in the same
+      // frame. If we read the state inside the rAF callback, the IO may have
+      // already transitioned to READING_HISTORY (sentinel pushed out of view
+      // by content growth), causing a false skip.
+      const shouldScroll = scrollStateRef.current !== "READING_HISTORY";
+
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        // Only auto-scroll if the user is at the bottom (or we're already
-        // in a programmatic scroll). Never hijack scroll when reading history.
-        if (scrollStateRef.current !== "READING_HISTORY") {
+        if (shouldScroll) {
           container.scrollTop = container.scrollHeight;
         }
       });
@@ -219,14 +226,7 @@ export function useAutoScroll({
           container.scrollTop + container.clientHeight >= container.scrollHeight - 16;
         if (atBottom) {
           transitionTo("AT_BOTTOM");
-          return;
         }
-      }
-
-      // Fallback: sentinel not visible but state still AT_BOTTOM
-      // (covers edge cases where IO hasn't fired yet).
-      if (!sentinelVisibleRef.current && scrollStateRef.current === "AT_BOTTOM") {
-        transitionTo("READING_HISTORY");
       }
     };
 
@@ -248,6 +248,10 @@ export function useAutoScroll({
     const isUserMessage = latestMessage?.role === "user";
 
     if (isUserMessage) {
+      // Set ref synchronously so ResizeObserver reads the correct state before
+      // any observers fire. The setState via transitionTo goes in the rAF to
+      // satisfy the lint rule (no setState in effect body).
+      scrollStateRef.current = "AT_BOTTOM";
       requestAnimationFrame(() => {
         transitionTo("AT_BOTTOM");
         const container = messagesContainerRef.current;

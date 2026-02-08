@@ -48,7 +48,7 @@ export function KillShellToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
                 Background process terminated successfully
               </div>
             ) : (
-              <div className="text-destructive-foreground bg-destructive/10 border-destructive/30 rounded border p-2 font-mono text-xs">
+              <div className="text-foreground/70 bg-destructive/5 border-destructive/15 rounded border p-2 font-mono text-xs">
                 {typeof toolResult.content === "object"
                   ? JSON.stringify(toolResult.content, null, 2)
                   : toolResult.content}
