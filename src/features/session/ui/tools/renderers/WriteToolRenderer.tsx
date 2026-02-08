@@ -14,7 +14,7 @@ import { detectLanguageFromPath } from "../utils/detectLanguage";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
-export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function WriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { file_path, content } = toolUse.input ?? {};
   const safeFilePath = typeof file_path === "string" ? file_path : "";
   const safeContent = typeof content === "string" ? content : "";
@@ -32,6 +32,7 @@ export function WriteToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
           <span

@@ -8,11 +8,13 @@
  * AFTER: ~85 LOC
  */
 
-import { Cpu } from "lucide-react";
+import { Bot } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
+import { chatTheme } from "../../theme";
+import { cn } from "@/shared/lib/utils";
 
-export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function TaskToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { description, prompt, subagent_type } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -29,11 +31,16 @@ export function TaskToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   return (
     <BaseToolRenderer
       toolName="Spawn Agent"
-      icon={<Cpu className="text-muted-foreground/70 h-4 w-4" />}
+      icon={
+        <Bot
+          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Task)}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate font-mono text-xs">
+        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
           {description || subagent_type || "Running agent"}
         </span>
       )}

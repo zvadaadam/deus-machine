@@ -36,15 +36,19 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
       className={cn(
         chatTheme.blocks.tool.container,
         "mt-1 text-sm",
-        isError
-          ? chatTheme.blocks.tool.borderLeft.error + " bg-destructive/10"
-          : chatTheme.blocks.tool.borderLeft.success
+        isError ? chatTheme.blocks.tool.borderLeft.error : chatTheme.blocks.tool.borderLeft.success
       )}
     >
       {/* Header */}
       <div className={chatTheme.blocks.tool.header}>
-        <span className={chatTheme.blocks.tool.icon}>{isError ? "❌" : "✅"}</span>
-        <strong className="text-xs font-semibold">{isError ? "Error" : "Result"}</strong>
+        <strong
+          className={cn(
+            "text-xs font-medium",
+            isError ? "text-destructive/70" : "text-foreground/70"
+          )}
+        >
+          {isError ? "Error" : "Result"}
+        </strong>
       </div>
 
       {/* Content */}
@@ -54,7 +58,7 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
         className={cn(
           chatTheme.blocks.tool.content,
           "scrollbar-vibrancy max-h-[150px] overflow-y-auto",
-          isError ? "bg-destructive/10 text-destructive" : "bg-sidebar-accent/40 text-foreground"
+          isError ? "bg-destructive/5 text-foreground/70" : "bg-sidebar-accent/40 text-foreground"
         )}
       >
         {content}

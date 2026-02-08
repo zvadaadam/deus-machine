@@ -320,6 +320,160 @@
   }
 }
 
+/* === Chat message entrance animations === */
+/* Assistant turn: fast, barely-there fade. The container shouldn't announce
+   itself — content blocks inside carry the expression (Cursor pattern). */
+@keyframes chat-message-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* User message: gentle rightward origin — acknowledgement, not a stage entrance.
+   4px is enough to hint at direction without being theatrical. */
+@keyframes chat-user-enter {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Individual content block fade-in (indicators, expanded sections) */
+@keyframes chat-block-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Content block entrance — tool calls, code blocks slide in like Cursor.
+   Short translateY(4px) + opacity gives directional hint without being dramatic.
+   Elastic curve (0.16, 1, 0.3, 1) adds subtle spring — matches Cursor's content-appear. */
+@keyframes chat-content-appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tool loading shimmer — Cursor's "make-shine" pattern.
+   Gradient slides across text via background-clip: text.
+   Applied to tool headers while result is pending. */
+@keyframes tool-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.tool-loading-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 25%,
+    color-mix(in oklch, var(--foreground) 90%, white) 50%,
+    currentColor 75%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tool-shimmer 2s linear infinite;
+}
+
+/* Turn collapse/expand — CSS grid rows trick for smooth height animation.
+   Only animates grid-template-rows + opacity (no height/max-height). */
+.turn-collapsible {
+  display: grid;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
+    opacity 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.turn-collapsible[data-state="open"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.turn-collapsible[data-state="closed"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* Tiered thinking animations - organic breathing effect */
+/* Core (center cell): largest amplitude, fastest, most opaque */
+@keyframes pixel-think-core {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  25% {
+    opacity: 0.9;
+    transform: scale(1.25);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  75% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+/* Support (edge-center cells): medium amplitude */
+@keyframes pixel-think-support {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.65);
+  }
+  30% {
+    opacity: 0.7;
+    transform: scale(1.15);
+    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+  60% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+}
+
+/* Subtle (corner cells): smallest amplitude, subtle shimmer */
+@keyframes pixel-think-subtle {
+  0%,
+  100% {
+    opacity: 0.05;
+    transform: scale(0.5);
+  }
+  40% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  70% {
+    opacity: 0.15;
+    transform: scale(0.7);
+  }
+}
+
 /* Design tokens & base styles - Graphite × Aqua Theme */
 :root {
   --radius: 0.75rem;
@@ -1176,6 +1330,12 @@ diffs-container.diffs-theme-compact {
 /* Last element has no bottom margin */
 .markdown-content > :last-child {
   margin-bottom: 0;
+}
+
+/* Prevent double-spacing from markdown line breaks (Cursor pattern).
+   Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
+.markdown-content p br {
+  display: none;
 }
 
 /* Paragraphs - Tighter spacing */

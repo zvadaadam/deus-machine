@@ -14,7 +14,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 
-export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { path } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -54,9 +54,15 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {dirName}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
@@ -75,36 +81,33 @@ export function LSToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
         // Directory contents
         return (
-          <div className="px-2 pb-2">
-            <div className="text-muted-foreground mb-1 text-xs">Contents ({itemCount}):</div>
-            <div className="max-h-60 space-y-0.5 overflow-y-auto pr-1">
-              {listings.map((item, index) => {
-                const isDir = isDirectory(item);
-                const cleanItem = item.replace(/\/$/, ""); // Remove trailing slash for display
+          <div className="max-h-60 space-y-0.5 overflow-y-auto">
+            {listings.map((item, index) => {
+              const isDir = isDirectory(item);
+              const cleanItem = item.replace(/\/$/, ""); // Remove trailing slash for display
 
-                return (
-                  <div
-                    key={index}
-                    className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
-                  >
-                    {isDir ? (
-                      <Folder className="text-info h-3 w-3 flex-shrink-0" aria-hidden="true" />
-                    ) : (
-                      <File
-                        className="text-muted-foreground h-3 w-3 flex-shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span className="flex-1 break-all">{cleanItem}</span>
-                    {isDir && (
-                      <span className="text-muted-foreground text-[0.65rem] opacity-60 transition-opacity group-hover:opacity-100">
-                        DIR
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <div
+                  key={index}
+                  className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
+                >
+                  {isDir ? (
+                    <Folder className="text-info h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                  ) : (
+                    <File
+                      className="text-muted-foreground h-3 w-3 flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="flex-1 break-all">{cleanItem}</span>
+                  {isDir && (
+                    <span className="text-muted-foreground text-[0.65rem] opacity-60 transition-opacity group-hover:opacity-100">
+                      DIR
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       }}

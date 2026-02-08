@@ -2,7 +2,10 @@
  * Tool Error Component
  *
  * Shared component for displaying tool execution errors consistently.
- * Used by all tool renderers to show error messages in a standardized format.
+ * Follows Cursor's "errors whisper" philosophy — errors are common during
+ * agent work (build failures, lint errors, retries). Aggressive red styling
+ * creates unnecessary visual noise. Keep it subtle: a faint tint, a small
+ * icon, and muted text. The error is distinguishable but not alarming.
  */
 
 import { cn } from "@/shared/lib/utils";
@@ -14,20 +17,19 @@ interface ToolErrorProps {
 }
 
 export function ToolError({ content, className }: ToolErrorProps) {
-  // Stringify objects for display
   const errorText = typeof content === "object" ? JSON.stringify(content, null, 2) : content;
 
   return (
     <div
       className={cn(
-        "mx-2 mb-2 rounded p-2",
-        "bg-destructive/10 border-destructive/30 border",
+        "rounded-md px-3 py-2",
+        "bg-destructive/5 border-destructive/15 border",
         "flex gap-2",
         className
       )}
     >
-      <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
-      <pre className="text-destructive-foreground m-0 flex-1 font-mono text-xs break-words whitespace-pre-wrap">
+      <AlertCircle className="text-destructive/60 mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <pre className="text-foreground/70 m-0 flex-1 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
         {errorText}
       </pre>
     </div>

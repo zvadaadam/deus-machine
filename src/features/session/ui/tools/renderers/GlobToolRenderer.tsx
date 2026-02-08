@@ -14,7 +14,7 @@ import type { ToolRendererProps } from "../../chat-types";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
-export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -48,9 +48,15 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
         <>
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.emphasis, "font-mono")}>
+          <span
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "bg-info/15 text-info rounded px-1.5 py-0.5 font-mono"
+            )}
+          >
             {pattern}
           </span>
           <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
@@ -71,21 +77,18 @@ export function GlobToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
 
         // File list
         return (
-          <div className="space-y-1 px-2 pb-2">
-            <div className="text-muted-foreground mb-1 text-xs">Matched files:</div>
-            <div className="max-h-60 space-y-0.5 overflow-y-auto pr-1">
-              {files.map((file, index) => (
-                <div
-                  key={index}
-                  className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
-                >
-                  <span className="text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100">
-                    {index + 1}.
-                  </span>
-                  <span className="flex-1 break-all">{file}</span>
-                </div>
-              ))}
-            </div>
+          <div className="max-h-60 space-y-0.5 overflow-y-auto">
+            {files.map((file, index) => (
+              <div
+                key={index}
+                className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
+              >
+                <span className="text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100">
+                  {index + 1}.
+                </span>
+                <span className="flex-1 break-all">{file}</span>
+              </div>
+            ))}
           </div>
         );
       }}

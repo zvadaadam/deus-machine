@@ -14,7 +14,7 @@ import { detectLanguageFromPath } from "../utils/detectLanguage";
 import { chatTheme } from "../../theme";
 import { cn } from "@/shared/lib/utils";
 
-export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { file_path, offset, limit } = toolUse.input ?? {};
   const safeFilePath = typeof file_path === "string" ? file_path : "";
   const language = safeFilePath ? detectLanguageFromPath(safeFilePath) : undefined;
@@ -46,6 +46,7 @@ export function ReadToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
       }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       defaultExpanded={false}
       renderSummary={() => (
         <>

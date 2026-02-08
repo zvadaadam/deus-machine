@@ -10,6 +10,8 @@
 
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
+import { chatTheme } from "../../theme";
+import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 /**
@@ -48,7 +50,7 @@ function isContentBlockArray(content: any): content is ContentBlock[] {
 function ContentBlockRenderer({ block }: { block: ContentBlock }) {
   if (block.type === "text") {
     return (
-      <div className="text-foreground whitespace-pre-wrap text-sm leading-relaxed">
+      <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
         {block.text}
       </div>
     );
@@ -75,7 +77,7 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
   );
 }
 
-export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   // Extract first input value as preview (if available)
   const firstInputKey = Object.keys(toolUse.input || {})[0];
   const firstInputValue = firstInputKey
@@ -85,20 +87,28 @@ export function DefaultToolRenderer({ toolUse, toolResult }: ToolRendererProps) 
   return (
     <BaseToolRenderer
       toolName={toolUse.name || "Unknown Tool"}
-      icon={<Wrench className="text-muted-foreground/70 h-4 w-4" />}
+      icon={
+        <Wrench
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            "text-muted-foreground"
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() =>
         firstInputValue ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">
+          <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
             {firstInputValue}
           </span>
         ) : undefined
       }
       renderContent={({ toolUse, toolResult }) => {
         // Check if output is content block array (MCP tools with text/images)
-        const hasContentBlocks =
-          toolResult && isContentBlockArray(toolResult.content);
+        const hasContentBlocks = toolResult && isContentBlockArray(toolResult.content);
 
         return (
           <div className="space-y-3 px-2 pb-2">

@@ -8,12 +8,13 @@
  * AFTER: ~85 LOC
  */
 
-import { Globe, ExternalLink } from "lucide-react";
+import { Globe } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
+import { chatTheme } from "../../theme";
 import type { ToolRendererProps } from "../../chat-types";
 
-export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
+export function WebFetchToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { url, prompt } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
@@ -41,11 +42,22 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
   return (
     <BaseToolRenderer
       toolName="Web Fetch"
-      icon={<Globe className="text-muted-foreground/70 h-4 w-4" />}
+      icon={
+        <Globe
+          className={cn(
+            chatTheme.tools.iconSize,
+            chatTheme.tools.iconBase,
+            chatTheme.tools.WebFetch
+          )}
+        />
+      }
       toolUse={toolUse}
       toolResult={toolResult}
+      isLoading={isLoading}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate font-mono text-xs">{getDomain()}</span>
+        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
+          {getDomain()}
+        </span>
       )}
       renderContent={() => {
         // No result message
@@ -59,17 +71,15 @@ export function WebFetchToolRenderer({ toolUse, toolResult }: ToolRendererProps)
 
         // Result display
         return (
-          <div className="px-2 pb-2">
-            <div className="text-muted-foreground mb-1 text-xs">Result:</div>
-            <div
-              className={cn(
-                "overflow-x-auto rounded p-3",
-                "bg-muted/50 border-border border",
-                "max-h-96 overflow-y-auto text-sm"
-              )}
-            >
-              <pre className="m-0 break-words whitespace-pre-wrap">{result}</pre>
-            </div>
+          <div
+            className={cn(
+              chatTheme.blocks.tool.contentHierarchy.mono,
+              "overflow-x-auto rounded px-3 py-2",
+              "bg-muted/50 border-border border",
+              "max-h-96 overflow-y-auto"
+            )}
+          >
+            <pre className="m-0 break-words whitespace-pre-wrap">{result}</pre>
           </div>
         );
       }}
