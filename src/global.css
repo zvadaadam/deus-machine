@@ -1332,8 +1332,9 @@ diffs-container.diffs-theme-compact {
   margin-bottom: 0;
 }
 
-/* Prevent double-spacing from markdown line breaks (Cursor pattern) */
-.markdown-content br {
+/* Prevent double-spacing from markdown line breaks (Cursor pattern).
+   Scoped to paragraphs to avoid affecting <br> in code blocks or pre. */
+.markdown-content p br {
   display: none;
 }
 
