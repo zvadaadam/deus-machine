@@ -22,6 +22,26 @@ import {
   KillShellToolRenderer,
   TaskToolRenderer,
   LSToolRenderer,
+  // OpenDevs MCP — Browser automation
+  BrowserSnapshotToolRenderer,
+  BrowserNavigateToolRenderer,
+  BrowserNavigateBackToolRenderer,
+  BrowserClickToolRenderer,
+  BrowserTypeToolRenderer,
+  BrowserPressKeyToolRenderer,
+  BrowserHoverToolRenderer,
+  BrowserSelectOptionToolRenderer,
+  BrowserWaitForToolRenderer,
+  BrowserEvaluateToolRenderer,
+  BrowserConsoleMessagesToolRenderer,
+  BrowserScreenshotToolRenderer,
+  BrowserNetworkRequestsToolRenderer,
+  BrowserScrollToolRenderer,
+  // OpenDevs MCP — Workspace
+  AskUserQuestionToolRenderer,
+  GetWorkspaceDiffToolRenderer,
+  DiffCommentToolRenderer,
+  GetTerminalOutputToolRenderer,
 } from "./renderers";
 
 // Idempotency guard - prevent double registration during HMR/dev
@@ -53,6 +73,28 @@ export function registerAllTools() {
   toolRegistry.register("KillShell", KillShellToolRenderer);
   toolRegistry.register("Task", TaskToolRenderer);
   toolRegistry.register("LS", LSToolRenderer);
+
+  // OpenDevs MCP — Browser automation tools
+  toolRegistry.register("BrowserSnapshot", BrowserSnapshotToolRenderer);
+  toolRegistry.register("BrowserNavigate", BrowserNavigateToolRenderer);
+  toolRegistry.register("BrowserNavigateBack", BrowserNavigateBackToolRenderer);
+  toolRegistry.register("BrowserClick", BrowserClickToolRenderer);
+  toolRegistry.register("BrowserType", BrowserTypeToolRenderer);
+  toolRegistry.register("BrowserPressKey", BrowserPressKeyToolRenderer);
+  toolRegistry.register("BrowserHover", BrowserHoverToolRenderer);
+  toolRegistry.register("BrowserSelectOption", BrowserSelectOptionToolRenderer);
+  toolRegistry.register("BrowserWaitFor", BrowserWaitForToolRenderer);
+  toolRegistry.register("BrowserEvaluate", BrowserEvaluateToolRenderer);
+  toolRegistry.register("BrowserConsoleMessages", BrowserConsoleMessagesToolRenderer);
+  toolRegistry.register("BrowserScreenshot", BrowserScreenshotToolRenderer);
+  toolRegistry.register("BrowserNetworkRequests", BrowserNetworkRequestsToolRenderer);
+  toolRegistry.register("BrowserScroll", BrowserScrollToolRenderer);
+
+  // OpenDevs MCP — Workspace tools
+  toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);
+  toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
+  toolRegistry.register("DiffComment", DiffCommentToolRenderer);
+  toolRegistry.register("GetTerminalOutput", GetTerminalOutputToolRenderer);
 
   if (import.meta.env.DEV) {
     const stats = toolRegistry.getStats();

@@ -7,7 +7,7 @@
  * Layout: [Content panel (file tree/browser/terminal)] [Sidecar tabs]
  */
 
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { TerminalPanel } from "@/features/terminal";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
@@ -26,7 +26,6 @@ interface RightSidePanelProps {
   workspace: Workspace;
   prStatus: PRStatus | null;
   createPRHandler: (() => void) | null;
-  onExpandedChange: (expanded: boolean) => void;
   /** Current panel width from store — used for flex-1 conditional */
   rightPanelWidth: number | null;
   /** Inline style for custom width (browser mode) */
@@ -41,13 +40,14 @@ interface RightSidePanelProps {
   compactWidth?: number | null;
   /** Hide PRStatusBar (rendered by parent instead for header alignment) */
   hidePRStatus?: boolean;
+  /** Whether the user is actively dragging the resize handle — disables transitions */
+  isResizing?: boolean;
 }
 
 export function RightSidePanel({
   workspace,
   prStatus,
   createPRHandler,
-  onExpandedChange,
   rightPanelWidth,
   rightSideStyle,
   onOpenDiffTab,
@@ -55,6 +55,7 @@ export function RightSidePanel({
   compact,
   compactWidth,
   hidePRStatus,
+  isResizing,
 }: RightSidePanelProps) {
   const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
     workspace.id
@@ -77,17 +78,8 @@ export function RightSidePanel({
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
-  // Expansion: only when browser tab is active
-  const rightSideExpanded = rightSideTab === "browser";
-
-  // Notify parent of expansion state changes
-  const prevExpandedRef = useRef(rightSideExpanded);
-  useEffect(() => {
-    if (rightSideExpanded !== prevExpandedRef.current) {
-      prevExpandedRef.current = rightSideExpanded;
-      onExpandedChange(rightSideExpanded);
-    }
-  }, [rightSideExpanded, onExpandedChange]);
+  // Whether outer container has explicit width from parent (user drag or smart default)
+  const hasExplicitWidth = rightSideStyle !== undefined;
 
   // --- Handlers ---
 
@@ -133,15 +125,23 @@ export function RightSidePanel({
     window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
   }, [prStatus]);
 
+  // Merge inline style with transition override when dragging
+  const outerStyle: React.CSSProperties | undefined = isResizing
+    ? { ...rightSideStyle, transition: "none" }
+    : rightSideStyle;
+
   return (
     <div
       className={cn(
         "flex h-full min-w-0 flex-col",
+        // Smooth width transition when resizing or switching tabs (matches sidebar curve)
+        !compact && !isResizing && "transition-[width,min-width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
         !compact && "border-border/40 border-l",
-        !compact && rightSideExpanded && "min-w-[380px]",
-        !compact && rightSideExpanded && rightPanelWidth === null && "flex-1"
+        !compact && "min-w-[380px]",
+        // Browser with no saved width: fill available space (smart default measures + persists)
+        !compact && rightSideTab === "browser" && rightPanelWidth === null && "flex-1"
       )}
-      style={rightSideStyle}
+      style={outerStyle}
     >
       {!hidePRStatus && (
         <PRStatusBar
@@ -157,11 +157,13 @@ export function RightSidePanel({
         <div
           className={cn(
             "bg-background/50 flex h-full flex-col overflow-hidden backdrop-blur-sm",
+            // Smooth width transition when switching tabs (disabled during drag)
+            !compact && !isResizing && "transition-[width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
             compact
               ? compactWidth == null
                 ? "w-[220px]"
                 : undefined
-              : rightSideTab === "browser"
+              : hasExplicitWidth || rightSideTab === "browser"
                 ? "flex-1"
                 : "w-[380px]"
           )}
@@ -170,7 +172,7 @@ export function RightSidePanel({
           }
         >
           {/* In compact mode, force code tab content regardless of sidecar selection */}
-          {(compact ? true : rightSideTab === "code") && (
+          {(compact || rightSideTab === "code") && (
             <CodePanelContent
               workspace={workspace}
               fileChanges={fileChanges}
@@ -181,7 +183,22 @@ export function RightSidePanel({
             />
           )}
 
-          {!compact && rightSideTab === "browser" && <BrowserPanel workspaceId={workspace.id} />}
+          {/* BrowserPanel is ALWAYS mounted — even in compact mode — to keep
+              the useBrowserRpcHandler Tauri event listener active so the sidecar's
+              browser MCP tools (BrowserNavigate, BrowserSnapshot, etc.) always have
+              a handler. CSS hides the wrapper; panelVisible tells BrowserPanel to
+              hide/show native webviews via Tauri IPC (they render above the DOM). */}
+          <div
+            className={cn(
+              "h-full w-full",
+              (compact || rightSideTab !== "browser") && "pointer-events-none invisible absolute"
+            )}
+          >
+            <BrowserPanel
+              workspaceId={workspace.id}
+              panelVisible={!compact && rightSideTab === "browser"}
+            />
+          </div>
 
           {!compact && rightSideTab === "terminal" && (
             <TerminalPanel workspacePath={workspace.workspace_path} />

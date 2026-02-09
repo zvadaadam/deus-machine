@@ -1,503 +1,683 @@
-import { useState, useEffect, useRef } from "react";
+/**
+ * BrowserPanel — multi-tab browser container with per-workspace tab persistence.
+ *
+ * Layout (top to bottom):
+ *   BrowserTabBar (h-9)  — tab row with [Tab 1] [Tab 2] [+]
+ *   Navigation Bar (h-9) — < > R [URL bar] link zap target console
+ *   Tab Content (flex-1)  — all tabs rendered hidden/shown (preserves webview state)
+ *   Console (h-[12.5rem]) — optional, shows active tab's logs
+ *
+ * Persistence: Tab URLs/titles are synced to the workspace layout store
+ * (localStorage) on a debounced 300ms timer. Webviews are destroyed on
+ * unmount and lazily recreated from persisted URLs on remount.
+ */
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from "@/components/ui/empty";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   RefreshCw,
-  ExternalLink,
-  Loader2,
-  AlertCircle,
-  Zap,
   ChevronLeft,
   ChevronRight,
-  ChevronsRight,
   ChevronDown,
+  Zap,
   Terminal,
-  X,
-  Info,
   Target,
-  Globe,
+  X,
+  Cookie,
+  Check,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
+import { BrowserTabBar } from "./BrowserTabBar";
+import { BrowserTab } from "./BrowserTab";
+import type { BrowserTabState, BrowserTabHandle, ConsoleLog, PersistedBrowserTab } from "../types";
+import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
+import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { invoke } from "@/platform/tauri";
 
-/**
- * Timeout for fetching injection script from dev-browser server
- * Longer than health check timeouts because script generation may take time
- */
-const SCRIPT_FETCH_TIMEOUT_MS = 10000;
+const MAX_LOGS = 500;
+const PERSIST_DEBOUNCE_MS = 300;
+
+/** Browser info from Rust get_cookie_browsers command */
+interface InstalledBrowser {
+  name: string;
+  keychain_service: string;
+  cookie_db_path: string;
+  available: boolean;
+}
+
+/** Decrypted cookie from Rust sync_browser_cookies command */
+interface DecryptedCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  http_only: boolean;
+  same_site: string;
+  expires: number;
+}
 
 interface BrowserPanelProps {
   workspaceId: string | null;
+  /** Whether the browser panel is the active (visible) right-side tab.
+   *  When false, the panel stays mounted (preserving webview instances)
+   *  but all native webviews are hidden via Tauri IPC. */
+  panelVisible?: boolean;
   onClose?: () => void;
 }
 
-interface ConsoleLog {
-  timestamp: Date;
-  level: "info" | "warn" | "error" | "debug";
-  message: string;
-}
+export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: BrowserPanelProps) {
+  // --- Initialize tabs from persisted state or create a fresh empty tab ---
+  const [tabs, setTabs] = useState<BrowserTabState[]>(() => {
+    if (workspaceId) {
+      const layout = workspaceLayoutActions.getLayout(workspaceId);
+      if (layout.browserTabs.length > 0) {
+        return layout.browserTabs.map((pt) => hydratePersistedTab(pt, workspaceId));
+      }
+    }
+    return [createBrowserTab(workspaceId)];
+  });
 
-export function BrowserPanel({ workspaceId, onClose }: BrowserPanelProps) {
-  const [url, setUrl] = useState("https://example.com");
-  const [currentUrl, setCurrentUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [injected, setInjected] = useState(false);
-  const [isCrossOrigin, setIsCrossOrigin] = useState(false);
-  const [selectorActive, setSelectorActive] = useState(false);
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    if (workspaceId) {
+      const layout = workspaceLayoutActions.getLayout(workspaceId);
+      if (layout.activeBrowserTabId && layout.browserTabs.length > 0) {
+        // Find the tab with the persisted active ID
+        const persisted = layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId);
+        if (persisted) return persisted.id;
+      }
+    }
+    return tabs[0]?.id ?? "";
+  });
 
-  // Navigation history
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-
-  // Console panel
+  // Console toggle (shared UI — one toggle, shows active tab's logs)
   const [showConsole, setShowConsole] = useState(false);
-  const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { status: devBrowserStatus, startServer } = useBrowser();
-  const tabId = `browser-${workspaceId || "main"}`;
+  // Imperative handles per tab
+  const tabRefs = useRef<Map<string, BrowserTabHandle>>(new Map());
 
-  // Helper to add console log
-  const MAX_LOGS = 500;
-  const addLog = (level: ConsoleLog["level"], message: string) => {
-    setConsoleLogs((prev) => {
-      const next = [...prev, { timestamp: new Date(), level, message }];
-      return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
-    });
-  };
+  // Debounced persistence timer
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track previous workspaceId to detect switches
+  const prevWorkspaceIdRef = useRef(workspaceId);
+
+  // Shared dev-browser server (called once in container, status passed to all tabs)
+  const { status: devBrowserStatus, startServer } = useBrowser();
+
+  // Derived: active tab for nav bar state
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  // --- Centralized webview visibility guard ---
+  // Native WKWebViews render above the DOM, so CSS can't hide them.
+  // Individual BrowserTabs manage their own show/hide via effects, but
+  // race conditions during rapid tab switches can leave stale webviews
+  // visible. This guard explicitly hides all non-active webviews whenever
+  // the active tab or panel visibility changes — belt-and-suspenders.
+  const tabInfoRef = useRef(tabs);
+  tabInfoRef.current = tabs;
+
+  useEffect(() => {
+    const currentTabs = tabInfoRef.current;
+    for (const tab of currentTabs) {
+      if (tab.id !== activeTabId || !panelVisible) {
+        invoke("hide_browser_webview", { label: tab.webviewLabel }).catch(() => {});
+      }
+    }
+  }, [activeTabId, panelVisible]);
+
+  // Browser automation RPC handler — lets the sidecar operate the browser
+  // via MCP tools (snapshot, click, type, navigate, getState).
+  // Uses a ref-based callback to always read the latest active tab without
+  // causing the Tauri event listener to re-subscribe on every tab change.
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const getActiveTab = useCallback(() => activeTabRef.current, []);
+
+  // Provide access to all tabs for session-mapped tab lookups
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const getTabs = useCallback(() => tabsRef.current, []);
+
+  // Auto-create (or populate an existing empty tab) when the sidecar calls
+  // BrowserNavigate and no usable tab exists. Sets the URL, switches the
+  // right panel to browser, and returns the webviewLabel.
+  // BrowserTab's auto-navigate effect handles actual native webview creation.
+  const handleAutoCreateTab = useCallback(
+    (url: string): string | null => {
+      if (!workspaceId) return null;
+
+      let fullUrl = url;
+      if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+        fullUrl = "https://" + url;
+      }
+
+      // Reuse existing empty tab if available (BrowserPanel always creates one)
+      const emptyTab = tabs.find((t) => !t.currentUrl);
+      let targetLabel: string;
+
+      if (emptyTab) {
+        // Populate the existing empty tab with the URL
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === emptyTab.id
+              ? {
+                  ...t,
+                  url: fullUrl,
+                  currentUrl: fullUrl,
+                  title: deriveTitleFromUrl(fullUrl),
+                  loading: true,
+                  history: [fullUrl],
+                  historyIndex: 0,
+                }
+              : t
+          )
+        );
+        setActiveTabId(emptyTab.id);
+        targetLabel = emptyTab.webviewLabel;
+      } else {
+        // Create a new tab with URL pre-filled
+        const newTab = createBrowserTab(workspaceId);
+        newTab.url = fullUrl;
+        newTab.currentUrl = fullUrl;
+        newTab.title = deriveTitleFromUrl(fullUrl);
+        newTab.loading = true;
+        newTab.history = [fullUrl];
+        newTab.historyIndex = 0;
+
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        targetLabel = newTab.webviewLabel;
+      }
+
+      // Switch the right panel to browser tab so the webview becomes visible
+      workspaceLayoutActions.setActiveRightSideTab(workspaceId, "browser");
+
+      return targetLabel;
+    },
+    [workspaceId, tabs]
+  );
+
+  // Store auto-create in ref for stable identity (avoids Tauri listener re-subscribe)
+  const autoCreateTabRef = useRef(handleAutoCreateTab);
+  autoCreateTabRef.current = handleAutoCreateTab;
+  const stableAutoCreateTab = useCallback((url: string) => autoCreateTabRef.current(url), []);
+
+  useBrowserRpcHandler(getActiveTab, stableAutoCreateTab, workspaceId, getTabs);
+
+  // --- Persist tab state to workspace layout store (debounced) ---
+  const persistTabs = useCallback(
+    (currentTabs: BrowserTabState[], currentActiveId: string) => {
+      if (!workspaceId) return;
+
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = setTimeout(() => {
+        // Only persist tabs that have a loaded URL (skip empty new tabs)
+        const persisted: PersistedBrowserTab[] = currentTabs
+          .filter((t) => t.currentUrl)
+          .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
+
+        workspaceLayoutActions.setLayout(workspaceId, {
+          browserTabs: persisted,
+          activeBrowserTabId: currentActiveId,
+        });
+      }, PERSIST_DEBOUNCE_MS);
+    },
+    [workspaceId]
+  );
+
+  // Cleanup persist timer on unmount
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, []);
+
+  // --- Swap tabs when workspaceId changes (workspace switch) ---
+  // BrowserPanel stays mounted to preserve WKWebView lifecycle, so we
+  // manually swap tab state instead of relying on remount.
+  //
+  // CRITICAL: We must explicitly close old native webviews BEFORE setting
+  // new tabs. BrowserTab's unmount cleanup also calls close, but it's async
+  // and races with the new workspace's webviews — causing overlapping webviews
+  // (native webviews render above the DOM so CSS can't hide them).
+  useEffect(() => {
+    const prevId = prevWorkspaceIdRef.current;
+    if (prevId === workspaceId) return;
+
+    // Flush pending persistence for the old workspace immediately
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    if (prevId) {
+      // Persist current tabs to old workspace synchronously (no debounce)
+      const persisted: PersistedBrowserTab[] = tabs
+        .filter((t) => t.currentUrl)
+        .map((t) => ({ id: t.id, url: t.currentUrl, title: t.title }));
+      workspaceLayoutActions.setLayout(prevId, {
+        browserTabs: persisted,
+        activeBrowserTabId: activeTabId,
+      });
+    }
+
+    // Hide then close ALL old native webviews immediately (don't wait for BrowserTab unmount).
+    // hide() is called first as a defensive measure — on macOS, WKWebView.close() may not
+    // immediately remove the native view from the NSView hierarchy, but hide() reliably
+    // sets [view setHidden:YES] which makes it invisible instantly.
+    for (const tab of tabs) {
+      invoke("hide_browser_webview", { label: tab.webviewLabel }).catch(() => {});
+      invoke("close_browser_webview", { label: tab.webviewLabel }).catch(() => {});
+    }
+
+    // Load tabs for the new workspace
+    let newTabs: BrowserTabState[];
+    let newActiveId: string;
+
+    if (workspaceId) {
+      const layout = workspaceLayoutActions.getLayout(workspaceId);
+      if (layout.browserTabs.length > 0) {
+        newTabs = layout.browserTabs.map((pt) => hydratePersistedTab(pt, workspaceId));
+        const persisted = layout.activeBrowserTabId
+          ? layout.browserTabs.find((t) => t.id === layout.activeBrowserTabId)
+          : null;
+        newActiveId = persisted ? persisted.id : newTabs[0].id;
+      } else {
+        const fresh = createBrowserTab(workspaceId);
+        newTabs = [fresh];
+        newActiveId = fresh.id;
+      }
+    } else {
+      const fresh = createBrowserTab(null);
+      newTabs = [fresh];
+      newActiveId = fresh.id;
+    }
+
+    tabRefs.current.clear();
+
+    setTabs(newTabs);
+    setActiveTabId(newActiveId);
+    prevWorkspaceIdRef.current = workspaceId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
+  // --- Auto-start dev-browser server on mount ---
+  useEffect(() => {
+    if (!devBrowserStatus.running && !devBrowserStatus.error) {
+      startServer().catch((err) => {
+        console.error("Failed to auto-start dev-browser:", err);
+      });
+    }
+  }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
+
+  // Log when MCP server starts (to active tab's console)
+  useEffect(() => {
+    if (devBrowserStatus.running && devBrowserStatus.port && activeTabId) {
+      handleAddLog(activeTabId, "info", `MCP server running on port ${devBrowserStatus.port}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devBrowserStatus.running]);
 
   // Auto-scroll console to bottom
   useEffect(() => {
     if (showConsole && consoleEndRef.current) {
       consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [consoleLogs, showConsole]);
+  }, [activeTab?.consoleLogs, showConsole]);
 
-  // Auto-start dev-browser server on mount
-  useEffect(() => {
-    if (!devBrowserStatus.running && !devBrowserStatus.error) {
-      addLog("info", "Starting dev-browser MCP server...");
-      startServer().catch((err) => {
-        console.error("Failed to auto-start dev-browser:", err);
-        addLog("error", `Failed to start MCP server: ${err.message}`);
+  // --- Tab operations ---
+
+  const addTab = useCallback(() => {
+    const newTab = createBrowserTab(workspaceId);
+    setTabs((prev) => {
+      const next = [...prev, newTab];
+      // Persist inside updater to avoid stale closure over `tabs`
+      persistTabs(next, newTab.id);
+      return next;
+    });
+    setActiveTabId(newTab.id);
+  }, [workspaceId, persistTabs]);
+
+  const closeTab = useCallback(
+    (closingTabId: string) => {
+      // Close the native webview BEFORE removing from React state.
+      // BrowserTab's unmount cleanup also calls close, but it's async and
+      // races with re-render — the native WKWebView can remain visible
+      // during the gap because it renders above the DOM.
+      const closingTab = tabs.find((t) => t.id === closingTabId);
+      if (closingTab) {
+        invoke("hide_browser_webview", { label: closingTab.webviewLabel }).catch(() => {});
+        invoke("close_browser_webview", { label: closingTab.webviewLabel }).catch(() => {});
+      }
+
+      setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.id === closingTabId);
+        const newTabs = prev.filter((t) => t.id !== closingTabId);
+
+        let nextActiveId = activeTabId;
+        // Select neighbor when closing the active tab
+        if (closingTabId === activeTabId) {
+          if (newTabs.length > 0) {
+            const nextIdx = Math.min(idx, newTabs.length - 1);
+            nextActiveId = newTabs[nextIdx].id;
+            setActiveTabId(nextActiveId);
+          } else {
+            nextActiveId = "";
+            setActiveTabId("");
+          }
+        }
+
+        persistTabs(newTabs, nextActiveId);
+        return newTabs;
       });
-    }
-  }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);
+      tabRefs.current.delete(closingTabId);
+    },
+    [tabs, activeTabId, persistTabs]
+  );
 
-  // Log when MCP server starts
-  useEffect(() => {
-    if (devBrowserStatus.running && devBrowserStatus.port) {
-      addLog("info", `MCP server running on port ${devBrowserStatus.port}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devBrowserStatus.running]);
+  /**
+   * Stable callback for BrowserTab children to update their tab state.
+   * Auto-derives title from URL when a page finishes loading.
+   * Triggers debounced persistence on meaningful changes.
+   */
+  const handleUpdateTab = useCallback(
+    (tabId: string, updates: Partial<BrowserTabState>) => {
+      setTabs((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== tabId) return t;
+          const updated = { ...t, ...updates };
+          // Auto-derive title when page finishes loading successfully
+          if (updates.loading === false && !updates.error && updated.currentUrl) {
+            updated.title = deriveTitleFromUrl(updated.currentUrl);
+          }
+          return updated;
+        });
 
-  async function navigateToUrl(urlToNavigate?: string) {
-    const targetUrl = urlToNavigate || url;
+        // Persist on URL or title changes (page load finish, title change, navigation)
+        if (
+          updates.currentUrl !== undefined ||
+          updates.title !== undefined ||
+          (updates.loading === false && !updates.error)
+        ) {
+          persistTabs(next, activeTabId);
+        }
+
+        return next;
+      });
+    },
+    [activeTabId, persistTabs]
+  );
+
+  /** Stable callback for BrowserTab children to add console logs */
+  const handleAddLog = useCallback(
+    (tabId: string, level: ConsoleLog["level"], message: string) => {
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id !== tabId) return t;
+          const next = [...t.consoleLogs, { timestamp: new Date(), level, message }];
+          return {
+            ...t,
+            consoleLogs: next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next,
+          };
+        })
+      );
+    },
+    []
+  );
+
+  // --- Navigation (operates on active tab) ---
+
+  const handleNavigate = useCallback(() => {
+    if (!activeTab) return;
+    const targetUrl = activeTab.url;
     if (!targetUrl) return;
 
+    let fullUrl = targetUrl;
+    if (
+      !targetUrl.startsWith("http://") &&
+      !targetUrl.startsWith("https://") &&
+      !targetUrl.startsWith("file://")
+    ) {
+      fullUrl = "https://" + targetUrl;
+    }
+
+    const title = deriveTitleFromUrl(fullUrl);
+
+    // Truncate forward history and add new entry
+    const newHistory = activeTab.history.slice(0, activeTab.historyIndex + 1);
+    newHistory.push(fullUrl);
+
+    handleUpdateTab(activeTab.id, {
+      url: fullUrl,
+      currentUrl: fullUrl,
+      loading: true,
+      error: null,
+      injected: false,
+      title,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+
+    handleAddLog(activeTab.id, "info", `Navigating to: ${fullUrl}`);
+    tabRefs.current.get(activeTab.id)?.navigateToUrl(fullUrl);
+  }, [activeTab, handleUpdateTab, handleAddLog]);
+
+  const handleGoBack = useCallback(() => {
+    if (!activeTab || activeTab.historyIndex <= 0) return;
+    const newIndex = activeTab.historyIndex - 1;
+    const previousUrl = activeTab.history[newIndex];
+
+    handleUpdateTab(activeTab.id, {
+      url: previousUrl,
+      currentUrl: previousUrl,
+      historyIndex: newIndex,
+      loading: true,
+      error: null,
+      injected: false,
+      title: deriveTitleFromUrl(previousUrl),
+    });
+
+    tabRefs.current.get(activeTab.id)?.navigateToUrl(previousUrl);
+  }, [activeTab, handleUpdateTab]);
+
+  const handleGoForward = useCallback(() => {
+    if (!activeTab || activeTab.historyIndex >= activeTab.history.length - 1) return;
+    const newIndex = activeTab.historyIndex + 1;
+    const nextUrl = activeTab.history[newIndex];
+
+    handleUpdateTab(activeTab.id, {
+      url: nextUrl,
+      currentUrl: nextUrl,
+      historyIndex: newIndex,
+      loading: true,
+      error: null,
+      injected: false,
+      title: deriveTitleFromUrl(nextUrl),
+    });
+
+    tabRefs.current.get(activeTab.id)?.navigateToUrl(nextUrl);
+  }, [activeTab, handleUpdateTab]);
+
+  const handleReload = useCallback(() => {
+    if (!activeTab) return;
+    tabRefs.current.get(activeTab.id)?.reload();
+  }, [activeTab]);
+
+  const handleInject = useCallback(() => {
+    if (!activeTab) return;
+    tabRefs.current.get(activeTab.id)?.injectAutomation();
+  }, [activeTab]);
+
+  const handleToggleSelector = useCallback(() => {
+    if (!activeTab) return;
+    tabRefs.current.get(activeTab.id)?.toggleElementSelector();
+  }, [activeTab]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") handleNavigate();
+    },
+    [handleNavigate]
+  );
+
+  const handleUrlChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (activeTab) {
+        handleUpdateTab(activeTab.id, { url: e.target.value });
+      }
+    },
+    [activeTab, handleUpdateTab]
+  );
+
+  const handleClearConsole = useCallback(() => {
+    if (activeTab) {
+      handleUpdateTab(activeTab.id, { consoleLogs: [] });
+    }
+  }, [activeTab, handleUpdateTab]);
+
+  // Persist active tab ID changes — read tabs from ref to avoid stale closure
+  const handleTabSelect = useCallback(
+    (tabId: string) => {
+      setActiveTabId(tabId);
+      persistTabs(tabsRef.current, tabId);
+    },
+    [persistTabs]
+  );
+
+  // --- Cookie Sync ---
+
+  const [cookieBrowsers, setCookieBrowsers] = useState<InstalledBrowser[]>([]);
+  const [cookieSyncing, setCookieSyncing] = useState<string | null>(null); // browser name being synced
+  const [lastSyncResult, setLastSyncResult] = useState<{ browser: string; count: number } | null>(null);
+
+  /** Fetch available browsers when dropdown opens */
+  const handleCookieDropdownOpen = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      setInjected(false);
-
-      // Ensure URL has protocol
-      let fullUrl = targetUrl;
-      if (
-        !targetUrl.startsWith("http://") &&
-        !targetUrl.startsWith("https://") &&
-        !targetUrl.startsWith("file://")
-      ) {
-        fullUrl = "https://" + targetUrl;
-      }
-
-      addLog("info", `Navigating to: ${fullUrl}`);
-
-      // Update iframe src
-      if (iframeRef.current) {
-        iframeRef.current.src = fullUrl;
-      }
-
-      setCurrentUrl(fullUrl);
-      setUrl(fullUrl);
-
-      // Add to history (only if not navigating via back/forward)
-      if (!urlToNavigate) {
-        setHistory((prev) => {
-          const newHistory = prev.slice(0, historyIndex + 1);
-          newHistory.push(fullUrl);
-          return newHistory;
-        });
-        setHistoryIndex((prev) => prev + 1);
-      }
+      const browsers = await invoke<InstalledBrowser[]>("get_cookie_browsers");
+      setCookieBrowsers(browsers);
     } catch (err) {
-      console.error("Failed to navigate:", err);
-      const errorMsg = err instanceof Error ? err.message : "Navigation failed";
-      setError(errorMsg);
-      addLog("error", `Navigation failed: ${errorMsg}`);
+      console.error("Failed to get cookie browsers:", err);
     }
-  }
+  }, []);
 
-  function goBack() {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const previousUrl = history[newIndex];
-      setHistoryIndex(newIndex);
-      setUrl(previousUrl);
-      setCurrentUrl(previousUrl);
-      setInjected(false);
+  /** Sync cookies from a browser for the active tab's domain, inject natively, and reload */
+  const handleCookieSync = useCallback(
+    async (browserName: string) => {
+      if (!activeTab?.currentUrl) return;
 
-      if (iframeRef.current) {
-        iframeRef.current.src = previousUrl;
-      }
-    }
-  }
-
-  function goForward() {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const nextUrl = history[newIndex];
-      setHistoryIndex(newIndex);
-      setUrl(nextUrl);
-      setCurrentUrl(nextUrl);
-      setInjected(false);
-
-      if (iframeRef.current) {
-        iframeRef.current.src = nextUrl;
-      }
-    }
-  }
-
-  async function injectAutomation() {
-    if (!devBrowserStatus.running || !devBrowserStatus.port || !iframeRef.current) {
-      const errorMsg = "Dev-browser server not running";
-      setError(errorMsg);
-      addLog("error", errorMsg);
-      return;
-    }
-
-    const iframe = iframeRef.current;
-
-    // Check if we can access iframe content (same-origin check)
-    try {
-      // Try to access contentDocument - will throw if cross-origin
-      const canAccess = iframe.contentDocument !== null;
-      if (!canAccess) {
-        throw new Error("Cross-origin iframe - cannot access content");
-      }
-    } catch (crossOriginError) {
-      // Cross-origin page detected - browsing works but automation doesn't
-      setIsCrossOrigin(true);
-      setInjected(false);
-      addLog("info", "🌐 Browsing external website (automation unavailable)");
-      addLog("info", "ℹ️  Automation only works with: file://, localhost, or same-origin pages");
-      return;
-    }
-
-    // Same-origin page - automation available
-    setIsCrossOrigin(false);
-
-    try {
-      addLog(
-        "info",
-        `Fetching injection script from MCP server (port ${devBrowserStatus.port})...`
-      );
-
-      // Get parent origin for postMessage security
-      const parentOrigin = window.location.origin; // e.g., http://localhost:1420
-
-      // Get injection script from dev-browser
-      const injectionUrl = `http://localhost:${devBrowserStatus.port}/inject-script?tabId=${encodeURIComponent(tabId)}&parentOrigin=${encodeURIComponent(parentOrigin)}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), SCRIPT_FETCH_TIMEOUT_MS);
-      const response = await fetch(injectionUrl, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch script: ${response.status}`);
-      }
-
-      const scriptContent = await response.text();
-
-      addLog("debug", `Script fetched (${scriptContent.length} chars), injecting into iframe...`);
-
-      // Inject into iframe
-      if (iframe.contentDocument && iframe.contentDocument.body) {
-        // Create script element in iframe
-        const script = iframe.contentDocument.createElement("script");
-        script.textContent = scriptContent;
-        iframe.contentDocument.body.appendChild(script);
-        setInjected(true);
-        addLog("info", "✓ Automation script injected successfully");
-
-        // Check if automation registered after a delay
-        setTimeout(() => {
-          try {
-            // Avoid eval; directly probe the flag placed by the injected script
-            const automationReady = Boolean((iframe.contentWindow as any)?.__browserAutomation);
-            if (automationReady) {
-              addLog("info", "✓ Browser automation registered and ready");
-            } else {
-              addLog("warn", "Automation script injected but not yet registered");
-            }
-          } catch (e) {
-            addLog("warn", "Cannot verify automation status");
-          }
-        }, 1000);
-      } else {
-        throw new Error("Iframe document or body not available");
-      }
-    } catch (err) {
-      console.error("Failed to inject automation:", err);
-      const errorMsg = err instanceof Error ? err.message : "Injection failed";
-      addLog("error", `Injection failed: ${errorMsg}`);
-    }
-  }
-
-  function reload() {
-    if (iframeRef.current && currentUrl) {
-      setLoading(true);
-      setError(null);
-      setInjected(false);
-      iframeRef.current.src = currentUrl;
-    }
-  }
-
-  function openInExternalBrowser() {
-    if (currentUrl) {
-      window.open(currentUrl, "_blank", "noopener,noreferrer");
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      navigateToUrl();
-    }
-  }
-
-  function handleIframeLoad() {
-    setLoading(false);
-    setError(null);
-    addLog("info", `Page loaded: ${currentUrl}`);
-
-    // Auto-inject automation script after page loads
-    if (devBrowserStatus.running && currentUrl && !injected) {
-      addLog("info", "Waiting 500ms before injecting automation...");
-      // Delay injection to allow page to fully initialize
-      setTimeout(() => {
-        injectAutomation();
-      }, 500);
-    }
-  }
-
-  function handleIframeError() {
-    setLoading(false);
-    const errorMsg = "Failed to load page. The site may block embedding or have CORS restrictions.";
-    setError(errorMsg);
-    addLog("error", errorMsg);
-  }
-
-  // ==================== ELEMENT SELECTOR FUNCTIONS ====================
-
-  /**
-   * Toggle element selector mode on/off
-   * Sends postMessage to iframe to activate/deactivate visual selection
-   */
-  function toggleElementSelector() {
-    if (!iframeRef.current || !injected || !currentUrl) return;
-
-    // Get target origin for secure postMessage
-    let targetOrigin: string;
-    try {
-      targetOrigin = new URL(currentUrl).origin;
-    } catch {
-      addLog("warn", "Invalid URL origin; cannot toggle element selector securely");
-      return;
-    }
-
-    if (selectorActive) {
-      // Disable selector mode
-      addLog("info", "🎯 Deactivating element selector");
-      iframeRef.current.contentWindow?.postMessage(
-        {
-          type: "disable-element-selection",
-        },
-        targetOrigin
-      );
-      setSelectorActive(false);
-    } else {
-      // Enable selector mode
-      addLog("info", "🎯 Activating element selector - Click any element to inspect");
-      iframeRef.current.contentWindow?.postMessage(
-        {
-          type: "enable-element-selection",
-        },
-        targetOrigin
-      );
-      setSelectorActive(true);
-    }
-  }
-
-  /**
-   * Handle element selected from iframe
-   * Formats element data and dispatches to chat
-   */
-  function handleElementSelected(elementData: any) {
-    const tn = elementData?.element?.tagName?.toLowerCase?.() ?? "element";
-    const eid = elementData?.element?.id ? `#${elementData.element.id}` : "";
-    addLog("info", `✓ Element selected: ${tn}${eid}`);
-
-    const formatted = formatElementForChat(elementData);
-
-    // Dispatch custom event for Dashboard to pick up
-    window.dispatchEvent(
-      new CustomEvent("insert-to-chat", {
-        detail: { text: formatted },
-      })
-    );
-
-    setSelectorActive(false);
-    // Best-effort: ensure selector is turned off in iframe as well
-    try {
-      const frame = iframeRef.current?.contentWindow;
-      if (frame && currentUrl) {
-        const to = new URL(currentUrl).origin;
-        frame.postMessage({ type: "disable-element-selection" }, to);
-      }
-    } catch {
-      // Best-effort - ignore errors (e.g., cross-origin restrictions)
-    }
-    addLog("info", "📝 Element data sent to chat");
-  }
-
-  /**
-   * Format element data as markdown for chat insertion
-   * Defensive guards protect against malformed postMessage data
-   */
-  function formatElementForChat(elementData: any): string {
-    // Defensive guards for untrusted postMessage data
-    const el = elementData?.element || {};
-    const tagName = (el.tagName || "element").toLowerCase?.() || "element";
-    const idText = el.id ? `#${el.id}` : "";
-    const classText =
-      typeof el.className === "string" && el.className
-        ? "." + el.className.split(" ").filter(Boolean).join(".")
-        : "";
-    const elementSelector = tagName + idText + classText;
-
-    // Build React component section if available
-    const rc = elementData?.reactComponent;
-    let reactSection = "";
-    if (rc && (rc.name || rc.fileName)) {
-      const lines = ["### ⚛️ React Component"];
-      if (rc.name) lines.push(`- **Component:** \`${rc.name}\``);
-      if (rc.fileName) {
-        const fileInfo = rc.lineNumber != null ? `${rc.fileName}:${rc.lineNumber}` : rc.fileName;
-        lines.push(`- **File:** \`${fileInfo}\``);
-      }
-      reactSection = "\n" + lines.join("\n") + "\n";
-    }
-
-    // Safe rect access
-    const rect = el.rect || { left: 0, top: 0, width: 0, height: 0 };
-    const position = `(${Math.round(rect.left)}, ${Math.round(rect.top)})`;
-    const size = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
-
-    // Safe text access
-    const textContent =
-      typeof el.innerText === "string" && el.innerText
-        ? `**Text:** "${el.innerText.substring(0, 100)}${el.innerText.length > 100 ? "..." : ""}"`
-        : "";
-
-    // Safe attributes
-    const attributes =
-      Array.isArray(el.attributes) && el.attributes.length > 0
-        ? el.attributes
-            .map((a: any) => `- **${a?.name ?? "unknown"}**: \`"${a?.value ?? ""}"\``)
-            .join("\n")
-        : "_(No attributes)_";
-
-    // Safe computed styles
-    const styles = el.computedStyle || {};
-
-    return `
-## 🎯 Selected Element
-
-**Element:** \`${elementSelector}\`
-**Path:** ${el.path ?? "_(unknown)_"}
-**Position:** ${position}
-**Size:** ${size}
-${textContent}
-${reactSection}
-### Attributes
-${attributes}
-
-### Computed Styles
-- **color**: ${styles.color ?? "_"}
-- **backgroundColor**: ${styles.backgroundColor ?? "_"}
-- **fontSize**: ${styles.fontSize ?? "_"}
-- **fontWeight**: ${styles.fontWeight ?? "_"}
-- **display**: ${styles.display ?? "_"}
-- **position**: ${styles.position ?? "_"}
-
----
-_You can ask me to modify this element, debug it, or help with related styling._
-`.trim();
-  }
-
-  // Listen for postMessage from iframe (element selection results)
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      // Security: Validate message source, origin, and state
-      const frame = iframeRef.current?.contentWindow;
-      if (event.source !== frame) return;
-
-      // Validate origin matches iframe URL
+      let domain: string;
       try {
-        const expectedOrigin = currentUrl ? new URL(currentUrl).origin : null;
-        if (!expectedOrigin || event.origin !== expectedOrigin) return;
+        domain = new URL(activeTab.currentUrl).hostname;
       } catch {
-        return; // Invalid URL
+        handleAddLog(activeTab.id, "error", "Invalid URL — can't extract domain for cookie sync");
+        return;
       }
 
-      // Only accept messages when selector is active and automation is injected
-      if (!selectorActive || !injected) return;
+      setCookieSyncing(browserName);
+      handleAddLog(activeTab.id, "info", `Syncing cookies from ${browserName} for ${domain}...`);
 
-      // Validate message data structure
-      if (!event.data || typeof event.data !== "object") return;
+      try {
+        const cookies = await invoke<DecryptedCookie[]>("sync_browser_cookies", {
+          browserName,
+          domain,
+        });
 
-      if (event.data.type === "element-selected") {
-        handleElementSelected(event.data);
-      } else if (event.data.type === "exit-selection-mode") {
-        setSelectorActive(false);
-        addLog("info", "Element selector deactivated (Escape pressed)");
+        if (cookies.length === 0) {
+          handleAddLog(activeTab.id, "warn", `No cookies found in ${browserName} for ${domain}`);
+          setCookieSyncing(null);
+          return;
+        }
+
+        // Inject ALL cookies (including HttpOnly) via native WKHTTPCookieStore
+        const injected = await invoke<number>("inject_browser_cookies", {
+          label: activeTab.webviewLabel,
+          cookies,
+        });
+
+        handleAddLog(
+          activeTab.id,
+          "info",
+          `Injected ${injected}/${cookies.length} cookies from ${browserName}`
+        );
+
+        setLastSyncResult({ browser: browserName, count: injected });
+
+        // Reload the page so the browser sends cookies with new requests
+        if (injected > 0) {
+          tabRefs.current.get(activeTab.id)?.reload();
+          handleAddLog(activeTab.id, "info", "Reloading page with injected cookies...");
+        }
+      } catch (err) {
+        handleAddLog(activeTab.id, "error", `Cookie sync failed: ${err}`);
+      } finally {
+        setCookieSyncing(null);
       }
-    };
+    },
+    [activeTab, handleAddLog]
+  );
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [injected, iframeRef, selectorActive, currentUrl]);
+  /** Clear cookies by navigating to about:blank and back (resets WKHTTPCookieStore) */
+  const handleClearCookies = useCallback(() => {
+    if (!activeTab?.currentUrl) return;
+    const restoreUrl = activeTab.currentUrl;
+    const handle = tabRefs.current.get(activeTab.id);
+    if (!handle) return;
 
-  // ==================== END ELEMENT SELECTOR FUNCTIONS ====================
+    handleAddLog(activeTab.id, "info", "Clearing site data...");
+    setLastSyncResult(null);
+
+    // Navigate to blank page (clears cookie association), then back
+    handle.navigateToUrl("about:blank");
+    setTimeout(() => {
+      handle.navigateToUrl(restoreUrl);
+      handleAddLog(activeTab.id, "info", "Reloaded without cookies");
+    }, 200);
+  }, [activeTab, handleAddLog]);
+
+  // Ref setter callback — stores/removes imperative handle per tab
+  const setTabRef = useCallback(
+    (tabId: string) => (handle: BrowserTabHandle | null) => {
+      if (handle) {
+        tabRefs.current.set(tabId, handle);
+      } else {
+        tabRefs.current.delete(tabId);
+      }
+    },
+    []
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Browser Controls - h-9 (36px) to align with chat tabs row */}
+      {/* Tab Bar */}
+      <BrowserTabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabSelect={handleTabSelect}
+        onTabClose={closeTab}
+        onTabAdd={addTab}
+      />
+
+      {/* Navigation Bar — h-9 to align with chat tabs row */}
       <div className="border-border flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={goBack}
-          disabled={loading || historyIndex <= 0}
+          onClick={handleGoBack}
+          disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
           title="Go back"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -507,8 +687,10 @@ _You can ask me to modify this element, debug it, or help with related styling._
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={goForward}
-          disabled={loading || historyIndex >= history.length - 1}
+          onClick={handleGoForward}
+          disabled={
+            !activeTab || activeTab.loading || activeTab.historyIndex >= activeTab.history.length - 1
+          }
           title="Go forward"
         >
           <ChevronRight className="h-4 w-4" />
@@ -518,57 +700,147 @@ _You can ask me to modify this element, debug it, or help with related styling._
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={reload}
-          disabled={loading || !currentUrl}
+          onClick={handleReload}
+          disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
           title="Reload"
         >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-4 w-4 ${activeTab?.loading ? "animate-spin" : ""}`} />
         </Button>
 
-        <div className="relative flex-1">
-          <Input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter URL and press Enter..."
-            className="focus-visible:border-border h-7 pr-8 text-sm focus-visible:ring-0"
-            disabled={loading}
+        <Input
+          type="text"
+          value={activeTab?.url ?? ""}
+          onChange={handleUrlChange}
+          onKeyDown={handleKeyDown}
+          onFocus={(e) => e.target.select()}
+          placeholder="Search or enter URL..."
+          autoComplete="off"
+          spellCheck={false}
+          data-1p-ignore
+          className="focus-visible:border-border h-7 min-w-0 flex-1 text-sm focus-visible:ring-0"
+          disabled={!activeTab || activeTab.loading}
+        />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleInject}
+          disabled={!activeTab?.currentUrl || !devBrowserStatus.running || activeTab?.injected}
+          title={activeTab?.injected ? "Automation active" : "Inject automation"}
+        >
+          <Zap className={`h-4 w-4 ${activeTab?.injected ? "text-success" : ""}`} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleToggleSelector}
+          disabled={!activeTab?.currentUrl || !activeTab?.injected}
+          aria-pressed={activeTab?.selectorActive}
+          title={
+            activeTab?.selectorActive
+              ? "Exit element selector (Esc)"
+              : "Select element to inspect"
+          }
+        >
+          <Target
+            className={`h-4 w-4 ${activeTab?.selectorActive ? "text-primary animate-pulse" : ""}`}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-0.5 right-0.5 h-6 w-6"
-            onClick={openInExternalBrowser}
-            disabled={!currentUrl}
-            title="Open in external browser"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={injectAutomation}
-          disabled={!currentUrl || !devBrowserStatus.running || injected}
-          title={injected ? "Automation active" : "Inject automation"}
-        >
-          <Zap className={`h-4 w-4 ${injected ? "text-success" : ""}`} />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={toggleElementSelector}
-          disabled={!currentUrl || !injected || isCrossOrigin}
-          aria-pressed={selectorActive}
-          title={selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"}
-        >
-          <Target className={`h-4 w-4 ${selectorActive ? "text-primary animate-pulse" : ""}`} />
-        </Button>
+        <DropdownMenu onOpenChange={(open) => {
+          if (open) {
+            handleCookieDropdownOpen();
+            // Hide native webview so the dropdown isn't rendered behind it
+            // (WKWebView floats above all DOM layers including portals)
+            if (activeTab?.webviewLabel) {
+              invoke("hide_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+            }
+          } else {
+            // Re-show webview when dropdown closes
+            if (activeTab?.webviewLabel && activeTab.currentUrl) {
+              invoke("show_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+            }
+          }
+        }}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={!activeTab?.currentUrl || !!cookieSyncing}
+              title="Import cookies from browser"
+            >
+              {cookieSyncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Cookie className="h-4 w-4" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {/* Show target domain */}
+            {activeTab?.currentUrl && (() => {
+              try {
+                return (
+                  <DropdownMenuLabel className="text-muted-foreground truncate text-[10px] font-normal">
+                    {new URL(activeTab.currentUrl).hostname}
+                  </DropdownMenuLabel>
+                );
+              } catch {
+                return null;
+              }
+            })()}
+
+            <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {cookieBrowsers.length === 0 ? (
+              <DropdownMenuItem disabled className="text-xs">
+                No browsers detected
+              </DropdownMenuItem>
+            ) : (
+              cookieBrowsers.map((b) => (
+                <DropdownMenuItem
+                  key={b.name}
+                  disabled={!b.available || !!cookieSyncing}
+                  className="text-xs"
+                  onClick={() => handleCookieSync(b.name)}
+                >
+                  <span className="flex-1">{b.name}</span>
+                  {!b.available && (
+                    <span className="text-muted-foreground text-[10px]">Not installed</span>
+                  )}
+                  {b.available && cookieSyncing === b.name && (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  )}
+                  {b.available && !cookieSyncing && lastSyncResult?.browser === b.name && (
+                    <span className="text-success text-[10px]">{lastSyncResult.count} synced</span>
+                  )}
+                  {b.available && !cookieSyncing && lastSyncResult?.browser !== b.name && (
+                    <Check className="text-muted-foreground/40 h-3 w-3" />
+                  )}
+                </DropdownMenuItem>
+              ))
+            )}
+
+            {/* Clear cookies option */}
+            {activeTab?.currentUrl && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive text-xs"
+                  onClick={handleClearCookies}
+                  disabled={!!cookieSyncing}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Clear Site Data</span>
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           variant="ghost"
@@ -579,108 +851,47 @@ _You can ask me to modify this element, debug it, or help with related styling._
         >
           <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
         </Button>
-
-        {/* Close button removed - now in panel header for consistency across all tabs */}
       </div>
 
-      {/* Browser View - Sandboxed iframe like Cursor */}
+      {/* Tab content area — all tabs rendered, only active visible */}
       <div className={`relative overflow-hidden ${showConsole ? "flex-1" : "min-h-0 flex-1"}`}>
-        {currentUrl ? (
-          <>
-            {/* Sandboxed iframe with Cursor-like permissions */}
-            <iframe
-              ref={iframeRef}
-              src={currentUrl}
-              sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-pointer-lock allow-popups allow-modals"
-              className="h-full w-full border-0"
-              onLoad={handleIframeLoad}
-              onError={handleIframeError}
-              title="Browser"
-            />
-
-            {/* Cross-Origin Info Banner */}
-            {isCrossOrigin && !loading && (
-              <div className="bg-warning/10 border-warning/20 absolute top-0 right-0 left-0 border-b backdrop-blur-sm">
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <Info className="text-warning h-3.5 w-3.5 flex-shrink-0" />
-                  <p className="text-warning-foreground flex-1 text-xs">
-                    <span className="font-medium">Browsing only</span> — AI automation unavailable
-                    on external websites
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="hover:bg-warning/20 h-5 w-5"
-                    onClick={() => setIsCrossOrigin(false)}
-                    title="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Error overlay */}
-            {error && (
-              <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-                <div className="max-w-md p-8 text-center">
-                  <AlertCircle className="text-destructive mx-auto mb-4 h-12 w-12" />
-                  <h3 className="mb-2 text-lg font-semibold">Unable to Load Page</h3>
-                  <p className="text-muted-foreground mb-4 text-sm">{error}</p>
-                  <div className="flex justify-center gap-2">
-                    <Button size="sm" onClick={reload} variant="outline">
-                      Try Again
-                    </Button>
-                    <Button size="sm" onClick={openInExternalBrowser}>
-                      Open Externally
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <Empty className="h-full border-0">
-            <EmptyHeader>
-              <EmptyMedia>
-                <Globe
-                  className="text-muted-foreground/40 h-16 w-16"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </EmptyMedia>
-              <EmptyTitle>Browser</EmptyTitle>
-              <EmptyDescription>
-                Enter a URL above, or instruct the Agent to navigate and use the browser
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-
-        {/* Loading overlay */}
-        {loading && (
-          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-            <Loader2 className="text-primary h-8 w-8 animate-spin" />
+        {tabs.length === 0 ? (
+          <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
+            Click + to open a browser tab
           </div>
+        ) : (
+          tabs.map((tab) => (
+            <BrowserTab
+              key={tab.id}
+              ref={setTabRef(tab.id)}
+              tab={tab}
+              devBrowserStatus={devBrowserStatus}
+              onUpdateTab={handleUpdateTab}
+              onAddLog={handleAddLog}
+              visible={tab.id === activeTabId && panelVisible}
+            />
+          ))
         )}
       </div>
 
-      {/* Console Panel */}
-      {showConsole && (
+      {/* Console Panel — shows active tab's logs */}
+      {showConsole && activeTab && (
         <div className="border-border bg-muted/10 flex h-[12.5rem] flex-shrink-0 flex-col border-t">
           {/* Console Header */}
           <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
             <div className="flex items-center gap-2">
               <Terminal className="text-muted-foreground h-3.5 w-3.5" />
               <span className="text-muted-foreground text-xs font-medium">Console</span>
-              <span className="text-muted-foreground/60 text-xs">({consoleLogs.length})</span>
+              <span className="text-muted-foreground/60 text-xs">
+                ({activeTab.consoleLogs.length})
+              </span>
             </div>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
-                onClick={() => setConsoleLogs([])}
+                onClick={handleClearConsole}
                 title="Clear console"
               >
                 <X className="h-3 w-3" />
@@ -699,11 +910,11 @@ _You can ask me to modify this element, debug it, or help with related styling._
 
           {/* Console Content */}
           <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
-            {consoleLogs.length === 0 ? (
+            {activeTab.consoleLogs.length === 0 ? (
               <div className="text-muted-foreground/50 italic">Console is empty</div>
             ) : (
               <div className="space-y-0.5">
-                {consoleLogs.map((log, i) => (
+                {activeTab.consoleLogs.map((log, i) => (
                   <div
                     key={i}
                     className={`flex gap-2 ${

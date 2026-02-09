@@ -7,6 +7,8 @@ interface ResizeHandleProps {
   isDragging: boolean;
   /** Accessible label for the separator */
   label: string;
+  /** Additional classes (e.g. opacity transitions) — merged with root element */
+  className?: string;
 }
 
 /**
@@ -15,11 +17,14 @@ interface ResizeHandleProps {
  *
  * Usage: pair with useResizeHandle() and spread its handleProps.
  */
-export function ResizeHandle({ handleProps, isDragging, label }: ResizeHandleProps) {
+export function ResizeHandle({ handleProps, isDragging, label, className }: ResizeHandleProps) {
   return (
     <div
       {...handleProps}
-      className="group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center"
+      className={cn(
+        "group relative z-10 flex w-0 flex-shrink-0 cursor-col-resize items-center justify-center",
+        className
+      )}
       aria-label={label}
       role="separator"
       aria-orientation="vertical"
