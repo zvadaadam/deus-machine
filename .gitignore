@@ -73,3 +73,6 @@ temp/
 
 *storybook.log
 storybook-static
+
+# Build artifact (esbuild/sidecar output accidentally placed in project root)
+main.js

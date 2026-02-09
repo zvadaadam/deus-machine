@@ -3,5 +3,5 @@
  * Public exports for Tauri-specific platform features
  */
 
-export { invoke, isTauriAvailable, isTauriEnv } from "./invoke";
+export { invoke, listen, isTauriAvailable, isTauriEnv } from "./invoke";
 export * from "./commands";

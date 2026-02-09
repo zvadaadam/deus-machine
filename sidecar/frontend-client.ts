@@ -27,6 +27,36 @@ import type {
   MessageResponse,
   ErrorResponse,
   EnterPlanModeNotification,
+  BrowserSnapshotRequest,
+  BrowserSnapshotResponse,
+  BrowserClickRequest,
+  BrowserClickResponse,
+  BrowserTypeRequest,
+  BrowserTypeResponse,
+  BrowserNavigateRequest,
+  BrowserNavigateResponse,
+  BrowserGetStateRequest,
+  BrowserGetStateResponse,
+  BrowserWaitForRequest,
+  BrowserWaitForResponse,
+  BrowserEvaluateRequest,
+  BrowserEvaluateResponse,
+  BrowserPressKeyRequest,
+  BrowserPressKeyResponse,
+  BrowserHoverRequest,
+  BrowserHoverResponse,
+  BrowserSelectOptionRequest,
+  BrowserSelectOptionResponse,
+  BrowserNavigateBackRequest,
+  BrowserNavigateBackResponse,
+  BrowserConsoleMessagesRequest,
+  BrowserConsoleMessagesResponse,
+  BrowserNetworkRequestsRequest,
+  BrowserNetworkRequestsResponse,
+  BrowserScreenshotRequest,
+  BrowserScreenshotResponse,
+  BrowserScrollRequest,
+  BrowserScrollResponse,
 } from "./protocol";
 
 // ============================================================================
@@ -99,6 +129,33 @@ const USER_FACING_TIMEOUT_MS = 120_000;
 
 /** Timeout for data-fetching requests that should resolve quickly */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
+
+/** Timeout for browser snapshot — the accessibility tree builder on heavy
+ *  pages can take up to 15s (evalWithResult timeout), plus IPC overhead. */
+const BROWSER_SNAPSHOT_TIMEOUT_MS = 20_000;
+
+/** Timeout for browser navigate — allows extra time for auto-creating a tab,
+ *  waiting for the webview to initialize, loading the page, and taking a snapshot. */
+const BROWSER_NAVIGATE_TIMEOUT_MS = 30_000;
+
+/** Timeout for browser navigate-back — page load (15s) + snapshot (12s) + buffer. */
+const BROWSER_NAVIGATE_BACK_TIMEOUT_MS = 30_000;
+
+/** Timeout for BrowserWaitFor — polls for up to 30s inside the webview,
+ *  plus 5s buffer for eval overhead and title-channel round-trip. */
+const BROWSER_WAIT_FOR_TIMEOUT_MS = 35_000;
+
+/** Timeout for BrowserEvaluate — user code can run expensive operations,
+ *  frontend allows 15s for eval, plus IPC overhead. */
+const BROWSER_EVALUATE_TIMEOUT_MS = 20_000;
+
+/** Timeout for BrowserScreenshot — native WKWebView.takeSnapshot() has a
+ *  10s internal timeout, plus 5s buffer for IPC and base64 encoding. */
+const BROWSER_SCREENSHOT_TIMEOUT_MS = 15_000;
+
+/** Timeout for browser interactions (click, type, hover, etc.) that include
+ *  visual effects + eval. Visual cursor animation up to 3s + eval up to 8s. */
+const BROWSER_INTERACTION_TIMEOUT_MS = 15_000;
 
 // ============================================================================
 // FrontendClient class
@@ -212,6 +269,175 @@ class FrontendClientClass {
       ) as Promise<GetTerminalOutputResponse>,
       DATA_QUERY_TIMEOUT_MS,
       "requestGetTerminalOutput"
+    );
+  }
+
+  // ==========================================================================
+  // BROWSER AUTOMATION REQUESTS (sidecar -> frontend, with timeout)
+  // ==========================================================================
+
+  async requestBrowserSnapshot(request: BrowserSnapshotRequest): Promise<BrowserSnapshotResponse> {
+    return this.withTimeout<BrowserSnapshotResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT,
+        request
+      ) as Promise<BrowserSnapshotResponse>,
+      BROWSER_SNAPSHOT_TIMEOUT_MS,
+      "requestBrowserSnapshot"
+    );
+  }
+
+  async requestBrowserClick(request: BrowserClickRequest): Promise<BrowserClickResponse> {
+    return this.withTimeout<BrowserClickResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_CLICK,
+        request
+      ) as Promise<BrowserClickResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserClick"
+    );
+  }
+
+  async requestBrowserType(request: BrowserTypeRequest): Promise<BrowserTypeResponse> {
+    return this.withTimeout<BrowserTypeResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_TYPE,
+        request
+      ) as Promise<BrowserTypeResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserType"
+    );
+  }
+
+  async requestBrowserNavigate(request: BrowserNavigateRequest): Promise<BrowserNavigateResponse> {
+    return this.withTimeout<BrowserNavigateResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_NAVIGATE,
+        request
+      ) as Promise<BrowserNavigateResponse>,
+      BROWSER_NAVIGATE_TIMEOUT_MS,
+      "requestBrowserNavigate"
+    );
+  }
+
+  async requestBrowserGetState(request: BrowserGetStateRequest): Promise<BrowserGetStateResponse> {
+    return this.withTimeout<BrowserGetStateResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_GET_STATE,
+        request
+      ) as Promise<BrowserGetStateResponse>,
+      DATA_QUERY_TIMEOUT_MS,
+      "requestBrowserGetState"
+    );
+  }
+
+  async requestBrowserWaitFor(request: BrowserWaitForRequest): Promise<BrowserWaitForResponse> {
+    return this.withTimeout<BrowserWaitForResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR,
+        request
+      ) as Promise<BrowserWaitForResponse>,
+      BROWSER_WAIT_FOR_TIMEOUT_MS,
+      "requestBrowserWaitFor"
+    );
+  }
+
+  async requestBrowserEvaluate(request: BrowserEvaluateRequest): Promise<BrowserEvaluateResponse> {
+    return this.withTimeout<BrowserEvaluateResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_EVALUATE,
+        request
+      ) as Promise<BrowserEvaluateResponse>,
+      BROWSER_EVALUATE_TIMEOUT_MS,
+      "requestBrowserEvaluate"
+    );
+  }
+
+  async requestBrowserPressKey(request: BrowserPressKeyRequest): Promise<BrowserPressKeyResponse> {
+    return this.withTimeout<BrowserPressKeyResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY,
+        request
+      ) as Promise<BrowserPressKeyResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserPressKey"
+    );
+  }
+
+  async requestBrowserHover(request: BrowserHoverRequest): Promise<BrowserHoverResponse> {
+    return this.withTimeout<BrowserHoverResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_HOVER,
+        request
+      ) as Promise<BrowserHoverResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserHover"
+    );
+  }
+
+  async requestBrowserSelectOption(request: BrowserSelectOptionRequest): Promise<BrowserSelectOptionResponse> {
+    return this.withTimeout<BrowserSelectOptionResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION,
+        request
+      ) as Promise<BrowserSelectOptionResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserSelectOption"
+    );
+  }
+
+  async requestBrowserNavigateBack(request: BrowserNavigateBackRequest): Promise<BrowserNavigateBackResponse> {
+    return this.withTimeout<BrowserNavigateBackResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK,
+        request
+      ) as Promise<BrowserNavigateBackResponse>,
+      BROWSER_NAVIGATE_BACK_TIMEOUT_MS,
+      "requestBrowserNavigateBack"
+    );
+  }
+
+  async requestBrowserConsoleMessages(request: BrowserConsoleMessagesRequest): Promise<BrowserConsoleMessagesResponse> {
+    return this.withTimeout<BrowserConsoleMessagesResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES,
+        request
+      ) as Promise<BrowserConsoleMessagesResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserConsoleMessages"
+    );
+  }
+
+  async requestBrowserNetworkRequests(request: BrowserNetworkRequestsRequest): Promise<BrowserNetworkRequestsResponse> {
+    return this.withTimeout<BrowserNetworkRequestsResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS,
+        request
+      ) as Promise<BrowserNetworkRequestsResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserNetworkRequests"
+    );
+  }
+
+  async requestBrowserScreenshot(request: BrowserScreenshotRequest): Promise<BrowserScreenshotResponse> {
+    return this.withTimeout<BrowserScreenshotResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT,
+        request
+      ) as Promise<BrowserScreenshotResponse>,
+      BROWSER_SCREENSHOT_TIMEOUT_MS,
+      "requestBrowserScreenshot"
+    );
+  }
+
+  async requestBrowserScroll(request: BrowserScrollRequest): Promise<BrowserScrollResponse> {
+    return this.withTimeout<BrowserScrollResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.BROWSER_SCROLL,
+        request
+      ) as Promise<BrowserScrollResponse>,
+      BROWSER_INTERACTION_TIMEOUT_MS,
+      "requestBrowserScroll"
     );
   }
 

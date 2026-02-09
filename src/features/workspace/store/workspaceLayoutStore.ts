@@ -23,6 +23,7 @@
 
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
+import type { PersistedBrowserTab } from "@/features/browser/types";
 
 export type RightPanelTab = "changes" | "files";
 export type RightSideTab = "code" | "config" | "terminal" | "design" | "browser";
@@ -40,6 +41,8 @@ interface WorkspaceLayoutState {
   sidebarCollapsed: boolean;
   rightPanelWidth: number | null; // User-set width for code panel, null = auto (50/50 flex split)
   rightPanelWidthBrowser: number | null; // User-set width for browser panel
+  browserTabs: PersistedBrowserTab[]; // Persisted browser tab URLs/titles
+  activeBrowserTabId: string | null; // Which browser tab was last active
 }
 
 interface WorkspaceLayoutStore {
@@ -104,6 +107,8 @@ export const defaultLayout: WorkspaceLayoutState = {
   sidebarCollapsed: false,
   rightPanelWidth: null,
   rightPanelWidthBrowser: null,
+  browserTabs: [],
+  activeBrowserTabId: null,
 };
 
 type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
@@ -125,7 +130,9 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
         // Getters
         getLayout: (workspaceId) => {
           const { layouts } = get();
-          return layouts[workspaceId] || defaultLayout;
+          // Merge with defaults so newly-added fields (e.g. browserTabs)
+          // are always present even for layouts persisted before they existed.
+          return { ...defaultLayout, ...(layouts[workspaceId] ?? {}) };
         },
 
         // Setters - Full state
@@ -236,7 +243,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 3,
+        version: 4,
         migrate: (persistedState: unknown, version: number) => {
           const state: PersistedStateV1 =
             typeof persistedState === "object" && persistedState !== null
@@ -263,6 +270,14 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
                   "rightPanelWidthBrowser" in layout
                     ? (layout.rightPanelWidthBrowser ?? null)
                     : null;
+              }
+
+              // v4: Add browser tab persistence fields
+              if (version < 4) {
+                (nextLayout as Record<string, unknown>).browserTabs =
+                  (layout as Record<string, unknown>).browserTabs ?? [];
+                (nextLayout as Record<string, unknown>).activeBrowserTabId =
+                  (layout as Record<string, unknown>).activeBrowserTabId ?? null;
               }
 
               nextLayouts[key] = nextLayout;
