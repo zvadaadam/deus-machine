@@ -52,15 +52,15 @@ export function MainContent({
   const { open: sidebarOpen, setOpen: setSidebarOpen, toggleSidebar } = useSidebar();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
-  const { rightPanelWidth, setRightPanelWidth } = useWorkspaceLayout(selectedWorkspaceId);
+  const { rightPanelWidth, setRightPanelWidth, rightSideTab } = useWorkspaceLayout(selectedWorkspaceId);
 
   // PR handler bridge: ChatArea sets it, RightSidePanel consumes it.
   // Setter must be called as `setCreatePRHandler(() => handler)` — passing a
   // function directly causes React to invoke it as a state updater (see bf516c6).
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
 
-  // Right side expansion state (browser tab only)
-  const [rightSideExpanded, setRightSideExpanded] = useState(false);
+  // Derived from store — no useState/callback delay on workspace load
+  const isBrowserTab = rightSideTab === "browser";
 
   // --- Middle panel state (single active view) ---
   const [middlePanel, setMiddlePanel] = useState<MiddlePanelView | null>(null);
@@ -237,20 +237,43 @@ export function MainContent({
     minPrimarySize: 300, // min viewer width
   });
 
-  // Browser mode: resize between chat area and expanded right panel
-  const { handleProps: browserResizeProps, isDragging: browserDragging } = useResizeHandle({
+  // Right panel resize: drag between chat area and right side panel (all tabs)
+  const { handleProps: rightPanelResizeProps, isDragging: rightPanelDragging } = useResizeHandle({
     onSizeChange: setRightPanelWidth,
-    enabled: rightSideExpanded && !middlePanelActive,
+    enabled: !middlePanelActive,
     direction: "horizontal",
     minSecondarySize: 380,
     minPrimarySize: 200,
   });
 
+  // --- Set smart default browser width on first activation ---
+  // When browser tab opens for the first time (no saved width), compute ~60% of
+  // the main content area. This gives the browser more room for rendering webpages
+  // while keeping chat usable. The width is persisted so subsequent opens use the
+  // user's last setting. Uses useLayoutEffect to set width before browser paint,
+  // avoiding a visible 50/50 flash.
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isBrowserTab && !middlePanelActive && rightPanelWidth === null) {
+      // Use rAF to measure after layout but set width quickly
+      const id = requestAnimationFrame(() => {
+        const container = mainContentRef.current;
+        if (container) {
+          const availableWidth = container.getBoundingClientRect().width;
+          // 60% for browser, minimum 380px, leave at least 300px for chat
+          const browserWidth = Math.max(380, Math.min(availableWidth * 0.6, availableWidth - 300));
+          setRightPanelWidth(Math.round(browserWidth));
+        }
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isBrowserTab, middlePanelActive, rightPanelWidth, setRightPanelWidth]);
+
   // --- Computed styles ---
 
-  // Browser mode right side style (no middle panel)
-  const browserRightSideStyle: React.CSSProperties | undefined =
-    rightSideExpanded && !middlePanelActive && rightPanelWidth !== null
+  // Right side panel explicit width (any tab, when user has dragged or smart default set)
+  const rightSideStyle: React.CSSProperties | undefined =
+    !middlePanelActive && rightPanelWidth !== null
       ? { width: rightPanelWidth, flexShrink: 0 }
       : undefined;
 
@@ -276,7 +299,7 @@ export function MainContent({
           </button>
         )}
 
-        <div className="flex min-w-0 flex-1">
+        <div ref={mainContentRef} className="flex min-w-0 flex-1">
           {selectedWorkspace ? (
             <>
               {/* Chat area — always visible, shrinks when middle panel is active */}
@@ -348,7 +371,6 @@ export function MainContent({
                         workspace={selectedWorkspace}
                         prStatus={prStatus}
                         createPRHandler={createPRHandler}
-                        onExpandedChange={setRightSideExpanded}
                         rightPanelWidth={null}
                         rightSideStyle={undefined}
                         onOpenDiffTab={handleOpenDiff}
@@ -362,25 +384,23 @@ export function MainContent({
                 </>
               ) : (
                 <>
-                  {/* Browser resize handle — enabled when browser tab expands */}
-                  {rightSideExpanded && (
-                    <ResizeHandle
-                      handleProps={browserResizeProps}
-                      isDragging={browserDragging}
-                      label="Resize panels"
-                    />
-                  )}
+                  {/* Right panel resize handle — between chat and right side panel */}
+                  <ResizeHandle
+                    handleProps={rightPanelResizeProps}
+                    isDragging={rightPanelDragging}
+                    label="Resize panels"
+                  />
 
                   {/* Normal right panel */}
                   <RightSidePanel
                     workspace={selectedWorkspace}
                     prStatus={prStatus}
                     createPRHandler={createPRHandler}
-                    onExpandedChange={setRightSideExpanded}
                     rightPanelWidth={rightPanelWidth}
-                    rightSideStyle={browserRightSideStyle}
+                    rightSideStyle={rightSideStyle}
                     onOpenDiffTab={handleOpenDiff}
                     onOpenFilePreview={handleOpenFilePreview}
+                    isResizing={rightPanelDragging}
                   />
                 </>
               )}

@@ -225,15 +225,36 @@ impl SocketManager {
                                         continue;
                                     }
 
-                                    // Dispatch based on whether the message has an "id" field:
-                                    // - With "id": JSON-RPC response → send to receive() via mpsc
-                                    // - Without "id": JSON-RPC notification → emit Tauri event
-                                    if rpc_msg.get("id").is_some() {
-                                        // Response message — route to receive() via channel.
-                                        // If the receiver is dropped (e.g., nobody called receive()),
-                                        // we just drop the response silently.
+                                    // Dispatch based on message shape:
+                                    // 1. Has "method" + "id" = sidecar→frontend REQUEST → emit Tauri event
+                                    // 2. Has "id" but no "method" = response to frontend request → mpsc
+                                    // 3. Has "method" but no "id" = notification → emit Tauri event
+                                    let has_method = rpc_msg.get("method").and_then(|v| v.as_str()).is_some();
+                                    let has_id = rpc_msg.get("id").is_some();
+
+                                    if has_method && has_id {
+                                        // Sidecar → Frontend REQUEST (bidirectional RPC)
+                                        // The sidecar is requesting the frontend to do something
+                                        // (e.g., eval JS in browser, ask user a question).
+                                        // Emit as "sidecar:request" with full JSON-RPC envelope.
+                                        let method = rpc_msg.get("method").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                        println!("[SOCKET] Sidecar request: {} (id={})", method,
+                                            rpc_msg.get("id").map(|v| v.to_string()).unwrap_or_default());
+
+                                        if let Some(handle) = app_handle.lock().unwrap().as_ref() {
+                                            let payload = serde_json::json!({
+                                                "id": rpc_msg.get("id"),
+                                                "method": method,
+                                                "params": rpc_msg.get("params").cloned().unwrap_or(Value::Null),
+                                            });
+                                            if let Err(e) = handle.emit("sidecar:request", payload) {
+                                                eprintln!("[SOCKET] Failed to emit sidecar request: {}", e);
+                                            }
+                                        }
+                                    } else if has_id {
+                                        // Response to frontend-initiated request → route to receive()
                                         let _ = response_tx.send(line);
-                                    } else {
+                                    } else if has_method {
                                         // Notification — emit as Tauri event
                                         let method = rpc_msg.get("method")
                                             .and_then(|v| v.as_str())
@@ -248,7 +269,7 @@ impl SocketManager {
                                             "queryError" => "session:error",
                                             "enterPlanModeNotification" => "session:enter-plan-mode",
                                             _ => {
-                                                println!("[SOCKET] Unknown RPC method: {}", method);
+                                                println!("[SOCKET] Unknown RPC notification: {}", method);
                                                 continue;
                                             }
                                         };

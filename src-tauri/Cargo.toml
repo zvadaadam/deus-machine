@@ -17,7 +17,8 @@ path = "src/main.rs"
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = ["config-toml", "protocol-asset", "devtools", "macos-private-api"] }
+tauri = { version = "2.0", features = ["config-toml", "protocol-asset", "devtools", "macos-private-api", "unstable"] }
+url = "2"
 tauri-plugin-fs = "2.0"
 tauri-plugin-dialog = "2.0"
 tauri-plugin-shell = "2.0"
@@ -41,6 +42,20 @@ parking_lot = "0.12"
 lazy_static = "1.4"
 git2 = "0.19"
 libc = "0.2"
+# Cookie sync: read browser cookie DBs + decrypt
+rusqlite = { version = "0.31", features = ["bundled"] }
+aes = "0.8"
+cbc = "0.1"
+pbkdf2 = { version = "0.12", features = ["hmac"] }
+sha1 = "0.10"
+hmac = "0.12"
+time = "0.3"
+# Native screenshot support (macOS WKWebView.takeSnapshot)
+base64 = "0.22"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+block = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

@@ -62,13 +62,27 @@ class ToolRendererRegistry {
   }
 
   /**
-   * Get renderer for a tool (returns default if not found)
+   * Get renderer for a tool (returns default if not found).
+   * Handles MCP server prefixes: "mcp__conductor__BrowserSnapshot" → "BrowserSnapshot"
    */
   getRenderer(toolName: string): ToolRenderer {
+    // Direct match first (built-in tools like Edit, Bash, Read)
     const renderer = this.renderers.get(toolName);
 
     if (renderer) {
       return renderer;
+    }
+
+    // Strip MCP server prefix: "mcp__<server>__<tool>" → "<tool>"
+    if (toolName.startsWith("mcp__")) {
+      const parts = toolName.split("__");
+      if (parts.length >= 3) {
+        const bareName = parts.slice(2).join("__");
+        const mcpRenderer = this.renderers.get(bareName);
+        if (mcpRenderer) {
+          return mcpRenderer;
+        }
+      }
     }
 
     // Return default or throw error

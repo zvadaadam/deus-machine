@@ -1,5 +1,5 @@
 // sidecar/db/session-writer.ts
-// Handles message persistence for assistant messages from Claude SDK.
+// Handles message persistence for SDK messages (assistant + tool_result).
 // Also updates session status when queries complete.
 
 import { randomUUID } from "crypto";
@@ -48,6 +48,48 @@ export function saveAssistantMessage(
     return messageId;
   } catch (error) {
     console.error(`[SESSION-WRITER] Failed to save assistant message:`, error);
+    return null;
+  }
+}
+
+/**
+ * Save a user message containing tool_result blocks to the database.
+ * The frontend's toolResultMap needs these to link tool_use → tool_result
+ * for displaying execution results (success/failure/output).
+ *
+ * Without this, tool renderers never receive their result data and show
+ * perpetual "in progress" state instead of actual output.
+ */
+export function saveToolResultMessage(
+  sessionId: string,
+  message: { id?: string; role?: string; content?: unknown },
+  parentToolUseId: string | null = null
+): string | null {
+  const db = getDatabase();
+  const messageId = randomUUID();
+  const sentAt = new Date().toISOString();
+
+  const contentEnvelope = parentToolUseId
+    ? { message, parent_tool_use_id: parentToolUseId }
+    : { message };
+  const prepared = prepareMessageContent(contentEnvelope);
+
+  if (!prepared.success) {
+    console.error(`[SESSION-WRITER] Failed to prepare tool_result content: ${prepared.error}`);
+    return null;
+  }
+
+  try {
+    db.prepare(
+      `
+      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, sdk_message_id)
+      VALUES (?, ?, 'user', ?, datetime('now'), ?, ?)
+    `
+    ).run(messageId, sessionId, prepared.content, sentAt, message.id || null);
+
+    return messageId;
+  } catch (error) {
+    console.error(`[SESSION-WRITER] Failed to save tool_result message:`, error);
     return null;
   }
 }

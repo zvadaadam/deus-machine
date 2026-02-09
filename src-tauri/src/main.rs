@@ -200,6 +200,21 @@ fn main() {
             commands::git_diff_files,
             commands::git_diff_file,
             commands::git_detect_default_branch,
+            commands::create_browser_webview,
+            commands::navigate_browser_webview,
+            commands::set_browser_webview_bounds,
+            commands::show_browser_webview,
+            commands::hide_browser_webview,
+            commands::close_browser_webview,
+            commands::get_browser_webview_url,
+            commands::eval_browser_webview,
+            commands::eval_browser_webview_with_result,
+            commands::reload_browser_webview,
+            commands::drain_browser_console,
+            commands::get_cookie_browsers,
+            commands::sync_browser_cookies,
+            commands::inject_browser_cookies,
+            commands::screenshot_browser_webview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
