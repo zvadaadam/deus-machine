@@ -259,6 +259,39 @@
   }
 }
 
+/* Browser-style loading bar — NProgress-inspired indeterminate progress.
+ * Starts fast, slows down near 90%, never reaches 100% until page loads.
+ * Uses transform (GPU-accelerated) instead of width for performance. */
+@keyframes browser-loading {
+  0% {
+    transform: scaleX(0);
+  }
+  20% {
+    transform: scaleX(0.5);
+  }
+  60% {
+    transform: scaleX(0.8);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+@keyframes browser-loading-complete {
+  0% {
+    transform: scaleX(0.92);
+    opacity: 1;
+  }
+  40% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
 /* Pixel Grid - 3x3 agent status indicator animations
  * Uses CSS custom properties set on the grid container:
  *   --pixel-glow        : color

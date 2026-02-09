@@ -5,7 +5,7 @@
 import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
-import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
+import { saveAssistantMessage, saveToolResultMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
@@ -504,6 +504,23 @@ export class ClaudeAgentHandler implements AgentHandler {
               model,
               typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null
             );
+          }
+
+          // Persist user messages with tool_result blocks so the frontend
+          // can link tool_use → tool_result via the toolResultMap
+          if (cleanMessage.type === "user" && cleanMessage.message) {
+            const msg = cleanMessage.message as { content?: unknown };
+            const content = msg.content;
+            const hasToolResult =
+              Array.isArray(content) &&
+              content.some((b: any) => b?.type === "tool_result");
+            if (hasToolResult) {
+              saveToolResultMessage(
+                sessionId,
+                cleanMessage.message as { id?: string; role?: string; content?: unknown },
+                typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null
+              );
+            }
           }
 
           // Update session status when query completes successfully

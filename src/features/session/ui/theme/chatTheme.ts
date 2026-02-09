@@ -246,6 +246,27 @@ export const chatTheme = {
     WebFetch: "text-info", // Violet - fetching data
     WebSearch: "text-info", // Violet - searching
 
+    // OpenDevs MCP — Browser automation
+    BrowserSnapshot: "text-info", // Violet - inspecting page
+    BrowserNavigate: "text-primary", // Copper - navigation action
+    BrowserNavigateBack: "text-primary", // Copper - navigation action
+    BrowserClick: "text-warning", // Amber - modifying page state
+    BrowserType: "text-warning", // Amber - modifying page state
+    BrowserPressKey: "text-warning", // Amber - modifying page state
+    BrowserHover: "text-info", // Violet - inspecting
+    BrowserSelectOption: "text-warning", // Amber - modifying page state
+    BrowserWaitFor: "text-info", // Violet - observing
+    BrowserEvaluate: "text-primary", // Copper - executing code
+    BrowserConsoleMessages: "text-info", // Violet - reading data
+    BrowserScreenshot: "text-info", // Violet - inspecting
+    BrowserNetworkRequests: "text-info", // Violet - reading data
+
+    // OpenDevs MCP — Workspace
+    AskUserQuestion: "text-primary", // Copper - user interaction
+    GetWorkspaceDiff: "text-info", // Violet - reading data
+    DiffComment: "text-warning", // Amber - adding content
+    GetTerminalOutput: "text-info", // Violet - reading data
+
     // Size and layout
     iconSize: "h-4 w-4",
     iconBase: "flex-shrink-0",

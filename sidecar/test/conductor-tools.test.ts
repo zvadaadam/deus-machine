@@ -42,14 +42,30 @@ describe("createOpenDevsMCPServer", () => {
     expect(info.version).toBe("1.0.0");
   });
 
-  it("registers 4 tools", () => {
+  it("registers all workspace + browser tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(4);
+    expect(toolNames).toHaveLength(18);
+    // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
     expect(toolNames).toContain("DiffComment");
     expect(toolNames).toContain("GetTerminalOutput");
+    // Browser tools
+    expect(toolNames).toContain("BrowserSnapshot");
+    expect(toolNames).toContain("BrowserClick");
+    expect(toolNames).toContain("BrowserType");
+    expect(toolNames).toContain("BrowserNavigate");
+    expect(toolNames).toContain("BrowserWaitFor");
+    expect(toolNames).toContain("BrowserEvaluate");
+    expect(toolNames).toContain("BrowserPressKey");
+    expect(toolNames).toContain("BrowserHover");
+    expect(toolNames).toContain("BrowserSelectOption");
+    expect(toolNames).toContain("BrowserNavigateBack");
+    expect(toolNames).toContain("BrowserConsoleMessages");
+    expect(toolNames).toContain("BrowserScreenshot");
+    expect(toolNames).toContain("BrowserNetworkRequests");
+    expect(toolNames).toContain("BrowserScroll");
   });
 
   // ==========================================================================
