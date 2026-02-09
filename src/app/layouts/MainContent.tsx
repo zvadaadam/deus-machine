@@ -250,8 +250,8 @@ export function MainContent({
   // When browser tab opens for the first time (no saved width), compute ~60% of
   // the main content area. This gives the browser more room for rendering webpages
   // while keeping chat usable. The width is persisted so subsequent opens use the
-  // user's last setting. Uses useLayoutEffect to set width before browser paint,
-  // avoiding a visible 50/50 flash.
+  // user's last setting. Uses requestAnimationFrame to measure after layout and
+  // set the width promptly, minimising a visible 50/50 flash.
   const mainContentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (isBrowserTab && !middlePanelActive && rightPanelWidth === null) {

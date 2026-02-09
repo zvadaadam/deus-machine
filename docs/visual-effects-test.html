@@ -167,7 +167,7 @@
     <p class="desc">White overlay flash. Full viewport or region-scoped. opacity 0.35 -> 0 over 300ms.</p>
     <div class="row">
       <button class="test-btn" onclick="testFlashFull()">Full Page Flash</button>
-      <button class="test-btn" onclick="testFlashRegion()">Region Flash (this section)</button>
+      <button class="test-btn" onclick="testFlashRegion(event)">Region Flash (this section)</button>
     </div>
   </div>
 
@@ -329,7 +329,7 @@
       log('Full page screenshot flash.');
     }
 
-    function testFlashRegion() {
+    function testFlashRegion(event) {
       if (!guard()) return;
       const section = event.target.closest('.section');
       const rect = section.getBoundingClientRect();

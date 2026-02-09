@@ -62,6 +62,21 @@ class ToolRendererRegistry {
   }
 
   /**
+   * Normalize a tool name by stripping MCP server prefixes.
+   * "mcp__conductor__BrowserSnapshot" → "BrowserSnapshot"
+   * Non-MCP names are returned as-is.
+   */
+  private normalizeName(toolName: string): string {
+    if (toolName.startsWith("mcp__")) {
+      const parts = toolName.split("__");
+      if (parts.length >= 3) {
+        return parts.slice(2).join("__");
+      }
+    }
+    return toolName;
+  }
+
+  /**
    * Get renderer for a tool (returns default if not found).
    * Handles MCP server prefixes: "mcp__conductor__BrowserSnapshot" → "BrowserSnapshot"
    */
@@ -73,15 +88,12 @@ class ToolRendererRegistry {
       return renderer;
     }
 
-    // Strip MCP server prefix: "mcp__<server>__<tool>" → "<tool>"
-    if (toolName.startsWith("mcp__")) {
-      const parts = toolName.split("__");
-      if (parts.length >= 3) {
-        const bareName = parts.slice(2).join("__");
-        const mcpRenderer = this.renderers.get(bareName);
-        if (mcpRenderer) {
-          return mcpRenderer;
-        }
+    // Try with MCP prefix stripped
+    const bareName = this.normalizeName(toolName);
+    if (bareName !== toolName) {
+      const mcpRenderer = this.renderers.get(bareName);
+      if (mcpRenderer) {
+        return mcpRenderer;
       }
     }
 
@@ -105,10 +117,13 @@ class ToolRendererRegistry {
   }
 
   /**
-   * Check if tool has a registered renderer
+   * Check if tool has a registered renderer.
+   * Handles MCP server prefixes the same way as getRenderer().
    */
   hasRenderer(toolName: string): boolean {
-    return this.renderers.has(toolName);
+    if (this.renderers.has(toolName)) return true;
+    const bareName = this.normalizeName(toolName);
+    return bareName !== toolName && this.renderers.has(bareName);
   }
 
   /**
