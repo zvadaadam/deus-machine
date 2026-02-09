@@ -499,7 +499,7 @@ export function useBrowserRpcHandler(
       await sendResponse(id, {
         available: true,
         activeTab: {
-          webviewLabel: mappedLabel || tab.webviewLabel,
+          webviewLabel: targetTab.webviewLabel,
           url: targetTab.currentUrl || targetTab.url,
           title: targetTab.title,
         },
