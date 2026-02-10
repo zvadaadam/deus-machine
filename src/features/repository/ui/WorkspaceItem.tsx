@@ -1,5 +1,6 @@
-import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { Circle, LoaderCircle, GitPullRequest } from "lucide-react";
 import { formatTimeAgo } from "@/shared/lib/formatters";
+import { cn } from "@/shared/lib/utils";
 import type { Workspace, DiffStats } from "@/shared/types";
 
 interface WorkspaceItemProps {
@@ -10,52 +11,110 @@ interface WorkspaceItemProps {
 }
 
 /**
- * Individual workspace list item in sidebar using shadcn SidebarMenuItem
- * Shows branch name, diff stats, and last updated time
+ * WorkspaceItem — V2: Jony Ive
+ *
+ * "True simplicity is derived from so much more than
+ *  just the absence of clutter."
+ *
+ * Layout:
+ *   [StatusIcon 14×14] [Name — Inter 13/500]     [+713 -2]
+ *                       [Location · Status]
+ *
+ * Selected: bg-elevated, rounded-md
+ * Hover: bg-surface, rounded-md
+ * Normal: transparent
+ *
+ * Status icons:
+ *   working  → LoaderCircle (animated) in accent-blue
+ *   review   → Circle in accent-gold
+ *   default  → GitPullRequest in neutral-600
  */
 export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: WorkspaceItemProps) {
   const hasDiff = diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
   const timeAgo = formatTimeAgo(workspace.updated_at);
+  const isWorking = workspace.session_status === "working";
+  const isNeedsResponse = workspace.session_status === "needs_response";
+
+  // Format branch name: show "owner/branch" or just "branch"
+  const displayName = workspace.branch?.includes("/")
+    ? workspace.branch
+    : `${workspace.directory_name}/${workspace.branch}`;
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={isActive}
+    <li className="list-none">
+      <button
+        type="button"
         onClick={onClick}
-        className="flex items-start gap-2 px-2 py-2"
+        className={cn(
+          "flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150",
+          isActive ? "bg-bg-selection" : "hover:bg-bg-surface"
+        )}
       >
-        <span className="mt-0.5 flex-shrink-0 text-base">🌿</span>
-        <div className="min-w-0 flex-1">
-          <div className="mb-0.5 flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium">{workspace.branch}</span>
-            {hasDiff && (
-              <div className="flex flex-shrink-0 gap-1 font-mono text-xs">
-                {diffStats.additions > 0 && (
-                  <span className="text-success bg-success/10 border-success/30 rounded border px-1.5 py-0.5">
-                    +{diffStats.additions}
-                  </span>
-                )}
-                {diffStats.deletions > 0 && (
-                  <span className="text-destructive bg-destructive/10 border-destructive/20 rounded border px-1.5 py-0.5">
-                    -{diffStats.deletions}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="text-muted-foreground flex items-center gap-1 text-xs">
-            {workspace.session_status === "working" ? (
-              <span className="text-primary">Working...</span>
+        {/* Left: status + text */}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {/* Row 1: status icon + name */}
+          <div className="flex items-center gap-1.5">
+            {isWorking ? (
+              <LoaderCircle className="text-text-muted h-3.5 w-3.5 shrink-0 animate-[subtle-spin_2s_linear_infinite]" />
+            ) : isNeedsResponse ? (
+              <Circle className="text-text-secondary h-2 w-2 shrink-0 fill-current" />
             ) : (
-              <>
-                <span className="truncate">{workspace.directory_name}</span>
-                <span>•</span>
-                <span>{timeAgo}</span>
-              </>
+              <GitPullRequest className="text-text-muted h-3.5 w-3.5 shrink-0" />
+            )}
+            <span
+              className={cn(
+                "truncate text-[13px]",
+                isActive
+                  ? "text-text-primary font-medium"
+                  : isWorking || isNeedsResponse
+                    ? "text-text-primary font-normal"
+                    : "text-text-tertiary font-normal"
+              )}
+            >
+              {displayName}
+            </span>
+          </div>
+
+          {/* Row 2: location · time/status */}
+          <div className="flex items-center gap-1.5 pl-5">
+            <span className="text-text-muted truncate text-xs">{workspace.directory_name}</span>
+            <span className="text-text-muted text-xs">·</span>
+            {isWorking ? (
+              <span className="text-accent-blue text-xs">Working...</span>
+            ) : isNeedsResponse ? (
+              <span className="text-accent-gold text-xs">Needs review</span>
+            ) : (
+              <span className="text-text-muted text-xs">{timeAgo}</span>
             )}
           </div>
         </div>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+
+        {/* Right: diff stats */}
+        {hasDiff && (
+          <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+            {diffStats.additions > 0 && (
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  isActive ? "text-accent-green" : "text-accent-green-muted"
+                )}
+              >
+                +{diffStats.additions}
+              </span>
+            )}
+            {diffStats.deletions > 0 && (
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  isActive ? "text-accent-red" : "text-accent-red-muted"
+                )}
+              >
+                -{diffStats.deletions}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+    </li>
   );
 }

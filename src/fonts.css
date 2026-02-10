@@ -1,6 +1,15 @@
-/* Self-hosted Inter variable font (OFL licensed)
- * Variable font covers weights 100-900 in a single file.
- * See: https://github.com/rsms/inter */
+/* ═══════════════════════════════════════════════════════
+ * Font Stack — V2: Jony Ive
+ *
+ * Sans:  Inter (variable, self-hosted)
+ * Mono:  JetBrains Mono (variable, self-hosted)
+ *
+ * Both are variable fonts — single file, all weights.
+ * font-display: swap prevents invisible text during load.
+ * ═══════════════════════════════════════════════════════ */
+
+/* Inter variable font (OFL licensed)
+ * Covers weights 100-900. See: https://github.com/rsms/inter */
 @font-face {
   font-family: "Inter";
   font-style: normal;
@@ -15,6 +24,25 @@
   font-weight: 100 900;
   font-display: swap;
   src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2-variations");
+}
+
+/* JetBrains Mono variable font (OFL licensed)
+ * Covers weights 100-800. See: https://github.com/JetBrains/JetBrainsMono
+ * Falls back to Suisse Intl Mono if not available. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("./assets/fonts/JetBrainsMono-Variable.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("./assets/fonts/JetBrainsMono-VariableItalic.woff2") format("woff2-variations");
 }
 
 /* OLD: Helvetica Neue font family (commented out, replaced by Suisse Intl) */
