@@ -52,7 +52,8 @@ export function MainContent({
   const { open: sidebarOpen, setOpen: setSidebarOpen, toggleSidebar } = useSidebar();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
-  const { rightPanelWidth, setRightPanelWidth, rightSideTab } = useWorkspaceLayout(selectedWorkspaceId);
+  const { rightPanelWidth, setRightPanelWidth, rightSideTab } =
+    useWorkspaceLayout(selectedWorkspaceId);
 
   // PR handler bridge: ChatArea sets it, RightSidePanel consumes it.
   // Setter must be called as `setCreatePRHandler(() => handler)` — passing a
@@ -285,7 +286,7 @@ export function MainContent({
     <SidebarInset className="min-w-0">
       <div
         data-slot="main-content"
-        className="bg-background border-border/5 flex h-full min-w-0 flex-1 overflow-hidden rounded-lg border"
+        className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 overflow-hidden rounded-xl border"
       >
         {/* Sidebar toggle — visible when sidebar collapsed and no workspace */}
         {!sidebarOpen && !selectedWorkspace && (

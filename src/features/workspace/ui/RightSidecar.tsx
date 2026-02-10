@@ -21,9 +21,15 @@ const sidecarItems: Array<{
   { id: "browser", label: "Browser", icon: Globe },
 ];
 
+/**
+ * RightSidecar — V2: Jony Ive
+ *
+ * Vertical icon strip. Active tab gets bg-overlay + text-secondary.
+ * Inactive: text-muted. No borders on icons — depth via background only.
+ */
 export function RightSidecar({ activeTab, onTabChange, compact }: RightSidecarProps) {
   return (
-    <div className="bg-background/60 border-border/20 flex h-full w-14 flex-shrink-0 flex-col items-center gap-2 border-l px-1.5 py-3 backdrop-blur-sm">
+    <div className="bg-bg-elevated border-border-subtle flex h-full w-[58px] flex-shrink-0 flex-col items-center gap-3 border-l px-1.5 pt-3 pb-5">
       {sidecarItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
@@ -38,27 +44,27 @@ export function RightSidecar({ activeTab, onTabChange, compact }: RightSidecarPr
             title={isDisabled ? `Close diff to use ${item.label}` : undefined}
             onClick={() => !isDisabled && onTabChange(item.id)}
             className={cn(
-              "group flex w-full flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium tracking-tight transition-colors",
+              "group flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-1.5 text-[10px] font-medium transition-colors duration-150",
               isDisabled
-                ? "cursor-not-allowed opacity-40"
+                ? "cursor-not-allowed opacity-30"
                 : isActive
-                  ? "text-foreground"
-                  : "text-muted-foreground/80 hover:text-foreground"
+                  ? "text-text-secondary"
+                  : "text-text-muted hover:text-text-secondary"
             )}
           >
             <div
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg border transition-colors",
+                "flex h-[38px] w-[38px] items-center justify-center rounded-md transition-colors duration-150",
                 isDisabled
-                  ? "border-border/20 bg-muted/20 text-muted-foreground/40"
+                  ? "text-text-disabled"
                   : isActive
-                    ? "border-primary/40 bg-primary/15 text-primary"
-                    : "border-border/40 bg-muted/40 text-muted-foreground group-hover:bg-muted/70 group-hover:text-foreground"
+                    ? "bg-bg-raised text-text-secondary"
+                    : "text-text-muted group-hover:text-text-secondary"
               )}
             >
               <Icon className="h-4 w-4" />
             </div>
-            <span>{item.label}</span>
+            <span className="font-sans">{item.label}</span>
           </button>
         );
       })}

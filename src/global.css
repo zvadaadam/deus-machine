@@ -63,6 +63,49 @@
   --color-file-markup: var(--file-markup);
   --color-file-image: var(--file-image);
 
+  /* Extended background tiers — for precise depth control */
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-bg-muted: var(--bg-muted);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-selection: var(--bg-selection);
+  --color-bg-code: var(--bg-code);
+
+  /* Extended border tiers */
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  /* Extended text hierarchy */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  /* Accent palette */
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-muted: var(--accent-green-muted);
+  --color-accent-red: var(--accent-red);
+  --color-accent-red-muted: var(--accent-red-muted);
+  --color-accent-gold: var(--accent-gold);
+
+  /* Neutral scale */
+  --color-neutral-50: var(--neutral-50);
+  --color-neutral-100: var(--neutral-100);
+  --color-neutral-200: var(--neutral-200);
+  --color-neutral-300: var(--neutral-300);
+  --color-neutral-400: var(--neutral-400);
+  --color-neutral-500: var(--neutral-500);
+  --color-neutral-600: var(--neutral-600);
+  --color-neutral-700: var(--neutral-700);
+  --color-neutral-800: var(--neutral-800);
+  --color-neutral-900: var(--neutral-900);
+
   /* Z-index tokens */
   --z-base: var(--z-base);
   --z-dropdown: var(--z-dropdown);
@@ -74,11 +117,11 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
-  /* Font families - Using Suisse Intl for both sans and mono */
-  /* Tailwind v4 utilities (font-sans, font-mono) use these variables */
+  /* Font families — Inter for UI, JetBrains Mono for code */
   --font-sans:
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  --font-mono:
+    "JetBrains Mono", "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
 
   /* Legacy aliases for backward compatibility */
   --font-family-sans: var(--font-sans);
@@ -91,6 +134,7 @@
    */
 
   /* Border radius */
+  --radius-xl: calc(var(--radius) + 2px);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -507,54 +551,73 @@
   }
 }
 
-/* Design tokens & base styles - Graphite × Aqua Theme */
+/* ═══════════════════════════════════════════════════════════
+ * Design Tokens — V2: Jony Ive
+ *
+ * "Design is not just what it looks like and feels like.
+ *  Design is how it works." — Steve Jobs
+ *
+ * Token architecture:
+ *   1. Core surfaces (background, foreground, card, popover)
+ *   2. Interactive accent (primary, secondary)
+ *   3. Semantic signals (destructive, success, warning, info)
+ *   4. Extended tiers (bg-*, border-*, text-*, neutral-*)
+ *   5. Status & file-type colors
+ *
+ * The system is dark-first. Light mode inverts the ramp.
+ * ═══════════════════════════════════════════════════════════ */
+
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.98 0 0); /* Neutral paper */
-  --foreground: oklch(0.2 0 0); /* True black text */
-  --card: oklch(0.95 0 0); /* Neutral card */
-  --card-foreground: oklch(0.2 0 0);
-  --popover: oklch(0.95 0 0);
-  --popover-foreground: oklch(0.2 0 0);
-  --primary: oklch(0.64 0.12 210); /* Aqua accent */
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.93 0 0);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.92 0.04 210);
-  --accent-foreground: oklch(0.2 0 0);
-  --destructive: oklch(0.6 0.22 25); /* Coral red */
-  --destructive-foreground: oklch(0.98 0 0);
+  --radius: 0.5rem;
 
-  /* Semantic state colors (stable across themes) */
-  --success: oklch(0.63 0.16 150); /* Emerald green */
-  --success-foreground: oklch(0.15 0.03 150);
+  /* --- Core surfaces (light mode — warm stone tones) --- */
+  --background: #f5f5f4;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
 
-  --warning: oklch(0.78 0.17 80); /* Warm amber */
-  --warning-foreground: oklch(0.2 0.02 80);
+  /* --- Interactive accent (vivid blue, light variant) --- */
+  --primary: #3b82b8;
+  --primary-foreground: #ffffff;
 
-  --info: oklch(0.68 0.1 210); /* Aqua info */
-  --info-foreground: oklch(0.15 0.02 210);
+  /* --- Secondary / structural --- */
+  --secondary: #efefed;
+  --secondary-foreground: #48484a;
+  --muted: #e8e8e6;
+  --muted-foreground: #8e8e93;
+  --accent: #efefed;
+  --accent-foreground: #1d1d1f;
 
-  /* Status colors for workspace/session states */
-  --status-working: oklch(0.6 0.16 150); /* Emerald for ready/working */
-  --status-working-fg: oklch(1 0 0);
-  --status-compacting: oklch(0.6 0.14 280); /* Soft violet for maintenance */
-  --status-compacting-fg: oklch(1 0 0);
-  --status-unread: oklch(0.74 0.17 80); /* Warm amber for unread */
-  --status-unread-fg: oklch(1 0 0);
+  /* --- Semantic signals --- */
+  --destructive: #d93e4c;
+  --destructive-foreground: #ffffff;
+  --success: #1a9a3e;
+  --success-foreground: #ffffff;
+  --warning: #a07830;
+  --warning-foreground: #ffffff;
+  --info: #3b82b8;
+  --info-foreground: #ffffff;
 
-  /* File type icon colors (semantic, consistent in light/dark) */
-  --file-typescript: oklch(0.6 0.1 220); /* Cyan blue for TS/JS */
-  --file-rust: oklch(0.6 0.2 35); /* Coral for Rust */
-  --file-data: oklch(0.68 0.15 80); /* Amber for JSON/YAML */
-  --file-docs: oklch(0.6 0.16 150); /* Emerald for markdown/docs */
-  --file-styles: oklch(0.6 0.16 280); /* Violet for CSS */
-  --file-markup: oklch(0.6 0.18 45); /* Warm coral for HTML */
-  --file-image: oklch(0.6 0.18 335); /* Pink for images */
+  /* --- Status indicators --- */
+  --status-working: #1a9a3e;
+  --status-working-fg: #ffffff;
+  --status-compacting: #3b82b8;
+  --status-compacting-fg: #ffffff;
+  --status-unread: #a07830;
+  --status-unread-fg: #ffffff;
 
-  /* Z-index scale for layered UI elements */
+  /* --- File type colors --- */
+  --file-typescript: #3b82b8;
+  --file-rust: #d93e4c;
+  --file-data: #a07830;
+  --file-docs: #1a9a3e;
+  --file-styles: #3b82b8;
+  --file-markup: #d93e4c;
+  --file-image: #a07830;
+
+  /* --- Z-index scale --- */
   --z-base: 0;
   --z-dropdown: 100;
   --z-sticky: 200;
@@ -565,130 +628,244 @@
   --z-tooltip: 1200;
   --z-notification: 1300;
 
-  --border: oklch(0.88 0 0);
-  --input: oklch(0.88 0 0);
-  --input-surface: oklch(0.99 0 0);
-  --ring: oklch(0.64 0.12 210 / 0.4);
+  /* --- Borders & inputs --- */
+  --border: #e0e0e0;
+  --input: #e0e0e0;
+  --input-surface: #fafaf9;
+  --ring: #3b82b866;
 
-  /* Sidebar colors */
-  --sidebar: oklch(0.97 0 0);
-  --sidebar-foreground: oklch(0.38 0 0);
-  --sidebar-primary: oklch(0.64 0.12 210);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.93 0 0);
-  --sidebar-accent-foreground: oklch(0.2 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.64 0.12 210 / 0.4);
+  /* --- Sidebar (cool gray — recedes behind warm content) --- */
+  --sidebar: #f3f4f6;
+  --sidebar-foreground: #6e6e73;
+  --sidebar-primary: #3b82b8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efefed;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: #3b82b866;
 
-  /* Vibrancy tint system (inspired by Arc/Dia multi-layer compositing) */
+  /* --- Extended background tiers (warm stone) --- */
+  --bg-base: #f5f5f4;
+  --bg-surface: #fafaf9;
+  --bg-elevated: #ffffff;
+  --bg-raised: #efefed;
+  --bg-overlay: #fafafa;
+  --bg-muted: #e8e8e6;
+
+  /* --- Specialized backgrounds --- */
+  --bg-sidebar: #f3f4f6;
+  --bg-selection: #fffdfb;
+  --bg-code: #f7f7f5;
+
+  /* --- Extended border tiers --- */
+  --border-subtle: #ebebeb;
+  --border-default: #e0e0e0;
+  --border-strong: #d4d4d4;
+
+  /* --- Extended text hierarchy (Apple system colors) --- */
+  --text-primary: #1d1d1f;
+  --text-secondary: #48484a;
+  --text-tertiary: #6e6e73;
+  --text-muted: #8e8e93;
+  --text-disabled: #aeaeb2;
+
+  /* --- Accent palette (vivid for light mode) --- */
+  --accent-blue: #3b82b8;
+  --accent-green: #1a9a3e;
+  --accent-green-muted: #5c8a6e;
+  --accent-red: #d93e4c;
+  --accent-red-muted: #a07272;
+  --accent-gold: #a07830;
+
+  /* --- Neutral scale --- */
+  --neutral-50: #fafafa;
+  --neutral-100: #ebebeb;
+  --neutral-200: #d4d4d4;
+  --neutral-300: #a3a3a3;
+  --neutral-400: #8a8a8a;
+  --neutral-500: #737373;
+  --neutral-600: #5c5c5c;
+  --neutral-700: #454545;
+  --neutral-800: #2e2e2e;
+  --neutral-900: #1a1a1a;
+
+  /* --- Vibrancy tint system --- */
   --sidebar-tint-opacity: 75%;
   --sidebar-tint-strong: 85%;
   --content-tint-opacity: 92%;
-  --sidebar-wash: oklch(0.97 0.01 210);
+  --sidebar-wash: #f3f4f6;
 
-  /* Content area border/shadow (Arc: SidebarBorderColor light=rgba(0,0,0,0.05), InnerShadowView) */
+  /* --- Content area border/shadow --- */
   --content-border-opacity: 5%;
   --content-shadow-opacity: 3%;
 
-  /* Diff viewer colors - Graphite Aqua (Light Mode) */
-  --diff-addition-bg: oklch(0.94 0.05 150);
-  --diff-addition-gutter: oklch(0.88 0.09 150);
-  --diff-addition-word: oklch(0.82 0.13 150);
-  --diff-addition-text: oklch(0.38 0.12 150);
+  /* --- Diff viewer (light mode) --- */
+  --diff-addition-bg: #e8f5e9;
+  --diff-addition-gutter: #c8e6c9;
+  --diff-addition-word: #a5d6a7;
+  --diff-addition-text: #2e7d32;
 
-  --diff-deletion-bg: oklch(0.94 0.05 25);
-  --diff-deletion-gutter: oklch(0.86 0.1 25);
-  --diff-deletion-word: oklch(0.8 0.14 25);
-  --diff-deletion-text: oklch(0.42 0.14 25);
+  --diff-deletion-bg: #ffebee;
+  --diff-deletion-gutter: #ffcdd2;
+  --diff-deletion-word: #ef9a9a;
+  --diff-deletion-text: #c62828;
 
-  --diff-line-number: oklch(0.5 0 0);
-  --diff-line-number-bg: oklch(0.94 0 0);
+  --diff-line-number: #8e8e93;
+  --diff-line-number-bg: #fafaf9;
 }
 
 .dark {
-  --background: oklch(0.12 0 0); /* True dark */
-  --foreground: oklch(0.92 0 0);
-  --card: oklch(0.16 0 0);
-  --card-foreground: oklch(0.92 0 0);
-  --popover: oklch(0.16 0 0);
-  --popover-foreground: oklch(0.92 0 0);
-  --primary: oklch(0.74 0.12 210); /* Aqua accent */
-  --primary-foreground: oklch(0.12 0 0);
-  --secondary: oklch(0.22 0 0);
-  --secondary-foreground: oklch(0.92 0 0);
-  --muted: oklch(0.24 0 0);
-  --muted-foreground: oklch(0.68 0 0);
-  --accent: oklch(0.26 0.06 210);
-  --accent-foreground: oklch(0.92 0 0);
-  --destructive: oklch(0.65 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
+  /* ═══════════════════════════════════════════════════════
+   * V2: Jony Ive — Dark Theme
+   *
+   * Design philosophy: "Simplicity is the ultimate sophistication."
+   * Pure neutral grays. No chroma in backgrounds. Every color earns
+   * its place through function, not decoration.
+   *
+   * Background hierarchy (6 tiers):
+   *   base → surface → elevated → raised → overlay → muted
+   *   Each step adds ~+3-5 lightness. The eye reads depth without
+   *   needing borders or shadows.
+   *
+   * Text hierarchy (5 levels):
+   *   primary → secondary → tertiary → muted → disabled
+   *   Generous contrast between levels. Never guess which is which.
+   *
+   * Accent palette: restrained, purposeful.
+   *   Steel blue for interactive, green/red for diffs, gold for warnings.
+   * ═══════════════════════════════════════════════════════ */
 
-  /* Semantic state colors - optimized for dark mode */
-  --success: oklch(0.72 0.18 150);
-  --success-foreground: oklch(0.18 0.05 150);
+  /* --- Core surfaces --- */
+  --background: #0b0b0b; /* bg-base: the canvas */
+  --foreground: #d8d8d8; /* text-primary */
+  --card: #141414; /* bg-elevated */
+  --card-foreground: #d8d8d8;
+  --popover: #1e1e1e; /* bg-overlay */
+  --popover-foreground: #d8d8d8;
 
-  --warning: oklch(0.8 0.18 80);
-  --warning-foreground: oklch(0.2 0.03 80);
+  /* --- Interactive accent (steel blue — quiet authority) --- */
+  --primary: #8494a8;
+  --primary-foreground: #0b0b0b;
 
-  --info: oklch(0.74 0.12 210);
-  --info-foreground: oklch(0.18 0.02 210);
+  /* --- Secondary / structural --- */
+  --secondary: #1a1a1a; /* bg-raised */
+  --secondary-foreground: #b0b0b0;
+  --muted: #2a2a2a; /* bg-muted */
+  --muted-foreground: #808080; /* text-tertiary */
+  --accent: #141414; /* bg-elevated */
+  --accent-foreground: #d8d8d8;
 
-  /* Status colors for workspace/session states - optimized for dark mode */
-  --status-working: oklch(0.7 0.18 150);
-  --status-working-fg: oklch(0.2 0.1 150);
-  --status-compacting: oklch(0.66 0.18 280);
-  --status-compacting-fg: oklch(0.25 0.12 280);
-  --status-unread: oklch(0.8 0.18 80);
-  --status-unread-fg: oklch(0.3 0.12 80);
+  /* --- Semantic signals (earned color) --- */
+  --destructive: #f97583; /* accent-red */
+  --destructive-foreground: #e0e0e0;
+  --success: #7ee787; /* accent-green */
+  --success-foreground: #0b0b0b;
+  --warning: #d4a050; /* accent-gold */
+  --warning-foreground: #0b0b0b;
+  --info: #8494a8; /* accent-blue */
+  --info-foreground: #0b0b0b;
 
-  /* File type icon colors - pastel for dark mode */
-  --file-typescript: oklch(0.7 0.1 220);
-  --file-rust: oklch(0.66 0.22 35);
-  --file-data: oklch(0.76 0.18 80);
-  --file-docs: oklch(0.66 0.18 150);
-  --file-styles: oklch(0.66 0.18 280);
-  --file-markup: oklch(0.66 0.2 45);
-  --file-image: oklch(0.68 0.2 335);
+  /* --- Status indicators (workspace session states) --- */
+  --status-working: #7ee787;
+  --status-working-fg: #0b0b0b;
+  --status-compacting: #8494a8;
+  --status-compacting-fg: #0b0b0b;
+  --status-unread: #d4a050;
+  --status-unread-fg: #0b0b0b;
 
-  --border: oklch(0.24 0 0);
-  --input: oklch(0.24 0 0);
-  --input-surface: oklch(0.2 0 0);
-  --ring: oklch(0.74 0.12 210 / 0.45);
+  /* --- File type colors (muted, purposeful) --- */
+  --file-typescript: #8494a8;
+  --file-rust: #f97583;
+  --file-data: #d4a050;
+  --file-docs: #6a9a70;
+  --file-styles: #8494a8;
+  --file-markup: #f97583;
+  --file-image: #d4a050;
 
-  --sidebar: oklch(0.14 0 0);
-  --sidebar-foreground: oklch(0.86 0 0);
-  --sidebar-primary: oklch(0.74 0.12 210);
-  --sidebar-primary-foreground: oklch(0.12 0 0);
-  --sidebar-accent: oklch(0.24 0 0);
-  --sidebar-accent-foreground: oklch(0.92 0 0);
-  --sidebar-border: oklch(0.24 0 0);
-  --sidebar-ring: oklch(0.74 0.12 210 / 0.45);
+  /* --- Borders (3-tier depth) --- */
+  --border: #252525; /* border-default */
+  --input: #252525;
+  --input-surface: #141414;
+  --ring: #8494a866;
 
-  /* Vibrancy tint system (dark — Dia uses 0.60 for content; we use 0.78 as
-   * a middle ground since our content area is larger and fully transparent
-   * would be distracting. Sidebar tint is more aggressive in dark to show blur.) */
+  /* --- Sidebar (inherits base, minimal distinction) --- */
+  --sidebar: #0b0b0b; /* Same as bg-base: unified canvas */
+  --sidebar-foreground: #b0b0b0;
+  --sidebar-primary: #8494a8;
+  --sidebar-primary-foreground: #0b0b0b;
+  --sidebar-accent: #141414;
+  --sidebar-accent-foreground: #d8d8d8;
+  --sidebar-border: #1a1a1a; /* border-subtle */
+  --sidebar-ring: #8494a866;
+
+  /* --- Extended background tiers --- */
+  --bg-base: #0b0b0b;
+  --bg-surface: #0f0f0f;
+  --bg-elevated: #141414;
+  --bg-raised: #1a1a1a;
+  --bg-overlay: #1e1e1e;
+  --bg-muted: #2a2a2a;
+
+  /* --- Specialized backgrounds --- */
+  --bg-sidebar: #0b0b0b;
+  --bg-selection: #141414;
+  --bg-code: #171717;
+
+  /* --- Extended border tiers --- */
+  --border-subtle: #1a1a1a;
+  --border-default: #252525;
+  --border-strong: #303030;
+
+  /* --- Extended text hierarchy --- */
+  --text-primary: #d8d8d8;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+  --text-muted: #606060;
+  --text-disabled: #404040;
+
+  /* --- Accent palette --- */
+  --accent-blue: #8494a8;
+  --accent-green: #7ee787;
+  --accent-green-muted: #6a9a70;
+  --accent-red: #f97583;
+  --accent-red-muted: #6a3838;
+  --accent-gold: #d4a050;
+
+  /* --- Neutral scale (pure gray ramp) --- */
+  --neutral-50: #e0e0e0;
+  --neutral-100: #c8c8c8;
+  --neutral-200: #a0a0a0;
+  --neutral-300: #909090;
+  --neutral-400: #808080;
+  --neutral-500: #686868;
+  --neutral-600: #555555;
+  --neutral-700: #404040;
+  --neutral-800: #2a2a2a;
+  --neutral-900: #141414;
+
+  /* --- Vibrancy tint system --- */
   --sidebar-tint-opacity: 70%;
   --sidebar-tint-strong: 88%;
   --content-tint-opacity: 78%;
-  --sidebar-wash: oklch(0.14 0.01 210);
+  --sidebar-wash: #0f0f0f;
 
-  /* Content area border/shadow (Arc: SidebarBorderColor dark=rgba(1,1,1,0.30)) */
-  --content-border-opacity: 15%;
-  --content-shadow-opacity: 6%;
+  /* --- Content area border/shadow --- */
+  --content-border-opacity: 8%;
+  --content-shadow-opacity: 4%;
 
-  /* Diff viewer colors - Graphite Aqua (Dark Mode) */
-  --diff-addition-bg: oklch(0.22 0.07 150);
-  --diff-addition-gutter: oklch(0.18 0.09 150);
-  --diff-addition-word: oklch(0.32 0.15 150);
-  --diff-addition-text: oklch(0.76 0.15 150);
+  /* --- Diff viewer (muted, integrated) --- */
+  --diff-addition-bg: #1a2a1a;
+  --diff-addition-gutter: #1a2a1a;
+  --diff-addition-word: #3d5a3d;
+  --diff-addition-text: #6a9a70;
 
-  --diff-deletion-bg: oklch(0.22 0.07 25);
-  --diff-deletion-gutter: oklch(0.18 0.09 25);
-  --diff-deletion-word: oklch(0.32 0.17 25);
-  --diff-deletion-text: oklch(0.74 0.17 25);
+  --diff-deletion-bg: #2a1a1a;
+  --diff-deletion-gutter: #2a1a1a;
+  --diff-deletion-word: #5a3d3d;
+  --diff-deletion-text: #f97583;
 
-  --diff-line-number: oklch(0.5 0 0);
-  --diff-line-number-bg: oklch(0.16 0 0);
+  --diff-line-number: #404040;
+  --diff-line-number-bg: #0f0f0f;
 }
 
 /* Apply semantic border color to all elements with border utilities */
@@ -1489,8 +1666,7 @@ diffs-container.diffs-theme-compact {
   padding: 0.5rem 0.75rem; /* Reduced from 1rem (MUCH tighter) */
   overflow-x: auto;
   border-radius: 0.375rem; /* Slightly smaller radius */
-  background-color: color-mix(in oklch, var(--muted) 50%, transparent);
-  border: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+  background-color: var(--bg-code);
   font-family: var(--font-family-mono);
   font-size: 0.75rem; /* 12px (reduced from 14px - SMALLER) */
   line-height: 1.5;

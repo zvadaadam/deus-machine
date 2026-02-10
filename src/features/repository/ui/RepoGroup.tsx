@@ -1,11 +1,5 @@
-import { ChevronDown } from "lucide-react";
+import { Plus, Ellipsis } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-} from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
 import { WorkspaceItem } from "./WorkspaceItem";
 import type { RepoGroup as RepoGroupType, Workspace, DiffStats } from "@/shared/types";
@@ -17,11 +11,19 @@ interface RepoGroupProps {
   diffStats: Record<string, DiffStats>;
   onToggleCollapse: () => void;
   onWorkspaceClick: (workspace: Workspace) => void;
+  onNewWorkspace?: () => void;
 }
 
 /**
- * Repository group in sidebar using shadcn Sidebar + Collapsible components
- * Shows repository name with collapsible workspace list
+ * RepoGroup — V2: Jony Ive
+ *
+ * Layout:
+ *   [Badge 20×20] [RepoName — text-secondary 14/500]  ...  [+] [⋯]
+ *     └── WorkspaceItem[]
+ *
+ * Badge: first letter of repo name, bg-muted rounded-md
+ * Minimal chrome. The repo header earns attention through
+ * contrast, not decoration.
  */
 export function RepoGroup({
   group,
@@ -30,47 +32,71 @@ export function RepoGroup({
   diffStats,
   onToggleCollapse,
   onWorkspaceClick,
+  onNewWorkspace,
 }: RepoGroupProps) {
-  // Filter to only show ready workspaces in sidebar
   const readyWorkspaces = group.workspaces.filter((w) => w.state === "ready");
 
-  // Only show repos that have ready workspaces
   if (readyWorkspaces.length === 0) {
     return null;
   }
 
-  return (
-    <SidebarGroup>
-      <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
-        <SidebarGroupLabel>
-          <CollapsibleTrigger className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold transition-colors duration-200">
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 transition-transform duration-200",
-                isCollapsed && "-rotate-90"
-              )}
-            />
-            <span className="flex-1 text-left">{group.repo_name}</span>
-            <span className="text-muted-foreground text-xs">{readyWorkspaces.length}</span>
-          </CollapsibleTrigger>
-        </SidebarGroupLabel>
+  const repoInitial = group.repo_name.charAt(0).toUpperCase();
 
+  return (
+    <div className="flex w-full flex-col px-1.5 py-1">
+      <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
+        {/* Repo header row */}
+        <div className="group/repo flex w-full items-center gap-2 rounded-md px-3 py-2">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2">
+            {/* Repo badge */}
+            <div className="bg-bg-muted flex h-5 w-5 shrink-0 items-center justify-center rounded-md">
+              <span className="text-text-tertiary text-[10px] font-semibold">{repoInitial}</span>
+            </div>
+            <span className="text-text-secondary min-w-0 flex-1 truncate text-left text-sm font-medium">
+              {group.repo_name}
+            </span>
+          </CollapsibleTrigger>
+
+          {/* Action icons — show on hover */}
+          <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover/repo:opacity-100">
+            {onNewWorkspace && (
+              <button
+                type="button"
+                aria-label="New workspace"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewWorkspace();
+                }}
+                className="text-text-muted hover:text-text-tertiary"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="More options"
+              className="text-text-muted hover:text-text-tertiary"
+            >
+              <Ellipsis className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Workspace list */}
         <CollapsibleContent>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {readyWorkspaces.map((workspace) => (
-                <WorkspaceItem
-                  key={workspace.id}
-                  workspace={workspace}
-                  diffStats={diffStats[workspace.id]}
-                  isActive={selectedWorkspaceId === workspace.id}
-                  onClick={() => onWorkspaceClick(workspace)}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <ul className="flex flex-col">
+            {readyWorkspaces.map((workspace) => (
+              <WorkspaceItem
+                key={workspace.id}
+                workspace={workspace}
+                diffStats={diffStats[workspace.id]}
+                isActive={selectedWorkspaceId === workspace.id}
+                onClick={() => onWorkspaceClick(workspace)}
+              />
+            ))}
+          </ul>
         </CollapsibleContent>
       </Collapsible>
-    </SidebarGroup>
+    </div>
   );
 }

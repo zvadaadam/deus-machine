@@ -135,8 +135,10 @@ export function RightSidePanel({
       className={cn(
         "flex h-full min-w-0 flex-col",
         // Smooth width transition when resizing or switching tabs (matches sidebar curve)
-        !compact && !isResizing && "transition-[width,min-width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
-        !compact && "border-border/40 border-l",
+        !compact &&
+          !isResizing &&
+          "transition-[width,min-width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+        !compact && "border-border-subtle border-l",
         !compact && "min-w-[380px]",
         // Browser with no saved width: fill available space (smart default measures + persists)
         !compact && rightSideTab === "browser" && rightPanelWidth === null && "flex-1"
@@ -156,9 +158,11 @@ export function RightSidePanel({
         {/* Content panel: file tree, browser, terminal, config, design */}
         <div
           className={cn(
-            "bg-background/50 flex h-full flex-col overflow-hidden backdrop-blur-sm",
+            "bg-bg-raised flex h-full flex-col overflow-hidden",
             // Smooth width transition when switching tabs (disabled during drag)
-            !compact && !isResizing && "transition-[width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+            !compact &&
+              !isResizing &&
+              "transition-[width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
             compact
               ? compactWidth == null
                 ? "w-[220px]"

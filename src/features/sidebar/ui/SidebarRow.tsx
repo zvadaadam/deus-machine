@@ -10,10 +10,17 @@ interface SidebarRowProps extends React.ComponentProps<"div"> {
   asChild?: boolean;
 }
 
+/**
+ * SidebarRow — V2: Jony Ive
+ *
+ * Active: bg-selection (warm white in light, elevated in dark)
+ * Hover: bg-surface (subtle, not aggressive)
+ * Padding: repo=8px, workspace=10px 12px 10px 20px
+ */
 const rowVariants: Record<SidebarRowVariant, string> = {
-  repo: "py-2",
-  workspace: "py-2",
-  action: "py-2",
+  repo: "py-2 px-3",
+  workspace: "py-2.5 px-3 pl-5",
+  action: "py-2.5 px-3 pl-5",
 };
 
 export function SidebarRow({
@@ -29,9 +36,9 @@ export function SidebarRow({
     <Comp
       className={cn(
         "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-md",
-        "px-1 transition-all duration-[80ms] ease-out",
+        "transition-colors duration-100 ease-out",
         rowVariants[variant],
-        isActive ? "bg-foreground/5" : "hover:bg-foreground/5",
+        isActive ? "bg-bg-selection" : "hover:bg-bg-surface",
         className
       )}
       {...props}
@@ -56,7 +63,7 @@ export function SidebarRowMain({
     <Comp
       className={cn(
         "flex min-w-0 flex-1 items-center gap-3",
-        indent === "workspace" && "pl-3",
+        indent === "workspace" && "pl-0",
         className
       )}
       {...props}
@@ -67,7 +74,7 @@ export function SidebarRowMain({
 export function SidebarRowIconSlot({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
-      className={cn("flex h-4 w-4 shrink-0 items-center justify-center", className)}
+      className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center", className)}
       {...props}
     />
   );
