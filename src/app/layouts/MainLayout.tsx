@@ -93,7 +93,7 @@ export function MainLayout() {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
 
-  // Sidebar resize: null = default 340px, number = user-set width
+  // Sidebar resize: null = default 344px, number = user-set width
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
   // Tracks drag state to disable sidebar CSS transitions during resize
   const [sidebarDragging, setSidebarDragging] = useState(false);
@@ -324,8 +324,8 @@ export function MainLayout() {
       data-resizing={sidebarDragging || undefined}
       style={
         {
-          "--sidebar-width": sidebarWidth ? `${sidebarWidth}px` : "340px",
-          "--sidebar-width-mobile": "340px",
+          "--sidebar-width": sidebarWidth ? `${sidebarWidth}px` : "344px",
+          "--sidebar-width-mobile": "344px",
         } as React.CSSProperties
       }
     >

@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { useTheme } from "@/app/providers";
 import { cn } from "@/shared/lib/utils";
 import { getCleanRepoName } from "../lib/utils";
 
@@ -10,42 +9,40 @@ interface RepoAvatarProps {
 }
 
 /**
- * Self-contained repo badge that tries a GitHub owner avatar
- * and falls back to a desaturated letter badge.
+ * RepoAvatar — V2: Jony Ive
  *
- * Avatar URL: https://avatars.githubusercontent.com/{owner}?size=40
- * No auth needed — works for any public GitHub user/org.
- * Radix Avatar handles 404 / slow-load gracefully.
+ * 20×20 square badge with 6px radius (matches design token radius-md).
+ * Falls back to a single letter on a dark, subtly tinted background.
+ * The tint is derived from a stable hue hash of the repo name —
+ * just enough color to distinguish, never enough to distract.
  */
 export function RepoAvatar({ repoName, className }: RepoAvatarProps) {
-  const { actualTheme } = useTheme();
-
   const { displayName, initial, avatarUrl, fallbackBg, fallbackText } = useMemo(() => {
     const parts = repoName.split("/");
     const owner = parts.length === 2 ? parts[0] : null;
     const display = getCleanRepoName(repoName);
 
-    // Deterministic hue from name hash (full 0-360 range)
+    // Deterministic hue from name hash
     const hue = repoName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-    const isDark = actualTheme === "dark";
 
     return {
       displayName: display,
       initial: display.slice(0, 1).toUpperCase(),
       avatarUrl: owner ? `https://avatars.githubusercontent.com/${owner}?size=40` : null,
-      fallbackBg: isDark ? `oklch(0.25 0.04 ${hue})` : `oklch(0.92 0.04 ${hue})`,
-      fallbackText: isDark ? `oklch(0.72 0.06 ${hue})` : `oklch(0.45 0.06 ${hue})`,
+      // Subtle tinted dark bg — barely there, just enough to distinguish
+      fallbackBg: `oklch(0.18 0.03 ${hue})`,
+      fallbackText: `oklch(0.55 0.04 ${hue})`,
     };
-  }, [repoName, actualTheme]);
+  }, [repoName]);
 
   return (
-    <Avatar shape="square" className={cn("h-5 w-5 rounded-[4px]", className)}>
+    <Avatar shape="square" className={cn("h-5 w-5 rounded-md", className)}>
       {avatarUrl && (
-        <AvatarImage src={avatarUrl} alt={`${displayName} avatar`} className="rounded-[4px]" />
+        <AvatarImage src={avatarUrl} alt={`${displayName} avatar`} className="rounded-md" />
       )}
       <AvatarFallback
         shape="square"
-        className="rounded-[4px] text-[11px] font-semibold"
+        className="rounded-md text-[10px] font-semibold"
         style={{ backgroundColor: fallbackBg, color: fallbackText }}
         delayMs={0}
       >

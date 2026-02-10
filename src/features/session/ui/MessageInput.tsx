@@ -294,10 +294,10 @@ export function MessageInput({
                   size="sm"
                   title="Select model"
                   aria-label={`Select model, currently ${modelLabel}`}
-                  className="group focus-visible:ring-0"
+                  className="group rounded-md focus-visible:ring-0"
                 >
-                  <span className="text-popover-foreground text-xs font-normal">{modelLabel}</span>
-                  <ChevronDown className="text-popover-foreground size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  <span className="text-text-muted text-xs font-normal">{modelLabel}</span>
+                  <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
