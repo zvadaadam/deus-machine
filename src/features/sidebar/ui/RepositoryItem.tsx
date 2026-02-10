@@ -1,6 +1,5 @@
-import { ChevronDown, Plus } from "lucide-react";
+import { Plus, Ellipsis } from "lucide-react";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
 import { getCleanRepoName } from "../lib/utils";
@@ -9,11 +8,18 @@ import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { DragHandle } from "./DragHandle";
 import { RepoAvatar } from "./RepoAvatar";
-import { SidebarRow, SidebarRowIconSlot, SidebarRowMain, SidebarRowRight } from "./SidebarRow";
+import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 
 /**
- * RepositoryItem Component
- * Displays a single repository with its workspaces and controls
+ * RepositoryItem — V2: Jony Ive
+ *
+ * Layout:
+ *   [Badge 20×20] [RepoName]  ...  [+] [⋯]  (hover-reveal actions)
+ *     └── [+ New workspace]
+ *     └── WorkspaceItem[]
+ *
+ * The repo header uses text-secondary (B0B0B0) 14px medium.
+ * Action icons: text-muted (#787878), appear on hover.
  */
 export function RepositoryItem({
   repository,
@@ -45,42 +51,33 @@ export function RepositoryItem({
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
               >
                 <RepoAvatar repoName={repository.repo_name} />
-                <span className="truncate text-sm font-medium">{repoName}</span>
-                <span
-                  className={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center",
-                    "opacity-0 transition-opacity duration-200",
-                    "group-hover/repository-item:opacity-100"
-                  )}
-                  aria-hidden="true"
-                >
-                  <ChevronDown
-                    className={cn(
-                      "text-muted-foreground h-4 w-4 transition-transform duration-200",
-                      isCollapsed && "-rotate-90"
-                    )}
-                  />
-                </span>
+                <span className="text-text-secondary truncate text-sm font-medium">{repoName}</span>
               </button>
             </CollapsibleTrigger>
           </SidebarRowMain>
           {sidebarExpanded && (
-            <SidebarRowRight className="gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
+            <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100">
+              <button
+                type="button"
                 aria-label={`New workspace in ${repoName}`}
                 onClick={() => onNewWorkspace(repository.repo_id)}
-                className="text-muted-foreground/60 hover:text-muted-foreground h-5 w-5"
+                className="text-text-muted hover:text-text-tertiary"
               >
-                <Plus className="h-3 w-3" />
-              </Button>
+                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="More options"
+                className="text-text-muted hover:text-text-tertiary"
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
             </SidebarRowRight>
           )}
         </SidebarRow>
       </SidebarMenuItem>
       <CollapsibleContent>
-        <ul className="flex min-w-0 flex-col gap-1">
+        <ul className="flex min-w-0 flex-col">
           {sidebarExpanded &&
             (() => {
               const sortedWorkspaces = sortByStatusPriority(
@@ -94,7 +91,7 @@ export function RepositoryItem({
                       variant="action"
                       asChild
                       onClick={() => onNewWorkspace(repository.repo_id)}
-                      className="text-muted-foreground/80 hover:text-foreground w-full text-left text-[13px]"
+                      className="text-text-muted hover:text-text-tertiary w-full text-left text-[13px]"
                     >
                       <button type="button">
                         <SidebarRowMain indent="workspace">
