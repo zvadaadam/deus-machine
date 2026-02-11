@@ -105,12 +105,12 @@ export function MainContentTabBar({
                 <span className="block truncate">{tab.label}</span>
               </div>
 
-              {tab.closeable !== false && (
+              {onTabClose && tab.closeable !== false && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onTabClose?.(tab.id);
+                    onTabClose(tab.id);
                   }}
                   className={cn(
                     "flex h-4 w-4 items-center justify-center rounded-sm",

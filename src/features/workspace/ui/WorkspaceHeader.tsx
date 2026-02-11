@@ -59,6 +59,9 @@ export function WorkspaceHeader({
   const sidebarCollapsed = sidebarState === "collapsed";
 
   const [localTargetBranch, setLocalTargetBranch] = useState(targetBranchProp);
+  useEffect(() => {
+    setLocalTargetBranch(targetBranchProp);
+  }, [targetBranchProp]);
   const effectiveTarget = localTargetBranch;
 
   const hasPR = Boolean(prStatus?.has_pr && prStatus?.pr_number);
