@@ -101,7 +101,7 @@ export function WorkspaceHeader({
 
         {/* Title (primary) — shown only when available */}
         {title && (
-          <span className="mr-0.5 max-w-[240px] truncate text-xs font-medium text-neutral-100">
+          <span className="text-foreground mr-0.5 max-w-[240px] truncate text-xs font-medium">
             {title}
           </span>
         )}
@@ -215,7 +215,7 @@ function SplitButton({
           "bg-primary flex items-center gap-1.5 rounded-l-md px-2.5 text-[11px] font-semibold",
           "transition-colors duration-150",
           leftDisabled
-            ? "cursor-not-allowed opacity-50"
+            ? "text-primary-foreground cursor-not-allowed opacity-50"
             : "text-primary-foreground hover:opacity-90"
         )}
       >
