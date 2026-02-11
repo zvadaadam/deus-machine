@@ -91,12 +91,12 @@ export function RepositoryItem({
                       variant="action"
                       asChild
                       onClick={() => onNewWorkspace(repository.repo_id)}
-                      className="text-text-muted hover:text-text-tertiary w-full text-left text-[13px]"
+                      className="text-text-tertiary hover:text-text-secondary w-full text-left text-[13px]"
                     >
                       <button type="button">
-                        <SidebarRowMain indent="workspace">
+                        <SidebarRowMain>
                           <SidebarRowIconSlot>
-                            <Plus className="h-3.5 w-3.5" />
+                            <Plus className="h-4 w-4" />
                           </SidebarRowIconSlot>
                           <span className="font-normal">New workspace</span>
                         </SidebarRowMain>
