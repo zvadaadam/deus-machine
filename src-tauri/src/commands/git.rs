@@ -374,6 +374,11 @@ pub fn git_detect_default_branch(root_path: String) -> Result<String, String> {
     Ok(git::detect_default_branch(&root_path))
 }
 
+#[tauri::command]
+pub fn git_list_branches(workspace_path: String) -> Result<Vec<git::BranchInfo>, String> {
+    git::list_branches(&workspace_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

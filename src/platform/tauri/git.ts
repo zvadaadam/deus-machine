@@ -69,3 +69,15 @@ export function gitDetectDefaultBranch(rootPath: string): Promise<string> {
     rootPath,
   });
 }
+
+export interface TauriBranchInfo {
+  name: string;
+  is_remote: boolean;
+  is_head: boolean;
+}
+
+export function gitListBranches(workspacePath: string): Promise<TauriBranchInfo[]> {
+  return invoke<TauriBranchInfo[]>("git_list_branches", {
+    workspacePath,
+  });
+}
