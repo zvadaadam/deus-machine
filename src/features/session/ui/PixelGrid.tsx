@@ -6,7 +6,7 @@
  * - generating: Random sparkle (green) - creative text generation
  * - toolExecuting: Snake walk (amber) - methodical tool execution
  * - error: Cross pulse (red) - tool execution failed
- * - compacting: Slow sparkle (violet) - context compaction
+ * - compacting: Inward converge (violet) - corners→edges→center cascade
  *
  * Uses CSS keyframes (global.css) with --pixel-glow custom property for color.
  * Zero-gap grid with box-shadow glow bleeds between cells for ambient effect.
@@ -104,19 +104,22 @@ const VARIANTS: Record<PixelGridVariant, VariantConfig> = {
     ],
   },
 
-  // Slow ambient sparkle - like generating but slower and more subtle
+  // Inward converge — corners → edges → center, structured cascade.
+  // Thinking breathes outward; compacting breathes inward.
+  // Same 3s period keeps tiers in phase; tiny negative delays avoid cold start.
+  // Grid: [0:corner][1:edge][2:corner] / [3:edge][4:center][5:edge] / [6:corner][7:edge][8:corner]
   compacting: {
     color: "var(--status-compacting)",
     cells: [
-      { name: "pixel-sparkle", dur: "3s", del: "0.2s" },
-      { name: "pixel-sparkle", dur: "3.5s", del: "1.8s" },
-      { name: "pixel-sparkle", dur: "2.8s", del: "0.9s" },
-      { name: "pixel-sparkle", dur: "3.2s", del: "1.4s" },
-      { name: "pixel-sparkle", dur: "2.5s", del: "0.6s" },
-      { name: "pixel-sparkle", dur: "3.8s", del: "2.2s" },
-      { name: "pixel-sparkle", dur: "2.6s", del: "0.4s" },
-      { name: "pixel-sparkle", dur: "3.1s", del: "1.6s" },
-      { name: "pixel-sparkle", dur: "2.9s", del: "1.0s" },
+      { name: "pixel-compact-corner", dur: "3s", del: "-0.1s" },
+      { name: "pixel-compact-edge", dur: "3s", del: "-0.05s" },
+      { name: "pixel-compact-corner", dur: "3s", del: "-0.2s" },
+      { name: "pixel-compact-edge", dur: "3s", del: "-0.15s" },
+      { name: "pixel-compact-center", dur: "3s", del: "0s" },
+      { name: "pixel-compact-edge", dur: "3s", del: "-0.08s" },
+      { name: "pixel-compact-corner", dur: "3s", del: "-0.15s" },
+      { name: "pixel-compact-edge", dur: "3s", del: "-0.12s" },
+      { name: "pixel-compact-corner", dur: "3s", del: "-0.25s" },
     ],
   },
 };
