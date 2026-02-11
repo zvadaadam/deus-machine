@@ -83,10 +83,12 @@
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
+  --color-text-subtle: var(--text-subtle);
   --color-text-muted: var(--text-muted);
   --color-text-disabled: var(--text-disabled);
 
   /* Accent palette */
+  --color-accent-blue-surface: var(--accent-blue-surface);
   --color-accent-blue: var(--accent-blue);
   --color-accent-green: var(--accent-green);
   --color-accent-green-muted: var(--accent-green-muted);
@@ -727,11 +729,13 @@
   --text-primary: #1d1d1f;
   --text-secondary: #48484a;
   --text-tertiary: #6e6e73;
+  --text-subtle: #78788a;
   --text-muted: #8e8e93;
   --text-disabled: #aeaeb2;
 
   /* --- Accent palette (vivid for light mode) --- */
   --accent-blue: #3b82b8;
+  --accent-blue-surface: #e8edf4;
   --accent-green: #1a9a3e;
   --accent-green-muted: #5c8a6e;
   --accent-red: #d93e4c;
@@ -881,11 +885,13 @@
   --text-primary: #d8d8d8;
   --text-secondary: #b0b0b0;
   --text-tertiary: #808080;
+  --text-subtle: #707070;
   --text-muted: #606060;
   --text-disabled: #404040;
 
   /* --- Accent palette --- */
   --accent-blue: #8494a8;
+  --accent-blue-surface: #252830;
   --accent-green: #7ee787;
   --accent-green-muted: #6a9a70;
   --accent-red: #f97583;
