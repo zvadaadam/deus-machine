@@ -245,12 +245,12 @@ export function useBranches(workspacePath: string | null) {
   return useQuery({
     queryKey: ["branches", workspacePath],
     queryFn: async () => {
-      try {
-        const { gitListBranches } = await import("@/platform/tauri/git");
-        return await gitListBranches(workspacePath!);
-      } catch {
+      const { isTauriAvailable } = await import("@/platform/tauri/invoke");
+      if (!isTauriAvailable()) {
         return [];
       }
+      const { gitListBranches } = await import("@/platform/tauri/git");
+      return await gitListBranches(workspacePath!);
     },
     enabled: !!workspacePath,
     staleTime: 30_000,

@@ -61,6 +61,11 @@ export function MainContent({
   // function directly causes React to invoke it as a state updater (see bf516c6).
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
 
+  // Target branch for PR creation/merge — synced from WorkspaceHeader's branch selector
+  const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(
+    selectedWorkspace?.default_branch ?? "main"
+  );
+
   // Derived from store — no useState/callback delay on workspace load
   const isBrowserTab = rightSideTab === "browser";
 
@@ -79,6 +84,7 @@ export function MainContent({
     if (middlePanelWidth !== null) setMiddlePanelWidth(null);
     if (compactPanelWidth !== null) setCompactPanelWidth(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
+    setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
   }
 
   const middlePanelActive = middlePanel !== null;
@@ -320,6 +326,7 @@ export function MainContent({
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
               targetBranch={selectedWorkspace.default_branch ?? "main"}
+              onTargetBranchChange={setSelectedTargetBranch}
             />
 
             {/* Panels row */}
