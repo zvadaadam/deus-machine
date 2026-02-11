@@ -14,9 +14,10 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useResizeHandle, useFileChanges } from "@/features/workspace";
+import { useArchiveWorkspace } from "@/features/workspace/api/workspace.queries";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
-import { PRStatusBar } from "@/features/workspace/ui/PRStatusBar";
+import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { FileViewer } from "@/features/file-browser";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { PanelLeft } from "lucide-react";
@@ -143,7 +144,7 @@ export function MainContent({
     });
   }, [setSidebarOpen]);
 
-  // --- PR actions for the aligned PRStatusBar above the middle panel ---
+  // --- PR actions (used in WorkspaceHeader) ---
 
   const handleCreatePR = useCallback(() => {
     if (!createPRHandler) {
@@ -160,6 +161,12 @@ export function MainContent({
     }
     window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
   }, [prStatus]);
+
+  const archiveMutation = useArchiveWorkspace();
+  const handleArchive = useCallback(() => {
+    if (!selectedWorkspace) return;
+    archiveMutation.mutate(selectedWorkspace.id);
+  }, [selectedWorkspace, archiveMutation]);
 
   // --- Prev/next file navigation for diff views ---
 
@@ -300,9 +307,23 @@ export function MainContent({
           </button>
         )}
 
-        <div ref={mainContentRef} className="flex min-w-0 flex-1">
-          {selectedWorkspace ? (
-            <>
+        {selectedWorkspace ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* Unified workspace header — spans full width above all panels */}
+            <WorkspaceHeader
+              repositoryName={selectedWorkspace.directory_name}
+              branch={selectedWorkspace.branch}
+              workspacePath={selectedWorkspace.workspace_path}
+              workspaceId={selectedWorkspace.id}
+              prStatus={prStatus}
+              onCreatePR={createPRHandler ? handleCreatePR : undefined}
+              onReviewPR={handleOpenPR}
+              onArchive={handleArchive}
+              targetBranch={selectedWorkspace.default_branch ?? "main"}
+            />
+
+            {/* Panels row */}
+            <div ref={mainContentRef} className="flex min-h-0 min-w-0 flex-1">
               {/* Chat area — always visible, shrinks when middle panel is active */}
               <div
                 className="flex min-w-0 flex-col overflow-hidden"
@@ -324,20 +345,11 @@ export function MainContent({
                     label="Resize panels"
                   />
 
-                  {/* Middle panel section: PRStatusBar + (viewer | compact right panel) */}
+                  {/* Middle panel section: viewer + compact right panel */}
                   <div
                     className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden"
                     style={middlePanelStyle}
                   >
-                    {/* PRStatusBar — aligned with chat header row 1 */}
-                    <PRStatusBar
-                      prStatus={prStatus}
-                      onCreatePR={createPRHandler ? handleCreatePR : undefined}
-                      onReviewPR={handleOpenPR}
-                      compact
-                    />
-
-                    {/* Horizontal content: viewer + compact right panel */}
                     <div className="flex min-h-0 flex-1 overflow-hidden">
                       {/* Code viewer (diff or file preview) */}
                       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -367,18 +379,15 @@ export function MainContent({
                         label="Resize file list"
                       />
 
-                      {/* Compact right panel (file list + sidecar, PRStatusBar hidden) */}
+                      {/* Compact right panel (file list + sidecar) */}
                       <RightSidePanel
                         workspace={selectedWorkspace}
-                        prStatus={prStatus}
-                        createPRHandler={createPRHandler}
                         rightPanelWidth={null}
                         rightSideStyle={undefined}
                         onOpenDiffTab={handleOpenDiff}
                         onOpenFilePreview={handleOpenFilePreview}
                         compact
                         compactWidth={compactPanelWidth}
-                        hidePRStatus
                       />
                     </div>
                   </div>
@@ -395,8 +404,6 @@ export function MainContent({
                   {/* Normal right panel */}
                   <RightSidePanel
                     workspace={selectedWorkspace}
-                    prStatus={prStatus}
-                    createPRHandler={createPRHandler}
                     rightPanelWidth={rightPanelWidth}
                     rightSideStyle={rightSideStyle}
                     onOpenDiffTab={handleOpenDiff}
@@ -405,15 +412,17 @@ export function MainContent({
                   />
                 </>
               )}
-            </>
-          ) : (
+            </div>
+          </div>
+        ) : (
+          <div ref={mainContentRef} className="flex min-w-0 flex-1">
             <WelcomeView
               onCreateWorkspace={onCreateWorkspace}
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </SidebarInset>
   );

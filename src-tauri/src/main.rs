@@ -200,6 +200,7 @@ fn main() {
             commands::git_diff_files,
             commands::git_diff_file,
             commands::git_detect_default_branch,
+            commands::git_list_branches,
             commands::create_browser_webview,
             commands::navigate_browser_webview,
             commands::set_browser_webview_bounds,

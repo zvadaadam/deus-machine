@@ -25,7 +25,7 @@
 // Branch resolution results are cached with a 5-second TTL to avoid
 // repeated ref lookups during rapid UI interactions (e.g., polling).
 
-use git2::{DiffFormat, DiffOptions, Repository};
+use git2::{BranchType, DiffFormat, DiffOptions, Repository};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -55,6 +55,13 @@ pub struct FileDiffResult {
     pub diff: String,
     pub old_content: Option<String>,
     pub new_content: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct BranchInfo {
+    pub name: String,
+    pub is_remote: bool,
+    pub is_head: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -518,6 +525,76 @@ pub fn verify_branch_exists(root_path: &str, branch: &str) -> String {
     }
 
     "main".to_string()
+}
+
+// ---------------------------------------------------------------------------
+// 9. list_branches — enumerate local and remote branches for UI selectors
+// ---------------------------------------------------------------------------
+
+/// List all branches in the repository, de-duplicated and sorted.
+///
+/// Remote branches have the `origin/` prefix stripped for display.
+/// When both a local and remote branch share the same name, only the
+/// local entry is returned (it's the one the user interacts with).
+pub fn list_branches(workspace_path: &str) -> Result<Vec<BranchInfo>, String> {
+    let repo = Repository::open(workspace_path)
+        .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+    let head_name = repo
+        .head()
+        .ok()
+        .and_then(|h| h.shorthand().map(|s| s.to_string()));
+
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut branches: Vec<BranchInfo> = Vec::new();
+
+    // Local branches first (they take priority over remote duplicates)
+    if let Ok(local_iter) = repo.branches(Some(BranchType::Local)) {
+        for entry in local_iter {
+            if let Ok((branch, _)) = entry {
+                if let Some(name) = branch.name().ok().flatten() {
+                    let name = name.to_string();
+                    let is_head = head_name.as_deref() == Some(&name);
+                    seen.insert(name.clone());
+                    branches.push(BranchInfo {
+                        name,
+                        is_remote: false,
+                        is_head,
+                    });
+                }
+            }
+        }
+    }
+
+    // Remote branches (skip duplicates already seen as local)
+    if let Ok(remote_iter) = repo.branches(Some(BranchType::Remote)) {
+        for entry in remote_iter {
+            if let Ok((branch, _)) = entry {
+                if let Some(full_name) = branch.name().ok().flatten() {
+                    // Strip "origin/" prefix for display
+                    let display_name = full_name
+                        .strip_prefix("origin/")
+                        .unwrap_or(full_name)
+                        .to_string();
+
+                    // Skip HEAD pointer and branches already seen locally
+                    if display_name == "HEAD" || seen.contains(&display_name) {
+                        continue;
+                    }
+
+                    seen.insert(display_name.clone());
+                    branches.push(BranchInfo {
+                        name: display_name,
+                        is_remote: true,
+                        is_head: false,
+                    });
+                }
+            }
+        }
+    }
+
+    branches.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(branches)
 }
 
 // ---------------------------------------------------------------------------
