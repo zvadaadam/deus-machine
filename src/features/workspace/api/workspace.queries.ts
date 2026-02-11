@@ -238,6 +238,26 @@ export function useCreateWorkspace() {
 }
 
 /**
+ * Fetch available branches for a workspace/repo.
+ * Uses Tauri IPC (fast, libgit2). Returns [] gracefully in browser/Storybook.
+ */
+export function useBranches(workspacePath: string | null) {
+  return useQuery({
+    queryKey: ["branches", workspacePath],
+    queryFn: async () => {
+      try {
+        const { gitListBranches } = await import("@/platform/tauri/git");
+        return await gitListBranches(workspacePath!);
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!workspacePath,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Archive workspace mutation with optimistic update
  *
  * Flow:

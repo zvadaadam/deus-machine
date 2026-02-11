@@ -1,31 +1,28 @@
 /**
- * Right Side Panel — narrow sidebar with file tree, sidecar tabs, and PR actions.
+ * Right Side Panel — narrow sidebar with file tree, sidecar tabs.
  *
  * Diffs and file previews open in the middle panel (side-by-side with chat).
  * This panel stays at fixed width except when browser tab is active.
+ * PR actions have moved to WorkspaceHeader (unified header bar).
  *
  * Layout: [Content panel (file tree/browser/terminal)] [Sidecar tabs]
  */
 
 import { useCallback, useMemo } from "react";
-import { toast } from "sonner";
 import { TerminalPanel } from "@/features/terminal";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
-import { PRStatusBar } from "@/features/workspace/ui/PRStatusBar";
 import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { BrowserPanel } from "@/features/browser";
 import { cn } from "@/shared/lib/utils";
 import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
-import type { Workspace, PRStatus } from "@/shared/types";
+import type { Workspace } from "@/shared/types";
 
 interface RightSidePanelProps {
   workspace: Workspace;
-  prStatus: PRStatus | null;
-  createPRHandler: (() => void) | null;
   /** Current panel width from store — used for flex-1 conditional */
   rightPanelWidth: number | null;
   /** Inline style for custom width (browser mode) */
@@ -38,23 +35,18 @@ interface RightSidePanelProps {
   compact?: boolean;
   /** Custom width for the compact content panel (from resize handle) */
   compactWidth?: number | null;
-  /** Hide PRStatusBar (rendered by parent instead for header alignment) */
-  hidePRStatus?: boolean;
   /** Whether the user is actively dragging the resize handle — disables transitions */
   isResizing?: boolean;
 }
 
 export function RightSidePanel({
   workspace,
-  prStatus,
-  createPRHandler,
   rightPanelWidth,
   rightSideStyle,
   onOpenDiffTab,
   onOpenFilePreview,
   compact,
   compactWidth,
-  hidePRStatus,
   isResizing,
 }: RightSidePanelProps) {
   const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
@@ -109,22 +101,6 @@ export function RightSidePanel({
     [setRightSideTab]
   );
 
-  const handleCreatePR = useCallback(() => {
-    if (!createPRHandler) {
-      toast.error("No active session available to create a PR.");
-      return;
-    }
-    createPRHandler();
-  }, [createPRHandler]);
-
-  const handleOpenPR = useCallback(() => {
-    if (!prStatus?.pr_url) {
-      toast.error("PR link not available.");
-      return;
-    }
-    window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
-  }, [prStatus]);
-
   // Merge inline style with transition override when dragging
   const outerStyle: React.CSSProperties | undefined = isResizing
     ? { ...rightSideStyle, transition: "none" }
@@ -145,15 +121,6 @@ export function RightSidePanel({
       )}
       style={outerStyle}
     >
-      {!hidePRStatus && (
-        <PRStatusBar
-          prStatus={prStatus}
-          onCreatePR={createPRHandler ? handleCreatePR : undefined}
-          onReviewPR={handleOpenPR}
-          compact={compact}
-        />
-      )}
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Content panel: file tree, browser, terminal, config, design */}
         <div

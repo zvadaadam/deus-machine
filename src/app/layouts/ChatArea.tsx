@@ -95,10 +95,6 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
 
   // --- Keyboard shortcuts ---
 
-  const handleBranchRename = (newName: string) => {
-    if (import.meta.env.DEV) console.log("Branch rename:", workspace.branch, "->", newName);
-  };
-
   // Cmd+T shortcut to open new chat tab
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -132,10 +128,6 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         onTabChange={handleMainTabChange}
         onTabClose={handleMainTabClose}
         onTabAdd={handleMainTabAdd}
-        repositoryName={workspace.directory_name}
-        branch={workspace.branch}
-        workspacePath={workspace.workspace_path}
-        onBranchRename={handleBranchRename}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
