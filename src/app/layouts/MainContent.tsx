@@ -168,11 +168,11 @@ export function MainContent({
     window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
   }, [prStatus]);
 
-  const archiveMutation = useArchiveWorkspace();
+  const { mutate: archiveWorkspace } = useArchiveWorkspace();
   const handleArchive = useCallback(() => {
     if (!selectedWorkspace) return;
-    archiveMutation.mutate(selectedWorkspace.id);
-  }, [selectedWorkspace, archiveMutation]);
+    archiveWorkspace(selectedWorkspace.id);
+  }, [selectedWorkspace, archiveWorkspace]);
 
   // --- Prev/next file navigation for diff views ---
 
@@ -325,7 +325,7 @@ export function MainContent({
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
-              targetBranch={selectedWorkspace.default_branch ?? "main"}
+              targetBranch={selectedTargetBranch}
               onTargetBranchChange={setSelectedTargetBranch}
             />
 
