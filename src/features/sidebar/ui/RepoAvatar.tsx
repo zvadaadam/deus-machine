@@ -9,29 +9,21 @@ interface RepoAvatarProps {
 }
 
 /**
- * RepoAvatar — V2: Jony Ive
+ * RepoAvatar — 20×20 square badge with 6px radius.
  *
- * 20×20 square badge with 6px radius (matches design token radius-md).
- * Falls back to a single letter on a dark, subtly tinted background.
- * The tint is derived from a stable hue hash of the repo name —
- * just enough color to distinguish, never enough to distract.
+ * Uses theme-aware bg-muted / text-tertiary so it adapts to light and dark modes.
+ * GitHub org avatar shown when the repo name includes an owner prefix.
  */
 export function RepoAvatar({ repoName, className }: RepoAvatarProps) {
-  const { displayName, initial, avatarUrl, fallbackBg, fallbackText } = useMemo(() => {
+  const { displayName, initial, avatarUrl } = useMemo(() => {
     const parts = repoName.split("/");
     const owner = parts.length === 2 ? parts[0] : null;
     const display = getCleanRepoName(repoName);
-
-    // Deterministic hue from name hash
-    const hue = repoName.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
 
     return {
       displayName: display,
       initial: display.slice(0, 1).toUpperCase(),
       avatarUrl: owner ? `https://avatars.githubusercontent.com/${owner}?size=40` : null,
-      // Subtle tinted dark bg — barely there, just enough to distinguish
-      fallbackBg: `oklch(0.18 0.03 ${hue})`,
-      fallbackText: `oklch(0.55 0.04 ${hue})`,
     };
   }, [repoName]);
 
@@ -42,8 +34,7 @@ export function RepoAvatar({ repoName, className }: RepoAvatarProps) {
       )}
       <AvatarFallback
         shape="square"
-        className="rounded-md text-[10px] font-semibold"
-        style={{ backgroundColor: fallbackBg, color: fallbackText }}
+        className="bg-bg-muted text-text-tertiary rounded-md text-[10px] font-semibold"
         delayMs={0}
       >
         {initial}

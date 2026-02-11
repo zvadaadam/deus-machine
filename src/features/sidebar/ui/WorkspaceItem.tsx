@@ -1,56 +1,33 @@
 import React from "react";
-import {
-  AlertTriangle,
-  Archive,
-  Eye,
-  GitBranch,
-  GitPullRequest,
-  LoaderCircle,
-  Circle,
-} from "lucide-react";
+import { Archive } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { PixelGrid } from "@/features/session/ui/PixelGrid";
 import { getDisplayStatus, STATUS_CONFIG } from "../lib/status";
 import type { WorkspaceItemProps } from "../model/types";
-import { SidebarRow, SidebarRowIconSlot, SidebarRowMain } from "./SidebarRow";
+import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
 
 /**
- * Status icon — V2: Jony Ive (refined)
- *
- * Shape communicates meaning, not color. Neutral gray icons.
- * working    → PixelGrid (handled separately)
- * unread     → Circle (filled, small)
- * error      → AlertTriangle (shape = warning)
- * compacting → GitPullRequest
- * idle       → GitPullRequest
+ * Whether this status shows an icon in the 20x20 slot.
+ * working → PixelGrid generating, compacting → PixelGrid compacting,
+ * unread → gold dot, error → red dot. Only idle shows no icon (26px padding).
  */
-function getStatusIcon(status: string, isArchived: boolean, className: string) {
-  if (isArchived) return <Archive className={className} />;
-  switch (status) {
-    case "error":
-      return <AlertTriangle className={className} />;
-    case "unread":
-      return <Circle className={cn(className, "fill-current")} />;
-    case "compacting":
-      return <GitPullRequest className={className} />;
-    case "idle":
-    default:
-      return <GitPullRequest className={className} />;
-  }
-}
+const hasStatusIcon = (status: string) =>
+  status === "working" || status === "unread" || status === "error" || status === "compacting";
 
 /**
- * WorkspaceItem — V2: Jony Ive
+ * WorkspaceItem — Sidebar workspace row
  *
- * Two-row layout inside a SidebarRow:
- *   Row 1: [StatusIcon] [branch name]     [+713 -2]
- *   Row 2:              [directory · status]
+ * Layout:  [Left (flex-1)]  [Right]
+ *   Left:
+ *     Row 1: [Icon 20×20 | pad-left 26px] [branch name]
+ *     Row 2: [pad-left 26px] [directory · status]
+ *   Right:
+ *     [+additions -deletions]
  *
- * Selected: bg-elevated, text-primary
- * Normal: text-primary (active items), text-tertiary (idle)
- * Diff stats: accent-green-muted / accent-red-muted (muted in non-selected)
+ * Icons: working → PixelGrid generating, compacting → PixelGrid compacting,
+ * error → red dot, unread → gold dot. Idle → no icon (26px indent).
  */
 export const WorkspaceItem = React.memo(function WorkspaceItem({
   workspace,
@@ -71,43 +48,33 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
+    const diffMonths = Math.floor(diffDays / 30);
 
     if (diffMins < 1) return "now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return `${diffMonths}mo ago`;
   };
 
   const displayStatus = getDisplayStatus(workspace);
   const statusConfig = STATUS_CONFIG[displayStatus];
-
-  // Neutral gray icons — shape communicates meaning, not color (Jony Ive)
-  const statusIconClass = (() => {
-    if (workspace.state === "archived") return "text-text-disabled";
-    switch (displayStatus) {
-      case "unread":
-        return "text-text-secondary";
-      case "error":
-        return "text-text-tertiary";
-      case "compacting":
-        return "text-text-muted";
-      default:
-        return "text-text-muted";
-    }
-  })();
+  const showIcon = hasStatusIcon(displayStatus);
+  // 20px icon + 6px gap = 26px indent for rows without an icon
+  const rowIndent = "pl-[26px]";
 
   const statusTextClass = (() => {
     switch (displayStatus) {
       case "working":
-        return "text-accent-blue";
+        return "text-text-tertiary";
       case "unread":
-        return "text-accent-gold";
+        return "text-text-secondary";
       case "error":
-        return "text-accent-red";
+        return "text-accent-red-muted";
       case "compacting":
-        return "text-accent-blue";
+        return "text-text-tertiary";
       default:
-        return "text-text-muted";
+        return "text-text-disabled";
     }
   })();
 
@@ -139,6 +106,11 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
 
   const isArchived = workspace.state === "archived";
   const canArchive = !isArchived && !!onArchive;
+  const isActiveState =
+    displayStatus === "working" ||
+    displayStatus === "unread" ||
+    displayStatus === "error" ||
+    displayStatus === "compacting";
 
   return (
     <li>
@@ -159,62 +131,81 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           if (e.key === "Enter" || e.key === " ") onClick(workspace);
         }}
       >
-        <SidebarRowMain indent="workspace" className="items-start">
-          <SidebarRowIconSlot className="mt-0.5">
-            {displayStatus === "working" ? (
-              <PixelGrid variant="generating" size={14} />
-            ) : displayStatus === "unread" ? (
-              <Circle className={cn("h-2 w-2", statusIconClass, "fill-current")} />
-            ) : (
-              getStatusIcon(displayStatus, isArchived, cn("h-3.5 w-3.5", statusIconClass))
+        {/* Left: rows */}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {/* Row 1: icon + branch name */}
+          <div className={cn("flex min-w-0 items-center gap-1.5", !showIcon && rowIndent)}>
+            {showIcon && (
+              <SidebarRowIconSlot>
+                {displayStatus === "working" ? (
+                  <PixelGrid variant="generating" size={14} />
+                ) : displayStatus === "compacting" ? (
+                  <PixelGrid variant="compacting" size={14} />
+                ) : displayStatus === "error" ? (
+                  <span className="bg-accent-red h-2 w-2 rounded-full" />
+                ) : (
+                  /* unread: gold dot */
+                  <span className="bg-accent-gold h-2 w-2 rounded-full" />
+                )}
+              </SidebarRowIconSlot>
             )}
-          </SidebarRowIconSlot>
-          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-3 gap-y-0.5">
-            {/* Row 1: branch name */}
             <span
               className={cn(
                 "truncate text-[13px]",
                 isActive
                   ? "text-text-primary font-medium"
-                  : displayStatus === "idle" || displayStatus === "compacting"
-                    ? "text-text-tertiary font-normal"
-                    : "text-text-primary font-normal"
+                  : isActiveState
+                    ? "text-text-primary font-normal"
+                    : "text-text-tertiary font-normal"
               )}
             >
               {workspace.branch}
             </span>
-
-            {/* Row 1 right: diff stats */}
-            {hasChanges ? (
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 self-start justify-self-end text-xs font-medium transition-opacity",
-                  canArchive && "group-hover/sidebar-row:opacity-0"
-                )}
-              >
-                {additions > 0 && (
-                  <span className={isActive ? "text-accent-green" : "text-accent-green-muted"}>
-                    +{additions}
-                  </span>
-                )}
-                {deletions > 0 && (
-                  <span className={isActive ? "text-accent-red" : "text-accent-red-muted"}>
-                    -{deletions}
-                  </span>
-                )}
-              </div>
-            ) : null}
-
-            {/* Row 2: directory · status */}
-            <div className="col-span-2 flex min-w-0 items-center gap-1.5">
-              <span className="text-text-muted truncate text-xs">{workspace.directory_name}</span>
-              {showStatusDot && <span className="text-text-muted text-xs">·</span>}
-              {statusText && (
-                <span className={cn("shrink-0 text-xs", statusTextClass)}>{statusText}</span>
-              )}
-            </div>
           </div>
-        </SidebarRowMain>
+
+          {/* Row 2: directory · status */}
+          <div className={cn("flex min-w-0 items-center gap-1.5", rowIndent)}>
+            <span
+              className={cn(
+                "truncate text-xs",
+                isActiveState ? "text-text-tertiary" : "text-text-disabled"
+              )}
+            >
+              {workspace.directory_name}
+            </span>
+            {showStatusDot && (
+              <span
+                className={cn("text-xs", isActiveState ? "text-text-muted" : "text-text-disabled")}
+              >
+                ·
+              </span>
+            )}
+            {statusText && (
+              <span className={cn("shrink-0 text-xs", statusTextClass)}>{statusText}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: diff stats */}
+        {hasChanges ? (
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 text-xs font-medium transition-opacity",
+              canArchive && "group-hover/sidebar-row:opacity-0"
+            )}
+          >
+            {additions > 0 && (
+              <span className={isActive ? "text-accent-green" : "text-accent-green-muted"}>
+                +{additions}
+              </span>
+            )}
+            {deletions > 0 && (
+              <span className={isActive ? "text-accent-red" : "text-accent-red-muted"}>
+                -{deletions}
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {/* Archive button — hover reveal */}
         {canArchive ? (

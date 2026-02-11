@@ -10,7 +10,11 @@ const VARIANTS: { variant: PixelGridVariant; label: string; description: string 
     description: "Running bash/edit/read — snake walk",
   },
   { variant: "error", label: "Error", description: "Tool failed — cross pulse" },
-  { variant: "compacting", label: "Compacting", description: "Context compaction — slow sparkle" },
+  {
+    variant: "compacting",
+    label: "Compacting",
+    description: "Context compaction — inward converge",
+  },
 ];
 
 const meta: Meta<typeof PixelGrid> = {

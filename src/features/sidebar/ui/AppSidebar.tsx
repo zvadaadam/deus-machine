@@ -115,7 +115,7 @@ export function AppSidebar({
             items={orderedRepositories.map((r) => r.repo_id)}
             strategy={verticalListSortingStrategy}
           >
-            <SidebarMenu className="gap-1 px-2 py-2">
+            <SidebarMenu className="gap-1 px-1.5 py-2">
               {orderedRepositories.map((repo) => (
                 <DraggableRepository
                   key={repo.repo_id}
