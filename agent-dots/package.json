@@ -1,0 +1,23 @@
+{
+  "name": "agent-dots",
+  "version": "1.0.0",
+  "description": "Abstract dot orchestration animation - Remotion video",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render AgentDots out/agent-dots.mp4",
+    "render": "remotion render AgentDots out/agent-dots.mp4",
+    "render:gif": "remotion render AgentDots out/agent-dots.gif",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.277",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.277"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config": "4.0.277",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}
