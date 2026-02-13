@@ -1,5 +1,7 @@
-import { X, Plus, FileCode, GitCompareArrows } from "lucide-react";
+import { useState } from "react";
+import { X, Plus, FileCode, GitCompareArrows, History } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 
@@ -38,12 +40,22 @@ export interface Tab {
   };
 }
 
+/** Info preserved when a chat tab is closed, for restore */
+export interface ClosedTab {
+  label: string;
+  sessionId: string;
+  agentType?: string;
+  closedAt: number;
+}
+
 interface MainContentTabBarProps {
   tabs: Tab[];
   activeTabId: string;
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
+  closedTabs?: ClosedTab[];
+  onTabRestore?: (closedTab: ClosedTab) => void;
 }
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
@@ -65,9 +77,21 @@ function getTabIcon(tab: Tab) {
   }
 }
 
+function getClosedTabIcon(agentType?: string) {
+  const LogoComponent = getAgentLogo(agentType || "claude");
+  if (LogoComponent) {
+    return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
+  }
+  return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
+}
+
 /**
  * MainContentTabBar — tabs-only bar for the chat area.
  * Workspace context (repo, branch, PR actions) moved to WorkspaceHeader.
+ *
+ * Close rules:
+ * - Any tab can be closed as long as at least one tab remains
+ * - The close button only appears on hover when there are 2+ tabs
  */
 export function MainContentTabBar({
   tabs,
@@ -75,12 +99,17 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  closedTabs = [],
+  onTabRestore,
 }: MainContentTabBarProps) {
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const canCloseTabs = tabs.length > 1;
+
   return (
     <div className="chat-tabs-header relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
       <div
         role="tablist"
-        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -114,8 +143,8 @@ export function MainContentTabBar({
                 <span className="block truncate">{tab.label}</span>
               </div>
 
-              {/* Close button — overlays right edge on hover with gradient fade */}
-              {onTabClose && tab.closeable !== false && (
+              {/* Close button — overlays right edge on hover, only when 2+ tabs */}
+              {onTabClose && canCloseTabs && tab.closeable !== false && (
                 <div
                   className={cn(
                     "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
@@ -146,28 +175,85 @@ export function MainContentTabBar({
           );
         })}
 
-        {onTabAdd && (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="New chat tab"
-                onClick={onTabAdd}
-                className={cn(
-                  "flex items-center justify-center",
-                  "h-7 flex-shrink-0 rounded-md px-1.5",
-                  "text-text-disabled hover:text-text-muted",
-                  "transition-colors duration-150"
+        {/* Action buttons: restore + new tab */}
+        <div className="flex flex-shrink-0 items-center">
+          {onTabRestore && closedTabs.length > 0 && (
+            <Popover open={restoreOpen} onOpenChange={setRestoreOpen}>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Restore closed session"
+                      className={cn(
+                        "flex items-center justify-center",
+                        "h-7 flex-shrink-0 rounded-md px-1.5",
+                        "text-text-disabled hover:text-text-muted",
+                        "transition-colors duration-150"
+                      )}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                {!restoreOpen && (
+                  <TooltipContent side="bottom">
+                    <p className="text-xs">Restore closed session (⌘⇧T)</p>
+                  </TooltipContent>
                 )}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p className="text-xs">New chat (⌘T)</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
+              </Tooltip>
+              <PopoverContent align="start" sideOffset={6} className="w-56 p-1">
+                <p className="text-text-muted px-2 py-1.5 text-[11px] font-medium">
+                  Recently closed
+                </p>
+                <div className="max-h-48 overflow-y-auto">
+                  {closedTabs.map((ct, i) => (
+                    <button
+                      key={`${ct.sessionId}-${i}`}
+                      type="button"
+                      onClick={() => {
+                        onTabRestore(ct);
+                        setRestoreOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
+                        "text-text-secondary text-left text-[13px]",
+                        "transition-colors duration-150",
+                        "hover:bg-bg-raised"
+                      )}
+                    >
+                      {getClosedTabIcon(ct.agentType)}
+                      <span className="min-w-0 flex-1 truncate">{ct.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {onTabAdd && (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="New chat tab"
+                  onClick={onTabAdd}
+                  className={cn(
+                    "flex items-center justify-center",
+                    "h-7 flex-shrink-0 rounded-md px-1.5",
+                    "text-text-disabled hover:text-text-muted",
+                    "transition-colors duration-150"
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">New chat (⌘T)</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
     </div>
   );
