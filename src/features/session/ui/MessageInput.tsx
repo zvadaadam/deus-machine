@@ -215,27 +215,12 @@ export function MessageInput({
   };
 
   const renderAgentIcon = (type: RuntimeAgentType) => {
-    const logo = getAgentLogo(type);
-    if (!logo) {
+    const LogoComponent = getAgentLogo(type);
+    if (!LogoComponent) {
       return <span className="bg-muted-foreground/80 inline-flex h-3.5 w-3.5 rounded-full" />;
     }
 
-    return (
-      <span
-        className="inline-block h-4 w-4 flex-shrink-0"
-        style={{
-          maskImage: `url(${logo})`,
-          maskSize: "contain",
-          maskRepeat: "no-repeat",
-          maskPosition: "center",
-          WebkitMaskImage: `url(${logo})`,
-          WebkitMaskSize: "contain",
-          WebkitMaskRepeat: "no-repeat",
-          WebkitMaskPosition: "center",
-          backgroundColor: "currentColor",
-        }}
-      />
-    );
+    return <LogoComponent className="h-4 w-4 flex-shrink-0" />;
   };
 
   return (
@@ -340,7 +325,7 @@ export function MessageInput({
                 className={cn(
                   "border-border/55 w-[320px] rounded-[18px] border p-2",
                   "from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                  "shadow-[0_24px_64px_rgba(0,0,0,0.46)]"
+                  "shadow-[var(--shadow-elevated)]"
                 )}
               >
                 <DropdownMenuLabel>
