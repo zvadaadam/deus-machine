@@ -34,14 +34,30 @@ function buildWindowTitle(context: DetachedBrowserWorkspaceContext): string {
 }
 
 let hasAttachedDestroyListener = false;
+let destroyUnlisten: (() => void) | null = null;
 
 function attachDestroyListener(window: WebviewWindow) {
   if (hasAttachedDestroyListener) return;
   hasAttachedDestroyListener = true;
-  window.once("tauri://destroyed", () => {
-    hasAttachedDestroyListener = false;
-    browserWindowActions.clearDetachedWindow();
-  });
+  // Capture the unlisten function so the error handler can clean up the
+  // orphaned IPC listener when window creation fails.
+  window
+    .once("tauri://destroyed", () => {
+      hasAttachedDestroyListener = false;
+      destroyUnlisten = null;
+      browserWindowActions.clearDetachedWindow();
+    })
+    .then((fn) => {
+      destroyUnlisten = fn;
+    });
+}
+
+function cleanupDestroyListener() {
+  if (destroyUnlisten) {
+    destroyUnlisten();
+    destroyUnlisten = null;
+  }
+  hasAttachedDestroyListener = false;
 }
 
 export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null) {
@@ -76,7 +92,7 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
 
     detachedWindow.once("tauri://error", (e) => {
       console.error("[BrowserDetach] Failed to create detached window:", e);
-      hasAttachedDestroyListener = false;
+      cleanupDestroyListener();
       browserWindowActions.clearDetachedWindow();
     });
 
