@@ -124,10 +124,12 @@
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono:
     "JetBrains Mono", "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  --font-pixel: "Geist Pixel Square", monospace;
 
   /* Legacy aliases for backward compatibility */
   --font-family-sans: var(--font-sans);
   --font-family-mono: var(--font-mono);
+  --font-family-pixel: var(--font-pixel);
 
   /*
    * Typography System:
@@ -629,6 +631,102 @@
  *
  * The system is dark-first. Light mode inverts the ramp.
  * ═══════════════════════════════════════════════════════════ */
+
+/* ─── Onboarding Animations ──────────────────────────────────────────────── */
+
+/* Step transitions — GPU-accelerated (transform + opacity only) */
+@keyframes onboarding-step-enter-forward {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes onboarding-step-exit-forward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+}
+
+@keyframes onboarding-step-enter-back {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes onboarding-step-exit-back {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+}
+
+/* Card window: fades in with subtle scale-up + lift */
+@keyframes onboarding-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Overlay: fades in from transparent to semi-opaque dark */
+@keyframes onboarding-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Exit: scrim fades out */
+@keyframes onboarding-exit-scrim {
+  0% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Exit: card dissolves upward with blur */
+@keyframes onboarding-exit-card {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04) translateY(-12px);
+    filter: blur(8px);
+  }
+}
 
 :root {
   --radius: 0.5rem;

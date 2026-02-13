@@ -71,6 +71,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.24",
+    "geist": "^1.7.0",
     "hono": "^4.11.7",
     "immer": "^11.0.1",
     "json-rpc-2.0": "^1.7.1",

@@ -13,6 +13,9 @@ export interface Settings {
   diff_view_mode?: string;
   user_name?: string;
 
+  // Onboarding
+  onboarding_completed?: boolean;
+
   // AI
   anthropic_api_key?: string;
   claude_provider?: string;

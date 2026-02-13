@@ -1,5 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -8,9 +10,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { RotateCcw } from "lucide-react";
+import { apiClient } from "@/shared/api/client";
+import { queryKeys } from "@/shared/api/queryKeys";
 import type { GeneralSectionProps } from "./types";
 
-export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
+export function GeneralSection({
+  settings,
+  saveSetting,
+  theme,
+  setTheme,
+  onClose,
+}: GeneralSectionProps) {
+  const queryClient = useQueryClient();
+
   return (
     <div className="space-y-5">
       <div>
@@ -77,6 +90,28 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             <SelectItem value="split">Split</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <Separator />
+
+      {/* Replay onboarding */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm">Onboarding</Label>
+          <p className="text-muted-foreground text-[13px]">Replay the setup walkthrough.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            onClose();
+            await apiClient.post("/settings", { key: "onboarding_completed", value: false });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
+          }}
+        >
+          <RotateCcw className="mr-1.5 size-3.5" />
+          Replay
+        </Button>
       </div>
     </div>
   );

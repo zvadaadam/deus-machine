@@ -7,6 +7,7 @@ mod cookies;
 mod apps;
 mod files;
 mod git;
+mod onboarding;
 
 pub use pty::*;
 pub use socket::*;
@@ -17,3 +18,4 @@ pub use cookies::*;
 pub use apps::*;
 pub use files::*;
 pub use git::*;
+pub use onboarding::*;

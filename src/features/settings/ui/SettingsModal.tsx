@@ -100,7 +100,9 @@ export function SettingsModal({ show, onClose }: SettingsModalProps) {
 
     switch (activeSection) {
       case "general":
-        return <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />;
+        return (
+          <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} onClose={onClose} />
+        );
       case "ai":
         return <AISection {...sectionProps} />;
       case "extensions":

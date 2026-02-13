@@ -216,6 +216,11 @@ fn main() {
             commands::sync_browser_cookies,
             commands::inject_browser_cookies,
             commands::screenshot_browser_webview,
+            commands::check_cli_tool,
+            commands::check_gh_auth,
+            commands::enter_onboarding_mode,
+            commands::exit_onboarding_mode,
+            commands::show_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
