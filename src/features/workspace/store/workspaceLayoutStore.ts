@@ -294,12 +294,16 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
                     : null;
               }
 
-              // v4: Add browser tab persistence fields and chat panel state
+              // v4: Add browser tab persistence fields
               if (version < 4) {
                 (nextLayout as Record<string, unknown>).browserTabs =
                   (layout as Record<string, unknown>).browserTabs ?? [];
                 (nextLayout as Record<string, unknown>).activeBrowserTabId =
                   (layout as Record<string, unknown>).activeBrowserTabId ?? null;
+              }
+
+              // v5: Add chat panel collapsed state
+              if (version < 5) {
                 nextLayout.chatPanelCollapsed = false;
               }
 
