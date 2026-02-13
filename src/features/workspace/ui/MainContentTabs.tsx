@@ -47,7 +47,7 @@ interface MainContentTabBarProps {
 }
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
-const AGENT_ICON_SIZE = "w-5 h-5";
+const AGENT_ICON_SIZE = "w-3.5 h-3.5";
 
 function getTabIcon(tab: Tab) {
   switch (tab.type) {
@@ -80,7 +80,7 @@ export function MainContentTabBar({
     <div className="chat-tabs-header relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
       <div
         role="tablist"
-        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center overflow-x-auto"
+        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
