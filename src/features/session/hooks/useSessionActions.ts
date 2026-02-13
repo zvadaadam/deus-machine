@@ -16,11 +16,14 @@ import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
 import { socketService } from "@/platform/socket";
 import { isTauriEnv } from "@/platform/tauri";
+import { getRuntimeAgentLabel, type RuntimeAgentType } from "../lib/agentRuntime";
 
 interface UseSessionActionsProps {
   sessionId: string;
   workspacePath: string;
   messageInput: string;
+  model?: string;
+  agentType?: RuntimeAgentType;
   onMessageSent?: () => void;
 }
 
@@ -39,6 +42,8 @@ export function useSessionActions({
   sessionId,
   workspacePath,
   messageInput,
+  model,
+  agentType = "claude",
   onMessageSent,
 }: UseSessionActionsProps): UseSessionActionsReturn {
   const sendMessageMutation = useSendMessage();
@@ -51,16 +56,22 @@ export function useSessionActions({
 
       try {
         // Step 1: Save user message to DB via HTTP
-        await sendMessageMutation.mutateAsync({ sessionId, content });
+        await sendMessageMutation.mutateAsync({ sessionId, content, model });
 
         // Step 2: Trigger agent query via sidecar-v2 socket (Tauri only)
         // In web mode, there's no direct sidecar connection
         if (isTauriEnv) {
           try {
-            await socketService.sendQuery(sessionId, content, {
-              cwd: workspacePath,
-              // TODO: Pass model, permissionMode, and other settings from session
-            });
+            await socketService.sendQuery(
+              sessionId,
+              content,
+              {
+                cwd: workspacePath,
+                model,
+                // TODO: Pass permissionMode and other settings from session
+              },
+              agentType
+            );
           } catch (socketError) {
             console.error("[useSessionActions] Socket query failed:", socketError);
             toast.error(
@@ -82,21 +93,24 @@ export function useSessionActions({
     },
     [
       messageInput,
+      model,
       sendMessageMutation,
       stopSessionMutation,
       sessionId,
       workspacePath,
+      agentType,
       onMessageSent,
     ]
   );
 
   const stopSession = useCallback(async () => {
-    if (!window.confirm("Stop the current Claude Code session?")) return;
+    const agentLabel = getRuntimeAgentLabel(agentType);
+    if (!window.confirm(`Stop the current ${agentLabel} session?`)) return;
     try {
       // Cancel the sidecar agent first so it stops consuming API tokens
       if (isTauriEnv) {
         try {
-          await socketService.cancelQuery(sessionId);
+          await socketService.cancelQuery(sessionId, agentType);
         } catch (cancelError) {
           console.error("[useSessionActions] Cancel query failed:", cancelError);
         }
@@ -106,7 +120,7 @@ export function useSessionActions({
     } catch (error) {
       console.error("Failed to stop session:", error);
     }
-  }, [stopSessionMutation, sessionId]);
+  }, [stopSessionMutation, sessionId, agentType]);
 
   const compactConversation = useCallback(() => sendMessage("/compact"), [sendMessage]);
 

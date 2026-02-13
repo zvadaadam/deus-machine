@@ -486,6 +486,7 @@ export function MainContent({
                 }
               >
                 <ChatArea
+                  key={selectedWorkspace.id}
                   workspace={selectedWorkspace}
                   workspaceChatPanelRef={workspaceChatPanelRef}
                   onCreatePRHandlerChange={setCreatePRHandler}
