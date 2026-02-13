@@ -337,6 +337,7 @@ export function MainContent({
                 style={middlePanelActive ? { flex: "1 1 0%", minWidth: 300 } : { flex: "1 1 auto" }}
               >
                 <ChatArea
+                  key={selectedWorkspace.id}
                   workspace={selectedWorkspace}
                   workspaceChatPanelRef={workspaceChatPanelRef}
                   onCreatePRHandlerChange={setCreatePRHandler}
