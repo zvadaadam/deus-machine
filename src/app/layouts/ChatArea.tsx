@@ -20,9 +20,10 @@ import { getRuntimeAgentLabel, type RuntimeAgentType } from "@/features/session/
 import { MainContentTabBar } from "@/features/workspace";
 import { FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
-import type { Tab } from "@/features/workspace/ui/MainContentTabs";
+import type { Tab, ClosedTab } from "@/features/workspace/ui/MainContentTabs";
 
 const NEW_CHAT_LABEL = "New chat";
+const MAX_CLOSED_TABS = 20;
 
 function buildStartedChatLabel(agentType: string, sequence: number): string {
   return `${getRuntimeAgentLabel(agentType)} #${sequence}`;
@@ -50,7 +51,6 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
       id: "chat-1",
       label: NEW_CHAT_LABEL,
       type: "chat",
-      closeable: false,
       data: {
         sessionId: workspace.active_session_id ?? undefined,
         agentType: "claude",
@@ -59,6 +59,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     },
   ]);
   const [activeMainTabId, setActiveMainTabId] = useState("chat-1");
+  const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
   const nextChatIndexRef = useRef(2);
 
   const createSessionMutation = useCreateSession();
@@ -70,8 +71,27 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
   const handleMainTabClose = useCallback(
     (tabId: string) => {
       setMainTabs((prev) => {
+        // Never close the last tab
+        if (prev.length <= 1) return prev;
+
+        const closingTab = prev.find((t) => t.id === tabId);
         const currentIndex = prev.findIndex((t) => t.id === tabId);
         const newTabs = prev.filter((t) => t.id !== tabId);
+
+        // Save closed chat tab for restore
+        if (closingTab?.type === "chat" && closingTab.data?.sessionId) {
+          setClosedTabs((prevClosed) => {
+            const entry: ClosedTab = {
+              label: closingTab.label,
+              sessionId: closingTab.data!.sessionId!,
+              agentType: closingTab.data?.agentType,
+              closedAt: Date.now(),
+            };
+            // Prepend and cap at MAX_CLOSED_TABS
+            return [entry, ...prevClosed].slice(0, MAX_CLOSED_TABS);
+          });
+        }
+
         if (tabId === activeMainTabId && newTabs.length > 0) {
           const targetIndex = currentIndex > 0 ? currentIndex - 1 : 0;
           setActiveMainTabId(newTabs[targetIndex].id);
@@ -93,7 +113,6 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         id: newId,
         label: NEW_CHAT_LABEL,
         type: "chat",
-        closeable: true,
         data: { sessionId: newSession.id, agentType: "claude", hasStarted: false },
       };
       setMainTabs((prevTabs) => [...prevTabs, newTab]);
@@ -104,6 +123,30 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
       nextChatIndexRef.current--;
     }
   }, [workspace.id, createSessionMutation]);
+
+  /** Restore a previously closed chat tab using its existing session */
+  const handleTabRestore = useCallback((closedTab: ClosedTab) => {
+    const idx = nextChatIndexRef.current++;
+    const newId = `chat-${idx}`;
+
+    const restoredTab: Tab = {
+      id: newId,
+      label: closedTab.label,
+      type: "chat",
+      data: {
+        sessionId: closedTab.sessionId,
+        agentType: closedTab.agentType,
+        // Mark as started if it had a label other than "New chat"
+        hasStarted: closedTab.label !== NEW_CHAT_LABEL,
+      },
+    };
+
+    setMainTabs((prev) => [...prev, restoredTab]);
+    setActiveMainTabId(newId);
+
+    // Remove from closed list
+    setClosedTabs((prev) => prev.filter((ct) => ct.sessionId !== closedTab.sessionId));
+  }, []);
 
   const updateChatTabAgentType = useCallback((tabId: string, nextAgentType: RuntimeAgentType) => {
     setMainTabs((prevTabs) => {
@@ -205,10 +248,26 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
 
   // --- Keyboard shortcuts ---
 
-  // Cmd+T shortcut to open new chat tab
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+      const isModKey = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+
+      // Cmd+Shift+T — restore last closed tab (check before Cmd+T)
+      if (isModKey && e.shiftKey && key === "t") {
+        e.preventDefault();
+        setClosedTabs((prev) => {
+          if (prev.length === 0) return prev;
+          const [latest, ...rest] = prev;
+          // Defer restore to avoid state conflicts inside setClosedTabs
+          queueMicrotask(() => handleTabRestore(latest));
+          return rest;
+        });
+        return;
+      }
+
+      // Cmd+T — new chat tab
+      if (isModKey && key === "t") {
         const ae = document.activeElement as HTMLElement | null;
         const isTextField =
           !!ae &&
@@ -224,7 +283,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleMainTabAdd]);
+  }, [handleMainTabAdd, handleTabRestore]);
 
   // --- Render ---
 
@@ -242,6 +301,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         onTabChange={handleMainTabChange}
         onTabClose={handleMainTabClose}
         onTabAdd={handleMainTabAdd}
+        closedTabs={closedTabs}
+        onTabRestore={handleTabRestore}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
