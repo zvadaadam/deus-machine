@@ -175,69 +175,40 @@ export function MainContentTabBar({
           );
         })}
 
-        {/* Action buttons: restore + new tab */}
-        <div className="flex flex-shrink-0 items-center">
-          {onTabRestore && closedTabs.length > 0 && (
-            <Popover open={restoreOpen} onOpenChange={setRestoreOpen}>
-              <Tooltip delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Restore closed session"
-                      className={cn(
-                        "flex items-center justify-center",
-                        "h-7 flex-shrink-0 rounded-md px-1.5",
-                        "text-text-disabled hover:text-text-muted",
-                        "transition-colors duration-150"
-                      )}
-                    >
-                      <History className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                {!restoreOpen && (
-                  <TooltipContent side="bottom">
-                    <p className="text-xs">Restore closed session (⌘⇧T)</p>
-                  </TooltipContent>
+        {/* New tab button — stays adjacent to tabs */}
+        {onTabAdd && (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="New chat tab"
+                onClick={onTabAdd}
+                className={cn(
+                  "flex items-center justify-center",
+                  "h-7 flex-shrink-0 rounded-md px-1.5",
+                  "text-text-disabled hover:text-text-muted",
+                  "transition-colors duration-150"
                 )}
-              </Tooltip>
-              <PopoverContent align="start" sideOffset={6} className="w-56 p-1">
-                <p className="text-text-muted px-2 py-1.5 text-[11px] font-medium">
-                  Recently closed
-                </p>
-                <div className="max-h-48 overflow-y-auto">
-                  {closedTabs.map((ct, i) => (
-                    <button
-                      key={`${ct.sessionId}-${i}`}
-                      type="button"
-                      onClick={() => {
-                        onTabRestore(ct);
-                        setRestoreOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
-                        "text-text-secondary text-left text-[13px]",
-                        "transition-colors duration-150",
-                        "hover:bg-bg-raised"
-                      )}
-                    >
-                      {getClosedTabIcon(ct.agentType)}
-                      <span className="min-w-0 flex-1 truncate">{ct.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">New chat (⌘T)</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
 
-          {onTabAdd && (
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
+      {/* History button — pinned far right, outside scrollable area */}
+      {onTabRestore && closedTabs.length > 0 && (
+        <Popover open={restoreOpen} onOpenChange={setRestoreOpen}>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
                 <button
                   type="button"
-                  aria-label="New chat tab"
-                  onClick={onTabAdd}
+                  aria-label="Restore closed session"
                   className={cn(
                     "flex items-center justify-center",
                     "h-7 flex-shrink-0 rounded-md px-1.5",
@@ -245,16 +216,42 @@ export function MainContentTabBar({
                     "transition-colors duration-150"
                   )}
                 >
-                  <Plus className="h-4 w-4" />
+                  <History className="h-3.5 w-3.5" />
                 </button>
-              </TooltipTrigger>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            {!restoreOpen && (
               <TooltipContent side="bottom">
-                <p className="text-xs">New chat (⌘T)</p>
+                <p className="text-xs">Restore closed session (⌘⇧T)</p>
               </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
+            )}
+          </Tooltip>
+          <PopoverContent align="end" sideOffset={6} className="w-56 p-1">
+            <p className="text-text-muted px-2 py-1.5 text-[11px] font-medium">Recently closed</p>
+            <div className="max-h-48 overflow-y-auto">
+              {closedTabs.map((ct, i) => (
+                <button
+                  key={`${ct.sessionId}-${i}`}
+                  type="button"
+                  onClick={() => {
+                    onTabRestore(ct);
+                    setRestoreOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
+                    "text-text-secondary text-left text-[13px]",
+                    "transition-colors duration-150",
+                    "hover:bg-bg-raised"
+                  )}
+                >
+                  {getClosedTabIcon(ct.agentType)}
+                  <span className="min-w-0 flex-1 truncate">{ct.label}</span>
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
