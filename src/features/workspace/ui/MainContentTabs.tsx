@@ -77,7 +77,7 @@ export function MainContentTabBar({
   onTabAdd,
 }: MainContentTabBarProps) {
   return (
-    <div className="bg-bg-surface relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
+    <div className="chat-tabs-header relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
       <div
         role="tablist"
         className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center overflow-x-auto"

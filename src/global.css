@@ -1285,6 +1285,22 @@ body {
 
 /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
 
+/* Chat tabs header — soft bottom fade to avoid sharp edge */
+.chat-tabs-header {
+  background: var(--bg-surface);
+}
+
+.chat-tabs-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -24px;
+  left: 0;
+  height: 24px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg-surface), transparent);
+}
+
 /* Message input fade overlay utility */
 .bg-fade-overlay {
   background: linear-gradient(to bottom, transparent 0%, var(--background) 100%);
