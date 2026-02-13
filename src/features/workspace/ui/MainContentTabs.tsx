@@ -1,6 +1,8 @@
-import { X, Plus, Sparkles, FileCode, GitCompareArrows } from "lucide-react";
+import { X, Plus, FileCode, GitCompareArrows } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { getAgentLogo } from "@/assets/agents";
+import styles from "./MainContentTabs.module.css";
 
 /**
  * Tab data structure
@@ -16,7 +18,7 @@ export interface Tab {
    * Type-specific data payload
    * - For 'diff' tabs: file path, diff content, and change stats
    * - For 'file' tabs: file content and language (future)
-   * - For 'chat' tabs: session ID
+   * - For 'chat' tabs: session ID and agent type (for logo)
    */
   data?: {
     // For 'diff' tabs
@@ -31,6 +33,9 @@ export interface Tab {
 
     // For 'chat' tabs
     sessionId?: string;
+    agentType?: string;
+    hasStarted?: boolean;
+    agentSequence?: number;
   };
 }
 
@@ -43,16 +48,21 @@ interface MainContentTabBarProps {
 }
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
+const AGENT_ICON_SIZE = "w-5 h-5";
 
-function getTabIcon(type: Tab["type"]) {
-  const iconClass = cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60");
-  switch (type) {
-    case "chat":
-      return <Sparkles className={iconClass} />;
+function getTabIcon(tab: Tab) {
+  switch (tab.type) {
+    case "chat": {
+      const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+      if (LogoComponent) {
+        return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
+      }
+      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
+    }
     case "diff":
-      return <GitCompareArrows className={iconClass} />;
+      return <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
     default:
-      return <FileCode className={iconClass} />;
+      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
   }
 }
 
@@ -68,10 +78,15 @@ export function MainContentTabBar({
   onTabAdd,
 }: MainContentTabBarProps) {
   return (
-    <div className="bg-bg-elevated flex h-9 flex-shrink-0 items-center px-2.5">
+    <div
+      className={cn(
+        styles.chatTabsHeader,
+        "relative z-20 flex h-9 flex-shrink-0 items-center px-2.5"
+      )}
+    >
       <div
         role="tablist"
-        className="scrollbar-hidden flex min-w-0 flex-1 items-center overflow-x-auto"
+        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -99,7 +114,7 @@ export function MainContentTabBar({
                   : "text-text-muted hover:text-text-tertiary"
               )}
             >
-              {getTabIcon(tab.type)}
+              {getTabIcon(tab)}
 
               <div className="relative min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>

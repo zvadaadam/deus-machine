@@ -49,8 +49,8 @@ export const SessionService = {
   /**
    * Send a message to a session
    */
-  sendMessage: async (id: string, content: string): Promise<Message> => {
-    return apiClient.post<Message>(ENDPOINTS.SESSION_MESSAGES(id), { content });
+  sendMessage: async (id: string, content: string, model?: string): Promise<Message> => {
+    return apiClient.post<Message>(ENDPOINTS.SESSION_MESSAGES(id), { content, model });
   },
 
   /**
@@ -58,5 +58,13 @@ export const SessionService = {
    */
   stop: async (id: string): Promise<void> => {
     return apiClient.post<void>(ENDPOINTS.SESSION_STOP(id));
+  },
+
+  /**
+   * Create a new session for a workspace.
+   * Also updates workspace.active_session_id to the new session.
+   */
+  createSession: async (workspaceId: string): Promise<Session> => {
+    return apiClient.post<Session>(ENDPOINTS.WORKSPACE_SESSIONS(workspaceId), {});
   },
 };
