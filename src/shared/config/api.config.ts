@@ -209,6 +209,7 @@ export const ENDPOINTS = {
   WORKSPACE_SYSTEM_PROMPT: (id: string) => `/workspaces/${id}/system-prompt`,
   WORKSPACE_PEN_FILES: (id: string) => `/workspaces/${id}/pen-files`,
   WORKSPACE_OPEN_PEN_FILE: (id: string) => `/workspaces/${id}/open-pen-file`,
+  WORKSPACE_SESSIONS: (workspaceId: string) => `/workspaces/${workspaceId}/sessions`,
 
   // Session endpoints
   SESSIONS: "/sessions",
