@@ -125,11 +125,15 @@ pub async fn create_browser_webview(
     y: f64,
     width: f64,
     height: f64,
+    window_label: Option<String>,
 ) -> Result<(), String> {
-    // Get the main window handle (requires "unstable" feature)
+    // Get the target window handle (requires "unstable" feature).
+    // Defaults to "main" for backward compatibility; pass "browser-detached"
+    // when the browser is popped out into a separate window.
+    let target = window_label.as_deref().unwrap_or("main");
     let window = app
-        .get_window("main")
-        .ok_or_else(|| "Main window not found".to_string())?;
+        .get_window(target)
+        .ok_or_else(|| format!("Window '{}' not found", target))?;
 
     // Parse URL — default to about:blank if empty
     let webview_url = if url.is_empty() {

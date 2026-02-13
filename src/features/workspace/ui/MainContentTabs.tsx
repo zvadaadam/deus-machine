@@ -1,5 +1,5 @@
-import { X, Plus, Sparkles, FileCode, GitCompareArrows } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { X, Plus, Sparkles, FileCode, GitCompareArrows, PanelLeftClose } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipKbd } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 
 /**
@@ -40,6 +40,7 @@ interface MainContentTabBarProps {
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
+  onCollapseChatPanel?: () => void;
 }
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
@@ -66,6 +67,7 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  onCollapseChatPanel,
 }: MainContentTabBarProps) {
   return (
     <div className="bg-bg-elevated flex h-9 flex-shrink-0 items-center px-2.5">
@@ -145,11 +147,36 @@ export function MainContentTabBar({
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p className="text-xs">New chat (⌘T)</p>
+              <div className="flex items-center gap-3">
+                <span className="text-xs">New chat</span>
+                <TooltipKbd>⌘T</TooltipKbd>
+              </div>
             </TooltipContent>
           </Tooltip>
         )}
       </div>
+
+      {/* Collapse chat panel — pinned to right edge of tab bar */}
+      {onCollapseChatPanel && (
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Collapse chat panel"
+              onClick={onCollapseChatPanel}
+              className="text-text-disabled hover:text-text-secondary hover:bg-bg-overlay ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200 ease-out"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <div className="flex items-center gap-3">
+              <span className="text-xs">Collapse chat</span>
+              <TooltipKbd>⌘\</TooltipKbd>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }
