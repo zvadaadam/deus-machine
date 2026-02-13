@@ -99,8 +99,8 @@ export function MainContentTabBar({
                 }
               }}
               className={cn(
-                "group relative flex items-center gap-1.5",
-                "h-7 max-w-[200px] min-w-[100px] rounded-md px-2",
+                "group relative flex items-center gap-1.5 overflow-hidden",
+                "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
                 "cursor-pointer text-[13px] font-normal",
                 "transition-colors duration-150",
                 isActive
@@ -110,27 +110,37 @@ export function MainContentTabBar({
             >
               {getTabIcon(tab)}
 
-              <div className="relative min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>
               </div>
 
+              {/* Close button — overlays right edge on hover with gradient fade */}
               {onTabClose && tab.closeable !== false && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTabClose(tab.id);
-                  }}
+                <div
                   className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-sm",
-                    "transition-all duration-150",
-                    "hover:bg-bg-muted",
-                    "opacity-0 group-hover:opacity-100"
+                    "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
+                    "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                    isActive
+                      ? "from-bg-raised bg-gradient-to-l from-50% to-transparent"
+                      : "from-bg-surface group-hover:from-bg-surface bg-gradient-to-l from-50% to-transparent"
                   )}
-                  aria-label={`Close ${tab.label} tab`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTabClose(tab.id);
+                    }}
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-sm",
+                      "transition-colors duration-150",
+                      "hover:bg-bg-muted"
+                    )}
+                    aria-label={`Close ${tab.label} tab`}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
               )}
             </div>
           );
