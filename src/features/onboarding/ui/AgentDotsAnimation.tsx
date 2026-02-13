@@ -43,6 +43,10 @@ export interface AgentDotsAnimationProps {
   loop?: boolean;
   /** Called when the animation completes (not called if looping). */
   onComplete?: () => void;
+  /** Cover mode: SVG fills container and crops (like CSS object-fit: cover).
+   *  Use when the container is non-square (e.g. fullscreen viewport) so the
+   *  final white expansion reaches all corners. */
+  cover?: boolean;
   className?: string;
 }
 
@@ -55,6 +59,7 @@ export function AgentDotsAnimation({
   autoPlay = true,
   loop = false,
   onComplete,
+  cover = false,
   className,
 }: AgentDotsAnimationProps) {
   const [frame, setFrame] = useState(0);
@@ -123,6 +128,7 @@ export function AgentDotsAnimation({
         width="100%"
         height="100%"
         viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
+        preserveAspectRatio={cover ? "xMidYMid slice" : "xMidYMid meet"}
         style={{ display: "block" }}
       >
         {dots.map((d, i) =>
