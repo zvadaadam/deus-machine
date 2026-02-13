@@ -764,6 +764,9 @@
   --content-border-opacity: 5%;
   --content-shadow-opacity: 3%;
 
+  /* --- Elevated shadow (dropdowns, popovers, overlays) --- */
+  --shadow-elevated: 0 24px 64px rgba(0, 0, 0, 0.28);
+
   /* --- Diff viewer (light mode) --- */
   --diff-addition-bg: #e8f5e9;
   --diff-addition-gutter: #c8e6c9;
@@ -919,6 +922,9 @@
   /* --- Content area border/shadow --- */
   --content-border-opacity: 8%;
   --content-shadow-opacity: 4%;
+
+  /* --- Elevated shadow (dropdowns, popovers, overlays) --- */
+  --shadow-elevated: 0 24px 64px rgba(0, 0, 0, 0.46);
 
   /* --- Diff viewer (muted, integrated) --- */
   --diff-addition-bg: #1a2a1a;
@@ -1278,6 +1284,47 @@ body {
 }
 
 /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
+
+/* Chat tabs header — decorative glow and gradient mask */
+.chat-tabs-header {
+  isolation: isolate;
+  /* Keep the same base surface as chat content so the seam disappears. */
+  background: var(--bg-surface);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--neutral-50) 14%, transparent);
+}
+
+.chat-tabs-header::before {
+  content: "";
+  position: absolute;
+  top: 22%;
+  right: 10px;
+  left: 10px;
+  height: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  border-radius: 9999px;
+  background: radial-gradient(
+    135% 130% at 50% 50%,
+    color-mix(in oklch, var(--accent-blue) 5%, transparent) 0%,
+    color-mix(in oklch, var(--foreground) 4%, transparent) 46%,
+    transparent 82%
+  );
+  opacity: 0.55;
+  filter: blur(6px);
+}
+
+.chat-tabs-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -24px;
+  left: 0;
+  height: 26px;
+  pointer-events: none;
+  background: var(--bg-surface);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+}
 
 /* Message input fade overlay utility */
 .bg-fade-overlay {

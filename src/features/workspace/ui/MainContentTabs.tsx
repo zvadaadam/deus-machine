@@ -2,7 +2,6 @@ import { X, Plus, FileCode, GitCompareArrows } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
-import styles from "./MainContentTabs.module.css";
 
 /**
  * Tab data structure
@@ -79,10 +78,7 @@ export function MainContentTabBar({
 }: MainContentTabBarProps) {
   return (
     <div
-      className={cn(
-        styles.chatTabsHeader,
-        "relative z-20 flex h-9 flex-shrink-0 items-center px-2.5"
-      )}
+      className={cn("chat-tabs-header", "relative z-20 flex h-9 flex-shrink-0 items-center px-2.5")}
     >
       <div
         role="tablist"
