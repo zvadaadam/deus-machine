@@ -8,6 +8,7 @@ import repoRoutes from './routes/repos';
 import configRoutes from './routes/config';
 import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
+import onboardingRoutes from './routes/onboarding';
 
 export function createApp() {
   const app = new Hono();
@@ -24,6 +25,7 @@ export function createApp() {
   app.route('/api', configRoutes);
   app.route('/api', settingsRoutes);
   app.route('/api', statsRoutes);
+  app.route('/api', onboardingRoutes);
 
   // Centralized error handling
   app.onError(errorHandler);
