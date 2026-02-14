@@ -49,7 +49,11 @@ function ConditionalErrorBoundary({
  */
 function AppContent({ reset }: { reset: () => void }) {
   const settingsQuery = useSettings();
-  const authQuery = useAuthStatus();
+  // Only query Keychain after onboarding — first-time users never trigger
+  // the macOS Keychain password prompt. During onboarding, SignInStep handles
+  // auth directly via Tauri events.
+  const onboardingDone = settingsQuery.data?.onboarding_completed ?? false;
+  const authQuery = useAuthStatus({ enabled: onboardingDone });
   const setLoginInProgress = useAuthStore((s) => s.setLoginInProgress);
   const queryClient = useQueryClient();
   const windowShownRef = useRef(false);

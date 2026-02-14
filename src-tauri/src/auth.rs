@@ -45,6 +45,10 @@ pub struct AuthState {
     pub user_email: Option<String>,
     pub user_name: Option<String>,
     pub user_avatar_url: Option<String>,
+    /// Whether Keychain has been read at least once. Prevents eager
+    /// Keychain access on startup (which triggers a macOS password prompt).
+    #[serde(skip)]
+    pub loaded: bool,
     /// True only between auth_start_login and callback processing.
     /// Prevents unsolicited deep link callbacks from spoofing identity.
     #[serde(skip)]
@@ -169,8 +173,20 @@ impl AuthManager {
         self.state.lock().unwrap().login_pending
     }
 
-    /// Get current auth state (in-memory cache, loaded from Keychain on startup).
+    /// Lazy Keychain load — reads once on first call, then returns cached state.
+    /// Avoids triggering the macOS Keychain prompt on app startup for first-time
+    /// users who have nothing stored.
+    pub fn load_if_needed(&self) {
+        let needs_load = !self.state.lock().unwrap().loaded;
+        if needs_load {
+            self.load_from_keychain();
+            self.state.lock().unwrap().loaded = true;
+        }
+    }
+
+    /// Get current auth state. Lazily loads from Keychain on first call.
     pub fn get_status(&self) -> AuthState {
+        self.load_if_needed();
         self.state.lock().unwrap().clone()
     }
 

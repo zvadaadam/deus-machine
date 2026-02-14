@@ -108,13 +108,9 @@ fn main() {
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
         .setup(|app| {
-            // Pre-load auth identity from macOS Keychain
-            let auth_manager: tauri::State<AuthManager> = app.state();
-            if auth_manager.load_from_keychain() {
-                println!("[TAURI] ✅ Auth identity loaded from Keychain");
-            } else {
-                println!("[TAURI] No stored auth identity — login required");
-            }
+            // Auth identity is loaded lazily from Keychain on first
+            // auth_check_status call — avoids triggering macOS Keychain
+            // password prompt on startup for first-time users.
 
             // Process auth deep links on app startup and while app is running.
             let auth_for_deeplink = app.state::<AuthManager>().inner().clone();

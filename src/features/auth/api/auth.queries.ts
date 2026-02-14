@@ -4,12 +4,13 @@ import { AuthService } from "./auth.service";
 import { useAuthStore } from "../store/authStore";
 
 /** Reads auth status from Keychain via native layer. Cached indefinitely — only invalidated on login/logout events. */
-export function useAuthStatus() {
+export function useAuthStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.auth.status,
     queryFn: AuthService.checkStatus,
     staleTime: Infinity,
     retry: false,
+    enabled: options?.enabled,
   });
 }
 
