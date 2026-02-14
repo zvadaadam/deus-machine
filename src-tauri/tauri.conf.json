@@ -53,6 +53,11 @@
     "updater": {
       "endpoints": [],
       "pubkey": ""
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["hivenet"]
+      }
     }
   }
 }

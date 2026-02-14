@@ -1,15 +1,94 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
 use conductor_lib::{
-    commands,
-    backend::BackendManager,
-    browser::BrowserManager,
-    pty::PtyManager,
-    sidecar::SidecarManager,
-    socket::SocketManager,
+    auth::AuthManager, backend::BackendManager, browser::BrowserManager, commands, pty::PtyManager,
+    sidecar::SidecarManager, socket::SocketManager,
 };
+use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
+
+struct LoginPendingGuard<'a> {
+    auth_manager: &'a AuthManager,
+}
+
+impl Drop for LoginPendingGuard<'_> {
+    fn drop(&mut self) {
+        self.auth_manager.clear_login_pending();
+    }
+}
+
+fn emit_auth_error(app_handle: &tauri::AppHandle, message: impl Into<String>) {
+    let message = message.into();
+    eprintln!("[AUTH] {}", message);
+    let _ = app_handle.emit("auth:login-error", message);
+}
+
+fn handle_auth_deep_link_url(
+    url_string: &str,
+    auth_manager: &AuthManager,
+    app_handle: &tauri::AppHandle,
+) {
+    println!("[AUTH] Deep link received");
+
+    // Only process expected OAuth callback URLs.
+    let Ok(url) = url::Url::parse(url_string) else {
+        return;
+    };
+    if url.scheme() != "hivenet" || url.host_str() != Some("auth") {
+        return;
+    }
+
+    // Ignore unsolicited callbacks unless we explicitly initiated login.
+    if !auth_manager.is_login_pending() {
+        return;
+    }
+    // Ensure login pending is always cleared for handled callback flows.
+    let _pending_guard = LoginPendingGuard { auth_manager };
+
+    if url.path() != "/callback" {
+        emit_auth_error(
+            app_handle,
+            format!("Rejected callback: unexpected path '{}'", url.path()),
+        );
+        return;
+    }
+
+    let params: std::collections::HashMap<String, String> = url
+        .query_pairs()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+
+    let received_state = params.get("state").map(String::as_str);
+    if !auth_manager.verify_callback(received_state) {
+        emit_auth_error(app_handle, "Rejected callback: state mismatch");
+        return;
+    }
+
+    let provider = params.get("provider").map(String::as_str).unwrap_or("");
+    let email = params.get("email").map(String::as_str).unwrap_or("");
+    let name = params.get("name").map(String::as_str).unwrap_or("");
+    let avatar = params.get("avatar").map(String::as_str).unwrap_or("");
+
+    if provider.is_empty() || email.is_empty() {
+        emit_auth_error(
+            app_handle,
+            "Deep link missing required params (provider, email)",
+        );
+        return;
+    }
+
+    match auth_manager.save_to_keychain(provider, email, name, avatar) {
+        Ok(_) => {
+            println!("[AUTH] Login complete via deep link");
+            let _ = app_handle.emit("auth:login-complete", ());
+        }
+        Err(e) => {
+            auth_manager.clear_keychain().ok();
+            emit_auth_error(app_handle, format!("Failed to save login state: {}", e));
+        }
+    }
+}
 
 fn main() {
     tauri::Builder::default()
@@ -21,12 +100,54 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .manage(AuthManager::new())
         .manage(BackendManager::new())
         .manage(BrowserManager::new())
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
         .setup(|app| {
+            // Pre-load auth identity from macOS Keychain
+            let auth_manager: tauri::State<AuthManager> = app.state();
+            if auth_manager.load_from_keychain() {
+                println!("[TAURI] ✅ Auth identity loaded from Keychain");
+            } else {
+                println!("[TAURI] No stored auth identity — login required");
+            }
+
+            // Process auth deep links on app startup and while app is running.
+            let auth_for_deeplink = app.state::<AuthManager>().inner().clone();
+            let app_handle_for_deeplink = app.handle().clone();
+            match app.deep_link().get_current() {
+                Ok(Some(urls)) => {
+                    for url in urls {
+                        let url_string = url.to_string();
+                        handle_auth_deep_link_url(
+                            &url_string,
+                            &auth_for_deeplink,
+                            &app_handle_for_deeplink,
+                        );
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("[AUTH] Failed to check current deep link: {}", e);
+                }
+            }
+
+            let auth_for_runtime_deeplink = auth_for_deeplink.clone();
+            let app_handle_for_runtime_deeplink = app_handle_for_deeplink.clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    let url_string = url.to_string();
+                    handle_auth_deep_link_url(
+                        &url_string,
+                        &auth_for_runtime_deeplink,
+                        &app_handle_for_runtime_deeplink,
+                    );
+                }
+            });
+
             // Set app handle for PTY manager so it can emit events
             let pty_manager: tauri::State<PtyManager> = app.state();
             pty_manager.set_app_handle(app.handle().clone());
@@ -216,6 +337,9 @@ fn main() {
             commands::sync_browser_cookies,
             commands::inject_browser_cookies,
             commands::screenshot_browser_webview,
+            commands::auth_check_status,
+            commands::auth_start_login,
+            commands::auth_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

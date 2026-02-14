@@ -7,6 +7,7 @@ import { ErrorFallback, DashboardError } from "@/shared/components";
 import { reportError } from "@/shared/utils/errorReporting";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthGate } from "@/features/auth";
 
 /**
  * Root App component with professional error handling setup.
@@ -64,18 +65,20 @@ function App() {
             }}
           >
             <ThemeProvider>
-              <BrowserRouter>
-                <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
-                        <MainLayout />
-                      </ConditionalErrorBoundary>
-                    }
-                  />
-                </Routes>
-              </BrowserRouter>
+              <AuthGate>
+                <BrowserRouter>
+                  <Routes>
+                    <Route
+                      path="/"
+                      element={
+                        <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
+                          <MainLayout />
+                        </ConditionalErrorBoundary>
+                      }
+                    />
+                  </Routes>
+                </BrowserRouter>
+              </AuthGate>
               <Toaster />
             </ThemeProvider>
           </ConditionalErrorBoundary>

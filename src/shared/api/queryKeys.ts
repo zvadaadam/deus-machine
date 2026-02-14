@@ -48,4 +48,8 @@ export const queryKeys = {
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
   },
+  // Auth
+  auth: {
+    status: ["auth", "status"] as const,
+  },
 } as const;

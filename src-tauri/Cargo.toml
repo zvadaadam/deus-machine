@@ -52,6 +52,9 @@ hmac = "0.12"
 time = "0.3"
 # Native screenshot support (macOS WKWebView.takeSnapshot)
 base64 = "0.22"
+# Auth: secure token storage in macOS Keychain
+keyring = { version = "3", features = ["apple-native"] }
+rand = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
