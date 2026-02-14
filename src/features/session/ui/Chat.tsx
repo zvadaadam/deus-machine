@@ -292,10 +292,6 @@ export function Chat({
         aria-live="polite"
         className="absolute inset-0 overflow-x-hidden overflow-y-auto scroll-smooth px-6 pt-6 motion-reduce:scroll-auto"
         ref={messagesContainerRef}
-        style={{
-          maskImage: "linear-gradient(to bottom, transparent, black 24px)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent, black 24px)",
-        }}
       >
         {loading ? (
           <div className="space-y-4">

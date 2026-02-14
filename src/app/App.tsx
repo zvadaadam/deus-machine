@@ -1,29 +1,27 @@
+import { useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import type { ComponentType, ReactNode, ErrorInfo } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
+import { DetachedBrowserWindow } from "@/features/browser/ui/DetachedBrowserWindow";
 import { ErrorFallback, DashboardError } from "@/shared/components";
 import { reportError } from "@/shared/utils/errorReporting";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthGate } from "@/features/auth";
+import { OnboardingOverlay } from "@/features/onboarding";
+import { useSettings } from "@/features/settings";
+import { isTauriEnv, invoke } from "@/platform/tauri";
 
-/**
- * Root App component with professional error handling setup.
- *
- * Error Boundary Strategy:
- * - QueryErrorResetBoundary: Resets failed TanStack Query queries on retry
- * - Outer ErrorBoundary: Catches any app-level crashes (routing, providers, etc.)
- * - Inner ErrorBoundary: Dashboard-specific errors with custom fallback
- *
- * The onReset callback clears failed queries so "Try Again" actually retries
- * data fetching, not just re-renders with cached error state.
- */
+// Detect if this window instance is the detached browser popup.
+// The main window creates it with ?window=browser-detached in the URL.
+const isDetachedBrowser =
+  new URLSearchParams(window.location.search).get("window") === "browser-detached";
 type ConditionalErrorBoundaryProps = {
   fallback: ComponentType<FallbackProps>;
   onReset?: () => void;
-  onError?: (error: Error, info: ErrorInfo) => void;
+  onError?: (error: unknown, info: ErrorInfo) => void;
   children: ReactNode;
 };
 
@@ -40,7 +38,74 @@ function ConditionalErrorBoundary({
   );
 }
 
+/**
+ * Gates between onboarding and the main app.
+ *
+ * When onboarding is active, ONLY OnboardingOverlay renders — no MainLayout,
+ * no sidebar, no workspace panels. This ensures the transparent window shows
+ * the desktop through the semi-transparent scrim, not the app's own UI.
+ */
+function AppContent({ reset }: { reset: () => void }) {
+  const settingsQuery = useSettings();
+  const windowShownRef = useRef(false);
+
+  const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
+
+  // Show the main window whenever we transition OUT of onboarding.
+  // Covers both first launch (window starts hidden via tauri.conf.json)
+  // and replay-onboarding (exit_onboarding_mode hides the window).
+  useEffect(() => {
+    if (settingsQuery.isLoading) return;
+    if (showOnboarding) {
+      // Entering onboarding — reset so we re-show when it completes
+      windowShownRef.current = false;
+      return;
+    }
+    if (windowShownRef.current) return;
+    if (isTauriEnv) {
+      invoke("show_main_window").catch(console.error);
+      windowShownRef.current = true;
+    }
+  }, [settingsQuery.isLoading, showOnboarding]);
+
+  // While settings load, render nothing — window is hidden anyway
+  if (settingsQuery.isLoading) return null;
+
+  if (showOnboarding) {
+    return <OnboardingOverlay />;
+  }
+
+  return (
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
+                <MainLayout />
+              </ConditionalErrorBoundary>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+      <Toaster />
+    </>
+  );
+}
+
 function App() {
+  // Detached browser window: minimal shell with just the browser panel
+  if (isDetachedBrowser) {
+    return (
+      <QueryClientProvider>
+        <ThemeProvider>
+          <DetachedBrowserWindow />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider>
       <QueryErrorResetBoundary>
@@ -51,35 +116,18 @@ function App() {
             onError={(error, info) => {
               reportError(error, {
                 source: "react.error-boundary",
-                extra: { componentStack: info.componentStack },
+                extra: { componentStack: info.componentStack ?? undefined },
               });
               if (typeof window !== "undefined") {
                 (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
-                  info.componentStack;
+                  info.componentStack ?? undefined;
               }
-
-              // TODO: Send to error tracking service in production
-              // if (import.meta.env.PROD) {
-              //   Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
-              // }
             }}
           >
             <ThemeProvider>
               <AuthGate>
-                <BrowserRouter>
-                  <Routes>
-                    <Route
-                      path="/"
-                      element={
-                        <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
-                          <MainLayout />
-                        </ConditionalErrorBoundary>
-                      }
-                    />
-                  </Routes>
-                </BrowserRouter>
+                <AppContent reset={reset} />
               </AuthGate>
-              <Toaster />
             </ThemeProvider>
           </ConditionalErrorBoundary>
         )}

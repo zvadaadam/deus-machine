@@ -27,6 +27,8 @@
         "height": 800,
         "resizable": true,
         "fullscreen": false,
+        "visible": false,
+        "shadow": false,
         "decorations": true,
         "transparent": true,
         "titleBarStyle": "Overlay",

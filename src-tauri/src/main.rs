@@ -283,15 +283,22 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Stop backend, sidecar, and browser when window closes
-                let backend_manager: tauri::State<BackendManager> = window.state();
-                backend_manager.stop().ok();
+                if window.label() == "main" {
+                    // Close detached browser window if open
+                    if let Some(detached) = window.app_handle().get_window("browser-detached") {
+                        detached.close().ok();
+                    }
 
-                let sidecar_manager: tauri::State<SidecarManager> = window.state();
-                sidecar_manager.stop().ok();
+                    // Stop backend, sidecar, and browser when main window closes
+                    let backend_manager: tauri::State<BackendManager> = window.state();
+                    backend_manager.stop().ok();
 
-                let browser_manager: tauri::State<BrowserManager> = window.state();
-                browser_manager.stop().ok();
+                    let sidecar_manager: tauri::State<SidecarManager> = window.state();
+                    sidecar_manager.stop().ok();
+
+                    let browser_manager: tauri::State<BrowserManager> = window.state();
+                    browser_manager.stop().ok();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -341,6 +348,11 @@ fn main() {
             commands::auth_check_status,
             commands::auth_start_login,
             commands::auth_logout,
+            commands::check_cli_tool,
+            commands::check_gh_auth,
+            commands::enter_onboarding_mode,
+            commands::exit_onboarding_mode,
+            commands::show_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

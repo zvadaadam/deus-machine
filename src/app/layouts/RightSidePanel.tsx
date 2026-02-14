@@ -17,6 +17,8 @@ import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { BrowserPanel } from "@/features/browser";
+import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
+import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
 import { cn } from "@/shared/lib/utils";
 import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
@@ -37,6 +39,12 @@ interface RightSidePanelProps {
   compactWidth?: number | null;
   /** Whether the user is actively dragging the resize handle — disables transitions */
   isResizing?: boolean;
+  /** Whether chat panel is collapsed — drives flex-1 expansion */
+  chatPanelCollapsed?: boolean;
+  /** Called when a non-code sidecar tab is clicked in compact mode (closes diff) */
+  onExitCompactMode?: () => void;
+  /** Called when user switches sidecar back to Code (used to restore parked diff layout) */
+  onReturnToCode?: () => void;
 }
 
 export function RightSidePanel({
@@ -48,10 +56,29 @@ export function RightSidePanel({
   compact,
   compactWidth,
   isResizing,
+  chatPanelCollapsed,
+  onExitCompactMode,
+  onReturnToCode,
 }: RightSidePanelProps) {
-  const { rightSideTab, rightPanelTab, setRightSideTab, setRightPanelTab } = useWorkspaceLayout(
-    workspace.id
-  );
+  const {
+    rightSideTab,
+    rightPanelTab,
+    selectedFilePath,
+    setRightSideTab,
+    setRightPanelTab,
+    setSelectedFilePath,
+  } = useWorkspaceLayout(workspace.id);
+
+  const {
+    isDetached: isBrowserDetached,
+    detach: detachBrowser,
+    reattach: reattachBrowser,
+  } = useBrowserDetach({
+    workspaceId: workspace.id,
+    directoryName: workspace.directory_name,
+    repoName: workspace.repo_name,
+    branch: workspace.branch,
+  });
 
   // Workspace git info for file changes query (Tauri IPC path)
   const workspaceGitInfo: WorkspaceGitInfo = useMemo(
@@ -77,18 +104,22 @@ export function RightSidePanel({
 
   const handleFileSelect = useCallback(
     (path: string | null) => {
-      if (path) onOpenDiffTab(path);
+      if (!path) return;
+      setSelectedFilePath(path, "changes");
+      onOpenDiffTab(path);
     },
-    [onOpenDiffTab]
+    [onOpenDiffTab, setSelectedFilePath]
   );
 
   const handleBrowserFileClick = useCallback(
     (path: string) => {
       const base = workspace.workspace_path.replace(/\/+$/, "");
       const rel = path.replace(/^\/+/, "");
-      onOpenFilePreview(`${base}/${rel}`);
+      const fullPath = `${base}/${rel}`;
+      setSelectedFilePath(fullPath, "files");
+      onOpenFilePreview(fullPath);
     },
-    [onOpenFilePreview, workspace.workspace_path]
+    [onOpenFilePreview, setSelectedFilePath, workspace.workspace_path]
   );
 
   const handleCodeTabChange = useCallback(
@@ -97,8 +128,13 @@ export function RightSidePanel({
   );
 
   const handleRightSideTabChange = useCallback(
-    (tab: RightSideTab) => setRightSideTab(tab),
-    [setRightSideTab]
+    (tab: RightSideTab) => {
+      setRightSideTab(tab);
+      if (tab === "code") {
+        onReturnToCode?.();
+      }
+    },
+    [setRightSideTab, onReturnToCode]
   );
 
   // Merge inline style with transition override when dragging
@@ -116,8 +152,11 @@ export function RightSidePanel({
           "transition-[width,min-width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
         !compact && "border-border-subtle border-l",
         !compact && "min-w-[380px]",
-        // Browser with no saved width: fill available space (smart default measures + persists)
-        !compact && rightSideTab === "browser" && rightPanelWidth === null && "flex-1"
+        // Fill available space when browser active (and not detached) or chat collapsed (no stored width)
+        !compact &&
+          ((rightSideTab === "browser" && !isBrowserDetached) || chatPanelCollapsed) &&
+          rightPanelWidth === null &&
+          "flex-1"
       )}
       style={outerStyle}
     >
@@ -134,7 +173,9 @@ export function RightSidePanel({
               ? compactWidth == null
                 ? "w-[220px]"
                 : undefined
-              : hasExplicitWidth || rightSideTab === "browser"
+              : hasExplicitWidth ||
+                  (rightSideTab === "browser" && !isBrowserDetached) ||
+                  chatPanelCollapsed
                 ? "flex-1"
                 : "w-[380px]"
           )}
@@ -148,28 +189,35 @@ export function RightSidePanel({
               workspace={workspace}
               fileChanges={fileChanges}
               rightPanelTab={rightPanelTab}
+              selectedFilePath={selectedFilePath}
               onTabChange={handleCodeTabChange}
               onFileSelect={handleFileSelect}
               onBrowserFileClick={handleBrowserFileClick}
             />
           )}
 
-          {/* BrowserPanel is ALWAYS mounted — even in compact mode — to keep
-              the useBrowserRpcHandler Tauri event listener active so the sidecar's
-              browser MCP tools (BrowserNavigate, BrowserSnapshot, etc.) always have
-              a handler. CSS hides the wrapper; panelVisible tells BrowserPanel to
-              hide/show native webviews via Tauri IPC (they render above the DOM). */}
-          <div
-            className={cn(
-              "h-full w-full",
-              (compact || rightSideTab !== "browser") && "pointer-events-none invisible absolute"
-            )}
-          >
-            <BrowserPanel
-              workspaceId={workspace.id}
-              panelVisible={!compact && rightSideTab === "browser"}
-            />
-          </div>
+          {/* Browser panel section: when detached, show placeholder; otherwise
+              keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
+          {isBrowserDetached ? (
+            <div
+              className={cn("h-full w-full", (compact || rightSideTab !== "browser") && "hidden")}
+            >
+              <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "h-full w-full",
+                (compact || rightSideTab !== "browser") && "pointer-events-none invisible absolute"
+              )}
+            >
+              <BrowserPanel
+                workspaceId={workspace.id}
+                panelVisible={!compact && rightSideTab === "browser"}
+                onDetach={detachBrowser}
+              />
+            </div>
+          )}
 
           {!compact && rightSideTab === "terminal" && (
             <TerminalPanel workspacePath={workspace.workspace_path} />
@@ -184,6 +232,7 @@ export function RightSidePanel({
           activeTab={rightSideTab}
           onTabChange={handleRightSideTabChange}
           compact={compact}
+          onRequestExitCompact={onExitCompactMode}
         />
       </div>
     </div>
