@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Loader2, FolderOpen } from "lucide-react";
 import { useRecentProjects, useCompleteOnboarding } from "../../api";
 import { useAddRepo } from "@/features/repository/api";
@@ -18,7 +18,7 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
 
   const projects = projectsQuery.data?.projects ?? [];
 
-  function toggleProject(path: string) {
+  const toggleProject = useCallback((path: string) => {
     setSelectedPaths((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
@@ -28,7 +28,7 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
       }
       return next;
     });
-  }
+  }, []);
 
   async function handleOpenProjects() {
     if (selectedPaths.size === 0) return;
@@ -107,7 +107,7 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
               key={project.path}
               project={project}
               selected={selectedPaths.has(project.path)}
-              onToggle={() => toggleProject(project.path)}
+              onToggle={toggleProject}
             />
           ))}
         </div>

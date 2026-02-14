@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react";
 import { Check, FolderOpen } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { RecentProject } from "../../types";
@@ -5,7 +6,7 @@ import type { RecentProject } from "../../types";
 interface ProjectCardProps {
   project: RecentProject;
   selected: boolean;
-  onToggle: () => void;
+  onToggle: (path: string) => void;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -14,10 +15,16 @@ const SOURCE_LABELS: Record<string, string> = {
   claude: "Claude",
 };
 
-export function ProjectCard({ project, selected, onToggle }: ProjectCardProps) {
+export const ProjectCard = memo(function ProjectCard({
+  project,
+  selected,
+  onToggle,
+}: ProjectCardProps) {
+  const handleClick = useCallback(() => onToggle(project.path), [onToggle, project.path]);
+
   return (
     <button
-      onClick={onToggle}
+      onClick={handleClick}
       className={cn(
         "group relative flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-200",
         selected ? "bg-white/10" : "bg-white/[0.04] hover:bg-white/[0.07]"
@@ -46,4 +53,4 @@ export function ProjectCard({ project, selected, onToggle }: ProjectCardProps) {
       </span>
     </button>
   );
-}
+});

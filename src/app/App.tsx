@@ -48,7 +48,7 @@ function AppContent({ reset }: { reset: () => void }) {
   const settingsQuery = useSettings();
   const windowShownRef = useRef(false);
 
-  const showOnboarding = !settingsQuery.data?.onboarding_completed;
+  const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
 
   // Show the main window whenever we transition OUT of onboarding.
   // Covers both first launch (window starts hidden via tauri.conf.json)

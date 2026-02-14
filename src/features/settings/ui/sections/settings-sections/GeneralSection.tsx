@@ -104,9 +104,13 @@ export function GeneralSection({
           variant="outline"
           size="sm"
           onClick={async () => {
-            onClose();
-            await apiClient.post("/settings", { key: "onboarding_completed", value: false });
-            queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
+            try {
+              await apiClient.post("/settings", { key: "onboarding_completed", value: false });
+              queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
+              onClose();
+            } catch {
+              // Settings reset failed — modal stays open for retry
+            }
           }}
         >
           <RotateCcw className="mr-1.5 size-3.5" />

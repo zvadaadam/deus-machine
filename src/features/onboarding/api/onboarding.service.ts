@@ -7,14 +7,22 @@ export const OnboardingService = {
     if (!isTauriEnv) {
       return { installed: false, path: null, webMode: true };
     }
-    return invoke<CliCheckResult>("check_cli_tool", { name });
+    try {
+      return await invoke<CliCheckResult>("check_cli_tool", { name });
+    } catch {
+      return { installed: false, path: null };
+    }
   },
 
   async checkGhAuth(): Promise<GhAuthResult> {
     if (!isTauriEnv) {
       return { authenticated: false, username: null };
     }
-    return invoke<GhAuthResult>("check_gh_auth");
+    try {
+      return await invoke<GhAuthResult>("check_gh_auth");
+    } catch {
+      return { authenticated: false, username: null };
+    }
   },
 
   async fetchRecentProjects(): Promise<{ projects: RecentProject[] }> {

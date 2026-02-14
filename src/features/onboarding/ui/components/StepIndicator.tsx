@@ -12,7 +12,7 @@ export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
         <div
           key={i}
           className={cn(
-            "h-1.5 rounded-full transition-all duration-300",
+            "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
             i === currentStep
               ? "w-6 bg-white"
               : i < currentStep

@@ -714,10 +714,17 @@ pub fn check_cli_tool(name: String) -> Result<CliCheckResult, String> {
         return Err("Invalid tool name".to_string());
     }
 
+    #[cfg(not(target_os = "windows"))]
     let output = std::process::Command::new("which")
         .arg(&name)
         .output()
         .map_err(|e| format!("Failed to run which: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    let output = std::process::Command::new("where")
+        .arg(&name)
+        .output()
+        .map_err(|e| format!("Failed to run where: {}", e))?;
 
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
