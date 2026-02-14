@@ -15,6 +15,7 @@ interface CodePanelContentProps {
   workspace: Workspace;
   fileChanges: FileChange[];
   rightPanelTab: RightPanelTab;
+  selectedFilePath?: string | null;
   onTabChange: (tab: RightPanelTab) => void;
   onFileSelect: (path: string | null) => void;
   onBrowserFileClick: (path: string) => void;
@@ -24,6 +25,7 @@ export function CodePanelContent({
   workspace,
   fileChanges,
   rightPanelTab,
+  selectedFilePath,
   onTabChange,
   onFileSelect,
   onBrowserFileClick,
@@ -73,6 +75,7 @@ export function CodePanelContent({
         <FileChangesPanel
           selectedWorkspace={workspace}
           fileChanges={fileChanges}
+          selectedFilePath={selectedFilePath}
           onFileSelect={onFileSelect}
           headerSlot={tabHeader}
         />

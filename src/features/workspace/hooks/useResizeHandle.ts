@@ -24,6 +24,14 @@ interface UseResizeHandleOptions {
   minSecondarySize?: number;
   /** Min size of the primary (left or top) panel in pixels */
   minPrimarySize?: number;
+  /** Called when the user drags the primary panel well below minPrimarySize
+   *  (past a 50% dead zone). The panel first clamps at minPrimarySize; only
+   *  dragging past half that value triggers the collapse callback. */
+  onPrimaryCollapse?: () => void;
+  /** Whether the primary panel is currently collapsed (for bidirectional drag gestures) */
+  isPrimaryCollapsed?: boolean;
+  /** Called when the user drags back past the expand threshold while collapsed */
+  onPrimaryExpand?: () => void;
 }
 
 interface UseResizeHandleReturn {
@@ -41,10 +49,18 @@ export function useResizeHandle({
   mode = "secondary",
   minSecondarySize = 380,
   minPrimarySize = 200,
+  onPrimaryCollapse,
+  isPrimaryCollapsed = false,
+  onPrimaryExpand,
 }: UseResizeHandleOptions): UseResizeHandleReturn {
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const isPrimaryCollapsedRef = useRef(isPrimaryCollapsed);
+
+  useEffect(() => {
+    isPrimaryCollapsedRef.current = isPrimaryCollapsed;
+  }, [isPrimaryCollapsed]);
 
   useEffect(() => {
     return () => {
@@ -75,30 +91,46 @@ export function useResizeHandle({
         const rect = container.getBoundingClientRect();
         const totalSize = direction === "horizontal" ? rect.width : rect.height;
 
+        // Raw primary size (before clamping) for snap-to-collapse detection
+        const rawPrimaryOffset =
+          direction === "horizontal" ? moveEvent.clientX - rect.left : moveEvent.clientY - rect.top;
+
+        // Bidirectional snap points:
+        // - Collapse when dragging well below minPrimarySize.
+        // - Re-expand when dragging back beyond minPrimarySize.
+        // This creates a dead zone / hysteresis that prevents jitter.
+        const collapseThreshold = minPrimarySize * 0.5;
+        const expandThreshold = minPrimarySize;
+        const currentlyCollapsed = isPrimaryCollapsedRef.current;
+
+        if (!currentlyCollapsed && onPrimaryCollapse && rawPrimaryOffset < collapseThreshold) {
+          isPrimaryCollapsedRef.current = true;
+          onPrimaryCollapse();
+          return;
+        }
+
+        if (currentlyCollapsed && onPrimaryExpand && rawPrimaryOffset > expandThreshold) {
+          isPrimaryCollapsedRef.current = false;
+          onPrimaryExpand();
+        }
+
+        if (isPrimaryCollapsedRef.current) {
+          return;
+        }
+
         if (mode === "primary") {
           // Primary mode: report left/top panel size
-          const mouseOffset =
-            direction === "horizontal"
-              ? moveEvent.clientX - rect.left
-              : moveEvent.clientY - rect.top;
-          let newPrimarySize = mouseOffset;
+          let newPrimarySize = rawPrimaryOffset;
           const maxPrimarySize = Math.max(0, totalSize - minSecondarySize);
           newPrimarySize = Math.max(newPrimarySize, Math.min(minPrimarySize, maxPrimarySize));
           newPrimarySize = Math.min(newPrimarySize, maxPrimarySize);
           onSizeChange(Math.round(newPrimarySize));
         } else {
           // Secondary mode (default): report right/bottom panel size
-          let newSecondarySize: number;
-          if (direction === "horizontal") {
-            const mouseX = moveEvent.clientX - rect.left;
-            newSecondarySize = rect.width - mouseX;
-          } else {
-            const mouseY = moveEvent.clientY - rect.top;
-            newSecondarySize = rect.height - mouseY;
-          }
+          const newSecondaryRaw = totalSize - rawPrimaryOffset;
           const maxSecondarySize = Math.max(0, totalSize - minPrimarySize);
-          newSecondarySize = Math.max(
-            newSecondarySize,
+          let newSecondarySize = Math.max(
+            newSecondaryRaw,
             Math.min(minSecondarySize, maxSecondarySize)
           );
           newSecondarySize = Math.min(newSecondarySize, maxSecondarySize);
@@ -126,7 +158,16 @@ export function useResizeHandle({
       document.addEventListener("mouseup", onMouseUp);
       cleanupRef.current = cleanup;
     },
-    [enabled, direction, mode, minSecondarySize, minPrimarySize, onSizeChange]
+    [
+      enabled,
+      direction,
+      mode,
+      minSecondarySize,
+      minPrimarySize,
+      onSizeChange,
+      onPrimaryCollapse,
+      onPrimaryExpand,
+    ]
   );
 
   const handleDoubleClick = useCallback(() => {

@@ -42,6 +42,8 @@ interface UseWorkspaceLayoutResult {
   selectedFilePath: string | null;
   /** Whether sidebar is collapsed */
   sidebarCollapsed: boolean;
+  /** Whether chat panel is collapsed */
+  chatPanelCollapsed: boolean;
   /** User-set right panel width in pixels, or null for auto */
   rightPanelWidth: number | null;
 
@@ -55,6 +57,8 @@ interface UseWorkspaceLayoutResult {
   setSelectedFilePath: (path: string | null, source?: "changes" | "files") => void;
   /** Set sidebar collapsed state */
   setSidebarCollapsed: (collapsed: boolean) => void;
+  /** Set chat panel collapsed state */
+  setChatPanelCollapsed: (collapsed: boolean) => void;
   /** Set right panel width (null = auto) */
   setRightPanelWidth: (width: number | null) => void;
   /** Update multiple layout properties at once */
@@ -128,6 +132,15 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
+  const setChatPanelCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (workspaceId) {
+        setLayout(workspaceId, { chatPanelCollapsed: collapsed });
+      }
+    },
+    [workspaceId, setLayout]
+  );
+
   const setRightPanelWidth = useCallback(
     (width: number | null) => {
       if (workspaceId) {
@@ -187,6 +200,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     rightPanelExpanded: layout.rightPanelExpanded,
     selectedFilePath: layout.selectedFile?.path ?? null,
     sidebarCollapsed: layout.sidebarCollapsed,
+    chatPanelCollapsed: layout.chatPanelCollapsed ?? false,
     rightPanelWidth:
       layout.activeRightSideTab === "browser"
         ? (layout.rightPanelWidthBrowser ?? null)
@@ -198,6 +212,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     setRightPanelExpanded,
     setSelectedFilePath,
     setSidebarCollapsed,
+    setChatPanelCollapsed,
     setRightPanelWidth,
     updateLayout,
   };

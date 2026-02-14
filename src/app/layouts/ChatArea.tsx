@@ -22,10 +22,11 @@ interface ChatAreaProps {
   workspace: Workspace;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreatePRHandlerChange: (handler: (() => void) | null) => void;
+  onCollapseChatPanel?: () => void;
 }
 
 export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea(
-  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange },
+  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange, onCollapseChatPanel },
   ref
 ) {
   const {
@@ -61,6 +62,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         onTabAdd={handleTabAdd}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
+        onCollapseChatPanel={onCollapseChatPanel}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

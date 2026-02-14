@@ -17,6 +17,8 @@ interface FileChangesPanelProps {
   selectedWorkspace: Workspace | null;
   /** File changes from API */
   fileChanges: FileChange[];
+  /** Optional controlled selection (persisted by parent/workspace store) */
+  selectedFilePath?: string | null;
   /** Callback when a file is selected */
   onFileSelect?: (path: string | null) => void;
   /** Optional header slot rendered above the file tree */
@@ -29,6 +31,7 @@ interface FileChangesPanelProps {
 export function FileChangesPanel({
   selectedWorkspace,
   fileChanges,
+  selectedFilePath,
   onFileSelect,
   headerSlot,
 }: FileChangesPanelProps) {
@@ -41,27 +44,31 @@ export function FileChangesPanel({
     fileTree
   );
 
-  // Currently selected file - track workspace changes via ref
+  // Local fallback selection (used when parent does not control selection)
   const prevWorkspaceIdRef = useRef<string | null>(null);
-  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [localSelectedFilePath, setLocalSelectedFilePath] = useState<string | null>(null);
 
   const currentWorkspaceId = selectedWorkspace?.id ?? null;
   useEffect(() => {
     if (currentWorkspaceId !== prevWorkspaceIdRef.current) {
       prevWorkspaceIdRef.current = currentWorkspaceId;
-      // Reset selection when workspace changes - intentional pattern for clearing related state
+      // Reset local fallback selection when workspace changes.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedFilePath(null);
+      setLocalSelectedFilePath(null);
     }
   }, [currentWorkspaceId]);
+
+  const effectiveSelectedFilePath = selectedFilePath ?? localSelectedFilePath;
 
   // Handle file selection from tree
   const handleTreeSelect = useCallback(
     (path: string) => {
-      setSelectedFilePath(path);
+      if (selectedFilePath === undefined) {
+        setLocalSelectedFilePath(path);
+      }
       onFileSelect?.(path);
     },
-    [onFileSelect]
+    [selectedFilePath, onFileSelect]
   );
 
   // Empty state - no workspace
@@ -110,7 +117,7 @@ export function FileChangesPanel({
         <FileChangeTree
           nodes={fileTree}
           expandedPaths={expandedPaths}
-          selectedPath={selectedFilePath}
+          selectedPath={effectiveSelectedFilePath}
           onToggle={toggleExpanded}
           onSelect={handleTreeSelect}
         />

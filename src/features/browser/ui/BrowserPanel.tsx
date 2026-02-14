@@ -76,9 +76,19 @@ interface BrowserPanelProps {
    *  but all native webviews are hidden via Tauri IPC. */
   panelVisible?: boolean;
   onClose?: () => void;
+  /** Pop-out callback — shown as a button in the tab bar */
+  onDetach?: () => void;
+  /** Which Tauri window hosts the child webviews. Defaults to "main". */
+  windowLabel?: string;
 }
 
-export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: BrowserPanelProps) {
+export function BrowserPanel({
+  workspaceId,
+  panelVisible = true,
+  onClose: _onClose,
+  onDetach,
+  windowLabel,
+}: BrowserPanelProps) {
   // --- Initialize tabs from persisted state or create a fresh empty tab ---
   const [tabs, setTabs] = useState<BrowserTabState[]>(() => {
     if (workspaceId) {
@@ -422,21 +432,18 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
   );
 
   /** Stable callback for BrowserTab children to add console logs */
-  const handleAddLog = useCallback(
-    (tabId: string, level: ConsoleLog["level"], message: string) => {
-      setTabs((prev) =>
-        prev.map((t) => {
-          if (t.id !== tabId) return t;
-          const next = [...t.consoleLogs, { timestamp: new Date(), level, message }];
-          return {
-            ...t,
-            consoleLogs: next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next,
-          };
-        })
-      );
-    },
-    []
-  );
+  const handleAddLog = useCallback((tabId: string, level: ConsoleLog["level"], message: string) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== tabId) return t;
+        const next = [...t.consoleLogs, { timestamp: new Date(), level, message }];
+        return {
+          ...t,
+          consoleLogs: next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next,
+        };
+      })
+    );
+  }, []);
 
   // --- Navigation (operates on active tab) ---
 
@@ -561,7 +568,9 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
 
   const [cookieBrowsers, setCookieBrowsers] = useState<InstalledBrowser[]>([]);
   const [cookieSyncing, setCookieSyncing] = useState<string | null>(null); // browser name being synced
-  const [lastSyncResult, setLastSyncResult] = useState<{ browser: string; count: number } | null>(null);
+  const [lastSyncResult, setLastSyncResult] = useState<{ browser: string; count: number } | null>(
+    null
+  );
 
   /** Fetch available browsers when dropdown opens */
   const handleCookieDropdownOpen = useCallback(async () => {
@@ -668,6 +677,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
         onTabSelect={handleTabSelect}
         onTabClose={closeTab}
         onTabAdd={addTab}
+        onDetach={onDetach}
       />
 
       {/* Navigation Bar — h-9 to align with chat tabs row */}
@@ -689,7 +699,9 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
           className="h-7 w-7"
           onClick={handleGoForward}
           disabled={
-            !activeTab || activeTab.loading || activeTab.historyIndex >= activeTab.history.length - 1
+            !activeTab ||
+            activeTab.loading ||
+            activeTab.historyIndex >= activeTab.history.length - 1
           }
           title="Go forward"
         >
@@ -740,9 +752,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
           disabled={!activeTab?.currentUrl || !activeTab?.injected}
           aria-pressed={activeTab?.selectorActive}
           title={
-            activeTab?.selectorActive
-              ? "Exit element selector (Esc)"
-              : "Select element to inspect"
+            activeTab?.selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"
           }
         >
           <Target
@@ -750,21 +760,23 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
           />
         </Button>
 
-        <DropdownMenu onOpenChange={(open) => {
-          if (open) {
-            handleCookieDropdownOpen();
-            // Hide native webview so the dropdown isn't rendered behind it
-            // (WKWebView floats above all DOM layers including portals)
-            if (activeTab?.webviewLabel) {
-              invoke("hide_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) {
+              handleCookieDropdownOpen();
+              // Hide native webview so the dropdown isn't rendered behind it
+              // (WKWebView floats above all DOM layers including portals)
+              if (activeTab?.webviewLabel) {
+                invoke("hide_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+              }
+            } else {
+              // Re-show webview when dropdown closes
+              if (activeTab?.webviewLabel && activeTab.currentUrl) {
+                invoke("show_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
+              }
             }
-          } else {
-            // Re-show webview when dropdown closes
-            if (activeTab?.webviewLabel && activeTab.currentUrl) {
-              invoke("show_browser_webview", { label: activeTab.webviewLabel }).catch(() => {});
-            }
-          }
-        }}>
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -782,17 +794,18 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             {/* Show target domain */}
-            {activeTab?.currentUrl && (() => {
-              try {
-                return (
-                  <DropdownMenuLabel className="text-muted-foreground truncate text-[10px] font-normal">
-                    {new URL(activeTab.currentUrl).hostname}
-                  </DropdownMenuLabel>
-                );
-              } catch {
-                return null;
-              }
-            })()}
+            {activeTab?.currentUrl &&
+              (() => {
+                try {
+                  return (
+                    <DropdownMenuLabel className="text-muted-foreground truncate text-[10px] font-normal">
+                      {new URL(activeTab.currentUrl).hostname}
+                    </DropdownMenuLabel>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
 
             <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -869,6 +882,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true, onClose }: Brow
               onUpdateTab={handleUpdateTab}
               onAddLog={handleAddLog}
               visible={tab.id === activeTabId && panelVisible}
+              windowLabel={windowLabel}
             />
           ))
         )}

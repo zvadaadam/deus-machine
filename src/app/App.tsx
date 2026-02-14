@@ -4,6 +4,7 @@ import type { ComponentType, ReactNode, ErrorInfo } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
+import { DetachedBrowserWindow } from "@/features/browser/ui/DetachedBrowserWindow";
 import { ErrorFallback, DashboardError } from "@/shared/components";
 import { reportError } from "@/shared/utils/errorReporting";
 import { QueryClientProvider, ThemeProvider } from "./providers";
@@ -12,6 +13,10 @@ import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { isTauriEnv, invoke } from "@/platform/tauri";
 
+// Detect if this window instance is the detached browser popup.
+// The main window creates it with ?window=browser-detached in the URL.
+const isDetachedBrowser =
+  new URLSearchParams(window.location.search).get("window") === "browser-detached";
 type ConditionalErrorBoundaryProps = {
   fallback: ComponentType<FallbackProps>;
   onReset?: () => void;
@@ -89,6 +94,17 @@ function AppContent({ reset }: { reset: () => void }) {
 }
 
 function App() {
+  // Detached browser window: minimal shell with just the browser panel
+  if (isDetachedBrowser) {
+    return (
+      <QueryClientProvider>
+        <ThemeProvider>
+          <DetachedBrowserWindow />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider>
       <QueryErrorResetBoundary>
