@@ -57,7 +57,7 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
         title: "Select Project Directory",
       });
       if (!selected) return;
-      const folderPath = typeof selected === "string" ? selected : (selected as any).path;
+      const folderPath = selected;
       setImporting(true);
       await addRepoMutation.mutateAsync(folderPath);
       await completeMutation.mutateAsync();
