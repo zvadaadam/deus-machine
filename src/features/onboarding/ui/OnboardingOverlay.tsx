@@ -35,7 +35,7 @@ const TIMELINE = {
   INTRO_COMPLETE: 6700, // Let white expansion show more before fading
   CARD_DELAY: 350, // Gap before card — let white dissolve first
   FADE_DURATION: 700, // Moderate fade while center still expanding
-  EXIT_DURATION: 1200, // Exit animation before window restore
+  EXIT_DURATION: 900, // Exit animation before window restore
 } as const;
 
 const TOTAL_STEPS = 4;
@@ -207,7 +207,7 @@ export function OnboardingOverlay() {
       <div
         className={cn(
           "absolute inset-0",
-          exiting && "animate-[onboarding-exit-scrim_1.2s_cubic-bezier(.32,.72,0,1)_forwards]"
+          exiting && "animate-[onboarding-exit-scrim_0.9s_cubic-bezier(.32,.72,0,1)_forwards]"
         )}
         style={{
           background: [

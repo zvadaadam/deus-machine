@@ -5,6 +5,7 @@ const MAX_VOLUME = 0.4;
 const FADE_IN_MS = 500;
 const FADE_OUT_MS = 600;
 
+/** Manages onboarding audio with fade-in/out. Returns { play, fadeOut, stop }. */
 export function useOnboardingAudio(src: string) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
