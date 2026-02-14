@@ -29,7 +29,7 @@ export function LoginScreen() {
         {/* Login */}
         {loginInProgress ? (
           <div className="flex flex-col items-center gap-3 py-6">
-            <Loader2 className="text-text-tertiary h-5 w-5 animate-spin" />
+            <Loader2 className="text-text-tertiary h-5 w-5 animate-spin motion-reduce:animate-none" />
             <p className="text-text-tertiary text-sm">Waiting for login in browser...</p>
             <button
               type="button"

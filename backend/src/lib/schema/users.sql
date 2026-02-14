@@ -40,8 +40,8 @@ BEGIN
     UPDATE users SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
--- Index for email lookups (login upsert)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
+-- Note: email column already has UNIQUE constraint, which creates an implicit index.
+-- No explicit index needed.
 
 
 -- =============================================================

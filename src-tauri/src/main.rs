@@ -43,8 +43,6 @@ fn handle_auth_deep_link_url(
     if !auth_manager.is_login_pending() {
         return;
     }
-    // Ensure login pending is always cleared for handled callback flows.
-    let _pending_guard = LoginPendingGuard { auth_manager };
 
     if url.path() != "/callback" {
         emit_auth_error(
@@ -64,6 +62,9 @@ fn handle_auth_deep_link_url(
         emit_auth_error(app_handle, "Rejected callback: state mismatch");
         return;
     }
+
+    // Only clear login-pending after successful state verification.
+    let _pending_guard = LoginPendingGuard { auth_manager };
 
     let provider = params.get("provider").map(String::as_str).unwrap_or("");
     let email = params.get("email").map(String::as_str).unwrap_or("");

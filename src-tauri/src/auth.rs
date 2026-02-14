@@ -97,6 +97,9 @@ impl AuthManager {
         name: &str,
         avatar: &str,
     ) -> Result<(), AuthError> {
+        if provider.is_empty() || email.is_empty() {
+            return Err(AuthError::MissingFields);
+        }
         Self::keychain_set("auth_provider", provider)?;
         Self::keychain_set("auth_email", email)?;
         Self::keychain_set("auth_name", name)?;
@@ -112,10 +115,7 @@ impl AuthManager {
             ..Default::default()
         };
 
-        println!(
-            "[AUTH] Saved identity to Keychain: {} ({})",
-            email, provider
-        );
+        println!("[AUTH] Saved identity to Keychain ({})", provider);
         Ok(())
     }
 
