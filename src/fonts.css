@@ -70,6 +70,15 @@
   font-display: swap;
 } */
 
+/* Geist Pixel Square - bitmap-inspired typeface for logo/branding */
+@font-face {
+  font-family: "Geist Pixel Square";
+  src: url("./assets/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Suisse Intl Mono font family - WOFF2 optimized for web */
 /* Note: Suisse Intl Mono only has one weight, so we map it to all font-weights */
 @font-face {
