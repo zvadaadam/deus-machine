@@ -53,7 +53,7 @@ function AppContent({ reset }: { reset: () => void }) {
   // the macOS Keychain password prompt. During onboarding, SignInStep handles
   // auth directly via Tauri events.
   const onboardingDone = settingsQuery.data?.onboarding_completed ?? false;
-  const authQuery = useAuthStatus({ enabled: onboardingDone });
+  const authQuery = useAuthStatus({ enabled: isTauriEnv && onboardingDone });
   const setLoginInProgress = useAuthStore((s) => s.setLoginInProgress);
   const queryClient = useQueryClient();
   const windowShownRef = useRef(false);

@@ -19,6 +19,8 @@ export function SignInStep({ onNext, onBack }: SignInStepProps) {
   const { mutate: startLogin } = useStartLogin();
   const loginInProgress = useAuthStore((s) => s.loginInProgress);
   const setLoginInProgress = useAuthStore((s) => s.setLoginInProgress);
+  const loginError = useAuthStore((s) => s.loginError);
+  const setLoginError = useAuthStore((s) => s.setLoginError);
 
   // Web mode: skip auth entirely — no Tauri Keychain available
   useEffect(() => {
@@ -34,15 +36,16 @@ export function SignInStep({ onNext, onBack }: SignInStepProps) {
       onNext();
     });
 
-    const unlistenError = listen<string>("auth:login-error", () => {
+    const unlistenError = listen<string>("auth:login-error", (event) => {
       setLoginInProgress(false);
+      setLoginError(event.payload || "Login failed. Please try again.");
     });
 
     return () => {
       unlistenSuccess.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, [onNext, setLoginInProgress]);
+  }, [onNext, setLoginInProgress, setLoginError]);
 
   // Web mode renders nothing — auto-advances above
   if (!isTauriEnv) return null;
@@ -69,17 +72,23 @@ export function SignInStep({ onNext, onBack }: SignInStepProps) {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => startLogin()}
-          className="mt-2 flex items-center gap-2 rounded-full bg-white px-10 py-3 text-sm font-semibold text-black/90 transition-all duration-200 hover:scale-[1.03] hover:bg-white/95 active:scale-[0.98]"
-          style={{
-            boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px rgba(0,0,0,0.2)",
-          }}
-        >
-          Sign in with Hivenet
-          <ExternalLink className="h-3.5 w-3.5 text-black/40" />
-        </button>
+        <>
+          {loginError && <p className="max-w-xs text-center text-sm text-red-400">{loginError}</p>}
+          <button
+            type="button"
+            onClick={() => {
+              setLoginError(null);
+              startLogin();
+            }}
+            className="mt-2 flex items-center gap-2 rounded-full bg-white px-10 py-3 text-sm font-semibold text-black/90 transition-all duration-200 hover:scale-[1.03] hover:bg-white/95 active:scale-[0.98]"
+            style={{
+              boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px rgba(0,0,0,0.2)",
+            }}
+          >
+            {loginError ? "Try again" : "Sign in with Hivenet"}
+            <ExternalLink className="h-3.5 w-3.5 text-black/40" />
+          </button>
+        </>
       )}
 
       <div className="flex w-full items-center pt-2">

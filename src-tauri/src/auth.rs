@@ -74,6 +74,7 @@ impl AuthManager {
 
         // Must have at least provider and email to be considered authenticated
         if provider.is_none() || email.is_none() {
+            self.state.lock().unwrap().loaded = true;
             return false;
         }
 
@@ -87,6 +88,7 @@ impl AuthManager {
             user_email: email,
             user_name: name,
             user_avatar_url: avatar,
+            loaded: true,
             ..Default::default()
         };
 
@@ -116,6 +118,7 @@ impl AuthManager {
             user_email: Some(email.to_string()),
             user_name: Some(name.to_string()),
             user_avatar_url: Some(avatar.to_string()),
+            loaded: true,
             ..Default::default()
         };
 

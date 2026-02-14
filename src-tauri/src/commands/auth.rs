@@ -2,18 +2,10 @@ use crate::auth::{AuthError, AuthManager, AuthState};
 use tauri::State;
 
 /// Check if user is authenticated (reads from Keychain on first call).
+/// `get_status()` handles lazy Keychain loading internally via `load_if_needed()`.
 #[tauri::command]
 pub fn auth_check_status(auth_manager: State<'_, AuthManager>) -> Result<AuthState, AuthError> {
-    let status = auth_manager.get_status();
-
-    // If not authenticated in memory, try loading from Keychain
-    // (covers case where state wasn't pre-loaded in setup)
-    if !status.authenticated {
-        auth_manager.load_from_keychain();
-        return Ok(auth_manager.get_status());
-    }
-
-    Ok(status)
+    Ok(auth_manager.get_status())
 }
 
 /// Open system browser to Hivenet login page.
