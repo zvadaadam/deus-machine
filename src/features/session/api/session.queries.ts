@@ -8,7 +8,14 @@ import { produce } from "immer";
 import { SessionService, type PaginatedMessages } from "./session.service";
 import { isTauriEnv } from "@/platform/tauri";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { ContentBlock, Message, Session, SessionStatus, ToolUseBlock } from "../types";
+import type {
+  ContentBlock,
+  Message,
+  Session,
+  SessionStatus,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "../types";
 import { useMemo, useCallback } from "react";
 
 /**
@@ -123,7 +130,11 @@ const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | st
     return didChange ? normalized : (blocks as (ContentBlock | string)[]);
   }
 
-  if (blocks == null || typeof blocks === "string") {
+  if (blocks == null) {
+    return null;
+  }
+
+  if (typeof blocks === "string") {
     return blocks;
   }
 
@@ -148,11 +159,14 @@ export function useSessionWithMessages(sessionId: string | null) {
 
   // Parse content helper (from original useMessages)
   // Memoized to prevent Context cascade re-renders
-  const parseContent = useCallback((content: string) => {
+  const parseContent = useCallback((content: string): string | (ContentBlock | string)[] | null => {
     try {
       const parsed = JSON.parse(content);
       // Use nullish coalescing to preserve explicit empty strings/arrays from the backend.
-      const blocks = parsed.message?.content ?? parsed.content ?? [];
+      const blocks =
+        (parsed as { message?: { content?: unknown }; content?: unknown }).message?.content ??
+        (parsed as { content?: unknown }).content ??
+        [];
       return normalizeContentBlocks(blocks);
     } catch {
       // If JSON.parse fails, treat it as plain text
@@ -186,7 +200,13 @@ export function useSessionWithMessages(sessionId: string | null) {
       );
       if (Array.isArray(blocks)) {
         blocks.forEach((block) => {
-          if (typeof block === "object" && block && "type" in block && "tool_use_id" in block && block.type === "tool_result") {
+          if (
+            typeof block === "object" &&
+            block &&
+            "type" in block &&
+            "tool_use_id" in block &&
+            block.type === "tool_result"
+          ) {
             resultMap.set((block as { tool_use_id: string }).tool_use_id, block as ToolResultBlock);
           }
         });
@@ -249,12 +269,19 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ sessionId, content }: { sessionId: string; content: string }) =>
-      SessionService.sendMessage(sessionId, content),
+    mutationFn: ({
+      sessionId,
+      content,
+      model,
+    }: {
+      sessionId: string;
+      content: string;
+      model?: string;
+    }) => SessionService.sendMessage(sessionId, content, model),
 
     // Optimistic update: Add user message to chat immediately
     // Note: Cache holds PaginatedMessages shape, not raw Message[]
-    onMutate: async ({ sessionId, content }) => {
+    onMutate: async ({ sessionId, content, model }) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });
@@ -275,6 +302,7 @@ export function useSendMessage() {
         content: JSON.stringify({ content: [{ type: "text", text: content }] }),
         created_at: new Date().toISOString(),
         sent_at: new Date().toISOString(),
+        model: model ?? null,
       };
 
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
@@ -338,6 +366,28 @@ export function useStopSession() {
       // Invalidate session to update status
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.detail(sessionId),
+      });
+    },
+  });
+}
+
+/**
+ * Create a new session for a workspace.
+ * Used when user opens a new chat tab (Cmd+T).
+ * Backend creates the session and updates workspace.active_session_id.
+ */
+export function useCreateSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceId: string) => SessionService.createSession(workspaceId),
+    onSuccess: (_newSession, workspaceId) => {
+      // Invalidate workspace lists so sidebar picks up new active_session_id
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.workspaces.byRepo(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.workspaces.detail(workspaceId),
       });
     },
   });

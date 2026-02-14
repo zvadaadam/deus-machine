@@ -6,6 +6,11 @@ import { SessionProvider } from "../context";
 import { useSessionWithMessages } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import {
+  getRuntimeAgentTypeForModel,
+  getRuntimeModelId,
+  type RuntimeAgentType,
+} from "../lib/agentRuntime";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -17,6 +22,8 @@ interface SessionPanelProps {
   onCompact?: (handler: () => void) => void;
   onCreatePR?: (handler: () => void) => void;
   onStop?: (handler: () => void) => void;
+  onAgentTypeChange?: (agentType: RuntimeAgentType) => void;
+  onSessionStarted?: () => void;
 }
 
 export interface SessionPanelRef {
@@ -24,7 +31,20 @@ export interface SessionPanelRef {
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
-  ({ sessionId, workspacePath, onClose, embedded = false, onCompact, onCreatePR, onStop }, ref) => {
+  (
+    {
+      sessionId,
+      workspacePath,
+      onClose,
+      embedded = false,
+      onCompact,
+      onCreatePR,
+      onStop,
+      onAgentTypeChange,
+      onSessionStarted,
+    },
+    ref
+  ) => {
     // Custom hooks (useSocket manages socket connection lifecycle)
     useSocket();
 
@@ -60,12 +80,18 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState(session?.thinking_level || "NONE");
     const [model, setModel] = useState(session?.model || "sonnet");
+    const runtimeModelId = getRuntimeModelId(model);
+    const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
 
     // Handlers for MessageInput controls
     const handleModelChange = (newModel: string) => {
       setModel(newModel);
       // TODO: Implement API call to update session model
     };
+
+    useEffect(() => {
+      onAgentTypeChange?.(getRuntimeAgentTypeForModel(model));
+    }, [model, onAgentTypeChange]);
 
     const handleThinkingLevelChange = (level: string) => {
       setThinkingLevel(level);
@@ -90,7 +116,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       sessionId,
       workspacePath,
       messageInput,
-      onMessageSent: () => setMessageInput(""),
+      model: runtimeModelId,
+      agentType: modelAgentType,
+      onMessageSent: () => {
+        setMessageInput("");
+        onSessionStarted?.();
+      },
     });
 
     // Expose action handlers to parent

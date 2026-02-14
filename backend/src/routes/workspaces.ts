@@ -314,7 +314,7 @@ app.post('/workspaces', async (c) => {
     try { initLog.end(); } catch {}
     if (code === 0) {
       const sessionId = randomUUID();
-      db.prepare("INSERT INTO sessions (id, status, created_at, updated_at) VALUES (?, 'idle', datetime('now'), datetime('now'))").run(sessionId);
+      db.prepare("INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))").run(sessionId, workspaceId);
       db.prepare("UPDATE workspaces SET state = 'ready', active_session_id = ?, updated_at = datetime('now') WHERE id = ?").run(sessionId, workspaceId);
     } else {
       db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
@@ -328,6 +328,32 @@ app.post('/workspaces', async (c) => {
   `).get(workspaceId) as any;
 
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+});
+
+// Create a new session for an existing workspace
+app.post('/workspaces/:id/sessions', (c) => {
+  const db = getDatabase();
+  const workspaceId = c.req.param('id');
+
+  const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(workspaceId);
+  if (!workspace) throw new NotFoundError('Workspace not found');
+
+  const sessionId = randomUUID();
+
+  const createSession = db.transaction(() => {
+    db.prepare(
+      "INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))"
+    ).run(sessionId, workspaceId);
+
+    db.prepare(
+      "UPDATE workspaces SET active_session_id = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(sessionId, workspaceId);
+  });
+
+  createSession();
+
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+  return c.json(session);
 });
 
 export default app;

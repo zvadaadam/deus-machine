@@ -165,7 +165,7 @@ class UnixSocketService {
     sessionId: string,
     prompt: string,
     options: QueryOptions,
-    agentType: "claude" | "codex" = "claude"
+    agentType: "claude" | "codex" | "unknown" = "claude"
   ): Promise<void> {
     await this.notify("query", {
       type: "query",
@@ -182,7 +182,10 @@ class UnixSocketService {
   /**
    * Cancel an active query
    */
-  async cancelQuery(sessionId: string, agentType: "claude" | "codex" = "claude"): Promise<void> {
+  async cancelQuery(
+    sessionId: string,
+    agentType: "claude" | "codex" | "unknown" = "claude"
+  ): Promise<void> {
     await this.request("cancel", {
       type: "cancel",
       id: sessionId,
@@ -227,7 +230,7 @@ class UnixSocketService {
   async updatePermissionMode(
     sessionId: string,
     permissionMode: string,
-    agentType: "claude" | "codex" = "claude"
+    agentType: "claude" | "codex" | "unknown" = "claude"
   ): Promise<void> {
     await this.notify("updatePermissionMode", {
       type: "update_permission_mode",
@@ -240,7 +243,10 @@ class UnixSocketService {
   /**
    * Reset generator for a session
    */
-  async resetGenerator(sessionId: string, agentType: "claude" | "codex" = "claude"): Promise<void> {
+  async resetGenerator(
+    sessionId: string,
+    agentType: "claude" | "codex" | "unknown" = "claude"
+  ): Promise<void> {
     await this.notify("resetGenerator", {
       type: "reset_generator",
       id: sessionId,

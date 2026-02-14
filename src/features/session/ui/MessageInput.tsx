@@ -11,6 +11,8 @@ import {
   Hammer,
   Globe,
   ChevronDown,
+  Check,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   InputGroup,
@@ -23,12 +25,20 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+import { getAgentLogo } from "@/assets/agents";
+import {
+  getRuntimeModelLabel,
+  getRuntimeModelOption,
+  RUNTIME_MODEL_OPTIONS,
+  type RuntimeAgentType,
+} from "../lib/agentRuntime";
 
 interface Attachment {
   id: string;
@@ -70,7 +80,7 @@ export function MessageInput({
   sending,
   isCompacting = false,
   sessionStatus,
-  embedded = false,
+  embedded: _embedded = false,
   model = "sonnet",
   thinkingLevel = "NONE",
   showCompactButton = false,
@@ -79,7 +89,7 @@ export function MessageInput({
   onMessageChange,
   onSend,
   onCompact,
-  onCreatePR,
+  onCreatePR: _onCreatePR,
   onStop,
   onModelChange,
   onThinkingLevelChange,
@@ -103,8 +113,8 @@ export function MessageInput({
     }
   };
 
-  // Model display label (full version numbers)
-  const modelLabel = model === "opus" ? "Opus 3" : model === "haiku" ? "Haiku 3.5" : "Sonnet 4.5";
+  const modelLabel = getRuntimeModelLabel(model);
+  const selectedOptionValue = getRuntimeModelOption(model)?.value;
 
   // Thinking level - cycle through levels
   const cycleThinkingLevel = () => {
@@ -204,6 +214,15 @@ export function MessageInput({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
+  const renderAgentIcon = (type: RuntimeAgentType) => {
+    const LogoComponent = getAgentLogo(type);
+    if (!LogoComponent) {
+      return <span className="bg-muted-foreground/80 inline-flex h-3.5 w-3.5 rounded-full" />;
+    }
+
+    return <LogoComponent className="h-4 w-4 flex-shrink-0" />;
+  };
+
   return (
     <div className={cn("relative shrink-0 px-4 pb-4", className)}>
       {/* Scroll fade overlay */}
@@ -300,19 +319,82 @@ export function MessageInput({
                   <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                className={cn(
+                  "border-border/55 w-[320px] rounded-[18px] border p-2",
+                  "from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
+                  "shadow-[var(--shadow-elevated)]"
+                )}
+              >
                 <DropdownMenuLabel>
-                  <span className="text-muted-foreground text-xs">Claude Code</span>
+                  <span className="text-text-muted/90 px-1.5 text-[11px] font-normal tracking-[0.01em]">
+                    Claude Code
+                  </span>
                 </DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => onModelChange?.("opus")}>
-                  <span className="font-family-mono text-xs font-medium uppercase">Opus 3</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onModelChange?.("sonnet")}>
-                  <span className="font-family-mono text-xs font-medium uppercase">Sonnet 4.5</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onModelChange?.("haiku")}>
-                  <span className="font-family-mono text-xs font-medium uppercase">Haiku 3.5</span>
-                </DropdownMenuItem>
+                {RUNTIME_MODEL_OPTIONS.filter((option) => option.group === "claude").map(
+                  (option) => {
+                    const isSelected = selectedOptionValue === option.value;
+                    return (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onClick={() => onModelChange?.(option.value)}
+                        className={cn(
+                          "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
+                          "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
+                          "flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[14px]"
+                        )}
+                      >
+                        {renderAgentIcon(option.agentType)}
+                        <span className="font-normal">{option.label}</span>
+                        {option.isNew && (
+                          <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[4px] border px-1.5 py-0.5 text-[10px] tracking-[0.08em] uppercase">
+                            New
+                          </span>
+                        )}
+                        {isSelected ? (
+                          <Check className="text-text-primary ml-auto h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowUpRight className="text-text-muted/65 ml-auto h-3.5 w-3.5" />
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  }
+                )}
+
+                <DropdownMenuSeparator className="bg-border/70 my-2" />
+
+                <DropdownMenuLabel>
+                  <span className="text-text-muted/90 px-1.5 text-[11px] font-normal tracking-[0.01em]">
+                    Codex
+                  </span>
+                </DropdownMenuLabel>
+                {RUNTIME_MODEL_OPTIONS.filter((option) => option.group === "codex").map(
+                  (option) => {
+                    const isSelected = selectedOptionValue === option.value;
+                    return (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onClick={() => onModelChange?.(option.value)}
+                        className={cn(
+                          "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
+                          "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
+                          "flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[14px]"
+                        )}
+                      >
+                        {renderAgentIcon(option.agentType)}
+                        <span className="font-normal">{option.label}</span>
+                        {option.isNew && (
+                          <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[4px] border px-1.5 py-0.5 text-[10px] tracking-[0.08em] uppercase">
+                            New
+                          </span>
+                        )}
+                        {isSelected && <Check className="text-text-primary ml-auto h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                    );
+                  }
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
