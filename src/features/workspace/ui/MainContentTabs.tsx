@@ -1,6 +1,9 @@
-import { X, Plus, Sparkles, FileCode, GitCompareArrows } from "lucide-react";
+import { useState } from "react";
+import { X, Plus, FileCode, GitCompareArrows, History } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
+import { getAgentLogo } from "@/assets/agents";
 
 /**
  * Tab data structure
@@ -16,7 +19,7 @@ export interface Tab {
    * Type-specific data payload
    * - For 'diff' tabs: file path, diff content, and change stats
    * - For 'file' tabs: file content and language (future)
-   * - For 'chat' tabs: session ID
+   * - For 'chat' tabs: session ID and agent type (for logo)
    */
   data?: {
     // For 'diff' tabs
@@ -31,7 +34,18 @@ export interface Tab {
 
     // For 'chat' tabs
     sessionId?: string;
+    agentType?: string;
+    hasStarted?: boolean;
+    agentSequence?: number;
   };
+}
+
+/** Info preserved when a chat tab is closed, for restore */
+export interface ClosedTab {
+  label: string;
+  sessionId: string;
+  agentType?: string;
+  closedAt: number;
 }
 
 interface MainContentTabBarProps {
@@ -40,25 +54,44 @@ interface MainContentTabBarProps {
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
+  closedTabs?: ClosedTab[];
+  onTabRestore?: (closedTab: ClosedTab) => void;
 }
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
+const AGENT_ICON_SIZE = "w-3.5 h-3.5";
 
-function getTabIcon(type: Tab["type"]) {
-  const iconClass = cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60");
-  switch (type) {
-    case "chat":
-      return <Sparkles className={iconClass} />;
+function getTabIcon(tab: Tab) {
+  switch (tab.type) {
+    case "chat": {
+      const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+      if (LogoComponent) {
+        return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
+      }
+      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
+    }
     case "diff":
-      return <GitCompareArrows className={iconClass} />;
+      return <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
     default:
-      return <FileCode className={iconClass} />;
+      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
   }
+}
+
+function getClosedTabIcon(agentType?: string) {
+  const LogoComponent = getAgentLogo(agentType || "claude");
+  if (LogoComponent) {
+    return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
+  }
+  return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
 }
 
 /**
  * MainContentTabBar — tabs-only bar for the chat area.
  * Workspace context (repo, branch, PR actions) moved to WorkspaceHeader.
+ *
+ * Close rules:
+ * - Any tab can be closed as long as at least one tab remains
+ * - The close button only appears on hover when there are 2+ tabs
  */
 export function MainContentTabBar({
   tabs,
@@ -66,12 +99,17 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  closedTabs = [],
+  onTabRestore,
 }: MainContentTabBarProps) {
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const canCloseTabs = tabs.length > 1;
+
   return (
-    <div className="bg-bg-elevated flex h-9 flex-shrink-0 items-center px-2.5">
+    <div className="chat-tabs-header relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
       <div
         role="tablist"
-        className="scrollbar-hidden flex min-w-0 flex-1 items-center overflow-x-auto"
+        className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -90,8 +128,8 @@ export function MainContentTabBar({
                 }
               }}
               className={cn(
-                "group relative flex items-center gap-1.5",
-                "h-7 max-w-[200px] min-w-[100px] rounded-md px-2",
+                "group relative flex items-center gap-1.5 overflow-hidden",
+                "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
                 "cursor-pointer text-[13px] font-normal",
                 "transition-colors duration-150",
                 isActive
@@ -99,34 +137,45 @@ export function MainContentTabBar({
                   : "text-text-muted hover:text-text-tertiary"
               )}
             >
-              {getTabIcon(tab.type)}
+              {getTabIcon(tab)}
 
-              <div className="relative min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>
               </div>
 
-              {onTabClose && tab.closeable !== false && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTabClose(tab.id);
-                  }}
+              {/* Close button — overlays right edge on hover, only when 2+ tabs */}
+              {onTabClose && canCloseTabs && tab.closeable !== false && (
+                <div
                   className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-sm",
-                    "transition-all duration-150",
-                    "hover:bg-bg-muted",
-                    "opacity-0 group-hover:opacity-100"
+                    "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
+                    "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                    isActive
+                      ? "from-bg-raised bg-gradient-to-l from-50% to-transparent"
+                      : "from-bg-surface group-hover:from-bg-surface bg-gradient-to-l from-50% to-transparent"
                   )}
-                  aria-label={`Close ${tab.label} tab`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTabClose(tab.id);
+                    }}
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-sm",
+                      "transition-colors duration-150",
+                      "hover:bg-bg-muted"
+                    )}
+                    aria-label={`Close ${tab.label} tab`}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
               )}
             </div>
           );
         })}
 
+        {/* New tab button — stays adjacent to tabs */}
         {onTabAdd && (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
@@ -150,6 +199,59 @@ export function MainContentTabBar({
           </Tooltip>
         )}
       </div>
+
+      {/* History button — pinned far right, outside scrollable area */}
+      {onTabRestore && closedTabs.length > 0 && (
+        <Popover open={restoreOpen} onOpenChange={setRestoreOpen}>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Restore closed session"
+                  className={cn(
+                    "flex items-center justify-center",
+                    "h-7 flex-shrink-0 rounded-md px-1.5",
+                    "text-text-disabled hover:text-text-muted",
+                    "transition-colors duration-150"
+                  )}
+                >
+                  <History className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            {!restoreOpen && (
+              <TooltipContent side="bottom">
+                <p className="text-xs">Restore closed session (⌘⇧T)</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+          <PopoverContent align="end" sideOffset={6} className="w-56 p-1">
+            <p className="text-text-muted px-2 py-1.5 text-[11px] font-medium">Recently closed</p>
+            <div className="max-h-48 overflow-y-auto">
+              {closedTabs.map((ct, i) => (
+                <button
+                  key={`${ct.sessionId}-${i}`}
+                  type="button"
+                  onClick={() => {
+                    onTabRestore(ct);
+                    setRestoreOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
+                    "text-text-secondary text-left text-[13px]",
+                    "transition-colors duration-150",
+                    "hover:bg-bg-raised"
+                  )}
+                >
+                  {getClosedTabIcon(ct.agentType)}
+                  <span className="min-w-0 flex-1 truncate">{ct.label}</span>
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
