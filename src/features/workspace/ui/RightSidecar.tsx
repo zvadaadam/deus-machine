@@ -1,12 +1,15 @@
 import { Code2, Settings2, Terminal, PenTool, Globe } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type { RightSideTab } from "@/features/workspace/store";
 
 interface RightSidecarProps {
   activeTab: RightSideTab;
   onTabChange: (tab: RightSideTab) => void;
-  /** Compact mode — disables non-code tabs when diff viewer is active */
+  /** Compact mode — clicking non-code tabs exits compact mode first */
   compact?: boolean;
+  /** Called when a non-code tab is clicked in compact mode (closes diff viewer) */
+  onRequestExitCompact?: () => void;
 }
 
 const sidecarItems: Array<{
@@ -27,45 +30,65 @@ const sidecarItems: Array<{
  * Vertical icon strip. Active tab gets bg-overlay + text-secondary.
  * Inactive: text-muted. No borders on icons — depth via background only.
  */
-export function RightSidecar({ activeTab, onTabChange, compact }: RightSidecarProps) {
+export function RightSidecar({
+  activeTab,
+  onTabChange,
+  compact,
+  onRequestExitCompact,
+}: RightSidecarProps) {
   return (
     <div className="bg-bg-elevated border-border-subtle flex h-full w-[58px] flex-shrink-0 flex-col items-center gap-3 border-l px-1.5 pt-3 pb-5">
       {sidecarItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
-        const isDisabled = compact && item.id !== "code";
+        // In compact mode, non-code tabs temporarily close the diff viewer.
+        // The layout restores when the user comes back to Code.
+        const willCloseDiff = compact && item.id !== "code";
+
         return (
-          <button
-            key={item.id}
-            type="button"
-            aria-label={item.label}
-            aria-pressed={isActive}
-            disabled={isDisabled}
-            title={isDisabled ? `Close diff to use ${item.label}` : undefined}
-            onClick={() => !isDisabled && onTabChange(item.id)}
-            className={cn(
-              "group flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-1.5 text-[10px] font-medium transition-colors duration-150",
-              isDisabled
-                ? "cursor-not-allowed opacity-30"
-                : isActive
-                  ? "text-text-secondary"
-                  : "text-text-muted hover:text-text-secondary"
-            )}
-          >
-            <div
-              className={cn(
-                "flex h-[38px] w-[38px] items-center justify-center rounded-md transition-colors duration-150",
-                isDisabled
-                  ? "text-text-disabled"
-                  : isActive
-                    ? "bg-bg-raised text-text-secondary"
-                    : "text-text-muted group-hover:text-text-secondary"
+          <Tooltip key={item.id} delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={item.label}
+                aria-pressed={isActive}
+                onClick={() => {
+                  // Set tab first, then exit compact mode if needed.
+                  // React batches both updates in the same tick.
+                  onTabChange(item.id);
+                  if (willCloseDiff && onRequestExitCompact) {
+                    onRequestExitCompact();
+                  }
+                }}
+                className={cn(
+                  "group flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-1.5 text-[10px] font-medium transition-colors duration-150",
+                  isActive ? "text-text-secondary" : "text-text-muted hover:text-text-secondary"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-[38px] w-[38px] items-center justify-center rounded-md transition-colors duration-150",
+                    isActive
+                      ? "bg-bg-raised text-text-secondary"
+                      : "text-text-muted group-hover:text-text-secondary"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <span className="font-sans">{item.label}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" sideOffset={6}>
+              {willCloseDiff ? (
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-xs font-medium">{item.label}</p>
+                  <p className="text-[11px] opacity-60">Parks diff, restores on Code</p>
+                </div>
+              ) : (
+                <p className="text-xs">{item.label}</p>
               )}
-            >
-              <Icon className="h-4 w-4" />
-            </div>
-            <span className="font-sans">{item.label}</span>
-          </button>
+            </TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

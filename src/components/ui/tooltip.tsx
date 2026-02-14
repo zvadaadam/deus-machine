@@ -33,10 +33,11 @@ TooltipTrigger.displayName = "TooltipTrigger";
 
 function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 4,
+  showArrow = false,
   children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & { showArrow?: boolean }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
@@ -49,10 +50,32 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+        {showArrow && (
+          <TooltipPrimitive.Arrow className="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+        )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+/**
+ * TooltipKbd — keyboard shortcut badge for use inside TooltipContent.
+ * Matches the reference style: translucent bg, small rounded pill.
+ *
+ * Usage:
+ *   <TooltipContent>
+ *     <div className="flex items-center gap-3">
+ *       <span>Toggle terminal</span>
+ *       <TooltipKbd>⌘J</TooltipKbd>
+ *     </div>
+ *   </TooltipContent>
+ */
+function TooltipKbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="bg-background/15 ml-auto rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tracking-wide">
+      {children}
+    </kbd>
+  );
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, TooltipKbd };

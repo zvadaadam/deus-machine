@@ -6,7 +6,7 @@
  */
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
-import { listen as tauriListen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit as tauriEmit, listen as tauriListen, type UnlistenFn } from "@tauri-apps/api/event";
 import { normalizeError, reportError } from "@/shared/utils/errorReporting";
 
 // Check if running in Tauri environment
@@ -55,6 +55,18 @@ export async function listen<T>(
   }
 
   return tauriListen<T>(event, handler);
+}
+
+/**
+ * Emit a Tauri event (broadcasts to all windows)
+ */
+export async function emit<T>(event: string, payload?: T): Promise<void> {
+  if (!isTauriEnv) {
+    console.warn(`[Platform] Tauri emit called in non-Tauri environment: ${event}`);
+    return;
+  }
+
+  return tauriEmit(event, payload);
 }
 
 /**
