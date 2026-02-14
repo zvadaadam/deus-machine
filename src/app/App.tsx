@@ -2,17 +2,19 @@ import { useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import type { ComponentType, ReactNode, ErrorInfo } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
-import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
 import { DetachedBrowserWindow } from "@/features/browser/ui/DetachedBrowserWindow";
 import { ErrorFallback, DashboardError } from "@/shared/components";
 import { reportError } from "@/shared/utils/errorReporting";
 import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthGate } from "@/features/auth";
+import { useAuthStatus, LoginScreen } from "@/features/auth";
+import { useAuthStore } from "@/features/auth/store/authStore";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
-import { isTauriEnv, invoke } from "@/platform/tauri";
+import { isTauriEnv, invoke, listen } from "@/platform/tauri";
+import { queryKeys } from "@/shared/api/queryKeys";
 
 // Detect if this window instance is the detached browser popup.
 // The main window creates it with ?window=browser-detached in the URL.
@@ -47,9 +49,32 @@ function ConditionalErrorBoundary({
  */
 function AppContent({ reset }: { reset: () => void }) {
   const settingsQuery = useSettings();
+  const authQuery = useAuthStatus();
+  const setLoginInProgress = useAuthStore((s) => s.setLoginInProgress);
+  const queryClient = useQueryClient();
   const windowShownRef = useRef(false);
 
   const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
+
+  // Deep-link event listeners for auth — always active so they cover both
+  // onboarding (SignInStep) and post-onboarding (LoginScreen for returning users).
+  useEffect(() => {
+    if (!isTauriEnv) return;
+
+    const unlistenSuccess = listen("auth:login-complete", () => {
+      setLoginInProgress(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.status });
+    });
+
+    const unlistenError = listen<string>("auth:login-error", () => {
+      setLoginInProgress(false);
+    });
+
+    return () => {
+      unlistenSuccess.then((fn) => fn());
+      unlistenError.then((fn) => fn());
+    };
+  }, [queryClient, setLoginInProgress]);
 
   // Show the main window whenever we transition OUT of onboarding.
   // Covers both first launch (window starts hidden via tauri.conf.json)
@@ -73,6 +98,11 @@ function AppContent({ reset }: { reset: () => void }) {
 
   if (showOnboarding) {
     return <OnboardingOverlay />;
+  }
+
+  // Returning user who logged out — show login screen (not full re-onboarding)
+  if (isTauriEnv && !authQuery.isLoading && !authQuery.data?.authenticated) {
+    return <LoginScreen />;
   }
 
   return (
@@ -125,9 +155,7 @@ function App() {
             }}
           >
             <ThemeProvider>
-              <AuthGate>
-                <AppContent reset={reset} />
-              </AuthGate>
+              <AppContent reset={reset} />
             </ThemeProvider>
           </ConditionalErrorBoundary>
         )}

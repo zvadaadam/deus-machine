@@ -6,6 +6,7 @@ import { useOnboardingAudio } from "../hooks/useOnboardingAudio";
 import { StepIndicator } from "./components/StepIndicator";
 import { AgentDotsAnimation } from "./AgentDotsAnimation";
 import { WelcomeStep } from "./steps/WelcomeStep";
+import { SignInStep } from "./steps/SignInStep";
 import { GitHubSetupStep } from "./steps/GitHubSetupStep";
 import { AIToolsCheckStep } from "./steps/AIToolsCheckStep";
 import { ProjectSelectionStep } from "./steps/ProjectSelectionStep";
@@ -38,7 +39,7 @@ const TIMELINE = {
   EXIT_DURATION: 900, // Exit animation before window restore
 } as const;
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 const OVERLAY_BG = "rgba(9, 10, 14, 0.52)";
 
 // Card surface — no border. Light and shadow define form, not lines.
@@ -175,7 +176,7 @@ export function OnboardingOverlay() {
     setAnimating(true);
     setAnimClass("animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.32,.72,0,1)_forwards]");
     setTimeout(() => {
-      setCurrentStep((prev) => Math.min(prev + 1, 3) as OnboardingStep);
+      setCurrentStep((prev) => Math.min(prev + 1, 4) as OnboardingStep);
       setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.32,.72,0,1)]");
       setAnimating(false);
     }, 160);
@@ -288,9 +289,10 @@ export function OnboardingOverlay() {
                 )}
               >
                 {currentStep === 0 && <WelcomeStep onNext={goForward} />}
-                {currentStep === 1 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
-                {currentStep === 2 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
-                {currentStep === 3 && (
+                {currentStep === 1 && <SignInStep onNext={goForward} onBack={goBack} />}
+                {currentStep === 2 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
+                {currentStep === 3 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
+                {currentStep === 4 && (
                   <ProjectSelectionStep onBack={goBack} onComplete={handleComplete} />
                 )}
               </div>
