@@ -96,8 +96,8 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           variant="outline"
           size="sm"
           onClick={async () => {
-            await saveSetting("onboarding_completed", false);
-            closeSettings();
+            const ok = await saveSetting("onboarding_completed", false);
+            if (ok) closeSettings();
           }}
         >
           <RotateCcw className="mr-1.5 size-3.5" />
