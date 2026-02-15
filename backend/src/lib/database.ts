@@ -1,10 +1,11 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { SCHEMA_SQL } from './schema';
 
 const DEFAULT_DB_PATH = path.join(
-  process.env.HOME!,
+  process.env.HOME || os.homedir(),
   'Library/Application Support/com.hivenet.app/hive.db'
 );
 

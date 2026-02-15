@@ -38,18 +38,12 @@ fn main() {
             println!("[TAURI] ✅ Socket event listener started");
 
             // Compute database path early — both backend and sidecar need it
-            let home_dir = std::env::var("HOME")
-                .ok()
-                .filter(|h| !h.is_empty())
-                .unwrap_or_else(|| {
-                    eprintln!("[TAURI] WARNING: HOME environment variable not set, using /tmp fallback");
-                    "/tmp".to_string()
-                });
-
-            let db_path = format!(
-                "{}/Library/Application Support/com.hivenet.app/hive.db",
-                home_dir
-            );
+            let db_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
+            std::fs::create_dir_all(&db_dir)
+                .map_err(|e| format!("Failed to create app data dir {}: {e}", db_dir.display()))?;
+            let db_path = db_dir.join("hive.db");
+            let db_path = db_path.to_string_lossy().to_string();
 
             println!("[TAURI] Using database at: {}", db_path);
 
