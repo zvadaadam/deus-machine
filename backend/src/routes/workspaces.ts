@@ -9,53 +9,34 @@ import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loa
 import { NotFoundError, ValidationError } from '../lib/errors';
 import * as gitService from '../services/git.service';
 import { generateUniqueCityName } from '../services/workspace.service';
+import {
+  getAllWorkspaces,
+  getWorkspacesByRepo,
+  getWorkspaceById,
+  getWorkspaceRaw,
+  getWorkspaceWithRepo,
+  getRepoById,
+  getSessionRaw,
+} from '../db';
+import type { WorkspaceWithDetailsRow } from '../db';
 
-type Env = { Variables: { workspace: any; workspacePath: string } };
+type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
 const app = new Hono<Env>();
 
 app.get('/workspaces', (c) => {
   const db = getDatabase();
-  const workspaces = db.prepare(`
-    SELECT
-      w.id, w.directory_name, w.branch, w.state, w.active_session_id,
-      w.unread, w.created_at, w.updated_at,
-      r.name as repo_name, r.root_path, r.storage_version,
-      s.status as session_status, s.is_compacting, s.context_token_count,
-      s.unread_count as session_unread,
-      s.last_user_message_at as latest_message_sent_at
-    FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.active_session_id = s.id
-    ORDER BY w.updated_at DESC
-    LIMIT 100
-  `).all();
-  return c.json((workspaces as any[]).map(ws => ({ ...ws, workspace_path: computeWorkspacePath(ws) })));
+  const workspaces = getAllWorkspaces(db);
+  return c.json(workspaces.map(ws => ({ ...ws, workspace_path: computeWorkspacePath(ws) })));
 });
 
 app.get('/workspaces/by-repo', (c) => {
   const db = getDatabase();
   const state = c.req.query('state');
-  const stateFilter = state ? "WHERE w.state = ?" : "";
 
-  const workspaces = db.prepare(`
-    SELECT
-      w.id, w.repository_id, w.directory_name, w.branch, w.state,
-      w.active_session_id, w.unread, w.created_at, w.updated_at,
-      w.initialization_parent_branch AS parent_branch,
-      r.name as repo_name, r.display_order as repo_display_order, r.root_path,
-      r.default_branch, r.storage_version,
-      s.status as session_status, s.is_compacting, s.context_token_count,
-      s.unread_count as session_unread,
-      s.last_user_message_at as latest_message_sent_at
-    FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.active_session_id = s.id
-    ${stateFilter}
-    ORDER BY r.display_order, r.name, w.updated_at DESC
-  `).all(...(state ? [state] : []));
+  const workspaces = getWorkspacesByRepo(db, state);
 
   const grouped: Record<string, any> = {};
-  (workspaces as any[]).forEach(workspace => {
+  workspaces.forEach(workspace => {
     const repoId = workspace.repository_id || 'unknown';
     if (!grouped[repoId]) {
       grouped[repoId] = {
@@ -74,17 +55,7 @@ app.get('/workspaces/by-repo', (c) => {
 
 app.get('/workspaces/:id', (c) => {
   const db = getDatabase();
-  const workspace = db.prepare(`
-    SELECT w.*, w.initialization_parent_branch AS parent_branch,
-           r.name as repo_name, r.root_path, r.storage_version,
-           s.status as session_status, s.is_compacting, s.context_token_count,
-           s.last_user_message_at as latest_message_sent_at
-    FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.active_session_id = s.id
-    WHERE w.id = ?
-  `).get(c.req.param('id')) as any;
-
+  const workspace = getWorkspaceById(db, c.req.param('id'));
   if (!workspace) throw new NotFoundError('Workspace not found');
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
@@ -95,14 +66,14 @@ app.patch('/workspaces/:id', async (c) => {
   if (state) {
     db.prepare('UPDATE workspaces SET state = ? WHERE id = ?').run(state, c.req.param('id'));
   }
-  const updated = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(c.req.param('id'));
+  const updated = getWorkspaceRaw(db, c.req.param('id'));
   return c.json(updated);
 });
 
 // Diff stats - uses withWorkspace middleware
 app.get('/workspaces/:id/diff-stats', withWorkspace, (c) => {
-  const workspace = c.get('workspace') as any;
-  const workspacePath = c.get('workspacePath') as string;
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
   const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
   const stats = gitService.getDiffStats(workspacePath, parentBranch);
   return c.json(stats);
@@ -110,8 +81,8 @@ app.get('/workspaces/:id/diff-stats', withWorkspace, (c) => {
 
 // Diff files
 app.get('/workspaces/:id/diff-files', withWorkspace, (c) => {
-  const workspace = c.get('workspace') as any;
-  const workspacePath = c.get('workspacePath') as string;
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
   const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
   const files = gitService.getDiffFiles(workspacePath, parentBranch);
   return c.json({ files });
@@ -122,8 +93,8 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
   const file = c.req.query('file');
   if (!file) throw new ValidationError('file parameter is required');
 
-  const workspace = c.get('workspace') as any;
-  const workspacePath = c.get('workspacePath') as string;
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
   const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
   const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
   if (!safeFilePath) throw new ValidationError('Invalid file path');
@@ -170,7 +141,7 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
 
 // PR status
 app.get('/workspaces/:id/pr-status', withWorkspace, (c) => {
-  const workspacePath = c.get('workspacePath') as string;
+  const workspacePath = c.get('workspacePath');
   try {
     const output = execFileSync('gh', ['pr', 'view', '--json', 'number,title,url,mergeable'], {
       cwd: workspacePath, encoding: 'utf-8', timeout: 5000
@@ -187,7 +158,7 @@ app.get('/workspaces/:id/pr-status', withWorkspace, (c) => {
 
 // Pen files
 app.get('/workspaces/:id/pen-files', withWorkspace, (c) => {
-  const workspacePath = c.get('workspacePath') as string;
+  const workspacePath = c.get('workspacePath');
   const MAX_DEPTH = 10;
   const MAX_FILES = 500;
 
@@ -218,7 +189,7 @@ app.post('/workspaces/:id/open-pen-file', withWorkspace, async (c) => {
   const { filePath } = await c.req.json();
   if (!filePath) throw new ValidationError('filePath is required');
 
-  const workspacePath = c.get('workspacePath') as string;
+  const workspacePath = c.get('workspacePath');
   const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
   if (!safeRelativePath) throw new ValidationError('Invalid file path');
 
@@ -268,7 +239,7 @@ app.post('/workspaces', async (c) => {
   const { repository_id } = await c.req.json();
   if (!repository_id) throw new ValidationError('repository_id is required');
 
-  const repo = db.prepare('SELECT * FROM repos WHERE id = ?').get(repository_id) as any;
+  const repo = getRepoById(db, repository_id);
   if (!repo) throw new NotFoundError('Repository not found');
 
   const workspace_name = generateUniqueCityName(db);
@@ -277,7 +248,7 @@ app.post('/workspaces', async (c) => {
 
   let branchPrefix = 'workspace';
   try {
-    const gitUser = execSync('git config user.name', { cwd: repo.root_path, encoding: 'utf8' })
+    const gitUser = execSync('git config user.name', { cwd: repo.root_path!, encoding: 'utf8' })
       .trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     if (gitUser) branchPrefix = gitUser;
   } catch {}
@@ -288,18 +259,17 @@ app.post('/workspaces', async (c) => {
 
   db.prepare(`
     INSERT INTO workspaces (
-      id, repository_id, directory_name, branch, placeholder_branch_name,
-      initialization_parent_branch, state, initialization_log_path,
-      initialization_files_copied, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      id, repository_id, directory_name, branch,
+      parent_branch, state, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
-    placeholderBranchName, parent_branch, 'initializing', initLogPath, 0);
+    parent_branch, 'initializing');
 
-  const workspacePath = path.join(repo.root_path, '.hive', workspace_name);
+  const workspacePath = path.join(repo.root_path!, '.hive', workspace_name);
   const initLog = fs.createWriteStream(initLogPath);
   const worktreeProcess = spawn('git', [
     'worktree', 'add', '-b', placeholderBranchName, workspacePath, parent_branch
-  ], { cwd: repo.root_path, stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { cwd: repo.root_path!, stdio: ['ignore', 'pipe', 'pipe'] });
 
   worktreeProcess.stdout.pipe(initLog);
   worktreeProcess.stderr.pipe(initLog);
@@ -321,12 +291,8 @@ app.post('/workspaces', async (c) => {
     }
   });
 
-  const workspace = db.prepare(`
-    SELECT w.*, w.initialization_parent_branch AS parent_branch,
-           r.name as repo_name, r.root_path, r.storage_version
-    FROM workspaces w LEFT JOIN repos r ON w.repository_id = r.id WHERE w.id = ?
-  `).get(workspaceId) as any;
-
+  const workspace = getWorkspaceWithRepo(db, workspaceId);
+  if (!workspace) throw new NotFoundError('Workspace not found after creation');
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
@@ -335,7 +301,7 @@ app.post('/workspaces/:id/sessions', (c) => {
   const db = getDatabase();
   const workspaceId = c.req.param('id');
 
-  const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(workspaceId);
+  const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found');
 
   const sessionId = randomUUID();
@@ -352,7 +318,7 @@ app.post('/workspaces/:id/sessions', (c) => {
 
   createSession();
 
-  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+  const session = getSessionRaw(db, sessionId);
   return c.json(session);
 });
 

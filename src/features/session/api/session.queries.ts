@@ -6,8 +6,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SessionService, type PaginatedMessages } from "./session.service";
-import { isTauriEnv } from "@/platform/tauri";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { MESSAGE_PAGE_SIZE, mergeNewerMessages, getLastRealSeq } from "../lib/messageCache";
 import type {
   ContentBlock,
   Message,
@@ -31,17 +31,13 @@ export function useSession(sessionId: string | null) {
     queryKey: queryKeys.sessions.detail(sessionId || ""),
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
-    // Desktop: useSessionEvents invalidates on session:message events, but
-    // status transitions (working → idle) can happen without a message event
+    // useSessionEvents invalidates on session:message events, but status
+    // transitions (working → idle) can happen without a message event
     // (e.g., Claude completes, process crashes). Keep a low-frequency fallback
     // poll until session:status-changed events are implemented.
-    // Web: Poll at standard intervals.
     refetchInterval: (query) => {
       const session = query.state.data as Session | undefined;
-      if (isTauriEnv) {
-        return session?.status === "working" ? 5000 : false;
-      }
-      return session?.status === "working" ? 2000 : 10_000;
+      return session?.status === "working" ? 5000 : false;
     },
     staleTime: 10000, // 10 seconds (was 500ms)
   });
@@ -55,28 +51,15 @@ export function useSession(sessionId: string | null) {
  * Returns Message[] via `select` so downstream consumers are unchanged.
  * Raw cache holds PaginatedMessages for optimistic updates.
  */
-export function useMessages(sessionId: string | null, sessionStatus?: SessionStatus) {
+export function useMessages(sessionId: string | null) {
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
-    queryFn: () => SessionService.fetchMessages(sessionId!),
+    queryFn: () => SessionService.fetchMessages(sessionId!, { limit: MESSAGE_PAGE_SIZE }),
     enabled: !!sessionId,
-    // Use select to unwrap messages array for downstream consumers
-    select: (data: PaginatedMessages) => data.messages,
-    // ✅ Smart fallback: Events in Tauri, polling in browser
-    refetchInterval: () => {
-      // Desktop mode (Tauri): Events handle updates, no polling
-      if (isTauriEnv) {
-        return false;
-      }
-
-      // Web mode (Browser): Poll only when session is working
-      if (sessionStatus === "working") {
-        return 2000; // Poll every 2s when Claude is working
-      }
-
-      return false; // Don't poll when idle
-    },
-    staleTime: 30000, // 30 seconds
+    // No select — expose full PaginatedMessages for has_older/has_newer.
+    // All updates are manual: Tauri events do incremental fetch, web mode uses polling hook.
+    refetchInterval: false,
+    staleTime: Infinity,
   });
 
   return query;
@@ -154,8 +137,12 @@ const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | st
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const sessionStatus = (sessionQuery.data?.status as SessionStatus) || "idle";
-  const messagesQuery = useMessages(sessionId, sessionStatus);
+  const _sessionStatus = (sessionQuery.data?.status as SessionStatus) || "idle";
+  const messagesQuery = useMessages(sessionId);
+
+  // Unwrap messages from PaginatedMessages (select was removed to expose has_older)
+  const messages = messagesQuery.data?.messages ?? [];
+  const hasOlder = messagesQuery.data?.has_older ?? false;
 
   // Parse content helper (from original useMessages)
   // Memoized to prevent Context cascade re-renders
@@ -179,9 +166,9 @@ export function useSessionWithMessages(sessionId: string | null) {
   const { toolResultMap, parentToolUseMap } = useMemo(() => {
     const resultMap = new Map();
     const parentMap = new Map<string, string>();
-    if (!messagesQuery.data) return { toolResultMap: resultMap, parentToolUseMap: parentMap };
+    if (!messages.length) return { toolResultMap: resultMap, parentToolUseMap: parentMap };
 
-    messagesQuery.data.forEach((msg: Message) => {
+    messages.forEach((msg: Message) => {
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(msg.content);
@@ -214,14 +201,14 @@ export function useSessionWithMessages(sessionId: string | null) {
     });
 
     return { toolResultMap: resultMap, parentToolUseMap: parentMap };
-  }, [messagesQuery.data]);
+  }, [messages]);
 
   // Group subagent messages by their parent Task tool_use_id
   const subagentMessages = useMemo(() => {
     const map = new Map<string, Message[]>();
-    if (!messagesQuery.data) return map;
+    if (!messages.length) return map;
 
-    messagesQuery.data.forEach((msg: Message) => {
+    messages.forEach((msg: Message) => {
       const parentId = parentToolUseMap.get(msg.id);
       if (parentId) {
         if (!map.has(parentId)) map.set(parentId, []);
@@ -230,25 +217,23 @@ export function useSessionWithMessages(sessionId: string | null) {
     });
 
     return map;
-  }, [messagesQuery.data, parentToolUseMap]);
+  }, [messages, parentToolUseMap]);
 
   // Get latest user message's sent_at for duration tracking
   const latestMessageSentAt = useMemo(() => {
-    if (!messagesQuery.data || messagesQuery.data.length === 0) return null;
+    if (!messages.length) return null;
 
     // Find the latest user message
-    const latestUserMessage = [...messagesQuery.data]
-      .reverse()
-      .find((msg: Message) => msg.role === "user");
+    const latestUserMessage = [...messages].reverse().find((msg: Message) => msg.role === "user");
 
     return latestUserMessage?.sent_at || null;
-  }, [messagesQuery.data]);
+  }, [messages]);
 
   return {
     session: sessionQuery.data,
-    messages: messagesQuery.data || [],
+    messages,
+    hasOlder,
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
-    isCompacting: sessionQuery.data?.is_compacting === 1,
     latestMessageSentAt,
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
@@ -257,6 +242,33 @@ export function useSessionWithMessages(sessionId: string | null) {
     parentToolUseMap,
     subagentMessages,
   };
+}
+
+/**
+ * Load older messages (scroll-up pagination).
+ * Prepends older messages to the cache while preserving has_newer from current cache.
+ */
+export function useLoadOlderMessages() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ sessionId, beforeSeq }: { sessionId: string; beforeSeq: number }) =>
+      SessionService.fetchMessages(sessionId, { before: beforeSeq, limit: MESSAGE_PAGE_SIZE }),
+
+    onSuccess: (olderPage, { sessionId }) => {
+      queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
+        if (!old) return olderPage;
+        // Deduplicate by id (shouldn't happen, but safety first)
+        const existingIds = new Set(old.messages.map((m) => m.id));
+        const newMessages = olderPage.messages.filter((m) => !existingIds.has(m.id));
+        return {
+          messages: [...newMessages, ...old.messages],
+          has_older: olderPage.has_older,
+          has_newer: old.has_newer,
+        };
+      });
+    },
+  });
 }
 
 /**
@@ -298,6 +310,7 @@ export function useSendMessage() {
       const optimisticMessage: Message = {
         id: optimisticId,
         session_id: sessionId,
+        seq: Number.MAX_SAFE_INTEGER, // Placeholder — real seq assigned by DB trigger
         role: "user",
         content: JSON.stringify({ content: [{ type: "text", text: content }] }),
         created_at: new Date().toISOString(),
@@ -342,11 +355,38 @@ export function useSendMessage() {
       }
     },
 
-    onSettled: (_, __, variables) => {
-      // Invalidate to get real message from server
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions.messages(variables.sessionId),
-      });
+    onSettled: async (_, __, variables) => {
+      // Incremental fetch: only get messages newer than what we have,
+      // then merge into cache (removing optimistic placeholders).
+      // Falls back to full invalidation if no cache exists.
+      const cached = queryClient.getQueryData<PaginatedMessages>(
+        queryKeys.sessions.messages(variables.sessionId)
+      );
+
+      if (cached) {
+        try {
+          const lastSeq = getLastRealSeq(cached.messages);
+          const newer = await SessionService.fetchMessages(variables.sessionId, {
+            after: lastSeq || undefined,
+            limit: MESSAGE_PAGE_SIZE,
+          });
+          queryClient.setQueryData<PaginatedMessages>(
+            queryKeys.sessions.messages(variables.sessionId),
+            (old) => mergeNewerMessages(old, newer)
+          );
+        } catch {
+          // Incremental fetch failed — fall back to full invalidation
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions.messages(variables.sessionId),
+          });
+        }
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.messages(variables.sessionId),
+        });
+      }
+
+      // Always refresh session status (working → idle transitions)
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.detail(variables.sessionId),
       });

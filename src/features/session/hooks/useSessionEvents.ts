@@ -23,6 +23,8 @@ import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isTauriEnv } from "@/platform/tauri";
+import { SessionService, type PaginatedMessages } from "../api/session.service";
+import { MESSAGE_PAGE_SIZE, mergeNewerMessages, getLastRealSeq } from "../lib/messageCache";
 
 /**
  * Event payload from sidecar-v2 JSON-RPC notification
@@ -67,12 +69,39 @@ export function useSessionEvents(sessionId: string | null) {
           console.log("[Events] 📨 Message received:", { type, dataType });
         }
 
-        // Invalidate messages query to trigger refetch
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions.messages(sessionId),
-        });
+        // Incremental fetch: only get messages newer than what we have
+        const cached = queryClient.getQueryData<PaginatedMessages>(
+          queryKeys.sessions.messages(sessionId)
+        );
 
-        // Also invalidate session to update status (e.g., when result arrives)
+        if (cached) {
+          const lastSeq = getLastRealSeq(cached.messages);
+          SessionService.fetchMessages(sessionId, {
+            after: lastSeq || undefined,
+            limit: MESSAGE_PAGE_SIZE,
+          })
+            .then((newer) => {
+              if (newer.messages.length > 0) {
+                queryClient.setQueryData<PaginatedMessages>(
+                  queryKeys.sessions.messages(sessionId),
+                  (old) => mergeNewerMessages(old, newer)
+                );
+              }
+            })
+            .catch(() => {
+              // Incremental fetch failed — fall back to full invalidation
+              queryClient.invalidateQueries({
+                queryKey: queryKeys.sessions.messages(sessionId),
+              });
+            });
+        } else {
+          // No cache yet — do a full fetch
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions.messages(sessionId),
+          });
+        }
+
+        // Always refresh session status (e.g., when result arrives)
         queryClient.invalidateQueries({
           queryKey: queryKeys.sessions.detail(sessionId),
         });

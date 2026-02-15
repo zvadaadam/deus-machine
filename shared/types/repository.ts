@@ -12,6 +12,8 @@ export interface Repo {
   name: string;
   root_path: string;
   default_branch: string;
+  display_order?: number;
+  github_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -28,7 +30,5 @@ export interface Stats {
   sessions: number;
   sessions_idle: number;
   sessions_working: number;
-  sessions_compacting: number;
   messages: number;
-  attachments: number;
 }
