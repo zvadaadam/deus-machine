@@ -1,0 +1,66 @@
+import { ArrowLeft, Settings2, Sparkles, Puzzle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from "@/components/ui/sidebar";
+import { useUIStore } from "@/shared/stores/uiStore";
+import type { SettingsSection } from "@shared/types/settings";
+
+interface NavItem {
+  id: SettingsSection;
+  label: string;
+  icon: LucideIcon;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: "general", label: "General", icon: Settings2 },
+  { id: "ai", label: "AI", icon: Sparkles },
+  { id: "extensions", label: "Extensions", icon: Puzzle },
+];
+
+export function SettingsSidebar() {
+  const closeSettings = useUIStore((s) => s.closeSettings);
+  const activeSection = useUIStore((s) => s.activeSettingsSection);
+  const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
+
+  return (
+    <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
+      <SidebarHeader className="px-3.5 py-3">
+        <button
+          type="button"
+          onClick={closeSettings}
+          className="text-text-muted hover:text-text-primary flex items-center gap-2 rounded-md py-0.5 text-sm transition-colors duration-200 ease-out"
+        >
+          <ArrowLeft className="h-4 w-4 shrink-0" />
+          <span>Back to app</span>
+        </button>
+      </SidebarHeader>
+
+      <SidebarContent className="px-1.5">
+        <SidebarMenu className="gap-0.5">
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeSection === item.id;
+            const Icon = item.icon;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => setActiveSection(item.id)}
+                  className="gap-2.5 px-3 py-1.5"
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="text-[13px]">{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarContent>
+    </Sidebar>
+  );
+}

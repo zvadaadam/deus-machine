@@ -4,7 +4,7 @@ import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
 import type { Repo } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
-import { SettingsModal } from "@/features/settings";
+import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
@@ -70,11 +70,10 @@ export function MainLayout() {
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
-  const showSettingsModal = useUIStore((s) => s.showSettingsModal);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
-  const closeSettingsModal = useUIStore((s) => s.closeSettingsModal);
 
   // TanStack Query hooks - automatic polling and caching
   const workspacesQuery = useWorkspacesByRepo("ready");
@@ -329,8 +328,10 @@ export function MainLayout() {
         } as React.CSSProperties
       }
     >
-      {/* Sidebar */}
-      {loading ? (
+      {/* Sidebar — swap between app sidebar and settings sidebar */}
+      {settingsOpen ? (
+        <SettingsSidebar />
+      ) : loading ? (
         <SidebarSkeleton />
       ) : repoGroups.length === 0 ? (
         <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
@@ -372,15 +373,19 @@ export function MainLayout() {
       {/* Sidebar resize handle */}
       <SidebarResizeHandle onSizeChange={setSidebarWidth} onDraggingChange={setSidebarDragging} />
 
-      {/* Main Content */}
-      <MainContent
-        selectedWorkspace={selectedWorkspace}
-        prStatus={prStatusQuery.data ?? null}
-        workspaceChatPanelRef={workspaceChatPanelRef}
-        onCreateWorkspace={openNewWorkspaceModal}
-        onOpenProject={handleOpenProject}
-        onCloneRepository={() => setShowCloneModal(true)}
-      />
+      {/* Main Content — swap between app content and settings page */}
+      {settingsOpen ? (
+        <SettingsPage />
+      ) : (
+        <MainContent
+          selectedWorkspace={selectedWorkspace}
+          prStatus={prStatusQuery.data ?? null}
+          workspaceChatPanelRef={workspaceChatPanelRef}
+          onCreateWorkspace={openNewWorkspaceModal}
+          onOpenProject={handleOpenProject}
+          onCloneRepository={() => setShowCloneModal(true)}
+        />
+      )}
 
       {/* Modals */}
       <NewWorkspaceModal
@@ -415,8 +420,6 @@ export function MainLayout() {
         onClone={handleCloneRepository}
         onClearError={() => setCloneError(null)}
       />
-
-      <SettingsModal show={showSettingsModal} onClose={closeSettingsModal} />
     </SidebarProvider>
   );
 }

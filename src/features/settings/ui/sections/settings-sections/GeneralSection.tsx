@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,18 +10,11 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { RotateCcw } from "lucide-react";
-import { apiClient } from "@/shared/api/client";
-import { queryKeys } from "@/shared/api/queryKeys";
+import { useUIStore } from "@/shared/stores/uiStore";
 import type { GeneralSectionProps } from "./types";
 
-export function GeneralSection({
-  settings,
-  saveSetting,
-  theme,
-  setTheme,
-  onClose,
-}: GeneralSectionProps) {
-  const queryClient = useQueryClient();
+export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
+  const closeSettings = useUIStore((s) => s.closeSettings);
 
   return (
     <div className="space-y-5">
@@ -104,13 +96,8 @@ export function GeneralSection({
           variant="outline"
           size="sm"
           onClick={async () => {
-            try {
-              await apiClient.post("/settings", { key: "onboarding_completed", value: false });
-              queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
-              onClose();
-            } catch {
-              // Settings reset failed — modal stays open for retry
-            }
+            const ok = await saveSetting("onboarding_completed", false);
+            if (ok) closeSettings();
           }}
         >
           <RotateCcw className="mr-1.5 size-3.5" />
