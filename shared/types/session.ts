@@ -8,20 +8,10 @@ export type MessageRole = "user" | "assistant";
 /**
  * Session status indicating current agent state
  *
- * TODO: Backend support for 'error' status
- * Currently 'error' is derived in frontend by checking tool_result.is_error
- * Backend should update session.status to 'error' when tool execution fails
- *
  * @see src/features/sidebar/lib/status.ts for status derivation logic
  */
 // Backend can also emit "needs_response" and "needs_plan_response" when awaiting user input.
-export type SessionStatus =
-  | "idle"
-  | "working"
-  | "compacting"
-  | "error"
-  | "needs_response"
-  | "needs_plan_response";
+export type SessionStatus = "idle" | "working" | "error" | "needs_response" | "needs_plan_response";
 
 /**
  * Base message entity
@@ -31,14 +21,15 @@ export type SessionStatus =
 export interface Message {
   id: string;
   session_id: string;
+  seq: number; // Per-session monotonic sequence number (auto-assigned by trigger)
   role: MessageRole;
   content: string; // JSON-stringified MessageContent
   created_at: string;
+  turn_id?: string | null; // Conversation turn identifier
   sent_at?: string | null; // ISO timestamp when message sent to Claude
   cancelled_at?: string | null; // ISO timestamp when user cancels message
   model?: string | null; // Claude model used (e.g., 'sonnet')
   sdk_message_id?: string | null; // SDK-provided message identifier
-  last_assistant_message_id?: string | null; // ID of last assistant message (for threading)
 }
 
 /**
@@ -94,17 +85,21 @@ export interface ThinkingBlock {
  * Session information
  * Metadata about a Claude Code session
  * Matches the sessions database table schema
- *
- * Note: workspace_id is not in the database but comes from JOIN queries
  */
 export interface Session {
   id: string;
-  workspace_id?: string; // From JOIN with workspaces table (not in sessions table)
+  workspace_id: string;
+  agent_type: string;
+  title?: string | null;
   status: SessionStatus;
-  unread_count?: number; // Number of unread messages
-  context_token_count?: number; // Token count for context management
+  model: string;
+  sdk_session_id?: string | null;
+  message_count: number;
+  error_message?: string | null;
+  last_user_message_at?: string | null;
   created_at: string;
   updated_at: string;
-  is_compacting: number; // Whether session is currently compacting (0 or 1)
-  last_user_message_at?: string | null; // ISO timestamp of last user message
+  // From JOINs (present in list/detail queries)
+  directory_name?: string | null;
+  workspace_state?: string | null;
 }

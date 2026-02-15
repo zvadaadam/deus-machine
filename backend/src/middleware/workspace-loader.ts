@@ -1,29 +1,24 @@
 import { createMiddleware } from 'hono/factory';
 import path from 'path';
-import os from 'os';
 import { getDatabase } from '../lib/database';
 import { NotFoundError } from '../lib/errors';
+import { getWorkspaceForMiddleware } from '../db';
+import type { WorkspaceWithDetailsRow } from '../db';
 
 export interface WorkspaceContext {
-  workspace: any;
+  workspace: WorkspaceWithDetailsRow;
   workspacePath: string;
 }
 
 /**
- * Compute the filesystem path for a workspace based on storage version.
- * - storage_version 3 (legacy): ~/hive/workspaces/{repo_name}/{directory_name}
- * - storage_version 2 (current): {root_path}/.hive/{directory_name}
+ * Compute the filesystem path for a workspace.
+ * All Hive workspaces live at {root_path}/.hive/{directory_name}.
  */
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
   directory_name?: string | null;
-  storage_version?: number;
-  repo_name?: string | null;
 }): string {
   if (!ws.root_path || !ws.directory_name) return '';
-  if (ws.storage_version === 3 && ws.repo_name) {
-    return path.join(os.homedir(), 'hive', 'workspaces', ws.repo_name, ws.directory_name);
-  }
   return path.join(ws.root_path, '.hive', ws.directory_name);
 }
 
@@ -33,16 +28,10 @@ export function computeWorkspacePath(ws: {
  * Throws NotFoundError if workspace not found.
  */
 export const withWorkspace = createMiddleware(async (c, next) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id')!;
   const db = getDatabase();
 
-  const workspace = db.prepare(`
-    SELECT w.*, w.initialization_parent_branch AS parent_branch,
-           r.root_path, r.default_branch, r.storage_version, r.name as repo_name
-    FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    WHERE w.id = ?
-  `).get(id) as any;
+  const workspace = getWorkspaceForMiddleware(db, id);
 
   if (!workspace || !workspace.root_path || !workspace.directory_name) {
     throw new NotFoundError('Workspace not found');

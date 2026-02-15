@@ -56,7 +56,6 @@ interface MCPServer {
 interface MessageInputProps {
   messageInput: string;
   sending: boolean;
-  isCompacting?: boolean;
   sessionStatus?: SessionStatus;
   embedded?: boolean;
   model?: string;
@@ -78,7 +77,6 @@ interface MessageInputProps {
 export function MessageInput({
   messageInput,
   sending,
-  isCompacting = false,
   sessionStatus,
   embedded: _embedded = false,
   model = "sonnet",
@@ -421,16 +419,14 @@ export function MessageInput({
             {showCompactButton && (
               <Button
                 onClick={onCompact}
-                disabled={sending || isCompacting}
+                disabled={sending}
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
                 className="text-warning rounded-sm border"
               >
                 <Minimize2 className="size-3" />
-                <span className="text-xs font-normal">
-                  {isCompacting ? "Compacting..." : "Compact"}
-                </span>
+                <span className="text-xs font-normal">Compact</span>
               </Button>
             )}
 

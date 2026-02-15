@@ -107,58 +107,25 @@ describe('withWorkspace middleware', () => {
     expect(mockStmt.get).toHaveBeenCalledWith('ws-42');
   });
 
-  it('computes legacy v3 path for storage_version 3 workspaces', async () => {
-    mockStmt.get.mockReturnValue({
-      id: 'ws-legacy',
-      root_path: '/Users/dev/projects/myrepo',
-      directory_name: 'athens',
-      default_branch: 'main',
-      storage_version: 3,
-      repo_name: 'myrepo',
-    });
-
-    const app = createTestApp();
-    const res = await app.request('/test/ws-legacy');
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    const os = await import('os');
-    expect(body.workspacePath).toBe(`${os.homedir()}/hive/workspaces/myrepo/athens`);
-  });
 });
 
 describe('computeWorkspacePath', () => {
-  it('returns .hive path for v2 storage version', () => {
-    expect(computeWorkspacePath({
-      root_path: '/repo',
-      directory_name: 'tokyo',
-      storage_version: 2,
-      repo_name: 'myrepo',
-    })).toBe('/repo/.hive/tokyo');
-  });
-
-  it('returns .hive path when storage_version is undefined', () => {
+  it('returns .hive path from root_path and directory_name', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
       directory_name: 'tokyo',
     })).toBe('/repo/.hive/tokyo');
   });
 
-  it('returns legacy ~/hive/workspaces path for v3', async () => {
-    const os = await import('os');
+  it('returns empty string when root_path is missing', () => {
     expect(computeWorkspacePath({
-      root_path: '/some/path',
-      directory_name: 'athens',
-      storage_version: 3,
-      repo_name: 'devsbook',
-    })).toBe(`${os.homedir()}/hive/workspaces/devsbook/athens`);
+      directory_name: 'tokyo',
+    })).toBe('');
   });
 
-  it('falls back to .hive path if v3 but repo_name missing', () => {
+  it('returns empty string when directory_name is missing', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
-      directory_name: 'athens',
-      storage_version: 3,
-    })).toBe('/repo/.hive/athens');
+    })).toBe('');
   });
 });

@@ -5,13 +5,15 @@
 
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
+import { isTauriAvailable } from "@/platform/tauri/invoke";
+import { dbGetSession, dbGetMessages } from "@/platform/tauri/db";
 import type { Session, Message } from "../types";
 
-/** Pagination params for cursor-based message fetching */
+/** Pagination params for cursor-based message fetching (seq-based) */
 export interface MessagePaginationParams {
   limit?: number;
-  before?: string; // sent_at cursor for older messages
-  after?: string; // sent_at cursor for newer messages
+  before?: number; // seq cursor for older messages
+  after?: number; // seq cursor for newer messages
 }
 
 /** Paginated response shape from GET /sessions/:id/messages */
@@ -23,24 +25,46 @@ export interface PaginatedMessages {
 
 export const SessionService = {
   /**
-   * Fetch session by ID
+   * Fetch session by ID.
+   * Uses Rust/rusqlite via Tauri IPC when available (~1ms),
+   * falls back to Node.js HTTP when in web mode.
    */
   fetchById: async (id: string): Promise<Session> => {
+    if (isTauriAvailable()) {
+      try {
+        const session = await dbGetSession(id);
+        if (session) return session;
+      } catch {
+        // Rust DB failed — fall through to HTTP
+      }
+    }
     return apiClient.get<Session>(ENDPOINTS.SESSION_BY_ID(id));
   },
 
   /**
    * Fetch messages for a session with optional cursor-based pagination.
-   * Returns paginated response with messages array and has_older/has_newer flags.
+   * Uses Rust/rusqlite via Tauri IPC when available (~1ms),
+   * falls back to Node.js HTTP when in web mode.
    */
   fetchMessages: async (
     id: string,
     params?: MessagePaginationParams
   ): Promise<PaginatedMessages> => {
+    if (isTauriAvailable()) {
+      try {
+        return await dbGetMessages(id, {
+          limit: params?.limit,
+          before: params?.before,
+          after: params?.after,
+        });
+      } catch {
+        // Rust DB failed — fall through to HTTP
+      }
+    }
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.before) searchParams.set("before", params.before);
-    if (params?.after) searchParams.set("after", params.after);
+    if (params?.before) searchParams.set("before", String(params.before));
+    if (params?.after) searchParams.set("after", String(params.after));
     const qs = searchParams.toString();
     const url = qs ? `${ENDPOINTS.SESSION_MESSAGES(id)}?${qs}` : ENDPOINTS.SESSION_MESSAGES(id);
     return apiClient.get<PaginatedMessages>(url);

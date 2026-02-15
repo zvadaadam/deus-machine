@@ -13,13 +13,15 @@ export type WorkspaceState = "ready" | "initializing" | "archived";
  */
 export interface Workspace {
   id: string;
+  repository_id: string;
   directory_name: string;
-  branch: string;
+  display_name: string | null;
+  branch: string | null;
+  parent_branch: string | null;
   state: WorkspaceState;
   active_session_id: string | null;
   session_status: SessionStatus | null;
-  is_compacting: number;
-  context_token_count: number;
+  model: string | null;
   latest_message_sent_at: string | null;
   created_at: string;
   updated_at: string;
@@ -27,10 +29,11 @@ export interface Workspace {
   root_path: string;
   /** Computed filesystem path to the workspace directory */
   workspace_path: string;
-  parent_branch?: string;
   default_branch?: string;
-  unread: number;
-  session_unread: number | null;
+  pr_url?: string | null;
+  pr_number?: number | null;
+  archive_commit?: string | null;
+  archived_at?: string | null;
 }
 
 /**

@@ -6,6 +6,7 @@ use hive_lib::{
     commands,
     backend::BackendManager,
     browser::BrowserManager,
+    db::DbManager,
     pty::PtyManager,
     sidecar::SidecarManager,
     socket::SocketManager,
@@ -23,6 +24,7 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(BackendManager::new())
         .manage(BrowserManager::new())
+        .manage(DbManager::new())
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
@@ -46,6 +48,13 @@ fn main() {
             let db_path = db_path.to_string_lossy().to_string();
 
             println!("[TAURI] Using database at: {}", db_path);
+
+            // Open database for direct Rust reads (hot-path queries)
+            let db_manager: tauri::State<DbManager> = app.state();
+            match db_manager.open(&db_path) {
+                Ok(_) => println!("[TAURI] ✅ Database opened for direct reads"),
+                Err(e) => eprintln!("[TAURI] ⚠️ Failed to open database for direct reads: {} — will fall back to HTTP", e),
+            }
 
             // Start backend server
             let backend_manager: tauri::State<BackendManager> = app.state();
@@ -222,6 +231,10 @@ fn main() {
             commands::enter_onboarding_mode,
             commands::exit_onboarding_mode,
             commands::show_main_window,
+            commands::db_get_workspaces_by_repo,
+            commands::db_get_stats,
+            commands::db_get_session,
+            commands::db_get_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
