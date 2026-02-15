@@ -78,9 +78,9 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
 
       {/* Empty state — promote pencil.dev */}
       {isEmpty && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-          <div className="bg-muted/40 flex h-14 w-14 items-center justify-center rounded-2xl">
-            <PenTool className="text-muted-foreground h-7 w-7" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center animate-fade-in-up">
+          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+            <PenTool className="text-muted-foreground/50 h-5 w-5" />
           </div>
           <div className="space-y-1.5">
             <p className="text-foreground text-sm font-medium">No design files found</p>

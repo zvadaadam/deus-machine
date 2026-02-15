@@ -28,6 +28,8 @@ const hasStatusIcon = (status: string) =>
  *
  * Icons: working → PixelGrid generating, error → red dot, unread → gold dot.
  * Idle → no icon (26px indent).
+ *
+ * State: "initializing" → shimmer row with PixelGrid thinking + "Setting up..."
  */
 export const WorkspaceItem = React.memo(function WorkspaceItem({
   workspace,
@@ -36,10 +38,51 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onClick,
   onArchive,
 }: WorkspaceItemProps) {
+  const isInitializing = workspace.state === "initializing";
+
+  // Hooks must be called unconditionally (React rules of hooks)
   const { duration } = useWorkingDuration({
     status: workspace.session_status,
     latestMessageSentAt: workspace.latest_message_sent_at,
   });
+
+  // Initializing state: non-interactive row with loading animation
+  if (isInitializing) {
+    return (
+      <li className="animate-[fadeInUp_0.25s_cubic-bezier(.215,.61,.355,1)]">
+        <SidebarRow
+          variant="workspace"
+          isActive={false}
+          aria-label="Workspace setting up"
+          className="pointer-events-none"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 animate-[shimmer_2s_ease-in-out_infinite]">
+            {/* Row 1: thinking icon + branch name (or placeholder) */}
+            <div className="flex min-w-0 items-center gap-1.5">
+              <SidebarRowIconSlot>
+                <PixelGrid variant="thinking" size={14} />
+              </SidebarRowIconSlot>
+              <span className="text-text-disabled truncate text-[13px] font-normal">
+                {workspace.branch || "New workspace"}
+              </span>
+            </div>
+            {/* Row 2: directory · status */}
+            <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
+              {workspace.directory_name && (
+                <>
+                  <span className="text-text-disabled truncate text-xs">
+                    {workspace.directory_name}
+                  </span>
+                  <span className="text-text-disabled text-xs">·</span>
+                </>
+              )}
+              <span className="text-text-muted shrink-0 text-xs">Setting up...</span>
+            </div>
+          </div>
+        </SidebarRow>
+      </li>
+    );
+  }
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
