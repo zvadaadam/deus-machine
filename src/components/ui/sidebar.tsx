@@ -297,7 +297,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,opacity,translate] md:flex",
+          "fixed inset-y-0 z-10 hidden w-(--sidebar-width) transition-[left,right,width,opacity,translate] md:flex",
           // Unified ease-out-expo curve, duration varies by interaction
           "ease-[cubic-bezier(.19,1,.22,1)]",
           hoverOpen
