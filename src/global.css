@@ -1093,6 +1093,7 @@ body {
   position: fixed;
   inset: 0;
   max-width: none;
+  will-change: transform;
 }
 
 /* Layer 2: vibrancy tint on the outermost wrapper (variable-driven) */
@@ -1206,6 +1207,17 @@ body {
 [data-resizing] [data-slot="sidebar-container"],
 [data-resizing] [data-slot="sidebar-inset"] {
   transition: none;
+}
+
+/* Disable ALL layout transitions during native window resize (fullscreen exit, snap, drag).
+ * WKWebView pauses rendering during resize — CSS transitions fighting the native animation
+ * cause content to "stick" at the old size. Same pattern as [data-resizing] for sidebar drag. */
+.window-resizing [data-slot="sidebar-gap"],
+.window-resizing [data-slot="sidebar-container"],
+.window-resizing [data-slot="sidebar-inset"],
+.window-resizing [data-slot="sidebar-wrapper"],
+.window-resizing [data-slot="main-content"] {
+  transition: none !important;
 }
 
 /* Tauri overlay titlebar: 32px top-padding clears macOS traffic lights (positioned at y:18).
