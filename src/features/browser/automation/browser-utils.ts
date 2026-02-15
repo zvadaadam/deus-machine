@@ -433,12 +433,7 @@ return waitForDomSettle(150, 2000).then(function() {
 /**
  * JS code to type text into an element by ref.
  */
-export function buildTypeJs(
-  ref: string,
-  text: string,
-  submit?: boolean,
-  slowly?: boolean
-): string {
+export function buildTypeJs(ref: string, text: string, submit?: boolean, slowly?: boolean): string {
   return `(function(){
 ${BROWSER_UTILS}
 var el = findElementByRef(${JSON.stringify(ref)});
@@ -767,11 +762,7 @@ try {
  * @param amount - pixels to scroll (default 600 — roughly one viewport)
  * @param ref - optional element ref to scroll into view instead of direction-scroll
  */
-export function buildScrollJs(
-  direction?: string,
-  amount?: number,
-  ref?: string
-): string {
+export function buildScrollJs(direction?: string, amount?: number, ref?: string): string {
   const px = amount ?? 600;
 
   if (ref) {
@@ -822,7 +813,7 @@ return waitForDomSettle(150, 2000).then(function() {
  */
 export const CONSOLE_MESSAGES_JS = `
 (function() {
-  var logs = window.__CONDUCTOR_LOGS__ || [];
+  var logs = window.__HIVE_LOGS__ || [];
   var entries = logs.map(function(l) {
     return '[' + (l.l || 'info').toUpperCase() + '] ' + (l.m || '');
   });

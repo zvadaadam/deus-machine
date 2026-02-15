@@ -41,18 +41,14 @@ import {
 /** Check that a JS string is a self-invoking function expression */
 function assertIsIIFE(js: string, name: string) {
   const trimmed = js.trim();
-  expect(trimmed, `${name} should start with (function`).toMatch(
-    /^\(function\s*\(/
-  );
+  expect(trimmed, `${name} should start with (function`).toMatch(/^\(function\s*\(/);
   expect(trimmed, `${name} should end with )()`).toMatch(/\)\(\)\s*;?\s*$/);
 }
 
 /** Check that a JS string contains `return` before a JSON.stringify call */
 function assertHasReturnJson(js: string, name: string) {
   // All non-Promise templates should have at least one `return JSON.stringify(`
-  expect(js, `${name} should have return JSON.stringify`).toContain(
-    "return JSON.stringify("
-  );
+  expect(js, `${name} should have return JSON.stringify`).toContain("return JSON.stringify(");
 }
 
 /**
@@ -216,10 +212,7 @@ describe("browser-utils JS templates", () => {
     });
 
     it("returns JSON", () => {
-      assertHasReturnJson(
-        buildSelectOptionJs("ref-123", ["opt1"]),
-        "buildSelectOptionJs"
-      );
+      assertHasReturnJson(buildSelectOptionJs("ref-123", ["opt1"]), "buildSelectOptionJs");
     });
 
     it("handles multiple values", () => {
@@ -232,10 +225,7 @@ describe("browser-utils JS templates", () => {
 
   describe("buildEvaluateJs", () => {
     it("is a valid IIFE (without ref)", () => {
-      assertIsIIFE(
-        buildEvaluateJs("return document.title"),
-        "buildEvaluateJs"
-      );
+      assertIsIIFE(buildEvaluateJs("return document.title"), "buildEvaluateJs");
     });
 
     it("is a valid IIFE (with ref)", () => {
@@ -283,10 +273,7 @@ describe("browser-utils JS templates", () => {
 
   describe("buildWaitForTextGoneJs", () => {
     it("is a valid IIFE", () => {
-      assertIsIIFE(
-        buildWaitForTextGoneJs("spinner"),
-        "buildWaitForTextGoneJs"
-      );
+      assertIsIIFE(buildWaitForTextGoneJs("spinner"), "buildWaitForTextGoneJs");
     });
 
     it("returns a Promise", () => {
@@ -306,17 +293,14 @@ describe("visual-effects JS templates", () => {
       assertIsIIFE(VISUAL_EFFECTS_SETUP, "VISUAL_EFFECTS_SETUP");
     });
 
-    it("installs window.__conductorVisuals", () => {
-      expect(VISUAL_EFFECTS_SETUP).toContain("window.__conductorVisuals");
+    it("installs window.__hiveVisuals", () => {
+      expect(VISUAL_EFFECTS_SETUP).toContain("window.__hiveVisuals");
     });
   });
 
   describe("buildMoveCursorAndRippleJs", () => {
     it("is a valid IIFE", () => {
-      assertIsIIFE(
-        buildMoveCursorAndRippleJs("ref-123"),
-        "buildMoveCursorAndRippleJs"
-      );
+      assertIsIIFE(buildMoveCursorAndRippleJs("ref-123"), "buildMoveCursorAndRippleJs");
     });
 
     it("returns JSON with duration", () => {
@@ -356,7 +340,7 @@ describe("evalWithResult wrapper compatibility", () => {
     try {
       var __result = ${js};
       if (__result && typeof __result === 'object' && typeof __result.then === 'function') {
-        return '__CONDUCTOR_ASYNC__';
+        return '__HIVE_ASYNC__';
       }
       return typeof __result === 'string' ? __result : String(__result);
     } catch(__e) {

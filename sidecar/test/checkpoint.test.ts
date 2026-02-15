@@ -47,7 +47,7 @@ describe("createCheckpoint", () => {
       "git",
       expect.arrayContaining([
         "update-ref",
-        "refs/conductor-checkpoints/session-sess-1-turn-turn-1-start",
+        "refs/hive-checkpoints/session-sess-1-turn-turn-1-start",
         "commit456",
       ]),
       expect.objectContaining({ cwd: "/test/repo" })
@@ -68,7 +68,7 @@ describe("createCheckpoint", () => {
       "git",
       expect.arrayContaining([
         "update-ref",
-        "refs/conductor-checkpoints/session-sess-2-turn-turn-5-end",
+        "refs/hive-checkpoints/session-sess-2-turn-turn-5-end",
       ]),
       expect.any(Object)
     );

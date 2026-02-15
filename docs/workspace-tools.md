@@ -1,6 +1,6 @@
 # Workspace MCP Tools
 
-OpenDevs MCP tools for user interaction and workspace state inspection.
+Hive MCP tools for user interaction and workspace state inspection.
 
 ## AskUserQuestion
 
@@ -8,12 +8,12 @@ Ask the user questions during execution to gather preferences, clarify instructi
 
 **Input:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `questions` | `array` | Yes | Up to 4 question objects |
-| `questions[].question` | `string` | Yes | The question to ask |
-| `questions[].options` | `string[]` | Yes | Up to 4 options. "Other" is auto-provided — don't include it |
-| `questions[].multiSelect` | `boolean` | No | Allow multiple selections |
+| Parameter                 | Type       | Required | Description                                                  |
+| ------------------------- | ---------- | -------- | ------------------------------------------------------------ |
+| `questions`               | `array`    | Yes      | Up to 4 question objects                                     |
+| `questions[].question`    | `string`   | Yes      | The question to ask                                          |
+| `questions[].options`     | `string[]` | Yes      | Up to 4 options. "Other" is auto-provided — don't include it |
+| `questions[].multiSelect` | `boolean`  | No       | Allow multiple selections                                    |
 
 **Output:** `text`
 
@@ -31,14 +31,14 @@ Returns `"User cancelled the question..."` if the user dismisses the dialog.
 
 ## GetWorkspaceDiff
 
-View all changes on the current branch (including uncommitted) compared against the merge base. Same diff shown in the OpenDevs UI and used for PRs.
+View all changes on the current branch (including uncommitted) compared against the merge base. Same diff shown in the Hive UI and used for PRs.
 
 **Input:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file` | `string` | No | Absolute file path for single-file unified diff |
-| `stat` | `boolean` | No | Return `git diff --stat` style per-file statistics |
+| Parameter | Type      | Required | Description                                        |
+| --------- | --------- | -------- | -------------------------------------------------- |
+| `file`    | `string`  | No       | Absolute file path for single-file unified diff    |
+| `stat`    | `boolean` | No       | Return `git diff --stat` style per-file statistics |
 
 **Output:** `text`
 
@@ -62,12 +62,12 @@ Leave review comments on the workspace diff targeting specific file/line locatio
 
 **Input:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `comments` | `array` | Yes | Array of comment objects |
-| `comments[].file` | `string` | Yes | File path to comment on |
-| `comments[].lineNumber` | `number` | Yes | Line number to comment on |
-| `comments[].body` | `string` | Yes | Comment body (prefer plain text over markdown) |
+| Parameter               | Type     | Required | Description                                    |
+| ----------------------- | -------- | -------- | ---------------------------------------------- |
+| `comments`              | `array`  | Yes      | Array of comment objects                       |
+| `comments[].file`       | `string` | Yes      | File path to comment on                        |
+| `comments[].lineNumber` | `number` | Yes      | Line number to comment on                      |
+| `comments[].body`       | `string` | Yes      | Comment body (prefer plain text over markdown) |
 
 **Output:** `text`
 
@@ -83,10 +83,10 @@ View output from the user's terminal — dev servers, build/test logs, or intera
 
 **Input:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `source` | `enum` | No | `"spotlight"` \| `"run_script"` \| `"terminal"` \| `"auto"` (default) |
-| `maxLines` | `number` | No | Max lines to return (default: 1000) |
+| Parameter  | Type     | Required | Description                                                           |
+| ---------- | -------- | -------- | --------------------------------------------------------------------- |
+| `source`   | `enum`   | No       | `"spotlight"` \| `"run_script"` \| `"terminal"` \| `"auto"` (default) |
+| `maxLines` | `number` | No       | Max lines to return (default: 1000)                                   |
 
 **Output:** `text`
 

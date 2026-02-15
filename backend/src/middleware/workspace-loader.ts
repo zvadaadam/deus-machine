@@ -11,8 +11,8 @@ export interface WorkspaceContext {
 
 /**
  * Compute the filesystem path for a workspace based on storage version.
- * - storage_version 3 (legacy): ~/conductor/workspaces/{repo_name}/{directory_name}
- * - storage_version 2 (current): {root_path}/.conductor/{directory_name}
+ * - storage_version 3 (legacy): ~/hive/workspaces/{repo_name}/{directory_name}
+ * - storage_version 2 (current): {root_path}/.hive/{directory_name}
  */
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
@@ -22,9 +22,9 @@ export function computeWorkspacePath(ws: {
 }): string {
   if (!ws.root_path || !ws.directory_name) return '';
   if (ws.storage_version === 3 && ws.repo_name) {
-    return path.join(os.homedir(), 'conductor', 'workspaces', ws.repo_name, ws.directory_name);
+    return path.join(os.homedir(), 'hive', 'workspaces', ws.repo_name, ws.directory_name);
   }
-  return path.join(ws.root_path, '.conductor', ws.directory_name);
+  return path.join(ws.root_path, '.hive', ws.directory_name);
 }
 
 /**

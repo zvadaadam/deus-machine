@@ -19,9 +19,8 @@ import {
 import { useResizeHandle } from "@/features/workspace";
 import { useRepos, useAddRepo } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
-import { Button, SidebarProvider, Sidebar, SidebarContent, useSidebar } from "@/components/ui";
+import { Button, SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
-import { FolderOpen } from "lucide-react";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
@@ -117,7 +116,7 @@ export function MainLayout() {
   }, [showSystemPromptModal, systemPromptQuery.data]);
 
   const repos = reposQuery.data || [];
-  const username = settingsQuery.data?.user_name || "Developer";
+  const username = settingsQuery.data?.user_name || "My Account";
 
   // PR status query
   const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
@@ -207,7 +206,8 @@ export function MainLayout() {
 
     setCreating(true);
     try {
-      await createWorkspaceMutation.mutateAsync(selectedRepoId);
+      const workspace = await createWorkspaceMutation.mutateAsync(selectedRepoId);
+      selectWorkspace(workspace);
       setSelectedRepoId("");
       closeNewWorkspaceModal();
     } catch (error) {
@@ -262,8 +262,24 @@ export function MainLayout() {
       if (!selected) return;
 
       const folderPath = typeof selected === "string" ? selected : (selected as any).path;
-      const repo = await addRepoMutation.mutateAsync(folderPath);
-      toast.success(`Repository "${repo.name}" added successfully!`);
+
+      let repo: Repo;
+      try {
+        repo = await addRepoMutation.mutateAsync(folderPath);
+      } catch (err) {
+        // If repo already exists (409 Conflict), use the existing one
+        const addError = err as { status?: number; details?: { repo?: Repo } };
+        if (addError?.status === 409 && addError?.details?.repo) {
+          repo = addError.details.repo;
+        } else {
+          throw err;
+        }
+      }
+
+      // Auto-create first workspace and select it for seamless onboarding
+      const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
+      selectWorkspace(workspace);
+      toast.success(`"${repo.name}" ready`);
     } catch (error) {
       console.error("Error adding repository:", error);
       const message = extractErrorMessage(error);
@@ -332,30 +348,6 @@ export function MainLayout() {
       {/* Sidebar */}
       {loading ? (
         <SidebarSkeleton />
-      ) : repoGroups.length === 0 ? (
-        <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
-          <SidebarContent className="flex h-full items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <FolderOpen
-                className="text-muted-foreground/30 h-10 w-10"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <div className="space-y-1">
-                <p className="text-muted-foreground/70 text-sm font-medium">No Workspaces</p>
-                <p className="text-muted-foreground/50 text-xs">Create one to get started</p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleNewWorkspace()}
-                className="mt-1 text-xs"
-              >
-                + New Workspace
-              </Button>
-            </div>
-          </SidebarContent>
-        </Sidebar>
       ) : (
         <AppSidebar
           repositories={repoGroups}
@@ -364,6 +356,7 @@ export function MainLayout() {
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={handleNewWorkspace}
           onAddRepository={handleOpenProject}
+          onCloneRepository={() => setShowCloneModal(true)}
           onArchive={archiveWorkspace}
           profile={{ username }}
         />

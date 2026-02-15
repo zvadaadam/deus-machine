@@ -1,7 +1,7 @@
 // sidecar/agents/env-builder.ts
 // Shared environment construction for all agent handlers.
 // Builds the 6-layer environment: shell env → process.env → extra env →
-// conductorEnv → claudeEnvVars → ghToken.
+// hiveEnv → claudeEnvVars → ghToken.
 
 import { getShellEnvironment } from "./shell-env";
 
@@ -65,13 +65,13 @@ export function parseEnvString(envString: string): Record<string, string> {
  * 1. Shell environment (login shell capture)
  * 2. process.env (sidecar process environment)
  * 3. extraEnv (agent-specific static env vars, e.g. CLAUDE_CODE_ENABLE_TASKS)
- * 4. conductorEnv (from frontend options)
+ * 4. hiveEnv (from frontend options)
  * 5. claudeEnvVars (user-configured env string, empty values delete keys)
  * 6. ghToken (sets GH_TOKEN if provided)
  */
 export function buildAgentEnvironment(options?: {
   claudeEnvVars?: string;
-  conductorEnv?: Record<string, string>;
+  hiveEnv?: Record<string, string>;
   ghToken?: string;
   extraEnv?: Record<string, string>;
 }): Record<string, string> {
@@ -96,9 +96,9 @@ export function buildAgentEnvironment(options?: {
     }
   }
 
-  // Layer 4: OpenDevs env (from frontend)
-  if (options?.conductorEnv) {
-    for (const [key, value] of Object.entries(options.conductorEnv)) {
+  // Layer 4: Hive env (from frontend)
+  if (options?.hiveEnv) {
+    for (const [key, value] of Object.entries(options.hiveEnv)) {
       env[key] = value;
     }
   }

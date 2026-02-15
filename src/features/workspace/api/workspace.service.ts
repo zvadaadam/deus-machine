@@ -21,7 +21,7 @@ export interface WorkspaceGitInfo {
 
 function getWorkspacePath(ws: WorkspaceGitInfo): string {
   if (ws.workspace_path) return ws.workspace_path;
-  return `${ws.root_path}/.conductor/${ws.directory_name}`;
+  return `${ws.root_path}/.hive/${ws.directory_name}`;
 }
 
 export const WorkspaceService = {

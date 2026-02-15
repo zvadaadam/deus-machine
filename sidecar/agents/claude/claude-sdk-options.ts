@@ -7,7 +7,7 @@ import * as path from "path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
-import { createOpenDevsMCPServer } from "../conductor-tools";
+import { createHiveMCPServer } from "../hive-tools";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { getSession } from "./claude-session";
@@ -225,7 +225,7 @@ export function buildSdkOptions(
 
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
-      conductor: createOpenDevsMCPServer(sessionId),
+      hive: createHiveMCPServer(sessionId),
     };
   }
 

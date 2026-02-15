@@ -117,7 +117,7 @@ We follow design inspiration from Linear, Vercel, Stripe, Airbnb, and Perplexity
 ## 🏗 Project Structure
 
 ```
-conductor/
+hive/
 ├── src/                          # React frontend
 │   ├── app/                      # App initialization
 │   ├── features/                 # Feature modules
@@ -179,7 +179,7 @@ When working on this project:
 
 ## ⚠️ Important Notes
 
-- This workspace is managed by OpenDevs
+- This workspace is managed by Hive
 - Never edit files outside the workspace directory
 - Always run both backend AND frontend together
 - Use `npm run dev:full` for web development

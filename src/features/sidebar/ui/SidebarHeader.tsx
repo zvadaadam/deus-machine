@@ -1,4 +1,4 @@
-import { ChevronDown, PanelLeftClose } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/shared/lib/utils";
@@ -7,11 +7,8 @@ import type { SidebarHeaderProps } from "../model/types";
 /**
  * SidebarHeader — V2: Jony Ive
  *
- * "The absence of clutter is just a way of making the
- *  things that are there more precious."
- *
- * Layout: [Avatar 24] [Username · Chevron]  ...  [Collapse 18]
- * Padding: 12px vertical, 14px horizontal (matches design spec)
+ * Avatar + name. Subtle hover bg signals it's clickable.
+ * No chevron — it promised a dropdown but delivered settings.
  */
 export function SidebarHeader({
   profile = { username: "User" },
@@ -31,7 +28,7 @@ export function SidebarHeader({
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-md"
+        className="hover:bg-bg-elevated -ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors duration-200"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
           <AvatarFallback shape="square" className="rounded-md text-[10px] font-semibold">
@@ -39,12 +36,7 @@ export function SidebarHeader({
           </AvatarFallback>
         </Avatar>
         {isExpanded && (
-          <>
-            <span className="text-text-primary truncate text-sm font-medium">
-              {profile.username}
-            </span>
-            <ChevronDown className="text-text-muted h-4 w-4 shrink-0" />
-          </>
+          <span className="text-text-primary truncate text-sm font-medium">{profile.username}</span>
         )}
       </button>
 

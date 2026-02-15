@@ -38,7 +38,6 @@ export function createMockSession(overrides: Record<string, any> = {}) {
   return {
     id: 'sess-test-001',
     status: 'idle',
-    claude_session_id: null,
     is_compacting: 0,
     context_token_count: 0,
     created_at: '2024-01-01T00:00:00Z',

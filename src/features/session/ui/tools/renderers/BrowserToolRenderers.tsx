@@ -1,7 +1,7 @@
 /**
  * Browser MCP Tool Renderers
  *
- * Specialized renderers for the 13 OpenDevs browser automation tools.
+ * Specialized renderers for the 13 Hive browser automation tools.
  * Groups related tools that share similar output patterns (snapshot-based,
  * action confirmations, data inspection).
  *
@@ -140,12 +140,8 @@ export function BrowserNavigateBackToolRenderer({ toolUse, toolResult }: ToolRen
       icon={<ArrowLeft className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => (
-        <span className="text-muted-foreground text-xs">Go back</span>
-      )}
-      renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : null
-      }
+      renderSummary={() => <span className="text-muted-foreground text-xs">Go back</span>}
+      renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
 }
@@ -165,13 +161,9 @@ export function BrowserClickToolRenderer({ toolUse, toolResult }: ToolRendererPr
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        ref ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span>
-        ) : null
+        ref ? <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span> : null
       }
-      renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : null
-      }
+      renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
 }
@@ -205,9 +197,7 @@ export function BrowserTypeToolRenderer({ toolUse, toolResult }: ToolRendererPro
           )}
         </>
       )}
-      renderContent={() =>
-        output ? <OutputBlock>{output}</OutputBlock> : null
-      }
+      renderContent={() => (output ? <OutputBlock>{output}</OutputBlock> : null)}
     />
   );
 }
@@ -261,9 +251,7 @@ export function BrowserHoverToolRenderer({ toolUse, toolResult }: ToolRendererPr
           <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span>
         ) : null
       }
-      renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : null
-      }
+      renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
 }
@@ -293,9 +281,7 @@ export function BrowserSelectOptionToolRenderer({ toolUse, toolResult }: ToolRen
           )}
         </>
       )}
-      renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : null
-      }
+      renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
 }
@@ -324,9 +310,7 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
       renderSummary={() => (
         <span className="text-muted-foreground truncate text-xs">{condition}</span>
       )}
-      renderContent={() =>
-        output ? <OutputBlock>{output}</OutputBlock> : null
-      }
+      renderContent={() => (output ? <OutputBlock>{output}</OutputBlock> : null)}
     />
   );
 }
@@ -338,9 +322,8 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
 export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { code } = toolUse.input ?? {};
   const output = toolResult ? extractText(toolResult.content) : "";
-  const codePreview = typeof code === "string"
-    ? code.length > 40 ? code.slice(0, 40) + "..." : code
-    : "";
+  const codePreview =
+    typeof code === "string" ? (code.length > 40 ? code.slice(0, 40) + "..." : code) : "";
 
   return (
     <BaseToolRenderer
@@ -389,12 +372,12 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        count ? (
-          <span className="text-muted-foreground text-xs">{count} messages</span>
-        ) : null
+        count ? <span className="text-muted-foreground text-xs">{count} messages</span> : null
       }
       renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : (
+        text ? (
+          <OutputBlock>{text}</OutputBlock>
+        ) : (
           <div className="text-muted-foreground px-2 pb-2 text-xs italic">No console messages</div>
         )
       }
@@ -456,12 +439,12 @@ export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: Tool
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        count ? (
-          <span className="text-muted-foreground text-xs">{count} requests</span>
-        ) : null
+        count ? <span className="text-muted-foreground text-xs">{count} requests</span> : null
       }
       renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : (
+        text ? (
+          <OutputBlock>{text}</OutputBlock>
+        ) : (
           <div className="text-muted-foreground px-2 pb-2 text-xs italic">No network requests</div>
         )
       }
@@ -476,9 +459,7 @@ export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: Tool
 export function BrowserScrollToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { direction, amount, ref } = toolUse.input ?? {};
   const text = toolResult ? extractText(toolResult.content) : "";
-  const summary = ref
-    ? `→ ${ref}`
-    : `${direction ?? "down"} ${amount ?? 600}px`;
+  const summary = ref ? `→ ${ref}` : `${direction ?? "down"} ${amount ?? 600}px`;
 
   return (
     <BaseToolRenderer
@@ -489,9 +470,7 @@ export function BrowserScrollToolRenderer({ toolUse, toolResult }: ToolRendererP
       renderSummary={() => (
         <span className="text-muted-foreground truncate text-xs">{summary}</span>
       )}
-      renderContent={() =>
-        text ? <OutputBlock>{text}</OutputBlock> : null
-      }
+      renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
 }
