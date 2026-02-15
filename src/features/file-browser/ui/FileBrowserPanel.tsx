@@ -2,7 +2,6 @@ import { FolderOpen, Search, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
 import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
 import { FileTree } from "./components/FileTree";
 import type { Workspace } from "@/shared/types";
@@ -69,41 +68,33 @@ export function FileBrowserPanel({
 
   if (!selectedWorkspace) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8">
-        <Empty className="border-0">
-          <EmptyHeader>
-            <EmptyMedia>
-              <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyDescription>No workspace selected</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
+        <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+          <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+        </div>
+        <p className="text-muted-foreground/60 text-xs">No workspace selected</p>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8">
-        <Loader2 className="text-primary h-8 w-8 animate-spin" />
-        <p className="text-muted-foreground mt-3 text-xs">Scanning files with Rust...</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in">
+        <Loader2 className="text-muted-foreground/50 h-5 w-5 animate-spin" />
+        <p className="text-muted-foreground/60 text-xs">Scanning files...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8">
-        <Empty className="border-0">
-          <EmptyHeader>
-            <EmptyMedia>
-              <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyDescription>
-              Error: {error instanceof Error ? error.message : "Unknown error"}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
+        <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+          <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+        </div>
+        <p className="text-muted-foreground/60 text-xs">
+          {error instanceof Error ? error.message : "Unable to load files"}
+        </p>
       </div>
     );
   }
@@ -150,17 +141,17 @@ export function FileBrowserPanel({
         {filteredFiles.length > 0 ? (
           <FileTree nodes={filteredFiles} onFileClick={handleFileClick} />
         ) : (
-          <div className="p-8">
-            <Empty className="border-0">
-              <EmptyHeader>
-                <EmptyMedia>
-                  <FolderOpen className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-                </EmptyMedia>
-                <EmptyDescription>
-                  {searchQuery ? "No files match your search" : "No files found"}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+          <div className="flex flex-col items-center justify-center gap-3 py-12 animate-fade-in-up">
+            <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+              {searchQuery ? (
+                <Search className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+              ) : (
+                <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+              )}
+            </div>
+            <p className="text-muted-foreground/60 text-xs">
+              {searchQuery ? "No files match your search" : "No files found"}
+            </p>
           </div>
         )}
       </div>
