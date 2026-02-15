@@ -68,10 +68,7 @@ export function FileBrowserPanel({
 
   if (!selectedWorkspace) {
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-3"
-        style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
-      >
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
         <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
           <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
         </div>
@@ -82,10 +79,7 @@ export function FileBrowserPanel({
 
   if (isLoading) {
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-3"
-        style={{ animation: "fadeIn 0.3s ease" }}
-      >
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in">
         <Loader2 className="text-muted-foreground/50 h-5 w-5 animate-spin" />
         <p className="text-muted-foreground/60 text-xs">Scanning files...</p>
       </div>
@@ -94,10 +88,7 @@ export function FileBrowserPanel({
 
   if (error) {
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-3"
-        style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
-      >
+      <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
         <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
           <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
         </div>
@@ -150,10 +141,7 @@ export function FileBrowserPanel({
         {filteredFiles.length > 0 ? (
           <FileTree nodes={filteredFiles} onFileClick={handleFileClick} />
         ) : (
-          <div
-            className="flex flex-col items-center justify-center gap-3 py-12"
-            style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
-          >
+          <div className="flex flex-col items-center justify-center gap-3 py-12 animate-fade-in-up">
             <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
               {searchQuery ? (
                 <Search className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
