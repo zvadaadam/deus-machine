@@ -5,7 +5,7 @@ import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
 import type { Repo } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
-import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone } from "@/shared/hooks";
+import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone, useWindowResizing } from "@/shared/hooks";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -135,6 +135,9 @@ export function MainLayout() {
   // Global drag zone — window-level mousedown in the top 48px triggers
   // startDragging(), mirroring Arc's full-width transparent overlay approach.
   useTauriDragZone();
+
+  // Disable CSS transitions during native window resize to prevent content "sticking"
+  useWindowResizing();
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -335,7 +338,7 @@ export function MainLayout() {
 
   return (
     <SidebarProvider
-      className="h-screen"
+      className="h-full"
       data-resizing={sidebarDragging || undefined}
       style={
         {
