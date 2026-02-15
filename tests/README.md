@@ -1,11 +1,13 @@
 # Tests
 
-This directory contains all test files for the Conductor application.
+This directory contains all test files for the Hive application.
 
 ## Test Files
 
 ### `e2e-flow.test.cjs`
+
 Comprehensive end-to-end test suite that verifies:
+
 - ✅ Backend health check
 - ✅ Workspace creation (new workspace, not existing)
 - ✅ Message sending
@@ -14,6 +16,7 @@ Comprehensive end-to-end test suite that verifies:
 - ✅ State management
 
 **Run the test:**
+
 ```bash
 # Backend must be running first!
 npm run dev:full  # Start in separate terminal
@@ -29,6 +32,7 @@ BACKEND_PORT=60068 npm test
 **Duration**: ~20-30 seconds
 
 **What it does:**
+
 1. Creates a fresh workspace in the box-ide repository
 2. Waits for workspace to become ready
 3. Sends a test message to Claude
@@ -39,7 +43,7 @@ BACKEND_PORT=60068 npm test
 ## Requirements
 
 - Backend must be running
-- Database must be accessible at `~/Library/Application Support/com.conductor.app/conductor.db`
+- Database must be accessible at `~/Library/Application Support/com.hivenet.app/hive.db`
 
 ## Test Coverage
 
@@ -62,6 +66,7 @@ When creating new tests, follow these patterns:
 ## CI/CD
 
 To add tests to CI/CD pipeline:
+
 ```json
 {
   "scripts": {

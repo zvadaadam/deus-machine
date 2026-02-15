@@ -21,8 +21,8 @@
  * INSPECT_MODE_ENABLE / INSPECT_MODE_DISABLE to toggle.
  */
 export const INSPECT_MODE_SETUP = `(function(){
-  if (window.__conductorInspectMode) return;
-  window.__conductorInspectMode = true;
+  if (window.__hiveInspectMode) return;
+  window.__hiveInspectMode = true;
 
   // ========================================================================
   // State
@@ -94,7 +94,7 @@ export const INSPECT_MODE_SETUP = `(function(){
     cursor.setAttribute('height', '16');
     cursor.setAttribute('viewBox', '0 0 16 16');
     cursor.setAttribute('fill', 'none');
-    cursor.setAttribute('data-conductor-inspect', 'true');
+    cursor.setAttribute('data-hive-inspect', 'true');
     cursor.setAttribute('aria-hidden', 'true');
     cursor.style.position = 'fixed';
     cursor.style.pointerEvents = 'none';
@@ -105,9 +105,9 @@ export const INSPECT_MODE_SETUP = `(function(){
     cursor.style.transition = 'opacity 150ms ease';
 
     var gClip = document.createElementNS(svgNS, 'g');
-    gClip.setAttribute('clip-path', 'url(#clip0_conductor)');
+    gClip.setAttribute('clip-path', 'url(#clip0_hive)');
     var gFilter = document.createElementNS(svgNS, 'g');
-    gFilter.setAttribute('filter', 'url(#filter0_conductor)');
+    gFilter.setAttribute('filter', 'url(#filter0_hive)');
 
     var path = document.createElementNS(svgNS, 'path');
     path.setAttribute('d', 'M1.68066 2.14282C1.5253 1.49746 2.16954 0.975576 2.75195 1.21118L2.86816 1.26782L3.11035 1.41333L12.958 7.27954L13.2031 7.42505C13.8128 7.78856 13.682 8.70779 12.9951 8.88696L12.7197 8.95825L8.28223 10.1155L6.16895 13.9592L6.02148 14.2288C5.66933 14.869 4.71301 14.741 4.54199 14.0305L4.4707 13.7317L1.74707 2.41724L1.68066 2.14282Z');
@@ -118,7 +118,7 @@ export const INSPECT_MODE_SETUP = `(function(){
 
     var defs = document.createElementNS(svgNS, 'defs');
     var filter = document.createElementNS(svgNS, 'filter');
-    filter.setAttribute('id', 'filter0_conductor');
+    filter.setAttribute('id', 'filter0_hive');
     filter.setAttribute('x', '-1.51');
     filter.setAttribute('y', '-1.35');
     filter.setAttribute('width', '18.27');
@@ -164,7 +164,7 @@ export const INSPECT_MODE_SETUP = `(function(){
     defs.appendChild(filter);
 
     var clipPath = document.createElementNS(svgNS, 'clipPath');
-    clipPath.setAttribute('id', 'clip0_conductor');
+    clipPath.setAttribute('id', 'clip0_hive');
     var rect = document.createElementNS(svgNS, 'rect');
     rect.setAttribute('width', '16');
     rect.setAttribute('height', '16');
@@ -198,12 +198,12 @@ export const INSPECT_MODE_SETUP = `(function(){
 
     if (!overlay) {
       overlay = document.createElement('div');
-      overlay.setAttribute('data-conductor-inspect', 'true');
+      overlay.setAttribute('data-hive-inspect', 'true');
       overlay.style.cssText = 'position:fixed;background:rgba(58,150,221,0.3);border:2px solid #3a96dd;pointer-events:none;z-index:2147483647;transition:all 0.1s ease;display:none;';
       document.body.appendChild(overlay);
 
       overlayLabel = document.createElement('div');
-      overlayLabel.setAttribute('data-conductor-inspect', 'true');
+      overlayLabel.setAttribute('data-hive-inspect', 'true');
       overlayLabel.style.cssText = 'position:fixed;background:#3a96dd;color:white;padding:2px 6px;font-size:11px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;border-radius:2px;pointer-events:none;z-index:2147483648;transition:all 0.1s ease;white-space:nowrap;display:none;';
       document.body.appendChild(overlayLabel);
     }
@@ -241,7 +241,7 @@ export const INSPECT_MODE_SETUP = `(function(){
   // Event Handlers
   // ========================================================================
   function isInspectElement(el) {
-    return el && el.getAttribute && el.getAttribute('data-conductor-inspect') === 'true';
+    return el && el.getAttribute && el.getAttribute('data-hive-inspect') === 'true';
   }
 
   function handleMouseDown(e) {
@@ -258,7 +258,7 @@ export const INSPECT_MODE_SETUP = `(function(){
 
     if (!dragSelectionBox) {
       dragSelectionBox = document.createElement('div');
-      dragSelectionBox.setAttribute('data-conductor-inspect', 'true');
+      dragSelectionBox.setAttribute('data-hive-inspect', 'true');
       dragSelectionBox.style.cssText = 'position:fixed;background:rgba(58,150,221,0.1);border:2px dashed #3a96dd;pointer-events:none;z-index:2147483647;';
       document.body.appendChild(dragSelectionBox);
     }
@@ -438,7 +438,7 @@ export const INSPECT_MODE_SETUP = `(function(){
   // ========================================================================
   // Public API on window
   // ========================================================================
-  window.__conductorInspect = {
+  window.__hiveInspect = {
     enable: enableSelectionMode,
     disable: disableSelectionMode,
     isActive: function() { return selectionMode; }
@@ -447,15 +447,15 @@ export const INSPECT_MODE_SETUP = `(function(){
 
 /** Enable inspect mode (call after INSPECT_MODE_SETUP has been eval'd) */
 export const INSPECT_MODE_ENABLE = `(function(){
-  if (window.__conductorInspect) window.__conductorInspect.enable();
+  if (window.__hiveInspect) window.__hiveInspect.enable();
 })()`;
 
 /** Disable inspect mode */
 export const INSPECT_MODE_DISABLE = `(function(){
-  if (window.__conductorInspect) window.__conductorInspect.disable();
+  if (window.__hiveInspect) window.__hiveInspect.disable();
 })()`;
 
 /** Check if inspect mode is active */
 export const INSPECT_MODE_IS_ACTIVE = `(function(){
-  return JSON.stringify({ active: window.__conductorInspect ? window.__conductorInspect.isActive() : false });
+  return JSON.stringify({ active: window.__hiveInspect ? window.__hiveInspect.isActive() : false });
 })()`;

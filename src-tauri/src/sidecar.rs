@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn test_socket_path_parsing() {
         // Test the socket path detection logic by simulating stdout
-        let test_output = "Some initialization output\nSOCKET_PATH=/tmp/conductor-sidecar-12345.sock\nMore output\n";
+        let test_output = "Some initialization output\nSOCKET_PATH=/tmp/hive-sidecar-12345.sock\nMore output\n";
 
         // Find the SOCKET_PATH line
         let socket_path = test_output
@@ -225,7 +225,7 @@ mod tests {
             .and_then(|line| line.strip_prefix("SOCKET_PATH="))
             .map(|s| s.to_string());
 
-        assert_eq!(socket_path, Some("/tmp/conductor-sidecar-12345.sock".to_string()));
+        assert_eq!(socket_path, Some("/tmp/hive-sidecar-12345.sock".to_string()));
     }
 
     #[test]

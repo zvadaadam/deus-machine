@@ -42,18 +42,18 @@ Agent interacts with browser normally
 
 **MCP Tool -> Playwright Mapping:**
 
-| MCP Tool Call               | Recorded Metadata           | Playwright Output                                             |
-|-----------------------------|-----------------------------|---------------------------------------------------------------|
-| `BrowserNavigate(url)`      | URL                         | `page.goto(url)`                                              |
-| `BrowserClick(ref)`         | role + name + selector      | `page.getByRole('button', { name: 'Sign In' }).click()`       |
-| `BrowserType(text)`         | focused element's role/name | `page.getByRole('textbox', { name: 'Email' }).fill(text)`     |
-| `BrowserWaitFor(text)`      | text                        | `expect(page.getByText(text)).toBeVisible()`                  |
-| `BrowserSelectOption(ref)`  | role + name                 | `page.getByRole('combobox', { name: '...' }).selectOption(v)` |
-| `BrowserSnapshot`           | full tree                   | Can emit assertions for key elements on the page              |
+| MCP Tool Call              | Recorded Metadata           | Playwright Output                                             |
+| -------------------------- | --------------------------- | ------------------------------------------------------------- |
+| `BrowserNavigate(url)`     | URL                         | `page.goto(url)`                                              |
+| `BrowserClick(ref)`        | role + name + selector      | `page.getByRole('button', { name: 'Sign In' }).click()`       |
+| `BrowserType(text)`        | focused element's role/name | `page.getByRole('textbox', { name: 'Email' }).fill(text)`     |
+| `BrowserWaitFor(text)`     | text                        | `expect(page.getByText(text)).toBeVisible()`                  |
+| `BrowserSelectOption(ref)` | role + name                 | `page.getByRole('combobox', { name: '...' }).selectOption(v)` |
+| `BrowserSnapshot`          | full tree                   | Can emit assertions for key elements on the page              |
 
 **Implementation — 3 pieces (~300-400 lines, no Rust changes):**
 
-1. **Recording buffer** (~50 lines in `conductor-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
+1. **Recording buffer** (~50 lines in `hive-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
 
 2. **`BrowserGenerateTest` tool** (~150 lines) — New MCP tool. Input: `testName`, `testDescription`, optional `framework` (playwright/cypress). Reads buffer, transforms to target framework API, writes file to workspace, clears buffer.
 
@@ -98,54 +98,54 @@ Reference API for the Claude in Chrome browser automation extension. Documented 
 
 ### Tool Inventory
 
-| Category | Tool | What It Does |
-|---|---|---|
-| Context | `tabs_context_mcp` | Discover existing tabs / create tab group |
-| Context | `tabs_create_mcp` | Open a new empty tab |
-| Navigation | `navigate` | Go to URL, or "back"/"forward" in history |
-| Navigation | `resize_window` | Set viewport to specific pixel dimensions |
-| Reading | `read_page` | Accessibility tree with ref IDs. Supports `filter: "interactive"`, subtree focus via `ref_id`, `depth` control, `max_chars` cap (default 50k) |
-| Reading | `get_page_text` | Extract plain text content (article-focused) |
-| Reading | `find` | Natural language element search ("login button", "search bar") — returns up to 20 matches with refs |
-| Reading | `javascript_tool` | Execute arbitrary JS in page context, returns last expression |
-| Interaction | `computer` | Mouse/keyboard/scroll/drag/screenshot. Actions: `screenshot`, `click`, `double_click`, `right_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`. Supports both coordinate `[x,y]` and ref-based targeting. Region crop for screenshots. Modifier keys (ctrl/shift/alt/meta). |
-| Interaction | `form_input` | Set form values by ref — text inputs, checkboxes, selects, dates. More reliable than click+type. |
-| Interaction | `upload_image` | Upload screenshot/image to file input (by ref) or drag-drop zone (by coordinate) |
-| Debugging | `read_console_messages` | Console output (log/warn/error/debug). Pattern filter, onlyErrors flag, limit, clear buffer. |
-| Debugging | `read_network_requests` | HTTP requests (XHR/Fetch/etc). URL pattern filter, limit, clear buffer. |
-| Media | `gif_creator` | Record interactions as animated GIF. Start → interact → stop → export. Overlays: click indicators, action labels, progress bar, watermark. |
-| Planning | `update_plan` | Present domains + approach for user approval before acting |
-| Shortcuts | `shortcuts_list` | List saved shortcuts/workflows |
-| Shortcuts | `shortcuts_execute` | Run a shortcut by ID or command |
+| Category    | Tool                    | What It Does                                                                                                                                                                                                                                                                       |
+| ----------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Context     | `tabs_context_mcp`      | Discover existing tabs / create tab group                                                                                                                                                                                                                                          |
+| Context     | `tabs_create_mcp`       | Open a new empty tab                                                                                                                                                                                                                                                               |
+| Navigation  | `navigate`              | Go to URL, or "back"/"forward" in history                                                                                                                                                                                                                                          |
+| Navigation  | `resize_window`         | Set viewport to specific pixel dimensions                                                                                                                                                                                                                                          |
+| Reading     | `read_page`             | Accessibility tree with ref IDs. Supports `filter: "interactive"`, subtree focus via `ref_id`, `depth` control, `max_chars` cap (default 50k)                                                                                                                                      |
+| Reading     | `get_page_text`         | Extract plain text content (article-focused)                                                                                                                                                                                                                                       |
+| Reading     | `find`                  | Natural language element search ("login button", "search bar") — returns up to 20 matches with refs                                                                                                                                                                                |
+| Reading     | `javascript_tool`       | Execute arbitrary JS in page context, returns last expression                                                                                                                                                                                                                      |
+| Interaction | `computer`              | Mouse/keyboard/scroll/drag/screenshot. Actions: `screenshot`, `click`, `double_click`, `right_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`. Supports both coordinate `[x,y]` and ref-based targeting. Region crop for screenshots. Modifier keys (ctrl/shift/alt/meta). |
+| Interaction | `form_input`            | Set form values by ref — text inputs, checkboxes, selects, dates. More reliable than click+type.                                                                                                                                                                                   |
+| Interaction | `upload_image`          | Upload screenshot/image to file input (by ref) or drag-drop zone (by coordinate)                                                                                                                                                                                                   |
+| Debugging   | `read_console_messages` | Console output (log/warn/error/debug). Pattern filter, onlyErrors flag, limit, clear buffer.                                                                                                                                                                                       |
+| Debugging   | `read_network_requests` | HTTP requests (XHR/Fetch/etc). URL pattern filter, limit, clear buffer.                                                                                                                                                                                                            |
+| Media       | `gif_creator`           | Record interactions as animated GIF. Start → interact → stop → export. Overlays: click indicators, action labels, progress bar, watermark.                                                                                                                                         |
+| Planning    | `update_plan`           | Present domains + approach for user approval before acting                                                                                                                                                                                                                         |
+| Shortcuts   | `shortcuts_list`        | List saved shortcuts/workflows                                                                                                                                                                                                                                                     |
+| Shortcuts   | `shortcuts_execute`     | Run a shortcut by ID or command                                                                                                                                                                                                                                                    |
 
 ### Key Differences from Our Tools
 
 **They have, we don't:**
 
-| Capability | Their Approach | How We Could Add It |
-|---|---|---|
-| Natural language `find` | Fuzzy search on accessibility tree by description | Add fuzzy matching layer on top of our existing YAML snapshot |
-| `form_input` (reliable) | Set value directly by ref for checkboxes, selects, dates | Extend BrowserType or add BrowserSetValue tool |
-| `upload_image` | Upload screenshots to file inputs / drop zones | Add via BrowserEvaluate or new tool |
-| `resize_window` | Set viewport to exact pixel dimensions | Trivial — `set_browser_webview_bounds` already exists in Rust |
-| `get_page_text` | Extract plain article text | Add via BrowserEvaluate (innerText extraction) |
-| Coordinate-based click | `computer` tool with `[x, y]` | Our BrowserClick is ref-only — could add coordinate mode |
-| `gif_creator` | Record + export with visual overlays | Capture frames from `screenshot_browser_webview` + stitch |
-| Shortcuts/workflows | Save and replay common sequences | Could add as workspace-level saved browser macros |
-| Region screenshot | Crop specific area of viewport | Our `screenshot_browser_webview` is full-page only |
+| Capability              | Their Approach                                           | How We Could Add It                                           |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------- |
+| Natural language `find` | Fuzzy search on accessibility tree by description        | Add fuzzy matching layer on top of our existing YAML snapshot |
+| `form_input` (reliable) | Set value directly by ref for checkboxes, selects, dates | Extend BrowserType or add BrowserSetValue tool                |
+| `upload_image`          | Upload screenshots to file inputs / drop zones           | Add via BrowserEvaluate or new tool                           |
+| `resize_window`         | Set viewport to exact pixel dimensions                   | Trivial — `set_browser_webview_bounds` already exists in Rust |
+| `get_page_text`         | Extract plain article text                               | Add via BrowserEvaluate (innerText extraction)                |
+| Coordinate-based click  | `computer` tool with `[x, y]`                            | Our BrowserClick is ref-only — could add coordinate mode      |
+| `gif_creator`           | Record + export with visual overlays                     | Capture frames from `screenshot_browser_webview` + stitch     |
+| Shortcuts/workflows     | Save and replay common sequences                         | Could add as workspace-level saved browser macros             |
+| Region screenshot       | Crop specific area of viewport                           | Our `screenshot_browser_webview` is full-page only            |
 
 **We have, they don't:**
 
-| Capability | Our Approach |
-|---|---|
-| Cookie sync | Decrypt + inject from Chrome/Arc/Brave/Edge via Keychain |
-| Visual cursor + ripple | User sees animated AI interactions in real-time |
-| Inspect mode | Figma-style selector with React Fiber component detection |
-| Native webview | No X-Frame-Options issues, full cookie/storage control |
-| Workspace integration | Browser + code + diff + terminal in same agent session |
-| Multi-agent isolation | Each agent gets its own browser tab automatically |
-| SPA detection | pushState/replaceState interception via init script |
-| Console buffering | Automatic capture with drain, no explicit start needed |
+| Capability             | Our Approach                                              |
+| ---------------------- | --------------------------------------------------------- |
+| Cookie sync            | Decrypt + inject from Chrome/Arc/Brave/Edge via Keychain  |
+| Visual cursor + ripple | User sees animated AI interactions in real-time           |
+| Inspect mode           | Figma-style selector with React Fiber component detection |
+| Native webview         | No X-Frame-Options issues, full cookie/storage control    |
+| Workspace integration  | Browser + code + diff + terminal in same agent session    |
+| Multi-agent isolation  | Each agent gets its own browser tab automatically         |
+| SPA detection          | pushState/replaceState interception via init script       |
+| Console buffering      | Automatic capture with drain, no explicit start needed    |
 
 ### Their `read_page` vs Our `BrowserSnapshot`
 

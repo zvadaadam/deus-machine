@@ -63,7 +63,7 @@ class ToolRendererRegistry {
 
   /**
    * Normalize a tool name by stripping MCP server prefixes.
-   * "mcp__conductor__BrowserSnapshot" → "BrowserSnapshot"
+   * "mcp__hive__BrowserSnapshot" → "BrowserSnapshot"
    * Non-MCP names are returned as-is.
    */
   private normalizeName(toolName: string): string {
@@ -78,7 +78,7 @@ class ToolRendererRegistry {
 
   /**
    * Get renderer for a tool (returns default if not found).
-   * Handles MCP server prefixes: "mcp__conductor__BrowserSnapshot" → "BrowserSnapshot"
+   * Handles MCP server prefixes: "mcp__hive__BrowserSnapshot" → "BrowserSnapshot"
    */
   getRenderer(toolName: string): ToolRenderer {
     // Direct match first (built-in tools like Edit, Bash, Read)

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Conductor Workspace Setup Script
+# Hive Workspace Setup Script
 # Sets up a new workspace with dependencies and configuration
 
 set -e  # Exit on any error
 
 echo "======================================"
-echo "Conductor Workspace Setup"
+echo "Hive Workspace Setup"
 echo "======================================"
 echo ""
 
@@ -16,11 +16,11 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Validate Conductor environment variable
-if [ -z "$CONDUCTOR_ROOT_PATH" ]; then
-    echo -e "${RED}ERROR: CONDUCTOR_ROOT_PATH environment variable not set${NC}"
+# Validate Hive environment variable
+if [ -z "$HIVE_ROOT_PATH" ]; then
+    echo -e "${RED}ERROR: HIVE_ROOT_PATH environment variable not set${NC}"
     echo ""
-    echo "This script must be run by Conductor, which sets this variable automatically."
+    echo "This script must be run by Hive, which sets this variable automatically."
     echo ""
     exit 1
 fi
@@ -57,11 +57,11 @@ echo ""
 echo -e "${YELLOW}[2/3] Checking for .env and .mcp.json files...${NC}"
 
 # Copy .env file
-if [ -f "$CONDUCTOR_ROOT_PATH/.env" ]; then
-    cp "$CONDUCTOR_ROOT_PATH/.env" .env
+if [ -f "$HIVE_ROOT_PATH/.env" ]; then
+    cp "$HIVE_ROOT_PATH/.env" .env
     echo -e "${GREEN}✓ Copied .env from root repository${NC}"
-elif [ -f "$CONDUCTOR_ROOT_PATH/.env.example" ]; then
-    cp "$CONDUCTOR_ROOT_PATH/.env.example" .env
+elif [ -f "$HIVE_ROOT_PATH/.env.example" ]; then
+    cp "$HIVE_ROOT_PATH/.env.example" .env
     echo -e "${YELLOW}⚠ Copied .env.example - you may need to configure it${NC}"
 else
     echo -e "${YELLOW}⚠ No .env file found in root repository${NC}"
@@ -69,11 +69,11 @@ else
 fi
 
 # Copy .mcp.json file
-if [ -f "$CONDUCTOR_ROOT_PATH/.mcp.json" ]; then
-    cp "$CONDUCTOR_ROOT_PATH/.mcp.json" .mcp.json
+if [ -f "$HIVE_ROOT_PATH/.mcp.json" ]; then
+    cp "$HIVE_ROOT_PATH/.mcp.json" .mcp.json
     echo -e "${GREEN}✓ Copied .mcp.json from root repository${NC}"
-elif [ -f "$CONDUCTOR_ROOT_PATH/.mcp.json.example" ]; then
-    cp "$CONDUCTOR_ROOT_PATH/.mcp.json.example" .mcp.json
+elif [ -f "$HIVE_ROOT_PATH/.mcp.json.example" ]; then
+    cp "$HIVE_ROOT_PATH/.mcp.json.example" .mcp.json
     echo -e "${YELLOW}⚠ Copied .mcp.json.example - you may need to configure MCP server paths${NC}"
 elif [ -f ".mcp.json.example" ]; then
     cp ".mcp.json.example" .mcp.json

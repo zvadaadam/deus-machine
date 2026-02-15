@@ -13,7 +13,7 @@ vi.mock("../frontend-client", () => ({
   FrontendClient: mockFrontendAPI,
 }));
 
-import { createConductorMCPServer } from "../agents/conductor-tools";
+import { createHiveMCPServer } from "../agents/hive-tools";
 
 // Helpers to access McpServer internals (the real McpServer class uses private fields)
 function getRegisteredTools(instance: any): Record<string, any> {
@@ -24,21 +24,21 @@ function getServerInfo(instance: any): { name: string; version: string } {
   return instance.server._serverInfo;
 }
 
-describe("createConductorMCPServer", () => {
+describe("createHiveMCPServer", () => {
   const SESSION_ID = "test-session-123";
-  let server: ReturnType<typeof createConductorMCPServer>;
+  let server: ReturnType<typeof createHiveMCPServer>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    server = createConductorMCPServer(SESSION_ID);
+    server = createHiveMCPServer(SESSION_ID);
   });
 
   it("returns an SDK-compatible server descriptor", () => {
     expect(server.type).toBe("sdk");
-    expect(server.name).toBe("conductor");
+    expect(server.name).toBe("hive");
     expect(server.instance).toBeDefined();
     const info = getServerInfo(server.instance);
-    expect(info.name).toBe("conductor");
+    expect(info.name).toBe("hive");
     expect(info.version).toBe("1.0.0");
   });
 

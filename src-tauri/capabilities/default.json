@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for Conductor app",
+  "description": "Default capabilities for Hive app",
   "windows": ["main", "browser-detached"],
   "permissions": [
     "core:default",

@@ -15,14 +15,14 @@
 
 /**
  * JS code to inject visual effects system into the webview.
- * Creates window.__conductorVisuals with cursor + ripple functions.
+ * Creates window.__hiveVisuals with cursor + ripple functions.
  *
  * The SVG cursor matches the inspect mode cursor (Figma-style pointer)
  * with drop shadow for depth. Animation uses distance-based timing
  * (1.5px per ms) clamped to [440ms, 1000ms] with a smooth easing curve.
  */
 export const VISUAL_EFFECTS_SETUP = `(function(){
-  if (window.__conductorVisuals) return;
+  if (window.__hiveVisuals) return;
 
   // ========================================================================
   // State
@@ -55,7 +55,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
     if (!frameEl || !frameEl.parentNode) {
       frameEl = document.createElement('div');
-      frameEl.setAttribute('data-conductor-visual', 'true');
+      frameEl.setAttribute('data-hive-visual', 'true');
       frameEl.style.position = 'fixed';
       frameEl.style.pointerEvents = 'none';
       frameEl.style.zIndex = '2147483646';
@@ -112,7 +112,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       cursorEl.setAttribute('height', '16');
       cursorEl.setAttribute('viewBox', '0 0 16 16');
       cursorEl.setAttribute('fill', 'none');
-      cursorEl.setAttribute('data-conductor-visual', 'true');
+      cursorEl.setAttribute('data-hive-visual', 'true');
       cursorEl.setAttribute('aria-hidden', 'true');
       cursorEl.style.position = 'fixed';
       cursorEl.style.pointerEvents = 'none';
@@ -123,9 +123,9 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       cursorEl.style.transition = 'opacity 150ms ease';
 
       var gClip = document.createElementNS(svgNS, 'g');
-      gClip.setAttribute('clip-path', 'url(#clip0_conductor_vis)');
+      gClip.setAttribute('clip-path', 'url(#clip0_hive_vis)');
       var gFilter = document.createElementNS(svgNS, 'g');
-      gFilter.setAttribute('filter', 'url(#filter0_conductor_vis)');
+      gFilter.setAttribute('filter', 'url(#filter0_hive_vis)');
 
       var path = document.createElementNS(svgNS, 'path');
       path.setAttribute('d', 'M1.68066 2.14282C1.5253 1.49746 2.16954 0.975576 2.75195 1.21118L2.86816 1.26782L3.11035 1.41333L12.958 7.27954L13.2031 7.42505C13.8128 7.78856 13.682 8.70779 12.9951 8.88696L12.7197 8.95825L8.28223 10.1155L6.16895 13.9592L6.02148 14.2288C5.66933 14.869 4.71301 14.741 4.54199 14.0305L4.4707 13.7317L1.74707 2.41724L1.68066 2.14282Z');
@@ -136,7 +136,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
       var defs = document.createElementNS(svgNS, 'defs');
       var filter = document.createElementNS(svgNS, 'filter');
-      filter.setAttribute('id', 'filter0_conductor_vis');
+      filter.setAttribute('id', 'filter0_hive_vis');
       filter.setAttribute('x', '-1.51');
       filter.setAttribute('y', '-1.35');
       filter.setAttribute('width', '18.27');
@@ -182,7 +182,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       defs.appendChild(filter);
 
       var clipPath = document.createElementNS(svgNS, 'clipPath');
-      clipPath.setAttribute('id', 'clip0_conductor_vis');
+      clipPath.setAttribute('id', 'clip0_hive_vis');
       var rect = document.createElementNS(svgNS, 'rect');
       rect.setAttribute('width', '16');
       rect.setAttribute('height', '16');
@@ -241,7 +241,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
     try {
       // Primary ring — fast, bright, immediate feedback
       var ring1 = document.createElement('div');
-      ring1.setAttribute('data-conductor-visual', 'true');
+      ring1.setAttribute('data-hive-visual', 'true');
       ring1.style.position = 'fixed';
       ring1.style.left = x + 'px';
       ring1.style.top = y + 'px';
@@ -267,7 +267,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       // Secondary ring — staggered, wider, softer (shockwave echo)
       setTimeout(function() {
         var ring2 = document.createElement('div');
-        ring2.setAttribute('data-conductor-visual', 'true');
+        ring2.setAttribute('data-hive-visual', 'true');
         ring2.style.position = 'fixed';
         ring2.style.left = x + 'px';
         ring2.style.top = y + 'px';
@@ -372,7 +372,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
       // --- Phase 1: White camera-shutter pop (asymmetric: fast in, fast out) ---
       var flash = document.createElement('div');
-      flash.setAttribute('data-conductor-visual', 'true');
+      flash.setAttribute('data-hive-visual', 'true');
       flash.style.position = 'fixed';
       flash.style.pointerEvents = 'none';
       flash.style.zIndex = '2147483647';
@@ -397,7 +397,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
         // --- Phase 2: Blue tint holds, then fades (slow release) ---
         var tint = document.createElement('div');
-        tint.setAttribute('data-conductor-visual', 'true');
+        tint.setAttribute('data-hive-visual', 'true');
         tint.style.position = 'fixed';
         tint.style.pointerEvents = 'none';
         tint.style.zIndex = '2147483647';
@@ -436,7 +436,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
     try {
       var rect = el.getBoundingClientRect();
       var box = document.createElement('div');
-      box.setAttribute('data-conductor-visual', 'true');
+      box.setAttribute('data-hive-visual', 'true');
       box.style.position = 'fixed';
       box.style.left = rect.left + 'px';
       box.style.top = rect.top + 'px';
@@ -496,7 +496,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
       // ---- Pass 1: slow recon scan line ----
       var tint1 = document.createElement('div');
-      tint1.setAttribute('data-conductor-visual', 'true');
+      tint1.setAttribute('data-hive-visual', 'true');
       tint1.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
         + 'pointer-events:none;z-index:2147483645;opacity:1;'
         + 'background:linear-gradient(180deg,'
@@ -505,7 +505,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
         + 'clip-path:inset(0 0 100% 0);';
 
       var band1 = document.createElement('div');
-      band1.setAttribute('data-conductor-visual', 'true');
+      band1.setAttribute('data-hive-visual', 'true');
       band1.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100px;'
         + 'pointer-events:none;z-index:2147483647;will-change:transform,opacity;'
         + 'background:linear-gradient(180deg,'
@@ -542,7 +542,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       setTimeout(function() {
         try {
           var tint2 = document.createElement('div');
-          tint2.setAttribute('data-conductor-visual', 'true');
+          tint2.setAttribute('data-hive-visual', 'true');
           tint2.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
             + 'pointer-events:none;z-index:2147483645;opacity:1;'
             + 'background:linear-gradient(180deg,'
@@ -552,7 +552,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
           var fo2 = Math.min(400, Math.round(P2_MS * 0.15));
           var band2 = document.createElement('div');
-          band2.setAttribute('data-conductor-visual', 'true');
+          band2.setAttribute('data-hive-visual', 'true');
           band2.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:80px;'
             + 'pointer-events:none;z-index:2147483647;will-change:transform,opacity;'
             + 'background:linear-gradient(180deg,'
@@ -581,11 +581,11 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
             tint2.style.opacity = '0';
             setTimeout(function() { try { tint2.remove(); } catch(e) {} }, 850);
           }, P2_MS + 600);
-        } catch(e) { console.error('[conductor] scanPage P2:', e); }
+        } catch(e) { console.error('[hive] scanPage P2:', e); }
       }, P2_DELAY);
 
       hideFrame(P1_MS + 1400);
-    } catch(e) { console.error('[conductor] scanPage:', e); }
+    } catch(e) { console.error('[hive] scanPage:', e); }
   }
 
   // ========================================================================
@@ -603,9 +603,9 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
       // Inject breathing keyframe once — shadow expands/contracts + subtle scale
       if (!activeGlowStyleEl) {
         activeGlowStyleEl = document.createElement('style');
-        activeGlowStyleEl.setAttribute('data-conductor-visual', 'true');
+        activeGlowStyleEl.setAttribute('data-hive-visual', 'true');
         activeGlowStyleEl.textContent =
-          '@keyframes conductorBreathe{'
+          '@keyframes hiveBreathe{'
           + '0%,100%{transform:scale(1);box-shadow:inset 0 0 80px 20px rgba(58,150,221,0.35),inset 0 0 25px 8px rgba(58,150,221,0.40)}'
           + '50%{transform:scale(1.04);box-shadow:inset 0 0 130px 40px rgba(58,150,221,0.45),inset 0 0 50px 18px rgba(58,150,221,0.50)}'
           + '}';
@@ -614,7 +614,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
 
       if (!activeGlowEl || !activeGlowEl.parentNode) {
         activeGlowEl = document.createElement('div');
-        activeGlowEl.setAttribute('data-conductor-visual', 'true');
+        activeGlowEl.setAttribute('data-hive-visual', 'true');
         activeGlowEl.style.position = 'fixed';
         activeGlowEl.style.left = '0';
         activeGlowEl.style.top = '0';
@@ -641,7 +641,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
         setTimeout(function() {
           if (!activeGlowEl) return;
           activeGlowEl.style.transition = 'none';
-          activeGlowEl.style.animation = 'conductorBreathe 3.5s ease-in-out infinite';
+          activeGlowEl.style.animation = 'hiveBreathe 3.5s ease-in-out infinite';
         }, 280);
       });
     } catch(e) {}
@@ -677,7 +677,7 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
   // ========================================================================
   // Public API
   // ========================================================================
-  window.__conductorVisuals = {
+  window.__hiveVisuals = {
     moveCursorToViewport: moveCursorToViewport,
     moveCursorToElement: moveCursorToElement,
     rippleAt: rippleAt,
@@ -704,16 +704,16 @@ export const VISUAL_EFFECTS_SETUP = `(function(){
  */
 export function buildMoveCursorAndRippleJs(ref: string): string {
   return `(function(){
-  if (!window.__conductorVisuals) return JSON.stringify({duration:0});
+  if (!window.__hiveVisuals) return JSON.stringify({duration:0});
   var el = document.querySelector('[data-cursor-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__conductorVisuals.moveCursorToElement(el);
+  var dur = window.__hiveVisuals.moveCursorToElement(el);
   // Ripple after cursor arrives
   setTimeout(function(){
     var rect = el.getBoundingClientRect();
     var cx = Math.round(rect.left + rect.width / 2);
     var cy = Math.round(rect.top + rect.height / 2);
-    window.__conductorVisuals.rippleAt(cx, cy);
+    window.__hiveVisuals.rippleAt(cx, cy);
   }, dur + 20);
   return JSON.stringify({duration: dur + 280});
 })()`;
@@ -724,12 +724,12 @@ export function buildMoveCursorAndRippleJs(ref: string): string {
  */
 export function buildPinCursorJs(ref: string): string {
   return `(function(){
-  if (!window.__conductorVisuals) return JSON.stringify({duration:0});
+  if (!window.__hiveVisuals) return JSON.stringify({duration:0});
   var el = document.querySelector('[data-cursor-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__conductorVisuals.moveCursorToElement(el);
+  var dur = window.__hiveVisuals.moveCursorToElement(el);
   setTimeout(function(){
-    window.__conductorVisuals.pinCursorToElement(el);
+    window.__hiveVisuals.pinCursorToElement(el);
   }, dur + 20);
   return JSON.stringify({duration: dur + 20});
 })()`;
@@ -737,7 +737,7 @@ export function buildPinCursorJs(ref: string): string {
 
 /** Build JS to unpin and hide cursor (after typing finishes) */
 export const HIDE_CURSOR_JS = `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.hideCursor();
+  if (window.__hiveVisuals) window.__hiveVisuals.hideCursor();
 })()`;
 
 /**
@@ -747,7 +747,7 @@ export const HIDE_CURSOR_JS = `(function(){
  */
 export function buildFadeCursorJs(dwellMs = 1000): string {
   return `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.fadeCursor(${dwellMs});
+  if (window.__hiveVisuals) window.__hiveVisuals.fadeCursor(${dwellMs});
 })()`;
 }
 
@@ -755,10 +755,17 @@ export function buildFadeCursorJs(dwellMs = 1000): string {
  * Build JS for screenshot flash effect.
  * If rect is provided, flashes only that region; otherwise flashes full viewport.
  */
-export function buildScreenshotFlashJs(rect?: { x: number; y: number; width: number; height: number }): string {
-  const rectArg = rect ? `{x:${rect.x},y:${rect.y},width:${rect.width},height:${rect.height}}` : "null";
+export function buildScreenshotFlashJs(rect?: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): string {
+  const rectArg = rect
+    ? `{x:${rect.x},y:${rect.y},width:${rect.width},height:${rect.height}}`
+    : "null";
   return `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.screenshotFlash(${rectArg});
+  if (window.__hiveVisuals) window.__hiveVisuals.screenshotFlash(${rectArg});
 })()`;
 }
 
@@ -768,9 +775,9 @@ export function buildScreenshotFlashJs(rect?: { x: number; y: number; width: num
  */
 export function buildHighlightElementJs(ref: string): string {
   return `(function(){
-  if (!window.__conductorVisuals) return;
+  if (!window.__hiveVisuals) return;
   var el = document.querySelector('[data-cursor-ref="${ref}"]');
-  if (el) window.__conductorVisuals.highlightElement(el);
+  if (el) window.__hiveVisuals.highlightElement(el);
 })()`;
 }
 
@@ -779,7 +786,7 @@ export function buildHighlightElementJs(ref: string): string {
  * Used to show the AI is reading/scanning the page (BrowserSnapshot).
  */
 export const SCAN_PAGE_JS = `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.scanPage();
+  if (window.__hiveVisuals) window.__hiveVisuals.scanPage();
 })()`;
 
 /**
@@ -787,7 +794,7 @@ export const SCAN_PAGE_JS = `(function(){
  * Used to show the AI pressing a key on an input/element.
  */
 export const KEY_FLASH_JS = `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.keyFlash();
+  if (window.__hiveVisuals) window.__hiveVisuals.keyFlash();
 })()`;
 
 /**
@@ -796,7 +803,7 @@ export const KEY_FLASH_JS = `(function(){
  * Call before tool execution begins; pair with HIDE_ACTIVE_GLOW_JS when done.
  */
 export const SHOW_ACTIVE_GLOW_JS = `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.showActiveGlow();
+  if (window.__hiveVisuals) window.__hiveVisuals.showActiveGlow();
 })()`;
 
 /**
@@ -804,6 +811,5 @@ export const SHOW_ACTIVE_GLOW_JS = `(function(){
  * Captures current breathing opacity for a smooth fade-out (no jump).
  */
 export const HIDE_ACTIVE_GLOW_JS = `(function(){
-  if (window.__conductorVisuals) window.__conductorVisuals.hideActiveGlow();
+  if (window.__hiveVisuals) window.__hiveVisuals.hideActiveGlow();
 })()`;
-

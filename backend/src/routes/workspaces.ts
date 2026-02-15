@@ -284,7 +284,7 @@ app.post('/workspaces', async (c) => {
   const placeholderBranchName = `${branchPrefix}/${workspace_name}`;
 
   const tmpDir = os.tmpdir();
-  const initLogPath = path.join(tmpDir, `conductor-${Date.now()}-init.log`);
+  const initLogPath = path.join(tmpDir, `hive-${Date.now()}-init.log`);
 
   db.prepare(`
     INSERT INTO workspaces (
@@ -295,7 +295,7 @@ app.post('/workspaces', async (c) => {
   `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
     placeholderBranchName, parent_branch, 'initializing', initLogPath, 0);
 
-  const workspacePath = path.join(repo.root_path, '.conductor', workspace_name);
+  const workspacePath = path.join(repo.root_path, '.hive', workspace_name);
   const initLog = fs.createWriteStream(initLogPath);
   const worktreeProcess = spawn('git', [
     'worktree', 'add', '-b', placeholderBranchName, workspacePath, parent_branch

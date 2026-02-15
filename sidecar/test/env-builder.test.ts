@@ -115,17 +115,17 @@ describe("buildAgentEnvironment", () => {
     expect(env.PATH).toBe("/custom/path");
   });
 
-  it("conductorEnv overrides extraEnv", () => {
+  it("hiveEnv overrides extraEnv", () => {
     const env = buildAgentEnvironment({
       extraEnv: { MY_KEY: "extra" },
-      conductorEnv: { MY_KEY: "conductor" },
+      hiveEnv: { MY_KEY: "hive" },
     });
-    expect(env.MY_KEY).toBe("conductor");
+    expect(env.MY_KEY).toBe("hive");
   });
 
-  it("claudeEnvVars overrides conductorEnv", () => {
+  it("claudeEnvVars overrides hiveEnv", () => {
     const env = buildAgentEnvironment({
-      conductorEnv: { MY_KEY: "conductor" },
+      hiveEnv: { MY_KEY: "hive" },
       claudeEnvVars: "MY_KEY=from-user",
     });
     expect(env.MY_KEY).toBe("from-user");
@@ -164,7 +164,7 @@ describe("buildAgentEnvironment", () => {
   it("applies multiple layers together", () => {
     const env = buildAgentEnvironment({
       extraEnv: { TASKS: "true", AGENT: "claude" },
-      conductorEnv: { WORKSPACE: "/my/project" },
+      hiveEnv: { WORKSPACE: "/my/project" },
       claudeEnvVars: "CUSTOM=value\nANOTHER=123",
       ghToken: "gh-token-123",
     });

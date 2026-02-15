@@ -14,7 +14,7 @@ export { KillShellToolRenderer } from "./KillShellToolRenderer";
 export { TaskToolRenderer } from "./TaskToolRenderer";
 export { LSToolRenderer } from "./LSToolRenderer";
 
-// Conductor MCP tools — Browser automation
+// Hive MCP tools — Browser automation
 export {
   BrowserSnapshotToolRenderer,
   BrowserNavigateToolRenderer,
@@ -32,7 +32,7 @@ export {
   BrowserScrollToolRenderer,
 } from "./BrowserToolRenderers";
 
-// Conductor MCP tools — Workspace
+// Hive MCP tools — Workspace
 export {
   AskUserQuestionToolRenderer,
   GetWorkspaceDiffToolRenderer,

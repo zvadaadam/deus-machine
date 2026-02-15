@@ -1,6 +1,6 @@
 // sidecar/frontend-client.ts
 // Singleton facade over the RPC connection that exposes typed methods
-// for every message the sidecar exchanges with the Conductor frontend.
+// for every message the sidecar exchanges with the Hive frontend.
 
 import type { RpcConnection } from "./rpc-connection";
 import {
@@ -375,7 +375,9 @@ class FrontendClientClass {
     );
   }
 
-  async requestBrowserSelectOption(request: BrowserSelectOptionRequest): Promise<BrowserSelectOptionResponse> {
+  async requestBrowserSelectOption(
+    request: BrowserSelectOptionRequest
+  ): Promise<BrowserSelectOptionResponse> {
     return this.withTimeout<BrowserSelectOptionResponse>(
       this.requireTunnel().request(
         FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION,
@@ -386,7 +388,9 @@ class FrontendClientClass {
     );
   }
 
-  async requestBrowserNavigateBack(request: BrowserNavigateBackRequest): Promise<BrowserNavigateBackResponse> {
+  async requestBrowserNavigateBack(
+    request: BrowserNavigateBackRequest
+  ): Promise<BrowserNavigateBackResponse> {
     return this.withTimeout<BrowserNavigateBackResponse>(
       this.requireTunnel().request(
         FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK,
@@ -397,7 +401,9 @@ class FrontendClientClass {
     );
   }
 
-  async requestBrowserConsoleMessages(request: BrowserConsoleMessagesRequest): Promise<BrowserConsoleMessagesResponse> {
+  async requestBrowserConsoleMessages(
+    request: BrowserConsoleMessagesRequest
+  ): Promise<BrowserConsoleMessagesResponse> {
     return this.withTimeout<BrowserConsoleMessagesResponse>(
       this.requireTunnel().request(
         FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES,
@@ -408,7 +414,9 @@ class FrontendClientClass {
     );
   }
 
-  async requestBrowserNetworkRequests(request: BrowserNetworkRequestsRequest): Promise<BrowserNetworkRequestsResponse> {
+  async requestBrowserNetworkRequests(
+    request: BrowserNetworkRequestsRequest
+  ): Promise<BrowserNetworkRequestsResponse> {
     return this.withTimeout<BrowserNetworkRequestsResponse>(
       this.requireTunnel().request(
         FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS,
@@ -419,7 +427,9 @@ class FrontendClientClass {
     );
   }
 
-  async requestBrowserScreenshot(request: BrowserScreenshotRequest): Promise<BrowserScreenshotResponse> {
+  async requestBrowserScreenshot(
+    request: BrowserScreenshotRequest
+  ): Promise<BrowserScreenshotResponse> {
     return this.withTimeout<BrowserScreenshotResponse>(
       this.requireTunnel().request(
         FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT,

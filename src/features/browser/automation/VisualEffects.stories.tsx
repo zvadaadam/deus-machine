@@ -3,28 +3,27 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { VISUAL_EFFECTS_SETUP } from "./visual-effects";
 
 // ============================================================================
-// Shared hook: inject __conductorVisuals into the window on mount
+// Shared hook: inject __hiveVisuals into the window on mount
 // ============================================================================
 function useVisualEffects() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!(window as any).__conductorVisuals) {
-      // eslint-disable-next-line no-eval
+    if (!(window as any).__hiveVisuals) {
       eval(VISUAL_EFFECTS_SETUP);
     }
-    setReady(!!(window as any).__conductorVisuals);
+    setReady(!!(window as any).__hiveVisuals);
     return () => {
       // Clean up cursor SVG + any leftover visual elements
-      document.querySelectorAll("[data-conductor-visual]").forEach((el) => el.remove());
-      delete (window as any).__conductorVisuals;
+      document.querySelectorAll("[data-hive-visual]").forEach((el) => el.remove());
+      delete (window as any).__hiveVisuals;
     };
   }, []);
 
-  return { ready, v: (window as any).__conductorVisuals as ConductorVisuals | null };
+  return { ready, v: (window as any).__hiveVisuals as HiveVisuals | null };
 }
 
-type ConductorVisuals = {
+type HiveVisuals = {
   moveCursorToViewport: (x: number, y: number) => number;
   moveCursorToElement: (el: Element) => number;
   rippleAt: (x: number, y: number) => void;
@@ -80,7 +79,7 @@ function StatusBadge({ ready }: { ready: boolean }) {
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${ready ? "bg-emerald-400" : "bg-red-400"}`} />
-      {ready ? "__conductorVisuals injected" : "Not injected"}
+      {ready ? "__hiveVisuals injected" : "Not injected"}
     </span>
   );
 }
@@ -189,7 +188,7 @@ function CursorMoveRipple() {
       <span
         ref={targetC}
         onClick={() => handleClick(targetC.current)}
-        className="border-border/40 cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px] text-muted-foreground"
+        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px]"
       >
         Target C (far right)
       </span>
@@ -299,7 +298,7 @@ function RippleOnly() {
           if (!v) return;
           v.rippleAt(e.clientX, e.clientY);
         }}
-        className="border-border/40 cursor-crosshair rounded-lg border border-dashed px-6 py-3 text-[12px] text-muted-foreground"
+        className="border-border/40 text-muted-foreground cursor-crosshair rounded-lg border border-dashed px-6 py-3 text-[12px]"
       >
         Click anywhere in this box for ripple
       </div>
@@ -329,7 +328,12 @@ function ScreenshotFlash() {
           onClick={() => {
             if (!v || !sectionRef.current) return;
             const rect = sectionRef.current.getBoundingClientRect();
-            v.screenshotFlash({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+            v.screenshotFlash({
+              x: rect.left,
+              y: rect.top,
+              width: rect.width,
+              height: rect.height,
+            });
           }}
         >
           Region Flash (this section)
@@ -502,7 +506,7 @@ function FullClickSequence() {
       <span
         ref={targetC}
         onClick={() => runSequence(targetC.current)}
-        className="border-border/40 cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px] text-muted-foreground"
+        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px]"
       >
         Sequence C
       </span>
@@ -518,10 +522,10 @@ function VisualEffectsDemo() {
   return (
     <div className="flex max-w-3xl flex-col gap-5">
       <div>
-        <h2 className="text-lg font-semibold">Conductor Visual Effects</h2>
+        <h2 className="text-lg font-semibold">Hive Visual Effects</h2>
         <p className="text-muted-foreground text-[13px]">
-          Interactive test for all browser automation visual effects. These are injected into the WKWebView during AI
-          actions.
+          Interactive test for all browser automation visual effects. These are injected into the
+          WKWebView during AI actions.
         </p>
       </div>
       <CaptureFrame />

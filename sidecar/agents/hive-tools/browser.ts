@@ -1,9 +1,9 @@
-// sidecar/agents/conductor-tools/browser.ts
+// sidecar/agents/hive-tools/browser.ts
 // Browser automation tools: snapshot, click, type, navigate, evaluate, etc.
 //
 // Snapshot file-based fallback (inspired by Cursor):
 // When a page snapshot exceeds SNAPSHOT_SIZE_THRESHOLD, the full snapshot
-// is written to ~/.conductor/browser-logs/ and only a preview (first N lines)
+// is written to ~/.hive/browser-logs/ and only a preview (first N lines)
 // is returned to the AI context. The AI can read the full file if needed.
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -21,10 +21,10 @@ import { FrontendClient } from "../../frontend-client";
 // Two-tier thresholds matching Cursor's approach:
 // - Action tools (click, type, hover, etc.): 25 KB — keeps context compact
 // - Dedicated snapshot tool: 200 KB — user explicitly asked for a snapshot
-const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024;         // 25 KB for action tools
-const SNAPSHOT_SIZE_THRESHOLD_LARGE = 200 * 1024;  // 200 KB for BrowserSnapshot
+const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024; // 25 KB for action tools
+const SNAPSHOT_SIZE_THRESHOLD_LARGE = 200 * 1024; // 200 KB for BrowserSnapshot
 const PREVIEW_LINE_COUNT = 50;
-const BROWSER_LOGS_DIR = join(homedir(), ".conductor", "browser-logs");
+const BROWSER_LOGS_DIR = join(homedir(), ".hive", "browser-logs");
 
 /**
  * Format a snapshot response with file-based fallback for large snapshots.
@@ -156,7 +156,7 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
           .describe("Target browser tab webview label. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserSnapshot({
@@ -202,12 +202,21 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
 
 The element is scrolled into view, focused, and clicked with proper mouse event simulation (mousedown → mouseup → click). Returns a page snapshot after the click so you can see the updated state.`,
       {
-        ref: z.string().describe("The element's data-cursor-ref ID from the accessibility snapshot (e.g., 'ref-abc123')"),
+        ref: z
+          .string()
+          .describe(
+            "The element's data-cursor-ref ID from the accessibility snapshot (e.g., 'ref-abc123')"
+          ),
         doubleClick: z.boolean().optional().describe("Whether to perform a double click"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`);
+        console.log(
+          `[hiveMCPServer] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserClick({
@@ -252,14 +261,26 @@ The element is scrolled into view, focused, and clicked with proper mouse event 
 
 The element is focused and text is entered. Use submit: true to press Enter after typing. Returns a page snapshot after typing so you can see the updated state.`,
       {
-        ref: z.string().describe("The element's data-cursor-ref ID from the accessibility snapshot"),
+        ref: z
+          .string()
+          .describe("The element's data-cursor-ref ID from the accessibility snapshot"),
         text: z.string().describe("Text to type into the element"),
         submit: z.boolean().optional().describe("Whether to press Enter after typing to submit"),
-        slowly: z.boolean().optional().describe("Type character by character (useful for triggering autocomplete or key handlers)"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        slowly: z
+          .boolean()
+          .optional()
+          .describe(
+            "Type character by character (useful for triggering autocomplete or key handlers)"
+          ),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserType invoked for session ${sessionId}: ref=${args.ref}`);
+        console.log(
+          `[hiveMCPServer] BrowserType invoked for session ${sessionId}: ref=${args.ref}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserType({
@@ -308,10 +329,15 @@ The element is focused and text is entered. Use submit: true to press Enter afte
       `Navigate the browser to a URL. Returns an accessibility snapshot of the loaded page.`,
       {
         url: z.string().describe("The URL to navigate to"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`);
+        console.log(
+          `[hiveMCPServer] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserNavigate({
@@ -359,15 +385,40 @@ The element is focused and text is entered. Use submit: true to press Enter afte
 
 Provide exactly one of: text, textGone, or time. Returns a page snapshot after the condition is met.`,
       {
-        text: z.string().optional().describe("Wait until this text appears on the page (polls every 500ms)"),
-        textGone: z.string().optional().describe("Wait until this text disappears from the page (polls every 500ms)"),
-        time: z.number().optional().describe("Wait for a fixed number of seconds (e.g., 2 for 2 seconds)"),
-        timeout: z.number().optional().describe("Maximum wait time in seconds (default: 30). Only applies to text/textGone modes."),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        text: z
+          .string()
+          .optional()
+          .describe("Wait until this text appears on the page (polls every 500ms)"),
+        textGone: z
+          .string()
+          .optional()
+          .describe("Wait until this text disappears from the page (polls every 500ms)"),
+        time: z
+          .number()
+          .optional()
+          .describe("Wait for a fixed number of seconds (e.g., 2 for 2 seconds)"),
+        timeout: z
+          .number()
+          .optional()
+          .describe(
+            "Maximum wait time in seconds (default: 30). Only applies to text/textGone modes."
+          ),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        const mode = args.text ? "text" : args.textGone ? "textGone" : args.time ? "time" : "unknown";
-        console.log(`[conductorMCPServer] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`);
+        const mode = args.text
+          ? "text"
+          : args.textGone
+            ? "textGone"
+            : args.time
+              ? "time"
+              : "unknown";
+        console.log(
+          `[hiveMCPServer] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserWaitFor({
@@ -424,16 +475,21 @@ If a ref is provided, the matching element is passed as the 'element' argument. 
           .string()
           .describe(
             "JavaScript function body to execute. Use 'return' to get results. " +
-            "Example: 'return document.title' or 'return element.textContent' when ref is provided."
+              "Example: 'return document.title' or 'return element.textContent' when ref is provided."
           ),
         ref: z
           .string()
           .optional()
-          .describe("Element data-cursor-ref — if provided, the element is passed as 'element' argument"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+          .describe(
+            "Element data-cursor-ref — if provided, the element is passed as 'element' argument"
+          ),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserEvaluate({
@@ -487,10 +543,15 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
         shift: z.boolean().optional().describe("Hold Shift key (e.g., Shift+Tab to go back)"),
         alt: z.boolean().optional().describe("Hold Alt/Option key"),
         meta: z.boolean().optional().describe("Hold Meta/Cmd key (e.g., Cmd+S to save)"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`);
+        console.log(
+          `[hiveMCPServer] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserPressKey({
@@ -510,9 +571,7 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
           }
 
           return {
-            content: [
-              { type: "text", text: `Pressed key: ${args.key}` },
-            ],
+            content: [{ type: "text", text: `Pressed key: ${args.key}` }],
           };
         } catch (err: any) {
           return {
@@ -532,14 +591,19 @@ hover states, or any UI that appears on mouse hover. Returns a page snapshot aft
       {
         element: z
           .string()
-          .describe("Human-readable element description (e.g., 'the Settings button', 'user avatar')"),
-        ref: z
+          .describe(
+            "Human-readable element description (e.g., 'the Settings button', 'user avatar')"
+          ),
+        ref: z.string().describe("Exact target element data-cursor-ref from the page snapshot"),
+        webviewLabel: z
           .string()
-          .describe("Exact target element data-cursor-ref from the page snapshot"),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`);
+        console.log(
+          `[hiveMCPServer] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserHover({
@@ -581,17 +645,24 @@ to select by option value or visible text. Returns a page snapshot after selecti
       {
         element: z
           .string()
-          .describe("Human-readable description of the dropdown (e.g., 'country selector', 'language dropdown')"),
+          .describe(
+            "Human-readable description of the dropdown (e.g., 'country selector', 'language dropdown')"
+          ),
         ref: z
           .string()
           .describe("Exact target <select> element data-cursor-ref from the page snapshot"),
         values: z
           .array(z.string())
           .describe("Array of values to select. Can be option values or visible text labels."),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`);
+        console.log(
+          `[hiveMCPServer] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserSelectOption({
@@ -635,10 +706,13 @@ to select by option value or visible text. Returns a page snapshot after selecti
       "BrowserNavigateBack",
       `Go back to the previous page in browser history. Returns a snapshot of the page after navigating back.`,
       {
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserNavigateBack({
@@ -677,10 +751,13 @@ to select by option value or visible text. Returns a page snapshot after selecti
 Use this to check for JavaScript errors, debug application behavior, or verify log output.
 Messages are formatted as [LEVEL] message.`,
       {
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserConsoleMessages({
@@ -743,7 +820,9 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
         ref: z
           .string()
           .optional()
-          .describe("Element ref ID from a BrowserSnapshot (e.g. 'ref-abc123'). Screenshots just that element with padding."),
+          .describe(
+            "Element ref ID from a BrowserSnapshot (e.g. 'ref-abc123'). Screenshots just that element with padding."
+          ),
         rect: z
           .object({
             x: z.number().describe("X offset in CSS pixels from left edge"),
@@ -755,7 +834,7 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
           .describe("Crop to a specific region. Takes priority over ref."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserScreenshot invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserScreenshot invoked for session ${sessionId}`);
 
         try {
           let cropRect = args.rect;
@@ -819,11 +898,10 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
           }
 
           // Add URL context as text
-          let context = response.url
-            ? `Screenshot of ${response.url}`
-            : "Screenshot captured.";
+          let context = response.url ? `Screenshot of ${response.url}` : "Screenshot captured.";
           if (args.ref) context += ` (element: ${args.ref})`;
-          if (cropRect) context += ` [region: ${Math.round(cropRect.x)},${Math.round(cropRect.y)} ${Math.round(cropRect.width)}x${Math.round(cropRect.height)}]`;
+          if (cropRect)
+            context += ` [region: ${Math.round(cropRect.x)},${Math.round(cropRect.y)} ${Math.round(cropRect.width)}x${Math.round(cropRect.height)}]`;
           parts.push({ type: "text", text: context });
 
           return { content: parts };
@@ -853,10 +931,13 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
 
 Requests are formatted as [TYPE] URL (duration, size).`,
       {
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
+        console.log(`[hiveMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserNetworkRequests({
@@ -915,15 +996,24 @@ Two modes:
         amount: z
           .number()
           .optional()
-          .describe("Pixels to scroll (default 600 ≈ one viewport height). Ignored when ref is provided."),
+          .describe(
+            "Pixels to scroll (default 600 ≈ one viewport height). Ignored when ref is provided."
+          ),
         ref: z
           .string()
           .optional()
-          .describe("Element ref ID to scroll into view. If provided, direction/amount are ignored."),
-        webviewLabel: z.string().optional().describe("Target browser tab. If omitted, uses the active tab."),
+          .describe(
+            "Element ref ID to scroll into view. If provided, direction/amount are ignored."
+          ),
+        webviewLabel: z
+          .string()
+          .optional()
+          .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[conductorMCPServer] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} amount=${args.amount} ref=${args.ref}`);
+        console.log(
+          `[hiveMCPServer] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} amount=${args.amount} ref=${args.ref}`
+        );
 
         try {
           const response = await FrontendClient.requestBrowserScroll({
