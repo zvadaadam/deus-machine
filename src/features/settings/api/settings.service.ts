@@ -15,10 +15,12 @@ export const SettingsService = {
   },
 
   /**
-   * Update settings
+   * Update a single setting. The mutation always passes one key at a time
+   * as Partial<Settings>, but the backend expects { key, value } format.
    */
   update: async (settings: Partial<Settings>): Promise<Settings> => {
-    return apiClient.post<Settings>("/settings", settings);
+    const [key, value] = Object.entries(settings)[0];
+    return apiClient.post<Settings>("/settings", { key, value });
   },
 
   /**
