@@ -10,16 +10,24 @@ import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
-import type { RepoGroup, DiffStats } from "../types";
+import type { Workspace, RepoGroup, DiffStats } from "../types";
 
 /**
- * Fetch workspaces grouped by repository with polling
+ * Fetch workspaces grouped by repository with polling.
+ * Includes "initializing" workspaces so new ones appear immediately in the sidebar.
+ * Polls faster (2s) when any workspace is initializing to catch the ready transition.
  */
-export function useWorkspacesByRepo(state: string = "ready") {
+export function useWorkspacesByRepo(state: string = "ready,initializing") {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
-    refetchInterval: 10_000,
+    refetchInterval: (query) => {
+      const data = query.state.data as RepoGroup[] | undefined;
+      const hasInitializing = data?.some((g) =>
+        g.workspaces.some((w) => w.state === "initializing")
+      );
+      return hasInitializing ? 2_000 : 10_000;
+    },
     staleTime: 5000,
   });
 }
@@ -87,7 +95,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
           root_path: w.root_path,
           directory_name: w.directory_name,
           workspace_path: w.workspace_path,
-          parent_branch: w.parent_branch,
+          parent_branch: w.parent_branch ?? undefined,
           default_branch: w.default_branch,
         });
       });
@@ -223,15 +231,64 @@ export function useFileDiff(
 }
 
 /**
- * Create workspace mutation
+ * Create workspace mutation with optimistic update.
+ *
+ * Flow:
+ * 1. User clicks "+" → placeholder workspace appears instantly in sidebar
+ * 2. Backend creates workspace (state = "initializing"), returns it
+ * 3. onSuccess replaces placeholder with real data, triggers refetch
+ * 4. Polling (2s during init) catches the "ready" transition
  */
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
+  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
 
   return useMutation({
     mutationFn: (repositoryId: string) => WorkspaceService.create(repositoryId),
-    onSuccess: () => {
-      // Invalidate workspaces to trigger refetch
+
+    onMutate: async (repositoryId: string) => {
+      await queryClient.cancelQueries({ queryKey });
+
+      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
+
+      // Inject a placeholder workspace into the matching repo group
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          const repoGroup = draft.find((g) => g.repo_id === repositoryId);
+          if (repoGroup) {
+            repoGroup.workspaces.unshift({
+              id: `optimistic-${Date.now()}`,
+              repository_id: repositoryId,
+              directory_name: "",
+              display_name: null,
+              branch: null,
+              parent_branch: null,
+              state: "initializing",
+              active_session_id: null,
+              session_status: null,
+              model: null,
+              latest_message_sent_at: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              repo_name: repoGroup.repo_name,
+              root_path: "",
+              workspace_path: "",
+            } satisfies Workspace);
+          }
+        });
+      });
+
+      return { previousData };
+    },
+
+    onError: (_err, _repositoryId, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(queryKey, context.previousData);
+      }
+    },
+
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
   });
@@ -268,6 +325,7 @@ export function useBranches(workspacePath: string | null) {
  */
 export function useArchiveWorkspace() {
   const queryClient = useQueryClient();
+  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
 
   return useMutation({
     mutationFn: (workspaceId: string) => WorkspaceService.archive(workspaceId),
@@ -275,15 +333,13 @@ export function useArchiveWorkspace() {
     // Optimistic update: Remove workspace from UI immediately
     onMutate: async (workspaceId: string) => {
       // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
-      await queryClient.cancelQueries({ queryKey: queryKeys.workspaces.byRepo("ready") });
+      await queryClient.cancelQueries({ queryKey });
 
       // Snapshot the previous value
-      const previousData = queryClient.getQueryData<RepoGroup[]>(
-        queryKeys.workspaces.byRepo("ready")
-      );
+      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
 
       // Optimistically remove the workspace from the list
-      queryClient.setQueryData<RepoGroup[]>(queryKeys.workspaces.byRepo("ready"), (old) => {
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
         if (!old) return old;
         return produce(old, (draft) => {
           for (const repo of draft) {
@@ -305,7 +361,7 @@ export function useArchiveWorkspace() {
     // If mutation fails, roll back to the previous value
     onError: (_err, _workspaceId, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(queryKeys.workspaces.byRepo("ready"), context.previousData);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
     },
 

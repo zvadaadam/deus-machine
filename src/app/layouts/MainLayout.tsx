@@ -75,7 +75,7 @@ export function MainLayout() {
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
   // TanStack Query hooks - automatic polling and caching
-  const workspacesQuery = useWorkspacesByRepo("ready");
+  const workspacesQuery = useWorkspacesByRepo();
   const statsQuery = useStats();
 
   const repoGroups = workspacesQuery.data || [];
@@ -225,13 +225,25 @@ export function MainLayout() {
   );
 
   const handleNewWorkspace = useCallback(
-    (repoId?: string) => {
+    async (repoId?: string) => {
+      // When repoId is known (clicked "+" on a specific repo), skip the modal
       if (repoId) {
-        setSelectedRepoId(repoId);
+        setCreating(true);
+        try {
+          const workspace = await createWorkspaceMutation.mutateAsync(repoId);
+          selectWorkspace(workspace);
+        } catch (error) {
+          console.error("Error creating workspace:", error);
+          toast.error(extractErrorMessage(error));
+        } finally {
+          setCreating(false);
+        }
+        return;
       }
+      // No repo context — show the modal so user can pick one
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal]
+    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace]
   );
 
   async function saveSystemPrompt(newPrompt: string) {
