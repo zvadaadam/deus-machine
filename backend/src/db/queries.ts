@@ -292,5 +292,5 @@ export function getStats(db: Database.Database): StatsRow {
 // ─── Settings Queries ────────────────────────────────────────
 
 export function getAllSettingRows(db: Database.Database): SettingRow[] {
-  return db.prepare('SELECT key, value FROM settings').all() as SettingRow[];
+  return db.prepare('SELECT key, value, updated_at FROM settings').all() as SettingRow[];
 }

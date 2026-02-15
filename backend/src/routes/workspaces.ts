@@ -292,7 +292,8 @@ app.post('/workspaces', async (c) => {
   });
 
   const workspace = getWorkspaceWithRepo(db, workspaceId);
-  return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace!) });
+  if (!workspace) throw new NotFoundError('Workspace not found after creation');
+  return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
 // Create a new session for an existing workspace

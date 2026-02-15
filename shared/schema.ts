@@ -6,7 +6,7 @@
  *
  * Tables: repos, workspaces, sessions, session_messages, attachments, diff_comments, settings
  * Indexes: 10
- * Triggers: 8 (5 auto-update updated_at, 2 denormalized message_count, 1 auto-seq)
+ * Triggers: 7 (5 auto-update updated_at, 2 denormalized message_count + auto-seq)
  */
 /**
  * V1 → V2 migrations.
@@ -148,7 +148,7 @@ export const SCHEMA_SQL = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Indexes (9)
+  -- Indexes (10)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -181,7 +181,7 @@ export const SCHEMA_SQL = `
     AFTER UPDATE ON diff_comments
     BEGIN UPDATE diff_comments SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
-  -- Triggers: denormalized message_count + auto-seq on session_messages (3)
+  -- Triggers: denormalized message_count + auto-seq on session_messages (2)
   CREATE TRIGGER IF NOT EXISTS assign_message_seq
     AFTER INSERT ON session_messages
     BEGIN
