@@ -24,6 +24,7 @@ export interface AppSidebarProps {
   onWorkspaceClick: (workspace: Workspace) => void;
   onNewWorkspace: (repoId?: string) => void;
   onAddRepository?: () => void;
+  onCloneRepository?: () => void;
   onArchive?: (workspaceId: string) => void;
   profile?: {
     username: string;
@@ -81,5 +82,5 @@ export interface SidebarHeaderProps {
  */
 export interface SidebarFooterProps {
   onAddRepository?: () => void;
-  onOpenSettings?: () => void;
+  onCloneRepository?: () => void;
 }

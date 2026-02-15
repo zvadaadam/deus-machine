@@ -51,25 +51,25 @@ Frontend receives:
   Tauri event → useSessionEvents hook → invalidates React Query → UI updates
 ```
 
-## Database: Shared with Production Conductor
+## Database: Standalone Hive Database
 
-**Critical context**: Our app currently opens the **production Conductor app's database** directly:
+Our app owns its own SQLite database:
 
 ```
-~/Library/Application Support/com.conductor.app/conductor.db
+~/Library/Application Support/com.hivenet.app/hive.db
 ```
 
-The production Conductor binary (Rust/sqlx) owns the schema — its 75+ migrations created all 8 tables, 46 evolved columns, 8 indexes, 5 auto-update triggers, and the `last_user_message_at` denormalization on sessions. Our `initDatabase()` (`backend/src/lib/database.ts`) only creates a `settings` table and enables WAL mode. Everything else is inherited.
+`initDatabase()` (in both `backend/src/lib/database.ts` and `sidecar/db/index.ts`) creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in the corresponding `schema.ts` files. No external dependencies — the app is fully self-contained.
+
+**Schema (5 tables):** `repos`, `workspaces`, `sessions`, `session_messages`, `settings`
 
 **What this means for development:**
 
-- Indexes, triggers, and denormalized columns **already exist** — use them in queries
-- `sessions.last_user_message_at` is already populated — use it instead of correlated subqueries
-- `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session and Codex support
-- If the production app updates its schema, we get those changes automatically
-- If the production app isn't installed, our app will fail (no tables except `settings`)
-
-**Transition plan**: When we break away to our own database, `initDatabase()` will detect whether it's a production DB (has `_sqlx_migrations` table) or a fresh DB, and run a collapsed v1 schema that recreates the full production schema in one pass. See `.context/research/database-transition-strategy.md` for the full collapsed schema SQL and migration logic.
+- All indexes, triggers, and denormalized columns are created by our own schema — see `backend/src/lib/schema.ts`
+- `sessions.last_user_message_at` is maintained by app code — use it instead of correlated subqueries
+- `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session support
+- Both backend and sidecar access the same DB file (WAL mode enabled)
+- Rust passes `DATABASE_PATH` env var to both Node.js processes
 
 ## Rust vs Node.js Boundary
 
@@ -158,7 +158,7 @@ backend/src/
 ├── services/
 │   ├── claude.service.ts  Tool permission checking (canUseTool)
 │   ├── git.service.ts     Git utilities (web-mode fallback, workspace creation)
-│   ├── config.service.ts  File-based config (~/.conductor/)
+│   ├── config.service.ts  File-based config (~/.hive/)
 │   ├── settings.service.ts  SQLite key-value settings
 │   └── workspace.service.ts  City name generator for workspaces
 └── routes/
@@ -192,7 +192,7 @@ sidecar/
 │   ├── agent-handler.ts   Abstract agent handler interface + registry
 │   ├── env-builder.ts     Shell environment builder for agent processes
 │   ├── shell-env.ts       Host shell environment detection
-│   ├── conductor-tools.ts Conductor MCP tools (AskUser, Diff, Terminal, etc.)
+│   ├── hive-tools.ts      Hive MCP tools (AskUser, Diff, Terminal, etc.)
 │   └── claude/
 │       ├── claude-handler.ts    Claude Agent SDK integration
 │       ├── claude-discovery.ts  Claude CLI executable discovery
@@ -851,23 +851,20 @@ The single biggest offender is the N+1 pattern in the workspace list. Fixing tha
 
 ### Database Rules
 
-**Required indexes** — any new table or query pattern must have proper indexes. The production DB already has 8 indexes (see "Database: Shared with Production Conductor" above). When we create our own DB, these must be included in the v1 schema. For any new query pattern, add an index:
+**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `backend/src/lib/schema.ts` (and mirrored in `sidecar/db/schema.ts`). For any new query pattern, add an index to the schema:
 
 ```sql
--- Already exist in production DB:
--- idx_sessions_workspace_id, idx_session_messages_sent_at,
--- idx_session_messages_cancelled_at, idx_session_messages_turn_id,
--- idx_attachments_session_id, idx_attachments_session_message_id,
--- idx_attachments_is_draft, idx_diff_comments_workspace
-
--- Our additions (for our own DB init):
+-- Defined in schema.ts:
 CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
 CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_messages_sent_at ON session_messages(sent_at);
 CREATE INDEX IF NOT EXISTS idx_session_messages_session_role ON session_messages(session_id, role, created_at DESC);
 ```
 
-**No N+1 queries** — never run a subquery per row in a list endpoint. The workspace list currently runs a `latest_message_sent_at` correlated subquery even though `sessions.last_user_message_at` already exists in the production DB. **Use it directly**: `s.last_user_message_at as latest_message_sent_at`. When our code inserts a user message, it must also update this column. Prefer denormalization for frequently-JOINed aggregates over CTEs or window functions — it's simpler and proven at scale. When adding new list endpoints, always fetch related data in a single query or a batched second query, never in a loop.
+**No N+1 queries** — never run a subquery per row in a list endpoint. Use `sessions.last_user_message_at` directly instead of correlated subqueries: `s.last_user_message_at as latest_message_sent_at`. When our code inserts a user message, it must also update this column. Prefer denormalization for frequently-JOINed aggregates over CTEs or window functions — it's simpler and proven at scale. When adding new list endpoints, always fetch related data in a single query or a batched second query, never in a loop.
 
 **Paginate large collections** — session messages, file lists, and any unbounded collection must support pagination. Never return all rows from a table that can grow indefinitely. Default page size: 50-100 items.
 

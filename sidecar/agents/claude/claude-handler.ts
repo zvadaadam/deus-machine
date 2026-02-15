@@ -5,7 +5,11 @@
 import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
-import { saveAssistantMessage, saveToolResultMessage, updateSessionStatus } from "../../db/session-writer";
+import {
+  saveAssistantMessage,
+  saveToolResultMessage,
+  updateSessionStatus,
+} from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
@@ -435,7 +439,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Build environment using shared env-builder
       const envForClaude = buildAgentEnvironment({
         claudeEnvVars: options?.claudeEnvVars,
-        conductorEnv: options?.conductorEnv,
+        hiveEnv: options?.hiveEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });
@@ -527,13 +531,14 @@ export class ClaudeAgentHandler implements AgentHandler {
             const msg = cleanMessage.message as { content?: unknown };
             const content = msg.content;
             const hasToolResult =
-              Array.isArray(content) &&
-              content.some((b: any) => b?.type === "tool_result");
+              Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
             if (hasToolResult) {
               saveToolResultMessage(
                 sessionId,
                 cleanMessage.message as { id?: string; role?: string; content?: unknown },
-                typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null
+                typeof cleanMessage.parent_tool_use_id === "string"
+                  ? cleanMessage.parent_tool_use_id
+                  : null
               );
             }
           }

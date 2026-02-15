@@ -598,49 +598,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "conductor"
-version = "2.0.0"
-dependencies = [
- "aes",
- "anyhow",
- "base64 0.22.1",
- "block",
- "cbc",
- "chrono",
- "git2",
- "glob",
- "hmac",
- "ignore",
- "lazy_static",
- "libc",
- "objc",
- "parking_lot",
- "pbkdf2",
- "portable-pty",
- "rusqlite",
- "serde",
- "serde_json",
- "sha1",
- "sqlx",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-http",
- "tauri-plugin-notification",
- "tauri-plugin-shell",
- "tauri-plugin-sql",
- "tauri-plugin-updater",
- "tempfile",
- "thiserror 2.0.17",
- "time",
- "tokio",
- "url",
- "walkdir",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1891,6 +1848,49 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hive"
+version = "2.0.0"
+dependencies = [
+ "aes",
+ "anyhow",
+ "base64 0.22.1",
+ "block",
+ "cbc",
+ "chrono",
+ "git2",
+ "glob",
+ "hmac",
+ "ignore",
+ "lazy_static",
+ "libc",
+ "objc",
+ "parking_lot",
+ "pbkdf2",
+ "portable-pty",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sqlx",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-http",
+ "tauri-plugin-notification",
+ "tauri-plugin-shell",
+ "tauri-plugin-sql",
+ "tauri-plugin-updater",
+ "tempfile",
+ "thiserror 2.0.17",
+ "time",
+ "tokio",
+ "url",
+ "walkdir",
+]
 
 [[package]]
 name = "hkdf"

@@ -62,7 +62,7 @@ async function isBackendHealthResponse(response: Response): Promise<boolean> {
   if (!response.ok) return false;
   try {
     const data = await response.json();
-    return data?.app === "conductor-backend" && data?.status === "ok";
+    return data?.app === "hive-backend" && data?.status === "ok";
   } catch {
     return false;
   }
@@ -70,7 +70,7 @@ async function isBackendHealthResponse(response: Response): Promise<boolean> {
 
 async function discoverBackendPort(): Promise<number | null> {
   // Try localStorage first (fastest)
-  const stored = localStorage.getItem("conductor_backend_port");
+  const stored = localStorage.getItem("hive_backend_port");
   if (stored) {
     const port = parseInt(stored);
     try {
@@ -117,7 +117,7 @@ async function discoverBackendPort(): Promise<number | null> {
 
   if (foundPort) {
     if (import.meta.env.DEV) console.log(`[API] Discovered backend on port: ${foundPort}`);
-    localStorage.setItem("conductor_backend_port", foundPort.toString());
+    localStorage.setItem("hive_backend_port", foundPort.toString());
     return foundPort;
   }
 

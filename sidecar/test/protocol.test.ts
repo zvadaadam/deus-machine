@@ -109,7 +109,7 @@ describe("QueryRequestSchema", () => {
         permissionMode: "plan",
         claudeEnvVars: "FOO=bar",
         ghToken: "gh-token",
-        conductorEnv: { KEY: "value" },
+        hiveEnv: { KEY: "value" },
         additionalDirectories: ["/extra"],
         chromeEnabled: true,
         strictDataPrivacy: false,
@@ -210,7 +210,8 @@ describe("WorkspaceInitRequestSchema", () => {
 
   it("accepts any valid agent type", () => {
     expect(
-      WorkspaceInitRequestSchema.safeParse(buildWorkspaceInitRequest({ agentType: "codex" })).success
+      WorkspaceInitRequestSchema.safeParse(buildWorkspaceInitRequest({ agentType: "codex" }))
+        .success
     ).toBe(true);
   });
 });

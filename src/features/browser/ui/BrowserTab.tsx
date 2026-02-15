@@ -253,7 +253,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           // Clear any pending completion animation
           if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
           setCompletingLoad(false);
-          // Reset injection flag — new page context destroys window.__conductorVisuals
+          // Reset injection flag — new page context destroys window.__hiveVisuals
           automationInjectedRef.current = false;
           setHasLoaded(false);
           onUpdateTab(tabId, { loading: true });
@@ -270,7 +270,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       unlistenLoad = unsub;
     });
 
-    // Title change events (regular, non-conductor title changes)
+    // Title change events (regular, non-hive title changes)
     listen<{ label: string; title: string }>(
       "browser:title-changed",
       (evt: { payload: { label: string; title: string } }) => {

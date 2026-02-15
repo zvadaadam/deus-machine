@@ -1,11 +1,15 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import { SCHEMA_SQL } from './schema';
 
-const DB_PATH = path.join(
-  process.env.HOME!,
-  'Library/Application Support/com.conductor.app/conductor.db'
+const DEFAULT_DB_PATH = path.join(
+  process.env.HOME || os.homedir(),
+  'Library/Application Support/com.hivenet.app/hive.db'
 );
+
+const DB_PATH = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
 
 let dbInstance: Database.Database | null = null;
 
@@ -29,14 +33,8 @@ function initDatabase(): Database.Database {
     dbInstance.pragma('busy_timeout = 5000');
     dbInstance.pragma('optimize');
 
-    // Ensure settings table exists
-    dbInstance.exec(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TEXT DEFAULT (datetime('now'))
-      )
-    `);
+    // Create all tables, indexes, and triggers on first run
+    dbInstance.exec(SCHEMA_SQL);
 
     console.log('Database connected');
     return dbInstance;

@@ -35,7 +35,6 @@ export interface Message {
   content: string; // JSON-stringified MessageContent
   created_at: string;
   sent_at?: string | null; // ISO timestamp when message sent to Claude
-  full_message?: string | null; // Full message data (if different from content)
   cancelled_at?: string | null; // ISO timestamp when user cancels message
   model?: string | null; // Claude model used (e.g., 'sonnet')
   sdk_message_id?: string | null; // SDK-provided message identifier
@@ -102,17 +101,10 @@ export interface Session {
   id: string;
   workspace_id?: string; // From JOIN with workspaces table (not in sessions table)
   status: SessionStatus;
-  claude_session_id?: string | null; // Claude CLI session identifier
   unread_count?: number; // Number of unread messages
-  freshly_compacted?: number; // Compaction flag (0 or 1)
   context_token_count?: number; // Token count for context management
-  notes?: string | null; // User notes for the session
   created_at: string;
   updated_at: string;
   is_compacting: number; // Whether session is currently compacting (0 or 1)
-  model?: string | null; // Claude model being used
-  permission_mode?: string; // Permission mode ('default', 'approve_all', etc.)
-  thinking_level?: string; // Thinking verbosity level ('NONE', 'LOW', 'MEDIUM', 'HIGH')
   last_user_message_at?: string | null; // ISO timestamp of last user message
-  resume_session_at?: string | null; // ISO timestamp to resume session
 }

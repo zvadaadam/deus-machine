@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * End-to-End Test for Conductor Backend
+ * End-to-End Test for Hive Backend
  *
  * Tests the complete flow:
  * 1. Create a workspace
@@ -18,7 +18,12 @@ const Database = require('better-sqlite3');
 // Configuration
 const BACKEND_PORT = process.env.BACKEND_PORT || process.env.VITE_BACKEND_PORT || 60068;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
-const DB_PATH = require('path').join(process.env.HOME, 'Library/Application Support/com.conductor.app/conductor.db');
+const DB_PATH = process.env.DATABASE_PATH || (() => {
+  if (!process.env.HOME) {
+    throw new Error('HOME environment variable is not set. Please set DATABASE_PATH explicitly.');
+  }
+  return require('path').join(process.env.HOME, 'Library/Application Support/com.hivenet.app/hive.db');
+})();
 
 // Test state
 let testWorkspaceId = null;
@@ -390,7 +395,7 @@ async function runTests() {
     console.clear();
   }
   log('╔═══════════════════════════════════════════════════════════╗', 'cyan');
-  log('║         CONDUCTOR E2E TEST SUITE                          ║', 'cyan');
+  log('║         HIVE E2E TEST SUITE                                ║', 'cyan');
   log('╚═══════════════════════════════════════════════════════════╝', 'cyan');
 
   const results = [];

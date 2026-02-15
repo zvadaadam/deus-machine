@@ -140,6 +140,6 @@ export const TitleWithPR: Story = {
 /** Minimal — only repo name, no actions */
 export const MinimalRepoOnly: Story = {
   args: {
-    repositoryName: "conductor-ide",
+    repositoryName: "hive-ide",
   },
 };

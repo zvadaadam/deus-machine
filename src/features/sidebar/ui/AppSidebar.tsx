@@ -14,6 +14,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { FolderOpen } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
@@ -29,6 +30,7 @@ export function AppSidebar({
   onWorkspaceClick,
   onNewWorkspace,
   onAddRepository,
+  onCloneRepository,
   onArchive,
   diffStatsMap,
   profile = { username: "User" },
@@ -108,35 +110,51 @@ export function AppSidebar({
         isExpanded={isExpanded}
       />
 
-      {/* Repositories List - Single tree for smooth animations */}
-      <SidebarContent className="scrollbar-hidden">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={orderedRepositories.map((r) => r.repo_id)}
-            strategy={verticalListSortingStrategy}
+      {/* Repositories List or Empty State */}
+      {repositories.length === 0 ? (
+        <SidebarContent className="flex h-full items-center justify-center">
+          <div className="flex flex-col items-center gap-3 px-6 text-center">
+            <FolderOpen className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+            <div className="space-y-1">
+              <p className="text-text-secondary text-sm font-medium">No projects yet</p>
+              <p className="text-text-muted text-xs">Add your first project to get started</p>
+            </div>
+          </div>
+        </SidebarContent>
+      ) : (
+        <SidebarContent className="scrollbar-hidden">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <SidebarMenu className="gap-1 px-1.5 py-2">
-              {orderedRepositories.map((repo) => (
-                <DraggableRepository
-                  key={repo.repo_id}
-                  repository={repo}
-                  isCollapsed={collapsedRepos.has(repo.repo_id)}
-                  selectedWorkspaceId={selectedWorkspaceId}
-                  onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
-                  onWorkspaceClick={onWorkspaceClick}
-                  onNewWorkspace={onNewWorkspace}
-                  onArchive={onArchive}
-                  diffStatsMap={diffStatsMap}
-                  sidebarExpanded={isExpanded}
-                  dragDisabled={!isExpanded}
-                />
-              ))}
-            </SidebarMenu>
-          </SortableContext>
-        </DndContext>
-      </SidebarContent>
+            <SortableContext
+              items={orderedRepositories.map((r) => r.repo_id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <SidebarMenu className="gap-1 px-1.5 py-2">
+                {orderedRepositories.map((repo) => (
+                  <DraggableRepository
+                    key={repo.repo_id}
+                    repository={repo}
+                    isCollapsed={collapsedRepos.has(repo.repo_id)}
+                    selectedWorkspaceId={selectedWorkspaceId}
+                    onToggleCollapse={() => toggleRepoCollapse(repo.repo_id)}
+                    onWorkspaceClick={onWorkspaceClick}
+                    onNewWorkspace={onNewWorkspace}
+                    onArchive={onArchive}
+                    diffStatsMap={diffStatsMap}
+                    sidebarExpanded={isExpanded}
+                    dragDisabled={!isExpanded}
+                  />
+                ))}
+              </SidebarMenu>
+            </SortableContext>
+          </DndContext>
+        </SidebarContent>
+      )}
 
-      <SidebarFooter onAddRepository={onAddRepository} onOpenSettings={openSettingsModal} />
+      <SidebarFooter onAddRepository={onAddRepository} onCloneRepository={onCloneRepository} />
     </Sidebar>
   );
 }

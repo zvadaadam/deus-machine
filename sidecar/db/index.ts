@@ -6,10 +6,11 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { SCHEMA_SQL } from "./schema";
 
 const DEFAULT_DB_PATH = path.join(
   process.env.HOME || os.homedir(),
-  "Library/Application Support/com.conductor.app/conductor.db"
+  "Library/Application Support/com.hivenet.app/hive.db"
 );
 
 let dbInstance: Database.Database | null = null;
@@ -43,6 +44,9 @@ export function initDatabase(): Database.Database {
     dbInstance.pragma("journal_mode = WAL");
     dbInstance.pragma("foreign_keys = ON");
     dbInstance.pragma("busy_timeout = 5000");
+
+    // Create all tables, indexes, and triggers on first run
+    dbInstance.exec(SCHEMA_SQL);
 
     console.log("[SIDECAR-V2] Database connected");
     return dbInstance;
