@@ -21,7 +21,7 @@ export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFoo
             className="text-text-muted hover:text-text-tertiary flex items-center gap-2 transition-colors duration-150"
           >
             <Plus className="h-4 w-4 shrink-0" />
-            <span className="text-[13px]">Add project</span>
+            <span className="text-sm">Add project</span>
           </button>
         </PopoverTrigger>
         <PopoverContent side="top" align="start" className="w-56 p-1.5">

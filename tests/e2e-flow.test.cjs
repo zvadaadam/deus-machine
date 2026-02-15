@@ -18,7 +18,12 @@ const Database = require('better-sqlite3');
 // Configuration
 const BACKEND_PORT = process.env.BACKEND_PORT || process.env.VITE_BACKEND_PORT || 60068;
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
-const DB_PATH = process.env.DATABASE_PATH || require('path').join(process.env.HOME, 'Library/Application Support/com.hivenet.app/hive.db');
+const DB_PATH = process.env.DATABASE_PATH || (() => {
+  if (!process.env.HOME) {
+    throw new Error('HOME environment variable is not set. Please set DATABASE_PATH explicitly.');
+  }
+  return require('path').join(process.env.HOME, 'Library/Application Support/com.hivenet.app/hive.db');
+})();
 
 // Test state
 let testWorkspaceId = null;
