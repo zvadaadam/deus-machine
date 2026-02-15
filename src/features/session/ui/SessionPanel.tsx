@@ -1,9 +1,9 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Chat, MessageInput } from ".";
 import { useSocket } from "@/shared/hooks";
 import { useSessionActions, useSessionEvents } from "../hooks";
 import { SessionProvider } from "../context";
-import { useSessionWithMessages } from "../api/session.queries";
+import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import {
@@ -48,15 +48,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Custom hooks (useSocket manages socket connection lifecycle)
     useSocket();
 
-    // ✅ NEW: Listen for real-time session events from Tauri
+    // Real-time message updates: Tauri events (desktop) + incremental polling (web)
     useSessionEvents(sessionId);
 
     // TanStack Query hooks
     const {
-      session,
       messages,
+      hasOlder,
       sessionStatus,
-      isCompacting,
       latestMessageSentAt,
       loading,
       parseContent,
@@ -64,6 +63,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       parentToolUseMap,
       subagentMessages,
     } = useSessionWithMessages(sessionId);
+
+    // Load-older pagination
+    const loadOlderMutation = useLoadOlderMessages();
+    const handleLoadOlder = useCallback(() => {
+      if (loadOlderMutation.isPending || !messages.length) return;
+      const firstSeq = messages[0]?.seq;
+      if (firstSeq == null) return;
+      loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
+    }, [loadOlderMutation, messages, sessionId]);
 
     // DEBUG: Log session data
     if (import.meta.env.DEV) {
@@ -108,8 +116,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
 
-    // Derive context token count once to avoid duplication
-    const contextTokenCount = session?.context_token_count ?? 0;
+    // Context token count placeholder — not tracked in DB, always 0 for now
+    const contextTokenCount = 0;
 
     // Session actions using custom hook
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
@@ -162,6 +170,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               loading={loading}
               sessionStatus={sessionStatus}
               latestMessageSentAt={latestMessageSentAt}
+              hasOlder={hasOlder}
+              loadingOlder={loadOlderMutation.isPending}
+              onLoadOlder={handleLoadOlder}
               onStop={stopSession}
             />
 
@@ -227,13 +238,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     loading={loading}
                     sessionStatus={sessionStatus}
                     latestMessageSentAt={latestMessageSentAt}
+                    hasOlder={hasOlder}
+                    loadingOlder={loadOlderMutation.isPending}
+                    onLoadOlder={handleLoadOlder}
                     onStop={stopSession}
                   />
 
                   <MessageInput
                     messageInput={messageInput}
                     sending={sending}
-                    isCompacting={isCompacting}
                     sessionStatus={sessionStatus}
                     embedded={false}
                     model={model}

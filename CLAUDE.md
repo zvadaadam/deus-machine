@@ -10,6 +10,8 @@ We treat AI chat as a first-class citizen here, code it secondary.
 
 Desktop app built with Tauri (Rust) + React frontend + Node.js backend.
 
+**Desktop-only:** We only target the Tauri desktop app. Do not write web-specific fallbacks, browser-mode polling, or `isTauriEnv` conditionals for feature parity. The HTTP/Node.js backend exists as a service layer — not as a standalone web app. Tauri IPC and events are the primary data transport.
+
 ## System Architecture
 
 ```

@@ -8,6 +8,7 @@ mod apps;
 mod files;
 mod git;
 mod onboarding;
+mod db;
 
 pub use pty::*;
 pub use socket::*;
@@ -19,3 +20,4 @@ pub use apps::*;
 pub use files::*;
 pub use git::*;
 pub use onboarding::*;
+pub use db::*;

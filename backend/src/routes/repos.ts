@@ -6,22 +6,13 @@ import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { ValidationError, ConflictError } from '../lib/errors';
 import { detectDefaultBranch } from '../services/git.service';
+import { getAllRepos, getRepoByRootPath, getRepoById, getMaxRepoDisplayOrder } from '../db';
 
 const app = new Hono();
 
 app.get('/repos', (c) => {
   const db = getDatabase();
-  const repos = db.prepare(`
-    SELECT r.*,
-           COUNT(CASE WHEN w.state = 'ready' THEN 1 END) as ready_count,
-           COUNT(CASE WHEN w.state = 'archived' THEN 1 END) as archived_count,
-           COUNT(w.id) as total_count
-    FROM repos r
-    LEFT JOIN workspaces w ON w.repository_id = r.id
-    GROUP BY r.id
-    ORDER BY r.display_order, r.created_at DESC
-  `).all();
-  return c.json(repos);
+  return c.json(getAllRepos(db));
 });
 
 app.post('/repos', async (c) => {
@@ -48,18 +39,17 @@ app.post('/repos', async (c) => {
   const defaultBranch = detectDefaultBranch(root_path);
 
   const insertRepo = db.transaction((root_path: string, repoId: string, repoName: string, defaultBranch: string) => {
-    const existing = db.prepare('SELECT * FROM repos WHERE root_path = ?').get(root_path);
+    const existing = getRepoByRootPath(db, root_path);
     if (existing) throw new ConflictError('Repository already exists', existing);
 
-    const maxOrder = db.prepare('SELECT MAX(display_order) as max FROM repos').get() as any;
-    const displayOrder = (maxOrder?.max || 0) + 1;
+    const displayOrder = getMaxRepoDisplayOrder(db) + 1;
 
     db.prepare(`
       INSERT INTO repos (id, name, root_path, default_branch, display_order, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(repoId, repoName, root_path, defaultBranch, displayOrder);
 
-    return db.prepare('SELECT * FROM repos WHERE id = ?').get(repoId);
+    return getRepoById(db, repoId);
   });
 
   const repoId = randomUUID();

@@ -10,11 +10,11 @@ import { SidebarRow, SidebarRowIconSlot } from "./SidebarRow";
 
 /**
  * Whether this status shows an icon in the 20x20 slot.
- * working → PixelGrid generating, compacting → PixelGrid compacting,
- * unread → gold dot, error → red dot. Only idle shows no icon (26px padding).
+ * working → PixelGrid generating, unread → gold dot, error → red dot.
+ * Only idle shows no icon (26px padding).
  */
 const hasStatusIcon = (status: string) =>
-  status === "working" || status === "unread" || status === "error" || status === "compacting";
+  status === "working" || status === "unread" || status === "error";
 
 /**
  * WorkspaceItem — Sidebar workspace row
@@ -26,8 +26,8 @@ const hasStatusIcon = (status: string) =>
  *   Right:
  *     [+additions -deletions]
  *
- * Icons: working → PixelGrid generating, compacting → PixelGrid compacting,
- * error → red dot, unread → gold dot. Idle → no icon (26px indent).
+ * Icons: working → PixelGrid generating, error → red dot, unread → gold dot.
+ * Idle → no icon (26px indent).
  */
 export const WorkspaceItem = React.memo(function WorkspaceItem({
   workspace,
@@ -71,8 +71,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         return "text-text-secondary";
       case "error":
         return "text-accent-red-muted";
-      case "compacting":
-        return "text-text-tertiary";
       default:
         return "text-text-disabled";
     }
@@ -81,11 +79,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   const getStatusText = () => {
     if (workspace.state === "archived" || !workspace.session_status) return "Archived";
     if (displayStatus === "idle") return formatTime(workspace.updated_at);
-    if (displayStatus === "unread") return "Needs review";
+    if (displayStatus === "unread") return "Needs response";
     if (displayStatus === "working") {
       return duration > 0 ? formatDuration(duration, false) : STATUS_CONFIG.working.labelActive;
     }
-    if (displayStatus === "compacting") return STATUS_CONFIG.compacting.labelActive;
     if (displayStatus === "error") return STATUS_CONFIG.error.label;
     return statusConfig.label;
   };
@@ -107,10 +104,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   const isArchived = workspace.state === "archived";
   const canArchive = !isArchived && !!onArchive;
   const isActiveState =
-    displayStatus === "working" ||
-    displayStatus === "unread" ||
-    displayStatus === "error" ||
-    displayStatus === "compacting";
+    displayStatus === "working" || displayStatus === "unread" || displayStatus === "error";
 
   return (
     <li>
@@ -139,8 +133,6 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               <SidebarRowIconSlot>
                 {displayStatus === "working" ? (
                   <PixelGrid variant="generating" size={14} />
-                ) : displayStatus === "compacting" ? (
-                  <PixelGrid variant="compacting" size={14} />
                 ) : displayStatus === "error" ? (
                   <span className="bg-accent-red h-2 w-2 rounded-full" />
                 ) : (

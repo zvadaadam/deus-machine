@@ -4,21 +4,21 @@ import { WorkspaceItem } from "./WorkspaceItem";
 
 const BASE_WORKSPACE: Workspace = {
   id: "ws-1",
+  repository_id: "repo-1",
   directory_name: "addis-ababa",
+  display_name: "Addis Ababa",
   branch: "zvadaadam/restart-dev-server",
+  parent_branch: "main",
   state: "ready",
   active_session_id: "session-1",
   session_status: "idle",
-  is_compacting: 0,
-  context_token_count: 0,
+  model: "sonnet",
   latest_message_sent_at: new Date(Date.now() - 120_000).toISOString(),
   created_at: new Date().toISOString(),
   updated_at: new Date(Date.now() - 120_000).toISOString(),
   repo_name: "sample-backend",
   root_path: "/code/sample-backend",
-  workspace_path: "/code/sample-backend/.worktrees/addis-ababa",
-  unread: 0,
-  session_unread: 0,
+  workspace_path: "/code/sample-backend/.hive/addis-ababa",
 };
 
 function ws(overrides: Partial<Workspace>): Workspace {
@@ -72,14 +72,13 @@ export const AllStates: Story = {
           onArchive={noop}
         />
 
-        {/* Unread — gold dot + "Needs review" */}
+        {/* Unread — gold dot + "Needs response" */}
         <WorkspaceItem
           workspace={ws({
             id: "unread",
-            session_status: "idle",
+            session_status: "needs_response",
             branch: "zvadaadam/fix-websocket-conn",
             directory_name: "rome-v1",
-            unread: 3,
             updated_at: new Date(Date.now() - 600_000).toISOString(),
           })}
           isActive={false}
@@ -99,21 +98,6 @@ export const AllStates: Story = {
           })}
           isActive={false}
           diffStats={{ additions: 1131, deletions: 297 }}
-          onClick={noop}
-          onArchive={noop}
-        />
-
-        {/* Compacting — PixelGrid compacting animation */}
-        <WorkspaceItem
-          workspace={ws({
-            id: "compacting",
-            session_status: "compacting",
-            branch: "zvadaadam/sidecar-mcp-server",
-            directory_name: "pattaya",
-            is_compacting: 1,
-          })}
-          isActive={false}
-          diffStats={{ additions: 537, deletions: 17 }}
           onClick={noop}
           onArchive={noop}
         />
@@ -195,10 +179,9 @@ export const WorkingSelected: Story = {
 export const Unread: Story = {
   args: {
     workspace: ws({
-      session_status: "idle",
+      session_status: "needs_response",
       branch: "zvadaadam/fix-websocket-conn",
       directory_name: "rome-v1",
-      unread: 3,
     }),
     isActive: false,
     diffStats: { additions: 229, deletions: 12 },
@@ -209,10 +192,9 @@ export const Unread: Story = {
 export const UnreadSelected: Story = {
   args: {
     workspace: ws({
-      session_status: "idle",
+      session_status: "needs_response",
       branch: "zvadaadam/fix-websocket-conn",
       directory_name: "rome-v1",
-      unread: 3,
     }),
     isActive: true,
     diffStats: { additions: 229, deletions: 12 },
@@ -229,20 +211,6 @@ export const Error: Story = {
     }),
     isActive: false,
     diffStats: { additions: 1131, deletions: 297 },
-  },
-};
-
-/** Compacting — PixelGrid compacting animation */
-export const Compacting: Story = {
-  args: {
-    workspace: ws({
-      session_status: "compacting",
-      branch: "zvadaadam/sidecar-mcp-server",
-      directory_name: "pattaya",
-      is_compacting: 1,
-    }),
-    isActive: false,
-    diffStats: { additions: 537, deletions: 17 },
   },
 };
 
