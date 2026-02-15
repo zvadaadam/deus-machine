@@ -42,9 +42,8 @@ app.get('/sessions/:id', (c) => {
 app.get('/sessions/:id/messages', (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
-  // Default limit high enough to avoid silent truncation until pagination UI is built.
-  // Cap at 5000 to prevent unbounded responses.
-  const limit = Math.min(Number(c.req.query('limit')) || 5000, 5000);
+  // Default to 50 messages per page; cap at 500 for safety.
+  const limit = Math.min(Number(c.req.query('limit')) || 50, 500);
   // Cursor is seq (integer), not sent_at (string with collisions)
   const beforeRaw = c.req.query('before');
   const afterRaw = c.req.query('after');

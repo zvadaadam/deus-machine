@@ -62,9 +62,9 @@ export const SessionService = {
       }
     }
     const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.before) searchParams.set("before", String(params.before));
-    if (params?.after) searchParams.set("after", String(params.after));
+    if (params?.limit != null) searchParams.set("limit", String(params.limit));
+    if (params?.before != null) searchParams.set("before", String(params.before));
+    if (params?.after != null) searchParams.set("after", String(params.after));
     const qs = searchParams.toString();
     const url = qs ? `${ENDPOINTS.SESSION_MESSAGES(id)}?${qs}` : ENDPOINTS.SESSION_MESSAGES(id);
     return apiClient.get<PaginatedMessages>(url);

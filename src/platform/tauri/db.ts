@@ -31,7 +31,7 @@ export function dbGetMessages(
   opts?: { limit?: number; before?: number; after?: number }
 ): Promise<PaginatedMessages> {
   return invoke<PaginatedMessages>("db_get_messages", {
-    sessionId,
+    session_id: sessionId,
     limit: opts?.limit ?? null,
     before: opts?.before ?? null,
     after: opts?.after ?? null,
