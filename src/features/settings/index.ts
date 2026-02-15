@@ -1,3 +1,3 @@
-export { SettingsModal } from "./ui";
+export { SettingsSidebar, SettingsPage } from "./ui";
 export * from "./api";
 export type * from "./types";
