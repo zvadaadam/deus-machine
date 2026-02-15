@@ -20,11 +20,13 @@ export function useWindowResizing(): void {
   useEffect(() => {
     if (!isTauriEnv) return;
 
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
 
     (async () => {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        if (cancelled) return;
         unlisten = await getCurrentWindow().onResized(() => {
           document.documentElement.classList.add("window-resizing");
           clearTimeout(timeoutRef.current);
@@ -32,12 +34,15 @@ export function useWindowResizing(): void {
             document.documentElement.classList.remove("window-resizing");
           }, DEBOUNCE_MS);
         });
+        // If unmount happened while awaiting onResized, clean up immediately
+        if (cancelled) unlisten();
       } catch {
         // Not in Tauri environment
       }
     })();
 
     return () => {
+      cancelled = true;
       unlisten?.();
       clearTimeout(timeoutRef.current);
       document.documentElement.classList.remove("window-resizing");
