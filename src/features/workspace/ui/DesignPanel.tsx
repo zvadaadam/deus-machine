@@ -78,10 +78,7 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
 
       {/* Empty state — promote pencil.dev */}
       {isEmpty && (
-        <div
-          className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center"
-          style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
-        >
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center animate-fade-in-up">
           <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <PenTool className="text-muted-foreground/50 h-5 w-5" />
           </div>

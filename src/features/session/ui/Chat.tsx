@@ -376,10 +376,7 @@ export function Chat({
             <Skeleton className="h-4 w-[80%]" />
           </div>
         ) : messages.length === 0 ? (
-          <div
-            className="flex h-full flex-col items-center justify-center gap-3"
-            style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
-          >
+          <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
             <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
               <MessageSquare className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
             </div>
