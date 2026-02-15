@@ -17,7 +17,7 @@ import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useSession } from "../context";
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
 // Pull spacing from theme for consistency
@@ -103,6 +103,9 @@ interface ChatProps {
   sessionStatus: SessionStatus;
   latestMessageSentAt?: string | null;
   onStop?: () => void; // Callback to stop/cancel the session
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
   className?: string;
 }
 
@@ -111,6 +114,9 @@ export function Chat({
   loading,
   sessionStatus,
   latestMessageSentAt,
+  hasOlder = false,
+  loadingOlder = false,
+  onLoadOlder,
   className,
 }: ChatProps) {
   const { parseContent, toolResultMap, parentToolUseMap } = useSession();
@@ -120,7 +126,7 @@ export function Chat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
 
-  const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
+  const { showScrollButton, hasNewMessages, handleScrollToBottomClick } = useAutoScroll({
     messages,
     messagesContainerRef,
     messagesEndRef,
@@ -134,6 +140,14 @@ export function Chat({
   // (no stagger). We mark all initial messages as "seen" on first render.
   const initialLoadDone = useRef(false);
 
+  // Load-older sentinel ref (placed at top of message list)
+  const loadOlderSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Scroll position preservation for prepend (load-older).
+  // Track the first message seq so we can detect prepends and restore scroll position.
+  const prevFirstSeqRef = useRef<number | null>(null);
+  const prevScrollGeometryRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+
   useEffect(() => {
     if (!initialLoadDone.current && messages.length > 0) {
       // Mark all existing messages as seen so they don't animate
@@ -141,6 +155,74 @@ export function Chat({
       initialLoadDone.current = true;
     }
   }, [messages]);
+
+  // Capture scroll geometry BEFORE React commits new DOM (for prepend preservation).
+  // This runs synchronously before paint via useLayoutEffect.
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !messages.length) return;
+
+    const firstSeq = messages[0]?.seq;
+    const prevFirstSeq = prevFirstSeqRef.current;
+
+    // Detect prepend: first message's seq decreased (older messages were added at the front)
+    if (prevFirstSeq !== null && firstSeq < prevFirstSeq) {
+      const prev = prevScrollGeometryRef.current;
+      if (prev) {
+        // Restore scroll position: offset by the height delta from prepended content
+        const heightDelta = container.scrollHeight - prev.scrollHeight;
+        container.scrollTop = prev.scrollTop + heightDelta;
+      }
+
+      // Mark all prepended messages as "seen" so they don't get entrance animation
+      messages.forEach((m) => {
+        if (m.seq < prevFirstSeq) {
+          seenMessageIds.current.add(m.id);
+        }
+      });
+    }
+
+    prevFirstSeqRef.current = firstSeq;
+  }, [messages, messagesContainerRef]);
+
+  // Capture scroll geometry after every render for the next prepend comparison
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      prevScrollGeometryRef.current = {
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+    }
+  });
+
+  // IntersectionObserver for load-older sentinel (triggers when scrolling near top)
+  useEffect(() => {
+    const sentinel = loadOlderSentinelRef.current;
+    const container = messagesContainerRef.current;
+    if (!sentinel || !container || !hasOlder || !onLoadOlder) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !loadingOlder) {
+          // Capture scroll geometry right before triggering load
+          prevScrollGeometryRef.current = {
+            scrollHeight: container.scrollHeight,
+            scrollTop: container.scrollTop,
+          };
+          onLoadOlder();
+        }
+      },
+      {
+        root: container,
+        rootMargin: "200px 0px 0px 0px", // Trigger 200px before reaching top
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [messagesContainerRef, hasOlder, loadingOlder, onLoadOlder]);
 
   // Track working duration
   const { formattedDuration } = useWorkingDuration({
@@ -317,6 +399,19 @@ export function Chat({
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">
+              {/* Load-older sentinel — triggers IntersectionObserver when near top */}
+              {hasOlder && (
+                <div ref={loadOlderSentinelRef} className="flex justify-center py-3">
+                  {loadingOlder && (
+                    <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5">
+                      <div className="border-foreground/20 border-t-foreground/60 h-3.5 w-3.5 animate-spin rounded-full border-2" />
+                      <span className="text-muted-foreground text-xs">
+                        Loading earlier messages
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
               {/* eslint-disable-next-line react-hooks/refs */}
               {turns.map((turn, turnIndex) => {
                 const prevTurn = turnIndex > 0 ? turns[turnIndex - 1] : null;
@@ -431,13 +526,16 @@ export function Chat({
         <Button
           variant="secondary"
           size="icon"
-          className="rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
+          className="relative rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
           onClick={handleScrollToBottomClick}
-          title="Scroll to bottom"
-          aria-label="Scroll to bottom"
+          title={hasNewMessages ? "New messages below" : "Scroll to bottom"}
+          aria-label={hasNewMessages ? "New messages below" : "Scroll to bottom"}
           aria-controls="chat-messages"
         >
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          {hasNewMessages && (
+            <span className="bg-primary absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full" />
+          )}
         </Button>
       </div>
     </div>

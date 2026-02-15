@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SCHEMA_SQL } from './schema';
+import { SCHEMA_SQL, V2_MIGRATIONS, V2_BACKFILL_SEQ } from './schema';
 
 const DEFAULT_DB_PATH = path.join(
   process.env.HOME || os.homedir(),
@@ -33,8 +33,22 @@ function initDatabase(): Database.Database {
     dbInstance.pragma('busy_timeout = 5000');
     dbInstance.pragma('optimize');
 
-    // Create all tables, indexes, and triggers on first run
+    // V1 → V2 migrations: add new columns to existing tables.
+    // Each ALTER TABLE may fail with "duplicate column" if already applied — skip those.
+    for (const sql of V2_MIGRATIONS) {
+      try {
+        dbInstance.exec(sql);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (!msg.includes('duplicate column')) throw e;
+      }
+    }
+
+    // Create all tables, indexes, and triggers (idempotent)
     dbInstance.exec(SCHEMA_SQL);
+
+    // Backfill seq for existing messages that predate the auto-seq trigger
+    dbInstance.exec(V2_BACKFILL_SEQ);
 
     console.log('Database connected');
     return dbInstance;

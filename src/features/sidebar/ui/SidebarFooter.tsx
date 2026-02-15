@@ -24,14 +24,14 @@ export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFoo
             <span className="text-sm">Add project</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent side="top" align="start" className="w-56 p-1.5">
+        <PopoverContent side="top" align="start" className="w-60 p-2">
           <button
             type="button"
             onClick={() => {
               setOpen(false);
               onAddRepository?.();
             }}
-            className="hover:bg-bg-elevated flex w-full items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150"
+            className="hover:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
           >
             <FolderPlus className="text-text-muted h-4 w-4 shrink-0" />
             <div className="min-w-0 text-left">
@@ -45,7 +45,7 @@ export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFoo
               setOpen(false);
               onCloneRepository?.();
             }}
-            className="hover:bg-bg-elevated flex w-full items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150"
+            className="hover:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
           >
             <Github className="text-text-muted h-4 w-4 shrink-0" />
             <div className="min-w-0 text-left">

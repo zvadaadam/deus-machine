@@ -7,6 +7,7 @@ import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
 import { isTauriAvailable } from "@/platform/tauri/invoke";
 import { gitDiffStats, gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
+import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
 
@@ -36,9 +37,18 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch workspaces grouped by repository
+   * Fetch workspaces grouped by repository.
+   * Uses Rust/rusqlite via Tauri IPC when available (~1ms),
+   * falls back to Node.js HTTP when in web mode (~50-200ms).
    */
   fetchByRepo: async (state?: string): Promise<RepoGroup[]> => {
+    if (isTauriAvailable()) {
+      try {
+        return await dbGetWorkspacesByRepo(state);
+      } catch {
+        // Rust DB failed — fall through to HTTP
+      }
+    }
     const query = state ? `?state=${state}` : "";
     return apiClient.get<RepoGroup[]>(`${ENDPOINTS.WORKSPACES_BY_REPO}${query}`);
   },

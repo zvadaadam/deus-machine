@@ -55,6 +55,7 @@ export function useAutoScroll({
 }: UseAutoScrollOptions) {
   // --- Core state ---
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
 
   // Refs for values that observers/timers need without triggering re-renders.
   const scrollStateRef = useRef<ScrollState>("AT_BOTTOM");
@@ -74,6 +75,8 @@ export function useAutoScroll({
   const transitionTo = useCallback((next: ScrollState) => {
     scrollStateRef.current = next;
     setShowScrollButton(next === "READING_HISTORY");
+    // Clear "new messages" indicator when user returns to bottom
+    if (next === "AT_BOTTOM") setHasNewMessages(false);
   }, []);
 
   /** Check prefers-reduced-motion once per call (cheap matchMedia check). */
@@ -261,7 +264,12 @@ export function useAutoScroll({
     }
 
     // For assistant messages, only auto-scroll if user is at bottom.
-    if (scrollStateRef.current !== "READING_HISTORY") {
+    if (scrollStateRef.current === "READING_HISTORY") {
+      // User is scrolled up — flag new messages for the pill indicator
+      requestAnimationFrame(() => {
+        setHasNewMessages(true);
+      });
+    } else {
       requestAnimationFrame(() => {
         const container = messagesContainerRef.current;
         if (container) container.scrollTop = container.scrollHeight;
@@ -288,6 +296,7 @@ export function useAutoScroll({
 
   return {
     showScrollButton,
+    hasNewMessages,
     scrollToBottom,
     handleScrollToBottomClick,
   };

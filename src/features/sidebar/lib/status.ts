@@ -7,25 +7,21 @@
  * @see src/features/session/types.ts for SessionStatus type definition
  */
 
-import type { SessionStatus } from "@/features/session/types";
 import type { Workspace } from "@/features/workspace/types";
 
 /**
- * Display status extends SessionStatus with derived states
- * 'unread' is derived from workspace.unread or session.unread_count
+ * Display status extends SessionStatus with derived states.
+ * 'unread' is derived from needs_response / needs_plan_response session status.
  */
-export type DisplayStatus =
-  | Exclude<SessionStatus, "needs_plan_response" | "needs_response">
-  | "unread";
+export type DisplayStatus = "idle" | "working" | "error" | "unread";
 
 /**
  * Priority levels for sorting (higher = more urgent)
  */
 export enum StatusPriority {
   ERROR = 4, // Critical - something broke
-  UNREAD = 3, // Important - needs review
+  UNREAD = 3, // Important - needs review / response
   WORKING = 2, // Active - in progress
-  COMPACTING = 1, // Maintenance - background
   IDLE = 0, // Dormant - no activity
 }
 
@@ -74,8 +70,8 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
   },
   unread: {
     priority: StatusPriority.UNREAD,
-    label: "Needs Review",
-    labelActive: "Unread",
+    label: "Needs Response",
+    labelActive: "Awaiting Input",
     badge: "bg-status-unread text-status-unread-fg",
     border: "border-status-unread/60",
     text: "text-status-unread",
@@ -90,16 +86,6 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
     border: "border-primary/60",
     text: "text-primary",
     bg: "bg-primary/10",
-    pulse: true,
-  },
-  compacting: {
-    priority: StatusPriority.COMPACTING,
-    label: "Compacting",
-    labelActive: "Compacting...",
-    badge: "bg-status-compacting text-status-compacting-fg",
-    border: "border-status-compacting/60",
-    text: "text-status-compacting",
-    bg: "bg-status-compacting/10",
     pulse: true,
   },
   idle: {
@@ -118,54 +104,30 @@ export const STATUS_CONFIG: Record<DisplayStatus, StatusConfig> = {
  * Derive display status from workspace data
  *
  * Priority logic:
- * 1. Error (if tool_result.is_error in recent messages) - NOT IMPLEMENTED YET
- * 2. Unread (if workspace.unread > 0 or session.unread > 0)
- * 3. Session status (working, compacting, idle)
- *
- * TODO: Implement error detection by checking latest messages for tool_result.is_error
- * Requires: useMessages hook and message parsing logic
+ * 1. Error — session in error state
+ * 2. Unread — agent needs user response (needs_response / needs_plan_response)
+ * 3. Working — agent actively processing
+ * 4. Idle — dormant
  *
  * @param workspace Workspace data with session info
  * @returns Derived display status for UI rendering
  */
 export function getDisplayStatus(workspace: Workspace): DisplayStatus {
-  // 1) Error status (highest priority)
-  if (workspace.session_status === "error") {
-    return "error";
-  }
+  const status = workspace.session_status;
 
-  // 2) Check for unread messages (highest non-error priority)
-  const hasUnread =
-    (workspace.unread && workspace.unread > 0) ||
-    (workspace.session_unread && workspace.session_unread > 0);
-
-  if (hasUnread) {
-    return "unread";
-  }
-
-  // 3) Map session status to display status
-  // Handle statuses that don't have direct UI mappings
-  const sessionStatus = workspace.session_status;
-  if (sessionStatus === "needs_plan_response" || sessionStatus === "needs_response") {
-    return "unread"; // Treat as needing attention
-  }
-  if (sessionStatus === "working") {
-    return "working";
-  }
-  if (sessionStatus === "compacting") {
-    return "compacting";
-  }
+  if (status === "error") return "error";
+  if (status === "needs_response" || status === "needs_plan_response") return "unread";
+  if (status === "working") return "working";
   return "idle";
 }
 
 /**
- * Get total unread count for a workspace
- * Combines workspace-level and session-level unread counters
+ * Check if workspace needs user attention.
+ * In V2, attention state is derived from session_status (needs_response / needs_plan_response).
  */
 export function getUnreadCount(workspace: Workspace): number {
-  const workspaceUnread = workspace.unread || 0;
-  const sessionUnread = workspace.session_unread || 0;
-  return Math.max(workspaceUnread, sessionUnread);
+  const status = workspace.session_status;
+  return status === "needs_response" || status === "needs_plan_response" ? 1 : 0;
 }
 
 /**
@@ -229,7 +191,6 @@ export function getStatusCounts(workspaces: Workspace[]): Record<DisplayStatus, 
     error: 0,
     unread: 0,
     working: 0,
-    compacting: 0,
     idle: 0,
   };
 
