@@ -20,7 +20,14 @@ import { StringDecoder } from "string_decoder";
  */
 
 const SIDECAR_DIR = path.resolve(__dirname, "..");
-const BUNDLE_PATH = path.resolve(SIDECAR_DIR, "..", "src-tauri", "resources", "bin", "index.bundled.cjs");
+const BUNDLE_PATH = path.resolve(
+  SIDECAR_DIR,
+  "..",
+  "src-tauri",
+  "resources",
+  "bin",
+  "index.bundled.cjs"
+);
 
 // The workspace root — a real git repo for integration tests
 const WORKSPACE_ROOT = path.resolve(SIDECAR_DIR, "..");
@@ -151,11 +158,7 @@ async function spawnSidecar(): Promise<{
   const socketPath = await new Promise<string>((resolve, reject) => {
     let stdoutBuffer = "";
     const timeout = setTimeout(() => {
-      reject(
-        new Error(
-          `Sidecar did not print SOCKET_PATH within 15s. stderr: ${stderrOutput}`
-        )
-      );
+      reject(new Error(`Sidecar did not print SOCKET_PATH within 15s. stderr: ${stderrOutput}`));
     }, 15_000);
 
     proc.stdout?.on("data", (data) => {
@@ -175,10 +178,7 @@ async function spawnSidecar(): Promise<{
 
   // Connect to the sidecar's Unix domain socket
   const client = await new Promise<net.Socket>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("Client connection timed out")),
-      5000
-    );
+    const timeout = setTimeout(() => reject(new Error("Client connection timed out")), 5000);
     const sock = net.connect(socketPath, () => {
       clearTimeout(timeout);
       resolve(sock);
@@ -189,7 +189,7 @@ async function spawnSidecar(): Promise<{
     });
   });
 
-  const logPath = `/tmp/conductor-${proc.pid}.log`;
+  const logPath = `/tmp/hive-${proc.pid}.log`;
 
   return { process: proc, socketPath, client, logPath };
 }
@@ -242,7 +242,7 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   it("connects to the sidecar's Unix socket", () => {
     expect(client).toBeDefined();
     expect(socketPath).toBeDefined();
-    expect(socketPath).toContain("conductor-sidecar-");
+    expect(socketPath).toContain("hive-sidecar-");
   });
 
   it("handles an unknown JSON-RPC method gracefully", async () => {
@@ -322,250 +322,240 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
 // Suite 2: Real Claude integration (requires Claude CLI + bundle)
 // ============================================================================
 
-describe.skipIf(!bundleExists || !claudeCliAvailable)(
-  "E2E: Real Claude Integration",
-  () => {
-    let sidecarProcess: ChildProcess;
-    let socketPath: string;
-    let client: net.Socket;
-    let logPath: string;
+describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integration", () => {
+  let sidecarProcess: ChildProcess;
+  let socketPath: string;
+  let client: net.Socket;
+  let logPath: string;
 
-    beforeAll(async () => {
-      const sidecar = await spawnSidecar();
-      sidecarProcess = sidecar.process;
-      socketPath = sidecar.socketPath;
-      client = sidecar.client;
-      logPath = sidecar.logPath;
-    }, 30_000);
+  beforeAll(async () => {
+    const sidecar = await spawnSidecar();
+    sidecarProcess = sidecar.process;
+    socketPath = sidecar.socketPath;
+    client = sidecar.client;
+    logPath = sidecar.logPath;
+  }, 30_000);
 
-    afterAll(async () => {
-      await killSidecar({ process: sidecarProcess, socketPath, client });
+  afterAll(async () => {
+    await killSidecar({ process: sidecarProcess, socketPath, client });
+  });
+
+  // ------------------------------------------------------------------
+  // Claude CLI discovery
+  // ------------------------------------------------------------------
+
+  it("discovers Claude CLI during initialization", () => {
+    // The sidecar log records whether initialization succeeded
+    const log = fs.readFileSync(logPath, "utf-8");
+    expect(log).toContain("Claude executable initialized with version:");
+    expect(log).toContain("handler initialized successfully");
+    // Must NOT contain the initialization failure message
+    expect(log).not.toContain("initialization failed");
+  });
+
+  // ------------------------------------------------------------------
+  // Authentication check (real Claude SDK call)
+  // ------------------------------------------------------------------
+
+  it("returns real account info via claudeAuth", async () => {
+    const id = sendRequest(client, "claudeAuth", {
+      type: "claude_auth",
+      id: "test-auth-real",
+      agentType: "claude",
+      options: { cwd: WORKSPACE_ROOT },
     });
 
-    // ------------------------------------------------------------------
-    // Claude CLI discovery
-    // ------------------------------------------------------------------
+    const response = await waitForMessage(
+      client,
+      (msg) => msg.jsonrpc === "2.0" && msg.id === id,
+      30_000
+    );
 
-    it("discovers Claude CLI during initialization", () => {
-      // The sidecar log records whether initialization succeeded
-      const log = fs.readFileSync(logPath, "utf-8");
-      expect(log).toContain("Claude executable initialized with version:");
-      expect(log).toContain("handler initialized successfully");
-      // Must NOT contain the initialization failure message
-      expect(log).not.toContain("initialization failed");
+    expect(response.jsonrpc).toBe("2.0");
+    expect(response.id).toBe(id);
+    // Should have a result (not an error) if Claude is authenticated
+    expect(response.result).toBeDefined();
+    expect(response.result.type).toBe("claude_auth_output");
+    expect(response.result.agentType).toBe("claude");
+    // accountInfo should have real data (email, org, etc.) or an error string
+    const hasAccountInfo = response.result.accountInfo !== undefined;
+    const hasError = response.result.error !== undefined;
+    expect(hasAccountInfo || hasError).toBe(true);
+  }, 30_000);
+
+  // ------------------------------------------------------------------
+  // Workspace initialization (real Claude SDK call)
+  // ------------------------------------------------------------------
+
+  it("returns slash commands and MCP servers via workspaceInit", async () => {
+    const id = sendRequest(client, "workspaceInit", {
+      type: "workspace_init",
+      id: "test-workspace-init",
+      agentType: "claude",
+      options: { cwd: WORKSPACE_ROOT },
     });
 
-    // ------------------------------------------------------------------
-    // Authentication check (real Claude SDK call)
-    // ------------------------------------------------------------------
+    const response = await waitForMessage(
+      client,
+      (msg) => msg.jsonrpc === "2.0" && msg.id === id,
+      30_000
+    );
 
-    it("returns real account info via claudeAuth", async () => {
-      const id = sendRequest(client, "claudeAuth", {
-        type: "claude_auth",
-        id: "test-auth-real",
-        agentType: "claude",
-        options: { cwd: WORKSPACE_ROOT },
-      });
+    expect(response.jsonrpc).toBe("2.0");
+    expect(response.id).toBe(id);
+    expect(response.result).toBeDefined();
+    expect(response.result.type).toBe("workspace_init_output");
+    expect(response.result.agentType).toBe("claude");
 
-      const response = await waitForMessage(
-        client,
-        (msg) => msg.jsonrpc === "2.0" && msg.id === id,
-        30_000
-      );
+    // Should return either real data or an error
+    if (!response.result.error) {
+      // Slash commands should be an array (may be empty in some setups)
+      expect(Array.isArray(response.result.slashCommands)).toBe(true);
+    }
+  }, 30_000);
 
-      expect(response.jsonrpc).toBe("2.0");
-      expect(response.id).toBe(id);
-      // Should have a result (not an error) if Claude is authenticated
-      expect(response.result).toBeDefined();
-      expect(response.result.type).toBe("claude_auth_output");
-      expect(response.result.agentType).toBe("claude");
-      // accountInfo should have real data (email, org, etc.) or an error string
-      const hasAccountInfo = response.result.accountInfo !== undefined;
-      const hasError = response.result.error !== undefined;
-      expect(hasAccountInfo || hasError).toBe(true);
-    }, 30_000);
+  // ------------------------------------------------------------------
+  // Query flow: send a real prompt, receive streamed messages
+  // ------------------------------------------------------------------
 
-    // ------------------------------------------------------------------
-    // Workspace initialization (real Claude SDK call)
-    // ------------------------------------------------------------------
+  it("sends a query and receives streamed response messages", async () => {
+    const sessionId = `test-query-${Date.now()}`;
+    const receivedMessages: any[] = [];
 
-    it("returns slash commands and MCP servers via workspaceInit", async () => {
-      const id = sendRequest(client, "workspaceInit", {
-        type: "workspace_init",
-        id: "test-workspace-init",
-        agentType: "claude",
-        options: { cwd: WORKSPACE_ROOT },
-      });
+    // Set up a collector for all incoming messages
+    const messageCollector = collectMessages(client);
 
-      const response = await waitForMessage(
-        client,
-        (msg) => msg.jsonrpc === "2.0" && msg.id === id,
-        30_000
-      );
-
-      expect(response.jsonrpc).toBe("2.0");
-      expect(response.id).toBe(id);
-      expect(response.result).toBeDefined();
-      expect(response.result.type).toBe("workspace_init_output");
-      expect(response.result.agentType).toBe("claude");
-
-      // Should return either real data or an error
-      if (!response.result.error) {
-        // Slash commands should be an array (may be empty in some setups)
-        expect(Array.isArray(response.result.slashCommands)).toBe(true);
-      }
-    }, 30_000);
-
-    // ------------------------------------------------------------------
-    // Query flow: send a real prompt, receive streamed messages
-    // ------------------------------------------------------------------
-
-    it("sends a query and receives streamed response messages", async () => {
-      const sessionId = `test-query-${Date.now()}`;
-      const receivedMessages: any[] = [];
-
-      // Set up a collector for all incoming messages
-      const messageCollector = collectMessages(client);
-
-      // Send a minimal query (short prompt to get a quick response)
-      sendNotification(client, "query", {
-        type: "query",
-        id: sessionId,
-        agentType: "claude",
-        prompt: "Reply with exactly: PONG",
-        options: {
-          cwd: WORKSPACE_ROOT,
-          model: "sonnet",
-          turnId: `turn-${Date.now()}`,
-          permissionMode: "default",
-        },
-      });
-
-      // Wait for a "result" notification (query completion) or an error
-      // The sidecar sends messages as JSON-RPC notifications with method "message"
-      // Messages arrive as: { jsonrpc: "2.0", method: "message", params: { id, type, data } }
-      const isSessionMessage = (msg: any) =>
-        msg.method === "message" &&
-        msg.params?.id === sessionId;
-
-      const isSessionError = (msg: any) =>
-        msg.method === "queryError" &&
-        msg.params?.id === sessionId;
-
-      const isSessionResult = (msg: any) =>
-        isSessionMessage(msg) &&
-        msg.params?.data?.type === "result";
-
-      // Wait for either a result or error (up to 60s for Claude to respond)
-      const terminalMessage = await waitForMessage(
-        client,
-        (msg) => isSessionResult(msg) || isSessionError(msg),
-        60_000
-      );
-
-      // Collect all session-related messages
-      const sessionMessages = messageCollector.filter(
-        (msg: any) => isSessionMessage(msg) || isSessionError(msg)
-      );
-
-      if (isSessionError(terminalMessage)) {
-        // If we got an error, it should be a structured error (not a crash)
-        expect(terminalMessage.params.error).toBeDefined();
-        expect(typeof terminalMessage.params.error).toBe("string");
-      } else {
-        // If we got a result, verify the message stream structure
-        expect(terminalMessage.params.data.type).toBe("result");
-
-        // Should have received at least one assistant message before the result
-        const assistantMessages = sessionMessages.filter(
-          (msg: any) => msg.params?.data?.type === "assistant"
-        );
-        expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
-
-        // Each assistant message should have valid structure
-        for (const msg of assistantMessages) {
-          expect(msg.params.data.message).toBeDefined();
-          expect(msg.params.data.message.role).toBe("assistant");
-        }
-      }
-    }, 90_000);
-
-    // ------------------------------------------------------------------
-    // Cancel flow: start a query then cancel it
-    // ------------------------------------------------------------------
-
-    it("cancels an active query and receives abort notification", async () => {
-      const sessionId = `test-cancel-${Date.now()}`;
-
-      // Start a query that will take a while (ask for a long response)
-      sendNotification(client, "query", {
-        type: "query",
-        id: sessionId,
-        agentType: "claude",
-        prompt: "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
-        options: {
-          cwd: WORKSPACE_ROOT,
-          model: "sonnet",
-          turnId: `turn-${Date.now()}`,
-          permissionMode: "default",
-        },
-      });
-
-      // Wait a bit for the query to start processing
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Send cancel request
-      const cancelId = sendRequest(client, "cancel", {
-        type: "cancel",
-        id: sessionId,
-        agentType: "claude",
-      });
-
-      // Should receive either:
-      // 1. A cancel RPC response (method result)
-      // 2. A queryError notification with "aborted by user"
-      // 3. A result if the query finished before cancel arrived
-      const terminalMessage = await waitForMessage(
-        client,
-        (msg) => {
-          // Cancel RPC response
-          if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
-          // Error notification for this session
-          if (
-            msg.method === "queryError" &&
-            msg.params?.id === sessionId
-          )
-            return true;
-          // Query result (completed before cancel)
-          if (
-            msg.method === "message" &&
-            msg.params?.id === sessionId &&
-            msg.params?.data?.type === "result"
-          )
-            return true;
-          return false;
-        },
-        30_000
-      );
-
-      // Verify we got a structured response (not a crash)
-      expect(terminalMessage.jsonrpc).toBe("2.0");
-
-      if (terminalMessage.method === "queryError") {
-        // Abort was successful
-        expect(terminalMessage.params.error).toContain("aborted");
-      }
-      // If we got a result or cancel response, that's also fine
-    }, 45_000);
-
-    // ------------------------------------------------------------------
-    // Verify sidecar log has no errors after full test run
-    // ------------------------------------------------------------------
-
-    it("sidecar log has no uncaught exceptions", () => {
-      const log = fs.readFileSync(logPath, "utf-8");
-      expect(log).not.toContain("Uncaught Exception:");
-      expect(log).not.toContain("Unhandled Rejection:");
+    // Send a minimal query (short prompt to get a quick response)
+    sendNotification(client, "query", {
+      type: "query",
+      id: sessionId,
+      agentType: "claude",
+      prompt: "Reply with exactly: PONG",
+      options: {
+        cwd: WORKSPACE_ROOT,
+        model: "sonnet",
+        turnId: `turn-${Date.now()}`,
+        permissionMode: "default",
+      },
     });
-  }
-);
+
+    // Wait for a "result" notification (query completion) or an error
+    // The sidecar sends messages as JSON-RPC notifications with method "message"
+    // Messages arrive as: { jsonrpc: "2.0", method: "message", params: { id, type, data } }
+    const isSessionMessage = (msg: any) => msg.method === "message" && msg.params?.id === sessionId;
+
+    const isSessionError = (msg: any) =>
+      msg.method === "queryError" && msg.params?.id === sessionId;
+
+    const isSessionResult = (msg: any) =>
+      isSessionMessage(msg) && msg.params?.data?.type === "result";
+
+    // Wait for either a result or error (up to 60s for Claude to respond)
+    const terminalMessage = await waitForMessage(
+      client,
+      (msg) => isSessionResult(msg) || isSessionError(msg),
+      60_000
+    );
+
+    // Collect all session-related messages
+    const sessionMessages = messageCollector.filter(
+      (msg: any) => isSessionMessage(msg) || isSessionError(msg)
+    );
+
+    if (isSessionError(terminalMessage)) {
+      // If we got an error, it should be a structured error (not a crash)
+      expect(terminalMessage.params.error).toBeDefined();
+      expect(typeof terminalMessage.params.error).toBe("string");
+    } else {
+      // If we got a result, verify the message stream structure
+      expect(terminalMessage.params.data.type).toBe("result");
+
+      // Should have received at least one assistant message before the result
+      const assistantMessages = sessionMessages.filter(
+        (msg: any) => msg.params?.data?.type === "assistant"
+      );
+      expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+
+      // Each assistant message should have valid structure
+      for (const msg of assistantMessages) {
+        expect(msg.params.data.message).toBeDefined();
+        expect(msg.params.data.message.role).toBe("assistant");
+      }
+    }
+  }, 90_000);
+
+  // ------------------------------------------------------------------
+  // Cancel flow: start a query then cancel it
+  // ------------------------------------------------------------------
+
+  it("cancels an active query and receives abort notification", async () => {
+    const sessionId = `test-cancel-${Date.now()}`;
+
+    // Start a query that will take a while (ask for a long response)
+    sendNotification(client, "query", {
+      type: "query",
+      id: sessionId,
+      agentType: "claude",
+      prompt:
+        "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
+      options: {
+        cwd: WORKSPACE_ROOT,
+        model: "sonnet",
+        turnId: `turn-${Date.now()}`,
+        permissionMode: "default",
+      },
+    });
+
+    // Wait a bit for the query to start processing
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // Send cancel request
+    const cancelId = sendRequest(client, "cancel", {
+      type: "cancel",
+      id: sessionId,
+      agentType: "claude",
+    });
+
+    // Should receive either:
+    // 1. A cancel RPC response (method result)
+    // 2. A queryError notification with "aborted by user"
+    // 3. A result if the query finished before cancel arrived
+    const terminalMessage = await waitForMessage(
+      client,
+      (msg) => {
+        // Cancel RPC response
+        if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
+        // Error notification for this session
+        if (msg.method === "queryError" && msg.params?.id === sessionId) return true;
+        // Query result (completed before cancel)
+        if (
+          msg.method === "message" &&
+          msg.params?.id === sessionId &&
+          msg.params?.data?.type === "result"
+        )
+          return true;
+        return false;
+      },
+      30_000
+    );
+
+    // Verify we got a structured response (not a crash)
+    expect(terminalMessage.jsonrpc).toBe("2.0");
+
+    if (terminalMessage.method === "queryError") {
+      // Abort was successful
+      expect(terminalMessage.params.error).toContain("aborted");
+    }
+    // If we got a result or cancel response, that's also fine
+  }, 45_000);
+
+  // ------------------------------------------------------------------
+  // Verify sidecar log has no errors after full test run
+  // ------------------------------------------------------------------
+
+  it("sidecar log has no uncaught exceptions", () => {
+    const log = fs.readFileSync(logPath, "utf-8");
+    expect(log).not.toContain("Uncaught Exception:");
+    expect(log).not.toContain("Unhandled Rejection:");
+  });
+});

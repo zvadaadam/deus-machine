@@ -38,8 +38,8 @@ vi.mock("../agents/claude/checkpoint", () => ({
   createCheckpoint: vi.fn(),
 }));
 
-vi.mock("../agents/conductor-tools", () => ({
-  createOpenDevsMCPServer: vi.fn(() => ({ type: "sdk", name: "conductor" })),
+vi.mock("../agents/hive-tools", () => ({
+  createHiveMCPServer: vi.fn(() => ({ type: "sdk", name: "hive" })),
 }));
 
 vi.mock("child_process", () => ({
@@ -217,9 +217,7 @@ describe("claude-handler", () => {
 
     it("creates a new generator for a new session", async () => {
       // Mock SDK to return an async iterable that yields one message then completes
-      const mockMessages = [
-        { type: "assistant", message: { role: "assistant", content: "Hi" } },
-      ];
+      const mockMessages = [{ type: "assistant", message: { role: "assistant", content: "Hi" } }];
       const mockQuery = {
         [Symbol.asyncIterator]: () => {
           let idx = 0;
@@ -309,7 +307,7 @@ describe("claude-handler", () => {
 
       const sdkCall = mockClaudeSDK.mock.calls[0][0];
       expect(sdkCall.options.mcpServers).toBeDefined();
-      expect(sdkCall.options.mcpServers.conductor).toBeDefined();
+      expect(sdkCall.options.mcpServers.hive).toBeDefined();
     });
 
     it("excludes MCP server when strictDataPrivacy is true", async () => {

@@ -1,6 +1,6 @@
 // sidecar/protocol.ts
 // Zod-validated protocol definitions for JSON-RPC 2.0 communication
-// between the OpenDevs frontend/backend and the sidecar agent runtime.
+// between the Hive frontend/backend and the sidecar agent runtime.
 
 import { z } from "zod";
 
@@ -75,7 +75,7 @@ export const QueryRequestSchema = z.object({
     permissionMode: z.string().optional(),
     claudeEnvVars: z.string().optional(),
     ghToken: z.string().optional(),
-    conductorEnv: z.record(z.string(), z.string()).optional(),
+    hiveEnv: z.record(z.string(), z.string()).optional(),
     additionalDirectories: z.array(z.string()).optional(),
     chromeEnabled: z.boolean().optional(),
     strictDataPrivacy: z.boolean().optional(),
@@ -223,11 +223,13 @@ export const BrowserGetStateRequestSchema = z.object({
 
 export const BrowserGetStateResponseSchema = z.object({
   available: z.boolean(),
-  activeTab: z.object({
-    webviewLabel: z.string(),
-    url: z.string(),
-    title: z.string(),
-  }).optional(),
+  activeTab: z
+    .object({
+      webviewLabel: z.string(),
+      url: z.string(),
+      title: z.string(),
+    })
+    .optional(),
   hint: z.string().optional(),
   error: z.string().optional(),
 });
@@ -252,7 +254,10 @@ export const BrowserWaitForResponseSchema = z.object({
 export const BrowserEvaluateRequestSchema = z.object({
   sessionId: z.string(),
   code: z.string().describe("JavaScript code to evaluate in the page context"),
-  ref: z.string().optional().describe("Element ref — if provided, the element is passed as 'element' argument"),
+  ref: z
+    .string()
+    .optional()
+    .describe("Element ref — if provided, the element is passed as 'element' argument"),
   webviewLabel: z.string().optional(),
 });
 
@@ -362,12 +367,14 @@ export const BrowserScreenshotRequestSchema = z.object({
   sessionId: z.string(),
   webviewLabel: z.string().optional(),
   /** Optional crop region in CSS points. When set, only this area is captured. */
-  rect: z.object({
-    x: z.number(),
-    y: z.number(),
-    width: z.number(),
-    height: z.number(),
-  }).optional(),
+  rect: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number(),
+    })
+    .optional(),
 });
 
 export const BrowserScreenshotResponseSchema = z.object({
@@ -447,7 +454,9 @@ export function isContextUsageRequest(value: unknown): value is ContextUsageRequ
   return ContextUsageRequestSchema.safeParse(value).success;
 }
 
-export function isUpdatePermissionModeRequest(value: unknown): value is UpdatePermissionModeRequest {
+export function isUpdatePermissionModeRequest(
+  value: unknown
+): value is UpdatePermissionModeRequest {
   return UpdatePermissionModeRequestSchema.safeParse(value).success;
 }
 

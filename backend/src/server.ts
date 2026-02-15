@@ -3,7 +3,7 @@ import { createApp } from './app';
 import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 
 /**
- * OpenDevs Backend Server
+ * Hive Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
  * Agent runtime (Claude SDK) is now managed by sidecar-v2 (Rust-spawned).
@@ -34,7 +34,7 @@ const server = serve({
   // CRITICAL: Machine-readable port output for Rust backend and dev.sh
   console.log(`[BACKEND_PORT]${info.port}`);
 
-  console.log('\nOpenDevs Backend Server');
+  console.log('\nHive Backend Server');
   console.log(`API Server: http://localhost:${info.port}`);
   console.log(`Database: ${DB_PATH}`);
   console.log('Server ready!\n');

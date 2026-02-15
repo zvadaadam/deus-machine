@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::Manager;
-use conductor_lib::{
+use hive_lib::{
     commands,
     backend::BackendManager,
     browser::BrowserManager,
@@ -37,6 +37,16 @@ fn main() {
             socket_manager.start_event_listener();
             println!("[TAURI] ✅ Socket event listener started");
 
+            // Compute database path early — both backend and sidecar need it
+            let db_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
+            std::fs::create_dir_all(&db_dir)
+                .map_err(|e| format!("Failed to create app data dir {}: {e}", db_dir.display()))?;
+            let db_path = db_dir.join("hive.db");
+            let db_path = db_path.to_string_lossy().to_string();
+
+            println!("[TAURI] Using database at: {}", db_path);
+
             // Start backend server
             let backend_manager: tauri::State<BackendManager> = app.state();
 
@@ -62,7 +72,7 @@ fn main() {
 
             println!("[TAURI] Starting backend from: {}", backend_path.display());
 
-            match backend_manager.start(backend_path.clone()) {
+            match backend_manager.start(backend_path.clone(), &db_path) {
                 Ok(_) => {
                     if let Some(port) = backend_manager.get_port() {
                         println!("[TAURI] Backend started successfully on port {}", port);
@@ -79,7 +89,7 @@ fn main() {
             // Start sidecar-v2 (agent runtime)
             let sidecar_manager: tauri::State<SidecarManager> = app.state();
 
-            // Determine sidecar path and database path
+            // Determine sidecar path
             let exe_dir = if cfg!(dev) {
                 let exe = std::env::current_exe()
                     .map_err(|e| format!("Failed to get current exe: {}", e))?;
@@ -102,23 +112,7 @@ fn main() {
                 exe_dir.join("bin/index.bundled.cjs")
             };
 
-            // Database path (production OpenDevs app database)
-            let home_dir = std::env::var("HOME")
-                .ok()
-                .filter(|h| !h.is_empty())
-                .unwrap_or_else(|| {
-                    // Fallback: use /tmp as a safe default that always exists
-                    eprintln!("[TAURI] WARNING: HOME environment variable not set, using /tmp fallback");
-                    "/tmp".to_string()
-                });
-
-            let db_path = format!(
-                "{}/Library/Application Support/com.conductor.app/conductor.db",
-                home_dir
-            );
-
             println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
-            println!("[TAURI] Using database at: {}", db_path);
 
             match sidecar_manager.start(sidecar_path, &db_path) {
                 Ok(_) => {

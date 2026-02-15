@@ -8,7 +8,7 @@ app.get('/health', (c) => {
   const db = getDatabase();
   // Note: Sidecar status removed - sidecar-v2 is managed by Rust, status via Tauri commands
   return c.json({
-    app: 'conductor-backend',
+    app: 'hive-backend',
     status: 'ok',
     port: getServerPort(),
     timestamp: new Date().toISOString(),

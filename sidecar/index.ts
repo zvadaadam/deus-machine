@@ -1,6 +1,6 @@
 // sidecar/index.ts
-// Entry point for the OpenDevs sidecar v2 process.
-// Creates a Unix domain socket server that the OpenDevs frontend connects to
+// Entry point for the Hive sidecar v2 process.
+// Creates a Unix domain socket server that the Hive frontend connects to
 // via newline-delimited JSON-RPC 2.0.
 
 import * as net from "net";
@@ -21,7 +21,7 @@ import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 // Logging
 // ============================================================================
 
-export const logFilePath = `/tmp/conductor-${process.pid}.log`;
+export const logFilePath = `/tmp/hive-${process.pid}.log`;
 const originalLog = console.log;
 
 const LOG_LEVEL = (process.env.LOG_LEVEL || "info") as "debug" | "info" | "error";
@@ -94,7 +94,7 @@ class UnifiedSidecar {
   constructor() {
     console.log("UnifiedSidecar: Initializing...");
 
-    this.socketPath = path.join(os.tmpdir(), `conductor-sidecar-${process.pid}.sock`);
+    this.socketPath = path.join(os.tmpdir(), `hive-sidecar-${process.pid}.sock`);
 
     this.server = net.createServer((socket) => {
       console.log("Server: New connection accepted");
@@ -286,7 +286,7 @@ class UnifiedSidecar {
    * 1. Clean up stale socket
    * 2. Initialize the Claude handler (verify executable)
    * 3. Listen on Unix domain socket
-   * 4. Print SOCKET_PATH=<path> to stdout (consumed by the OpenDevs app)
+   * 4. Print SOCKET_PATH=<path> to stdout (consumed by the Hive app)
    */
   async start(): Promise<void> {
     await this.cleanup();
@@ -310,7 +310,7 @@ class UnifiedSidecar {
         console.log(`Unified sidecar listening on ${this.socketPath}`);
         console.log(`Sidecar PID: ${process.pid}`);
 
-        // Print the socket path to stdout so the OpenDevs app can connect
+        // Print the socket path to stdout so the Hive app can connect
         originalLog(`SOCKET_PATH=${this.socketPath}`);
         resolve();
       });

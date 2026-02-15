@@ -31,10 +31,10 @@ describe('GET /health', () => {
     expect(body.socket).toBeUndefined();
   });
 
-  it('includes app name as conductor-backend', async () => {
+  it('includes app name as hive-backend', async () => {
     const res = await app.request('/health');
     const body = await res.json();
-    expect(body.app).toBe('conductor-backend');
+    expect(body.app).toBe('hive-backend');
   });
 
   it('includes timestamp and port', async () => {

@@ -78,8 +78,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
-    const [thinkingLevel, setThinkingLevel] = useState(session?.thinking_level || "NONE");
-    const [model, setModel] = useState(session?.model || "sonnet");
+    const [thinkingLevel, setThinkingLevel] = useState("NONE");
+    const [model, setModel] = useState("sonnet");
     const runtimeModelId = getRuntimeModelId(model);
     const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
 

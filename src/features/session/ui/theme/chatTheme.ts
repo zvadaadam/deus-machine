@@ -258,7 +258,7 @@ export const chatTheme = {
     WebFetch: "text-info", // Violet - fetching data
     WebSearch: "text-info", // Violet - searching
 
-    // OpenDevs MCP — Browser automation
+    // Hive MCP — Browser automation
     BrowserSnapshot: "text-info", // Violet - inspecting page
     BrowserNavigate: "text-primary", // Copper - navigation action
     BrowserNavigateBack: "text-primary", // Copper - navigation action
@@ -273,7 +273,7 @@ export const chatTheme = {
     BrowserScreenshot: "text-info", // Violet - inspecting
     BrowserNetworkRequests: "text-info", // Violet - reading data
 
-    // OpenDevs MCP — Workspace
+    // Hive MCP — Workspace
     AskUserQuestion: "text-primary", // Copper - user interaction
     GetWorkspaceDiff: "text-info", // Violet - reading data
     DiffComment: "text-warning", // Amber - adding content

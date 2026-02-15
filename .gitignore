@@ -46,7 +46,7 @@ yarn-error.log*
 *.db
 *.db-shm
 *.db-wal
-conductor.db
+hive.db
 database/
 
 # Logs

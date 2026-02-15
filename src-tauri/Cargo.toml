@@ -1,16 +1,16 @@
 [package]
-name = "conductor"
+name = "hive"
 version = "2.0.0"
 description = "AI-powered development environment with Claude Code integration"
-authors = ["OpenDevs Team"]
+authors = ["Hive Team"]
 edition = "2021"
 
 [lib]
-name = "conductor_lib"
+name = "hive_lib"
 crate-type = ["staticlib", "cdylib", "lib"]
 
 [[bin]]
-name = "conductor"
+name = "hive"
 path = "src/main.rs"
 
 [build-dependencies]

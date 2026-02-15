@@ -22,7 +22,7 @@ import {
   KillShellToolRenderer,
   TaskToolRenderer,
   LSToolRenderer,
-  // OpenDevs MCP — Browser automation
+  // Hive MCP — Browser automation
   BrowserSnapshotToolRenderer,
   BrowserNavigateToolRenderer,
   BrowserNavigateBackToolRenderer,
@@ -37,7 +37,7 @@ import {
   BrowserScreenshotToolRenderer,
   BrowserNetworkRequestsToolRenderer,
   BrowserScrollToolRenderer,
-  // OpenDevs MCP — Workspace
+  // Hive MCP — Workspace
   AskUserQuestionToolRenderer,
   GetWorkspaceDiffToolRenderer,
   DiffCommentToolRenderer,
@@ -74,7 +74,7 @@ export function registerAllTools() {
   toolRegistry.register("Task", TaskToolRenderer);
   toolRegistry.register("LS", LSToolRenderer);
 
-  // OpenDevs MCP — Browser automation tools
+  // Hive MCP — Browser automation tools
   toolRegistry.register("BrowserSnapshot", BrowserSnapshotToolRenderer);
   toolRegistry.register("BrowserNavigate", BrowserNavigateToolRenderer);
   toolRegistry.register("BrowserNavigateBack", BrowserNavigateBackToolRenderer);
@@ -90,7 +90,7 @@ export function registerAllTools() {
   toolRegistry.register("BrowserNetworkRequests", BrowserNetworkRequestsToolRenderer);
   toolRegistry.register("BrowserScroll", BrowserScrollToolRenderer);
 
-  // OpenDevs MCP — Workspace tools
+  // Hive MCP — Workspace tools
   toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);
   toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
   toolRegistry.register("DiffComment", DiffCommentToolRenderer);

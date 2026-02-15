@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "setup": "./scripts/conductor-setup.sh",
+    "setup": "./scripts/hive-setup.sh",
     "run": "./scripts/dev.sh"
   },
   "runScriptMode": "nonconcurrent"

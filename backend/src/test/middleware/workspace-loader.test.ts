@@ -48,7 +48,7 @@ describe('withWorkspace middleware', () => {
       directory_name: 'tokyo',
       default_branch: 'main',
     });
-    expect(body.workspacePath).toBe('/repo/.conductor/tokyo');
+    expect(body.workspacePath).toBe('/repo/.hive/tokyo');
   });
 
   it('returns 404 when workspace is not found', async () => {
@@ -123,42 +123,42 @@ describe('withWorkspace middleware', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const os = await import('os');
-    expect(body.workspacePath).toBe(`${os.homedir()}/conductor/workspaces/myrepo/athens`);
+    expect(body.workspacePath).toBe(`${os.homedir()}/hive/workspaces/myrepo/athens`);
   });
 });
 
 describe('computeWorkspacePath', () => {
-  it('returns .conductor path for v2 storage version', () => {
+  it('returns .hive path for v2 storage version', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
       directory_name: 'tokyo',
       storage_version: 2,
       repo_name: 'myrepo',
-    })).toBe('/repo/.conductor/tokyo');
+    })).toBe('/repo/.hive/tokyo');
   });
 
-  it('returns .conductor path when storage_version is undefined', () => {
+  it('returns .hive path when storage_version is undefined', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
       directory_name: 'tokyo',
-    })).toBe('/repo/.conductor/tokyo');
+    })).toBe('/repo/.hive/tokyo');
   });
 
-  it('returns legacy ~/conductor/workspaces path for v3', async () => {
+  it('returns legacy ~/hive/workspaces path for v3', async () => {
     const os = await import('os');
     expect(computeWorkspacePath({
       root_path: '/some/path',
       directory_name: 'athens',
       storage_version: 3,
       repo_name: 'devsbook',
-    })).toBe(`${os.homedir()}/conductor/workspaces/devsbook/athens`);
+    })).toBe(`${os.homedir()}/hive/workspaces/devsbook/athens`);
   });
 
-  it('falls back to .conductor path if v3 but repo_name missing', () => {
+  it('falls back to .hive path if v3 but repo_name missing', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
       directory_name: 'athens',
       storage_version: 3,
-    })).toBe('/repo/.conductor/athens');
+    })).toBe('/repo/.hive/athens');
   });
 });

@@ -1,7 +1,7 @@
 {
   "default": {
     "identifier": "default",
-    "description": "Default capabilities for OpenDevs app",
+    "description": "Default capabilities for Hive app",
     "local": true,
     "windows": ["main", "browser-detached"],
     "permissions": [
