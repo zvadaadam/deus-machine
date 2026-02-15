@@ -19,69 +19,95 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
 
       <div className="space-y-8">
         {/* MCP Servers */}
-        <div className="space-y-2.5">
-          <h4 className="text-sm font-medium">MCP Servers</h4>
-          {mcpServers.length === 0 ? (
-            <EmptyState message="No MCP servers configured" />
-          ) : (
-            mcpServers.map((server) => (
-              <div key={server.name} className="border-border/60 rounded-lg border p-3">
-                <p className="text-sm font-medium">{server.name}</p>
-                <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded px-2 py-1 text-xs">
-                  {server.command}
-                </code>
-              </div>
-            ))
-          )}
-        </div>
+        <ConfigGroup
+          title="MCP Servers"
+          emptyMessage="No MCP servers configured"
+          isEmpty={mcpServers.length === 0}
+        >
+          {mcpServers.map((server) => (
+            <ConfigItem key={server.name} title={server.name}>
+              <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded px-2 py-1 text-xs">
+                {server.command}
+              </code>
+            </ConfigItem>
+          ))}
+        </ConfigGroup>
 
         {/* Commands */}
-        <div className="space-y-2.5">
-          <h4 className="text-sm font-medium">Custom Commands</h4>
-          {commands.length === 0 ? (
-            <EmptyState message="No custom commands defined" />
-          ) : (
-            commands.map((cmd) => (
-              <div key={cmd.name} className="border-border/60 rounded-lg border p-3">
-                <p className="text-sm font-medium">/{cmd.name}</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">{cmd.description}</p>
-              </div>
-            ))
-          )}
-        </div>
+        <ConfigGroup
+          title="Custom Commands"
+          emptyMessage="No custom commands defined"
+          isEmpty={commands.length === 0}
+        >
+          {commands.map((cmd) => (
+            <ConfigItem key={cmd.name} title={`/${cmd.name}`} description={cmd.description} />
+          ))}
+        </ConfigGroup>
 
         {/* Agents */}
-        <div className="space-y-2.5">
-          <h4 className="text-sm font-medium">Agents</h4>
-          {agents.length === 0 ? (
-            <EmptyState message="Using default agents" />
-          ) : (
-            agents.map((agent) => (
-              <div key={agent.name} className="border-border/60 rounded-lg border p-3">
-                <p className="text-sm font-medium">{agent.name}</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">{agent.description}</p>
-                {agent.tools?.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {agent.tools.map((tool) => (
-                      <Badge key={tool} variant="secondary" className="text-[11px] font-normal">
-                        {tool}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <ConfigGroup
+          title="Agents"
+          emptyMessage="Using default agents"
+          isEmpty={agents.length === 0}
+        >
+          {agents.map((agent) => (
+            <ConfigItem key={agent.name} title={agent.name} description={agent.description}>
+              {agent.tools?.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {agent.tools.map((tool) => (
+                    <Badge key={tool} variant="secondary" className="text-[11px] font-normal">
+                      {tool}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </ConfigItem>
+          ))}
+        </ConfigGroup>
       </div>
     </div>
   );
 }
 
-function EmptyState({ message }: { message: string }) {
+function ConfigGroup({
+  title,
+  emptyMessage,
+  isEmpty,
+  children,
+}: {
+  title: string;
+  emptyMessage: string;
+  isEmpty: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="border-border/60 bg-muted/20 rounded-lg border border-dashed px-4 py-8 text-center">
-      <p className="text-muted-foreground text-sm">{message}</p>
+    <div className="space-y-2.5">
+      <h4 className="text-sm font-medium">{title}</h4>
+      {isEmpty ? (
+        <div className="border-border/60 bg-muted/20 rounded-lg border border-dashed px-4 py-8 text-center">
+          <p className="text-muted-foreground text-sm">{emptyMessage}</p>
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+function ConfigItem({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="border-border/60 rounded-lg border p-3">
+      <p className="text-sm font-medium">{title}</p>
+      {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
+      {children}
     </div>
   );
 }

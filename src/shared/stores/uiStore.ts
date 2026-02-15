@@ -1,34 +1,47 @@
 /**
  * UI Store
- * Global state management for UI-related state (modals, panels, etc.)
+ * Global state management for UI-related state (modals, panels, views)
  */
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import type { SettingsSection } from "@shared/types/settings";
 
 interface UIState {
   // Modals
   showNewWorkspaceModal: boolean;
   showSystemPromptModal: boolean;
-  showSettingsModal: boolean;
+
+  // Settings view (full-page, not a modal)
+  settingsOpen: boolean;
+  activeSettingsSection: SettingsSection;
 
   // Actions - Modals
   openNewWorkspaceModal: () => void;
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
+
+  // Actions - Settings view
+  openSettings: () => void;
+  closeSettings: () => void;
+  setActiveSettingsSection: (section: SettingsSection) => void;
+
+  // Legacy aliases (used by sidebar header/footer)
   openSettingsModal: () => void;
   closeSettingsModal: () => void;
+
   closeAllModals: () => void;
 }
 
 export const useUIStore = create<UIState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       // Initial state
       showNewWorkspaceModal: false,
       showSystemPromptModal: false,
-      showSettingsModal: false,
+      settingsOpen: false,
+      activeSettingsSection: "general" as SettingsSection,
 
       // Modal actions
       openNewWorkspaceModal: () =>
@@ -43,16 +56,24 @@ export const useUIStore = create<UIState>()(
       closeSystemPromptModal: () =>
         set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
 
-      openSettingsModal: () => set({ showSettingsModal: true }, false, "ui/openSettingsModal"),
+      // Settings view actions
+      openSettings: () => set({ settingsOpen: true }, false, "ui/openSettings"),
 
-      closeSettingsModal: () => set({ showSettingsModal: false }, false, "ui/closeSettingsModal"),
+      closeSettings: () => set({ settingsOpen: false }, false, "ui/closeSettings"),
+
+      setActiveSettingsSection: (section) =>
+        set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
+
+      // Legacy aliases — point to the new settings view actions
+      openSettingsModal: () => get().openSettings(),
+      closeSettingsModal: () => get().closeSettings(),
 
       closeAllModals: () =>
         set(
           {
             showNewWorkspaceModal: false,
             showSystemPromptModal: false,
-            showSettingsModal: false,
+            settingsOpen: false,
           },
           false,
           "ui/closeAllModals"
@@ -73,17 +94,15 @@ export const useUIStore = create<UIState>()(
  * - Calling from Tauri event listeners
  * - Calling from keyboard shortcuts
  * - You don't need to subscribe to state changes
- *
- * Example:
- *   // Instead of: const { openSettingsModal } = useUIStore()
- *   uiActions.openSettingsModal()
  */
 export const uiActions = {
   openNewWorkspaceModal: () => useUIStore.getState().openNewWorkspaceModal(),
   closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
   openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
-  openSettingsModal: () => useUIStore.getState().openSettingsModal(),
-  closeSettingsModal: () => useUIStore.getState().closeSettingsModal(),
+  openSettings: () => useUIStore.getState().openSettings(),
+  closeSettings: () => useUIStore.getState().closeSettings(),
+  openSettingsModal: () => useUIStore.getState().openSettings(),
+  closeSettingsModal: () => useUIStore.getState().closeSettings(),
   closeAllModals: () => useUIStore.getState().closeAllModals(),
 };
