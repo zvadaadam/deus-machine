@@ -6,3 +6,4 @@ export { useWorkingDuration, formatDuration } from "./useWorkingDuration";
 export { useZoom } from "./useZoom";
 export { useIsFullscreen } from "./useIsFullscreen";
 export { useTauriDragZone } from "./useTauriDrag";
+export { useWindowResizing } from "./useWindowResizing";
