@@ -5,8 +5,7 @@
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { FileChangeTree } from "./FileChangeTree";
-import { Sparkles, FileCode } from "lucide-react";
-import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@/components/ui/empty";
+import { GitBranch, FileCode } from "lucide-react";
 import { buildFileTree } from "../lib/buildFileTree";
 import { useTreeState } from "../hooks/useTreeState";
 import type { Workspace } from "@/shared/types";
@@ -76,15 +75,14 @@ export function FileChangesPanel({
     return (
       <div className="flex h-full flex-col overflow-hidden">
         {headerSlot}
-        <div className="flex flex-1 items-center justify-center py-8">
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyMedia>
-                <FileCode className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyDescription>Select a workspace to view file changes</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3"
+          style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
+        >
+          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+            <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="text-muted-foreground/60 text-xs">Select a workspace to view changes</p>
         </div>
       </div>
     );
@@ -95,15 +93,14 @@ export function FileChangesPanel({
     return (
       <div className="flex h-full flex-col overflow-hidden">
         {headerSlot}
-        <div className="flex flex-1 items-center justify-center py-8">
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyMedia>
-                <Sparkles className="text-muted-foreground/40 h-16 w-16" aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyDescription>No file changes detected</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3"
+          style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
+        >
+          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+            <GitBranch className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="text-muted-foreground/60 text-xs">No file changes detected</p>
         </div>
       </div>
     );

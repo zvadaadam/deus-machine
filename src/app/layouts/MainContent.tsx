@@ -436,7 +436,7 @@ export function MainContent({
             {/* Unified workspace header — spans full width above all panels */}
             <WorkspaceHeader
               repositoryName={selectedWorkspace.directory_name}
-              branch={selectedWorkspace.branch}
+              branch={selectedWorkspace.branch ?? undefined}
               workspacePath={selectedWorkspace.workspace_path}
               workspaceId={selectedWorkspace.id}
               prStatus={prStatus}

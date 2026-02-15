@@ -2,16 +2,9 @@ import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, MessageSquare } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
@@ -383,19 +376,20 @@ export function Chat({
             <Skeleton className="h-4 w-[80%]" />
           </div>
         ) : messages.length === 0 ? (
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyMedia>
-                <div className="text-4xl" aria-hidden="true">
-                  💬
-                </div>
-              </EmptyMedia>
-              <EmptyTitle>No messages yet</EmptyTitle>
-              <EmptyDescription>
-                Start a conversation with Claude Code to make changes to your workspace
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <div
+            className="flex h-full flex-col items-center justify-center gap-3"
+            style={{ animation: "fadeInUp 0.4s cubic-bezier(.215, .61, .355, 1)" }}
+          >
+            <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+              <MessageSquare className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="space-y-1 text-center">
+              <p className="text-muted-foreground/70 text-sm font-medium">No messages yet</p>
+              <p className="text-muted-foreground/50 text-xs">
+                Start a conversation to make changes to your workspace
+              </p>
+            </div>
+          </div>
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">

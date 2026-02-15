@@ -47,7 +47,14 @@ export function getWorkspacesByRepo(
   db: Database.Database,
   state?: string
 ): WorkspaceWithDetailsRow[] {
-  const stateFilter = state ? 'WHERE w.state = ?' : '';
+  // Support comma-separated states (e.g. "ready,initializing")
+  let stateFilter = '';
+  let stateParams: string[] = [];
+  if (state) {
+    const states = state.split(',').map(s => s.trim());
+    stateFilter = `WHERE w.state IN (${states.map(() => '?').join(',')})`;
+    stateParams = states;
+  }
   return db.prepare(`
     SELECT
       w.id, w.repository_id, w.directory_name, w.display_name, w.branch,
@@ -61,7 +68,7 @@ export function getWorkspacesByRepo(
     LEFT JOIN sessions s ON w.active_session_id = s.id
     ${stateFilter}
     ORDER BY r.display_order, r.name, w.updated_at DESC
-  `).all(...(state ? [state] : [])) as WorkspaceWithDetailsRow[];
+  `).all(...stateParams) as WorkspaceWithDetailsRow[];
 }
 
 export function getWorkspaceById(

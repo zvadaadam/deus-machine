@@ -44,14 +44,27 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-foreground text-background animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",
+          // Surface
+          "bg-popover text-popover-foreground border border-border shadow-md",
+          // Layout + origin-aware scaling (Radix provides transform origin)
+          "z-50 w-fit will-change-transform origin-(--radix-tooltip-content-transform-origin) rounded-md px-2.5 py-1 text-xs text-balance",
+          // Enter: 200ms with Emil Kowalski's custom ease-out curve
+          "data-[state=delayed-open]:animate-[tooltip-enter_200ms_cubic-bezier(0.32,0.72,0,1)]",
+          "data-[state=instant-open]:animate-[tooltip-enter_150ms_cubic-bezier(0.32,0.72,0,1)]",
+          // Exit: faster, same ease-out (ease-out for both enter & exit per Kowalski)
+          "data-[state=closed]:animate-[tooltip-exit_150ms_cubic-bezier(0.32,0.72,0,1)]",
+          // Directional offsets (3px nudge toward trigger)
+          "data-[side=top]:[--tooltip-translate-y:3px]",
+          "data-[side=bottom]:[--tooltip-translate-y:-3px]",
+          "data-[side=left]:[--tooltip-translate-x:3px]",
+          "data-[side=right]:[--tooltip-translate-x:-3px]",
           className
         )}
         {...props}
       >
         {children}
         {showArrow && (
-          <TooltipPrimitive.Arrow className="bg-foreground fill-foreground z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+          <TooltipPrimitive.Arrow className="bg-popover fill-popover z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
         )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
@@ -72,7 +85,7 @@ function TooltipContent({
  */
 function TooltipKbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="bg-background/15 ml-auto rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tracking-wide">
+    <kbd className="bg-muted text-muted-foreground ml-auto rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tracking-wide">
       {children}
     </kbd>
   );

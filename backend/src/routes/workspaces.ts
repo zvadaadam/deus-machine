@@ -31,9 +31,8 @@ app.get('/workspaces', (c) => {
 
 app.get('/workspaces/by-repo', (c) => {
   const db = getDatabase();
-  const state = c.req.query('state');
-
-  const workspaces = getWorkspacesByRepo(db, state);
+  const stateParam = c.req.query('state');
+  const workspaces = getWorkspacesByRepo(db, stateParam);
 
   const grouped: Record<string, any> = {};
   workspaces.forEach(workspace => {
