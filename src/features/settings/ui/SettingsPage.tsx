@@ -29,7 +29,13 @@ export function SettingsPage() {
   const mcpServers = mcpServersQuery.data || [];
   const commands = commandsQuery.data || [];
   const agents = agentsQuery.data || [];
-  const loading = settingsQuery.isLoading;
+  const loading =
+    activeSection === "extensions"
+      ? settingsQuery.isLoading ||
+        mcpServersQuery.isLoading ||
+        commandsQuery.isLoading ||
+        agentsQuery.isLoading
+      : settingsQuery.isLoading;
   const saving = updateSettingsMutation.isPending;
 
   // ESC closes settings
@@ -53,14 +59,16 @@ export function SettingsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeSettings]);
 
-  async function saveSetting(key: string, value: unknown) {
+  async function saveSetting(key: string, value: unknown): Promise<boolean> {
     try {
       await updateSettingsMutation.mutateAsync({ [key]: value });
+      return true;
     } catch (error) {
       console.error("Failed to save setting:", error);
       toast.error(
         `Failed to save setting: ${error instanceof Error ? error.message : String(error)}`
       );
+      return false;
     }
   }
 
