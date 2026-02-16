@@ -43,6 +43,8 @@ export function useFileWatcher(
   const [isWatching, setIsWatching] = useState(false);
 
   useEffect(() => {
+    let isActive = true;
+
     if (!isTauriEnv || !workspacePath || !workspaceId) {
       setIsWatching(false);
       return;
@@ -51,11 +53,11 @@ export function useFileWatcher(
     // Start watching
     invoke("watch_workspace", { workspacePath })
       .then(() => {
-        setIsWatching(true);
+        if (isActive) setIsWatching(true);
       })
       .catch((err: unknown) => {
         console.warn("[FileWatcher] Failed to start watching:", err);
-        setIsWatching(false);
+        if (isActive) setIsWatching(false);
       });
 
     // Listen for debounced change events
@@ -92,9 +94,10 @@ export function useFileWatcher(
 
     // Cleanup: stop watching + remove event listener
     return () => {
+      isActive = false;
       setIsWatching(false);
       invoke("unwatch_workspace", { workspacePath }).catch(() => {});
-      unlistenPromise.then((unlisten) => unlisten());
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
     };
   }, [workspacePath, workspaceId, queryClient]);
 
