@@ -49,9 +49,6 @@
     }
   },
   "plugins": {
-    "sql": {
-      "preload": ["sqlite:hive.db"]
-    },
     "updater": {
       "endpoints": [],
       "pubkey": ""

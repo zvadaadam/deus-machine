@@ -30,6 +30,7 @@ export const queryKeys = {
     all: ["sessions"] as const,
     detail: (id: string) => ["sessions", "detail", id] as const,
     messages: (id: string) => ["sessions", "messages", id] as const,
+    byWorkspace: (workspaceId: string) => ["sessions", "by-workspace", workspaceId] as const,
   },
 
   // Repositories
@@ -41,6 +42,11 @@ export const queryKeys = {
   // Stats
   stats: {
     all: ["stats"] as const,
+  },
+
+  // GitHub CLI
+  github: {
+    ghStatus: ["github", "gh-status"] as const,
   },
 
   // Settings
