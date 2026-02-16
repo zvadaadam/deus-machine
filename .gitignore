@@ -13,7 +13,7 @@ build/
 # Tauri
 src-tauri/target/
 src-tauri/WixTools/
-# Sidecar build artifact (built via `npm run build:sidecar`)
+# Sidecar build artifact (built via `bun run build:sidecar`)
 src-tauri/resources/bin/index.bundled.cjs
 
 # Misc
@@ -38,7 +38,7 @@ src-tauri/resources/bin/index.bundled.cjs
 *.sublime-workspace
 
 # Debug
-npm-debug.log*
+bun-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
@@ -70,6 +70,9 @@ temp/
 
 # MCP Configuration (user-specific)
 .mcp.json
+
+# Local cloned workspaces (nested repos, not tracked in this repo)
+.hive/
 
 *storybook.log
 storybook-static

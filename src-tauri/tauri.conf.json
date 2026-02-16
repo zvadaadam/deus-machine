@@ -1,10 +1,10 @@
 {
   "productName": "Command",
   "version": "2.0.0",
-  "identifier": "com.hivenet.app",
+  "identifier": "com.hivenet.command",
   "build": {
-    "beforeDevCommand": "npm run dev:web",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "bun run dev:web",
+    "beforeBuildCommand": "bun run build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
