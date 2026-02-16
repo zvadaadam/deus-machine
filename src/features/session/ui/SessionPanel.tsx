@@ -143,10 +143,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       if (!isTauriEnv) return;
 
       let unlisten: (() => void) | undefined;
+      let disposed = false;
 
       (async () => {
         const { getCurrentWebview } = await import("@tauri-apps/api/webview");
         const { readFile } = await import("@tauri-apps/plugin-fs");
+        if (disposed) return;
 
         unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
           const { type } = event.payload;
@@ -183,9 +185,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             }
           }
         });
+        // If unmounted while awaiting onDragDropEvent, clean up immediately
+        if (disposed) {
+          unlisten?.();
+        }
       })();
 
       return () => {
+        disposed = true;
         unlisten?.();
       };
     }, []);
