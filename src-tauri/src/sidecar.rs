@@ -55,7 +55,9 @@ impl SidecarManager {
                 sidecar_path.display()
             ))?;
 
-        println!("[SIDECAR] Sidecar started with PID: {}", child.id());
+        let pid = child.id();
+        println!("[SIDECAR] Sidecar started with PID: {}", pid);
+        println!("[SIDECAR] Sidecar logs: /tmp/hive-{}.log", pid);
 
         // Take stdout to read the socket path
         let stdout = child.stdout.take()
@@ -120,14 +122,16 @@ impl SidecarManager {
         let mut process = self.process.lock().unwrap();
         if let Some(ref mut child) = *process {
             match child.try_wait() {
-                Ok(Some(_status)) => {
+                Ok(Some(status)) => {
                     // Process has exited — clean up both handles
+                    eprintln!("[SIDECAR] Process exited unexpectedly (exit: {})", status);
                     *process = None;
                     *self.socket_path.lock().unwrap() = None;
                     false
                 }
                 Ok(None) => true,    // Still running
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("[SIDECAR] Failed to check process status: {}", e);
                     *process = None;
                     *self.socket_path.lock().unwrap() = None;
                     false
@@ -178,13 +182,16 @@ impl SidecarManager {
 
             if !exited {
                 println!("[SIDECAR] SIGTERM timeout, sending SIGKILL");
-                let _ = child.kill();
+                if let Err(e) = child.kill() {
+                    eprintln!("[SIDECAR] SIGKILL failed: {}", e);
+                }
             }
 
             // Always reap the child to prevent zombie processes
-            child.wait().ok();
-
-            println!("[SIDECAR] Sidecar stopped");
+            match child.wait() {
+                Ok(status) => println!("[SIDECAR] Sidecar stopped (exit: {})", status),
+                Err(e) => eprintln!("[SIDECAR] Sidecar stopped (wait error: {})", e),
+            }
         }
 
         // Clear the socket path

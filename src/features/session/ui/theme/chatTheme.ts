@@ -166,11 +166,10 @@ export const chatTheme = {
     },
   },
 
-  // Animation variants
-  // CSS-first: These are reference tokens. Actual animations use @keyframes in global.css:
-  //   chat-message-enter  (assistant: 150ms opacity only, ease-out) — subtle, Cursor-inspired
-  //   chat-user-enter     (user: 150ms translateX 4px, ease-out) — gentle directional hint
-  //   chat-block-fade     (content blocks: 200ms opacity, ease-out-cubic)
+  // Animation variants — Framer Motion (co-located in Chat.tsx, ThinkingBlock, ToolUseBlock)
+  //   User turn:      150ms ease-out-quad, opacity + x:4px
+  //   Assistant turn:  150ms ease-out-quad, opacity only
+  //   Working:        200ms ease-out-cubic, opacity + AnimatePresence exit
   // seenMessageIds ref in Chat.tsx prevents re-animation on refetch.
   animations: {
     messageEnter: {

@@ -1,4 +1,5 @@
 import { Circle, LoaderCircle, GitPullRequest } from "lucide-react";
+import NumberFlow from "@number-flow/react";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { cn } from "@/shared/lib/utils";
 import type { Workspace, DiffStats } from "@/shared/types";
@@ -93,24 +94,24 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
         {hasDiff && (
           <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
             {diffStats.additions > 0 && (
-              <span
+              <NumberFlow
+                value={diffStats.additions}
+                prefix="+"
                 className={cn(
                   "text-xs font-medium",
                   isActive ? "text-accent-green" : "text-accent-green-muted"
                 )}
-              >
-                +{diffStats.additions}
-              </span>
+              />
             )}
             {diffStats.deletions > 0 && (
-              <span
+              <NumberFlow
+                value={diffStats.deletions}
+                prefix="-"
                 className={cn(
                   "text-xs font-medium",
                   isActive ? "text-accent-red" : "text-accent-red-muted"
                 )}
-              >
-                -{diffStats.deletions}
-              </span>
+              />
             )}
           </div>
         )}
