@@ -1,25 +1,66 @@
 /**
  * Window Focus Detection
  *
- * Tracks whether the app window is currently visible/focused.
+ * Tracks whether the app window is currently focused at the OS level.
  * Used by the notification system to suppress OS notifications when the user
  * is already looking at the app (Sonner toasts handle that case).
+ *
+ * Uses Tauri's `tauri://focus` and `tauri://blur` events which correctly
+ * track OS-level window focus. Unlike `document.hidden` / `visibilitychange`,
+ * these fire when the user switches to another app even if the Tauri window
+ * is still partially visible (e.g., side-by-side windows).
+ *
+ * Falls back to `document.visibilitychange` in non-Tauri environments
+ * (e.g., `bun run dev:web`).
  */
 
 import { useSyncExternalStore } from "react";
+import { listen, isTauriEnv } from "@/platform/tauri";
 
-let focused = !document.hidden;
+// Assume focused on startup — the app window is in the foreground when it launches
+let focused = true;
 
-function handleVisibilityChange() {
-  focused = !document.hidden;
+// Subscribers for useSyncExternalStore notifications
+const subscribers = new Set<() => void>();
+
+function notifySubscribers() {
+  for (const callback of subscribers) {
+    callback();
+  }
 }
 
-document.addEventListener("visibilitychange", handleVisibilityChange);
+/**
+ * Set up Tauri window focus/blur listeners at module level.
+ * These fire on OS-level focus changes — not just tab visibility.
+ */
+if (isTauriEnv) {
+  (async () => {
+    await listen("tauri://focus", () => {
+      focused = true;
+      notifySubscribers();
+    });
+
+    await listen("tauri://blur", () => {
+      focused = false;
+      notifySubscribers();
+    });
+  })();
+} else {
+  // Fallback for dev mode (bun run dev:web) — use visibilitychange
+  focused = !document.hidden;
+
+  document.addEventListener("visibilitychange", () => {
+    focused = !document.hidden;
+    notifySubscribers();
+  });
+}
 
 // useSyncExternalStore requires subscribe + getSnapshot
 function subscribe(callback: () => void) {
-  document.addEventListener("visibilitychange", callback);
-  return () => document.removeEventListener("visibilitychange", callback);
+  subscribers.add(callback);
+  return () => {
+    subscribers.delete(callback);
+  };
 }
 
 function getSnapshot() {
@@ -27,7 +68,7 @@ function getSnapshot() {
 }
 
 /**
- * Returns true when the app window is visible and in the foreground.
+ * Returns true when the app window is focused (OS-level).
  * Uses useSyncExternalStore for tear-free reads.
  */
 export function useWindowFocus(): boolean {
