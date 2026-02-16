@@ -329,6 +329,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               thinkingLevel={thinkingLevel}
               mcpServers={mcpServers}
               contextTokenCount={contextTokenCount}
+              workspacePath={workspacePath}
               onMessageChange={setMessageInput}
               onSend={(content) => sendMessage(content)}
               onStop={stopSession}
@@ -409,6 +410,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     showCompactButton={showCompactButton}
                     mcpServers={mcpServers}
                     contextTokenCount={contextTokenCount}
+                    workspacePath={workspacePath}
                     onMessageChange={setMessageInput}
                     onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}

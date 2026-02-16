@@ -5,7 +5,7 @@
  *   BrowserTabBar (h-9)  — tab row with [Tab 1] [Tab 2] [+]
  *   Navigation Bar (h-9) — < > R [URL bar] link zap target console
  *   Tab Content (flex-1)  — all tabs rendered hidden/shown (preserves webview state)
- *   Console (h-[12.5rem]) — optional, shows active tab's logs
+ *   Console (resizable)   — collapsible panel, shows active tab's logs
  *
  * Persistence: Tab URLs/titles are synced to the workspace layout store
  * (localStorage) on a debounced 300ms timer. Webviews are destroyed on
@@ -13,8 +13,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,6 +120,7 @@ export function BrowserPanel({
 
   // Console toggle (shared UI — one toggle, shows active tab's logs)
   const [showConsole, setShowConsole] = useState(false);
+  const consolePanelRef = useRef<ImperativePanelHandle>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Imperative handles per tab
@@ -350,6 +357,17 @@ export function BrowserPanel({
       consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [activeTab?.consoleLogs, showConsole]);
+
+  // Sync showConsole state ↔ console panel collapse/expand
+  useEffect(() => {
+    const panel = consolePanelRef.current;
+    if (!panel) return;
+    if (showConsole) {
+      if (panel.isCollapsed()) panel.expand();
+    } else {
+      if (!panel.isCollapsed()) panel.collapse();
+    }
+  }, [showConsole]);
 
   // --- Tab operations ---
 
@@ -869,96 +887,114 @@ export function BrowserPanel({
         </Button>
       </div>
 
-      {/* Tab content area — all tabs rendered, only active visible */}
-      <div className={`relative overflow-hidden ${showConsole ? "flex-1" : "min-h-0 flex-1"}`}>
-        {tabs.length === 0 ? (
-          <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
-            Click + to open a browser tab
-          </div>
-        ) : (
-          tabs.map((tab) => (
-            <BrowserTab
-              key={tab.id}
-              ref={setTabRef(tab.id)}
-              tab={tab}
-              devBrowserStatus={devBrowserStatus}
-              onUpdateTab={handleUpdateTab}
-              onAddLog={handleAddLog}
-              visible={tab.id === activeTabId && panelVisible}
-              windowLabel={windowLabel}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Console Panel — shows active tab's logs */}
-      {showConsole && activeTab && (
-        <div className="border-border bg-muted/10 flex h-[12.5rem] flex-shrink-0 flex-col border-t">
-          {/* Console Header */}
-          <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
-            <div className="flex items-center gap-2">
-              <Terminal className="text-muted-foreground h-3.5 w-3.5" />
-              <span className="text-muted-foreground text-xs font-medium">Console</span>
-              <span className="text-muted-foreground/60 text-xs">
-                ({activeTab.consoleLogs.length})
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleClearConsole}
-                title="Clear console"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setShowConsole(false)}
-                title="Close console"
-              >
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Console Content */}
-          <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
-            {activeTab.consoleLogs.length === 0 ? (
-              <div className="text-muted-foreground/50 italic">Console is empty</div>
-            ) : (
-              <div className="space-y-0.5">
-                {activeTab.consoleLogs.map((log, i) => (
-                  <div
-                    key={i}
-                    className={`flex gap-2 ${
-                      log.level === "error"
-                        ? "text-destructive"
-                        : log.level === "warn"
-                          ? "text-warning"
-                          : log.level === "debug"
-                            ? "text-info"
-                            : "text-foreground"
-                    }`}
-                  >
-                    <span className="text-muted-foreground/60 flex-shrink-0">
-                      {log.timestamp.toLocaleTimeString("en-US", { hour12: false })}
-                    </span>
-                    <span className="w-14 flex-shrink-0 font-semibold">
-                      [{log.level.toUpperCase()}]
-                    </span>
-                    <span className="flex-1">{log.message}</span>
-                  </div>
-                ))}
-                <div ref={consoleEndRef} />
+      {/* Tab content + console — vertical resizable split */}
+      <ResizablePanelGroup direction="vertical" className="min-h-0 flex-1">
+        {/* Webview content: all tabs rendered, only active visible */}
+        <ResizablePanel minSize={30}>
+          <div className="relative h-full overflow-hidden">
+            {tabs.length === 0 ? (
+              <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
+                Click + to open a browser tab
               </div>
+            ) : (
+              tabs.map((tab) => (
+                <BrowserTab
+                  key={tab.id}
+                  ref={setTabRef(tab.id)}
+                  tab={tab}
+                  devBrowserStatus={devBrowserStatus}
+                  onUpdateTab={handleUpdateTab}
+                  onAddLog={handleAddLog}
+                  visible={tab.id === activeTabId && panelVisible}
+                  windowLabel={windowLabel}
+                />
+              ))
             )}
           </div>
-        </div>
-      )}
+        </ResizablePanel>
+
+        <ResizableHandle />
+
+        {/* Console panel — collapsible, drag to resize */}
+        <ResizablePanel
+          ref={consolePanelRef}
+          defaultSize={0}
+          minSize={10}
+          maxSize={60}
+          collapsible
+          collapsedSize={0}
+          onCollapse={() => setShowConsole(false)}
+          onExpand={() => setShowConsole(true)}
+        >
+          {showConsole && activeTab && (
+            <div className="border-border bg-muted/10 flex h-full flex-col border-t">
+              {/* Console Header */}
+              <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
+                <div className="flex items-center gap-2">
+                  <Terminal className="text-muted-foreground h-3.5 w-3.5" />
+                  <span className="text-muted-foreground text-xs font-medium">Console</span>
+                  <span className="text-muted-foreground/60 text-xs">
+                    ({activeTab.consoleLogs.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleClearConsole}
+                    title="Clear console"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setShowConsole(false)}
+                    title="Close console"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Console Content */}
+              <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
+                {activeTab.consoleLogs.length === 0 ? (
+                  <div className="text-muted-foreground/50 italic">Console is empty</div>
+                ) : (
+                  <div className="space-y-0.5">
+                    {activeTab.consoleLogs.map((log, i) => (
+                      <div
+                        key={i}
+                        className={`flex gap-2 ${
+                          log.level === "error"
+                            ? "text-destructive"
+                            : log.level === "warn"
+                              ? "text-warning"
+                              : log.level === "debug"
+                                ? "text-info"
+                                : "text-foreground"
+                        }`}
+                      >
+                        <span className="text-muted-foreground/60 flex-shrink-0">
+                          {log.timestamp.toLocaleTimeString("en-US", { hour12: false })}
+                        </span>
+                        <span className="w-14 flex-shrink-0 font-semibold">
+                          [{log.level.toUpperCase()}]
+                        </span>
+                        <span className="flex-1">{log.message}</span>
+                      </div>
+                    ))}
+                    <div ref={consoleEndRef} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
