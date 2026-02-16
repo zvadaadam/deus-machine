@@ -1,4 +1,5 @@
 use std::path::{Component, Path, PathBuf};
+use std::time::Instant;
 use tauri::Emitter;
 use crate::git;
 
@@ -322,8 +323,13 @@ pub fn git_diff_stats(
     parent_branch: String,
     default_branch: String,
 ) -> Result<DiffStatsResponse, String> {
+    let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let stats = git::get_diff_stats(&workspace_path, &resolved)?;
+    let elapsed = start.elapsed();
+    if elapsed.as_millis() > 100 {
+        println!("[GIT] git_diff_stats took {}ms ({})", elapsed.as_millis(), workspace_path);
+    }
     Ok(DiffStatsResponse { additions: stats.additions, deletions: stats.deletions })
 }
 
@@ -333,8 +339,13 @@ pub fn git_diff_files(
     parent_branch: String,
     default_branch: String,
 ) -> Result<Vec<DiffFileResponse>, String> {
+    let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let files = git::get_changed_files(&workspace_path, &resolved)?;
+    let elapsed = start.elapsed();
+    if elapsed.as_millis() > 100 {
+        println!("[GIT] git_diff_files took {}ms ({}, {} files)", elapsed.as_millis(), workspace_path, files.len());
+    }
     Ok(files.into_iter().map(|f| DiffFileResponse { file: f.file, additions: f.additions, deletions: f.deletions }).collect())
 }
 
@@ -345,6 +356,7 @@ pub fn git_diff_file(
     default_branch: String,
     file_path: String,
 ) -> Result<FileDiffResponse, String> {
+    let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let diff = git::get_file_patch(&workspace_path, &resolved, &file_path)?;
     let merge_base = git::get_merge_base(&workspace_path, &resolved)?;
@@ -366,6 +378,10 @@ pub fn git_diff_file(
         }
         Err(_) => git::get_git_file_content(&workspace_path, "HEAD", &file_path)?,
     };
+    let elapsed = start.elapsed();
+    if elapsed.as_millis() > 200 {
+        println!("[GIT] git_diff_file took {}ms ({}: {})", elapsed.as_millis(), workspace_path, file_path);
+    }
     Ok(FileDiffResponse { file: file_path, diff, old_content, new_content })
 }
 

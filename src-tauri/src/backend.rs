@@ -112,8 +112,10 @@ impl BackendManager {
         if let Some(mut child) = process.take() {
             println!("[BACKEND] Stopping backend (PID: {})", child.id());
             child.kill().context("Failed to kill backend process")?;
-            child.wait().ok(); // Wait for process to finish
-            println!("[BACKEND] Backend stopped");
+            match child.wait() {
+                Ok(status) => println!("[BACKEND] Backend stopped (exit: {})", status),
+                Err(e) => eprintln!("[BACKEND] Backend stopped (wait error: {})", e),
+            }
         }
 
         Ok(())
