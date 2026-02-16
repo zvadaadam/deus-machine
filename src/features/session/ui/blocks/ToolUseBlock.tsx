@@ -12,6 +12,7 @@
  */
 
 import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from "@/shared/types";
+import { motion } from "framer-motion";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
@@ -75,14 +76,14 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   const isLoading = !toolResult;
 
   return (
-    <div
+    <motion.div
       className="my-1"
-      style={{
-        contain: "paint",
-        animation: "chat-content-appear 250ms cubic-bezier(.16,1,.3,1) both",
-      }}
+      style={{ contain: "paint" }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
     >
       <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />
-    </div>
+    </motion.div>
   );
 }

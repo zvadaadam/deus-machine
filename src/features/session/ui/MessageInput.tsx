@@ -1,12 +1,11 @@
 import type { SessionStatus } from "@/shared/types";
-import { useState } from "react";
+import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
   Minimize2,
   ArrowUp,
   Square,
   Brain,
-  Paperclip,
-  X,
   Plus,
   Hammer,
   Globe,
@@ -14,6 +13,8 @@ import {
   Check,
   ArrowUpRight,
 } from "lucide-react";
+import { useFileMention } from "../hooks/useFileMention";
+import { FileMentionPopover } from "./FileMentionPopover";
 import {
   InputGroup,
   InputGroupAddon,
@@ -33,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
+import { PastedTextCard } from "./PastedTextCard";
+import { PastedImageCard } from "./PastedImageCard";
 import {
   getRuntimeModelLabel,
   getRuntimeModelOption,
@@ -47,11 +50,24 @@ interface Attachment {
   type: string;
 }
 
+interface PastedText {
+  id: string;
+  content: string;
+}
+
 interface MCPServer {
   name: string;
   active: boolean;
   command: string;
 }
+
+export interface MessageInputRef {
+  addFiles: (files: File[]) => Promise<void>;
+  clearPastedContent: () => void;
+}
+
+// Anthropic API only supports these image formats for vision
+const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 interface MessageInputProps {
   messageInput: string;
@@ -63,8 +79,10 @@ interface MessageInputProps {
   showCompactButton?: boolean;
   mcpServers?: MCPServer[];
   contextTokenCount?: number;
+  /** Workspace path for @ file mention search */
+  workspacePath?: string | null;
   onMessageChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (content?: string) => void;
   onCompact?: () => void;
   onCreatePR?: () => void;
   onStop?: () => void;
@@ -74,41 +92,206 @@ interface MessageInputProps {
   className?: string;
 }
 
-export function MessageInput({
-  messageInput,
-  sending,
-  sessionStatus,
-  embedded: _embedded = false,
-  model = "sonnet",
-  thinkingLevel = "NONE",
-  showCompactButton = false,
-  mcpServers = [],
-  contextTokenCount = 0,
-  onMessageChange,
-  onSend,
-  onCompact,
-  onCreatePR: _onCreatePR,
-  onStop,
-  onModelChange,
-  onThinkingLevelChange,
-  onAttachmentClick,
-  className,
-}: MessageInputProps) {
+export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(function MessageInput(
+  {
+    messageInput,
+    sending,
+    sessionStatus,
+    embedded: _embedded = false,
+    model = "sonnet",
+    thinkingLevel = "NONE",
+    showCompactButton = false,
+    mcpServers = [],
+    contextTokenCount = 0,
+    workspacePath = null,
+    onMessageChange,
+    onSend,
+    onCompact,
+    onCreatePR: _onCreatePR,
+    onStop,
+    onModelChange,
+    onThinkingLevelChange,
+    onAttachmentClick,
+    className,
+  },
+  ref
+) {
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
+
+  // Pasted text cards (long pastes shown as collapsed cards)
+  const [pastedTexts, setPastedTexts] = useState<PastedText[]>([]);
 
   // Browser MCP state (future integration)
   const [browserEnabled, setBrowserEnabled] = useState(false);
 
-  // Keyboard shortcut
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // Process image files into attachment previews (shared by paste + panel drop)
+  const processFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter((f) => SUPPORTED_IMAGE_TYPES.has(f.type));
+    if (!imageFiles.length) return;
+    const previews = await Promise.all(
+      imageFiles.map(
+        (file) =>
+          new Promise<Attachment | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) =>
+              resolve({
+                id: crypto.randomUUID(),
+                file,
+                preview: ev.target?.result as string,
+                type: file.type,
+              });
+            reader.onerror = () => resolve(null);
+            reader.onabort = () => resolve(null);
+            reader.readAsDataURL(file);
+          })
+      )
+    );
+    const valid = previews.filter(Boolean) as Attachment[];
+    if (valid.length) setAttachments((prev) => [...prev, ...valid]);
+  }, []);
+
+  // Expose addFiles + clearPastedContent for parent-level drag & drop and success cleanup
+  useImperativeHandle(
+    ref,
+    () => ({
+      addFiles: processFiles,
+      clearPastedContent: () => {
+        setPastedTexts([]);
+        setAttachments([]);
+      },
+    }),
+    [processFiles]
+  );
+
+  /**
+   * Build combined content from pasted texts + typed input + images.
+   * When images are present, returns a JSON-stringified content blocks array
+   * (Anthropic API format). Otherwise returns plain text for backward compat.
+   */
+  const buildCombinedContent = () => {
+    const hasImages = attachments.length > 0;
+
+    // Combine all text sources
+    const textParts: string[] = [];
+    for (const paste of pastedTexts) {
+      textParts.push(paste.content);
+    }
+    const typed = messageInput.trim();
+    if (typed) {
+      textParts.push(typed);
+    }
+    const combinedText = textParts.join("\n\n");
+
+    // No images: return plain text string (backward compatible)
+    if (!hasImages) {
+      return combinedText;
+    }
+
+    // With images: build Anthropic API content blocks array, JSON-stringified.
+    // The sidecar parses this and passes the array as MessageParam.content to the SDK.
+    const blocks: Array<Record<string, unknown>> = [];
+
+    if (combinedText) {
+      blocks.push({ type: "text", text: combinedText });
+    }
+
+    for (const attachment of attachments) {
+      // Strip data URL prefix (e.g. "data:image/png;base64,") to get raw base64
+      const base64Data = attachment.preview.includes(",")
+        ? attachment.preview.split(",")[1]
+        : attachment.preview;
+
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: attachment.type,
+          data: base64Data,
+        },
+      });
+    }
+
+    return JSON.stringify(blocks);
+  };
+
+  const hasContent =
+    messageInput.trim().length > 0 || pastedTexts.length > 0 || attachments.length > 0;
+
+  // Send with combined content (pasted texts + typed input + images)
+  // Pasted content is NOT cleared here — it's cleared by the parent via
+  // ref.clearPastedContent() inside onMessageSent (only on success), mirroring
+  // how messageInput is cleared. This prevents data loss on send failure.
+  const handleSend = () => {
+    if (sending || !hasContent) return;
+    const combined = buildCombinedContent();
+    if (combined) {
+      onSend(combined);
+    }
+  };
+
+  // @ file mention support (nucleo-powered fuzzy search via Rust)
+  const fileMention = useFileMention({
+    value: messageInput,
+    workspacePath: workspacePath ?? null,
+    onChange: onMessageChange,
+  });
+
+  // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Let file mention popover handle navigation keys first
+    if (fileMention.handleKeyDown(e)) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      if (!sending && messageInput.trim()) {
-        onSend();
+      handleSend();
+    }
+  };
+
+  // Intercept long pastes (20+ lines) → show as collapsed card
+  const PASTE_LINE_THRESHOLD = 20;
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    // Check for pasted images — clipboardData.items is the reliable API
+    // (clipboardData.files is often empty for clipboard screenshots)
+    const imageFiles: File[] = [];
+    if (e.clipboardData.items) {
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.kind === "file" && SUPPORTED_IMAGE_TYPES.has(item.type)) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
       }
     }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      processFiles(imageFiles);
+      return;
+    }
+
+    // Check for long text pastes
+    const text = e.clipboardData.getData("text/plain");
+    if (!text) return;
+
+    const lineCount = text.split("\n").length;
+    if (lineCount >= PASTE_LINE_THRESHOLD) {
+      e.preventDefault();
+      setPastedTexts((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          content: text,
+        },
+      ]);
+    }
+    // Under threshold: native paste into textarea
+  };
+
+  const removePastedText = (id: string) => {
+    setPastedTexts((prev) => prev.filter((p) => p.id !== id));
   };
 
   const modelLabel = getRuntimeModelLabel(model);
@@ -155,59 +338,6 @@ export function MessageInput({
       ? "var(--primary)" // Copper/warning when > 80%
       : "var(--muted-foreground)"; // Neutral gray normally
 
-  // Drag & Drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isDragging) setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    if (
-      e.clientX < rect.left ||
-      e.clientX >= rect.right ||
-      e.clientY < rect.top ||
-      e.clientY >= rect.bottom
-    ) {
-      setIsDragging(false);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-
-    if (files.length === 0) {
-      // TODO: Show toast - "Only image files are supported"
-      return;
-    }
-
-    const previews = await Promise.all(
-      files.map((file) => {
-        return new Promise<Attachment>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) =>
-            resolve({
-              id: crypto.randomUUID(),
-              file,
-              preview: e.target?.result as string,
-              type: file.type,
-            });
-          reader.readAsDataURL(file);
-        });
-      })
-    );
-
-    setAttachments((prev) => [...prev, ...previews]);
-  };
-
   const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
@@ -222,63 +352,59 @@ export function MessageInput({
   };
 
   return (
-    <div className={cn("relative shrink-0 px-4 pb-4", className)}>
-      {/* Scroll fade overlay */}
-      <div className="bg-fade-overlay pointer-events-none absolute right-0 bottom-full left-0 h-8 translate-y-2" />
-
-      {/* InputGroup with drag & drop */}
+    <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
+      {/* File mention popover — anchored above the input group */}
+      {fileMention.isOpen && (
+        <div className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start">
+          <FileMentionPopover
+            results={fileMention.results}
+            loading={fileMention.loading}
+            selectedIndex={fileMention.selectedIndex}
+            query={fileMention.query}
+            onSelect={fileMention.selectFile}
+          />
+        </div>
+      )}
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
-        {/* Drag overlay */}
-        {isDragging && (
-          <div className="bg-primary/10 border-primary pointer-events-none absolute inset-0 z-1 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed">
-            <Paperclip className="text-primary h-8 w-8" />
-            <p className="text-primary text-sm font-medium">Drop files here</p>
-          </div>
-        )}
-
-        {/* Attachment previews - inside InputGroup */}
-        {attachments.length > 0 && (
-          <div className="scrollbar-vibrancy flex w-full items-start justify-start gap-3 overflow-x-auto px-3 pt-3">
-            {attachments.map((attachment) => (
-              <div
-                key={attachment.id}
-                className="group border-border bg-muted relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border"
-              >
-                <img
-                  src={attachment.preview}
-                  className="h-full w-full object-cover"
-                  alt={attachment.file.name}
+        {/* Pasted content cards (images + text) — unified horizontal scroll */}
+        {(attachments.length > 0 || pastedTexts.length > 0) && (
+          <div className="scrollbar-vibrancy flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
+            <AnimatePresence mode="popLayout">
+              {attachments.map((attachment) => (
+                <PastedImageCard
+                  key={attachment.id}
+                  preview={attachment.preview}
+                  fileName={attachment.file.name}
+                  onRemove={() => removeAttachment(attachment.id)}
                 />
-                {/* Remove button */}
-                <button
-                  onClick={() => removeAttachment(attachment.id)}
-                  className="bg-muted absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label="Remove attachment"
-                >
-                  <X className="text-muted-foreground h-3 w-3" />
-                </button>
-                {/* File name */}
-                <div className="bg-muted text-muted-foreground text-2xs absolute right-0 bottom-0 left-0 truncate px-1 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                  {attachment.file.name}
-                </div>
-              </div>
-            ))}
+              ))}
+              {pastedTexts.map((paste) => (
+                <PastedTextCard
+                  key={paste.id}
+                  content={paste.content}
+                  onRemove={() => removePastedText(paste.id)}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         )}
 
         {/* Textarea */}
         <InputGroupTextarea
           value={messageInput}
-          onChange={(e) => onMessageChange(e.target.value)}
-          placeholder="Ask a follow-up ..."
+          onChange={(e) => {
+            onMessageChange(e.target.value);
+            fileMention.handleCursorChange(e);
+          }}
+          onPaste={handlePaste}
+          placeholder="Ask a follow-up ... (type @ to mention a file)"
           disabled={sending}
           onKeyDown={handleKeyDown}
+          onSelect={fileMention.handleCursorChange}
+          onClick={fileMention.handleCursorChange}
           className={cn(
             "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
@@ -537,11 +663,11 @@ export function MessageInput({
               </InputGroupButton>
             )}
 
-            {/* Send button - always visible, highlighted when text exists */}
+            {/* Send button - always visible, highlighted when content exists */}
             <InputGroupButton
-              onClick={onSend}
-              disabled={sending || !messageInput.trim()}
-              variant={messageInput.trim() ? "default" : "outline"}
+              onClick={handleSend}
+              disabled={sending || !hasContent}
+              variant={hasContent ? "default" : "outline"}
               size="icon-sm"
               title="Send message (⌘ + Enter)"
               aria-label="Send message"
@@ -554,4 +680,4 @@ export function MessageInput({
       </InputGroup>
     </div>
   );
-}
+});

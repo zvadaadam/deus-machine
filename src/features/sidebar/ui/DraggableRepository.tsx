@@ -11,7 +11,8 @@ interface DraggableRepositoryProps extends RepositoryItemProps {
 
 /**
  * Draggable wrapper for RepositoryItem
- * Uses dedicated drag handle area - clicks work normally
+ * Entire row is the drag target — click = expand/collapse, drag = reorder
+ * PointerSensor distance constraint (in AppSidebar) differentiates the two
  * Auto-collapses on drag start (Linear pattern) for better drag experience
  */
 export function DraggableRepository({
@@ -21,17 +22,14 @@ export function DraggableRepository({
   dragDisabled = false,
   ...props
 }: DraggableRepositoryProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: repository.repo_id,
     disabled: dragDisabled,
+    // Snappy spring-like transition for neighbors shifting (ease-out-quart 200ms)
+    transition: {
+      duration: 200,
+      easing: "cubic-bezier(.165, .84, .44, 1)",
+    },
   });
 
   // Auto-collapse when drag starts (prevents huge drag preview with many workspaces)
@@ -41,26 +39,28 @@ export function DraggableRepository({
     }
   }, [isDragging, isCollapsed, onToggleCollapse]);
 
+  // Use Translate (not Transform) to avoid scaleX/scaleY stretching during drag
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={cn(isDragging && "z-50 opacity-50")}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        isDragging
+          ? "z-50 cursor-grabbing [&_*]:cursor-grabbing opacity-70 shadow-lg shadow-black/20 rounded-lg"
+          : "cursor-grab [&_*]:cursor-grab",
+      )}
+    >
       <RepositoryItem
         repository={repository}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
-        dragHandleProps={
-          !dragDisabled
-            ? {
-                attributes,
-                listeners,
-                setActivatorNodeRef,
-              }
-            : undefined
-        }
         {...props}
       />
     </div>

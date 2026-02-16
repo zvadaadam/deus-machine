@@ -1,12 +1,14 @@
 /**
- * Simple Syntax Highlighter
+ * Syntax Highlighter — Progressive Enhancement
  *
- * Basic syntax highlighting without external dependencies.
- * Can be replaced with Prism.js or Shiki later for better highlighting.
+ * Renders plain text instantly, then upgrades with Shiki syntax highlighting.
+ * Uses the shared Shiki singleton (src/shared/lib/syntaxHighlighter.ts).
  */
 
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/utils";
+import { useTheme } from "@/app/providers";
+import { highlightCodeTokens, highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 
 interface SyntaxHighlighterProps {
   code: string;
@@ -21,14 +23,62 @@ export function SyntaxHighlighter({
   showLineNumbers = false,
   className,
 }: SyntaxHighlighterProps) {
-  const lines = code.split("\n");
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+  const { actualTheme } = useTheme();
+  const shikiTheme = actualTheme === "dark" ? "github-dark" : "github-light";
 
-  // Simple keyword highlighting for common languages
-  const highlightLine = (line: string, lang: string): ReactNode => {
-    // For now, return plain text. Easy to enhance later.
-    // This keeps the component ready for Prism.js integration.
-    return line;
-  };
+  useEffect(() => {
+    let cancelled = false;
+
+    if (showLineNumbers) {
+      highlightFileLines(code, language, shikiTheme).then((lines) => {
+        if (cancelled) return;
+        // Build line-number table from per-line HTML
+        const rows = lines
+          .map(
+            (lineHtml, i) =>
+              `<tr class="hover:bg-[var(--muted)]/30 transition-colors">` +
+              `<td class="text-[var(--muted-foreground)] border-r border-[var(--border)]/40 w-12 pr-4 text-right align-top select-none">${i + 1}</td>` +
+              `<td class="pl-4 align-top"><code class="block whitespace-pre">${lineHtml}</code></td>` +
+              `</tr>`
+          )
+          .join("");
+        setHighlightedHtml(`<table class="border-collapse"><tbody>${rows}</tbody></table>`);
+      });
+    } else {
+      highlightCodeTokens(code, language, shikiTheme).then((html) => {
+        if (!cancelled && html) setHighlightedHtml(html);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language, shikiTheme, showLineNumbers]);
+
+  // Shiki HTML ready — render highlighted output
+  if (highlightedHtml) {
+    // Line-number mode renders a full table; plain mode renders token spans
+    if (showLineNumbers) {
+      return (
+        <div
+          className={cn("font-mono text-sm", className)}
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
+      );
+    }
+    return (
+      <div className={cn("font-mono text-sm", className)}>
+        <code
+          className="block whitespace-pre"
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
+      </div>
+    );
+  }
+
+  // Instant fallback: plain text (zero delay, matches layout exactly)
+  const lines = code.split("\n");
 
   return (
     <div className={cn("font-mono text-sm", className)}>
@@ -41,7 +91,7 @@ export function SyntaxHighlighter({
                   {i + 1}
                 </td>
                 <td className="pl-4 align-top">
-                  <code className="block whitespace-pre">{highlightLine(line, language)}</code>
+                  <code className="block whitespace-pre">{line}</code>
                 </td>
               </tr>
             ))}

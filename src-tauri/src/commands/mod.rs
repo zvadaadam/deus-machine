@@ -9,6 +9,7 @@ mod files;
 mod git;
 mod onboarding;
 mod db;
+mod watcher;
 
 pub use pty::*;
 pub use socket::*;
@@ -21,3 +22,4 @@ pub use files::*;
 pub use git::*;
 pub use onboarding::*;
 pub use db::*;
+pub use watcher::*;
