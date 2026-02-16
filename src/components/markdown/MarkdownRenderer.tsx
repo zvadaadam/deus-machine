@@ -5,14 +5,15 @@
  * - INSTANT rendering (synchronous, no async plugins)
  * - Security: Sanitizes HTML (rehype-sanitize)
  * - Copy button on code blocks
+ * - Progressive Shiki syntax highlighting (renders plain first, upgrades after)
  * - Configurable typography
  * - GFM support (tables, task lists, strikethrough)
  *
  * Performance Philosophy:
  * - Uses synchronous Markdown (not MarkdownHooks/Async)
- * - NO syntax highlighting for chat (Shiki is slow, adds 200ms+ delay)
- * - Basic code styling via CSS (instant, good enough for chat)
- * - Save Shiki for file viewer where syntax highlighting matters
+ * - Code blocks render instantly as plain text (CSS-only)
+ * - Shiki highlights asynchronously AFTER initial render (no blocking)
+ * - Zero layout shift: same <code> element, inner content swapped
  *
  * Usage:
  * ```tsx
@@ -27,6 +28,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
+import { ShikiCodeBlock } from "./ShikiCodeBlock";
 import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 
 interface MarkdownRendererProps {
@@ -118,6 +120,13 @@ function MarkdownCode({ className, children, ...props }: any) {
     return <LazyMermaidDiagram chart={chart} />;
   }
 
+  // Fenced code block — progressive Shiki highlighting
+  if (lang) {
+    const code = String(children).replace(/\n$/, "");
+    return <ShikiCodeBlock language={lang} code={code} className={className} />;
+  }
+
+  // Inline code — render as-is
   return (
     <code className={className} {...props}>
       {children}
@@ -180,6 +189,8 @@ export function MarkdownRenderer({
       },
     ]);
   }
+
+
 
   // Use synchronous Markdown - INSTANT rendering (no async delay)
   return (

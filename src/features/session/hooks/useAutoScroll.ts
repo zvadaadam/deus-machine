@@ -18,14 +18,40 @@
  *                           blocks appearing). Triggers auto-scroll when content
  *                           grows while user is at bottom.
  *
- * This replaces the old approach of:
- *   - A 100px threshold that broke at different zoom levels
- *   - No ResizeObserver (scroll jumped when content reflowed)
- *   - Scroll events firing during smooth-scroll animation (button flicker)
+ * PROTECTIONS (ported from use-stick-to-bottom):
+ *   Text selection   -- Pauses auto-scroll while user is dragging to select text
+ *                       inside the chat, preventing the scroll from fighting the
+ *                       selection during streaming.
+ *   Wheel escape     -- Uses wheel events (not scroll direction) to detect user
+ *                       intent to scroll up. Walks the DOM to distinguish scrolling
+ *                       inside nested scrollables (code blocks) from the main chat.
+ *   Resize guard     -- Tracks content height deltas to prevent resize-triggered
+ *                       scroll events from being misinterpreted as user scroll-ups.
  */
 
 import { useState, useEffect, useCallback, useRef, RefObject } from "react";
 import type { Message } from "@/shared/types";
+
+// ---------------------------------------------------------------------------
+// Text selection protection (module-level singleton, shared across instances)
+// Ported from use-stick-to-bottom: tracks mousedown globally so the hook can
+// skip auto-scroll while the user is dragging to select text.
+// ---------------------------------------------------------------------------
+let mouseDown = false;
+
+if (typeof document !== "undefined") {
+  document.addEventListener("mousedown", () => {
+    mouseDown = true;
+  });
+  document.addEventListener("mouseup", () => {
+    mouseDown = false;
+  });
+  // Safety net: click fires after mouseup, catches edge cases where mouseup
+  // was missed (e.g., mouseup outside the window).
+  document.addEventListener("click", () => {
+    mouseDown = false;
+  });
+}
 
 /**
  * Scroll state machine states.
@@ -69,7 +95,32 @@ export function useAutoScroll({
   // Track previous message count to detect new messages vs. content reflows.
   const prevMessageCountRef = useRef(messages.length);
 
+  // Resize-vs-scroll race condition guard (ported from use-stick-to-bottom).
+  // When content resizes, the browser may fire a scroll event before/after the
+  // ResizeObserver callback. Without this guard, the scroll handler sees
+  // scrollTop change and misinterprets it as a user scroll-up.
+  const resizeDifferenceRef = useRef(0);
+
   // --- Helpers ---
+
+  /**
+   * Check if the user is actively selecting text inside the scroll container.
+   * Ported from use-stick-to-bottom: prevents auto-scroll from fighting text
+   * selection during streaming. Requires both mouseDown AND an active selection
+   * range that overlaps with the scroll container.
+   */
+  const isSelecting = useCallback(() => {
+    if (!mouseDown) return false;
+    const container = messagesContainerRef.current;
+    if (!container) return false;
+
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return false;
+
+    const range = selection.getRangeAt(0);
+    const ancestor = range.commonAncestorContainer;
+    return ancestor.contains(container) || container.contains(ancestor);
+  }, [messagesContainerRef]);
 
   /** Transition the scroll state and sync the button visibility. */
   const transitionTo = useCallback((next: ScrollState) => {
@@ -138,7 +189,7 @@ export function useAutoScroll({
         // Only RE-ENGAGE (→ AT_BOTTOM) from the IO, never disengage (→ READING_HISTORY).
         // Content growth pushes the sentinel out of view — the IO sees "not visible"
         // but that's NOT the user scrolling up. Disengagement is handled exclusively
-        // by the scroll listener detecting actual upward scrolls.
+        // by the wheel listener detecting actual upward wheel events.
         if (isVisible && scrollStateRef.current !== "SCROLLING_TO_BOTTOM") {
           transitionTo("AT_BOTTOM");
         }
@@ -163,11 +214,32 @@ export function useAutoScroll({
     if (!container) return;
 
     let rafId: number | null = null;
+    let previousHeight: number | undefined;
 
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
       // Batch with rAF to avoid layout thrashing when multiple children resize
       // in the same frame (e.g., several markdown blocks rendering at once).
       if (rafId !== null) return;
+
+      // Track height delta for the resize-vs-scroll race condition guard.
+      const entry = entries[0];
+      if (entry) {
+        const currentHeight = entry.contentRect.height;
+        const difference = currentHeight - (previousHeight ?? currentHeight);
+        previousHeight = currentHeight;
+        resizeDifferenceRef.current = difference;
+
+        // Reset the guard after the scroll event has had a chance to fire.
+        // rAF + setTimeout(1) ensures we clear AFTER both the scroll event
+        // and any microtasks from the resize (see WICG/resize-observer#25).
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            if (resizeDifferenceRef.current === difference) {
+              resizeDifferenceRef.current = 0;
+            }
+          }, 1);
+        });
+      }
 
       // Capture scroll intent NOW, before the IO can react to the layout change.
       // Per spec, ResizeObserver fires before IntersectionObserver in the same
@@ -178,7 +250,7 @@ export function useAutoScroll({
 
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (shouldScroll) {
+        if (shouldScroll && !isSelecting()) {
           container.scrollTop = container.scrollHeight;
         }
       });
@@ -196,9 +268,49 @@ export function useAutoScroll({
       observer.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [messagesContainerRef]);
+  }, [messagesContainerRef, isSelecting]);
 
-  // --- Scroll event listener: detect manual user scrolling ---
+  // --- Wheel event listener: escape detection (ported from use-stick-to-bottom) ---
+  // Uses wheel events instead of scroll-direction math. This correctly handles
+  // nested scrollable elements (code blocks, terminal output): the DOM walk
+  // finds the nearest scrollable ancestor of the event target and only escapes
+  // if it's OUR scroll container. Scroll events can't distinguish this.
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (scrollStateRef.current === "SCROLLING_TO_BOTTOM") return;
+      if (e.deltaY >= 0) return; // Only care about scroll-UP (deltaY < 0)
+
+      // Walk up from the event target to find the nearest scrollable ancestor.
+      // If it's not our container, the user is scrolling inside a nested
+      // scrollable (code block, terminal, etc.) — don't escape.
+      let el = e.target as HTMLElement | null;
+      while (el) {
+        const overflow = getComputedStyle(el).overflowY;
+        const isScrollable =
+          (overflow === "scroll" || overflow === "auto") && el.scrollHeight > el.clientHeight;
+        if (isScrollable) {
+          // Found the nearest scrollable ancestor
+          if (el === container) {
+            // User is scrolling up in OUR container → escape from auto-scroll
+            if (scrollStateRef.current === "AT_BOTTOM") {
+              transitionTo("READING_HISTORY");
+            }
+          }
+          // Either way, stop walking — we found the relevant scrollable
+          return;
+        }
+        el = el.parentElement;
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: true });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [messagesContainerRef, transitionTo]);
+
+  // --- Scroll event listener: detect re-engagement (scrolling back to bottom) ---
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -208,22 +320,20 @@ export function useAutoScroll({
       // the scroll-to-bottom button from flickering on/off.
       if (scrollStateRef.current === "SCROLLING_TO_BOTTOM") return;
 
+      // If there's a pending resize difference, this scroll event was triggered
+      // by a content resize (not by the user). Ignore it to prevent false
+      // disengagement. (Ported from use-stick-to-bottom.)
+      if (resizeDifferenceRef.current !== 0) return;
+
       const currentTop = container.scrollTop;
-      const scrolledUp = currentTop < lastScrollTopRef.current;
       const scrolledDown = currentTop > lastScrollTopRef.current;
       lastScrollTopRef.current = currentTop;
 
-      // --- DISENGAGEMENT: upward scroll = user intent to read history ---
-      // Catches the case BEFORE the IntersectionObserver fires (IO is async)
-      // and prevents the ResizeObserver from yanking the user back down.
-      if (scrolledUp && scrollStateRef.current === "AT_BOTTOM") {
-        transitionTo("READING_HISTORY");
-        return;
-      }
-
-      // --- RE-ENGAGEMENT: user scrolled back to bottom ---
+      // RE-ENGAGEMENT: user scrolled back to bottom.
       // Math-based check (like Cursor's approach) as a fast path.
       // The IO will also fire but is async; this gives immediate re-engagement.
+      // Note: Disengagement is now handled by the wheel listener (more reliable
+      // than scroll-direction for distinguishing nested scrollables).
       if (scrolledDown && scrollStateRef.current === "READING_HISTORY") {
         const atBottom =
           container.scrollTop + container.clientHeight >= container.scrollHeight - 16;

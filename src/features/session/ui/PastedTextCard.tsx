@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 
 interface PastedTextCardProps {
@@ -8,7 +9,14 @@ interface PastedTextCardProps {
 
 export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
   return (
-    <div className="group bg-muted/50 border-border/60 animate-paste-card-enter relative flex h-[80px] w-44 shrink-0 flex-col rounded-lg border p-2">
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+      className="group bg-muted/50 border-border/60 relative flex h-[80px] w-44 shrink-0 flex-col rounded-lg border p-2"
+    >
       <p className="text-foreground/60 text-2xs line-clamp-3 min-h-0 flex-1 font-mono leading-snug">
         {content}
       </p>
@@ -28,6 +36,6 @@ export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
       >
         <X className="text-muted-foreground h-3 w-3" />
       </button>
-    </div>
+    </motion.div>
   );
 }

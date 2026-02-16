@@ -1,5 +1,6 @@
 import type { SessionStatus } from "@/shared/types";
-import { useState, forwardRef, useImperativeHandle } from "react";
+import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
   Minimize2,
   ArrowUp,
@@ -12,6 +13,8 @@ import {
   Check,
   ArrowUpRight,
 } from "lucide-react";
+import { useFileMention } from "../hooks/useFileMention";
+import { FileMentionPopover } from "./FileMentionPopover";
 import {
   InputGroup,
   InputGroupAddon,
@@ -76,6 +79,8 @@ interface MessageInputProps {
   showCompactButton?: boolean;
   mcpServers?: MCPServer[];
   contextTokenCount?: number;
+  /** Workspace path for @ file mention search */
+  workspacePath?: string | null;
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
   onCompact?: () => void;
@@ -98,6 +103,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     showCompactButton = false,
     mcpServers = [],
     contextTokenCount = 0,
+    workspacePath = null,
     onMessageChange,
     onSend,
     onCompact,
@@ -120,7 +126,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   const [browserEnabled, setBrowserEnabled] = useState(false);
 
   // Process image files into attachment previews (shared by paste + panel drop)
-  const processFiles = async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[]) => {
     const imageFiles = files.filter((f) => SUPPORTED_IMAGE_TYPES.has(f.type));
     if (!imageFiles.length) return;
     const previews = await Promise.all(
@@ -143,7 +149,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     );
     const valid = previews.filter(Boolean) as Attachment[];
     if (valid.length) setAttachments((prev) => [...prev, ...valid]);
-  };
+  }, []);
 
   // Expose addFiles + clearPastedContent for parent-level drag & drop and success cleanup
   useImperativeHandle(
@@ -155,7 +161,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         setAttachments([]);
       },
     }),
-    []
+    [processFiles]
   );
 
   /**
@@ -224,8 +230,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     }
   };
 
-  // Keyboard shortcut
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // @ file mention support (nucleo-powered fuzzy search via Rust)
+  const fileMention = useFileMention({
+    value: messageInput,
+    workspacePath: workspacePath ?? null,
+    onChange: onMessageChange,
+  });
+
+  // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Let file mention popover handle navigation keys first
+    if (fileMention.handleKeyDown(e)) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSend();
@@ -334,6 +353,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   return (
     <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
+      {/* File mention popover — anchored above the input group */}
+      {fileMention.isOpen && (
+        <div className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start">
+          <FileMentionPopover
+            results={fileMention.results}
+            loading={fileMention.loading}
+            selectedIndex={fileMention.selectedIndex}
+            query={fileMention.query}
+            onSelect={fileMention.selectFile}
+          />
+        </div>
+      )}
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
@@ -341,32 +372,39 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         {/* Pasted content cards (images + text) — unified horizontal scroll */}
         {(attachments.length > 0 || pastedTexts.length > 0) && (
           <div className="scrollbar-vibrancy flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
-            {attachments.map((attachment) => (
-              <PastedImageCard
-                key={attachment.id}
-                preview={attachment.preview}
-                fileName={attachment.file.name}
-                onRemove={() => removeAttachment(attachment.id)}
-              />
-            ))}
-            {pastedTexts.map((paste) => (
-              <PastedTextCard
-                key={paste.id}
-                content={paste.content}
-                onRemove={() => removePastedText(paste.id)}
-              />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {attachments.map((attachment) => (
+                <PastedImageCard
+                  key={attachment.id}
+                  preview={attachment.preview}
+                  fileName={attachment.file.name}
+                  onRemove={() => removeAttachment(attachment.id)}
+                />
+              ))}
+              {pastedTexts.map((paste) => (
+                <PastedTextCard
+                  key={paste.id}
+                  content={paste.content}
+                  onRemove={() => removePastedText(paste.id)}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         )}
 
         {/* Textarea */}
         <InputGroupTextarea
           value={messageInput}
-          onChange={(e) => onMessageChange(e.target.value)}
+          onChange={(e) => {
+            onMessageChange(e.target.value);
+            fileMention.handleCursorChange(e);
+          }}
           onPaste={handlePaste}
-          placeholder="Ask a follow-up ..."
+          placeholder="Ask a follow-up ... (type @ to mention a file)"
           disabled={sending}
           onKeyDown={handleKeyDown}
+          onSelect={fileMention.handleCursorChange}
+          onClick={fileMention.handleCursorChange}
           className={cn(
             "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
