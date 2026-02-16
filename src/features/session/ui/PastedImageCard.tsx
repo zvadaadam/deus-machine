@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface PastedImageCardProps {
   preview: string;
@@ -8,7 +9,14 @@ interface PastedImageCardProps {
 
 export function PastedImageCard({ preview, fileName, onRemove }: PastedImageCardProps) {
   return (
-    <div className="group bg-muted/50 border-border/60 animate-paste-card-enter relative h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border">
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
+      className="group bg-muted/50 border-border/60 relative h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
+    >
       <img src={preview} className="h-full w-full object-cover" alt={fileName} />
       <button
         onClick={onRemove}
@@ -17,6 +25,6 @@ export function PastedImageCard({ preview, fileName, onRemove }: PastedImageCard
       >
         <X className="text-muted-foreground h-3 w-3" />
       </button>
-    </div>
+    </motion.div>
   );
 }

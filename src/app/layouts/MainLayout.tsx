@@ -26,6 +26,7 @@ import { useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { invoke } from "@/platform/tauri";
+import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
 
@@ -427,6 +428,14 @@ export function MainLayout() {
         }}
         onClone={handleCloneRepository}
         onClearError={() => setCloneError(null)}
+      />
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette
+        actionOverrides={{
+          "open-project": handleOpenProject,
+          "clone-repository": () => setShowCloneModal(true),
+        }}
       />
     </SidebarProvider>
   );
