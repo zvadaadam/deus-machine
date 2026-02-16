@@ -7,3 +7,4 @@ export { useZoom } from "./useZoom";
 export { useIsFullscreen } from "./useIsFullscreen";
 export { useTauriDragZone } from "./useTauriDrag";
 export { useWindowResizing } from "./useWindowResizing";
+export { useWindowFocus, isWindowFocused } from "./useWindowFocus";
