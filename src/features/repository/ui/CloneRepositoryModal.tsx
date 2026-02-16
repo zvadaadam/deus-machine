@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -223,7 +224,15 @@ export function CloneRepositoryModal({
               {/* Progress bar */}
               <div className="bg-muted h-1 overflow-hidden rounded-full">
                 {statusMessage || isIndeterminate ? (
-                  <div className="bg-primary h-full w-1/3 animate-[clone-indeterminate_1.5s_cubic-bezier(.645,.045,.355,1)_infinite] rounded-full" />
+                  <motion.div
+                    className="bg-primary h-full w-1/3 rounded-full"
+                    animate={{ x: ["-100%", "400%"] }}
+                    transition={{
+                      duration: 1.5,
+                      ease: [0.645, 0.045, 0.355, 1],
+                      repeat: Infinity,
+                    }}
+                  />
                 ) : (
                   <div
                     className="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"

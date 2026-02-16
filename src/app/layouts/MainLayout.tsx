@@ -111,9 +111,10 @@ export function MainLayout() {
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
 
-  // Tracks whether a clone was abandoned by closing the modal mid-clone.
-  // Checked after each async phase to skip stale UI side effects.
-  const cloneAbortedRef = useRef(false);
+  // Generation counter: prevents stale clone invocations from mutating state.
+  // Each call to handleCloneRepository captures its generation; if the counter
+  // advances (via close or a new clone), earlier invocations bail out.
+  const cloneGenerationRef = useRef(0);
 
   // Queries for repos, settings, system prompt
   const reposQuery = useRepos();
@@ -320,7 +321,10 @@ export function MainLayout() {
   }
 
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
-    cloneAbortedRef.current = false;
+    // Advance generation so any in-flight clone from a previous invocation bails out.
+    const generation = ++cloneGenerationRef.current;
+    const isStale = () => generation !== cloneGenerationRef.current;
+
     setCloning(true);
     setCloneError(null);
     setCloneStatus(null);
@@ -343,7 +347,7 @@ export function MainLayout() {
 
       // Phase 1: Git clone (progress events shown by modal)
       await invoke("git_clone", { url: githubUrl, targetPath: cloneTarget });
-      if (cloneAbortedRef.current) return;
+      if (isStale()) return;
 
       // Phase 2: Register repository
       setCloneStatus("Adding repository...");
@@ -361,16 +365,16 @@ export function MainLayout() {
           throw err;
         }
       }
-      if (cloneAbortedRef.current) return;
+      if (isStale()) return;
 
       // Phase 3: Create workspace (returns immediately as 'initializing')
       setCloneStatus("Setting up workspace...");
       const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
-      if (cloneAbortedRef.current) return;
+      if (isStale()) return;
 
       // Phase 4: Wait for workspace to become 'ready' (git worktree runs async)
-      const readyWorkspace = await waitForWorkspaceReady(workspace.id);
-      if (cloneAbortedRef.current) return;
+      const readyWorkspace = await waitForWorkspaceReady(workspace.id, isStale);
+      if (isStale()) return;
 
       // Force sidebar to show the new workspace immediately
       await queryClient.refetchQueries({ queryKey: queryKeys.workspaces.all });
@@ -381,25 +385,29 @@ export function MainLayout() {
       setCloneStatus(null);
       toast.success(`"${repo.name}" ready`);
     } catch (error) {
-      if (!cloneAbortedRef.current) {
+      if (!isStale()) {
         console.error("Error cloning repository:", error);
         setCloneError(extractErrorMessage(error));
         setCloneStatus(null);
       }
     } finally {
-      if (!cloneAbortedRef.current) {
+      if (!isStale()) {
         setCloning(false);
       }
     }
   }
 
   /** Poll workspace until state becomes 'ready' or timeout (15s). */
-  async function waitForWorkspaceReady(workspaceId: string): Promise<Workspace | null> {
+  async function waitForWorkspaceReady(
+    workspaceId: string,
+    isStale: () => boolean
+  ): Promise<Workspace | null> {
     const maxWaitMs = 15_000;
     const pollMs = 400;
     const deadline = Date.now() + maxWaitMs;
 
     while (Date.now() < deadline) {
+      if (isStale()) return null;
       let ws: Workspace | undefined;
       try {
         ws = await WorkspaceService.fetchById(workspaceId);
@@ -489,9 +497,8 @@ export function MainLayout() {
         error={cloneError}
         statusMessage={cloneStatus}
         onClose={() => {
-          if (cloning) {
-            cloneAbortedRef.current = true;
-          }
+          // Advance generation so any in-flight clone invocation becomes stale
+          cloneGenerationRef.current++;
           setShowCloneModal(false);
           setCloneError(null);
           setCloneStatus(null);
