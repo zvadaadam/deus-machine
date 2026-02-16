@@ -79,7 +79,7 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
       className="my-1"
       style={{
         contain: "paint",
-        animation: "chat-content-appear 250ms cubic-bezier(.16,1,.3,1) both",
+        animation: "chat-content-appear 250ms cubic-bezier(.165,.84,.44,1) both",
       }}
     >
       <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />

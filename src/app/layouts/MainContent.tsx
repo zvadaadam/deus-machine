@@ -469,7 +469,7 @@ export function MainContent({
                     "border-border-subtle flex h-full w-8 flex-shrink-0 cursor-col-resize items-center justify-center border-r",
                     "text-text-muted hover:text-text-secondary hover:bg-bg-overlay",
                     "transition-colors duration-200 ease-out",
-                    "animate-[fadeIn_0.15s_0.15s_cubic-bezier(0,0,0.2,1)] [animation-fill-mode:backwards]"
+                    "animate-[fadeIn_0.15s_0.15s_cubic-bezier(.215,.61,.355,1)] [animation-fill-mode:backwards]"
                   )}
                 >
                   <PanelLeft className="h-4 w-4" />
@@ -515,7 +515,7 @@ export function MainContent({
 
                   {/* Middle panel section: viewer + compact right panel */}
                   <div
-                    className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden"
+                    className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(.215,.61,.355,1)] flex-col overflow-hidden"
                     style={middlePanelStyle}
                   >
                     <div className="flex min-h-0 flex-1 overflow-hidden">
