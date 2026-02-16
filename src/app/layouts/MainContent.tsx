@@ -91,12 +91,17 @@ export function MainContent({
 
   // Reset state when workspace changes (React-recommended render-time pattern)
   const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
+  // Guard: true once stored width has been restored for the current workspace.
+  // Prevents useLayoutEffect from re-firing on every drag frame (which would
+  // cause a feedback loop: onResize → setRightPanelWidth → effect → resize()).
+  const hasRestoredWidthRef = useRef(false);
   if (prevWorkspaceIdRef.current !== selectedWorkspaceId) {
     prevWorkspaceIdRef.current = selectedWorkspaceId;
     if (middlePanel !== null) setMiddlePanel(null);
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
     setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
+    hasRestoredWidthRef.current = false;
   }
 
   const middlePanelActive = middlePanel !== null;
@@ -209,16 +214,20 @@ export function MainContent({
   // Stored pixel widths are restored after mount via useLayoutEffect below.
   const rightPanelDefaultSize = isBrowserTab && !isBrowserDetached ? 60 : 30;
 
-  // Restore stored panel width after mount. useLayoutEffect runs after DOM commit
-  // but before paint, so the ref is populated and the user sees no flash.
-  // This replaces the broken useMemo approach (refs are always null during render).
+  // Restore stored panel width once after mount / workspace switch.
+  // useLayoutEffect runs before paint so the user sees no flash.
+  // The hasRestoredWidthRef guard prevents this from re-firing during drag
+  // (onResize updates rightPanelWidth, which would otherwise re-trigger
+  // this effect and create a feedback loop with forced layout reflows).
   useLayoutEffect(() => {
+    if (hasRestoredWidthRef.current) return;
     if (rightPanelWidth === null || middlePanelActive) return;
     const container = mainContentRef.current;
     if (!container || !rightPanelRef.current) return;
     const total = container.getBoundingClientRect().width;
     if (total > 0) {
       rightPanelRef.current.resize((rightPanelWidth / total) * 100);
+      hasRestoredWidthRef.current = true;
     }
   }, [rightPanelWidth, middlePanelActive]);
 
