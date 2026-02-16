@@ -20,6 +20,7 @@ export type {
   MessageContent,
   ContentBlock,
   TextBlock,
+  ImageBlock,
   ToolUseBlock,
   ToolResultBlock,
   ThinkingBlock,

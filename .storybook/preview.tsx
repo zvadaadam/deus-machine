@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import type { Preview } from "@storybook/react-vite";
 import "../src/global.css";
 
@@ -32,10 +32,18 @@ const preview: Preview = {
   decorators: [
     (Story, context) => {
       const theme = context.globals.theme || "dark";
+      useEffect(() => {
+        const html = document.documentElement;
+        if (theme === "dark") {
+          html.classList.add("dark");
+        } else {
+          html.classList.remove("dark");
+        }
+        return () => html.classList.remove("dark");
+      }, [theme]);
+
       return (
-        <div
-          className={`${theme === "dark" ? "dark" : ""} bg-background text-foreground min-h-screen p-4`}
-        >
+        <div className="bg-background text-foreground min-h-screen p-4">
           <Story />
         </div>
       );
