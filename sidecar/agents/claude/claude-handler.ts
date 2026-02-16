@@ -527,19 +527,6 @@ export class ClaudeAgentHandler implements AgentHandler {
             );
           }
 
-          // Persist tool result messages (SDK "user" type = tool execution outputs).
-          // These contain tool_result blocks the frontend needs for expanded tool content.
-          // Chat.tsx already filters tool_result-only messages from the visible list;
-          // these rows only feed toolResultMap for tool block detail views.
-          if (cleanMessage.type === "user" && cleanMessage.message) {
-            const model = options?.model || "sonnet";
-            saveAssistantMessage(
-              sessionId,
-              cleanMessage.message as { id?: string; role?: string; content?: unknown },
-              model
-            );
-          }
-
           // Persist user messages with tool_result blocks so the frontend
           // can link tool_use → tool_result via the toolResultMap
           if (cleanMessage.type === "user" && cleanMessage.message) {

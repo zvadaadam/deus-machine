@@ -49,7 +49,7 @@ interface SidecarMessageEvent {
  * 5. Invalidates React Query cache
  * 6. UI updates instantly
  */
-export function useSessionEvents(sessionId: string | null) {
+export function useSessionEvents(sessionId: string | null, workspaceId?: string | null) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -105,6 +105,14 @@ export function useSessionEvents(sessionId: string | null) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.sessions.detail(sessionId),
         });
+
+        // Invalidate PR status so we detect PRs created/updated by the agent.
+        // staleTime (10s) prevents excessive refetches from rapid events.
+        if (workspaceId) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.workspaces.prStatus(workspaceId),
+          });
+        }
       }
     });
 
@@ -135,5 +143,5 @@ export function useSessionEvents(sessionId: string | null) {
       unlistenErrorPromise.then((unlisten) => unlisten());
       if (import.meta.env.DEV) console.log("[Events] 🔇 Stopped listening for session events");
     };
-  }, [sessionId, queryClient]);
+  }, [sessionId, workspaceId, queryClient]);
 }

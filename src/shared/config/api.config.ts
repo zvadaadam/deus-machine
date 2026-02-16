@@ -223,4 +223,7 @@ export const ENDPOINTS = {
 
   // Stats endpoint
   STATS: "/stats",
+
+  // GitHub CLI status
+  GH_STATUS: "/gh-status",
 } as const;
