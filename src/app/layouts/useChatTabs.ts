@@ -127,6 +127,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     if (!workspaceSessions || hydrated.current) return;
     hydrated.current = true;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration sync from DB
     setMainTabs((prev) => {
       const chatTabs = prev.filter((t) => t.type === "chat");
       const fileTabs = prev.filter((t) => t.type !== "chat");
@@ -193,7 +194,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const activeSessionIdForPersist =
         activeTab?.type === "chat" ? (activeTab.data?.sessionId ?? null) : null;
 
-      workspaceLayoutActions.setChatTabState(workspaceId, chatSessionIds, activeSessionIdForPersist);
+      workspaceLayoutActions.setChatTabState(
+        workspaceId,
+        chatSessionIds,
+        activeSessionIdForPersist
+      );
     }, 100);
 
     return () => clearTimeout(persistTimeoutRef.current);

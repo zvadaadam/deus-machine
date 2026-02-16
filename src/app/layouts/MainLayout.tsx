@@ -5,7 +5,14 @@ import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
 import type { Repo } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
-import { useKeyboardShortcuts, useZoom, useIsFullscreen, useTauriDragZone, useWindowResizing } from "@/shared/hooks";
+import {
+  useKeyboardShortcuts,
+  useZoom,
+  useIsFullscreen,
+  useTauriDragZone,
+  useWindowResizing,
+} from "@/shared/hooks";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useWorkspacesByRepo,
   useStats,
@@ -17,10 +24,12 @@ import {
   useSystemPrompt,
   useUpdateSystemPrompt,
 } from "@/features/workspace/api";
+import { WorkspaceService } from "@/features/workspace/api/workspace.service";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { useResizeHandle } from "@/features/workspace";
 import { useRepos, useAddRepo } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
-import { Button, SidebarProvider, useSidebar } from "@/components/ui";
+import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -76,7 +85,8 @@ export function MainLayout() {
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
-  // TanStack Query hooks - automatic polling and caching
+  // TanStack Query
+  const queryClient = useQueryClient();
   const workspacesQuery = useWorkspacesByRepo();
   const statsQuery = useStats();
 
@@ -92,6 +102,7 @@ export function MainLayout() {
   const [cloning, setCloning] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
+  const [cloneStatus, setCloneStatus] = useState<string | null>(null);
 
   // Sidebar resize: null = default 344px, number = user-set width
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
@@ -100,6 +111,11 @@ export function MainLayout() {
 
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
+
+  // Generation counter: prevents stale clone invocations from mutating state.
+  // Each call to handleCloneRepository captures its generation; if the counter
+  // advances (via close or a new clone), earlier invocations bail out.
+  const cloneGenerationRef = useRef(0);
 
   // Queries for repos, settings, system prompt
   const reposQuery = useRepos();
@@ -284,16 +300,19 @@ export function MainLayout() {
 
       if (!selected) return;
 
-      const folderPath = typeof selected === "string" ? selected : (selected as any).path;
+      const folderPath =
+        typeof selected === "string" ? selected : (selected as { path: string }).path;
 
       let repo: Repo;
       try {
         repo = await addRepoMutation.mutateAsync(folderPath);
       } catch (err) {
-        // If repo already exists (409 Conflict), use the existing one
-        const addError = err as { status?: number; details?: { repo?: Repo } };
-        if (addError?.status === 409 && addError?.details?.repo) {
-          repo = addError.details.repo;
+        // If repo already exists (409 Conflict), use the existing one.
+        // API error shape: { status: 409, details: { error: "...", details: repoObject } }
+        const addError = err as { status?: number; details?: { details?: Repo } };
+        const existingRepo = addError?.details?.details;
+        if (addError?.status === 409 && existingRepo?.id) {
+          repo = existingRepo;
         } else {
           throw err;
         }
@@ -311,8 +330,13 @@ export function MainLayout() {
   }
 
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
+    // Advance generation so any in-flight clone from a previous invocation bails out.
+    const generation = ++cloneGenerationRef.current;
+    const isStale = () => generation !== cloneGenerationRef.current;
+
     setCloning(true);
     setCloneError(null);
+    setCloneStatus(null);
     try {
       const repoName = extractRepoNameFromUrl(githubUrl);
       if (!repoName) {
@@ -324,37 +348,92 @@ export function MainLayout() {
       let cloneTarget = targetPath;
       if (!cloneTarget) {
         const { homeDir, join } = await import("@tauri-apps/api/path");
-        cloneTarget = await join(await homeDir(), "Projects", repoName);
+        cloneTarget = await join(await homeDir(), "Developer", repoName);
       } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
         const { join } = await import("@tauri-apps/api/path");
         cloneTarget = await join(targetPath, repoName);
       }
 
+      // Phase 1: Git clone (progress events shown by modal)
       await invoke("git_clone", { url: githubUrl, targetPath: cloneTarget });
+      if (isStale()) return;
 
+      // Phase 2: Register repository
+      setCloneStatus("Adding repository...");
       let repo: Repo;
       try {
         repo = await addRepoMutation.mutateAsync(cloneTarget);
       } catch (err) {
-        const addError = err as { status?: number; details?: { repo?: Repo } };
-        if (addError?.status === 409 && addError?.details?.repo) {
-          repo = addError.details.repo;
+        // If repo already exists (409 Conflict), use the existing one.
+        // API error shape: { status: 409, details: { error: "...", details: repoObject } }
+        const addError = err as { status?: number; details?: { details?: Repo } };
+        const existingRepo = addError?.details?.details;
+        if (addError?.status === 409 && existingRepo?.id) {
+          repo = existingRepo;
         } else {
           throw err;
         }
       }
+      if (isStale()) return;
 
+      // Phase 3: Create workspace (returns immediately as 'initializing')
+      setCloneStatus("Setting up workspace...");
       const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
-      selectWorkspace(workspace);
+      if (isStale()) return;
+
+      // Phase 4: Wait for workspace to become 'ready' (git worktree runs async)
+      const readyWorkspace = await waitForWorkspaceReady(workspace.id, isStale);
+      if (isStale()) return;
+
+      // Force sidebar to show the new workspace immediately
+      await queryClient.refetchQueries({ queryKey: queryKeys.workspaces.all });
+
+      selectWorkspace(readyWorkspace || workspace);
       setShowCloneModal(false);
       setCloneError(null);
-      toast.success(`"${repo.name}" ready`);
+      setCloneStatus(null);
+
+      if (readyWorkspace) {
+        toast.success(`"${repo.name}" ready`);
+      } else {
+        toast.info(`"${repo.name}" cloned — workspace is still setting up`);
+      }
     } catch (error) {
-      console.error("Error cloning repository:", error);
-      setCloneError(extractErrorMessage(error));
+      if (!isStale()) {
+        console.error("Error cloning repository:", error);
+        setCloneError(extractErrorMessage(error));
+        setCloneStatus(null);
+      }
     } finally {
-      setCloning(false);
+      if (!isStale()) {
+        setCloning(false);
+      }
     }
+  }
+
+  /** Poll workspace until state becomes 'ready' or timeout (15s). */
+  async function waitForWorkspaceReady(
+    workspaceId: string,
+    isStale: () => boolean
+  ): Promise<Workspace | null> {
+    const maxWaitMs = 15_000;
+    const pollMs = 400;
+    const deadline = Date.now() + maxWaitMs;
+
+    while (Date.now() < deadline) {
+      if (isStale()) return null;
+      let ws: Workspace | undefined;
+      try {
+        ws = await WorkspaceService.fetchById(workspaceId);
+      } catch {
+        // fetchById failed — backend might be busy, keep trying
+      }
+      if (ws?.state === "ready") return ws;
+      if (ws?.state === "error") throw new Error("Workspace setup failed");
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    // Timed out — workspace might still become ready via polling
+    return null;
   }
 
   return (
@@ -431,9 +510,14 @@ export function MainLayout() {
         show={showCloneModal}
         cloning={cloning}
         error={cloneError}
+        statusMessage={cloneStatus}
         onClose={() => {
+          // Advance generation so any in-flight clone invocation becomes stale
+          cloneGenerationRef.current++;
           setShowCloneModal(false);
           setCloneError(null);
+          setCloneStatus(null);
+          setCloning(false);
         }}
         onClone={handleCloneRepository}
         onClearError={() => setCloneError(null)}

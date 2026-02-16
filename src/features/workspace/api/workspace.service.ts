@@ -6,7 +6,13 @@
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
 import { isTauriAvailable } from "@/platform/tauri/invoke";
-import { gitDiffStats, gitDiffFiles, gitDiffFile, gitUncommittedFiles, gitLastTurnFiles } from "@/platform/tauri/git";
+import {
+  gitDiffStats,
+  gitDiffFiles,
+  gitDiffFile,
+  gitUncommittedFiles,
+  gitLastTurnFiles,
+} from "@/platform/tauri/git";
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
@@ -152,9 +158,7 @@ export const WorkspaceService = {
    * Fetch uncommitted files (HEAD → workdir diff).
    * Tauri IPC only — no HTTP fallback needed.
    */
-  fetchUncommittedFiles: async (
-    workspace?: WorkspaceGitInfo
-  ): Promise<FileChange[]> => {
+  fetchUncommittedFiles: async (workspace?: WorkspaceGitInfo): Promise<FileChange[]> => {
     if (!isTauriAvailable() || !workspace?.root_path || !workspace?.directory_name) {
       return [];
     }

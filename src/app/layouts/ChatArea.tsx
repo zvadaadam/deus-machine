@@ -23,12 +23,20 @@ interface ChatAreaProps {
   workspace: Workspace;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreatePRHandlerChange: (handler: (() => void) | null) => void;
-  onSendAgentMessageHandlerChange: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
+  onSendAgentMessageHandlerChange: Dispatch<
+    SetStateAction<((text: string) => Promise<void>) | null>
+  >;
   onCollapseChatPanel?: () => void;
 }
 
 export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea(
-  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange, onSendAgentMessageHandlerChange, onCollapseChatPanel },
+  {
+    workspace,
+    workspaceChatPanelRef,
+    onCreatePRHandlerChange,
+    onSendAgentMessageHandlerChange,
+    onCollapseChatPanel,
+  },
   ref
 ) {
   const {

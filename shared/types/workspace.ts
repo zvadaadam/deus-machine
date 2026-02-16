@@ -5,7 +5,7 @@
 
 import type { SessionStatus } from "./session";
 
-export type WorkspaceState = "ready" | "initializing" | "archived";
+export type WorkspaceState = "ready" | "initializing" | "archived" | "error";
 
 /**
  * Core workspace entity

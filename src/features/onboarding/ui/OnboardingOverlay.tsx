@@ -173,7 +173,9 @@ export function OnboardingOverlay() {
   const goForward = useCallback(() => {
     if (animating) return;
     setAnimating(true);
-    setAnimClass("animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]");
+    setAnimClass(
+      "animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
+    );
     setTimeout(() => {
       setCurrentStep((prev) => Math.min(prev + 1, 3) as OnboardingStep);
       setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.215,.61,.355,1)]");
@@ -184,7 +186,9 @@ export function OnboardingOverlay() {
   const goBack = useCallback(() => {
     if (animating) return;
     setAnimating(true);
-    setAnimClass("animate-[onboarding-step-exit-back_160ms_cubic-bezier(.215,.61,.355,1)_forwards]");
+    setAnimClass(
+      "animate-[onboarding-step-exit-back_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
+    );
     setTimeout(() => {
       setCurrentStep((prev) => Math.max(prev - 1, 0) as OnboardingStep);
       setAnimClass("animate-[onboarding-step-enter-back_240ms_cubic-bezier(.215,.61,.355,1)]");
