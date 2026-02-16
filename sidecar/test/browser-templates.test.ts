@@ -7,7 +7,7 @@
 // Automatic Semicolon Insertion (ASI) — silently returning undefined.
 //
 // These tests ensure every template is a properly-formed IIFE that, when
-// evaluated, returns a value (not undefined). Run via `npm run test:sidecar`.
+// evaluated, returns a value (not undefined). Run via `bun run test:sidecar`.
 
 import { describe, it, expect } from "vitest";
 

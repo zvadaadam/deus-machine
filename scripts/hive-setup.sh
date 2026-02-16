@@ -39,18 +39,18 @@ fi
 NODE_VERSION=$(node --version)
 echo -e "${GREEN}✓ Node.js found: $NODE_VERSION${NC}"
 
-# Check for npm
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}✗ npm is not installed${NC}"
+# Check for Bun
+if ! command -v bun &> /dev/null; then
+    echo -e "${RED}✗ Bun is not installed${NC}"
     echo ""
-    echo "ERROR: npm is required but not found."
-    echo "Please install npm (usually comes with Node.js)"
+    echo "ERROR: Bun is required but not found."
+    echo "Please install Bun from https://bun.sh/"
     echo ""
     exit 1
 fi
 
-NPM_VERSION=$(npm --version)
-echo -e "${GREEN}✓ npm found: v$NPM_VERSION${NC}"
+BUN_VERSION=$(bun --version)
+echo -e "${GREEN}✓ Bun found: v$BUN_VERSION${NC}"
 
 # Step 2: Copy .env and .mcp.json files from root repo if they exist
 echo ""
@@ -85,8 +85,8 @@ fi
 
 # Step 3: Install dependencies
 echo ""
-echo -e "${YELLOW}[3/3] Installing npm dependencies...${NC}"
-npm install
+echo -e "${YELLOW}[3/3] Installing Bun dependencies...${NC}"
+bun install
 echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
 
 # Success!
@@ -100,5 +100,5 @@ echo "  1. Run './dev.sh' to start web dev servers"
 echo "  2. Frontend will be at http://localhost:1420"
 echo "  3. Backend will use dynamic port (check terminal output)"
 echo ""
-echo "Or run 'npm run tauri:dev' for Tauri desktop app"
+echo "Or run 'bun run dev' for Tauri desktop app"
 echo ""

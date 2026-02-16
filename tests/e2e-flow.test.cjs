@@ -205,7 +205,7 @@ async function testSocketConnection() {
 
   // Socket tests disabled - requires socket.io-client package
   logWarning('Socket tests skipped (socket.io-client not installed)');
-  logInfo('To enable: npm install socket.io-client');
+  logInfo('To enable: bun install socket.io-client');
 
   return true;
 }

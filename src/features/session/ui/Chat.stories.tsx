@@ -75,9 +75,9 @@ export const WithMCPServers: StoryObj<typeof MessageInput> = {
     model: "sonnet",
     thinkingLevel: "NONE",
     mcpServers: [
-      { name: "filesystem", active: true, command: "npx @anthropic/mcp-filesystem" },
-      { name: "github", active: true, command: "npx @anthropic/mcp-github" },
-      { name: "postgres", active: false, command: "npx @anthropic/mcp-postgres" },
+      { name: "filesystem", active: true, command: "bunx @anthropic/mcp-filesystem" },
+      { name: "github", active: true, command: "bunx @anthropic/mcp-github" },
+      { name: "postgres", active: false, command: "bunx @anthropic/mcp-postgres" },
     ],
     onMessageChange: () => {},
     onSend: () => {},
