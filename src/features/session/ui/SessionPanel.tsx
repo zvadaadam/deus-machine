@@ -16,19 +16,14 @@ import { isTauriEnv } from "@/platform/tauri";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
-// Tauri native drag-drop: image detection for file drops from Finder
-const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?)$/i;
+// Tauri native drag-drop: only accept formats the Anthropic vision API supports
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
 const EXT_TO_MIME: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
-  svg: "image/svg+xml",
-  bmp: "image/bmp",
-  ico: "image/x-icon",
-  tif: "image/tiff",
-  tiff: "image/tiff",
 };
 
 interface SessionPanelProps {
@@ -239,6 +234,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       agentType: modelAgentType,
       onMessageSent: () => {
         setMessageInput("");
+        messageInputRef.current?.clearPastedContent();
         onSessionStarted?.();
       },
     });
