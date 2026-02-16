@@ -6,6 +6,7 @@ build/
 # Tauri build artifacts
 src-tauri/target/
 src-tauri/Cargo.lock
+src-tauri/gen/schemas/
 
 # Generated files
 *.min.js
