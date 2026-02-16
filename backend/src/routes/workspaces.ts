@@ -22,6 +22,7 @@ import {
   getWorkspaceWithRepo,
   getRepoById,
   getSessionRaw,
+  getSessionsByWorkspaceId,
 } from '../db';
 import type { WorkspaceWithDetailsRow } from '../db';
 
@@ -411,6 +412,16 @@ app.post('/workspaces', async (c) => {
   const workspace = getWorkspaceWithRepo(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found after creation');
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+});
+
+// List all sessions for a workspace (used by chat tab reconstruction)
+app.get('/workspaces/:id/sessions', (c) => {
+  const db = getDatabase();
+  const workspaceId = c.req.param('id');
+  const workspace = getWorkspaceRaw(db, workspaceId);
+  if (!workspace) throw new NotFoundError('Workspace not found');
+  const sessions = getSessionsByWorkspaceId(db, workspaceId);
+  return c.json(sessions);
 });
 
 // Create a new session for an existing workspace
