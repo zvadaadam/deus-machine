@@ -12,6 +12,7 @@ import { useCallback, useMemo } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
+import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
@@ -80,6 +81,12 @@ export function RightSidePanel({
     branch: workspace.branch,
   });
 
+  // Watch workspace for file changes (event-driven cache invalidation)
+  const isWatched = useFileWatcher(
+    workspace.workspace_path ?? null,
+    workspace.id
+  );
+
   // Workspace git info for file changes query (Tauri IPC path)
   const workspaceGitInfo: WorkspaceGitInfo = useMemo(
     () => ({
@@ -89,11 +96,12 @@ export function RightSidePanel({
     [workspace.root_path, workspace.directory_name]
   );
 
-  // File changes query
+  // File changes query — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
     workspace.id,
     workspace.session_status,
-    workspaceGitInfo
+    workspaceGitInfo,
+    isWatched
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
