@@ -6,6 +6,7 @@
  */
 
 import { forwardRef, useImperativeHandle } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { MainContentTabBar } from "@/features/workspace";
@@ -22,11 +23,12 @@ interface ChatAreaProps {
   workspace: Workspace;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreatePRHandlerChange: (handler: (() => void) | null) => void;
+  onSendAgentMessageHandlerChange: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
   onCollapseChatPanel?: () => void;
 }
 
 export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea(
-  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange, onCollapseChatPanel },
+  { workspace, workspaceChatPanelRef, onCreatePRHandlerChange, onSendAgentMessageHandlerChange, onCollapseChatPanel },
   ref
 ) {
   const {
@@ -72,11 +74,13 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
           <SessionPanel
             ref={workspaceChatPanelRef}
             sessionId={tabSessionId}
+            workspaceId={workspace.id}
             workspacePath={workspace.workspace_path}
             embedded={true}
             onAgentTypeChange={(agentType) => updateChatTabAgentType(activeTab.id, agentType)}
             onSessionStarted={() => markChatTabStarted(activeTab.id)}
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
+            onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
           />
         )}
 

@@ -9,7 +9,7 @@ import { isTauriAvailable } from "@/platform/tauri/invoke";
 import { gitDiffStats, gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
+import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
 
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
@@ -169,6 +169,14 @@ export const WorkspaceService = {
    */
   fetchPRStatus: async (id: string): Promise<PRStatus | null> => {
     return apiClient.get<PRStatus | null>(ENDPOINTS.WORKSPACE_PR_STATUS(id));
+  },
+
+  /**
+   * Check GitHub CLI installation and auth status.
+   * Cached with long staleTime on the frontend — rarely changes.
+   */
+  fetchGhStatus: async (): Promise<GhCliStatus> => {
+    return apiClient.get<GhCliStatus>(ENDPOINTS.GH_STATUS);
   },
 
   /**

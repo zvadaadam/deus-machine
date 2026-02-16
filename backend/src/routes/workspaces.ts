@@ -2,7 +2,10 @@ import { Hono } from 'hono';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn, execFileSync, execSync } from 'child_process';
+import { spawn, execFile, execFileSync, execSync } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
@@ -19,6 +22,7 @@ import {
   getWorkspaceWithRepo,
   getRepoById,
   getSessionRaw,
+  getSessionsByWorkspaceId,
 } from '../db';
 import type { WorkspaceWithDetailsRow } from '../db';
 
@@ -140,21 +144,136 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
   }
 });
 
-// PR status
-app.get('/workspaces/:id/pr-status', withWorkspace, (c) => {
-  const workspacePath = c.get('workspacePath');
+// Helper: run gh CLI command with timeout, explicit error classification
+async function runGh(args: string[], options: { cwd: string; timeoutMs?: number }): Promise<
+  { success: true; stdout: string } | { success: false; error: 'gh_not_installed' | 'gh_not_authenticated' | 'timeout' | 'unknown'; message: string }
+> {
   try {
-    const output = execFileSync('gh', ['pr', 'view', '--json', 'number,title,url,mergeable'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
-    const prData = JSON.parse(output);
-    return c.json({
-      has_pr: true, pr_number: prData.number, pr_title: prData.title,
-      pr_url: prData.url, merge_status: prData.mergeable === 'MERGEABLE' ? 'ready' : 'blocked'
+    const { stdout, stderr } = await execFileAsync('gh', args, {
+      cwd: options.cwd,
+      encoding: 'utf-8',
+      timeout: options.timeoutMs ?? 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
     });
-  } catch {
-    return c.json({ has_pr: false });
+    return { success: true, stdout: stdout.trim() };
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return { success: false, error: 'gh_not_installed', message: 'GitHub CLI (gh) is not installed' };
+    if (err.killed) return { success: false, error: 'timeout', message: 'GitHub CLI command timed out' };
+    const output = `${err.stderr ?? ''} ${err.stdout ?? ''}`.toLowerCase();
+    if (output.includes('gh auth login') || output.includes('not logged into any github hosts'))
+      return { success: false, error: 'gh_not_authenticated', message: 'GitHub CLI is not authenticated' };
+    return { success: false, error: 'unknown', message: err.stderr || err.message || 'Failed to run gh CLI' };
   }
+}
+
+// gh CLI status check — cached on frontend with long staleTime
+app.get('/gh-status', async (c) => {
+  const versionResult = await runGh(['--version'], { cwd: process.cwd(), timeoutMs: 2000 });
+  if (!versionResult.success) return c.json({ isInstalled: false, isAuthenticated: false });
+  const authResult = await runGh(['auth', 'status'], { cwd: process.cwd(), timeoutMs: 5000 });
+  return c.json({ isInstalled: true, isAuthenticated: authResult.success });
+});
+
+// PR status — async, fork-aware, explicit errors
+app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
+  const workspacePath = c.get('workspacePath');
+
+  // Resolve current branch name
+  let headBranch: string;
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: workspacePath, encoding: 'utf-8', timeout: 3000,
+    });
+    headBranch = stdout.trim();
+  } catch {
+    return c.json({ has_pr: false, error: null });
+  }
+
+  if (!headBranch || headBranch === 'HEAD') return c.json({ has_pr: false, error: null });
+
+  // Resolve origin and upstream remotes for fork support
+  let originUrl: string | null = null;
+  let upstreamUrl: string | null = null;
+  try {
+    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: workspacePath, encoding: 'utf-8', timeout: 2000 });
+    originUrl = stdout.trim() || null;
+  } catch {}
+  try {
+    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'upstream'], { cwd: workspacePath, encoding: 'utf-8', timeout: 2000 });
+    upstreamUrl = stdout.trim() || null;
+  } catch {}
+
+  const isFork = upstreamUrl != null && originUrl != null && upstreamUrl !== originUrl;
+
+  // Build list of attempts: try upstream first (for forks), then origin.
+  // Use plain branch name — gh pr list --head does NOT support "owner:branch" syntax.
+  // The --author @me flag already narrows results to the current user's PRs.
+  const attempts: { repoArg: string | null; headArg: string }[] = [];
+  if (isFork) attempts.push({ repoArg: upstreamUrl, headArg: headBranch });
+  attempts.push({ repoArg: originUrl, headArg: headBranch });
+
+  for (const { repoArg, headArg } of attempts) {
+    const args = ['pr', 'list', '--head', headArg, '--author', '@me', '--state', 'all',
+      '--json', 'number,title,url,state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,isDraft'];
+    if (repoArg) args.push('--repo', repoArg);
+
+    const result = await runGh(args, { cwd: workspacePath });
+    if (!result.success) {
+      // Surface specific errors (installed/auth) to the frontend
+      if (result.error === 'gh_not_installed' || result.error === 'gh_not_authenticated' || result.error === 'timeout') {
+        return c.json({ has_pr: false, error: result.error });
+      }
+      continue; // Try next attempt for unknown errors (e.g. repo not found)
+    }
+
+    let prs: any[];
+    try { prs = JSON.parse(result.stdout || '[]'); } catch { continue; }
+    if (!Array.isArray(prs)) continue;
+
+    const openPr = prs.find((pr: any) => pr.state?.toUpperCase() === 'OPEN');
+    const mergedPr = prs.find((pr: any) => pr.state?.toUpperCase() === 'MERGED');
+    const pr = openPr ?? mergedPr;
+
+    if (pr) {
+      const state = pr.state?.toUpperCase() === 'MERGED' ? 'merged' : 'open';
+      let mergeStatus: 'ready' | 'blocked' | 'merged' = 'blocked';
+      if (state === 'merged') mergeStatus = 'merged';
+      else if (pr.mergeable === 'MERGEABLE') mergeStatus = 'ready';
+
+      // Derive CI status from statusCheckRollup
+      const checks: any[] = pr.statusCheckRollup ?? [];
+      let ciStatus: 'passing' | 'failing' | 'pending' | 'unknown' = 'unknown';
+      if (checks.length > 0) {
+        const hasFailing = checks.some((c: any) => c.conclusion === 'FAILURE' || c.conclusion === 'ERROR' || c.conclusion === 'TIMED_OUT');
+        const hasPending = checks.some((c: any) => !c.conclusion || c.state === 'PENDING' || c.state === 'QUEUED' || c.state === 'IN_PROGRESS');
+        if (hasFailing) ciStatus = 'failing';
+        else if (hasPending) ciStatus = 'pending';
+        else ciStatus = 'passing';
+      }
+
+      // Map reviewDecision from GitHub GraphQL enum
+      const reviewMap: Record<string, 'approved' | 'changes_requested' | 'review_required' | 'none'> = {
+        'APPROVED': 'approved', 'CHANGES_REQUESTED': 'changes_requested', 'REVIEW_REQUIRED': 'review_required',
+      };
+      const reviewStatus = reviewMap[pr.reviewDecision ?? ''] ?? 'none';
+
+      return c.json({
+        has_pr: true,
+        pr_number: pr.number,
+        pr_title: pr.title,
+        pr_url: pr.url,
+        pr_state: state,
+        merge_status: mergeStatus,
+        is_draft: pr.isDraft === true,
+        has_conflicts: pr.mergeStateStatus === 'DIRTY',
+        ci_status: ciStatus,
+        review_status: reviewStatus,
+        error: null,
+      });
+    }
+  }
+
+  return c.json({ has_pr: false, error: null });
 });
 
 // Pen files
@@ -293,6 +412,16 @@ app.post('/workspaces', async (c) => {
   const workspace = getWorkspaceWithRepo(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found after creation');
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+});
+
+// List all sessions for a workspace (used by chat tab reconstruction)
+app.get('/workspaces/:id/sessions', (c) => {
+  const db = getDatabase();
+  const workspaceId = c.req.param('id');
+  const workspace = getWorkspaceRaw(db, workspaceId);
+  if (!workspace) throw new NotFoundError('Workspace not found');
+  const sessions = getSessionsByWorkspaceId(db, workspaceId);
+  return c.json(sessions);
 });
 
 // Create a new session for an existing workspace
