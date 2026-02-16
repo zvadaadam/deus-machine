@@ -1264,7 +1264,7 @@ body {
  * The library sets data-resize-handle-active on the handle during drag. */
 [data-resize-handle-active] ~ [data-slot="resizable-panel"],
 :has(> [data-resize-handle-active]) [data-slot="resizable-panel"] {
-  transition: none !important;
+  transition: none;
 }
 
 /* Disable ALL layout transitions during native window resize (fullscreen exit, snap, drag).
