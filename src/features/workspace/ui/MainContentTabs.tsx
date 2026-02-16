@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { match } from "ts-pattern";
 import { X, Plus, FileCode, GitCompareArrows, History, PanelLeftClose } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipKbd } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -63,19 +64,20 @@ const TAB_ICON_SIZE = "w-3.5 h-3.5";
 const AGENT_ICON_SIZE = "w-3.5 h-3.5";
 
 function getTabIcon(tab: Tab) {
-  switch (tab.type) {
-    case "chat": {
-      const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+  return match(tab)
+    .with({ type: "chat" }, (t) => {
+      const LogoComponent = getAgentLogo(t.data?.agentType || "claude");
       if (LogoComponent) {
         return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
       }
       return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-    }
-    case "diff":
-      return <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-    default:
-      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-  }
+    })
+    .with({ type: "diff" }, () => (
+      <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
+    ))
+    .otherwise(() => (
+      <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
+    ));
 }
 
 function getClosedTabIcon(agentType?: string) {
