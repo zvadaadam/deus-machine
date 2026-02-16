@@ -145,12 +145,25 @@ fn resolve_branch_tree<'a>(
 // 1. resolve_parent_branch — find the upstream ref to diff against
 // ---------------------------------------------------------------------------
 
-/// Determine the best parent branch for diff comparisons.
+/// Determine the best parent branch reference for diff comparisons.
 ///
-/// Tries remote branches first (`origin/{name}`), then local (`refs/heads/{name}`).
-/// Remote is preferred because worktrees are created from remote branches and
-/// diffs should show what changed relative to the upstream target.
+/// ─── ARCHITECTURE DECISION: Remote-first, ALWAYS ───────────────────
+/// We ALWAYS prefer `origin/<branch>` over local `<branch>`. This is
+/// NOT a fallback strategy — it's the intended behavior. The entire
+/// diff pipeline depends on this:
+///
+///   1. Workspace creation fetches `origin/<parent>` and branches from it
+///      (see backend/src/routes/workspaces.ts — POST /workspaces)
+///   2. Diffs show "what changed in this workspace vs upstream"
+///   3. PRs target the remote branch, so diffs match what the PR shows
+///
+/// If you change this to local-first, every workspace that has diverged
+/// from its remote will show phantom file changes. DO NOT change this
+/// without understanding the full workspace creation → diff → PR flow.
+/// ────────────────────────────────────────────────────────────────────
+///
 /// Candidate order: `parent_branch`, `default_branch`, "main", "master", "develop".
+/// For each candidate: tries `origin/{name}` first, then `refs/heads/{name}`.
 /// Results are cached for 5 seconds.
 pub fn resolve_parent_branch(
     workspace_path: &str,
@@ -288,52 +301,7 @@ pub fn get_changed_files(
         .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
-    let mut files: Vec<DiffFile> = Vec::new();
-
-    // Iterate over each patch (one per file) to collect per-file stats
-    let num_deltas = diff.deltas().len();
-    for idx in 0..num_deltas {
-        let patch = match git2::Patch::from_diff(&diff, idx) {
-            Ok(Some(p)) => p,
-            Ok(None) => continue,
-            Err(_) => continue,
-        };
-
-        let delta = patch.delta();
-        let file_path = delta
-            .new_file()
-            .path()
-            .or_else(|| delta.old_file().path())
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default();
-
-        let (mut additions, mut deletions) = (0u32, 0u32);
-        let num_hunks = patch.num_hunks();
-        for hunk_idx in 0..num_hunks {
-            let (hunk, num_lines) = match patch.hunk(hunk_idx) {
-                Ok(h) => h,
-                Err(_) => continue,
-            };
-            let _ = hunk; // hunk header not needed for stats
-            for line_idx in 0..num_lines {
-                if let Ok(line) = patch.line_in_hunk(hunk_idx, line_idx) {
-                    match line.origin() {
-                        '+' => additions += 1,
-                        '-' => deletions += 1,
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        files.push(DiffFile {
-            file: file_path,
-            additions,
-            deletions,
-        });
-    }
-
-    Ok(files)
+    collect_diff_files(&diff)
 }
 
 // ---------------------------------------------------------------------------
@@ -598,8 +566,149 @@ pub fn list_branches(workspace_path: &str) -> Result<Vec<BranchInfo>, String> {
 }
 
 // ---------------------------------------------------------------------------
+// 10. get_uncommitted_files — HEAD → workdir diff (staged + unstaged + untracked)
+// ---------------------------------------------------------------------------
+
+/// Get per-file changes that are NOT yet committed (exist in workdir but not HEAD).
+/// Diffs HEAD tree → working directory instead of merge-base → workdir.
+/// This captures staged, unstaged, and untracked changes only.
+pub fn get_uncommitted_files(workspace_path: &str) -> Result<Vec<DiffFile>, String> {
+    let repo = Repository::open(workspace_path)
+        .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+    let head_tree = repo
+        .head()
+        .and_then(|h| h.peel_to_tree())
+        .map_err(|e| format!("Failed to get HEAD tree: {}", e))?;
+
+    let mut opts = DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    opts.show_untracked_content(true);
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))
+        .map_err(|e| format!("Failed to compute HEAD→workdir diff: {}", e))?;
+
+    collect_diff_files(&diff)
+}
+
+// ---------------------------------------------------------------------------
+// 11. get_last_turn_files — checkpoint ref → workdir diff
+// ---------------------------------------------------------------------------
+
+/// Get per-file changes since the last turn checkpoint.
+/// Finds the latest `refs/hive-checkpoints/session-{session_id}-turn-*-start` ref,
+/// diffs that tree → working directory.
+pub fn get_last_turn_files(
+    workspace_path: &str,
+    session_id: &str,
+) -> Result<Vec<DiffFile>, String> {
+    let repo = Repository::open(workspace_path)
+        .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+    let prefix = format!("refs/hive-checkpoints/session-{}-turn-", session_id);
+    let mut latest_ref: Option<(String, git2::Oid, i64)> = None;
+
+    // Find the most recent checkpoint by commit timestamp (not ref name).
+    // Ref names embed turnId which may not be zero-padded (e.g. "turn-9" vs
+    // "turn-10"), so lexicographic comparison would pick the wrong ref after
+    // 10+ turns. Comparing committer timestamps is always correct.
+    repo.references_glob(&format!("{}*-start", prefix))
+        .map_err(|e| format!("Failed to list checkpoint refs: {}", e))?
+        .for_each(|r| {
+            if let Ok(reference) = r {
+                if let Some(oid) = reference.target() {
+                    let commit_time = repo
+                        .find_commit(oid)
+                        .map(|c| c.time().seconds())
+                        .unwrap_or(0);
+                    if latest_ref
+                        .as_ref()
+                        .map_or(true, |(_, _, t)| commit_time > *t)
+                    {
+                        let name = reference.name().unwrap_or("").to_string();
+                        latest_ref = Some((name, oid, commit_time));
+                    }
+                }
+            }
+        });
+
+    let (_, checkpoint_oid, _) = latest_ref
+        .ok_or_else(|| "No turn checkpoints found for this session".to_string())?;
+
+    let checkpoint_commit = repo
+        .find_commit(checkpoint_oid)
+        .map_err(|e| format!("Failed to find checkpoint commit: {}", e))?;
+
+    let checkpoint_tree = checkpoint_commit
+        .tree()
+        .map_err(|e| format!("Failed to get checkpoint tree: {}", e))?;
+
+    let mut opts = DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    opts.show_untracked_content(true);
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&checkpoint_tree), Some(&mut opts))
+        .map_err(|e| format!("Failed to compute checkpoint→workdir diff: {}", e))?;
+
+    collect_diff_files(&diff)
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/// Extract per-file stats from a git2::Diff object.
+fn collect_diff_files(diff: &git2::Diff) -> Result<Vec<DiffFile>, String> {
+    let mut files: Vec<DiffFile> = Vec::new();
+
+    let num_deltas = diff.deltas().len();
+    for idx in 0..num_deltas {
+        let patch = match git2::Patch::from_diff(diff, idx) {
+            Ok(Some(p)) => p,
+            Ok(None) => continue,
+            Err(_) => continue,
+        };
+
+        let delta = patch.delta();
+        let file_path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+
+        let (mut additions, mut deletions) = (0u32, 0u32);
+        let num_hunks = patch.num_hunks();
+        for hunk_idx in 0..num_hunks {
+            let (hunk, num_lines) = match patch.hunk(hunk_idx) {
+                Ok(h) => h,
+                Err(_) => continue,
+            };
+            let _ = hunk;
+            for line_idx in 0..num_lines {
+                if let Ok(line) = patch.line_in_hunk(hunk_idx, line_idx) {
+                    match line.origin() {
+                        '+' => additions += 1,
+                        '-' => deletions += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        files.push(DiffFile {
+            file: file_path,
+            additions,
+            deletions,
+        });
+    }
+
+    Ok(files)
+}
 
 /// Resolve a branch name to its OID (commit hash).
 fn resolve_branch_oid(repo: &Repository, branch: &str) -> Result<git2::Oid, String> {
@@ -632,14 +741,19 @@ fn resolve_branch_oid(repo: &Repository, branch: &str) -> Result<git2::Oid, Stri
 }
 
 /// Get the tree at the fork point — where this workspace diverged from the
-/// upstream branch. This is the baseline for all diff operations.
+/// upstream branch. This is the baseline for ALL diff operations.
 ///
 /// Implements merge-base semantics:
-///   fork_point = merge_base(HEAD, upstream)
+///   fork_point = merge_base(HEAD, origin/<parent>)
 ///   tree = commit_at(fork_point).tree()
 ///
 /// All diff functions compare this tree to the working directory, giving
-/// "everything that changed since we forked."
+/// "everything that changed since we forked from upstream."
+///
+/// The `parent_branch` arg is typically `origin/main` (from resolve_parent_branch).
+/// Workspace creation fetches origin/<parent> first and branches the worktree from
+/// it, so HEAD and origin/<parent> share a recent common ancestor. If origin is
+/// stale, the merge-base drifts backward and phantom changes appear.
 ///
 /// Falls back to the upstream branch tree directly if merge-base fails
 /// (e.g., unrelated histories).
