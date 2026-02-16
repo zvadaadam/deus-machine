@@ -19,6 +19,19 @@ import type {
 import { useMemo, useCallback } from "react";
 
 /**
+ * Fetch all sessions for a workspace (used by chat tab reconstruction).
+ * Stale time is high — tabs only hydrate on mount and after creating new sessions.
+ */
+export function useWorkspaceSessions(workspaceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.sessions.byWorkspace(workspaceId || ""),
+    queryFn: () => SessionService.fetchByWorkspace(workspaceId!),
+    enabled: !!workspaceId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Fetch session details with dynamic polling based on status
  *
  * NOTE: Polling is kept even on desktop because:
@@ -453,6 +466,10 @@ export function useCreateSession() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.detail(workspaceId),
+      });
+      // Invalidate workspace sessions so chat tabs pick up the new session
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions.byWorkspace(workspaceId),
       });
     },
   });

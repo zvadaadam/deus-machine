@@ -49,10 +49,10 @@ function TooltipContent({
           // Layout + origin-aware scaling (Radix provides transform origin)
           "z-50 w-fit will-change-transform origin-(--radix-tooltip-content-transform-origin) rounded-md px-2.5 py-1 text-xs text-balance",
           // Enter: 200ms with Emil Kowalski's custom ease-out curve
-          "data-[state=delayed-open]:animate-[tooltip-enter_200ms_cubic-bezier(0.32,0.72,0,1)]",
-          "data-[state=instant-open]:animate-[tooltip-enter_150ms_cubic-bezier(0.32,0.72,0,1)]",
+          "data-[state=delayed-open]:animate-[tooltip-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
+          "data-[state=instant-open]:animate-[tooltip-enter_150ms_cubic-bezier(.215,.61,.355,1)]",
           // Exit: faster, same ease-out (ease-out for both enter & exit per Kowalski)
-          "data-[state=closed]:animate-[tooltip-exit_150ms_cubic-bezier(0.32,0.72,0,1)]",
+          "data-[state=closed]:animate-[tooltip-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
           // Directional offsets (3px nudge toward trigger)
           "data-[side=top]:[--tooltip-translate-y:3px]",
           "data-[side=bottom]:[--tooltip-translate-y:-3px]",
