@@ -13,6 +13,8 @@ import {
   Check,
   ArrowUpRight,
 } from "lucide-react";
+import { useFileMention } from "../hooks/useFileMention";
+import { FileMentionPopover } from "./FileMentionPopover";
 import {
   InputGroup,
   InputGroupAddon,
@@ -77,6 +79,8 @@ interface MessageInputProps {
   showCompactButton?: boolean;
   mcpServers?: MCPServer[];
   contextTokenCount?: number;
+  /** Workspace path for @ file mention search */
+  workspacePath?: string | null;
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
   onCompact?: () => void;
@@ -99,6 +103,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     showCompactButton = false,
     mcpServers = [],
     contextTokenCount = 0,
+    workspacePath = null,
     onMessageChange,
     onSend,
     onCompact,
@@ -225,8 +230,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     }
   };
 
-  // Keyboard shortcut
+  // @ file mention support (nucleo-powered fuzzy search via Rust)
+  const fileMention = useFileMention({
+    value: messageInput,
+    workspacePath: workspacePath ?? null,
+    onChange: onMessageChange,
+  });
+
+  // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Let file mention popover handle navigation keys first
+    if (fileMention.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>)) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSend();
@@ -335,6 +353,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   return (
     <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
+      {/* File mention popover — anchored above the input group */}
+      {fileMention.isOpen && (
+        <div className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start">
+          <FileMentionPopover
+            results={fileMention.results}
+            loading={fileMention.loading}
+            selectedIndex={fileMention.selectedIndex}
+            query={fileMention.query}
+            onSelect={fileMention.selectFile}
+          />
+        </div>
+      )}
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
@@ -365,11 +395,16 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         {/* Textarea */}
         <InputGroupTextarea
           value={messageInput}
-          onChange={(e) => onMessageChange(e.target.value)}
+          onChange={(e) => {
+            onMessageChange(e.target.value);
+            fileMention.handleCursorChange(e);
+          }}
           onPaste={handlePaste}
-          placeholder="Ask a follow-up ..."
+          placeholder="Ask a follow-up ... (type @ to mention a file)"
           disabled={sending}
           onKeyDown={handleKeyDown}
+          onSelect={fileMention.handleCursorChange}
+          onClick={fileMention.handleCursorChange}
           className={cn(
             "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
