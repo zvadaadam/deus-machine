@@ -168,6 +168,83 @@ Port discovery is automatic:
 2. Web dev: `VITE_BACKEND_PORT` env variable
 3. Fallback: Port scanning + localStorage cache
 
+## 🤖 AI Agent Workflow
+
+This repo ships with custom Claude Code agents and skills for a structured dev workflow. Everything is tailored to this codebase's architecture (Tauri + React + Node.js + Sidecar).
+
+### Agents
+
+Agents are specialized subagents that Claude auto-delegates to. They run in isolated context with their own tools and model.
+
+| Agent | Model | What it does |
+|-------|-------|-------------|
+| `code-reviewer` | Sonnet | Quick read-only code review. Has persistent memory — learns patterns over time. |
+| `dev` | Opus | TDD developer. Writes failing test first, implements, refactors. Knows the test infrastructure. |
+| `deep-reviewer` | Opus | Thorough reviewer. Writes structured review docs to `.context/reviews/` with iteration tracking. |
+
+Agents live in `.claude/agents/` and are auto-loaded by Claude Code.
+
+### Skills (Slash Commands)
+
+Type these in Claude Code to invoke them. **Inline skills** run in your conversation. **Forked skills** spawn a subagent.
+
+#### Quick Commands (inline)
+
+| Command | What it does |
+|---------|-------------|
+| `/commit` | Analyzes staged changes, writes a good commit message |
+| `/pr` | Creates a PR with risk tier, test plan, structured description |
+| `/test` | Auto-detects what changed, runs the right test suites |
+| `/test backend` | Explicitly run backend tests |
+| `/test all` | Run all test suites |
+| `/debug [error]` | Traces root cause through the codebase, suggests fix |
+| `/risk-tier` | Classifies changed files by risk tier, outputs required checks |
+
+#### Deep Work Commands (forked)
+
+| Command | Agent | What it does |
+|---------|-------|-------------|
+| `/review` | code-reviewer | Quick code review of changes |
+| `/review --staged` | code-reviewer | Review only staged changes |
+| `/deep-review` | deep-reviewer | Thorough audit, writes review file to `.context/reviews/` |
+| `/dev [task]` | dev | TDD implementation: failing test → pass → refactor |
+| `/explore [area]` | Explore | Deep-dive into a codebase area, traces full stack |
+
+### Risk Tiers
+
+Changes are classified by risk tier to determine required checks:
+
+| Tier | Examples | Required checks |
+|------|----------|----------------|
+| **1 - Critical** | schema.ts, database.ts, sidecar core, Rust main | All tests + cargo test + smoke test + senior review |
+| **2 - High** | Routes, services, agents, git.rs, platform | Backend + sidecar + cargo tests + review |
+| **3 - Medium** | UI features, stores, global.css | Typecheck + format + visual verification |
+| **4 - Low** | Docs, config, tests, Shadcn components | Typecheck + format |
+
+### Typical Dev Session
+
+```
+/explore workspace pagination       # understand the area
+/dev add cursor-based pagination     # implement with TDD
+/test                                # verify tests pass
+/review                              # quick check
+/commit                              # commit with good message
+/deep-review                         # thorough pre-merge audit
+/pr                                  # open the PR
+```
+
+### Dev ↔ Review Loop
+
+The deep reviewer writes structured review files with status tracking:
+
+1. `/dev [task]` → dev agent implements with TDD
+2. `/deep-review` → writes `.context/reviews/review-01.md` (Status: pending)
+3. Fix findings → update status to `addressed`
+4. `/deep-review` → writes `review-02.md`, references fixed/open items
+5. Repeat until Verdict: APPROVE
+
+Skills live in `.claude/skills/` and agents in `.claude/agents/`.
+
 ## 📝 Contributing
 
 When working on this project:
