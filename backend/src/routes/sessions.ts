@@ -74,6 +74,9 @@ app.post('/sessions/:id/messages', async (c) => {
   const sessionId = c.req.param('id');
   const { content, model } = await c.req.json();
 
+  // Content can be a plain text string or a JSON-stringified content blocks array
+  // (when user attaches images — Anthropic API ImageBlockParam format).
+  // Both are stored as-is in the DB; the sidecar parses before sending to Claude SDK.
   if (!content || typeof content !== 'string') {
     throw new ValidationError('content is required and must be a string');
   }

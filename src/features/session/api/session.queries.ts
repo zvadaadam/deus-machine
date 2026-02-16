@@ -149,6 +149,14 @@ export function useSessionWithMessages(sessionId: string | null) {
   const parseContent = useCallback((content: string): string | (ContentBlock | string)[] | null => {
     try {
       const parsed = JSON.parse(content);
+
+      // User messages with images: content is stored as a JSON content blocks array
+      // (e.g., [{"type":"text","text":"..."}, {"type":"image","source":{...}}])
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
+        return normalizeContentBlocks(parsed);
+      }
+
+      // Assistant messages: wrapped in { message: { content: [...] } } envelope
       // Use nullish coalescing to preserve explicit empty strings/arrays from the backend.
       const blocks =
         (parsed as { message?: { content?: unknown }; content?: unknown }).message?.content ??
@@ -307,12 +315,29 @@ export function useSendMessage() {
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? `optimistic-${crypto.randomUUID()}`
           : `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      // Content may be plain text or a JSON-stringified content blocks array (when images attached).
+      // Detect JSON arrays to wrap correctly for parseContent downstream.
+      let optimisticContentJson: string;
+      try {
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          // Already content blocks array — wrap in the envelope parseContent expects
+          optimisticContentJson = JSON.stringify({ content: parsed });
+        } else {
+          optimisticContentJson = JSON.stringify({ content: [{ type: "text", text: content }] });
+        }
+      } catch {
+        // Plain text
+        optimisticContentJson = JSON.stringify({ content: [{ type: "text", text: content }] });
+      }
+
       const optimisticMessage: Message = {
         id: optimisticId,
         session_id: sessionId,
         seq: Number.MAX_SAFE_INTEGER, // Placeholder — real seq assigned by DB trigger
         role: "user",
-        content: JSON.stringify({ content: [{ type: "text", text: content }] }),
+        content: optimisticContentJson,
         created_at: new Date().toISOString(),
         sent_at: new Date().toISOString(),
         model: model ?? null,
