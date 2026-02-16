@@ -60,7 +60,11 @@ interface MCPServer {
 
 export interface MessageInputRef {
   addFiles: (files: File[]) => Promise<void>;
+  clearPastedContent: () => void;
 }
+
+// Anthropic API only supports these image formats for vision
+const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 interface MessageInputProps {
   messageInput: string;
@@ -117,7 +121,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   // Process image files into attachment previews (shared by paste + panel drop)
   const processFiles = async (files: File[]) => {
-    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    const imageFiles = files.filter((f) => SUPPORTED_IMAGE_TYPES.has(f.type));
     if (!imageFiles.length) return;
     const previews = await Promise.all(
       imageFiles.map(
@@ -141,8 +145,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     if (valid.length) setAttachments((prev) => [...prev, ...valid]);
   };
 
-  // Expose addFiles for parent-level drag & drop
-  useImperativeHandle(ref, () => ({ addFiles: processFiles }), []);
+  // Expose addFiles + clearPastedContent for parent-level drag & drop and success cleanup
+  useImperativeHandle(
+    ref,
+    () => ({
+      addFiles: processFiles,
+      clearPastedContent: () => {
+        setPastedTexts([]);
+        setAttachments([]);
+      },
+    }),
+    []
+  );
 
   /**
    * Build combined content from pasted texts + typed input + images.
@@ -199,13 +213,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput.trim().length > 0 || pastedTexts.length > 0 || attachments.length > 0;
 
   // Send with combined content (pasted texts + typed input + images)
+  // Pasted content is NOT cleared here — it's cleared by the parent via
+  // ref.clearPastedContent() inside onMessageSent (only on success), mirroring
+  // how messageInput is cleared. This prevents data loss on send failure.
   const handleSend = () => {
     if (sending || !hasContent) return;
     const combined = buildCombinedContent();
     if (combined) {
       onSend(combined);
-      setPastedTexts([]);
-      setAttachments([]);
     }
   };
 
@@ -226,7 +241,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     const imageFiles: File[] = [];
     if (e.clipboardData.items) {
       for (const item of Array.from(e.clipboardData.items)) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
+        if (item.kind === "file" && SUPPORTED_IMAGE_TYPES.has(item.type)) {
           const file = item.getAsFile();
           if (file) imageFiles.push(file);
         }
