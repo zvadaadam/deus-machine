@@ -110,7 +110,11 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
       return [{ type: "text", text: `**Plan:**\n${text}` }];
     })
     .with({ type: "error" }, (i) => [{ type: "text", text: `Error: ${i.message}` }])
-    .exhaustive();
+    .otherwise((i) => {
+      // External SDK types can gain new variants — gracefully ignore unknown items
+      console.warn(`[codex] Unknown ThreadItem type: ${(i as any).type}`);
+      return [];
+    });
 }
 
 // ============================================================================
@@ -315,7 +319,10 @@ export class CodexAgentHandler implements AgentHandler {
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
           })
-          .exhaustive();
+          .otherwise((e) => {
+            // External SDK types can gain new variants — gracefully skip unknown events
+            console.warn(`[codex] Unknown ThreadEvent type: ${(e as any).type}`);
+          });
       }
 
       // Normal completion if turn.completed wasn't received.

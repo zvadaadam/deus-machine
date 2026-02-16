@@ -611,156 +611,153 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 // Suite 3: Real Codex integration (requires OPENAI_API_KEY + bundle)
 // ============================================================================
 
-// In CI: always run (keys are required via secrets). Locally: skip if no key.
-describe.skipIf(isCI ? !bundleExists : !bundleExists || !hasOpenAIKey)(
-  "E2E: Real Codex Integration",
-  () => {
-    let sidecarProcess: ChildProcess;
-    let socketPath: string;
-    let client: net.Socket;
-    let logPath: string;
+// Skip if bundle missing or API key unavailable (matches Claude E2E pattern).
+// Fork PRs can't access repo secrets — skip gracefully instead of failing.
+describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", () => {
+  let sidecarProcess: ChildProcess;
+  let socketPath: string;
+  let client: net.Socket;
+  let logPath: string;
 
-    beforeAll(async () => {
-      const sidecar = await spawnSidecar();
-      sidecarProcess = sidecar.process;
-      socketPath = sidecar.socketPath;
-      client = sidecar.client;
-      logPath = sidecar.logPath;
-    }, 30_000);
+  beforeAll(async () => {
+    const sidecar = await spawnSidecar();
+    sidecarProcess = sidecar.process;
+    socketPath = sidecar.socketPath;
+    client = sidecar.client;
+    logPath = sidecar.logPath;
+  }, 30_000);
 
-    afterAll(async () => {
-      await killSidecar({ process: sidecarProcess, socketPath, client });
+  afterAll(async () => {
+    await killSidecar({ process: sidecarProcess, socketPath, client });
+  });
+
+  // ------------------------------------------------------------------
+  // Query flow: send a real prompt, receive streamed messages
+  // ------------------------------------------------------------------
+
+  it("sends a query and receives streamed response messages", async () => {
+    const sessionId = `test-codex-query-${Date.now()}`;
+
+    // Collect all incoming messages
+    const messageCollector = collectMessages(client);
+
+    // Send a minimal query (short prompt for a quick response)
+    sendNotification(client, "query", {
+      type: "query",
+      id: sessionId,
+      agentType: "codex",
+      prompt: "Reply with exactly: PONG",
+      options: {
+        cwd: WORKSPACE_ROOT,
+        model: "o4-mini",
+        turnId: `turn-${Date.now()}`,
+        permissionMode: "default",
+      },
     });
 
-    // ------------------------------------------------------------------
-    // Query flow: send a real prompt, receive streamed messages
-    // ------------------------------------------------------------------
+    const isSessionMessage = (msg: any) => msg.method === "message" && msg.params?.id === sessionId;
+    const isSessionError = (msg: any) =>
+      msg.method === "queryError" && msg.params?.id === sessionId;
+    const isSessionResult = (msg: any) =>
+      isSessionMessage(msg) && msg.params?.data?.type === "result";
 
-    it("sends a query and receives streamed response messages", async () => {
-      const sessionId = `test-codex-query-${Date.now()}`;
+    // Wait for either a result or error (up to 90s for Codex to respond)
+    const terminalMessage = await waitForMessage(
+      client,
+      (msg) => isSessionResult(msg) || isSessionError(msg),
+      90_000
+    );
 
-      // Collect all incoming messages
-      const messageCollector = collectMessages(client);
+    // Collect all session-related messages
+    const sessionMessages = messageCollector.filter(
+      (msg: any) => isSessionMessage(msg) || isSessionError(msg)
+    );
 
-      // Send a minimal query (short prompt for a quick response)
-      sendNotification(client, "query", {
-        type: "query",
-        id: sessionId,
-        agentType: "codex",
-        prompt: "Reply with exactly: PONG",
-        options: {
-          cwd: WORKSPACE_ROOT,
-          model: "o4-mini",
-          turnId: `turn-${Date.now()}`,
-          permissionMode: "default",
-        },
-      });
+    if (isSessionError(terminalMessage)) {
+      // If we got an error, it should be a structured error (not a crash)
+      expect(terminalMessage.params.error).toBeDefined();
+      expect(typeof terminalMessage.params.error).toBe("string");
+    } else {
+      // If we got a result, verify the message stream structure
+      expect(terminalMessage.params.data.type).toBe("result");
 
-      const isSessionMessage = (msg: any) =>
-        msg.method === "message" && msg.params?.id === sessionId;
-      const isSessionError = (msg: any) =>
-        msg.method === "queryError" && msg.params?.id === sessionId;
-      const isSessionResult = (msg: any) =>
-        isSessionMessage(msg) && msg.params?.data?.type === "result";
-
-      // Wait for either a result or error (up to 90s for Codex to respond)
-      const terminalMessage = await waitForMessage(
-        client,
-        (msg) => isSessionResult(msg) || isSessionError(msg),
-        90_000
+      // Should have received at least one assistant message before the result
+      const assistantMessages = sessionMessages.filter(
+        (msg: any) => msg.params?.data?.type === "assistant"
       );
+      expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
 
-      // Collect all session-related messages
-      const sessionMessages = messageCollector.filter(
-        (msg: any) => isSessionMessage(msg) || isSessionError(msg)
-      );
-
-      if (isSessionError(terminalMessage)) {
-        // If we got an error, it should be a structured error (not a crash)
-        expect(terminalMessage.params.error).toBeDefined();
-        expect(typeof terminalMessage.params.error).toBe("string");
-      } else {
-        // If we got a result, verify the message stream structure
-        expect(terminalMessage.params.data.type).toBe("result");
-
-        // Should have received at least one assistant message before the result
-        const assistantMessages = sessionMessages.filter(
-          (msg: any) => msg.params?.data?.type === "assistant"
-        );
-        expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
-
-        // Each assistant message should have valid structure
-        for (const msg of assistantMessages) {
-          expect(msg.params.data.message).toBeDefined();
-          expect(msg.params.data.message.role).toBe("assistant");
-        }
+      // Each assistant message should have valid structure
+      for (const msg of assistantMessages) {
+        expect(msg.params.data.message).toBeDefined();
+        expect(msg.params.data.message.role).toBe("assistant");
       }
-    }, 90_000);
+    }
+  }, 90_000);
 
-    // ------------------------------------------------------------------
-    // Cancel flow: start a query then cancel it
-    // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // Cancel flow: start a query then cancel it
+  // ------------------------------------------------------------------
 
-    it("cancels an active query and receives abort notification", async () => {
-      const sessionId = `test-codex-cancel-${Date.now()}`;
+  it("cancels an active query and receives abort notification", async () => {
+    const sessionId = `test-codex-cancel-${Date.now()}`;
 
-      // Start a query that will take a while
-      sendNotification(client, "query", {
-        type: "query",
-        id: sessionId,
-        agentType: "codex",
-        prompt:
-          "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
-        options: {
-          cwd: WORKSPACE_ROOT,
-          model: "o4-mini",
-          turnId: `turn-${Date.now()}`,
-          permissionMode: "default",
-        },
-      });
-
-      // Wait for the query to start processing
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Send cancel request
-      const cancelId = sendRequest(client, "cancel", {
-        type: "cancel",
-        id: sessionId,
-        agentType: "codex",
-      });
-
-      // Should receive either:
-      // 1. A cancel RPC response
-      // 2. A queryError notification with abort
-      // 3. A result if the query finished before cancel arrived
-      const terminalMessage = await waitForMessage(
-        client,
-        (msg) => {
-          if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
-          if (msg.method === "queryError" && msg.params?.id === sessionId) return true;
-          if (
-            msg.method === "message" &&
-            msg.params?.id === sessionId &&
-            msg.params?.data?.type === "result"
-          )
-            return true;
-          return false;
-        },
-        30_000
-      );
-
-      // Verify we got a structured response (not a crash)
-      expect(terminalMessage.jsonrpc).toBe("2.0");
-    }, 45_000);
-
-    // ------------------------------------------------------------------
-    // Verify sidecar log has no errors after Codex tests
-    // ------------------------------------------------------------------
-
-    it("sidecar log has no uncaught exceptions", () => {
-      const log = fs.readFileSync(logPath, "utf-8");
-      expect(log).not.toContain("Uncaught Exception:");
-      expect(log).not.toContain("Unhandled Rejection:");
+    // Start a query that will take a while
+    sendNotification(client, "query", {
+      type: "query",
+      id: sessionId,
+      agentType: "codex",
+      prompt:
+        "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
+      options: {
+        cwd: WORKSPACE_ROOT,
+        model: "o4-mini",
+        turnId: `turn-${Date.now()}`,
+        permissionMode: "default",
+      },
     });
-  }
-);
+
+    // Wait for the query to start processing
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // Send cancel request
+    const cancelId = sendRequest(client, "cancel", {
+      type: "cancel",
+      id: sessionId,
+      agentType: "codex",
+    });
+
+    // Should receive either:
+    // 1. A cancel RPC response
+    // 2. A queryError notification with abort
+    // 3. A result if the query finished before cancel arrived
+    const terminalMessage = await waitForMessage(
+      client,
+      (msg) => {
+        if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
+        if (msg.method === "queryError" && msg.params?.id === sessionId) return true;
+        if (
+          msg.method === "message" &&
+          msg.params?.id === sessionId &&
+          msg.params?.data?.type === "result"
+        )
+          return true;
+        return false;
+      },
+      30_000
+    );
+
+    // Verify we got a structured response (not a crash)
+    expect(terminalMessage.jsonrpc).toBe("2.0");
+  }, 45_000);
+
+  // ------------------------------------------------------------------
+  // Verify sidecar log has no errors after Codex tests
+  // ------------------------------------------------------------------
+
+  it("sidecar log has no uncaught exceptions", () => {
+    const log = fs.readFileSync(logPath, "utf-8");
+    expect(log).not.toContain("Uncaught Exception:");
+    expect(log).not.toContain("Unhandled Rejection:");
+  });
+});
