@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { match } from "ts-pattern";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { SidebarInset } from "@/components/ui/sidebar";
@@ -83,16 +84,13 @@ export function SettingsPage() {
 
     const sectionProps = { settings, saveSetting };
 
-    switch (activeSection) {
-      case "general":
-        return <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />;
-      case "ai":
-        return <AISection {...sectionProps} />;
-      case "extensions":
-        return <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />;
-      default:
-        return null;
-    }
+    return match(activeSection)
+      .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
+      .with("ai", () => <AISection {...sectionProps} />)
+      .with("extensions", () => (
+        <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />
+      ))
+      .otherwise(() => null);
   }
 
   return (
