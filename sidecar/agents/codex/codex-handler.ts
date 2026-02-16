@@ -7,19 +7,8 @@
 // The runtime Codex class is loaded via dynamic import() in processQuery()
 // because @openai/codex-sdk is ESM-only and uses import.meta.url at module
 // init, which can't be shimmed in esbuild's CJS output.
-import type {
-  ThreadEvent,
-  ThreadItem,
-  ThreadOptions,
-  AgentMessageItem,
-  ReasoningItem,
-  CommandExecutionItem,
-  FileChangeItem,
-  McpToolCallItem,
-  WebSearchItem,
-  TodoListItem,
-  ErrorItem,
-} from "@openai/codex-sdk";
+import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
+import { match, P } from "ts-pattern";
 import { FrontendClient } from "../../frontend-client";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
@@ -44,15 +33,10 @@ import {
  * ToolResultBlock, ThinkingBlock), so we produce the same shape.
  */
 function mapItemToContentBlocks(item: ThreadItem): unknown[] {
-  switch (item.type) {
-    case "agent_message":
-      return [{ type: "text", text: (item as AgentMessageItem).text }];
-
-    case "reasoning":
-      return [{ type: "thinking", thinking: (item as ReasoningItem).text }];
-
-    case "command_execution": {
-      const cmd = item as CommandExecutionItem;
+  return match(item)
+    .with({ type: "agent_message" }, (i) => [{ type: "text", text: i.text }])
+    .with({ type: "reasoning" }, (i) => [{ type: "thinking", thinking: i.text }])
+    .with({ type: "command_execution" }, (cmd) => {
       const toolUseId = `codex-cmd-${cmd.id}`;
       const blocks: unknown[] = [
         {
@@ -62,7 +46,6 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
           input: { command: cmd.command },
         },
       ];
-      // Add result block if the command has output or has completed
       if (cmd.status === "completed" || cmd.status === "failed") {
         blocks.push({
           type: "tool_result",
@@ -72,10 +55,8 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
         });
       }
       return blocks;
-    }
-
-    case "file_change": {
-      const fc = item as FileChangeItem;
+    })
+    .with({ type: "file_change" }, (fc) => {
       const toolUseId = `codex-file-${fc.id}`;
       const summary = fc.changes.map((c) => `${c.kind}: ${c.path}`).join("\n");
       return [
@@ -95,10 +76,8 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
           is_error: fc.status === "failed",
         },
       ];
-    }
-
-    case "mcp_tool_call": {
-      const mcp = item as McpToolCallItem;
+    })
+    .with({ type: "mcp_tool_call" }, (mcp) => {
       const toolUseId = `codex-mcp-${mcp.id}`;
       const blocks: unknown[] = [
         {
@@ -117,32 +96,21 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
         });
       }
       return blocks;
-    }
-
-    case "web_search": {
-      const ws = item as WebSearchItem;
-      return [
-        {
-          type: "tool_use",
-          id: `codex-ws-${ws.id}`,
-          name: "WebSearch",
-          input: { query: ws.query },
-        },
-      ];
-    }
-
-    case "todo_list": {
-      const todo = item as TodoListItem;
+    })
+    .with({ type: "web_search" }, (ws) => [
+      {
+        type: "tool_use",
+        id: `codex-ws-${ws.id}`,
+        name: "WebSearch",
+        input: { query: ws.query },
+      },
+    ])
+    .with({ type: "todo_list" }, (todo) => {
       const text = todo.items.map((t) => `${t.completed ? "[x]" : "[ ]"} ${t.text}`).join("\n");
       return [{ type: "text", text: `**Plan:**\n${text}` }];
-    }
-
-    case "error":
-      return [{ type: "text", text: `Error: ${(item as ErrorItem).message}` }];
-
-    default:
-      return [{ type: "text", text: `[Unknown item type: ${(item as any).type}]` }];
-  }
+    })
+    .with({ type: "error" }, (i) => [{ type: "text", text: `Error: ${i.message}` }])
+    .exhaustive();
 }
 
 // ============================================================================
@@ -263,63 +231,53 @@ export class CodexAgentHandler implements AgentHandler {
       for await (const event of events) {
         if (abortController.signal.aborted) break;
 
-        switch (event.type) {
-          case "thread.started": {
-            // Store the thread ID for resumption
-            session.threadId = event.thread_id;
-            console.log(`[${queryId}] Thread started: ${event.thread_id}`);
-            break;
-          }
-
-          case "item.started":
-          case "item.updated":
-          case "item.completed": {
-            const blocks = mapItemToContentBlocks(event.item);
-            if (blocks.length === 0) break;
+        match(event)
+          .with({ type: "thread.started" }, (e) => {
+            session.threadId = e.thread_id;
+            console.log(`[${queryId}] Thread started: ${e.thread_id}`);
+          })
+          .with({ type: P.union("item.started", "item.updated", "item.completed") }, (e) => {
+            const blocks = mapItemToContentBlocks(e.item);
+            if (blocks.length === 0) return;
 
             // For completed items, accumulate into the turn message
-            if (event.type === "item.completed") {
+            if (e.type === "item.completed") {
               turnContentBlocks.push(...blocks);
             }
 
             // Send real-time update to frontend (every event, not just completed)
-            const messageEnvelope = {
-              type: "assistant" as const,
-              message: {
-                id: `codex-${event.item.id}-${event.type}`,
-                role: "assistant" as const,
-                content: blocks,
-              },
-            };
-
             FrontendClient.sendMessage({
               id: sessionId,
               type: "message",
               agentType: "codex",
-              data: messageEnvelope,
+              data: {
+                type: "assistant" as const,
+                message: {
+                  id: `codex-${e.item.id}-${e.type}`,
+                  role: "assistant" as const,
+                  content: blocks,
+                },
+              },
             });
 
             // Persist completed items to database
-            if (event.type === "item.completed") {
+            if (e.type === "item.completed") {
               saveAssistantMessage(
                 sessionId,
                 {
-                  id: `codex-${event.item.id}`,
+                  id: `codex-${e.item.id}`,
                   role: "assistant",
                   content: blocks,
                 },
                 model
               );
             }
-            break;
-          }
-
-          case "turn.completed": {
+          })
+          .with({ type: "turn.completed" }, (e) => {
             console.log(
-              `[${queryId}] Turn completed. Tokens: in=${event.usage.input_tokens}, out=${event.usage.output_tokens}`
+              `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
 
-            // Send a result message to signal completion (matches Claude's behavior)
             FrontendClient.sendMessage({
               id: sessionId,
               type: "message",
@@ -327,48 +285,44 @@ export class CodexAgentHandler implements AgentHandler {
               data: {
                 type: "result",
                 subtype: "success",
-                usage: event.usage,
+                usage: e.usage,
               },
             });
 
             updateSessionStatus(sessionId, "idle");
             turnContentBlocks = [];
-            break;
-          }
-
-          case "turn.failed": {
-            console.error(`[${queryId}] Turn failed:`, event.error.message);
+          })
+          .with({ type: "turn.failed" }, (e) => {
+            console.error(`[${queryId}] Turn failed:`, e.error.message);
             FrontendClient.sendError({
               id: sessionId,
               type: "error",
-              error: event.error.message,
+              error: e.error.message,
               agentType: "codex",
             });
             updateSessionStatus(sessionId, "error");
-            break;
-          }
-
-          case "error": {
-            console.error(`[${queryId}] Stream error:`, event.message);
+          })
+          .with({ type: "error" }, (e) => {
+            console.error(`[${queryId}] Stream error:`, e.message);
             FrontendClient.sendError({
               id: sessionId,
               type: "error",
-              error: event.message,
+              error: e.message,
               agentType: "codex",
             });
             updateSessionStatus(sessionId, "error");
-            break;
-          }
-
-          case "turn.started":
+          })
+          .with({ type: "turn.started" }, () => {
             // Informational — no action needed
-            break;
-        }
+          })
+          .exhaustive();
       }
 
-      // Normal completion if turn.completed wasn't received
+      // Normal completion if turn.completed wasn't received.
+      // Only update status if this processQuery still owns the session —
+      // a rapid re-query can replace the session before we reach this point.
       const currentSession = getCodexSession(sessionId);
-      if (currentSession?.isRunning) {
+      if (currentSession === session && currentSession.isRunning) {
         updateSessionStatus(sessionId, "idle");
       }
 
@@ -379,7 +333,10 @@ export class CodexAgentHandler implements AgentHandler {
       const isAbort =
         error instanceof Error && (error.name === "AbortError" || abortController.signal.aborted);
 
-      if (!isAbort) {
+      // Only update status if this processQuery still owns the session.
+      const ownsSession = getCodexSession(sessionId) === session;
+
+      if (!isAbort && ownsSession) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
@@ -388,10 +345,15 @@ export class CodexAgentHandler implements AgentHandler {
         });
       }
 
-      updateSessionStatus(sessionId, isAbort ? "idle" : "error");
+      if (ownsSession) {
+        updateSessionStatus(sessionId, isAbort ? "idle" : "error");
+      }
     } finally {
+      // Only clean up if this processQuery still owns the session.
+      // A rapid re-query can replace the session before this finally runs;
+      // blindly mutating would corrupt the new session's state.
       const currentSession = getCodexSession(sessionId);
-      if (currentSession) {
+      if (currentSession === session) {
         currentSession.isRunning = false;
       }
     }
