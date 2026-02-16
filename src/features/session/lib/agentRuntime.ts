@@ -35,24 +35,24 @@ export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = [
     group: "claude",
   },
   {
-    value: "codex:opus",
-    model: "opus",
-    label: "Opus 4.5",
+    value: "codex:o3",
+    model: "o3",
+    label: "o3",
     agentType: "codex",
     group: "codex",
     isNew: true,
   },
   {
-    value: "codex:sonnet",
-    model: "sonnet",
-    label: "Sonnet 4.5",
+    value: "codex:o4-mini",
+    model: "o4-mini",
+    label: "o4-mini",
     agentType: "codex",
     group: "codex",
   },
   {
-    value: "codex:haiku",
-    model: "haiku",
-    label: "Haiku 3.5",
+    value: "codex:gpt-4.1",
+    model: "gpt-4.1",
+    label: "GPT-4.1",
     agentType: "codex",
     group: "codex",
   },
@@ -79,7 +79,7 @@ export function getRuntimeModelOption(model: string): RuntimeModelOption | undef
 
   // Backward compatibility for persisted values
   if (normalized === "codex") {
-    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:sonnet");
+    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:o4-mini");
   }
 
   // Legacy plain model values default to Claude harness
