@@ -12,6 +12,28 @@ Desktop app built with Tauri (Rust) + React frontend + Node.js backend.
 
 **Desktop-only:** We only target the Tauri desktop app. Do not write web-specific fallbacks, browser-mode polling, or `isTauriEnv` conditionals for feature parity. The HTTP/Node.js backend exists as a service layer — not as a standalone web app. Tauri IPC and events are the primary data transport.
 
+### ts-pattern (Pattern Matching)
+
+Use `ts-pattern` for switch/case and if/else chains on discriminated unions. Prefer `.exhaustive()` to catch missing cases at compile time.
+
+```tsx
+import { match, P } from "ts-pattern";
+
+// Discriminated union dispatch
+return match(block)
+  .with({ type: "text" }, (b) => <TextBlock block={b} />)
+  .with({ type: "tool_use" }, (b) => <ToolUseBlock block={b} />)
+  .with({ type: "thinking" }, (b) => <ThinkingBlock block={b} />)
+  .otherwise(() => null);
+
+// .exhaustive() — all cases MUST be handled (no default/fallback)
+// .otherwise() — intentional fallback for open-ended matching
+// P.union("a", "b") — match multiple values
+// P.when(pred) — guard conditions
+```
+
+**When to use:** Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields.
+
 ## System Architecture
 
 ```

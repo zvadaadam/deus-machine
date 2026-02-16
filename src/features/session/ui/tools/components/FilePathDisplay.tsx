@@ -4,6 +4,7 @@
  * Shows file path with icon and proper formatting
  */
 
+import { match, P } from "ts-pattern";
 import { File, FileCode, FileJson, FileText } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -27,33 +28,19 @@ export function FilePathDisplay({ path, className }: FilePathDisplayProps) {
 
     const iconProps = { className: "w-4 h-4 flex-shrink-0", "aria-hidden": true };
 
-    switch (ext) {
-      case "ts":
-      case "tsx":
-      case "js":
-      case "jsx":
-      case "py":
-      case "rs":
-      case "go":
-      case "java":
-        return <FileCode {...iconProps} className={cn(iconProps.className, "text-info")} />;
-
-      case "json":
-      case "yaml":
-      case "yml":
-      case "toml":
-        return <FileJson {...iconProps} className={cn(iconProps.className, "text-warning")} />;
-
-      case "md":
-      case "txt":
-      case "log":
-        return (
-          <FileText {...iconProps} className={cn(iconProps.className, "text-muted-foreground")} />
-        );
-
-      default:
-        return <File {...iconProps} className={cn(iconProps.className, "text-muted-foreground")} />;
-    }
+    return match(ext)
+      .with(P.union("ts", "tsx", "js", "jsx", "py", "rs", "go", "java"), () => (
+        <FileCode {...iconProps} className={cn(iconProps.className, "text-info")} />
+      ))
+      .with(P.union("json", "yaml", "yml", "toml"), () => (
+        <FileJson {...iconProps} className={cn(iconProps.className, "text-warning")} />
+      ))
+      .with(P.union("md", "txt", "log"), () => (
+        <FileText {...iconProps} className={cn(iconProps.className, "text-muted-foreground")} />
+      ))
+      .otherwise(() => (
+        <File {...iconProps} className={cn(iconProps.className, "text-muted-foreground")} />
+      ));
   };
 
   return (

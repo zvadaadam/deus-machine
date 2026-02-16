@@ -1,3 +1,4 @@
+import { match } from "ts-pattern";
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
@@ -266,20 +267,16 @@ export function Chat({
       const lastBlock = blocks[blocks.length - 1];
       if (!lastBlock || typeof lastBlock === "string") return "generating";
 
-      switch (lastBlock.type) {
-        case "thinking":
-          return "thinking";
-        case "text":
-          return "generating";
-        case "tool_use": {
-          const result = toolResultMap.get(lastBlock.id);
-          if (result?.is_error) return "error";
-          if (!result) return "toolExecuting";
-          return "generating";
-        }
-        default:
-          return "generating";
-      }
+      return match(lastBlock)
+        .with({ type: "thinking" }, () => "thinking" as const)
+        .with({ type: "text" }, () => "generating" as const)
+        .with({ type: "tool_use" }, (b) => {
+          const result = toolResultMap.get(b.id);
+          if (result?.is_error) return "error" as const;
+          if (!result) return "toolExecuting" as const;
+          return "generating" as const;
+        })
+        .otherwise(() => "generating" as const);
     }
 
     return "generating";
