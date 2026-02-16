@@ -8,6 +8,7 @@
 // This hook should be mounted in BrowserPanel (or a parent component)
 // so it's active whenever the browser is visible.
 
+import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
 import { invoke, listen, isTauriEnv } from "@/platform/tauri";
 import { evalWithResult } from "./eval-with-result";
@@ -843,56 +844,25 @@ export function useBrowserRpcHandler(
         console.log("[BrowserRPC] Received request:", method);
       }
 
-      switch (method) {
-        case "browserSnapshot":
-          handleBrowserSnapshot(id, params);
-          break;
-        case "browserClick":
-          handleBrowserClick(id, params);
-          break;
-        case "browserType":
-          handleBrowserType(id, params);
-          break;
-        case "browserNavigate":
-          handleBrowserNavigate(id, params);
-          break;
-        case "browserGetState":
-          handleBrowserGetState(id, params);
-          break;
-        case "browserWaitFor":
-          handleBrowserWaitFor(id, params);
-          break;
-        case "browserEvaluate":
-          handleBrowserEvaluate(id, params);
-          break;
-        case "browserPressKey":
-          handleBrowserPressKey(id, params);
-          break;
-        case "browserHover":
-          handleBrowserHover(id, params);
-          break;
-        case "browserSelectOption":
-          handleBrowserSelectOption(id, params);
-          break;
-        case "browserNavigateBack":
-          handleBrowserNavigateBack(id, params);
-          break;
-        case "browserConsoleMessages":
-          handleBrowserConsoleMessages(id, params);
-          break;
-        case "browserNetworkRequests":
-          handleBrowserNetworkRequests(id, params);
-          break;
-        case "browserScreenshot":
-          handleBrowserScreenshot(id, params);
-          break;
-        case "browserScroll":
-          handleBrowserScroll(id, params);
-          break;
-        default:
+      match(method)
+        .with("browserSnapshot", () => handleBrowserSnapshot(id, params))
+        .with("browserClick", () => handleBrowserClick(id, params))
+        .with("browserType", () => handleBrowserType(id, params))
+        .with("browserNavigate", () => handleBrowserNavigate(id, params))
+        .with("browserGetState", () => handleBrowserGetState(id, params))
+        .with("browserWaitFor", () => handleBrowserWaitFor(id, params))
+        .with("browserEvaluate", () => handleBrowserEvaluate(id, params))
+        .with("browserPressKey", () => handleBrowserPressKey(id, params))
+        .with("browserHover", () => handleBrowserHover(id, params))
+        .with("browserSelectOption", () => handleBrowserSelectOption(id, params))
+        .with("browserNavigateBack", () => handleBrowserNavigateBack(id, params))
+        .with("browserConsoleMessages", () => handleBrowserConsoleMessages(id, params))
+        .with("browserNetworkRequests", () => handleBrowserNetworkRequests(id, params))
+        .with("browserScreenshot", () => handleBrowserScreenshot(id, params))
+        .with("browserScroll", () => handleBrowserScroll(id, params))
+        .otherwise(() => {
           // Not a browser method — ignore (other handlers may pick it up)
-          break;
-      }
+        });
     });
 
     return () => {

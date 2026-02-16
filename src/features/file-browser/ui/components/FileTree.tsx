@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { match } from "ts-pattern";
 import {
   ChevronRight,
   ChevronDown,
@@ -81,18 +82,12 @@ function getFileIconConfig(filename: string): { icon: typeof File; color: string
 function getGitStatusColor(gitStatus?: "modified" | "added" | "deleted" | "untracked"): string {
   if (!gitStatus) return "";
 
-  switch (gitStatus) {
-    case "modified":
-      return "text-warning"; // Amber/orange
-    case "added":
-      return "text-success"; // Green
-    case "deleted":
-      return "text-destructive/60 line-through"; // Red with strikethrough
-    case "untracked":
-      return "text-info"; // Blue
-    default:
-      return "";
-  }
+  return match(gitStatus)
+    .with("modified", () => "text-warning")
+    .with("added", () => "text-success")
+    .with("deleted", () => "text-destructive/60 line-through")
+    .with("untracked", () => "text-info")
+    .exhaustive();
 }
 
 /**
