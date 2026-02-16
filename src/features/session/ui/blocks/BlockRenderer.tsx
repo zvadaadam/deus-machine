@@ -9,6 +9,7 @@
  * they're only displayed as part of their tool_use block.
  */
 
+import { match } from "ts-pattern";
 import type { ContentBlock, MessageRole } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
 import { TextBlock } from "./TextBlock";
@@ -42,11 +43,9 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
   }
 
   // Dispatch based on block type
-  switch (block.type) {
-    case "text":
-      return <TextBlock block={block} role={role} weight={weight} />;
-
-    case "image": {
+  return match(block)
+    .with({ type: "text" }, (b) => <TextBlock block={b} role={role} weight={weight} />)
+    .with({ type: "image" }, (b) => {
       // Display-only image in chat (no remove button)
       // User: compact 80×80 thumbnails; Assistant: larger inline display
       const isUser = role === "user";
@@ -58,32 +57,22 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
           )}
         >
           <img
-            src={`data:${block.source.media_type};base64,${block.source.data}`}
+            src={`data:${b.source.media_type};base64,${b.source.data}`}
             alt="Pasted image"
             className={isUser ? "h-full w-full object-cover" : "max-h-64 max-w-full object-contain"}
           />
         </div>
       );
-    }
-
-    case "tool_use": {
-      // Link tool_use with its corresponding tool_result
-      const toolResult = toolResultMap.get(block.id);
-      return <ToolUseBlock block={block} toolResult={toolResult} />;
-    }
-
-    case "tool_result":
-      // Don't render tool_result standalone - it's already linked to tool_use
-      return null;
-
-    case "thinking":
-      return <ThinkingBlock block={block} />;
-
-    default:
-      // Graceful fallback for unknown block types
+    })
+    .with({ type: "tool_use" }, (b) => (
+      <ToolUseBlock block={b} toolResult={toolResultMap.get(b.id)} />
+    ))
+    .with({ type: "tool_result" }, () => null)
+    .with({ type: "thinking" }, (b) => <ThinkingBlock block={b} />)
+    .otherwise((b) => {
       if (import.meta.env.DEV) {
-        console.warn("[BlockRenderer] Unknown block type:", (block as any).type, block);
+        console.warn("[BlockRenderer] Unknown block type:", (b as { type?: string }).type, b);
       }
       return null;
-  }
+    });
 }
