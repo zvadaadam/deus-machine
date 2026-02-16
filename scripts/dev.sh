@@ -20,6 +20,15 @@ NC='\033[0m'
 # Trap to kill background processes on exit
 trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt' EXIT
 
+# Kill any stale Vite process on port 1420 to prevent Tauri from
+# connecting to an outdated dev server from a previous session.
+STALE_PID=$(lsof -ti:1420 2>/dev/null || true)
+if [ -n "$STALE_PID" ]; then
+    echo -e "${YELLOW}Killing stale process on port 1420 (PID: $STALE_PID)...${NC}"
+    kill -9 $STALE_PID 2>/dev/null || true
+    sleep 0.3
+fi
+
 # Start backend server with dynamic port
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
 PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
