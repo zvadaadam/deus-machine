@@ -40,11 +40,17 @@ import type { Message } from "@/shared/types";
 let mouseDown = false;
 
 if (typeof document !== "undefined") {
-  document.addEventListener("mousedown", () => { mouseDown = true; });
-  document.addEventListener("mouseup", () => { mouseDown = false; });
+  document.addEventListener("mousedown", () => {
+    mouseDown = true;
+  });
+  document.addEventListener("mouseup", () => {
+    mouseDown = false;
+  });
   // Safety net: click fires after mouseup, catches edge cases where mouseup
   // was missed (e.g., mouseup outside the window).
-  document.addEventListener("click", () => { mouseDown = false; });
+  document.addEventListener("click", () => {
+    mouseDown = false;
+  });
 }
 
 /**
@@ -283,7 +289,9 @@ export function useAutoScroll({
       let el = e.target as HTMLElement | null;
       while (el) {
         const overflow = getComputedStyle(el).overflowY;
-        if (overflow === "scroll" || overflow === "auto") {
+        const isScrollable =
+          (overflow === "scroll" || overflow === "auto") && el.scrollHeight > el.clientHeight;
+        if (isScrollable) {
           // Found the nearest scrollable ancestor
           if (el === container) {
             // User is scrolling up in OUR container → escape from auto-scroll
