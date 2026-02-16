@@ -1,0 +1,154 @@
+/**
+ * Global Session Notifications
+ *
+ * Listens to ALL session events (not just the selected one) and sends
+ * OS-level notifications when the app is in the background.
+ *
+ * Notification triggers:
+ * - Agent finished working (working → idle)         → Glass sound
+ * - Agent error (session:error event)                → Basso sound
+ * - Agent needs input (→ needs_response)             → Ping sound
+ * - Plan ready for review (session:enter-plan-mode)  → Ping sound
+ *
+ * When the app is in the foreground, notifications are suppressed —
+ * Sonner toasts handle in-app feedback.
+ */
+
+import { useEffect, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useQueryClient } from "@tanstack/react-query";
+import { isTauriEnv } from "@/platform/tauri";
+import { sendNotification } from "@/platform/notifications";
+import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
+import type { Session, SessionStatus } from "@shared/types/session";
+
+/** Event payload from sidecar — same shape as useSessionEvents */
+interface SidecarEvent {
+  id: string;
+  type: string;
+  agentType: string;
+  error?: string;
+}
+
+/**
+ * Batches multiple notifications within a short window into a single one.
+ * Prevents notification spam when multiple agents finish simultaneously.
+ */
+const BATCH_WINDOW_MS = 1500;
+
+export function useGlobalSessionNotifications() {
+  // Track previous session statuses for transition detection
+  const prevStatusMap = useRef(new Map<string, SessionStatus>());
+  // Batch queue for "agent finished" notifications
+  const finishedBatch = useRef<string[]>([]);
+  const batchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauriEnv) return;
+
+    function flushFinishedBatch() {
+      const batch = finishedBatch.current;
+      finishedBatch.current = [];
+      batchTimerRef.current = undefined;
+
+      if (batch.length === 0 || isWindowFocused()) return;
+
+      if (batch.length === 1) {
+        sendNotification({
+          title: "Agent finished",
+          body: `Session ${batch[0].substring(0, 8)} completed`,
+          sound: "Glass",
+        });
+      } else {
+        sendNotification({
+          title: `${batch.length} agents finished`,
+          body: "Multiple sessions completed",
+          sound: "Glass",
+        });
+      }
+    }
+
+    function queueFinished(sessionId: string) {
+      finishedBatch.current.push(sessionId);
+      if (!batchTimerRef.current) {
+        batchTimerRef.current = setTimeout(flushFinishedBatch, BATCH_WINDOW_MS);
+      }
+    }
+
+    // --- Error notifications (instant) ---
+    const unlistenError = listen<SidecarEvent>("session:error", (event) => {
+      if (isWindowFocused()) return;
+
+      const { id, error } = event.payload;
+      sendNotification({
+        title: "Agent error",
+        body: error || `Session ${id.substring(0, 8)} encountered an error`,
+        sound: "Basso",
+      });
+    });
+
+    // --- Plan mode notifications (instant) ---
+    const unlistenPlan = listen<SidecarEvent>("session:enter-plan-mode", (event) => {
+      if (isWindowFocused()) return;
+
+      const { id } = event.payload;
+      sendNotification({
+        title: "Plan ready for review",
+        body: `Session ${id.substring(0, 8)} has a plan waiting for approval`,
+        sound: "Ping",
+      });
+    });
+
+    // --- Status transition detection via session:message events ---
+    // When we receive a message event, the session detail query will be
+    // invalidated (by useSessionEvents). We subscribe to cache updates
+    // to detect status transitions across ALL sessions.
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || !event.query.queryKey[0]) return;
+
+      // Only watch session detail queries: ["sessions", "detail", id]
+      const key = event.query.queryKey;
+      if (key[0] !== "sessions" || key[1] !== "detail") return;
+
+      const session = event.query.state.data as Session | undefined;
+      if (!session?.id || !session.status) return;
+
+      const prevStatus = prevStatusMap.current.get(session.id);
+      prevStatusMap.current.set(session.id, session.status);
+
+      // Skip the first observation (no transition to compare)
+      if (!prevStatus) return;
+      // Skip non-transitions
+      if (prevStatus === session.status) return;
+
+      if (isWindowFocused()) return;
+
+      // working → idle = agent finished
+      if (prevStatus === "working" && session.status === "idle") {
+        queueFinished(session.id);
+      }
+
+      // → needs_response = agent needs user input
+      if (session.status === "needs_response") {
+        sendNotification({
+          title: "Agent needs input",
+          body: `Session ${session.id.substring(0, 8)} is waiting for your response`,
+          sound: "Ping",
+        });
+      }
+
+      // Error and plan-mode notifications are handled by the direct Tauri
+      // event listeners above (session:error, session:enter-plan-mode) which
+      // fire immediately — no need to duplicate them via cache transitions.
+    });
+
+    return () => {
+      unlistenError.then((fn) => fn());
+      unlistenPlan.then((fn) => fn());
+      unsubscribe();
+      if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
+    };
+  }, [queryClient]);
+}
