@@ -164,7 +164,7 @@ export function WorkspaceHeader({
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <div className="text-text-muted flex items-center gap-1 px-2 py-1">
-                <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                <AlertTriangle className="h-3 w-3 text-warning" />
                 <span className="text-[11px] font-medium">PR</span>
               </div>
             </TooltipTrigger>
@@ -286,19 +286,19 @@ function PRStatusChips({
     chips.push({ icon: null, label: "Draft", color: "text-text-muted" });
   }
   if (hasConflicts) {
-    chips.push({ icon: <FileWarning className="h-2.5 w-2.5" />, label: "Conflicts", color: "text-red-500" });
+    chips.push({ icon: <FileWarning className="h-2.5 w-2.5" />, label: "Conflicts", color: "text-destructive" });
   }
   if (ciStatus === "passing") {
-    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "CI", color: "text-green-500" });
+    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "CI", color: "text-success" });
   } else if (ciStatus === "failing") {
-    chips.push({ icon: <CircleX className="h-2.5 w-2.5" />, label: "CI", color: "text-red-500" });
+    chips.push({ icon: <CircleX className="h-2.5 w-2.5" />, label: "CI", color: "text-destructive" });
   } else if (ciStatus === "pending") {
-    chips.push({ icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />, label: "CI", color: "text-yellow-500" });
+    chips.push({ icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />, label: "CI", color: "text-warning" });
   }
   if (reviewStatus === "approved") {
-    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "Approved", color: "text-green-500" });
+    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "Approved", color: "text-success" });
   } else if (reviewStatus === "changes_requested") {
-    chips.push({ icon: <MessageSquareWarning className="h-2.5 w-2.5" />, label: "Changes", color: "text-orange-500" });
+    chips.push({ icon: <MessageSquareWarning className="h-2.5 w-2.5" />, label: "Changes", color: "text-warning" });
   }
 
   if (chips.length === 0) return null;
