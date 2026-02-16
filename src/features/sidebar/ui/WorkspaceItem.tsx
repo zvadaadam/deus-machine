@@ -1,6 +1,7 @@
 import React from "react";
 import { match } from "ts-pattern";
 import { Archive } from "lucide-react";
+import NumberFlow from "@number-flow/react";
 
 import { cn } from "@/shared/lib/utils";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
@@ -224,14 +225,18 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             )}
           >
             {additions > 0 && (
-              <span className={isActive ? "text-accent-green" : "text-accent-green-muted"}>
-                +{additions}
-              </span>
+              <NumberFlow
+                value={additions}
+                prefix="+"
+                className={isActive ? "text-accent-green" : "text-accent-green-muted"}
+              />
             )}
             {deletions > 0 && (
-              <span className={isActive ? "text-accent-red" : "text-accent-red-muted"}>
-                -{deletions}
-              </span>
+              <NumberFlow
+                value={deletions}
+                prefix="-"
+                className={isActive ? "text-accent-red" : "text-accent-red-muted"}
+              />
             )}
           </div>
         ) : null}
