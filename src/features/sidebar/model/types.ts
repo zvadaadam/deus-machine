@@ -46,11 +46,6 @@ export interface RepositoryItemProps {
   onArchive?: (workspaceId: string) => void;
   // Avoid mounting workspace list when sidebar is offcanvas-collapsed.
   sidebarExpanded: boolean;
-  dragHandleProps?: {
-    attributes?: Record<string, any>;
-    listeners?: Record<string, any>;
-    setActivatorNodeRef?: (node: HTMLElement | null) => void;
-  };
 }
 
 /**

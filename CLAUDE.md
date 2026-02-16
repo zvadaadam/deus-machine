@@ -762,10 +762,26 @@ src/components/ui/              ← Shadcn base primitives only
 - Do not animate blur values higher than 20px.
 - Use `will-change` to optimize your animation, but use it only for: `transform`, `opacity`, `clipPath`, `filter`.
 
-### Animation Strategy: CSS-First
+### Animation Strategy: CSS + Framer Motion Hybrid
 
-- **Primary approach:** CSS/Tailwind animations and transitions. The codebase uses `@keyframes` in `global.css` and Tailwind's built-in animation utilities.
-- **Framer Motion:** Available but use sparingly — only when CSS can't handle the interaction (gesture-driven animations, layout animations, shared element transitions). Most animations should be pure CSS.
+**CSS/Tailwind** — use for:
+- Hover/focus transitions (`transition-colors duration-200 ease`)
+- Infinite loops (spinners, shimmers, loading indicators)
+- Tooltip/popover enter/exit
+- Simple opacity/transform keyframes that don't need mount/unmount awareness
+
+**Framer Motion** (`motion`, `AnimatePresence`) — use for:
+- **Presence animations**: mount/unmount transitions (`AnimatePresence` + `initial`/`animate`/`exit`)
+- **Layout animations**: items shifting position after reorder or sibling changes (`layout` prop)
+- **Staggered lists**: children animating in sequence (`staggerChildren` in variants)
+- **Height auto**: expanding/collapsing containers to `height: "auto"` (CSS can't animate to `auto`)
+
+**Rules:**
+- Co-locate animation config with the component, not in `global.css`
+- Keep `global.css` for design tokens, complex effects Tailwind can't do, and truly global styles
+- Never define a `@keyframes` in global.css for a single component — use Framer Motion inline
+- Reuse transition configs: `{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }` (ease-out-quart)
+- Always wrap conditional renders in `AnimatePresence` when exit animations are needed
 
 ## Testing
 

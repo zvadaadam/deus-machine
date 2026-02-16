@@ -1,5 +1,6 @@
 import type { SessionStatus } from "@/shared/types";
 import { useState, forwardRef, useImperativeHandle } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
   Minimize2,
   ArrowUp,
@@ -341,21 +342,23 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         {/* Pasted content cards (images + text) — unified horizontal scroll */}
         {(attachments.length > 0 || pastedTexts.length > 0) && (
           <div className="scrollbar-vibrancy flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
-            {attachments.map((attachment) => (
-              <PastedImageCard
-                key={attachment.id}
-                preview={attachment.preview}
-                fileName={attachment.file.name}
-                onRemove={() => removeAttachment(attachment.id)}
-              />
-            ))}
-            {pastedTexts.map((paste) => (
-              <PastedTextCard
-                key={paste.id}
-                content={paste.content}
-                onRemove={() => removePastedText(paste.id)}
-              />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {attachments.map((attachment) => (
+                <PastedImageCard
+                  key={attachment.id}
+                  preview={attachment.preview}
+                  fileName={attachment.file.name}
+                  onRemove={() => removeAttachment(attachment.id)}
+                />
+              ))}
+              {pastedTexts.map((paste) => (
+                <PastedTextCard
+                  key={paste.id}
+                  content={paste.content}
+                  onRemove={() => removePastedText(paste.id)}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         )}
 
