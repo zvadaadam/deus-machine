@@ -1260,6 +1260,13 @@ body {
   transition: none;
 }
 
+/* Disable panel transitions during react-resizable-panels drag.
+ * The library sets data-resize-handle-active on the handle during drag. */
+[data-resize-handle-active] ~ [data-slot="resizable-panel"],
+:has(> [data-resize-handle-active]) [data-slot="resizable-panel"] {
+  transition: none !important;
+}
+
 /* Disable ALL layout transitions during native window resize (fullscreen exit, snap, drag).
  * WKWebView pauses rendering during resize — CSS transitions fighting the native animation
  * cause content to "stick" at the old size. Same pattern as [data-resizing] for sidebar drag. */

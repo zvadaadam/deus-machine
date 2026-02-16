@@ -1,5 +1,4 @@
 import * as React from "react";
-import { GripVerticalIcon } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/shared/lib/utils";
@@ -21,27 +20,55 @@ function ResizablePanel({ ...props }: React.ComponentProps<typeof ResizablePrimi
   return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
 }
 
+/**
+ * Codex-style resize handle — zero-width separator with a gradient line
+ * that fades at the top/bottom edges. Appears on hover, brightens on drag.
+ * Keyboard accessible (arrow keys) via react-resizable-panels.
+ *
+ * Uses data-resize-handle-state (inactive | hover | drag) for CSS-only styling.
+ */
 function ResizableHandle({
-  withHandle,
   className,
   ...props
-}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
-  withHandle?: boolean;
-}) {
+}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle>) {
   return (
     <ResizablePrimitive.PanelResizeHandle
       data-slot="resizable-handle"
       className={cn(
-        "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-hidden data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full data-[panel-group-direction=vertical]:after:left-0 data-[panel-group-direction=vertical]:after:h-1 data-[panel-group-direction=vertical]:after:w-full data-[panel-group-direction=vertical]:after:translate-x-0 data-[panel-group-direction=vertical]:after:-translate-y-1/2 [&[data-panel-group-direction=vertical]>div]:rotate-90",
+        // Zero-width base — matches the Codex gradient handle style
+        "group relative z-10 flex w-0 flex-shrink-0 items-center justify-center",
+        // Vertical mode: zero-height instead
+        "data-[panel-group-direction=vertical]:h-0 data-[panel-group-direction=vertical]:w-full",
+        // Keyboard focus ring (a11y improvement over the custom hook)
+        "focus-visible:ring-ring focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-hidden",
         className
       )}
       {...props}
     >
-      {withHandle && (
-        <div className="bg-border z-10 flex h-4 w-3 items-center justify-center rounded-sm border">
-          <GripVerticalIcon className="size-2.5" />
-        </div>
-      )}
+      {/* Hit area — wider than the visual line for easier grabbing */}
+      <div
+        className={cn(
+          "absolute inset-y-0 w-3 -translate-x-1/2",
+          // Vertical mode: full-width hit area
+          "group-data-[panel-group-direction=vertical]:inset-x-0 group-data-[panel-group-direction=vertical]:inset-y-auto group-data-[panel-group-direction=vertical]:h-3 group-data-[panel-group-direction=vertical]:w-full group-data-[panel-group-direction=vertical]:translate-x-0 group-data-[panel-group-direction=vertical]:-translate-y-1/2"
+        )}
+      />
+      {/* Gradient separator: fades at top/bottom for a soft radiance */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2",
+          "bg-gradient-to-b from-transparent via-border to-transparent",
+          "transition-colors transition-opacity duration-200 ease-out",
+          // Drag state: visible with stronger color
+          "group-data-[resize-handle-state=drag]:via-foreground/25 group-data-[resize-handle-state=drag]:opacity-100",
+          // Hover state: visible with stronger color
+          "group-data-[resize-handle-state=hover]:via-foreground/25 group-data-[resize-handle-state=hover]:opacity-100",
+          // Inactive: hidden
+          "group-data-[resize-handle-state=inactive]:opacity-0",
+          // Vertical mode: horizontal gradient line
+          "group-data-[panel-group-direction=vertical]:inset-x-0 group-data-[panel-group-direction=vertical]:inset-y-auto group-data-[panel-group-direction=vertical]:left-0 group-data-[panel-group-direction=vertical]:h-px group-data-[panel-group-direction=vertical]:w-full group-data-[panel-group-direction=vertical]:translate-x-0 group-data-[panel-group-direction=vertical]:-translate-y-1/2 group-data-[panel-group-direction=vertical]:bg-gradient-to-r"
+        )}
+      />
     </ResizablePrimitive.PanelResizeHandle>
   );
 }
