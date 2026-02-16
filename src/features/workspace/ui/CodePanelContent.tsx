@@ -7,6 +7,7 @@ import { Tabs, TabsContent } from "@/components/ui";
 import { FileChangesPanel } from "@/features/file-changes";
 import { FileBrowserPanel } from "@/features/file-browser";
 import { cn } from "@/shared/lib/utils";
+import NumberFlow from "@number-flow/react";
 import type { Workspace } from "@/shared/types";
 import type { FileChange } from "@/features/workspace/types";
 import type { RightPanelTab } from "@/features/workspace/store";
@@ -44,7 +45,7 @@ export function CodePanelContent({
         Changes
         {fileChanges.length > 0 && (
           <span className="bg-muted-foreground/20 text-muted-foreground rounded px-1.5 py-0.5 text-[10px] leading-none font-medium">
-            {fileChanges.length}
+            <NumberFlow value={fileChanges.length} />
           </span>
         )}
       </button>

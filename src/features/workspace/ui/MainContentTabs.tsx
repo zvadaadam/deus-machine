@@ -1,9 +1,20 @@
 import { useState } from "react";
+import { match } from "ts-pattern";
 import { X, Plus, FileCode, GitCompareArrows, History, PanelLeftClose } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { arrayMove, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipKbd } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
+import { SortableTab } from "./SortableTab";
 
 /**
  * Tab data structure
@@ -54,6 +65,7 @@ interface MainContentTabBarProps {
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
+  onTabReorder?: (reorderedTabs: Tab[]) => void;
   closedTabs?: ClosedTab[];
   onTabRestore?: (closedTab: ClosedTab) => void;
   onCollapseChatPanel?: () => void;
@@ -63,19 +75,20 @@ const TAB_ICON_SIZE = "w-3.5 h-3.5";
 const AGENT_ICON_SIZE = "w-3.5 h-3.5";
 
 function getTabIcon(tab: Tab) {
-  switch (tab.type) {
-    case "chat": {
-      const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+  return match(tab)
+    .with({ type: "chat" }, (t) => {
+      const LogoComponent = getAgentLogo(t.data?.agentType || "claude");
       if (LogoComponent) {
         return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
       }
       return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-    }
-    case "diff":
-      return <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-    default:
-      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-  }
+    })
+    .with({ type: "diff" }, () => (
+      <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
+    ))
+    .otherwise(() => (
+      <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
+    ));
 }
 
 function getClosedTabIcon(agentType?: string) {
@@ -100,6 +113,7 @@ export function MainContentTabBar({
   onTabChange,
   onTabClose,
   onTabAdd,
+  onTabReorder,
   closedTabs = [],
   onTabRestore,
   onCollapseChatPanel,
@@ -107,75 +121,94 @@ export function MainContentTabBar({
   const [restoreOpen, setRestoreOpen] = useState(false);
   const canCloseTabs = tabs.length > 1;
 
+  // dnd-kit: 5px distance threshold prevents accidental drags when clicking tabs
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onTabReorder) return;
+
+    const oldIndex = tabs.findIndex((t) => t.id === active.id);
+    const newIndex = tabs.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    onTabReorder(arrayMove(tabs, oldIndex, newIndex));
+  }
+
   return (
     <div className="chat-tabs-header relative z-20 flex h-9 flex-shrink-0 items-center px-2.5">
       <div
         role="tablist"
         className="scrollbar-hidden relative z-[1] flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
       >
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
 
-          return (
-            <div
-              key={tab.id}
-              role="tab"
-              aria-selected={isActive}
-              tabIndex={0}
-              onClick={() => onTabChange(tab.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onTabChange(tab.id);
-                }
-              }}
-              className={cn(
-                "group relative flex items-center gap-1.5 overflow-hidden",
-                "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
-                "cursor-pointer text-[13px] font-normal",
-                "transition-colors duration-150",
-                isActive
-                  ? "bg-bg-raised text-text-secondary"
-                  : "text-text-muted hover:text-text-tertiary"
-              )}
-            >
-              {getTabIcon(tab)}
-
-              <div className="min-w-0 flex-1">
-                <span className="block truncate">{tab.label}</span>
-              </div>
-
-              {/* Close button — overlays right edge on hover, only when 2+ tabs */}
-              {onTabClose && canCloseTabs && tab.closeable !== false && (
-                <div
-                  className={cn(
-                    "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
-                    "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                    isActive
-                      ? "from-bg-raised bg-gradient-to-l from-50% to-transparent"
-                      : "from-bg-surface group-hover:from-bg-surface bg-gradient-to-l from-50% to-transparent"
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTabClose(tab.id);
+              return (
+                <SortableTab key={tab.id} id={tab.id}>
+                  <div
+                    role="tab"
+                    aria-selected={isActive}
+                    tabIndex={0}
+                    onClick={() => onTabChange(tab.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onTabChange(tab.id);
+                      }
                     }}
                     className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-sm",
+                      "group relative flex items-center gap-1.5 overflow-hidden",
+                      "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
+                      "cursor-pointer text-[13px] font-normal",
                       "transition-colors duration-150",
-                      "hover:bg-bg-muted"
+                      isActive
+                        ? "bg-bg-raised text-text-secondary"
+                        : "text-text-muted hover:text-text-tertiary"
                     )}
-                    aria-label={`Close ${tab.label} tab`}
                   >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                    {getTabIcon(tab)}
+
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate">{tab.label}</span>
+                    </div>
+
+                    {/* Close button — overlays right edge on hover, only when 2+ tabs */}
+                    {onTabClose && canCloseTabs && tab.closeable !== false && (
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",
+                          "opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                          isActive
+                            ? "from-bg-raised bg-gradient-to-l from-50% to-transparent"
+                            : "from-bg-surface group-hover:from-bg-surface bg-gradient-to-l from-50% to-transparent"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTabClose(tab.id);
+                          }}
+                          className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded-sm",
+                            "transition-colors duration-150",
+                            "hover:bg-bg-muted"
+                          )}
+                          aria-label={`Close ${tab.label} tab`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </SortableTab>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
 
         {/* New tab button — stays adjacent to tabs */}
         {onTabAdd && (

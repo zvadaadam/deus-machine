@@ -8,6 +8,7 @@
  * AFTER: ~25 LOC → Now ~80 LOC (with content block rendering)
  */
 
+import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { chatTheme } from "../../theme";
@@ -48,33 +49,24 @@ function isContentBlockArray(content: any): content is ContentBlock[] {
  * Render individual content block (text or image)
  */
 function ContentBlockRenderer({ block }: { block: ContentBlock }) {
-  if (block.type === "text") {
-    return (
+  return match(block)
+    .with({ type: "text" }, (b) => (
       <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
-        {block.text}
+        {b.text}
       </div>
-    );
-  }
-
-  if (block.type === "image") {
-    const { data, media_type } = block.source;
-    const dataUrl = `data:${media_type};base64,${data}`;
-
-    return (
+    ))
+    .with({ type: "image" }, (b) => (
       <img
-        src={dataUrl}
+        src={`data:${b.source.media_type};base64,${b.source.data}`}
         alt="Tool output"
         className="border-border/40 max-w-full rounded-lg border shadow-sm"
       />
-    );
-  }
-
-  // Unknown block type - show JSON
-  return (
-    <pre className="bg-muted/60 border-border/60 overflow-x-auto rounded-lg border p-3 font-mono text-xs">
-      {JSON.stringify(block, null, 2)}
-    </pre>
-  );
+    ))
+    .otherwise((b) => (
+      <pre className="bg-muted/60 border-border/60 overflow-x-auto rounded-lg border p-3 font-mono text-xs">
+        {JSON.stringify(b, null, 2)}
+      </pre>
+    ));
 }
 
 export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
