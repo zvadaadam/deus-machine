@@ -45,10 +45,21 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
     case "text":
       return <TextBlock block={block} role={role} weight={weight} />;
 
-    case "tool_use":
+    case "image":
+      // Render user-pasted image inline in the chat
+      return (
+        <img
+          src={`data:${block.source.media_type};base64,${block.source.data}`}
+          alt="Pasted image"
+          className="max-h-64 max-w-full rounded-lg object-contain"
+        />
+      );
+
+    case "tool_use": {
       // Link tool_use with its corresponding tool_result
       const toolResult = toolResultMap.get(block.id);
       return <ToolUseBlock block={block} toolResult={toolResult} />;
+    }
 
     case "tool_result":
       // Don't render tool_result standalone - it's already linked to tool_use
