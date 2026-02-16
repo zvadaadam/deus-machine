@@ -75,11 +75,29 @@ pub fn db_get_workspaces_by_repo(
     db: State<'_, DbManager>,
 ) -> Result<Vec<RepoGroup>, String> {
     db.with_conn(|conn| {
-        let state_filter = if state.is_some() {
-            "WHERE w.state = ?1"
-        } else {
-            ""
-        };
+        // Keep parity with backend/src/db/queries.ts:
+        // support comma-separated state filters (e.g. "ready,initializing").
+        let state_values = state
+            .as_deref()
+            .map(|raw| {
+                raw.split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|values| !values.is_empty());
+
+        let state_filter = state_values
+            .as_ref()
+            .map(|values| {
+                let placeholders = (1..=values.len())
+                    .map(|idx| format!("?{idx}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("WHERE w.state IN ({placeholders})")
+            })
+            .unwrap_or_default();
 
         let sql = format!(
             "SELECT
@@ -100,8 +118,9 @@ pub fn db_get_workspaces_by_repo(
 
         let mut stmt = conn.prepare(&sql)?;
 
-        let rows: Vec<WorkspaceWithDetails> = if let Some(ref s) = state {
-            let mapped = stmt.query_map(rusqlite::params![s], |row| read_workspace_row(row))?;
+        let rows: Vec<WorkspaceWithDetails> = if let Some(ref values) = state_values {
+            let params = rusqlite::params_from_iter(values.iter());
+            let mapped = stmt.query_map(params, |row| read_workspace_row(row))?;
             mapped.collect::<Result<Vec<_>, _>>()?
         } else {
             let mapped = stmt.query_map([], |row| read_workspace_row(row))?;
