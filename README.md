@@ -7,7 +7,7 @@ A desktop IDE for managing multiple parallel AI coding agents. Built for semi-te
 ### Development Mode (Web)
 
 ```bash
-npm run dev:full
+bun run dev:web
 ```
 
 This starts both backend (Node.js on dynamic port) and frontend (Vite on http://localhost:1420).
@@ -15,12 +15,12 @@ This starts both backend (Node.js on dynamic port) and frontend (Vite on http://
 ### Development Mode (Desktop App)
 
 ```bash
-npm run tauri:dev
+bun run dev
 ```
 
 This runs everything: Vite + Backend + Tauri desktop app.
 
-**⚠️ NEVER run `npm run dev` alone** - it only starts frontend without backend!
+**⚠️ NEVER run `bun run dev:frontend` alone** - it only starts frontend without backend!
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed development guide.
 
@@ -78,6 +78,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 ## 📦 Prerequisites
 
 - **Node.js** 18+
+- **Bun** 1.2+
 - **Rust** 1.70+ (for Tauri)
 - **Tauri CLI**: `cargo install tauri-cli`
 
@@ -85,15 +86,15 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Run in development mode
-npm run dev:full        # Web development
-npm run tauri:dev       # Desktop app development
+bun run dev:web        # Web development
+bun run dev       # Desktop app development
 
 # Build for production
-npm run build           # Frontend only
-npm run tauri:build     # Desktop app
+bun run build           # Frontend only
+bun run build:tauri     # Desktop app
 ```
 
 ## 📚 Documentation
@@ -182,8 +183,8 @@ When working on this project:
 - This workspace is managed by Hive
 - Never edit files outside the workspace directory
 - Always run both backend AND frontend together
-- Use `npm run dev:full` for web development
-- Use `npm run tauri:dev` for desktop development
+- Use `bun run dev:web` for web development
+- Use `bun run dev` for desktop development
 
 ## 📄 License
 

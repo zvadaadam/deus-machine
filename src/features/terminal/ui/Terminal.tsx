@@ -120,7 +120,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
 
     if (!isTauriEnv) {
       xterm.write(
-        "\r\n  \x1b[90mTerminal requires the desktop app. Run \x1b[36mnpm run tauri:dev\x1b[90m to enable.\x1b[0m\r\n"
+        "\r\n  \x1b[90mTerminal requires the desktop app. Run \x1b[36mbun run dev\x1b[90m to enable.\x1b[0m\r\n"
       );
       return () => {
         xterm.dispose();

@@ -19,14 +19,14 @@ Comprehensive end-to-end test suite that verifies:
 
 ```bash
 # Backend must be running first!
-npm run dev:full  # Start in separate terminal
+bun run dev:web  # Start in separate terminal
 
-# Then run test (use the backend port from dev:full output)
+# Then run test (use the backend port from dev:web output)
 export BACKEND_PORT=60068  # Use actual port from backend
-npm test
+bun run test:e2e
 
 # Or specify port inline
-BACKEND_PORT=60068 npm test
+BACKEND_PORT=60068 bun run test:e2e
 ```
 
 **Duration**: ~20-30 seconds

@@ -208,12 +208,12 @@ sidecar/
     └── ...              Unit tests for each module
 ```
 
-### Key npm Scripts
+### Key Bun Scripts
 
 ```bash
-npm run build:sidecar    # Build sidecar → src-tauri/resources/bin/index.bundled.cjs
-npm run test:sidecar     # Run sidecar tests (198 tests)
-npm run test:sidecar:watch  # Watch mode for sidecar tests
+bun run build:sidecar    # Build sidecar → src-tauri/resources/bin/index.bundled.cjs
+bun run test:sidecar     # Run sidecar tests (198 tests)
+bun run test:sidecar:watch  # Watch mode for sidecar tests
 ```
 
 # RUNNING THE APP
@@ -223,7 +223,7 @@ npm run test:sidecar:watch  # Watch mode for sidecar tests
 ### For Web Development
 
 ```bash
-npm run dev:full
+bun run dev:web
 ```
 
 This runs `./dev.sh` which starts:
@@ -234,7 +234,7 @@ This runs `./dev.sh` which starts:
 ### For Desktop Development
 
 ```bash
-npm run tauri:dev
+bun run dev
 ```
 
 This runs everything: Vite + Backend + Tauri desktop app.
@@ -242,7 +242,7 @@ This runs everything: Vite + Backend + Tauri desktop app.
 ## ❌ NEVER DO THIS
 
 ```bash
-npm run dev  # DON'T! This only runs frontend without backend!
+bun run dev:frontend  # DON'T! This only runs frontend without backend!
 ```
 
 ## Troubleshooting
@@ -255,7 +255,7 @@ If you need to kill a specific port:
 
 ```bash
 lsof -ti:1420 | xargs kill -9
-npm run dev:full
+bun run dev:web
 ```
 
 ### Check what's running
@@ -587,7 +587,7 @@ The files in `src/components/ui/` are not a locked library - they're starter cod
 **3. Track upstream changes**
 
 - Watch [shadcn's changelog](https://ui.shadcn.com/docs/changelog) for component updates
-- Use `npx shadcn@canary add button --overwrite` to refresh from upstream
+- Use `bunx shadcn@canary add button --overwrite` to refresh from upstream
 - Review Git diff and reapply your customizations after updates
 - Commit with clear messages: `chore(ui/button): pull upstream + preserve custom variants`
 

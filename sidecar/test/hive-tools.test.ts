@@ -255,7 +255,7 @@ describe("createHiveMCPServer", () => {
   describe("GetTerminalOutput", () => {
     it("returns terminal output with header", async () => {
       mockFrontendAPI.requestGetTerminalOutput.mockResolvedValue({
-        output: "npm test\n  PASS  src/test.ts",
+        output: "bun run test\n  PASS  src/test.ts",
         source: "terminal",
         isRunning: true,
       });
@@ -264,7 +264,7 @@ describe("createHiveMCPServer", () => {
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain("[Terminal - running]");
-      expect(result.content[0].text).toContain("npm test");
+      expect(result.content[0].text).toContain("bun run test");
     });
 
     it("returns spotlight source label", async () => {

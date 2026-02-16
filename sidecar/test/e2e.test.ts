@@ -15,7 +15,7 @@ import { StringDecoder } from "string_decoder";
  *    real repository with a real Claude CLI (skipped if CLI unavailable)
  *
  * NOTE: These tests require:
- * 1. The sidecar bundle to be built: `npx tsx sidecar/build.ts`
+ * 1. The sidecar bundle to be built: `bunx tsx sidecar/build.ts`
  * 2. Claude CLI to be installed (for integration tests)
  */
 
@@ -132,6 +132,25 @@ function sendRequest(socket: net.Socket, method: string, params: any): number {
   const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
   socket.write(msg + "\n");
   return id;
+}
+
+/** Wait until a file exists and has content, then return its contents. */
+async function readFileWithRetry(filePath: string, timeoutMs = 5000): Promise<string> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, "utf-8");
+        if (content.length > 0) return content;
+      } catch {
+        // Keep retrying while file is being written/flushed
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(`Timed out waiting for log file: ${filePath}`);
 }
 
 /** Spawn a sidecar process and connect a client socket */
@@ -344,9 +363,9 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // Claude CLI discovery
   // ------------------------------------------------------------------
 
-  it("discovers Claude CLI during initialization", () => {
+  it("discovers Claude CLI during initialization", async () => {
     // The sidecar log records whether initialization succeeded
-    const log = fs.readFileSync(logPath, "utf-8");
+    const log = await readFileWithRetry(logPath, 7000);
     expect(log).toContain("Claude executable initialized with version:");
     expect(log).toContain("handler initialized successfully");
     // Must NOT contain the initialization failure message

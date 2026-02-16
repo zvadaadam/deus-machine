@@ -98,7 +98,7 @@ export function initializeClaude(): { success: boolean; error?: string } {
 function verifyClaudeCandidate(candidate: string): string {
   const escaped = candidate.replaceAll('"', '\\"');
 
-  // JS entrypoint installed via npm global package.
+  // JS entrypoint installed via a global package manager.
   if (candidate.endsWith(".js")) {
     return execSync(`node "${escaped}" -v`, {
       encoding: "utf-8",
