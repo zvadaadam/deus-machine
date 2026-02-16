@@ -12,6 +12,7 @@ import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useSession } from "../context";
 import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
 // Pull spacing from theme for consistency
@@ -420,17 +421,13 @@ export function Chat({
                   if (isNew) seenMessageIds.current.add(turn.message.id);
 
                   return (
-                    <div
+                    <motion.div
                       key={turn.message.id}
                       ref={isLastRendered ? lastMessageRef : undefined}
                       className={cn(spacingClass, "min-w-0")}
-                      style={
-                        isNew
-                          ? {
-                              animation: "chat-user-enter 150ms ease-out both",
-                            }
-                          : undefined
-                      }
+                      initial={isNew ? { opacity: 0, x: 4 } : false}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
                     >
                       <MessageItem
                         message={turn.message}
@@ -438,7 +435,7 @@ export function Chat({
                         isLastInTurn={true}
                         isWorking={sessionStatus === "working"}
                       />
-                    </div>
+                    </motion.div>
                   );
                 }
 
@@ -453,45 +450,45 @@ export function Chat({
                 turn.messages.forEach((m) => seenMessageIds.current.add(m.id));
 
                 return (
-                  <div
+                  <motion.div
                     key={turn.messages[0].id}
                     ref={isLastRendered ? lastMessageRef : undefined}
                     className={cn(spacingClass, "min-w-0")}
-                    style={
-                      isTurnNew
-                        ? {
-                            animation: "chat-message-enter 150ms ease-out both",
-                          }
-                        : undefined
-                    }
+                    initial={isTurnNew ? { opacity: 0 } : false}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
                   >
                     <AssistantTurn
                       messages={turn.messages}
                       isLatest={turn.isLatest}
                       isWorking={sessionStatus === "working"}
                     />
-                  </div>
+                  </motion.div>
                 );
               })}
-              {sessionStatus === "working" && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  aria-label={`Working for ${formattedDuration || "0.0s"}`}
-                  className={cn(
-                    "mr-auto flex items-center gap-2 px-2 py-1.5",
-                    indicatorMarginClass
-                  )}
-                  style={{
-                    animation: "chat-block-fade 200ms cubic-bezier(.215,.61,.355,1) both",
-                  }}
-                >
-                  <PixelGrid variant={agentSubState} size={15} className="flex-shrink-0" />
-                  <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
-                    {formattedDuration || "0.0s"}
-                  </span>
-                </div>
-              )}
+              <AnimatePresence>
+                {sessionStatus === "working" && (
+                  <motion.div
+                    key="working-indicator"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+                    role="status"
+                    aria-live="polite"
+                    aria-label={`Working for ${formattedDuration || "0.0s"}`}
+                    className={cn(
+                      "mr-auto flex items-center gap-2 px-2 py-1.5",
+                      indicatorMarginClass
+                    )}
+                  >
+                    <PixelGrid variant={agentSubState} size={15} className="flex-shrink-0" />
+                    <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
+                      {formattedDuration || "0.0s"}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               {/* Sentinel for auto-scroll IntersectionObserver.
                   MUST be inside the content wrapper (before pb-32 padding) so it's
                   adjacent to the last message. If placed outside, the 128px padding
