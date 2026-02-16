@@ -45,4 +45,4 @@ export type {
 } from "./api";
 
 // GitHub types
-export type { PRStatus, DevServer } from "./github";
+export type { PRStatus, GhCliStatus, DevServer } from "./github";
