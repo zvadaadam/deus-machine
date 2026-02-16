@@ -122,7 +122,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     const previews = await Promise.all(
       imageFiles.map(
         (file) =>
-          new Promise<Attachment>((resolve) => {
+          new Promise<Attachment | null>((resolve) => {
             const reader = new FileReader();
             reader.onload = (ev) =>
               resolve({
@@ -131,11 +131,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 preview: ev.target?.result as string,
                 type: file.type,
               });
+            reader.onerror = () => resolve(null);
+            reader.onabort = () => resolve(null);
             reader.readAsDataURL(file);
           })
       )
     );
-    setAttachments((prev) => [...prev, ...previews]);
+    const valid = previews.filter(Boolean) as Attachment[];
+    if (valid.length) setAttachments((prev) => [...prev, ...valid]);
   };
 
   // Expose addFiles for parent-level drag & drop
@@ -315,7 +318,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   return (
-    <div className={cn("relative shrink-0 px-4 pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
