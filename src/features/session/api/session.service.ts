@@ -85,6 +85,13 @@ export const SessionService = {
   },
 
   /**
+   * Fetch all sessions for a workspace (used by chat tab reconstruction).
+   */
+  fetchByWorkspace: async (workspaceId: string): Promise<Session[]> => {
+    return apiClient.get<Session[]>(ENDPOINTS.WORKSPACE_SESSIONS(workspaceId));
+  },
+
+  /**
    * Create a new session for a workspace.
    * Also updates workspace.active_session_id to the new session.
    */
