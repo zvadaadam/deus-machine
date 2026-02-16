@@ -14,6 +14,7 @@
 
 import { useState, useMemo } from "react";
 import { ChevronRight, Cpu, Loader2 } from "lucide-react";
+import NumberFlow from "@number-flow/react";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock, Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
@@ -124,7 +125,7 @@ export function SubagentGroupBlock({
                 ·
               </span>
               <span className="text-muted-foreground/60 truncate text-xs">
-                {toolCount} tool call{toolCount !== 1 ? "s" : ""}
+                <NumberFlow value={toolCount} /> tool call{toolCount !== 1 ? "s" : ""}
               </span>
             </>
           )}
