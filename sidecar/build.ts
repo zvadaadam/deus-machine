@@ -1,6 +1,6 @@
 // sidecar/build.ts
 // esbuild script to bundle the sidecar into a single CJS file.
-// Run: npx tsx sidecar/build.ts
+// Run: bunx tsx sidecar/build.ts
 
 import { build } from "esbuild";
 import * as path from "path";

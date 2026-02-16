@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 /**
  * Webview commands — manage native child webviews for the embedded browser.
  *
@@ -159,7 +161,6 @@ pub async fn create_browser_webview(
             let event_type = match payload.event() {
                 tauri::webview::PageLoadEvent::Started => "started",
                 tauri::webview::PageLoadEvent::Finished => "finished",
-                _ => return,
             };
             app_for_load
                 .emit(

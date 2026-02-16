@@ -4,9 +4,9 @@
   "description": "Abstract dot orchestration animation - Remotion video",
   "scripts": {
     "start": "remotion studio",
-    "build": "remotion render AgentDots out/agent-dots.mp4",
-    "render": "remotion render AgentDots out/agent-dots.mp4",
-    "render:gif": "remotion render AgentDots out/agent-dots.gif",
+    "build": "remotion render Orchestrator out/agent-dots.mp4",
+    "render": "remotion render Orchestrator out/agent-dots.mp4",
+    "render:gif": "remotion render Orchestrator out/agent-dots.gif",
     "upgrade": "remotion upgrade"
   },
   "dependencies": {

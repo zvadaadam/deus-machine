@@ -25,7 +25,7 @@ export const BashSuccess: StoryObj<typeof BashToolRenderer> = {
       type: "tool_use",
       id: "1",
       name: "Bash",
-      input: { command: "npm run build", description: "Build the project" },
+      input: { command: "bun run build", description: "Build the project" },
     },
     toolResult: {
       type: "tool_result",
@@ -41,7 +41,7 @@ export const BashError: StoryObj<typeof BashToolRenderer> = {
       type: "tool_use",
       id: "2",
       name: "Bash",
-      input: { command: "npm test" },
+      input: { command: "bun run test" },
     },
     toolResult: {
       type: "tool_result",
@@ -58,7 +58,7 @@ export const BashPending: StoryObj<typeof BashToolRenderer> = {
       type: "tool_use",
       id: "3",
       name: "Bash",
-      input: { command: "npm run dev", description: "Start dev server" },
+      input: { command: "bun run dev:web", description: "Start dev server" },
     },
   },
 };

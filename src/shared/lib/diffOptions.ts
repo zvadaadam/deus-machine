@@ -3,7 +3,7 @@ import { useTheme } from "@/app/providers";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import type { PatchDiffProps } from "@pierre/diffs/react";
 
-type DiffOptions = NonNullable<PatchDiffProps["options"]>;
+type DiffOptions<LAnnotation = undefined> = NonNullable<PatchDiffProps<LAnnotation>["options"]>;
 
 const DIFF_LIMITS = {
   maxLineDiffLength: 200,
@@ -91,7 +91,7 @@ const DIFF_UNSAFE_CSS = `
   }
 `;
 
-export function useDiffOptions(): DiffOptions {
+export function useDiffOptions<LAnnotation = undefined>(): DiffOptions<LAnnotation> {
   const { actualTheme } = useTheme();
   const { data: settings } = useSettings();
 

@@ -35,8 +35,8 @@ impl BrowserManager {
 
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
-        // Run npm run start:http with PORT=0 for dynamic port allocation
-        let mut child = Command::new("npm")
+        // Run bun run start:http with PORT=0 for dynamic port allocation
+        let mut child = Command::new("bun")
             .arg("run")
             .arg("start:http")
             .env("PORT", "0")  // Use port 0 for dynamic allocation (avoids conflicts)
