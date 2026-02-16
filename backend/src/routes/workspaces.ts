@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn, execFileSync, execSync } from 'child_process';
+import { spawn, execFileSync, execSync, execFile } from 'child_process';
 import { randomUUID } from 'crypto';
+import { promisify } from 'util';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
@@ -21,6 +22,8 @@ import {
   getSessionRaw,
 } from '../db';
 import type { WorkspaceWithDetailsRow } from '../db';
+
+const execFileAsync = promisify(execFile);
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
 const app = new Hono<Env>();
@@ -265,14 +268,13 @@ app.post('/workspaces', async (c) => {
   // 2. Diff merge-base matches what we branched from (zero phantom changes)
   // 3. PRs will be clean against the upstream target
   //
-  // This is a synchronous fetch (~1-3s on a warm connection). We accept
-  // the latency because workspace creation is already async (worktree add
-  // runs in a child process) and correctness matters more here.
+  // This is a non-blocking fetch (~1-3s on a warm connection). Workspace
+  // creation is already async (worktree add runs in a child process) and
+  // correctness matters more here.
   // ───────────────────────────────────────────────────────────────────
   try {
-    execSync(`git fetch origin ${parent_branch}`, {
+    await execFileAsync('git', ['fetch', 'origin', parent_branch], {
       cwd: repo.root_path!,
-      encoding: 'utf8',
       timeout: 15000,
     });
   } catch (fetchErr) {
@@ -296,9 +298,9 @@ app.post('/workspaces', async (c) => {
 
   // Branch from origin/<parent_branch> when available (fetched above).
   // Falls back to local <parent_branch> if remote doesn't exist.
-  const worktreeBase = (() => {
+  const worktreeBase = await (async () => {
     try {
-      execSync(`git show-ref --verify --quiet refs/remotes/origin/${parent_branch}`, {
+      await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${parent_branch}`], {
         cwd: repo.root_path!, timeout: 2000,
       });
       return `origin/${parent_branch}`;

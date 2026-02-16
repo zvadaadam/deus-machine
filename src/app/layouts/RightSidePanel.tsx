@@ -108,12 +108,17 @@ export function RightSidePanel({
   // Build a set of changed file paths for O(1) lookup
   const changedPaths = useMemo(() => {
     const set = new Set<string>();
-    for (const c of fileChanges) {
-      const p = c.file || c.file_path || "";
-      if (p) set.add(p);
-    }
+    const addPaths = (changes: typeof fileChanges) => {
+      for (const c of changes) {
+        const p = c.file || c.file_path || "";
+        if (p) set.add(p);
+      }
+    };
+    addPaths(fileChanges);
+    addPaths(uncommittedFiles);
+    addPaths(lastTurnFiles);
     return set;
-  }, [fileChanges]);
+  }, [fileChanges, uncommittedFiles, lastTurnFiles]);
 
   // Unified file click handler: changed files → open diff, others → open preview
   const handleFileClick = useCallback(
