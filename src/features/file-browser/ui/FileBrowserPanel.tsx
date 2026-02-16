@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
+import { useFileWatcher } from "../hooks/useFileWatcher";
 import { FileTree } from "./components/FileTree";
 import type { Workspace } from "@/shared/types";
 import type { FileTreeNode } from "../types";
@@ -28,6 +29,9 @@ export function FileBrowserPanel({
 
   // Use Rust-based file scanning
   const workspacePath = selectedWorkspace?.workspace_path ?? null;
+
+  // Watch workspace for file changes (event-driven cache invalidation)
+  useFileWatcher(workspacePath, selectedWorkspace?.id ?? null);
 
   const { data, isLoading, error, refetch } = useFilesRust(workspacePath);
 
