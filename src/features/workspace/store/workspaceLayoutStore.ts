@@ -44,6 +44,8 @@ interface WorkspaceLayoutState {
   browserTabs: PersistedBrowserTab[]; // Persisted browser tab URLs/titles
   activeBrowserTabId: string | null; // Which browser tab was last active
   chatPanelCollapsed: boolean;
+  chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
+  activeChatTabSessionId: string | null; // Which chat tab is active
 }
 
 interface WorkspaceLayoutStore {
@@ -93,6 +95,15 @@ interface WorkspaceLayoutStore {
    */
   setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
 
+  /**
+   * Persist chat tab order and active tab for a workspace
+   */
+  setChatTabState: (
+    workspaceId: string,
+    sessionIds: string[],
+    activeSessionId: string | null
+  ) => void;
+
   // Utilities
   /**
    * Clear layout state for a specific workspace
@@ -116,6 +127,8 @@ export const defaultLayout: WorkspaceLayoutState = {
   browserTabs: [],
   activeBrowserTabId: null,
   chatPanelCollapsed: false,
+  chatTabSessionIds: [],
+  activeChatTabSessionId: null,
 };
 
 type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
@@ -250,6 +263,22 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             "workspaceLayout/setChatPanelCollapsed"
           ),
 
+        setChatTabState: (workspaceId, sessionIds, activeSessionId) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  chatTabSessionIds: sessionIds,
+                  activeChatTabSessionId: activeSessionId,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setChatTabState"
+          ),
+
         // Utilities
         clearWorkspaceLayout: (workspaceId) =>
           set(
@@ -265,7 +294,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 5,
+        version: 6,
         migrate: (persistedState: unknown, version: number) => {
           const state: PersistedStateV1 =
             typeof persistedState === "object" && persistedState !== null
@@ -307,6 +336,12 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
                 nextLayout.chatPanelCollapsed = false;
               }
 
+              // v6: Add chat tab persistence fields
+              if (version < 6) {
+                (nextLayout as Record<string, unknown>).chatTabSessionIds = [];
+                (nextLayout as Record<string, unknown>).activeChatTabSessionId = null;
+              }
+
               nextLayouts[key] = nextLayout;
             }
             return { ...state, layouts: nextLayouts } as WorkspaceLayoutStore;
@@ -342,6 +377,8 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setSidebarCollapsed(workspaceId, collapsed),
   setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) =>
     useWorkspaceLayoutStore.getState().setChatPanelCollapsed(workspaceId, collapsed),
+  setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) =>
+    useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),

@@ -10,7 +10,12 @@
 
 import { useCallback, useMemo } from "react";
 import { TerminalPanel } from "@/features/terminal";
-import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
+import {
+  useWorkspaceLayout,
+  useFileChanges,
+  useUncommittedFiles,
+  useLastTurnFiles,
+} from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
@@ -20,7 +25,7 @@ import { BrowserPanel } from "@/features/browser";
 import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
 import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
 import { cn } from "@/shared/lib/utils";
-import type { RightPanelTab, RightSideTab } from "@/features/workspace/store";
+import type { RightSideTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
 interface RightSidePanelProps {
@@ -51,14 +56,8 @@ export function RightSidePanel({
   onReturnToCode,
   isWatched = false,
 }: RightSidePanelProps) {
-  const {
-    rightSideTab,
-    rightPanelTab,
-    selectedFilePath,
-    setRightSideTab,
-    setRightPanelTab,
-    setSelectedFilePath,
-  } = useWorkspaceLayout(workspace.id);
+  const { rightSideTab, selectedFilePath, setRightSideTab, setSelectedFilePath } =
+    useWorkspaceLayout(workspace.id);
 
   const {
     isDetached: isBrowserDetached,
@@ -89,31 +88,56 @@ export function RightSidePanel({
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
+  // Uncommitted files (HEAD → workdir) and last-turn files (checkpoint → workdir)
+  const { data: uncommittedData } = useUncommittedFiles(
+    workspace.id,
+    workspace.session_status,
+    workspaceGitInfo
+  );
+  const uncommittedFiles = useMemo(() => uncommittedData ?? [], [uncommittedData]);
+
+  const { data: lastTurnData } = useLastTurnFiles(
+    workspace.id,
+    workspace.active_session_id,
+    workspace.session_status,
+    workspaceGitInfo
+  );
+  const lastTurnFiles = useMemo(() => lastTurnData ?? [], [lastTurnData]);
+
   // --- Handlers ---
 
-  const handleFileSelect = useCallback(
-    (path: string | null) => {
-      if (!path) return;
-      setSelectedFilePath(path, "changes");
-      onOpenDiffTab(path);
-    },
-    [onOpenDiffTab, setSelectedFilePath]
-  );
+  // Build a set of changed file paths for O(1) lookup
+  const changedPaths = useMemo(() => {
+    const set = new Set<string>();
+    const addPaths = (changes: typeof fileChanges) => {
+      for (const c of changes) {
+        const p = c.file || c.file_path || "";
+        if (p) set.add(p);
+      }
+    };
+    addPaths(fileChanges);
+    addPaths(uncommittedFiles);
+    addPaths(lastTurnFiles);
+    return set;
+  }, [fileChanges, uncommittedFiles, lastTurnFiles]);
 
-  const handleBrowserFileClick = useCallback(
+  // Unified file click handler: changed files → open diff, others → open preview
+  const handleFileClick = useCallback(
     (path: string) => {
-      const base = workspace.workspace_path.replace(/\/+$/, "");
-      const rel = path.replace(/^\/+/, "");
-      const fullPath = `${base}/${rel}`;
-      setSelectedFilePath(fullPath, "files");
-      onOpenFilePreview(fullPath);
+      if (changedPaths.has(path)) {
+        // Changed file — relative path, open diff viewer
+        setSelectedFilePath(path, "changes");
+        onOpenDiffTab(path);
+      } else {
+        // Regular file — build full workspace path, open preview
+        const base = workspace.workspace_path.replace(/\/+$/, "");
+        const rel = path.replace(/^\/+/, "");
+        const fullPath = `${base}/${rel}`;
+        setSelectedFilePath(path, "files");
+        onOpenFilePreview(fullPath);
+      }
     },
-    [onOpenFilePreview, setSelectedFilePath, workspace.workspace_path]
-  );
-
-  const handleCodeTabChange = useCallback(
-    (tab: RightPanelTab) => setRightPanelTab(tab),
-    [setRightPanelTab]
+    [changedPaths, onOpenDiffTab, onOpenFilePreview, setSelectedFilePath, workspace.workspace_path]
   );
 
   const handleRightSideTabChange = useCallback(
@@ -128,10 +152,7 @@ export function RightSidePanel({
 
   return (
     <div
-      className={cn(
-        "flex h-full min-w-0 flex-col",
-        !compact && "border-border-subtle border-l",
-      )}
+      className={cn("flex h-full min-w-0 flex-col", !compact && "border-border-subtle border-l")}
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Content panel: file tree, browser, terminal, config, design */}
@@ -141,11 +162,10 @@ export function RightSidePanel({
             <CodePanelContent
               workspace={workspace}
               fileChanges={fileChanges}
-              rightPanelTab={rightPanelTab}
+              uncommittedFiles={uncommittedFiles}
+              lastTurnFiles={lastTurnFiles}
               selectedFilePath={selectedFilePath}
-              onTabChange={handleCodeTabChange}
-              onFileSelect={handleFileSelect}
-              onBrowserFileClick={handleBrowserFileClick}
+              onFileClick={handleFileClick}
             />
           )}
 

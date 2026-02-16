@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { match } from "ts-pattern";
+/**
+ * Unified File Tree
+ * Condensed tree with file type icons, change indicators,
+ * selection highlighting, and indent guides.
+ */
+
+import { useState, memo, useCallback } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -11,205 +16,227 @@ import {
   FileType,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { formatFileSize } from "@/shared/lib/formatters";
 import type { FileTreeNode } from "../../types";
+
+const INDENT_PX = 16;
 
 interface FileTreeProps {
   nodes: FileTreeNode[];
+  selectedPath?: string | null;
   onFileClick?: (path: string) => void;
   level?: number;
+  /** When true, all directories start expanded. When false, all start collapsed. */
+  defaultExpanded?: boolean;
 }
 
-/**
- * Get file icon and color based on file extension
- * Inspired by VS Code's icon theme
- * Uses semantic color variables from global.css for consistency
- */
+/** File icon + color by extension (VS Code-inspired) */
 function getFileIconConfig(filename: string): { icon: typeof File; color: string } {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
 
-  // TypeScript/JavaScript
-  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext)) {
+  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext))
     return { icon: FileCode, color: "text-file-typescript" };
-  }
-
-  // Rust (check before Data to prioritize .toml for Rust projects)
-  if (["rs", "toml"].includes(ext)) {
-    return { icon: FileCode, color: "text-file-rust" };
-  }
-
-  // Markup/Data
-  if (["json", "yaml", "yml", "xml"].includes(ext)) {
+  if (["rs", "toml"].includes(ext)) return { icon: FileCode, color: "text-file-rust" };
+  if (["json", "yaml", "yml", "xml"].includes(ext))
     return { icon: FileJson, color: "text-file-data" };
-  }
-
-  // Documentation
-  if (["md", "mdx", "txt", "rst"].includes(ext)) {
-    return { icon: FileText, color: "text-file-docs" };
-  }
-
-  // Styles
-  if (["css", "scss", "sass", "less"].includes(ext)) {
+  if (["md", "mdx", "txt", "rst"].includes(ext)) return { icon: FileText, color: "text-file-docs" };
+  if (["css", "scss", "sass", "less"].includes(ext))
     return { icon: FileCode, color: "text-file-styles" };
-  }
-
-  // HTML
-  if (["html", "htm"].includes(ext)) {
-    return { icon: FileCode, color: "text-file-markup" };
-  }
-
-  // Images (includes svg since they're primarily used as images)
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext)) {
+  if (["html", "htm"].includes(ext)) return { icon: FileCode, color: "text-file-markup" };
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext))
     return { icon: FileImage, color: "text-file-image" };
-  }
-
-  // Config files
   if (
     ["env", "gitignore", "dockerignore", "editorconfig"].includes(ext) ||
     filename.startsWith(".")
-  ) {
+  )
     return { icon: FileType, color: "text-muted-foreground/50" };
-  }
-
-  // Default
   return { icon: File, color: "text-muted-foreground/40" };
 }
 
-/**
- * Get subtle color accent for git status
- * Subtle hints, not overwhelming - this is a secondary feature
- */
-function getGitStatusColor(gitStatus?: "modified" | "added" | "deleted" | "untracked"): string {
-  if (!gitStatus) return "";
-
-  return match(gitStatus)
-    .with("modified", () => "text-warning")
-    .with("added", () => "text-success")
-    .with("deleted", () => "text-destructive/60 line-through")
-    .with("untracked", () => "text-info")
-    .exhaustive();
-}
-
-/**
- * Check if a folder contains any changed files (recursively)
- */
+/** Check if folder contains any changed files recursively */
 function hasChanges(node: FileTreeNode): boolean {
-  if (node.type === "file") {
-    return !!node.git_status;
-  }
-
-  // Check if any children have changes
+  if (node.type === "file") return !!node.git_status || !!node.change_status;
   return node.children?.some((child) => hasChanges(child)) || false;
 }
 
-export function FileTree({ nodes, onFileClick, level = 0 }: FileTreeProps) {
+export function FileTree({
+  nodes,
+  selectedPath,
+  onFileClick,
+  level = 0,
+  defaultExpanded,
+}: FileTreeProps) {
   return (
-    <div className="space-y-0.5">
+    <div className={cn(level === 0 && "group/tree")} role={level === 0 ? "tree" : "group"}>
       {nodes.map((node) => (
-        <TreeNode key={node.path} node={node} level={level} onFileClick={onFileClick} />
+        <TreeNode
+          key={node.path}
+          node={node}
+          level={level}
+          selectedPath={selectedPath}
+          onFileClick={onFileClick}
+          defaultExpanded={defaultExpanded}
+        />
       ))}
     </div>
   );
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   level,
+  selectedPath,
   onFileClick,
+  defaultExpanded,
 }: {
   node: FileTreeNode;
   level: number;
+  selectedPath?: string | null;
   onFileClick?: (path: string) => void;
+  defaultExpanded?: boolean;
 }) {
-  // Auto-expand:
-  // 1. First 2 levels always expanded
-  // 2. Folders containing changes auto-expanded
-  const shouldAutoExpand = level < 2 || (node.type === "directory" && hasChanges(node));
-  const [isExpanded, setIsExpanded] = useState(shouldAutoExpand);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
 
   const isDirectory = node.type === "directory";
   const hasChildren = node.children && node.children.length > 0;
+  const indentPx = level * INDENT_PX;
+  const isSelected = selectedPath === node.path;
 
-  const indentSize = level * 16; // 16px per level (improved from 12px)
-
-  // Get file-specific icon and color
   const fileConfig = !isDirectory ? getFileIconConfig(node.name) : null;
   const FileIcon = fileConfig?.icon;
-
-  // Get git status color (subtle accent for changed files)
-  const gitStatusColor = !isDirectory ? getGitStatusColor(node.git_status) : "";
   const folderHasChanges = isDirectory && hasChanges(node);
 
+  const handleClick = useCallback(() => {
+    if (isDirectory) {
+      setIsExpanded((prev) => !prev);
+    } else {
+      onFileClick?.(node.path);
+    }
+  }, [isDirectory, node.path, onFileClick]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleClick();
+      }
+      if (isDirectory) {
+        if (e.key === "ArrowLeft" && isExpanded) {
+          e.preventDefault();
+          setIsExpanded(false);
+        } else if (e.key === "ArrowRight" && !isExpanded) {
+          e.preventDefault();
+          setIsExpanded(true);
+        }
+      }
+    },
+    [isDirectory, isExpanded, handleClick]
+  );
+
+  // Indent guide lines (visible on tree hover)
+  const indentGuides = [];
+  for (let i = 0; i < level; i++) {
+    indentGuides.push(
+      <span
+        key={i}
+        className="bg-border/50 absolute top-0 bottom-0 w-px opacity-0 transition-opacity duration-150 group-hover/tree:opacity-100"
+        style={{ left: `${i * INDENT_PX + 12}px` }}
+      />
+    );
+  }
+
   return (
-    <div>
-      {/* Node Row */}
+    <div
+      role="treeitem"
+      aria-expanded={isDirectory ? isExpanded : undefined}
+      className="[contain-intrinsic-size:auto_24px] [content-visibility:auto]"
+    >
       <div
+        tabIndex={0}
         className={cn(
-          "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5",
-          "hover:bg-muted/30 transition-colors duration-200",
-          "group"
+          "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-xs",
+          "transition-colors duration-150 ease-out",
+          "focus-visible:ring-primary/50 focus-visible:ring-1 focus-visible:outline-none",
+          isSelected
+            ? "bg-primary/10 text-primary"
+            : "text-foreground/80 hover:bg-muted/30 hover:text-foreground",
+          // Committed files are muted — they're "done", less attention needed
+          !isDirectory && node.committed === true && "opacity-60"
         )}
-        style={{ paddingLeft: `${indentSize + 8}px` }}
-        onClick={() => {
-          if (isDirectory) {
-            setIsExpanded(!isExpanded);
-          } else {
-            onFileClick?.(node.path);
-          }
-        }}
+        style={{ paddingLeft: `${indentPx + 8}px` }}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
       >
-        {/* Single Icon Column - Chevron for folders, File icon for files */}
-        <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+        {indentGuides}
+
+        {/* Icon */}
+        <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
           {isDirectory ? (
-            // Folders: Show whisper-light chevron
             hasChildren ? (
               isExpanded ? (
-                <ChevronDown className="text-muted-foreground/40 h-4 w-4" />
+                <ChevronDown className="text-muted-foreground/40 h-3.5 w-3.5" />
               ) : (
-                <ChevronRight className="text-muted-foreground/40 h-4 w-4" />
+                <ChevronRight className="text-muted-foreground/40 h-3.5 w-3.5" />
               )
             ) : (
-              // Empty folder - show very faint chevron
-              <ChevronRight className="text-muted-foreground/15 h-4 w-4" />
+              <ChevronRight className="text-muted-foreground/15 h-3.5 w-3.5" />
             )
           ) : FileIcon ? (
-            // Files: Show colored icon (very muted like VS Code)
-            <FileIcon className={cn("h-4 w-4 opacity-50", fileConfig?.color)} />
+            <FileIcon className={cn("h-3.5 w-3.5 opacity-50", fileConfig?.color)} />
           ) : (
-            <File className="text-muted-foreground/30 h-4 w-4" />
+            <File className="text-muted-foreground/30 h-3.5 w-3.5" />
           )}
         </div>
 
-        {/* File/Folder Name - VS Code style: subtle, readable, not bold */}
+        {/* Name */}
         <span
           className={cn(
-            "flex-1 truncate text-[13px] font-normal",
-            // VS Code style: muted gray, consistent weight
-            // Folders with changes get subtle warning tint, otherwise muted
+            "min-w-0 flex-1 truncate font-normal",
             isDirectory
               ? folderHasChanges
                 ? "text-warning/60"
                 : "text-muted-foreground/60"
               : "text-foreground/70",
-            // Git status color (subtle accent - files only)
-            gitStatusColor
+            // Change status from diff data takes priority
+            node.change_status === "deleted" && "line-through opacity-50",
+            node.change_status === "added" && "text-success/80",
+            // Fallback to git_status from Rust scan
+            !node.change_status && node.git_status === "deleted" && "line-through opacity-50",
+            !node.change_status && node.git_status === "added" && "text-success/80",
+            !node.change_status && node.git_status === "untracked" && "text-info/80"
           )}
         >
           {node.name}
         </span>
 
-        {/* File Size (files only) */}
-        {!isDirectory && node.size !== undefined && (
-          <span className="text-muted-foreground/30 flex-shrink-0 font-mono text-[10px] tabular-nums">
-            {formatFileSize(node.size)}
+        {/* Change stats (+N, -N) for files with diff data */}
+        {!isDirectory && (node.additions || node.deletions) && (
+          <div className="text-2xs flex items-center gap-1 font-mono tabular-nums opacity-60">
+            {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
+            {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
+          </div>
+        )}
+
+        {/* Uncommitted indicator — small dot for files not yet committed */}
+        {!isDirectory && node.committed === false && (
+          <span
+            className="text-warning/70 flex-shrink-0 text-[8px] leading-none"
+            title="Uncommitted"
+          >
+            ●
           </span>
         )}
       </div>
 
-      {/* Children (if expanded) */}
+      {/* Children */}
       {isDirectory && isExpanded && hasChildren && (
-        <FileTree nodes={node.children!} level={level + 1} onFileClick={onFileClick} />
+        <FileTree
+          nodes={node.children!}
+          level={level + 1}
+          selectedPath={selectedPath}
+          onFileClick={onFileClick}
+          defaultExpanded={defaultExpanded}
+        />
       )}
     </div>
   );
-}
+});

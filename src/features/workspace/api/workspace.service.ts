@@ -6,10 +6,16 @@
 import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
 import { isTauriAvailable } from "@/platform/tauri/invoke";
-import { gitDiffStats, gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
+import {
+  gitDiffStats,
+  gitDiffFiles,
+  gitDiffFile,
+  gitUncommittedFiles,
+  gitLastTurnFiles,
+} from "@/platform/tauri/git";
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceQueryParams, PRStatus } from "@/shared/types";
+import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
 
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
@@ -64,6 +70,11 @@ export const WorkspaceService = {
    * Fetch diff statistics for a workspace.
    * Uses Rust/libgit2 via Tauri IPC when available (5-20ms),
    * falls back to Node.js HTTP when in web mode (50-200ms).
+   *
+   * Diffs are computed against origin/<parent_branch> (remote-first).
+   * Workspace creation fetches origin/<parent> before branching the worktree,
+   * so the merge-base is always a recent shared commit with upstream.
+   * See: src-tauri/src/git.rs::resolve_parent_branch for the resolution logic.
    */
   fetchDiffStats: async (id: string, workspace?: WorkspaceGitInfo): Promise<DiffStats> => {
     if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
@@ -144,6 +155,42 @@ export const WorkspaceService = {
   },
 
   /**
+   * Fetch uncommitted files (HEAD → workdir diff).
+   * Tauri IPC only — no HTTP fallback needed.
+   */
+  fetchUncommittedFiles: async (workspace?: WorkspaceGitInfo): Promise<FileChange[]> => {
+    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.directory_name) {
+      return [];
+    }
+    try {
+      const files = await gitUncommittedFiles(getWorkspacePath(workspace));
+      return files as FileChange[];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Fetch last-turn files (checkpoint → workdir diff).
+   * Tauri IPC only — no HTTP fallback needed.
+   */
+  fetchLastTurnFiles: async (
+    workspace?: WorkspaceGitInfo,
+    sessionId?: string
+  ): Promise<FileChange[]> => {
+    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.directory_name || !sessionId) {
+      return [];
+    }
+    try {
+      const files = await gitLastTurnFiles(getWorkspacePath(workspace), sessionId);
+      return files as FileChange[];
+    } catch {
+      // No checkpoints exist yet — expected for new sessions
+      return [];
+    }
+  },
+
+  /**
    * Create a new workspace
    */
   create: async (repositoryId: string): Promise<Workspace> => {
@@ -169,6 +216,14 @@ export const WorkspaceService = {
    */
   fetchPRStatus: async (id: string): Promise<PRStatus | null> => {
     return apiClient.get<PRStatus | null>(ENDPOINTS.WORKSPACE_PR_STATUS(id));
+  },
+
+  /**
+   * Check GitHub CLI installation and auth status.
+   * Cached with long staleTime on the frontend — rarely changes.
+   */
+  fetchGhStatus: async (): Promise<GhCliStatus> => {
+    return apiClient.get<GhCliStatus>(ENDPOINTS.GH_STATUS);
   },
 
   /**

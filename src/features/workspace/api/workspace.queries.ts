@@ -65,9 +65,7 @@ export function useDiffStats(
     enabled: !!workspaceId,
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched
-      ? false
-      : sessionStatus === "working" ? 5000 : false,
+    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
@@ -189,23 +187,90 @@ export function useFileChanges(
     enabled: !!workspaceId,
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched
-      ? false
-      : sessionStatus === "working" ? 5000 : false,
+    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
 }
 
 /**
- * Fetch PR status for a workspace
+ * Fetch uncommitted files for a workspace (HEAD → workdir).
+ * Tauri IPC only — polls when workspace is actively working.
  */
-export function usePRStatus(workspaceId: string | null) {
+export function useUncommittedFiles(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId || ""),
+    queryFn: () => WorkspaceService.fetchUncommittedFiles(workspace),
+    enabled: !!workspaceId,
+    staleTime: 30000,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Fetch last-turn files for a workspace (checkpoint → workdir).
+ * Tauri IPC only — polls when workspace is actively working.
+ */
+export function useLastTurnFiles(
+  workspaceId: string | null,
+  sessionId: string | null | undefined,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.lastTurnFiles(workspaceId || "", sessionId || undefined),
+    queryFn: () => WorkspaceService.fetchLastTurnFiles(workspace, sessionId || undefined),
+    enabled: !!workspaceId && !!sessionId,
+    staleTime: 30000,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Check GitHub CLI availability and auth status.
+ * Cached with 5-minute staleTime — rarely changes during a session.
+ * Gates usePRStatus to avoid wasted gh calls when CLI is missing or unauthenticated.
+ */
+export function useGhStatus() {
+  return useQuery({
+    queryKey: queryKeys.github.ghStatus,
+    queryFn: () => WorkspaceService.fetchGhStatus(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Fetch PR status for a workspace.
+ *
+ * Gated on gh CLI being installed + authenticated (like Codex).
+ * Polls every 30s while agent is working (to detect PR creation),
+ * stops polling when idle. Auto-refetched on session completion
+ * via useSessionEvents invalidation.
+ */
+export function usePRStatus(
+  workspaceId: string | null,
+  options?: { ghInstalled?: boolean; ghAuthenticated?: boolean; sessionStatus?: string }
+) {
+  const { ghInstalled = true, ghAuthenticated = true, sessionStatus } = options ?? {};
   return useQuery({
     queryKey: queryKeys.workspaces.prStatus(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchPRStatus(workspaceId!),
-    enabled: !!workspaceId,
-    staleTime: 5000,
+    enabled: !!workspaceId && ghInstalled && ghAuthenticated,
+    staleTime: 10_000,
+    // Poll while agent is working so we detect PR creation without manual refresh.
+    // 30s aligns with CLAUDE.md polling budget; event-driven invalidation via
+    // useSessionEvents handles the fast path (agent just created/updated a PR).
+    refetchInterval: sessionStatus === "working" ? 30_000 : false,
+    refetchOnWindowFocus: true,
   });
 }
 

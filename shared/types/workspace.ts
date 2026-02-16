@@ -65,6 +65,8 @@ export interface FileChange {
   file_path?: string; // Some APIs use file_path instead
   additions: number;
   deletions: number;
+  /** true = committed (in HEAD), false = uncommitted (working dir only), undefined = unknown */
+  committed?: boolean;
 }
 
 /**

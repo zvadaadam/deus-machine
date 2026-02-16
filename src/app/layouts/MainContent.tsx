@@ -28,7 +28,7 @@ import { SidebarInset, useSidebar } from "@/components/ui";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import { toast } from "sonner";
-import type { Workspace, PRStatus } from "@/shared/types";
+import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
@@ -45,6 +45,7 @@ type ParkedMiddlePanel = { view: MiddlePanelView };
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
   prStatus: PRStatus | null;
+  ghStatus?: GhCliStatus | null;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
@@ -54,6 +55,7 @@ interface MainContentProps {
 export function MainContent({
   selectedWorkspace,
   prStatus,
+  ghStatus,
   workspaceChatPanelRef,
   onCreateWorkspace,
   onOpenProject,
@@ -70,10 +72,13 @@ export function MainContent({
     setChatPanelCollapsed,
   } = useWorkspaceLayout(selectedWorkspaceId);
 
-  // PR handler bridge: ChatArea sets it, RightSidePanel consumes it.
-  // Setter must be called as `setCreatePRHandler(() => handler)` — passing a
+  // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
+  // Setter must be called as `setXxxHandler(() => handler)` — passing a
   // function directly causes React to invoke it as a state updater (see bf516c6).
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
+  const [sendAgentMessageHandler, setSendAgentMessageHandler] = useState<
+    ((text: string) => Promise<void>) | null
+  >(null);
 
   // Target branch for PR creation/merge — synced from WorkspaceHeader's branch selector
   const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(
@@ -102,6 +107,7 @@ export function MainContent({
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
     setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
+    // eslint-disable-next-line react-hooks/refs -- intentional: reset on workspace change during render
     hasRestoredWidthRef.current = false;
   }
 
@@ -120,10 +126,7 @@ export function MainContent({
   );
 
   // Watch workspace for file changes (event-driven cache invalidation)
-  const isWatched = useFileWatcher(
-    selectedWorkspace?.workspace_path ?? null,
-    selectedWorkspaceId
-  );
+  const isWatched = useFileWatcher(selectedWorkspace?.workspace_path ?? null, selectedWorkspaceId);
 
   // File changes for prev/next navigation — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
@@ -249,6 +252,17 @@ export function MainContent({
     createPRHandler();
   }, [createPRHandler]);
 
+  const handleSendAgentMessage = useCallback(
+    (text: string) => {
+      if (!sendAgentMessageHandler) {
+        toast.error("No active session available.");
+        return;
+      }
+      sendAgentMessageHandler(text);
+    },
+    [sendAgentMessageHandler]
+  );
+
   const handleOpenPR = useCallback(() => {
     if (!prStatus?.pr_url) {
       toast.error("PR link not available.");
@@ -357,7 +371,6 @@ export function MainContent({
     void emit("browser-window:workspace-change", detachedWorkspaceContext);
   }, [isBrowserDetached, detachedWorkspaceContext]);
 
-
   return (
     <SidebarInset className="min-w-0">
       <div
@@ -385,7 +398,9 @@ export function MainContent({
               workspacePath={selectedWorkspace.workspace_path}
               workspaceId={selectedWorkspace.id}
               prStatus={prStatus}
+              ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
+              onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
               targetBranch={selectedTargetBranch}
@@ -396,10 +411,7 @@ export function MainContent({
             <div ref={mainContentRef} className="flex min-h-0 min-w-0 flex-1">
               {middlePanelActive && workspaceGitInfo ? (
                 // --- Middle panel mode: Chat | Viewer | CompactPanel ---
-                <ResizablePanelGroup
-                  direction="horizontal"
-                  key={`${selectedWorkspaceId}-middle`}
-                >
+                <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-middle`}>
                   {/* Chat panel (collapsible) */}
                   <ResizablePanel
                     ref={chatPanelRef}
@@ -420,6 +432,7 @@ export function MainContent({
                         workspace={selectedWorkspace}
                         workspaceChatPanelRef={workspaceChatPanelRef}
                         onCreatePRHandlerChange={setCreatePRHandler}
+                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
                         onCollapseChatPanel={handleCollapseChatPanel}
                       />
                     )}
@@ -428,12 +441,7 @@ export function MainContent({
                   <ResizableHandle />
 
                   {/* Middle section: viewer + compact right panel */}
-                  <ResizablePanel
-                    defaultSize={60}
-                    minSize={30}
-                    className="min-w-0"
-                    order={2}
-                  >
+                  <ResizablePanel defaultSize={60} minSize={30} className="min-w-0" order={2}>
                     <div className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden">
                       <ResizablePanelGroup direction="horizontal">
                         {/* Code viewer (diff or file preview) */}
@@ -462,12 +470,7 @@ export function MainContent({
                         <ResizableHandle />
 
                         {/* Compact right panel (file list + sidecar) */}
-                        <ResizablePanel
-                          defaultSize={25}
-                          minSize={12}
-                          className="min-w-0"
-                          order={2}
-                        >
+                        <ResizablePanel defaultSize={25} minSize={12} className="min-w-0" order={2}>
                           <RightSidePanel
                             workspace={selectedWorkspace}
                             onOpenDiffTab={handleOpenDiff}
@@ -485,10 +488,7 @@ export function MainContent({
                 </ResizablePanelGroup>
               ) : (
                 // --- Normal mode: Chat | RightSidePanel ---
-                <ResizablePanelGroup
-                  direction="horizontal"
-                  key={`${selectedWorkspaceId}-normal`}
-                >
+                <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-normal`}>
                   {/* Chat panel (collapsible) */}
                   <ResizablePanel
                     ref={chatPanelRef}
@@ -509,6 +509,7 @@ export function MainContent({
                         workspace={selectedWorkspace}
                         workspaceChatPanelRef={workspaceChatPanelRef}
                         onCreatePRHandlerChange={setCreatePRHandler}
+                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
                         onCollapseChatPanel={handleCollapseChatPanel}
                       />
                     )}

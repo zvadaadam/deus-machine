@@ -20,7 +20,6 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
@@ -236,6 +235,8 @@ fn main() {
             commands::git_diff_stats,
             commands::git_diff_files,
             commands::git_diff_file,
+            commands::git_uncommitted_files,
+            commands::git_last_turn_files,
             commands::git_detect_default_branch,
             commands::git_list_branches,
             commands::create_browser_webview,
