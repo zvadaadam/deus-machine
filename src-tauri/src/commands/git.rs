@@ -370,6 +370,37 @@ pub fn git_diff_file(
 }
 
 #[tauri::command]
+pub fn git_uncommitted_files(
+    workspace_path: String,
+) -> Result<Vec<DiffFileResponse>, String> {
+    let files = git::get_uncommitted_files(&workspace_path)?;
+    Ok(files
+        .into_iter()
+        .map(|f| DiffFileResponse {
+            file: f.file,
+            additions: f.additions,
+            deletions: f.deletions,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn git_last_turn_files(
+    workspace_path: String,
+    session_id: String,
+) -> Result<Vec<DiffFileResponse>, String> {
+    let files = git::get_last_turn_files(&workspace_path, &session_id)?;
+    Ok(files
+        .into_iter()
+        .map(|f| DiffFileResponse {
+            file: f.file,
+            additions: f.additions,
+            deletions: f.deletions,
+        })
+        .collect())
+}
+
+#[tauri::command]
 pub fn git_detect_default_branch(root_path: String) -> Result<String, String> {
     Ok(git::detect_default_branch(&root_path))
 }
