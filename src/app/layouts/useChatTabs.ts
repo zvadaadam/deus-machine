@@ -270,7 +270,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     setMainTabs((prev) => {
       // Don't add duplicate if session is already open in a tab
       if (prev.some((t) => t.data?.sessionId === closedTab.sessionId)) {
-        setActiveMainTabId(prev.find((t) => t.data?.sessionId === closedTab.sessionId)!.id);
         return prev;
       }
       return [...prev, restoredTab];
