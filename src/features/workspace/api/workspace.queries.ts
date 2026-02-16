@@ -200,6 +200,47 @@ export function useFileChanges(
 }
 
 /**
+ * Fetch uncommitted files for a workspace (HEAD → workdir).
+ * Tauri IPC only — polls when workspace is actively working.
+ */
+export function useUncommittedFiles(
+  workspaceId: string | null,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId || ""),
+    queryFn: () => WorkspaceService.fetchUncommittedFiles(workspace),
+    enabled: !!workspaceId,
+    staleTime: 30000,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Fetch last-turn files for a workspace (checkpoint → workdir).
+ * Tauri IPC only — polls when workspace is actively working.
+ */
+export function useLastTurnFiles(
+  workspaceId: string | null,
+  sessionId: string | null | undefined,
+  sessionStatus?: string | null,
+  workspace?: WorkspaceGitInfo
+) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.lastTurnFiles(workspaceId || "", sessionId || undefined),
+    queryFn: () => WorkspaceService.fetchLastTurnFiles(workspace, sessionId || undefined),
+    enabled: !!workspaceId && !!sessionId,
+    staleTime: 30000,
+    refetchInterval: sessionStatus === "working" ? 5000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
  * Fetch PR status for a workspace
  */
 export function usePRStatus(workspaceId: string | null) {

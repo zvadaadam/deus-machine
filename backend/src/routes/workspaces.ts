@@ -253,6 +253,36 @@ app.post('/workspaces', async (c) => {
   } catch {}
   const placeholderBranchName = `${branchPrefix}/${workspace_name}`;
 
+  // ─── IMPORTANT: Remote-first branch strategy ───────────────────────
+  // We ALWAYS want worktrees branched from origin/<parent_branch>, not
+  // local <parent_branch>. Diffs are computed against origin/<branch>
+  // (see resolve_parent_branch in git.rs and git.service.ts). If origin
+  // is stale, the merge-base drifts and every file since the divergence
+  // shows as "changed" — producing hundreds of phantom file changes.
+  //
+  // Fetch the remote branch before creating the worktree so that:
+  // 1. The worktree starts from the latest upstream commit
+  // 2. Diff merge-base matches what we branched from (zero phantom changes)
+  // 3. PRs will be clean against the upstream target
+  //
+  // This is a synchronous fetch (~1-3s on a warm connection). We accept
+  // the latency because workspace creation is already async (worktree add
+  // runs in a child process) and correctness matters more here.
+  // ───────────────────────────────────────────────────────────────────
+  try {
+    execSync(`git fetch origin ${parent_branch}`, {
+      cwd: repo.root_path!,
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+  } catch (fetchErr) {
+    // Non-fatal: if fetch fails (offline, no remote, etc.), fall back to
+    // whatever local state we have. The worktree will still be created
+    // from the local branch — diffs might be off but it's better than
+    // blocking workspace creation entirely.
+    console.warn(`[WORKSPACE] git fetch origin ${parent_branch} failed (continuing with local):`, fetchErr);
+  }
+
   const tmpDir = os.tmpdir();
   const initLogPath = path.join(tmpDir, `hive-${Date.now()}-init.log`);
 
@@ -264,10 +294,23 @@ app.post('/workspaces', async (c) => {
   `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
     parent_branch, 'initializing');
 
+  // Branch from origin/<parent_branch> when available (fetched above).
+  // Falls back to local <parent_branch> if remote doesn't exist.
+  const worktreeBase = (() => {
+    try {
+      execSync(`git show-ref --verify --quiet refs/remotes/origin/${parent_branch}`, {
+        cwd: repo.root_path!, timeout: 2000,
+      });
+      return `origin/${parent_branch}`;
+    } catch {
+      return parent_branch;
+    }
+  })();
+
   const workspacePath = path.join(repo.root_path!, '.hive', workspace_name);
   const initLog = fs.createWriteStream(initLogPath);
   const worktreeProcess = spawn('git', [
-    'worktree', 'add', '-b', placeholderBranchName, workspacePath, parent_branch
+    'worktree', 'add', '-b', placeholderBranchName, workspacePath, worktreeBase
   ], { cwd: repo.root_path!, stdio: ['ignore', 'pipe', 'pipe'] });
 
   worktreeProcess.stdout.pipe(initLog);
