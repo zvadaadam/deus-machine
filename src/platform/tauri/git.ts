@@ -64,6 +64,22 @@ export function gitDiffFile(
   });
 }
 
+export function gitUncommittedFiles(workspacePath: string): Promise<TauriDiffFile[]> {
+  return invoke<TauriDiffFile[]>("git_uncommitted_files", {
+    workspacePath,
+  });
+}
+
+export function gitLastTurnFiles(
+  workspacePath: string,
+  sessionId: string
+): Promise<TauriDiffFile[]> {
+  return invoke<TauriDiffFile[]>("git_last_turn_files", {
+    workspacePath,
+    sessionId,
+  });
+}
+
 export function gitDetectDefaultBranch(rootPath: string): Promise<string> {
   return invoke<string>("git_detect_default_branch", {
     rootPath,

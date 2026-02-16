@@ -151,6 +151,16 @@ export function getSessionRaw(
   return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
 }
 
+/** All sessions for a workspace, ordered by creation time. Uses idx_sessions_workspace_id. */
+export function getSessionsByWorkspaceId(
+  db: Database.Database,
+  workspaceId: string
+): SessionRow[] {
+  return db.prepare(
+    'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY created_at ASC'
+  ).all(workspaceId) as SessionRow[];
+}
+
 // ─── Message Queries ─────────────────────────────────────────
 
 /**

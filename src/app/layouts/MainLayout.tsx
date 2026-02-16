@@ -18,6 +18,7 @@ import {
   useStats,
   useBulkDiffStats,
   usePRStatus,
+  useGhStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
   useSystemPrompt,
@@ -28,7 +29,7 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { useResizeHandle } from "@/features/workspace";
 import { useRepos, useAddRepo } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
-import { Button, SidebarProvider, useSidebar } from "@/components/ui";
+import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -134,8 +135,15 @@ export function MainLayout() {
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || "My Account";
 
-  // PR status query
-  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
+  // GitHub CLI status — gates PR polling (like Codex)
+  const ghStatusQuery = useGhStatus();
+
+  // PR status query — gated on gh CLI, polls while agent is working
+  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
+    ghInstalled: ghStatusQuery.data?.isInstalled,
+    ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
+    sessionStatus: selectedWorkspace?.session_status ?? undefined,
+  });
 
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
@@ -292,7 +300,8 @@ export function MainLayout() {
 
       if (!selected) return;
 
-      const folderPath = typeof selected === "string" ? selected : (selected as any).path;
+      const folderPath =
+        typeof selected === "string" ? selected : (selected as { path: string }).path;
 
       let repo: Repo;
       try {
@@ -467,6 +476,7 @@ export function MainLayout() {
         <MainContent
           selectedWorkspace={selectedWorkspace}
           prStatus={prStatusQuery.data ?? null}
+          ghStatus={ghStatusQuery.data}
           workspaceChatPanelRef={workspaceChatPanelRef}
           onCreateWorkspace={openNewWorkspaceModal}
           onOpenProject={handleOpenProject}

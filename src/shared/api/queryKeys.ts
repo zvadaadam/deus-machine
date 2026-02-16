@@ -17,6 +17,9 @@ export const queryKeys = {
     detail: (id: string) => ["workspaces", "detail", id] as const,
     diffStats: (id: string) => ["workspaces", "diff-stats", id] as const,
     diffFiles: (id: string) => ["workspaces", "diff-files", id] as const,
+    uncommittedFiles: (id: string) => ["workspaces", "uncommitted-files", id] as const,
+    lastTurnFiles: (id: string, sessionId?: string) =>
+      ["workspaces", "last-turn-files", id, sessionId] as const,
     diffFile: (id: string, file: string) => ["workspaces", "diff-file", id, file] as const,
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
     penFiles: (id: string) => ["workspaces", "pen-files", id] as const,
@@ -28,6 +31,7 @@ export const queryKeys = {
     all: ["sessions"] as const,
     detail: (id: string) => ["sessions", "detail", id] as const,
     messages: (id: string) => ["sessions", "messages", id] as const,
+    byWorkspace: (workspaceId: string) => ["sessions", "by-workspace", workspaceId] as const,
   },
 
   // Repositories
@@ -39,6 +43,11 @@ export const queryKeys = {
   // Stats
   stats: {
     all: ["stats"] as const,
+  },
+
+  // GitHub CLI
+  github: {
+    ghStatus: ["github", "gh-status"] as const,
   },
 
   // Settings
