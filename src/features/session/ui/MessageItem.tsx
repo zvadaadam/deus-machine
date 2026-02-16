@@ -261,9 +261,9 @@ export const MessageItem = memo(function MessageItem({
               renderContentBlocks(otherBlocks as (ContentBlock | string)[])
             ) : (
               <div className={cn("text-sm leading-relaxed", roleStyles.text)}>
-                {typeof contentBlocks === "string"
-                  ? contentBlocks
-                  : JSON.stringify(contentBlocks, null, 2)}
+                {typeof otherBlocks === "string"
+                  ? otherBlocks
+                  : JSON.stringify(otherBlocks, null, 2)}
               </div>
             )}
 
