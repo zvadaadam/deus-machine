@@ -74,7 +74,7 @@ export const PRReady: Story = {
       merge_status: "ready",
     },
     onReviewPR: () => console.log("Review PR"),
-    onMergePR: () => console.log("Merge PR"),
+    onSendAgentMessage: (text: string) => console.log("Agent message:", text),
     targetBranch: "main",
   },
 };
@@ -112,7 +112,7 @@ export const PRBlocked: Story = {
       merge_status: "blocked",
     },
     onReviewPR: () => console.log("Review PR"),
-    onMergePR: () => console.log("Merge PR"),
+    onSendAgentMessage: (text: string) => console.log("Agent message:", text),
     targetBranch: "main",
   },
 };
@@ -132,7 +132,7 @@ export const TitleWithPR: Story = {
       merge_status: "ready",
     },
     onReviewPR: () => console.log("Review PR"),
-    onMergePR: () => console.log("Merge PR"),
+    onSendAgentMessage: (text: string) => console.log("Agent message:", text),
     targetBranch: "main",
   },
 };

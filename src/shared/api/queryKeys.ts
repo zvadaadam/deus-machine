@@ -41,6 +41,11 @@ export const queryKeys = {
     all: ["stats"] as const,
   },
 
+  // GitHub CLI
+  github: {
+    ghStatus: ["github", "gh-status"] as const,
+  },
+
   // Settings
   settings: {
     all: ["settings"] as const,
