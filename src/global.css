@@ -156,6 +156,8 @@
   --animate-subtle-spin: subtle-spin 2s linear infinite;
   --animate-breathing-glow: breathing-glow 2.5s ease-in-out infinite;
   --animate-gentle-pulse: gentle-pulse 0.6s ease infinite;
+  --animate-paste-card-enter: paste-card-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
+  --animate-drop-overlay-enter: drop-overlay-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 /* Custom typography utilities for sizes not in Tailwind's default scale */
@@ -422,6 +424,31 @@
   50% {
     opacity: var(--pixel-peak-opacity, 1);
     box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
+  }
+}
+
+/* Pasted text card — subtle scale-up + fade (never from scale(0), per Emil Kowalski).
+ * ease-out-quart for snappy deceleration on user-initiated paste. */
+@keyframes paste-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Full-panel drop overlay — fade + subtle scale for the drop zone */
+@keyframes drop-overlay-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

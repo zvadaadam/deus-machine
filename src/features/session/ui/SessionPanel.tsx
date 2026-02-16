@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { Chat, MessageInput } from ".";
+import type { MessageInputRef } from ".";
 import { useSocket } from "@/shared/hooks";
 import { useSessionActions, useSessionEvents } from "../hooks";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, Upload } from "lucide-react";
 import {
   getRuntimeAgentTypeForModel,
   getRuntimeModelId,
@@ -84,6 +85,46 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       });
     }
 
+    // Ref to MessageInput for adding files from panel-level drag & drop
+    const messageInputRef = useRef<MessageInputRef>(null);
+
+    // Full-panel drag & drop — uses dragOver (fires continuously) for reliable detection
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDragOver = useCallback(
+      (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isDragging) setIsDragging(true);
+      },
+      [isDragging]
+    );
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only dismiss when cursor truly leaves the container bounds
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX >= rect.right ||
+        e.clientY < rect.top ||
+        e.clientY >= rect.bottom
+      ) {
+        setIsDragging(false);
+      }
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        messageInputRef.current?.addFiles(files);
+      }
+    }, []);
+
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState("NONE");
@@ -154,6 +195,19 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       [setMessageInput]
     );
 
+    // Drop overlay shared between embedded and dialog layouts
+    const dropOverlay = isDragging && (
+      <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="border-border/60 bg-muted/80 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-12 py-10 backdrop-blur-md">
+          <Upload className="text-muted-foreground h-10 w-10" />
+          <p className="text-foreground text-base font-medium">Add files</p>
+          <p className="text-muted-foreground text-sm">
+            Drop any files here to add them to your message
+          </p>
+        </div>
+      </div>
+    );
+
     // If embedded, render without overlay but with message input
     if (embedded) {
       return (
@@ -164,7 +218,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           subagentMessages={subagentMessages}
           sessionStatus={sessionStatus}
         >
-          <div className={`${CONTENT_WIDTH_CLASSES} flex min-h-0 flex-1 flex-col`}>
+          <div
+            className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {dropOverlay}
+
             <Chat
               messages={messages}
               loading={loading}
@@ -176,7 +237,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onStop={stopSession}
             />
 
+            {/* Fade overlay: smoothly transitions chat scroll area into input */}
+            <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
+
             <MessageInput
+              ref={messageInputRef}
               messageInput={messageInput}
               sending={sending}
               sessionStatus={sessionStatus}
@@ -186,7 +251,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               mcpServers={mcpServers}
               contextTokenCount={contextTokenCount}
               onMessageChange={setMessageInput}
-              onSend={() => sendMessage()}
+              onSend={(content) => sendMessage(content)}
               onStop={stopSession}
               onModelChange={handleModelChange}
               onThinkingLevelChange={handleThinkingLevelChange}
@@ -222,7 +287,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             </Button>
           </div>
 
-          <div className="flex flex-1 overflow-hidden">
+          <div
+            className="relative flex flex-1 overflow-hidden"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {dropOverlay}
+
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
               <SessionProvider
@@ -244,7 +316,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onStop={stopSession}
                   />
 
+                  {/* Fade overlay: smoothly transitions chat scroll area into input */}
+                  <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
+
                   <MessageInput
+                    ref={messageInputRef}
                     messageInput={messageInput}
                     sending={sending}
                     sessionStatus={sessionStatus}
@@ -255,7 +331,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     mcpServers={mcpServers}
                     contextTokenCount={contextTokenCount}
                     onMessageChange={setMessageInput}
-                    onSend={() => sendMessage()}
+                    onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}
                     onCreatePR={createPR}
                     onStop={stopSession}
