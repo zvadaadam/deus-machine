@@ -1,5 +1,5 @@
 import type { SessionStatus } from "@/shared/types";
-import { useState, forwardRef, useImperativeHandle } from "react";
+import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   Minimize2,
@@ -126,7 +126,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   const [browserEnabled, setBrowserEnabled] = useState(false);
 
   // Process image files into attachment previews (shared by paste + panel drop)
-  const processFiles = async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[]) => {
     const imageFiles = files.filter((f) => SUPPORTED_IMAGE_TYPES.has(f.type));
     if (!imageFiles.length) return;
     const previews = await Promise.all(
@@ -149,7 +149,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     );
     const valid = previews.filter(Boolean) as Attachment[];
     if (valid.length) setAttachments((prev) => [...prev, ...valid]);
-  };
+  }, []);
 
   // Expose addFiles + clearPastedContent for parent-level drag & drop and success cleanup
   useImperativeHandle(
@@ -161,7 +161,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         setAttachments([]);
       },
     }),
-    []
+    [processFiles]
   );
 
   /**
@@ -238,9 +238,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   });
 
   // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Let file mention popover handle navigation keys first
-    if (fileMention.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>)) {
+    if (fileMention.handleKeyDown(e)) {
       e.preventDefault();
       return;
     }

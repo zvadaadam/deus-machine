@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { File, Folder, Loader2 } from "lucide-react";
+import { File, Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { FuzzyFileResult } from "../hooks/useFileMention";
 
@@ -97,18 +97,13 @@ export function FileMentionPopover({
                 e.preventDefault();
                 onSelect(result.path);
               }}
-              onMouseEnter={() => {
-                // Let mouse hover update selection for smoother UX
-              }}
             >
               <File className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0 flex-1">
                 <span className="text-[13px] leading-tight">
                   {highlightMatch(result.name, query)}
                 </span>
-                {dir && (
-                  <span className="text-muted-foreground ml-1.5 text-[11px]">{dir}</span>
-                )}
+                {dir && <span className="text-muted-foreground ml-1.5 text-[11px]">{dir}</span>}
               </div>
             </button>
           );

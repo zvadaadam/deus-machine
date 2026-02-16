@@ -92,14 +92,15 @@ export function useFileMention({
   // Debounce timer for search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Monotonic search ID — discard results from stale IPC calls when the user
+  // types faster than the debounce + Tauri round-trip (e.g. "@fo" → "@foo").
+  const searchIdRef = useRef(0);
+
   // Track cursor position changes
-  const handleCursorChange = useCallback(
-    (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-      const textarea = e.currentTarget;
-      setCursorPos(textarea.selectionStart);
-    },
-    []
-  );
+  const handleCursorChange = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    setCursorPos(textarea.selectionStart);
+  }, []);
 
   // Detect @mention trigger whenever value or cursor changes
   useEffect(() => {
@@ -139,19 +140,28 @@ export function useFileMention({
 
     setLoading(true);
 
+    // Bump search ID so in-flight IPC calls from earlier keystrokes are discarded
+    const currentSearchId = ++searchIdRef.current;
+
     // Debounce search by 80ms to avoid hammering Tauri on every keystroke
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const searchResults = await invoke<FuzzyFileResult[]>(
-          "fuzzy_file_search",
-          { workspacePath, query, limit: 15 }
-        );
+        const searchResults = await invoke<FuzzyFileResult[]>("fuzzy_file_search", {
+          workspacePath,
+          query,
+          limit: 15,
+        });
+        // Only apply results if this is still the latest search
+        if (searchIdRef.current !== currentSearchId) return;
         setResults(searchResults);
       } catch (err) {
+        if (searchIdRef.current !== currentSearchId) return;
         console.error("[useFileMention] Search failed:", err);
         setResults([]);
       } finally {
-        setLoading(false);
+        if (searchIdRef.current === currentSearchId) {
+          setLoading(false);
+        }
       }
     }, 80);
 
@@ -173,6 +183,13 @@ export function useFileMention({
       const after = value.slice(cursorPos);
       const mention = `@${filePath} `;
       const newValue = before + mention + after;
+
+      // Update cursorPos BEFORE onChange so the detection effect (which depends
+      // on [value, cursorPos]) sees the new cursor after the mention. Without
+      // this, cursorPos stays stale and findMentionTrigger re-detects the @
+      // inside the inserted text, immediately reopening the popover.
+      const newCursorPos = before.length + mention.length;
+      setCursorPos(newCursorPos);
 
       onChange(newValue);
       setIsOpen(false);
