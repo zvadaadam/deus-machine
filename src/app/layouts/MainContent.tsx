@@ -559,6 +559,7 @@ export function MainContent({
                         chatPanelCollapsed={chatPanelCollapsed}
                         onExitCompactMode={handleExitCompactMode}
                         onReturnToCode={handleRestoreParkedMiddlePanel}
+                        isWatched={isWatched}
                       />
                     </div>
                   </div>
@@ -584,6 +585,7 @@ export function MainContent({
                     isResizing={rightPanelDragging}
                     chatPanelCollapsed={chatPanelCollapsed}
                     onReturnToCode={handleRestoreParkedMiddlePanel}
+                    isWatched={isWatched}
                   />
                 </>
               )}

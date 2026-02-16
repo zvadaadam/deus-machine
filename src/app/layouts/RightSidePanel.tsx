@@ -12,7 +12,6 @@ import { useCallback, useMemo } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
-import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
@@ -46,6 +45,8 @@ interface RightSidePanelProps {
   onExitCompactMode?: () => void;
   /** Called when user switches sidecar back to Code (used to restore parked diff layout) */
   onReturnToCode?: () => void;
+  /** Whether file watcher is active — disables polling in useFileChanges */
+  isWatched?: boolean;
 }
 
 export function RightSidePanel({
@@ -60,6 +61,7 @@ export function RightSidePanel({
   chatPanelCollapsed,
   onExitCompactMode,
   onReturnToCode,
+  isWatched = false,
 }: RightSidePanelProps) {
   const {
     rightSideTab,
@@ -80,12 +82,6 @@ export function RightSidePanel({
     repoName: workspace.repo_name,
     branch: workspace.branch,
   });
-
-  // Watch workspace for file changes (event-driven cache invalidation)
-  const isWatched = useFileWatcher(
-    workspace.workspace_path ?? null,
-    workspace.id
-  );
 
   // Workspace git info for file changes query (Tauri IPC path)
   const workspaceGitInfo: WorkspaceGitInfo = useMemo(
