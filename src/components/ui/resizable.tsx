@@ -16,9 +16,15 @@ function ResizablePanelGroup({
   );
 }
 
-function ResizablePanel({ ...props }: React.ComponentProps<typeof ResizablePrimitive.Panel>) {
-  return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
-}
+// forwardRef required in React 18 — ref is a reserved prop stripped from ...props.
+// Without this, imperative handles (collapse/expand/resize) silently receive null.
+const ResizablePanel = React.forwardRef<
+  React.ComponentRef<typeof ResizablePrimitive.Panel>,
+  React.ComponentPropsWithoutRef<typeof ResizablePrimitive.Panel>
+>(({ ...props }, ref) => (
+  <ResizablePrimitive.Panel ref={ref} data-slot="resizable-panel" {...props} />
+));
+ResizablePanel.displayName = "ResizablePanel";
 
 /**
  * Codex-style resize handle — zero-width separator with a gradient line
