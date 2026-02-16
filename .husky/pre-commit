@@ -1,1 +1,11 @@
+# If package.json is staged, ensure bun.lock is in sync
+if git diff --cached --name-only | grep -q '^package.json$'; then
+  bun install --frozen-lockfile 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "⚠️  package.json changed but bun.lock is stale. Updating..."
+    bun install
+    git add bun.lock
+  fi
+fi
+
 bunx lint-staged
