@@ -1928,7 +1928,7 @@ diffs-container.diffs-theme-compact {
   padding: 0;
   border-radius: 0;
   font-size: inherit;
-  color: color-mix(in oklch, var(--foreground) 88%, transparent); /* Softer */
+  color: var(--foreground);
 }
 
 /* Tables - Compact */

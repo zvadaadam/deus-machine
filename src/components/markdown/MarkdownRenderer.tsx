@@ -5,14 +5,15 @@
  * - INSTANT rendering (synchronous, no async plugins)
  * - Security: Sanitizes HTML (rehype-sanitize)
  * - Copy button on code blocks
+ * - Progressive Shiki syntax highlighting (renders plain first, upgrades after)
  * - Configurable typography
  * - GFM support (tables, task lists, strikethrough)
  *
  * Performance Philosophy:
  * - Uses synchronous Markdown (not MarkdownHooks/Async)
- * - NO syntax highlighting for chat (Shiki is slow, adds 200ms+ delay)
- * - Basic code styling via CSS (instant, good enough for chat)
- * - Save Shiki for file viewer where syntax highlighting matters
+ * - Code blocks render instantly as plain text (CSS-only)
+ * - Shiki highlights asynchronously AFTER initial render (no blocking)
+ * - Zero layout shift: same <code> element, inner content swapped
  *
  * Usage:
  * ```tsx
@@ -21,12 +22,13 @@
  * ```
  */
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
+import { ShikiCodeBlock } from "./ShikiCodeBlock";
 
 interface MarkdownRendererProps {
   children: string;
@@ -35,6 +37,25 @@ interface MarkdownRendererProps {
   allowHtml?: boolean;
   /** Custom prose classes (default: chat-optimized) */
   proseClassName?: string;
+}
+
+/**
+ * Extract text content from react-markdown children (text or element).
+ * React Markdown passes either a string or an array with a text child element.
+ */
+function extractTextFromChildren(children: any): string {
+  if (typeof children === "string") return children;
+  if (Array.isArray(children)) {
+    return children
+      .map((child) => {
+        if (typeof child === "string") return child;
+        if (child?.props?.children) return extractTextFromChildren(child.props.children);
+        return "";
+      })
+      .join("");
+  }
+  if (children?.props?.children) return extractTextFromChildren(children.props.children);
+  return "";
 }
 
 /**
@@ -137,14 +158,26 @@ export function MarkdownRenderer({
   const components = {
     // Wrap code blocks with copy button
     pre({ children, ...props }: any) {
-      const ref = useRef<HTMLPreElement>(null);
       return (
         <div className="group relative">
-          <pre ref={ref} {...props}>
-            {children}
-          </pre>
-          <CopyButton getText={() => ref.current?.innerText ?? ""} />
+          <pre {...props}>{children}</pre>
+          <CopyButton getText={() => extractTextFromChildren(children)} />
         </div>
+      );
+    },
+    // Progressive Shiki highlighting for fenced code blocks
+    code({ className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+      if (match) {
+        // Fenced code block — upgrade with Shiki
+        const code = String(children).replace(/\n$/, "");
+        return <ShikiCodeBlock language={match[1]} code={code} className={className} />;
+      }
+      // Inline code — render as-is
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
       );
     },
   };
