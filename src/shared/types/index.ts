@@ -39,5 +39,6 @@ export type {
   PaginatedResponse,
   WorkspaceQueryParams,
   PRStatus,
+  GhCliStatus,
   DevServer,
 } from "@shared/types";

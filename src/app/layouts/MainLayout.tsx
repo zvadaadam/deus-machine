@@ -11,6 +11,7 @@ import {
   useStats,
   useBulkDiffStats,
   usePRStatus,
+  useGhStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
   useSystemPrompt,
@@ -117,8 +118,15 @@ export function MainLayout() {
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || "My Account";
 
-  // PR status query
-  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null);
+  // GitHub CLI status — gates PR polling (like Codex)
+  const ghStatusQuery = useGhStatus();
+
+  // PR status query — gated on gh CLI, polls while agent is working
+  const prStatusQuery = usePRStatus(selectedWorkspace?.id || null, {
+    ghInstalled: ghStatusQuery.data?.isInstalled,
+    ghAuthenticated: ghStatusQuery.data?.isAuthenticated,
+    sessionStatus: selectedWorkspace?.session_status ?? undefined,
+  });
 
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
@@ -388,6 +396,7 @@ export function MainLayout() {
         <MainContent
           selectedWorkspace={selectedWorkspace}
           prStatus={prStatusQuery.data ?? null}
+          ghStatus={ghStatusQuery.data}
           workspaceChatPanelRef={workspaceChatPanelRef}
           onCreateWorkspace={openNewWorkspaceModal}
           onOpenProject={handleOpenProject}

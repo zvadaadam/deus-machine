@@ -29,10 +29,12 @@ const EXT_TO_MIME: Record<string, string> = {
 interface SessionPanelProps {
   sessionId: string;
   workspacePath: string;
+  workspaceId?: string;
   onClose?: () => void;
   embedded?: boolean;
   onCompact?: (handler: () => void) => void;
   onCreatePR?: (handler: () => void) => void;
+  onSendAgentMessage?: (handler: (text: string) => Promise<void>) => void;
   onStop?: (handler: () => void) => void;
   onAgentTypeChange?: (agentType: RuntimeAgentType) => void;
   onSessionStarted?: () => void;
@@ -47,10 +49,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     {
       sessionId,
       workspacePath,
+      workspaceId,
       onClose,
       embedded = false,
       onCompact,
       onCreatePR,
+      onSendAgentMessage,
       onStop,
       onAgentTypeChange,
       onSessionStarted,
@@ -61,7 +65,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     useSocket();
 
     // Real-time message updates: Tauri events (desktop) + incremental polling (web)
-    useSessionEvents(sessionId);
+    // workspaceId enables PR status invalidation when agent creates/updates PRs
+    useSessionEvents(sessionId, workspaceId);
 
     // TanStack Query hooks
     const {
@@ -250,8 +255,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     useEffect(() => {
       onCompact?.(compactConversation);
       onCreatePR?.(createPR);
+      onSendAgentMessage?.(sendMessage);
       onStop?.(stopSession);
-    }, [compactConversation, createPR, stopSession, onCompact, onCreatePR, onStop]);
+    }, [compactConversation, createPR, sendMessage, stopSession, onCompact, onCreatePR, onSendAgentMessage, onStop]);
 
     // Expose insertText method for browser element selector
     useImperativeHandle(

@@ -24,7 +24,7 @@ import { SidebarInset, useSidebar } from "@/components/ui";
 import { PanelLeft } from "lucide-react";
 import { toast } from "sonner";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
-import type { Workspace, PRStatus } from "@/shared/types";
+import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
@@ -45,6 +45,7 @@ type ParkedMiddlePanel = {
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
   prStatus: PRStatus | null;
+  ghStatus?: GhCliStatus | null;
   workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreateWorkspace: () => void;
   onOpenProject: () => void;
@@ -54,6 +55,7 @@ interface MainContentProps {
 export function MainContent({
   selectedWorkspace,
   prStatus,
+  ghStatus,
   workspaceChatPanelRef,
   onCreateWorkspace,
   onOpenProject,
@@ -70,10 +72,11 @@ export function MainContent({
     setChatPanelCollapsed,
   } = useWorkspaceLayout(selectedWorkspaceId);
 
-  // PR handler bridge: ChatArea sets it, RightSidePanel consumes it.
-  // Setter must be called as `setCreatePRHandler(() => handler)` — passing a
+  // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
+  // Setter must be called as `setXxxHandler(() => handler)` — passing a
   // function directly causes React to invoke it as a state updater (see bf516c6).
   const [createPRHandler, setCreatePRHandler] = useState<(() => void) | null>(null);
+  const [sendAgentMessageHandler, setSendAgentMessageHandler] = useState<((text: string) => Promise<void>) | null>(null);
 
   // Target branch for PR creation/merge — synced from WorkspaceHeader's branch selector
   const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(
@@ -214,6 +217,14 @@ export function MainContent({
     }
     createPRHandler();
   }, [createPRHandler]);
+
+  const handleSendAgentMessage = useCallback((text: string) => {
+    if (!sendAgentMessageHandler) {
+      toast.error("No active session available.");
+      return;
+    }
+    sendAgentMessageHandler(text);
+  }, [sendAgentMessageHandler]);
 
   const handleOpenPR = useCallback(() => {
     if (!prStatus?.pr_url) {
@@ -448,7 +459,9 @@ export function MainContent({
               workspacePath={selectedWorkspace.workspace_path}
               workspaceId={selectedWorkspace.id}
               prStatus={prStatus}
+              ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
+              onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
               targetBranch={selectedTargetBranch}
@@ -498,6 +511,7 @@ export function MainContent({
                   workspace={selectedWorkspace}
                   workspaceChatPanelRef={workspaceChatPanelRef}
                   onCreatePRHandlerChange={setCreatePRHandler}
+                  onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
                   onCollapseChatPanel={handleCollapseChatPanel}
                 />
               </div>
