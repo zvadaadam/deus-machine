@@ -63,7 +63,7 @@ export function DiffViewer({
   const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  const baseDiffOptions = useDiffOptions();
+  const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
 
   const handleCopyDiff = async () => {
     try {
@@ -106,7 +106,7 @@ export function DiffViewer({
     }
   }, [diff, filePath, newContent, oldContent]);
 
-  const canExpand = Boolean(displayFileDiff && !displayFileDiff.isPartial);
+  const canExpand = Boolean(displayFileDiff);
 
   useEffect(() => {
     // Reset comment state when file changes - intentional pattern for clearing related state
@@ -375,7 +375,7 @@ export function DiffViewer({
             <p className="text-sm">Unable to render diff</p>
           </div>
         ) : (
-          <FileDiff
+          <FileDiff<DiffCommentMeta>
             fileDiff={displayFileDiff}
             options={diffOptions}
             lineAnnotations={lineAnnotations}

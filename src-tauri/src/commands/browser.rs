@@ -8,27 +8,22 @@ pub fn start_browser_server(
     browser_path: String,
     browser_manager: State<'_, BrowserManager>,
 ) -> Result<String, String> {
-    println!("[COMMAND] start_browser_server called with path: {}", browser_path);
-
     let path = PathBuf::from(&browser_path);
 
     // Verify path exists
     if !path.exists() {
-        let error_msg = format!("Browser path does not exist: {}", browser_path);
-        eprintln!("[COMMAND] {}", error_msg);
-        return Err(error_msg);
+        return Err(format!(
+            "Browser path does not exist: {}. Set VITE_DEV_BROWSER_PATH to an absolute path.",
+            browser_path
+        ));
     }
 
-    println!("[COMMAND] Starting browser server at: {}", path.display());
     browser_manager
         .start(path)
         .map_err(|e| {
-            let error_msg = format!("Failed to start browser server: {}", e);
-            eprintln!("[COMMAND] {}", error_msg);
-            error_msg
+            format!("Failed to start browser server: {}", e)
         })?;
 
-    println!("[COMMAND] Browser server started successfully");
     Ok("Browser server started".to_string())
 }
 

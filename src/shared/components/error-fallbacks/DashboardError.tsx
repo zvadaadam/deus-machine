@@ -9,17 +9,17 @@ import { Button } from "@/components/ui/button";
  */
 export function DashboardError({ error, resetErrorBoundary }: FallbackProps) {
   const [copied, setCopied] = useState(false);
+  const normalizedError = normalizeError(error);
   const componentStack =
     typeof window !== "undefined"
       ? (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__
       : undefined;
 
   async function copyErrorDetails() {
-    if (!error) return;
     const details = [
-      `Message: ${error.message}`,
+      `Message: ${normalizedError.message}`,
       componentStack ? `\nComponent stack:\n${componentStack}` : "",
-      error.stack ? `\nStack:\n${error.stack}` : "",
+      normalizedError.stack ? `\nStack:\n${normalizedError.stack}` : "",
     ].join("\n");
 
     try {
@@ -60,7 +60,7 @@ export function DashboardError({ error, resetErrorBoundary }: FallbackProps) {
           </div>
         </div>
 
-        {error && (
+        {Boolean(error) && (
           <details className="mt-5 text-left">
             <summary className="bg-muted/60 hover:bg-muted cursor-pointer rounded-lg px-3 py-2 text-sm font-medium">
               Error details
@@ -72,12 +72,14 @@ export function DashboardError({ error, resetErrorBoundary }: FallbackProps) {
                 </Button>
               </div>
               <strong className="text-foreground">Message:</strong>
-              <pre className="text-foreground/90 mt-2 whitespace-pre-wrap">{error.message}</pre>
-              {import.meta.env.DEV && error.stack && (
+              <pre className="text-foreground/90 mt-2 whitespace-pre-wrap">
+                {normalizedError.message}
+              </pre>
+              {import.meta.env.DEV && normalizedError.stack && (
                 <>
                   <strong className="text-foreground mt-4 block">Stack trace:</strong>
                   <pre className="text-muted-foreground mt-2 whitespace-pre-wrap">
-                    {error.stack}
+                    {normalizedError.stack}
                   </pre>
                 </>
               )}
@@ -102,4 +104,18 @@ export function DashboardError({ error, resetErrorBoundary }: FallbackProps) {
       </div>
     </div>
   );
+}
+
+function normalizeError(error: unknown): { message: string; stack?: string } {
+  if (error instanceof Error) {
+    return { message: error.message, stack: error.stack };
+  }
+  if (typeof error === "string") {
+    return { message: error };
+  }
+  try {
+    return { message: JSON.stringify(error) };
+  } catch {
+    return { message: String(error) };
+  }
 }

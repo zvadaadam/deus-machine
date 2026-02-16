@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Terminal as XTerm } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import { WebLinksAddon } from "xterm-addon-web-links";
+import { Terminal as XTerm } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { listen } from "@tauri-apps/api/event";
 import { ptyCommands, isTauriEnv } from "@/platform";
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
 
 interface TerminalProps {

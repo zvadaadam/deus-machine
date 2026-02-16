@@ -13,6 +13,9 @@ const config: StorybookConfig = {
   viteFinal: async (config) => {
     return mergeConfig(config, {
       plugins: [tailwindcss()],
+      build: {
+        chunkSizeWarningLimit: 2000,
+      },
       resolve: {
         alias: {
           "@": resolve(__dirname, "../src"),

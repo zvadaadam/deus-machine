@@ -71,6 +71,9 @@ temp/
 # MCP Configuration (user-specific)
 .mcp.json
 
+# Local cloned workspaces (nested repos, not tracked in this repo)
+.hive/
+
 *storybook.log
 storybook-static
 
