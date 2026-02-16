@@ -10,6 +10,7 @@
  */
 
 import type { ContentBlock, MessageRole } from "@/shared/types";
+import { cn } from "@/shared/lib/utils";
 import { TextBlock } from "./TextBlock";
 import { ToolUseBlock } from "./ToolUseBlock";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -45,10 +46,31 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
     case "text":
       return <TextBlock block={block} role={role} weight={weight} />;
 
-    case "tool_use":
+    case "image": {
+      // Display-only image in chat (no remove button)
+      // User: compact 80×80 thumbnails; Assistant: larger inline display
+      const isUser = role === "user";
+      return (
+        <div
+          className={cn(
+            "border-border/60 overflow-hidden rounded-lg border",
+            isUser && "h-[80px] w-[80px] shrink-0"
+          )}
+        >
+          <img
+            src={`data:${block.source.media_type};base64,${block.source.data}`}
+            alt="Pasted image"
+            className={isUser ? "h-full w-full object-cover" : "max-h-64 max-w-full object-contain"}
+          />
+        </div>
+      );
+    }
+
+    case "tool_use": {
       // Link tool_use with its corresponding tool_result
       const toolResult = toolResultMap.get(block.id);
       return <ToolUseBlock block={block} toolResult={toolResult} />;
+    }
 
     case "tool_result":
       // Don't render tool_result standalone - it's already linked to tool_use

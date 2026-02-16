@@ -38,7 +38,7 @@ export interface Message {
  */
 export type MessageContent = ContentBlock[];
 
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
+export type ContentBlock = TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
 
 /**
  * Text content block
@@ -46,6 +46,19 @@ export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | Thinking
 export interface TextBlock {
   type: "text";
   text: string;
+}
+
+/**
+ * Image content block (Anthropic API format)
+ * Used for user-pasted images sent to Claude's vision API
+ */
+export interface ImageBlock {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
 }
 
 /**
