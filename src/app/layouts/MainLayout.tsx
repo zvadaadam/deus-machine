@@ -383,7 +383,12 @@ export function MainLayout() {
       setShowCloneModal(false);
       setCloneError(null);
       setCloneStatus(null);
-      toast.success(`"${repo.name}" ready`);
+
+      if (readyWorkspace) {
+        toast.success(`"${repo.name}" ready`);
+      } else {
+        toast.info(`"${repo.name}" cloned — workspace is still setting up`);
+      }
     } catch (error) {
       if (!isStale()) {
         console.error("Error cloning repository:", error);
