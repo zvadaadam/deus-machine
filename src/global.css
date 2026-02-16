@@ -211,6 +211,16 @@
   }
 }
 
+/* Indeterminate progress bar: slides left-to-right, loops */
+@keyframes clone-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 /* Subtle spinner for working state - 120° arc rotating smoothly */
 @keyframes subtle-spin {
   from {

@@ -142,13 +142,39 @@ pub async fn git_clone(
     target_path: String,
     app_handle: tauri::AppHandle,
 ) -> Result<GitCloneResult, String> {
-    use git2::{build::RepoBuilder, ErrorCode, FetchOptions, RemoteCallbacks};
+    use git2::{build::RepoBuilder, Cred, CredentialType, ErrorCode, FetchOptions, RemoteCallbacks};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     validate_git_clone_url(&url)?;
 
-    let target = validate_git_clone_target(Path::new(&target_path))?;
+    // Syntactic validation first — no filesystem side effects before these checks.
+    // Rejects empty, relative, and `..`-containing paths before we create any directories.
+    let target_raw = Path::new(&target_path);
+    if target_raw.as_os_str().is_empty() {
+        return Err("Target path is required".to_string());
+    }
+    if !target_raw.is_absolute() {
+        return Err("Target path must be absolute".to_string());
+    }
+    if target_raw
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err("Target path must not contain '..' segments".to_string());
+    }
+
+    // Ensure parent directories exist (e.g. ~/Projects) before canonicalization
+    let target_parent = target_raw
+        .parent()
+        .ok_or_else(|| "Target path must include a parent directory".to_string())?;
+    if !target_parent.exists() {
+        std::fs::create_dir_all(target_parent)
+            .map_err(|e| format!("Could not create directory \"{}\": {}", target_parent.display(), e))?;
+    }
+
+    // Full validation including canonicalization + home directory containment
+    let target = validate_git_clone_target(target_raw)?;
     let folder_name = target
         .file_name()
         .and_then(|n| n.to_str())
@@ -205,6 +231,61 @@ pub async fn git_clone(
         let mut callbacks = RemoteCallbacks::new();
         let progress_tracker = last_percent.clone();
 
+        // Credential callback: SSH agent/keys for SSH, credential helper for HTTPS.
+        // Counter prevents infinite auth retry loops (libgit2 retries on failure).
+        let auth_attempts = Arc::new(AtomicUsize::new(0));
+        callbacks.credentials(move |_url, username_from_url, allowed_types| {
+            let attempts = auth_attempts.fetch_add(1, Ordering::Relaxed);
+            if attempts >= 3 {
+                return Err(git2::Error::from_str(
+                    "Authentication failed after multiple attempts",
+                ));
+            }
+
+            let username = username_from_url.unwrap_or("git");
+
+            if allowed_types.contains(CredentialType::SSH_KEY) {
+                // Try SSH agent first (works with macOS Keychain-stored SSH keys)
+                if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+                    return Ok(cred);
+                }
+
+                // Fall back to common SSH key files
+                let home = std::env::var("HOME").unwrap_or_default();
+                let ssh_dir = PathBuf::from(&home).join(".ssh");
+
+                for key_name in &["id_ed25519", "id_rsa", "id_ecdsa"] {
+                    let private_key = ssh_dir.join(key_name);
+                    let public_key = ssh_dir.join(format!("{}.pub", key_name));
+                    if private_key.exists() {
+                        let pub_path = if public_key.exists() {
+                            Some(public_key.as_path())
+                        } else {
+                            None
+                        };
+                        if let Ok(cred) =
+                            Cred::ssh_key(username, pub_path, &private_key, None)
+                        {
+                            return Ok(cred);
+                        }
+                    }
+                }
+
+                Err(git2::Error::from_str(
+                    "No SSH key found. Add an SSH key or use HTTPS.",
+                ))
+            } else if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
+                // HTTPS: try system git credential helper (macOS Keychain, etc.)
+                let config = git2::Config::open_default()
+                    .map_err(|_| git2::Error::from_str("Could not open git config"))?;
+                Cred::credential_helper(&config, _url, username_from_url)
+            } else if allowed_types.contains(CredentialType::DEFAULT) {
+                Cred::default()
+            } else {
+                Err(git2::Error::from_str("Unsupported authentication method"))
+            }
+        });
+
         callbacks.transfer_progress(move |stats| {
             let total = stats.total_objects();
             let received = stats.received_objects();
@@ -216,16 +297,21 @@ pub async fn git_clone(
                 0
             };
 
+            // Composite tracker: encode both receive percent and indexed percent
+            // so events keep flowing during the indexing phase (where percent stays 100).
+            let indexed_pct = if total > 0 { (indexed * 100) / total } else { 0 };
+            let composite = percent * 1000 + indexed_pct;
+
             let last = progress_tracker.load(Ordering::Relaxed);
-            if percent != last {
-                progress_tracker.store(percent, Ordering::Relaxed);
+            if composite != last {
+                progress_tracker.store(composite, Ordering::Relaxed);
 
                 let (phase, status) = if received < total {
-                    ("receiving".to_string(), "Receiving...".to_string())
-                } else if indexed < received {
-                    ("indexing".to_string(), "Indexing...".to_string())
+                    ("receiving".to_string(), "Downloading...".to_string())
+                } else if indexed < total {
+                    ("indexing".to_string(), "Processing...".to_string())
                 } else {
-                    ("resolving".to_string(), "Resolving...".to_string())
+                    ("resolving".to_string(), "Almost done...".to_string())
                 };
 
                 let _ = app.emit(
@@ -252,7 +338,7 @@ pub async fn git_clone(
         builder.clone(&url_clone, &target_clone).map_err(|e| {
             match e.code() {
                 ErrorCode::NotFound => "Repository not found. Check the URL and try again.".to_string(),
-                ErrorCode::Auth => "Authentication required. Check your credentials.".to_string(),
+                ErrorCode::Auth => "Authentication failed. Check your SSH keys or credentials.".to_string(),
                 ErrorCode::Exists => format!("Folder \"{}\" already exists", folder_name_clone),
                 _ => {
                     let msg = e.message();
@@ -260,6 +346,8 @@ pub async fn git_clone(
                         "Could not connect. Check your internet connection.".to_string()
                     } else if msg.contains("SSL") || msg.contains("certificate") {
                         "SSL/certificate error. Check your network settings.".to_string()
+                    } else if msg.contains("Authentication failed") || msg.contains("authentication") {
+                        "Authentication failed. Check your SSH keys or credentials.".to_string()
                     } else {
                         format!("Clone failed: {}", msg)
                     }
