@@ -16,6 +16,7 @@ import { FrontendClient } from "./frontend-client";
 import { closeDatabase } from "./db/index";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
+import { CodexAgentHandler } from "./agents/codex/codex-handler";
 
 // ============================================================================
 // Logging
@@ -234,7 +235,7 @@ class UnifiedSidecar {
   /**
    * Kills any remaining Claude child processes spawned by this sidecar.
    */
-  private async killRemainingClaudeProcesses(): Promise<void> {
+  private async killRemainingChildProcesses(): Promise<void> {
     return new Promise((resolve) => {
       const command = `/usr/bin/pgrep -P ${process.pid}`;
       exec(command, (error, stdout) => {
@@ -268,7 +269,7 @@ class UnifiedSidecar {
   }
 
   private async cleanup(): Promise<void> {
-    await this.killRemainingClaudeProcesses();
+    await this.killRemainingChildProcesses();
     try {
       closeDatabase();
     } catch (err) {
@@ -293,6 +294,7 @@ class UnifiedSidecar {
 
     // Register all agent handlers
     registerAgent(new ClaudeAgentHandler());
+    registerAgent(new CodexAgentHandler());
 
     // Initialize all registered agents
     console.log("Initializing agent handlers...");

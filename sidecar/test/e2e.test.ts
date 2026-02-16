@@ -9,14 +9,15 @@ import { StringDecoder } from "string_decoder";
  * End-to-end tests: Spawn a real sidecar process, connect via
  * Unix domain socket, send JSON-RPC messages, verify responses.
  *
- * Two test suites:
+ * Three test suites:
  * 1. Protocol compliance — tests JSON-RPC protocol handling (always runs)
- * 2. Real Claude integration — tests actual Claude SDK calls against a
- *    real repository with a real Claude CLI (skipped if CLI unavailable)
+ * 2. Real Claude integration — tests actual Claude SDK calls (skipped if CLI unavailable)
+ * 3. Real Codex integration — tests actual Codex SDK calls (skipped if no OPENAI_API_KEY)
  *
  * NOTE: These tests require:
  * 1. The sidecar bundle to be built: `bunx tsx sidecar/build.ts`
- * 2. Claude CLI to be installed (for integration tests)
+ * 2. Claude CLI to be installed (for Claude integration tests)
+ * 3. OPENAI_API_KEY env var (for Codex integration tests — CLI binary comes from npm)
  */
 
 const SIDECAR_DIR = path.resolve(__dirname, "..");
@@ -51,6 +52,33 @@ try {
   }
 } catch {
   // Claude CLI not installed — integration tests will be skipped
+}
+
+// Check if Codex can run — the binary comes bundled with @openai/codex (npm dep),
+// so we only need an API key to actually hit the OpenAI API.
+const hasOpenAIKey = !!(process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY);
+
+// In CI, integration tests MUST run — fail if prerequisites are missing, don't skip.
+// Locally, gracefully skip when keys/CLI are unavailable.
+const isCI = !!process.env.CI;
+
+// ============================================================================
+// CI prerequisite guard — fail fast with clear messages
+// ============================================================================
+
+if (isCI) {
+  describe("CI: Required E2E prerequisites", () => {
+    it("sidecar bundle exists", () => {
+      expect(bundleExists, "Run 'bun run build:sidecar' before E2E tests").toBe(true);
+    });
+
+    it("OPENAI_API_KEY is set for Codex tests", () => {
+      expect(
+        hasOpenAIKey,
+        "Add OPENAI_API_KEY as a GitHub Actions secret (Settings → Secrets → Actions)"
+      ).toBe(true);
+    });
+  });
 }
 
 // ============================================================================
@@ -578,3 +606,161 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     expect(log).not.toContain("Unhandled Rejection:");
   });
 });
+
+// ============================================================================
+// Suite 3: Real Codex integration (requires OPENAI_API_KEY + bundle)
+// ============================================================================
+
+// In CI: always run (keys are required via secrets). Locally: skip if no key.
+describe.skipIf(isCI ? !bundleExists : !bundleExists || !hasOpenAIKey)(
+  "E2E: Real Codex Integration",
+  () => {
+    let sidecarProcess: ChildProcess;
+    let socketPath: string;
+    let client: net.Socket;
+    let logPath: string;
+
+    beforeAll(async () => {
+      const sidecar = await spawnSidecar();
+      sidecarProcess = sidecar.process;
+      socketPath = sidecar.socketPath;
+      client = sidecar.client;
+      logPath = sidecar.logPath;
+    }, 30_000);
+
+    afterAll(async () => {
+      await killSidecar({ process: sidecarProcess, socketPath, client });
+    });
+
+    // ------------------------------------------------------------------
+    // Query flow: send a real prompt, receive streamed messages
+    // ------------------------------------------------------------------
+
+    it("sends a query and receives streamed response messages", async () => {
+      const sessionId = `test-codex-query-${Date.now()}`;
+
+      // Collect all incoming messages
+      const messageCollector = collectMessages(client);
+
+      // Send a minimal query (short prompt for a quick response)
+      sendNotification(client, "query", {
+        type: "query",
+        id: sessionId,
+        agentType: "codex",
+        prompt: "Reply with exactly: PONG",
+        options: {
+          cwd: WORKSPACE_ROOT,
+          model: "o4-mini",
+          turnId: `turn-${Date.now()}`,
+          permissionMode: "default",
+        },
+      });
+
+      const isSessionMessage = (msg: any) =>
+        msg.method === "message" && msg.params?.id === sessionId;
+      const isSessionError = (msg: any) =>
+        msg.method === "queryError" && msg.params?.id === sessionId;
+      const isSessionResult = (msg: any) =>
+        isSessionMessage(msg) && msg.params?.data?.type === "result";
+
+      // Wait for either a result or error (up to 90s for Codex to respond)
+      const terminalMessage = await waitForMessage(
+        client,
+        (msg) => isSessionResult(msg) || isSessionError(msg),
+        90_000
+      );
+
+      // Collect all session-related messages
+      const sessionMessages = messageCollector.filter(
+        (msg: any) => isSessionMessage(msg) || isSessionError(msg)
+      );
+
+      if (isSessionError(terminalMessage)) {
+        // If we got an error, it should be a structured error (not a crash)
+        expect(terminalMessage.params.error).toBeDefined();
+        expect(typeof terminalMessage.params.error).toBe("string");
+      } else {
+        // If we got a result, verify the message stream structure
+        expect(terminalMessage.params.data.type).toBe("result");
+
+        // Should have received at least one assistant message before the result
+        const assistantMessages = sessionMessages.filter(
+          (msg: any) => msg.params?.data?.type === "assistant"
+        );
+        expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+
+        // Each assistant message should have valid structure
+        for (const msg of assistantMessages) {
+          expect(msg.params.data.message).toBeDefined();
+          expect(msg.params.data.message.role).toBe("assistant");
+        }
+      }
+    }, 90_000);
+
+    // ------------------------------------------------------------------
+    // Cancel flow: start a query then cancel it
+    // ------------------------------------------------------------------
+
+    it("cancels an active query and receives abort notification", async () => {
+      const sessionId = `test-codex-cancel-${Date.now()}`;
+
+      // Start a query that will take a while
+      sendNotification(client, "query", {
+        type: "query",
+        id: sessionId,
+        agentType: "codex",
+        prompt:
+          "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
+        options: {
+          cwd: WORKSPACE_ROOT,
+          model: "o4-mini",
+          turnId: `turn-${Date.now()}`,
+          permissionMode: "default",
+        },
+      });
+
+      // Wait for the query to start processing
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Send cancel request
+      const cancelId = sendRequest(client, "cancel", {
+        type: "cancel",
+        id: sessionId,
+        agentType: "codex",
+      });
+
+      // Should receive either:
+      // 1. A cancel RPC response
+      // 2. A queryError notification with abort
+      // 3. A result if the query finished before cancel arrived
+      const terminalMessage = await waitForMessage(
+        client,
+        (msg) => {
+          if (msg.jsonrpc === "2.0" && msg.id === cancelId) return true;
+          if (msg.method === "queryError" && msg.params?.id === sessionId) return true;
+          if (
+            msg.method === "message" &&
+            msg.params?.id === sessionId &&
+            msg.params?.data?.type === "result"
+          )
+            return true;
+          return false;
+        },
+        30_000
+      );
+
+      // Verify we got a structured response (not a crash)
+      expect(terminalMessage.jsonrpc).toBe("2.0");
+    }, 45_000);
+
+    // ------------------------------------------------------------------
+    // Verify sidecar log has no errors after Codex tests
+    // ------------------------------------------------------------------
+
+    it("sidecar log has no uncaught exceptions", () => {
+      const log = fs.readFileSync(logPath, "utf-8");
+      expect(log).not.toContain("Uncaught Exception:");
+      expect(log).not.toContain("Unhandled Rejection:");
+    });
+  }
+);

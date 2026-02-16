@@ -33,6 +33,13 @@ build({
     "https",
     // Heavy native dependencies — loaded at runtime
     "better-sqlite3",
+    // Codex SDK and native binary — externalized because:
+    // - @openai/codex contains platform-specific native Rust binaries
+    // - @openai/codex-sdk is ESM-only and uses import.meta.url at module init,
+    //   which esbuild can't shim in CJS output. Our handler uses dynamic import()
+    //   to load it at runtime (CJS can dynamic-import ESM in modern Node.js).
+    "@openai/codex",
+    "@openai/codex-sdk",
   ],
   minify: false,
   sourcemap: false,
