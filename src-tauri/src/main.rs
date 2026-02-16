@@ -24,6 +24,16 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(BackendManager::new())
         .manage(BrowserManager::new())
         .manage(DbManager::new())
@@ -218,6 +228,7 @@ fn main() {
             commands::is_browser_running,
             commands::read_text_file,
             commands::scan_workspace_files,
+            commands::fuzzy_file_search,
             commands::invalidate_file_cache,
             commands::clear_file_cache,
             commands::git_clone,
