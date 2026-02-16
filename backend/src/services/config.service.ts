@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { McpConfigFile, AgentConfigFile, SettingsFile } from '../lib/schemas';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const MCP_CONFIG_PATH = path.join(CLAUDE_DIR, 'plugins', 'config.json');
@@ -32,21 +33,19 @@ export function getMcpServers(): Array<{ name: string; command: string; args: st
   try {
     if (!fs.existsSync(MCP_CONFIG_PATH)) return [];
 
-    const config = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, 'utf8'));
-    const servers: Array<{ name: string; command: string; args: string[]; env: Record<string, string> }> = [];
-
-    if (config.mcpServers) {
-      for (const [name, serverConfig] of Object.entries(config.mcpServers) as [string, any][]) {
-        servers.push({
-          name,
-          command: serverConfig.command,
-          args: serverConfig.args || [],
-          env: serverConfig.env || {},
-        });
-      }
+    const raw = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, 'utf8'));
+    const parsed = McpConfigFile.safeParse(raw);
+    if (!parsed.success) {
+      console.error('Invalid MCP config file:', parsed.error.issues);
+      return [];
     }
 
-    return servers;
+    return Object.entries(parsed.data.mcpServers).map(([name, entry]) => ({
+      name,
+      command: entry.command,
+      args: entry.args,
+      env: entry.env,
+    }));
   } catch (error) {
     console.error('Error reading MCP config:', error);
     return [];
@@ -131,10 +130,17 @@ export function getAgents(): Array<{ id: string; name?: string; description?: st
 
     files.forEach(file => {
       const filePath = path.join(AGENTS_DIR, file);
-      const content = fs.readFileSync(filePath, 'utf8');
-      const agent = JSON.parse(content);
-      agent.id = file.replace('.json', '');
-      agents.push(agent);
+      try {
+        const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const parsed = AgentConfigFile.safeParse(raw);
+        if (!parsed.success) {
+          console.error(`Invalid agent config ${file}:`, parsed.error.issues);
+          return;
+        }
+        agents.push({ ...parsed.data, id: file.replace('.json', '') });
+      } catch {
+        console.error(`Failed to parse agent file: ${file}`);
+      }
     });
 
     return agents;
@@ -174,8 +180,13 @@ export function deleteAgent(id: string): boolean {
 export function getHooks(): Record<string, any> {
   try {
     if (!fs.existsSync(SETTINGS_PATH)) return {};
-    const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-    return settings.hooks || {};
+    const raw = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    const parsed = SettingsFile.safeParse(raw);
+    if (!parsed.success) {
+      console.error('Invalid settings file:', parsed.error.issues);
+      return {};
+    }
+    return parsed.data.hooks;
   } catch (error) {
     console.error('Error reading hooks:', error);
     return {};

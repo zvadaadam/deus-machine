@@ -22,13 +22,14 @@
  * ```
  */
 
-import { useState } from "react";
+import { isValidElement, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
 import { ShikiCodeBlock } from "./ShikiCodeBlock";
+import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 
 interface MarkdownRendererProps {
   children: string;
@@ -37,25 +38,6 @@ interface MarkdownRendererProps {
   allowHtml?: boolean;
   /** Custom prose classes (default: chat-optimized) */
   proseClassName?: string;
-}
-
-/**
- * Extract text content from react-markdown children (text or element).
- * React Markdown passes either a string or an array with a text child element.
- */
-function extractTextFromChildren(children: any): string {
-  if (typeof children === "string") return children;
-  if (Array.isArray(children)) {
-    return children
-      .map((child) => {
-        if (typeof child === "string") return child;
-        if (child?.props?.children) return extractTextFromChildren(child.props.children);
-        return "";
-      })
-      .join("");
-  }
-  if (children?.props?.children) return extractTextFromChildren(children.props.children);
-  return "";
 }
 
 /**
@@ -128,6 +110,60 @@ function CopyButton({ getText }: { getText: () => string }) {
   );
 }
 
+// Stable component for code blocks — module-level to avoid remounts on parent re-render
+function MarkdownCode({ className, children, ...props }: any) {
+  const match = /language-(\w+)/.exec(className || "");
+  const lang = match?.[1];
+
+  if (lang === "mermaid") {
+    const chart = String(children).replace(/\n$/, "");
+    return <LazyMermaidDiagram chart={chart} />;
+  }
+
+  // Fenced code block — progressive Shiki highlighting
+  if (lang) {
+    const code = String(children).replace(/\n$/, "");
+    return <ShikiCodeBlock language={lang} code={code} className={className} />;
+  }
+
+  // Inline code — render as-is
+  return (
+    <code className={className} {...props}>
+      {children}
+    </code>
+  );
+}
+
+// Stable component for pre blocks — useRef called unconditionally to satisfy Rules of Hooks
+function MarkdownPre({ children, ...props }: any) {
+  const ref = useRef<HTMLPreElement>(null);
+
+  // react-markdown passes <code> as a React element (type=MarkdownCode), not its
+  // rendered output. For mermaid blocks, MarkdownCode returns <LazyMermaidDiagram>,
+  // but we must detect it here via className before React renders the child.
+  if (
+    isValidElement(children) &&
+    /language-mermaid/.test(String((children.props as any)?.className || ""))
+  ) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="group relative">
+      <pre ref={ref} {...props}>
+        {children}
+      </pre>
+      <CopyButton getText={() => ref.current?.innerText ?? ""} />
+    </div>
+  );
+}
+
+// Stable component map — never recreated, prevents react-markdown from remounting elements
+const markdownComponents = {
+  code: MarkdownCode,
+  pre: MarkdownPre,
+};
+
 export function MarkdownRenderer({
   children,
   className = "",
@@ -154,33 +190,7 @@ export function MarkdownRenderer({
     ]);
   }
 
-  // Custom components
-  const components = {
-    // Wrap code blocks with copy button
-    pre({ children, ...props }: any) {
-      return (
-        <div className="group relative">
-          <pre {...props}>{children}</pre>
-          <CopyButton getText={() => extractTextFromChildren(children)} />
-        </div>
-      );
-    },
-    // Progressive Shiki highlighting for fenced code blocks
-    code({ className, children, ...props }: any) {
-      const match = /language-(\w+)/.exec(className || "");
-      if (match) {
-        // Fenced code block — upgrade with Shiki
-        const code = String(children).replace(/\n$/, "");
-        return <ShikiCodeBlock language={match[1]} code={code} className={className} />;
-      }
-      // Inline code — render as-is
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
-  };
+
 
   // Use synchronous Markdown - INSTANT rendering (no async delay)
   return (
@@ -188,7 +198,7 @@ export function MarkdownRenderer({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
-        components={components}
+        components={markdownComponents}
       >
         {children}
       </ReactMarkdown>
