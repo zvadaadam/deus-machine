@@ -40,6 +40,7 @@ glob = "0.3"
 chrono = "0.4"
 parking_lot = "0.12"
 lazy_static = "1.4"
+notify = "8.1"
 git2 = "0.19"
 libc = "0.2"
 # Cookie sync: read browser cookie DBs + decrypt

@@ -16,6 +16,7 @@ import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useResizeHandle, useFileChanges } from "@/features/workspace";
 import { useArchiveWorkspace } from "@/features/workspace/api/workspace.queries";
 import type { WorkspaceGitInfo } from "@/features/workspace";
+import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { FileViewer } from "@/features/file-browser";
@@ -116,11 +117,18 @@ export function MainContent({
     [selectedWorkspace]
   );
 
-  // File changes for prev/next navigation
+  // Watch workspace for file changes (event-driven cache invalidation)
+  const isWatched = useFileWatcher(
+    selectedWorkspace?.workspace_path ?? null,
+    selectedWorkspaceId
+  );
+
+  // File changes for prev/next navigation — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
     selectedWorkspaceId,
     selectedWorkspace?.session_status,
-    workspaceGitInfo ?? undefined
+    workspaceGitInfo ?? undefined,
+    isWatched
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
@@ -551,6 +559,7 @@ export function MainContent({
                         chatPanelCollapsed={chatPanelCollapsed}
                         onExitCompactMode={handleExitCompactMode}
                         onReturnToCode={handleRestoreParkedMiddlePanel}
+                        isWatched={isWatched}
                       />
                     </div>
                   </div>
@@ -576,6 +585,7 @@ export function MainContent({
                     isResizing={rightPanelDragging}
                     chatPanelCollapsed={chatPanelCollapsed}
                     onReturnToCode={handleRestoreParkedMiddlePanel}
+                    isWatched={isWatched}
                   />
                 </>
               )}
