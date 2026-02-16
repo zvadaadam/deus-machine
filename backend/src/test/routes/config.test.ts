@@ -69,12 +69,12 @@ describe('Commands', () => {
     const res = await app.request('/config/commands', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'build', content: 'npm run build' }),
+      body: JSON.stringify({ name: 'build', content: 'bun run build' }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(saveCommand).toHaveBeenCalledWith('build', 'npm run build');
+    expect(saveCommand).toHaveBeenCalledWith('build', 'bun run build');
   });
 
   it('POST /config/commands without name returns 400', async () => {

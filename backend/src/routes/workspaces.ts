@@ -7,6 +7,8 @@ import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib/schemas';
 import * as gitService from '../services/git.service';
 import { generateUniqueCityName } from '../services/workspace.service';
 import {
@@ -61,7 +63,7 @@ app.get('/workspaces/:id', (c) => {
 
 app.patch('/workspaces/:id', async (c) => {
   const db = getDatabase();
-  const { state } = await c.req.json();
+  const { state } = parseBody(PatchWorkspaceBody, await c.req.json());
   if (state) {
     db.prepare('UPDATE workspaces SET state = ? WHERE id = ?').run(state, c.req.param('id'));
   }
@@ -185,8 +187,7 @@ app.get('/workspaces/:id/pen-files', withWorkspace, (c) => {
 
 // Open pen file
 app.post('/workspaces/:id/open-pen-file', withWorkspace, async (c) => {
-  const { filePath } = await c.req.json();
-  if (!filePath) throw new ValidationError('filePath is required');
+  const { filePath } = parseBody(OpenPenFileBody, await c.req.json());
 
   const workspacePath = c.get('workspacePath');
   const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
@@ -235,8 +236,7 @@ app.get('/workspaces/:id/dev-servers', (c) => {
 // Create workspace
 app.post('/workspaces', async (c) => {
   const db = getDatabase();
-  const { repository_id } = await c.req.json();
-  if (!repository_id) throw new ValidationError('repository_id is required');
+  const { repository_id } = parseBody(CreateWorkspaceBody, await c.req.json());
 
   const repo = getRepoById(db, repository_id);
   if (!repo) throw new NotFoundError('Repository not found');

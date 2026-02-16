@@ -3,17 +3,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAgents, useMCPServers, useSettings } from "@/features/settings/api/settings.queries";
 
 export function ConfigPanel() {
-  const settingsQuery = useSettings();
+  const settings = useSettings().data;
   const mcpServersQuery = useMCPServers();
   const agentsQuery = useAgents();
 
-  const settings = settingsQuery.data || {};
   const mcpServers = mcpServersQuery.data || [];
   const agents = agentsQuery.data || [];
 
-  const provider = settings.claude_provider || "Anthropic";
-  const model = settings.claude_model || "Default model";
-  const contextWindow: { used: number; max: number } | null = null;
+  const provider = settings?.claude_provider || "Anthropic";
+  const model = settings?.claude_model || "Default model";
+  const contextWindowLabel = "Not available";
+  const contextWindowPercent = "0%";
 
   return (
     <div className="flex h-full flex-col">
@@ -88,19 +88,13 @@ export function ConfigPanel() {
               <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                 Context Window
               </p>
-              <span className="text-muted-foreground text-[11px]">
-                {contextWindow
-                  ? `${contextWindow.used.toLocaleString()} / ${contextWindow.max.toLocaleString()} tokens`
-                  : "Not available"}
-              </span>
+              <span className="text-muted-foreground text-[11px]">{contextWindowLabel}</span>
             </div>
             <div className="bg-muted/40 h-2 w-full overflow-hidden rounded-full">
               <div
                 className="bg-success/60 h-full rounded-full"
                 style={{
-                  width: contextWindow
-                    ? `${Math.min((contextWindow.used / contextWindow.max) * 100, 100)}%`
-                    : "0%",
+                  width: contextWindowPercent,
                 }}
               />
             </div>

@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
-import { NotFoundError, ValidationError } from '../lib/errors';
+import { NotFoundError } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { CreateMessageBody } from '../lib/schemas';
 import {
   getAllSessions,
   getSessionById,
@@ -72,18 +74,14 @@ app.get('/sessions/:id/messages', (c) => {
 app.post('/sessions/:id/messages', async (c) => {
   const db = getDatabase();
   const sessionId = c.req.param('id');
-  const { content, model } = await c.req.json();
-
-  if (!content || typeof content !== 'string') {
-    throw new ValidationError('content is required and must be a string');
-  }
+  const { content, model } = parseBody(CreateMessageBody, await c.req.json());
 
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError('Session not found');
 
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
-  const messageModel = (typeof model === 'string' && model) ? model : 'sonnet';
+  const messageModel = model || 'sonnet';
 
   const insertMessageAndUpdateSession = db.transaction(() => {
     db.prepare(`

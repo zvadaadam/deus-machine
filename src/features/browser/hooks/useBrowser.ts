@@ -34,7 +34,6 @@ export function useBrowser() {
     try {
       if (isTauriEnv) {
         // Tauri mode: start server via Rust backend
-        // Use environment variable if available, otherwise use relative path
         const devBrowserPath = import.meta.env.VITE_DEV_BROWSER_PATH || "../../../dev-browser";
 
         if (import.meta.env.DEV) {
@@ -104,7 +103,6 @@ export function useBrowser() {
         }
       }
     } catch (error) {
-      // Avoid serializing arbitrary error objects (may throw on circular refs)
       const kind = error instanceof Error ? error.name : typeof error;
       const msg = error instanceof Error ? error.message : String(error);
       console.error("[useBrowser] Error starting server:", kind, msg);
@@ -157,12 +155,13 @@ export function useBrowser() {
             error: null,
           });
         } else {
-          setStatus({
+          setStatus((prev) => ({
             running: false,
             port: null,
             authToken: null,
-            error: null,
-          });
+            // Preserve configuration/runtime errors to avoid start-loop retries.
+            error: prev.error,
+          }));
         }
       } else {
         // Web mode: check for existing MCP server
