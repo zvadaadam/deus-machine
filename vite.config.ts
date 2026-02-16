@@ -7,6 +7,9 @@ import path from "path";
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), svgr(), tailwindcss()],
+  build: {
+    chunkSizeWarningLimit: 2000,
+  },
 
   // Path aliases - FSD-Lite Architecture
   resolve: {
@@ -31,8 +34,8 @@ export default defineConfig(async () => ({
     // Auto-increment to next available port if 1420 is taken (like Next.js)
     // This allows running multiple dev instances simultaneously
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // Ignore generated/native/local workspace trees that cause noisy reload storms.
+      ignored: ["**/src-tauri/**", "**/.hive/**"],
     },
   },
 }));

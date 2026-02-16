@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use std::sync::Mutex;
 
 #[cfg(target_os = "macos")]

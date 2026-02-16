@@ -13,8 +13,6 @@ pub struct PtySession {
 }
 
 struct PtySessionInternal {
-    id: String,
-    pid: u32,
     writer: Box<dyn Write + Send>,
     _reader_thread: thread::JoinHandle<()>,
 }
@@ -55,10 +53,8 @@ impl PtyManager {
             cmd.cwd(cwd_path);
         }
 
-        let mut child = pair.slave.spawn_command(cmd)
+        let _child = pair.slave.spawn_command(cmd)
             .map_err(|e| anyhow::anyhow!("Failed to spawn command: {}", e))?;
-
-        let pid = child.process_id().unwrap_or(0);
 
         // Get reader and writer
         let mut reader = pair.master.try_clone_reader()
@@ -102,8 +98,6 @@ impl PtyManager {
         });
 
         let session = PtySessionInternal {
-            id: id.clone(),
-            pid,
             writer,
             _reader_thread: reader_thread,
         };
@@ -113,7 +107,7 @@ impl PtyManager {
         Ok(id)
     }
 
-    pub fn resize(&self, id: &str, cols: u16, rows: u16) -> anyhow::Result<()> {
+    pub fn resize(&self, _id: &str, _cols: u16, _rows: u16) -> anyhow::Result<()> {
         // Note: portable-pty doesn't expose resize directly on the writer
         // This is a limitation we'll document
         Ok(())

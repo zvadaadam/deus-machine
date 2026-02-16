@@ -57,7 +57,7 @@ echo -e "${BLUE}Starting frontend dev server...${NC}"
 echo ""
 
 # Start frontend with backend port as environment variable
-VITE_BACKEND_PORT=$BACKEND_PORT npm run dev:frontend
+VITE_BACKEND_PORT=$BACKEND_PORT bun run dev:frontend
 
 # This line will be reached when npm run dev is stopped
 echo ""

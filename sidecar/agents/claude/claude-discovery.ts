@@ -2,7 +2,8 @@
 // Claude executable discovery and initialization state.
 
 import * as path from "path";
-import { execSync, execFileSync } from "child_process";
+import * as fs from "fs";
+import { execSync } from "child_process";
 import { FrontendClient } from "../../frontend-client";
 
 // ============================================================================
@@ -52,10 +53,11 @@ export function initializeClaude(): { success: boolean; error?: string } {
         .filter((p) => !p.includes("node_modules"))
         .join(":");
     }
-    const resolved = execFileSync(shell, ["-l", "-c", "command -v claude"], {
+    const resolved = execSync(`"${shell}" -l -c "command -v claude"`, {
       encoding: "utf-8",
       timeout: 5000,
       env: cleanEnv,
+      stdio: ["ignore", "pipe", "pipe"],
     }).trim();
     if (resolved && !candidates.includes(resolved)) {
       candidates.push(resolved);
@@ -64,22 +66,53 @@ export function initializeClaude(): { success: boolean; error?: string } {
     // Shell discovery failed — continue with static candidates
   }
 
+  const triedCandidates: string[] = [];
   for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    // Avoid shell noise when absolute/relative paths are missing.
+    const looksLikePath = candidate.includes(path.sep) || candidate.startsWith(".");
+    if (looksLikePath && !fs.existsSync(candidate)) {
+      triedCandidates.push(candidate);
+      continue;
+    }
+
     try {
-      const version = execSync(`"${candidate}" -v`, { encoding: "utf-8" }).trim();
+      const version = verifyClaudeCandidate(candidate);
       console.log(`Claude executable initialized with version: ${version} at ${candidate}`);
       pathToClaudeCodeExecutable = candidate;
       initializationResult = { success: true, path: candidate };
       return { success: true };
     } catch {
+      triedCandidates.push(candidate);
       // Try next candidate
     }
   }
 
-  const errorMessage = `Failed to find Claude executable. Tried: ${candidates.join(", ")}`;
+  const errorMessage = `Failed to find Claude executable. Tried: ${triedCandidates.join(", ")}`;
   console.error(`Claude executable initialization failed: ${errorMessage}`);
   initializationResult = { success: false, error: errorMessage };
   return { success: false, error: errorMessage };
+}
+
+function verifyClaudeCandidate(candidate: string): string {
+  const escaped = candidate.replaceAll('"', '\\"');
+
+  // JS entrypoint installed via npm global package.
+  if (candidate.endsWith(".js")) {
+    return execSync(`node "${escaped}" -v`, {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  }
+
+  // Native binary/symlink.
+  return execSync(`"${escaped}" -v`, {
+    encoding: "utf-8",
+    timeout: 5000,
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
 /**
