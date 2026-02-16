@@ -173,10 +173,10 @@ export function OnboardingOverlay() {
   const goForward = useCallback(() => {
     if (animating) return;
     setAnimating(true);
-    setAnimClass("animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.32,.72,0,1)_forwards]");
+    setAnimClass("animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]");
     setTimeout(() => {
       setCurrentStep((prev) => Math.min(prev + 1, 3) as OnboardingStep);
-      setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.32,.72,0,1)]");
+      setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.215,.61,.355,1)]");
       setAnimating(false);
     }, 160);
   }, [animating]);
@@ -184,10 +184,10 @@ export function OnboardingOverlay() {
   const goBack = useCallback(() => {
     if (animating) return;
     setAnimating(true);
-    setAnimClass("animate-[onboarding-step-exit-back_160ms_cubic-bezier(.32,.72,0,1)_forwards]");
+    setAnimClass("animate-[onboarding-step-exit-back_160ms_cubic-bezier(.215,.61,.355,1)_forwards]");
     setTimeout(() => {
       setCurrentStep((prev) => Math.max(prev - 1, 0) as OnboardingStep);
-      setAnimClass("animate-[onboarding-step-enter-back_240ms_cubic-bezier(.32,.72,0,1)]");
+      setAnimClass("animate-[onboarding-step-enter-back_240ms_cubic-bezier(.215,.61,.355,1)]");
       setAnimating(false);
     }, 160);
   }, [animating]);
@@ -207,7 +207,7 @@ export function OnboardingOverlay() {
       <div
         className={cn(
           "absolute inset-0",
-          exiting && "animate-[onboarding-exit-scrim_0.9s_cubic-bezier(.32,.72,0,1)_forwards]"
+          exiting && "animate-[onboarding-exit-scrim_0.9s_cubic-bezier(.215,.61,.355,1)_forwards]"
         )}
         style={{
           background: [
@@ -216,7 +216,7 @@ export function OnboardingOverlay() {
           ].join(", "),
           animation: exiting
             ? undefined
-            : "onboarding-overlay-fade-in 520ms cubic-bezier(.32,.72,0,1) forwards",
+            : "onboarding-overlay-fade-in 520ms cubic-bezier(.215,.61,.355,1) forwards",
         }}
       />
 
@@ -231,7 +231,7 @@ export function OnboardingOverlay() {
           style={{
             pointerEvents: "none",
             opacity: animationFading ? 0 : 1,
-            transition: `opacity ${TIMELINE.FADE_DURATION}ms cubic-bezier(.32,.72,0,1)`,
+            transition: `opacity ${TIMELINE.FADE_DURATION}ms cubic-bezier(.215,.61,.355,1)`,
           }}
         >
           <AgentDotsAnimation
@@ -261,8 +261,8 @@ export function OnboardingOverlay() {
             className={cn(
               "relative w-full max-w-[560px]",
               exiting
-                ? "animate-[onboarding-exit-card_700ms_cubic-bezier(.32,.72,0,1)_forwards]"
-                : "animate-[onboarding-card-enter_420ms_cubic-bezier(.32,.72,0,1)_forwards]"
+                ? "animate-[onboarding-exit-card_700ms_cubic-bezier(.215,.61,.355,1)_forwards]"
+                : "animate-[onboarding-card-enter_420ms_cubic-bezier(.215,.61,.355,1)_forwards]"
             )}
             style={{ opacity: 0 }}
           >
