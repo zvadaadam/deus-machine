@@ -134,21 +134,70 @@ fn validate_workspace_path(workspace_path: &str, file_path: &str) -> Result<Path
     Ok(canonical)
 }
 
+/// Parse a git clone progress line (from stderr with --progress).
+/// Matches patterns like "Receiving objects:  42% (52/123), 1.23 MiB"
+/// and "Resolving deltas: 100% (89/89), done."
+fn parse_git_progress(line: &str) -> Option<(String, String, usize)> {
+    // Find percent: look for "NN%" pattern
+    let pct_pos = line.find('%')?;
+    let before_pct = &line[..pct_pos];
+    let pct_start = before_pct.rfind(|c: char| !c.is_ascii_digit())?;
+    let percent: usize = before_pct[pct_start + 1..].parse().ok()?;
+
+    let (phase, status) = if line.contains("Receiving") {
+        ("receiving", "Downloading...")
+    } else if line.contains("Resolving") {
+        ("resolving", "Almost done...")
+    } else if line.contains("Compressing") || line.contains("Counting") || line.contains("Enumerating") {
+        ("connecting", "Connecting...")
+    } else {
+        ("indexing", "Processing...")
+    };
+
+    Some((phase.to_string(), status.to_string(), percent))
+}
+
 /// Clone a git repository to a target directory with progress events.
-/// Runs on a background thread to avoid blocking the UI.
+/// Shells out to `git clone --progress` so SSH/HTTPS auth is handled natively
+/// by the user's ssh-agent, ~/.ssh/config, credential helpers, and macOS Keychain.
 #[tauri::command]
 pub async fn git_clone(
     url: String,
     target_path: String,
     app_handle: tauri::AppHandle,
 ) -> Result<GitCloneResult, String> {
-    use git2::{build::RepoBuilder, ErrorCode, FetchOptions, RemoteCallbacks};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::io::Read;
+    use std::process::{Command, Stdio};
 
     validate_git_clone_url(&url)?;
 
-    let target = validate_git_clone_target(Path::new(&target_path))?;
+    // Syntactic validation first — no filesystem side effects before these checks.
+    // Rejects empty, relative, and `..`-containing paths before we create any directories.
+    let target_raw = Path::new(&target_path);
+    if target_raw.as_os_str().is_empty() {
+        return Err("Target path is required".to_string());
+    }
+    if !target_raw.is_absolute() {
+        return Err("Target path must be absolute".to_string());
+    }
+    if target_raw
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err("Target path must not contain '..' segments".to_string());
+    }
+
+    // Ensure parent directories exist (e.g. ~/Projects) before canonicalization
+    let target_parent = target_raw
+        .parent()
+        .ok_or_else(|| "Target path must include a parent directory".to_string())?;
+    if !target_parent.exists() {
+        std::fs::create_dir_all(target_parent)
+            .map_err(|e| format!("Could not create directory \"{}\": {}", target_parent.display(), e))?;
+    }
+
+    // Full validation including canonicalization + home directory containment
+    let target = validate_git_clone_target(target_raw)?;
     let folder_name = target
         .file_name()
         .and_then(|n| n.to_str())
@@ -192,85 +241,100 @@ pub async fn git_clone(
         },
     );
 
-    // Clone values for the blocking task
     let url_clone = url.clone();
     let target_clone = target.clone();
     let folder_name_clone = folder_name.clone();
     let app_clone = app_handle.clone();
 
-    // Run blocking git2 operations on a separate thread
+    // Shell out to git CLI — handles SSH/HTTPS auth natively via
+    // ssh-agent, ~/.ssh/config, credential helpers, macOS Keychain, etc.
+    // No hand-rolled credential callback needed.
     let result = tokio::task::spawn_blocking(move || {
-        let last_percent = Arc::new(AtomicUsize::new(0));
-        let app = app_clone.clone();
-        let mut callbacks = RemoteCallbacks::new();
-        let progress_tracker = last_percent.clone();
+        let mut child = Command::new("git")
+            .args(["clone", "--progress", &url_clone])
+            .arg(&target_clone)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            // Disable interactive prompts — fail fast instead of hanging on TTY input
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .spawn()
+            .map_err(|e| format!("Failed to start git: {}", e))?;
 
-        callbacks.transfer_progress(move |stats| {
-            let total = stats.total_objects();
-            let received = stats.received_objects();
-            let indexed = stats.indexed_objects();
-            let received_bytes = stats.received_bytes();
-            let percent = if total > 0 {
-                (received * 100) / total
-            } else {
-                0
-            };
-
-            let last = progress_tracker.load(Ordering::Relaxed);
-            if percent != last {
-                progress_tracker.store(percent, Ordering::Relaxed);
-
-                let (phase, status) = if received < total {
-                    ("receiving".to_string(), "Receiving...".to_string())
-                } else if indexed < received {
-                    ("indexing".to_string(), "Indexing...".to_string())
-                } else {
-                    ("resolving".to_string(), "Resolving...".to_string())
-                };
-
-                let _ = app.emit(
-                    "git-clone-progress",
-                    GitCloneProgress {
-                        percent,
-                        received,
-                        total,
-                        received_bytes,
-                        status,
-                        phase,
-                    },
-                );
-            }
-            true
-        });
-
-        let mut fetch_options = FetchOptions::new();
-        fetch_options.remote_callbacks(callbacks);
-
-        let mut builder = RepoBuilder::new();
-        builder.fetch_options(fetch_options);
-
-        builder.clone(&url_clone, &target_clone).map_err(|e| {
-            match e.code() {
-                ErrorCode::NotFound => "Repository not found. Check the URL and try again.".to_string(),
-                ErrorCode::Auth => "Authentication required. Check your credentials.".to_string(),
-                ErrorCode::Exists => format!("Folder \"{}\" already exists", folder_name_clone),
-                _ => {
-                    let msg = e.message();
-                    if msg.contains("failed to resolve address") || msg.contains("Could not resolve host") {
-                        "Could not connect. Check your internet connection.".to_string()
-                    } else if msg.contains("SSL") || msg.contains("certificate") {
-                        "SSL/certificate error. Check your network settings.".to_string()
-                    } else {
-                        format!("Clone failed: {}", msg)
+        // Read stderr for progress lines and error output.
+        // git --progress uses \r for in-place updates, so we split on both \r and \n.
+        let mut last_percent: usize = 0;
+        let mut stderr_capture = String::new();
+        if let Some(mut stderr) = child.stderr.take() {
+            let mut buf = [0u8; 512];
+            let mut line_buf = String::new();
+            loop {
+                match stderr.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let chunk = String::from_utf8_lossy(&buf[..n]);
+                        for ch in chunk.chars() {
+                            if ch == '\r' || ch == '\n' {
+                                if !line_buf.is_empty() {
+                                    if let Some((phase, status, percent)) = parse_git_progress(&line_buf) {
+                                        if percent != last_percent {
+                                            last_percent = percent;
+                                            let _ = app_clone.emit(
+                                                "git-clone-progress",
+                                                GitCloneProgress {
+                                                    percent,
+                                                    received: 0,
+                                                    total: 0,
+                                                    received_bytes: 0,
+                                                    status,
+                                                    phase,
+                                                },
+                                            );
+                                        }
+                                    }
+                                    // Keep last ~500 chars for error reporting on failure
+                                    stderr_capture.push_str(&line_buf);
+                                    stderr_capture.push('\n');
+                                    if stderr_capture.len() > 2000 {
+                                        let drain = stderr_capture.len() - 1000;
+                                        stderr_capture.drain(..drain);
+                                    }
+                                    line_buf.clear();
+                                }
+                            } else {
+                                line_buf.push(ch);
+                            }
+                        }
                     }
+                    Err(_) => break,
                 }
             }
-        })
+        }
+
+        let status = child.wait().map_err(|e| format!("git clone failed: {}", e))?;
+        if !status.success() {
+            // Map common git error messages to user-friendly strings
+            let msg = stderr_capture.trim().to_string();
+            if msg.contains("Could not resolve host") || msg.contains("failed to resolve") {
+                return Err("Could not connect. Check your internet connection.".to_string());
+            } else if msg.contains("not found") || msg.contains("does not appear to be a git repository") {
+                return Err("Repository not found. Check the URL and try again.".to_string());
+            } else if msg.contains("Authentication failed") || msg.contains("Permission denied") || msg.contains("could not read") {
+                return Err("Authentication failed. Check your SSH keys or credentials.".to_string());
+            } else if msg.contains("SSL") || msg.contains("certificate") {
+                return Err("SSL/certificate error. Check your network settings.".to_string());
+            } else if msg.contains("already exists") {
+                return Err(format!("Folder \"{}\" already exists", folder_name_clone));
+            }
+            // Last resort: show the raw message (last meaningful line)
+            let last_line = msg.lines().rev().find(|l| !l.is_empty()).unwrap_or(&msg);
+            return Err(format!("Clone failed: {}", last_line));
+        }
+
+        Ok(())
     })
     .await
     .map_err(|e| format!("Clone task failed: {}", e))?;
 
-    // Handle the inner Result from the blocking task
     result?;
 
     let _ = app_handle.emit(
@@ -556,5 +620,35 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"old_content\":null"));
         assert!(json.contains("\"new_content\":\"added line\""));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_git_progress tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_progress_receiving_objects() {
+        let (phase, _, pct) = parse_git_progress("Receiving objects:  42% (52/123), 1.23 MiB | 2.34 MiB/s").unwrap();
+        assert_eq!(phase, "receiving");
+        assert_eq!(pct, 42);
+    }
+
+    #[test]
+    fn parse_progress_resolving_deltas() {
+        let (phase, _, pct) = parse_git_progress("Resolving deltas: 100% (89/89), done.").unwrap();
+        assert_eq!(phase, "resolving");
+        assert_eq!(pct, 100);
+    }
+
+    #[test]
+    fn parse_progress_remote_counting() {
+        let (phase, _, pct) = parse_git_progress("remote: Counting objects:  50% (62/123)").unwrap();
+        assert_eq!(phase, "connecting");
+        assert_eq!(pct, 50);
+    }
+
+    #[test]
+    fn parse_progress_no_percent() {
+        assert!(parse_git_progress("Cloning into 'repo'...").is_none());
     }
 }

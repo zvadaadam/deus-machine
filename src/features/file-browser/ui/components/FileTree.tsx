@@ -38,8 +38,7 @@ function getFileIconConfig(filename: string): { icon: typeof File; color: string
   if (["rs", "toml"].includes(ext)) return { icon: FileCode, color: "text-file-rust" };
   if (["json", "yaml", "yml", "xml"].includes(ext))
     return { icon: FileJson, color: "text-file-data" };
-  if (["md", "mdx", "txt", "rst"].includes(ext))
-    return { icon: FileText, color: "text-file-docs" };
+  if (["md", "mdx", "txt", "rst"].includes(ext)) return { icon: FileText, color: "text-file-docs" };
   if (["css", "scss", "sass", "less"].includes(ext))
     return { icon: FileCode, color: "text-file-styles" };
   if (["html", "htm"].includes(ext)) return { icon: FileCode, color: "text-file-markup" };
@@ -59,7 +58,13 @@ function hasChanges(node: FileTreeNode): boolean {
   return node.children?.some((child) => hasChanges(child)) || false;
 }
 
-export function FileTree({ nodes, selectedPath, onFileClick, level = 0, defaultExpanded }: FileTreeProps) {
+export function FileTree({
+  nodes,
+  selectedPath,
+  onFileClick,
+  level = 0,
+  defaultExpanded,
+}: FileTreeProps) {
   return (
     <div className={cn(level === 0 && "group/tree")} role={level === 0 ? "tree" : "group"}>
       {nodes.map((node) => (
@@ -143,7 +148,7 @@ const TreeNode = memo(function TreeNode({
     <div
       role="treeitem"
       aria-expanded={isDirectory ? isExpanded : undefined}
-      className="[content-visibility:auto] [contain-intrinsic-size:auto_24px]"
+      className="[contain-intrinsic-size:auto_24px] [content-visibility:auto]"
     >
       <div
         tabIndex={0}
@@ -205,17 +210,20 @@ const TreeNode = memo(function TreeNode({
 
         {/* Change stats (+N, -N) for files with diff data */}
         {!isDirectory && (node.additions || node.deletions) && (
-          <div className="flex items-center gap-1 font-mono text-2xs tabular-nums opacity-60">
+          <div className="text-2xs flex items-center gap-1 font-mono tabular-nums opacity-60">
             {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
-            {node.deletions ? (
-              <span className="text-destructive/80">-{node.deletions}</span>
-            ) : null}
+            {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
           </div>
         )}
 
         {/* Uncommitted indicator — small dot for files not yet committed */}
         {!isDirectory && node.committed === false && (
-          <span className="text-warning/70 flex-shrink-0 text-[8px] leading-none" title="Uncommitted">●</span>
+          <span
+            className="text-warning/70 flex-shrink-0 text-[8px] leading-none"
+            title="Uncommitted"
+          >
+            ●
+          </span>
         )}
       </div>
 

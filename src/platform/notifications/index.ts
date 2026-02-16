@@ -1,1 +1,5 @@
-export { initNotifications, sendNotification, type NotificationOptions } from "./notificationService";
+export {
+  initNotifications,
+  sendNotification,
+  type NotificationOptions,
+} from "./notificationService";

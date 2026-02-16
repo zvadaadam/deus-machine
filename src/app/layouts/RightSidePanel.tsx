@@ -10,7 +10,12 @@
 
 import { useCallback, useMemo } from "react";
 import { TerminalPanel } from "@/features/terminal";
-import { useWorkspaceLayout, useFileChanges, useUncommittedFiles, useLastTurnFiles } from "@/features/workspace";
+import {
+  useWorkspaceLayout,
+  useFileChanges,
+  useUncommittedFiles,
+  useLastTurnFiles,
+} from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
@@ -51,12 +56,8 @@ export function RightSidePanel({
   onReturnToCode,
   isWatched = false,
 }: RightSidePanelProps) {
-  const {
-    rightSideTab,
-    selectedFilePath,
-    setRightSideTab,
-    setSelectedFilePath,
-  } = useWorkspaceLayout(workspace.id);
+  const { rightSideTab, selectedFilePath, setRightSideTab, setSelectedFilePath } =
+    useWorkspaceLayout(workspace.id);
 
   const {
     isDetached: isBrowserDetached,
@@ -151,10 +152,7 @@ export function RightSidePanel({
 
   return (
     <div
-      className={cn(
-        "flex h-full min-w-0 flex-col",
-        !compact && "border-border-subtle border-l",
-      )}
+      className={cn("flex h-full min-w-0 flex-col", !compact && "border-border-subtle border-l")}
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Content panel: file tree, browser, terminal, config, design */}

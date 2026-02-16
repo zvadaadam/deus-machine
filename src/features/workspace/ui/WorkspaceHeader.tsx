@@ -83,7 +83,10 @@ export function WorkspaceHeader({
   // gh CLI error states — show warning instead of broken PR buttons
   const ghMissing = ghStatus !== undefined && ghStatus !== null && !ghStatus.isInstalled;
   const ghUnauthenticated =
-    ghStatus !== undefined && ghStatus !== null && ghStatus.isInstalled && !ghStatus.isAuthenticated;
+    ghStatus !== undefined &&
+    ghStatus !== null &&
+    ghStatus.isInstalled &&
+    !ghStatus.isAuthenticated;
 
   const handleBranchSelect = (name: string) => {
     setLocalTargetBranch(name);
@@ -145,7 +148,14 @@ export function WorkspaceHeader({
       {/* Right section — PR actions */}
       <div className="flex items-center gap-1.5">
         {/* PR status indicators — small chips when PR exists */}
-        {hasPR && !isMerged && <PRStatusChips ciStatus={ciStatus} reviewStatus={reviewStatus} hasConflicts={hasConflicts} isDraft={isDraft} />}
+        {hasPR && !isMerged && (
+          <PRStatusChips
+            ciStatus={ciStatus}
+            reviewStatus={reviewStatus}
+            hasConflicts={hasConflicts}
+            isDraft={isDraft}
+          />
+        )}
 
         {/* Review button — visible when PR exists */}
         {hasPR && onReviewPR && (
@@ -164,7 +174,7 @@ export function WorkspaceHeader({
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <div className="text-text-muted flex items-center gap-1 px-2 py-1">
-                <AlertTriangle className="h-3 w-3 text-warning" />
+                <AlertTriangle className="text-warning h-3 w-3" />
                 <span className="text-[11px] font-medium">PR</span>
               </div>
             </TooltipTrigger>
@@ -191,7 +201,9 @@ export function WorkspaceHeader({
           <SplitButton
             icon={<FileWarning className="h-2.5 w-2.5" />}
             label="Resolve Conflicts"
-            onLeftClick={() => onSendAgentMessage?.("Resolve the merge conflicts on the PR and push the fix")}
+            onLeftClick={() =>
+              onSendAgentMessage?.("Resolve the merge conflicts on the PR and push the fix")
+            }
             leftDisabled={!onSendAgentMessage}
             branchLabel={effectiveTarget}
             workspacePath={workspacePath ?? null}
@@ -286,19 +298,43 @@ function PRStatusChips({
     chips.push({ icon: null, label: "Draft", color: "text-text-muted" });
   }
   if (hasConflicts) {
-    chips.push({ icon: <FileWarning className="h-2.5 w-2.5" />, label: "Conflicts", color: "text-destructive" });
+    chips.push({
+      icon: <FileWarning className="h-2.5 w-2.5" />,
+      label: "Conflicts",
+      color: "text-destructive",
+    });
   }
   if (ciStatus === "passing") {
-    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "CI", color: "text-success" });
+    chips.push({
+      icon: <CircleCheck className="h-2.5 w-2.5" />,
+      label: "CI",
+      color: "text-success",
+    });
   } else if (ciStatus === "failing") {
-    chips.push({ icon: <CircleX className="h-2.5 w-2.5" />, label: "CI", color: "text-destructive" });
+    chips.push({
+      icon: <CircleX className="h-2.5 w-2.5" />,
+      label: "CI",
+      color: "text-destructive",
+    });
   } else if (ciStatus === "pending") {
-    chips.push({ icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />, label: "CI", color: "text-warning" });
+    chips.push({
+      icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />,
+      label: "CI",
+      color: "text-warning",
+    });
   }
   if (reviewStatus === "approved") {
-    chips.push({ icon: <CircleCheck className="h-2.5 w-2.5" />, label: "Approved", color: "text-success" });
+    chips.push({
+      icon: <CircleCheck className="h-2.5 w-2.5" />,
+      label: "Approved",
+      color: "text-success",
+    });
   } else if (reviewStatus === "changes_requested") {
-    chips.push({ icon: <MessageSquareWarning className="h-2.5 w-2.5" />, label: "Changes", color: "text-warning" });
+    chips.push({
+      icon: <MessageSquareWarning className="h-2.5 w-2.5" />,
+      label: "Changes",
+      color: "text-warning",
+    });
   }
 
   if (chips.length === 0) return null;

@@ -65,9 +65,7 @@ export function useDiffStats(
     enabled: !!workspaceId,
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched
-      ? false
-      : sessionStatus === "working" ? 5000 : false,
+    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
@@ -189,9 +187,7 @@ export function useFileChanges(
     enabled: !!workspaceId,
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched
-      ? false
-      : sessionStatus === "working" ? 5000 : false,
+    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });

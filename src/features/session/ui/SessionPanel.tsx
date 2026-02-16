@@ -257,7 +257,16 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onCreatePR?.(createPR);
       onSendAgentMessage?.(sendMessage);
       onStop?.(stopSession);
-    }, [compactConversation, createPR, sendMessage, stopSession, onCompact, onCreatePR, onSendAgentMessage, onStop]);
+    }, [
+      compactConversation,
+      createPR,
+      sendMessage,
+      stopSession,
+      onCompact,
+      onCreatePR,
+      onSendAgentMessage,
+      onStop,
+    ]);
 
     // Expose insertText method for browser element selector
     useImperativeHandle(

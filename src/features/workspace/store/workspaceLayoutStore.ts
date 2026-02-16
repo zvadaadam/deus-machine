@@ -98,7 +98,11 @@ interface WorkspaceLayoutStore {
   /**
    * Persist chat tab order and active tab for a workspace
    */
-  setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) => void;
+  setChatTabState: (
+    workspaceId: string,
+    sessionIds: string[],
+    activeSessionId: string | null
+  ) => void;
 
   // Utilities
   /**

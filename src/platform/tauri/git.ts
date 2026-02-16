@@ -64,9 +64,7 @@ export function gitDiffFile(
   });
 }
 
-export function gitUncommittedFiles(
-  workspacePath: string
-): Promise<TauriDiffFile[]> {
+export function gitUncommittedFiles(workspacePath: string): Promise<TauriDiffFile[]> {
   return invoke<TauriDiffFile[]>("git_uncommitted_files", {
     workspacePath,
   });

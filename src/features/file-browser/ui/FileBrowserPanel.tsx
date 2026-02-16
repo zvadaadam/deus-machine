@@ -4,7 +4,16 @@
  * Replaces the old two-tab (Changes / All files) approach.
  */
 
-import { FolderOpen, Loader2, GitBranch, FileCode, MoreHorizontal, RefreshCw, Search, X } from "lucide-react";
+import {
+  FolderOpen,
+  Loader2,
+  GitBranch,
+  FileCode,
+  MoreHorizontal,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,10 +54,7 @@ interface FileBrowserPanelProps {
  * Overlay change data (additions/deletions) from git diff onto the Rust-scanned tree.
  * Builds a path→change lookup and walks the tree to decorate matching files.
  */
-function enrichTreeWithChanges(
-  nodes: FileTreeNode[],
-  changes: FileChange[]
-): FileTreeNode[] {
+function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): FileTreeNode[] {
   if (changes.length === 0) return nodes;
 
   const changeMap = new Map<string, FileChange>();
@@ -107,10 +113,7 @@ function filterToChangedOnly(nodes: FileTreeNode[]): FileTreeNode[] {
 }
 
 /** Filter tree to only files matching a specific change set */
-function filterToChangeSet(
-  nodes: FileTreeNode[],
-  allowedPaths: Set<string>
-): FileTreeNode[] {
+function filterToChangeSet(nodes: FileTreeNode[], allowedPaths: Set<string>): FileTreeNode[] {
   return nodes.reduce((acc, node) => {
     if (node.type === "file") {
       if (allowedPaths.has(node.path)) {
@@ -206,6 +209,7 @@ export function FileBrowserPanel({
 
   // Clear search when switching away from All tab
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear search on filter change
     if (filterMode !== "all") setSearchQuery("");
   }, [filterMode]);
 
@@ -263,7 +267,7 @@ export function FileBrowserPanel({
     return (
       <div className="flex h-full flex-col overflow-hidden">
         {headerSlot}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 animate-fade-in-up">
+        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
           <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
           </div>
@@ -278,7 +282,7 @@ export function FileBrowserPanel({
     return (
       <div className="flex h-full flex-col overflow-hidden">
         {headerSlot}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 animate-fade-in">
+        <div className="animate-fade-in flex flex-1 flex-col items-center justify-center gap-3">
           <Loader2 className="text-muted-foreground/50 h-5 w-5 animate-spin" />
           <p className="text-muted-foreground/60 text-xs">Scanning files...</p>
         </div>
@@ -291,7 +295,7 @@ export function FileBrowserPanel({
     return (
       <div className="flex h-full flex-col overflow-hidden">
         {headerSlot}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 animate-fade-in-up">
+        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
           <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
           </div>
@@ -316,7 +320,7 @@ export function FileBrowserPanel({
             className={cn(
               "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors duration-200 ease-[ease]",
               filterMode === "changes"
-                ? "bg-background text-foreground shadow-sm font-medium"
+                ? "bg-background text-foreground font-medium shadow-sm"
                 : "text-muted-foreground/60 hover:text-muted-foreground"
             )}
           >
@@ -333,7 +337,7 @@ export function FileBrowserPanel({
             className={cn(
               "rounded px-2 py-0.5 text-[11px] transition-colors duration-200 ease-[ease]",
               filterMode === "all"
-                ? "bg-background text-foreground shadow-sm font-medium"
+                ? "bg-background text-foreground font-medium shadow-sm"
                 : "text-muted-foreground/60 hover:text-muted-foreground"
             )}
           >
@@ -411,7 +415,7 @@ export function FileBrowserPanel({
             defaultExpanded={filterMode === "changes"}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center gap-3 py-12 animate-fade-in-up">
+          <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">
             <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
               {filterMode === "changes" ? (
                 <GitBranch className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
