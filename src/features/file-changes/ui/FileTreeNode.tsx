@@ -11,6 +11,7 @@
 
 import { memo, useCallback } from "react";
 import { Folder, FolderOpen, FileText } from "lucide-react";
+import NumberFlow from "@number-flow/react";
 import { cn } from "@/shared/lib/utils";
 import type { FileChangeTreeNode } from "../types";
 import { FILE_TREE } from "../constants";
@@ -126,8 +127,8 @@ export const FileTreeNode = memo(function FileTreeNode({
       {/* Stats (files only) - muted pastel colors */}
       {node.type === "file" && (node.additions || node.deletions) && (
         <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums opacity-60">
-          {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
-          {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
+          {node.additions ? <NumberFlow value={node.additions} prefix="+" className="text-success/80" /> : null}
+          {node.deletions ? <NumberFlow value={node.deletions} prefix="-" className="text-destructive/80" /> : null}
         </div>
       )}
     </div>
