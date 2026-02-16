@@ -90,8 +90,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build sidecar bundle
-        run: bunx tsx sidecar/build.ts
+      - name: Run sidecar unit tests
+        run: bun run test:sidecar:unit
 
-      - name: Run tests
-        run: bun run test:sidecar
+      - name: Build sidecar bundle
+        run: bun run build:sidecar
+
+      - name: Run sidecar E2E tests
+        run: bun run test:sidecar:e2e
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
