@@ -159,6 +159,9 @@ impl BrowserManager {
                 Ok(None) => true,  // Still running
                 Err(e) => {
                     eprintln!("[BROWSER] Failed to check process status: {}", e);
+                    *lock = None;
+                    *self.port.lock().unwrap() = None;
+                    *self.auth_token.lock().unwrap() = None;
                     false
                 }
             }
