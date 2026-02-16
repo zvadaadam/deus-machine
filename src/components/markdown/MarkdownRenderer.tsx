@@ -21,12 +21,13 @@
  * ```
  */
 
-import { useRef, useState } from "react";
+import { isValidElement, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { cn } from "@/shared/lib/utils";
+import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 
 interface MarkdownRendererProps {
   children: string;
@@ -107,6 +108,53 @@ function CopyButton({ getText }: { getText: () => string }) {
   );
 }
 
+// Stable component for code blocks — module-level to avoid remounts on parent re-render
+function MarkdownCode({ className, children, ...props }: any) {
+  const match = /language-(\w+)/.exec(className || "");
+  const lang = match?.[1];
+
+  if (lang === "mermaid") {
+    const chart = String(children).replace(/\n$/, "");
+    return <LazyMermaidDiagram chart={chart} />;
+  }
+
+  return (
+    <code className={className} {...props}>
+      {children}
+    </code>
+  );
+}
+
+// Stable component for pre blocks — useRef called unconditionally to satisfy Rules of Hooks
+function MarkdownPre({ children, ...props }: any) {
+  const ref = useRef<HTMLPreElement>(null);
+
+  // react-markdown passes <code> as a React element (type=MarkdownCode), not its
+  // rendered output. For mermaid blocks, MarkdownCode returns <LazyMermaidDiagram>,
+  // but we must detect it here via className before React renders the child.
+  if (
+    isValidElement(children) &&
+    /language-mermaid/.test(String((children.props as any)?.className || ""))
+  ) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="group relative">
+      <pre ref={ref} {...props}>
+        {children}
+      </pre>
+      <CopyButton getText={() => ref.current?.innerText ?? ""} />
+    </div>
+  );
+}
+
+// Stable component map — never recreated, prevents react-markdown from remounting elements
+const markdownComponents = {
+  code: MarkdownCode,
+  pre: MarkdownPre,
+};
+
 export function MarkdownRenderer({
   children,
   className = "",
@@ -133,29 +181,13 @@ export function MarkdownRenderer({
     ]);
   }
 
-  // Custom components
-  const components = {
-    // Wrap code blocks with copy button
-    pre({ children, ...props }: any) {
-      const ref = useRef<HTMLPreElement>(null);
-      return (
-        <div className="group relative">
-          <pre ref={ref} {...props}>
-            {children}
-          </pre>
-          <CopyButton getText={() => ref.current?.innerText ?? ""} />
-        </div>
-      );
-    },
-  };
-
   // Use synchronous Markdown - INSTANT rendering (no async delay)
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={rehypePlugins}
-        components={components}
+        components={markdownComponents}
       >
         {children}
       </ReactMarkdown>
