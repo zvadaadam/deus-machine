@@ -231,55 +231,69 @@ pub async fn git_clone(
         let mut callbacks = RemoteCallbacks::new();
         let progress_tracker = last_percent.clone();
 
-        // Credential callback: SSH agent/keys for SSH, credential helper for HTTPS.
-        // Counter prevents infinite auth retry loops (libgit2 retries on failure).
+        // Credential callback: cycles through credential sources on each retry.
+        // libgit2 calls this again when auth fails — we MUST return a different
+        // credential each time, or return Err to stop the loop.
+        //
+        // SSH strategy (one source per attempt):
+        //   0: SSH agent (tries all agent identities internally)
+        //   1: ~/.ssh/id_ed25519
+        //   2: ~/.ssh/id_rsa
+        //   3: ~/.ssh/id_ecdsa
+        //   4+: give up
+        //
+        // HTTPS strategy: credential helper once, then give up (no TTY).
         let auth_attempts = Arc::new(AtomicUsize::new(0));
         callbacks.credentials(move |_url, username_from_url, allowed_types| {
-            let attempts = auth_attempts.fetch_add(1, Ordering::Relaxed);
-            if attempts >= 3 {
-                return Err(git2::Error::from_str(
-                    "Authentication failed after multiple attempts",
-                ));
-            }
-
+            let attempt = auth_attempts.fetch_add(1, Ordering::Relaxed);
             let username = username_from_url.unwrap_or("git");
 
             if allowed_types.contains(CredentialType::SSH_KEY) {
-                // Try SSH agent first (works with macOS Keychain-stored SSH keys)
-                if let Ok(cred) = Cred::ssh_key_from_agent(username) {
-                    return Ok(cred);
-                }
-
-                // Fall back to common SSH key files
                 let home = std::env::var("HOME").unwrap_or_default();
                 let ssh_dir = PathBuf::from(&home).join(".ssh");
+                let key_names = ["id_ed25519", "id_rsa", "id_ecdsa"];
 
-                for key_name in &["id_ed25519", "id_rsa", "id_ecdsa"] {
-                    let private_key = ssh_dir.join(key_name);
-                    let public_key = ssh_dir.join(format!("{}.pub", key_name));
-                    if private_key.exists() {
+                match attempt {
+                    // Attempt 0: SSH agent (iterates all agent identities internally)
+                    0 => Cred::ssh_key_from_agent(username).map_err(|_| {
+                        git2::Error::from_str("SSH agent not available")
+                    }),
+                    // Attempts 1-3: try specific key files in priority order
+                    n @ 1..=3 => {
+                        let key_name = key_names[n - 1];
+                        let private_key = ssh_dir.join(key_name);
+                        if !private_key.exists() {
+                            return Err(git2::Error::from_str(&format!(
+                                "~/.ssh/{} not found",
+                                key_name
+                            )));
+                        }
+                        let public_key = ssh_dir.join(format!("{}.pub", key_name));
                         let pub_path = if public_key.exists() {
                             Some(public_key.as_path())
                         } else {
                             None
                         };
-                        if let Ok(cred) =
-                            Cred::ssh_key(username, pub_path, &private_key, None)
-                        {
-                            return Ok(cred);
-                        }
+                        Cred::ssh_key(username, pub_path, &private_key, None)
                     }
+                    _ => Err(git2::Error::from_str(
+                        "Authentication failed: no valid SSH key found. \
+                         Add your SSH key to ssh-agent or use HTTPS.",
+                    )),
                 }
-
-                Err(git2::Error::from_str(
-                    "No SSH key found. Add an SSH key or use HTTPS.",
-                ))
             } else if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
-                // HTTPS: try system git credential helper (macOS Keychain, etc.)
+                if attempt > 0 {
+                    return Err(git2::Error::from_str(
+                        "Authentication failed. Check your git credentials.",
+                    ));
+                }
                 let config = git2::Config::open_default()
                     .map_err(|_| git2::Error::from_str("Could not open git config"))?;
                 Cred::credential_helper(&config, _url, username_from_url)
             } else if allowed_types.contains(CredentialType::DEFAULT) {
+                if attempt > 0 {
+                    return Err(git2::Error::from_str("Default credentials not accepted"));
+                }
                 Cred::default()
             } else {
                 Err(git2::Error::from_str("Unsupported authentication method"))
@@ -314,10 +328,18 @@ pub async fn git_clone(
                     ("resolving".to_string(), "Almost done...".to_string())
                 };
 
+                // During indexing, received==total so percent is stuck at 100.
+                // Show indexing progress instead so the frontend bar advances.
+                let display_percent = if received >= total && indexed < total {
+                    indexed_pct
+                } else {
+                    percent
+                };
+
                 let _ = app.emit(
                     "git-clone-progress",
                     GitCloneProgress {
-                        percent,
+                        percent: display_percent,
                         received,
                         total,
                         received_bytes,
