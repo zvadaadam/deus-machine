@@ -2,7 +2,7 @@
  * Right Side Panel — narrow sidebar with file tree, sidecar tabs.
  *
  * Diffs and file previews open in the middle panel (side-by-side with chat).
- * This panel stays at fixed width except when browser tab is active.
+ * Panel sizing is managed by react-resizable-panels (parent PanelGroup).
  * PR actions have moved to WorkspaceHeader (unified header bar).
  *
  * Layout: [Content panel (file tree/browser/terminal)] [Sidecar tabs]
@@ -25,40 +25,31 @@ import type { Workspace } from "@/shared/types";
 
 interface RightSidePanelProps {
   workspace: Workspace;
-  /** Current panel width from store — used for flex-1 conditional */
-  rightPanelWidth: number | null;
-  /** Inline style for custom width (browser mode) */
-  rightSideStyle?: React.CSSProperties;
   /** Open a diff in the middle panel */
   onOpenDiffTab: (filePath: string) => void;
   /** Open a file preview in the middle panel */
   onOpenFilePreview: (filePath: string) => void;
   /** Compact mode — narrower panel when diff viewer is active */
   compact?: boolean;
-  /** Custom width for the compact content panel (from resize handle) */
-  compactWidth?: number | null;
-  /** Whether the user is actively dragging the resize handle — disables transitions */
-  isResizing?: boolean;
   /** Whether chat panel is collapsed — drives flex-1 expansion */
   chatPanelCollapsed?: boolean;
   /** Called when a non-code sidecar tab is clicked in compact mode (closes diff) */
   onExitCompactMode?: () => void;
   /** Called when user switches sidecar back to Code (used to restore parked diff layout) */
   onReturnToCode?: () => void;
+  /** Whether file watcher is active — disables polling in useFileChanges */
+  isWatched?: boolean;
 }
 
 export function RightSidePanel({
   workspace,
-  rightPanelWidth,
-  rightSideStyle,
   onOpenDiffTab,
   onOpenFilePreview,
   compact,
-  compactWidth,
-  isResizing,
   chatPanelCollapsed,
   onExitCompactMode,
   onReturnToCode,
+  isWatched = false,
 }: RightSidePanelProps) {
   const {
     rightSideTab,
@@ -89,16 +80,14 @@ export function RightSidePanel({
     [workspace.root_path, workspace.directory_name]
   );
 
-  // File changes query
+  // File changes query — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
     workspace.id,
     workspace.session_status,
-    workspaceGitInfo
+    workspaceGitInfo,
+    isWatched
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
-
-  // Whether outer container has explicit width from parent (user drag or smart default)
-  const hasExplicitWidth = rightSideStyle !== undefined;
 
   // --- Handlers ---
 
@@ -137,52 +126,16 @@ export function RightSidePanel({
     [setRightSideTab, onReturnToCode]
   );
 
-  // Merge inline style with transition override when dragging
-  const outerStyle: React.CSSProperties | undefined = isResizing
-    ? { ...rightSideStyle, transition: "none" }
-    : rightSideStyle;
-
   return (
     <div
       className={cn(
         "flex h-full min-w-0 flex-col",
-        // Smooth width transition when resizing or switching tabs (matches sidebar curve)
-        !compact &&
-          !isResizing &&
-          "transition-[width,min-width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
         !compact && "border-border-subtle border-l",
-        !compact && "min-w-[380px]",
-        // Fill available space when browser active (and not detached) or chat collapsed (no stored width)
-        !compact &&
-          ((rightSideTab === "browser" && !isBrowserDetached) || chatPanelCollapsed) &&
-          rightPanelWidth === null &&
-          "flex-1"
       )}
-      style={outerStyle}
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Content panel: file tree, browser, terminal, config, design */}
-        <div
-          className={cn(
-            "bg-bg-raised flex h-full flex-col overflow-hidden",
-            // Smooth width transition when switching tabs (disabled during drag)
-            !compact &&
-              !isResizing &&
-              "transition-[width,flex] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
-            compact
-              ? compactWidth == null
-                ? "w-[220px]"
-                : undefined
-              : hasExplicitWidth ||
-                  (rightSideTab === "browser" && !isBrowserDetached) ||
-                  chatPanelCollapsed
-                ? "flex-1"
-                : "w-[380px]"
-          )}
-          style={
-            compact && compactWidth != null ? { width: compactWidth, flexShrink: 0 } : undefined
-          }
-        >
+        <div className="bg-bg-raised flex h-full flex-1 flex-col overflow-hidden">
           {/* In compact mode, force code tab content regardless of sidecar selection */}
           {(compact || rightSideTab === "code") && (
             <CodePanelContent

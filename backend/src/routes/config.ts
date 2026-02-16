@@ -5,7 +5,13 @@ import {
   getAgents, saveAgent, deleteAgent,
   getHooks, saveHooks,
 } from '../services/config.service';
-import { ValidationError } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import {
+  SaveMcpServersBody,
+  SaveCommandBody,
+  SaveAgentBody,
+  SaveHooksBody,
+} from '../lib/schemas';
 
 const app = new Hono();
 
@@ -15,8 +21,7 @@ app.get('/config/mcp-servers', (c) => {
 });
 
 app.post('/config/mcp-servers', async (c) => {
-  const { servers } = await c.req.json();
-  if (!Array.isArray(servers)) throw new ValidationError('servers must be an array');
+  const { servers } = parseBody(SaveMcpServersBody, await c.req.json());
   const success = saveMcpServers(servers);
   return c.json({ success, servers });
 });
@@ -27,8 +32,7 @@ app.get('/config/commands', (c) => {
 });
 
 app.post('/config/commands', async (c) => {
-  const { name, content } = await c.req.json();
-  if (!name || !content) throw new ValidationError('name and content are required');
+  const { name, content } = parseBody(SaveCommandBody, await c.req.json());
   const success = saveCommand(name, content);
   return c.json({ success, name, content });
 });
@@ -44,8 +48,7 @@ app.get('/config/agents', (c) => {
 });
 
 app.post('/config/agents', async (c) => {
-  const { id, ...agentData } = await c.req.json();
-  if (!id) throw new ValidationError('id is required');
+  const { id, ...agentData } = parseBody(SaveAgentBody, await c.req.json());
   const success = saveAgent(id, agentData);
   return c.json({ success, id, ...agentData });
 });
@@ -61,8 +64,7 @@ app.get('/config/hooks', (c) => {
 });
 
 app.post('/config/hooks', async (c) => {
-  const { hooks } = await c.req.json();
-  if (!hooks || typeof hooks !== 'object') throw new ValidationError('hooks must be an object');
+  const { hooks } = parseBody(SaveHooksBody, await c.req.json());
   const success = saveHooks(hooks);
   return c.json({ success, hooks });
 });

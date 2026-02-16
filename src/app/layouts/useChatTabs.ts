@@ -183,6 +183,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     });
   }, []);
 
+  const handleTabReorder = useCallback((reorderedTabs: Tab[]) => {
+    setMainTabs(reorderedTabs);
+  }, []);
+
   const openFileTab = useCallback((filePath: string) => {
     const tabId = `file-${filePath}`;
     setMainTabs((prev) => {
@@ -253,6 +257,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     handleTabChange,
     handleTabClose,
     handleTabAdd,
+    handleTabReorder,
     handleTabRestore,
     updateChatTabAgentType,
     markChatTabStarted,

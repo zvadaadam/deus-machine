@@ -46,6 +46,28 @@ export const MessageItem = memo(function MessageItem({
     [message.content, parseContent]
   );
 
+  // Separate image blocks from text/other blocks for grouped rendering (user messages only)
+  // Images render in a horizontal row above the collapsible text content
+  const { imageBlocks, otherBlocks } = useMemo(() => {
+    if (message.role !== "user" || !Array.isArray(contentBlocks)) {
+      return { imageBlocks: [] as ContentBlock[], otherBlocks: contentBlocks };
+    }
+    const images: ContentBlock[] = [];
+    const others: (ContentBlock | string)[] = [];
+    for (const block of contentBlocks as (ContentBlock | string)[]) {
+      if (typeof block === "object" && block?.type === "image") {
+        images.push(block);
+      } else {
+        others.push(block);
+      }
+    }
+    return { imageBlocks: images, otherBlocks: others as ParsedContent };
+  }, [message.role, contentBlocks]);
+
+  const hasTextContent = Array.isArray(otherBlocks)
+    ? (otherBlocks as (ContentBlock | string)[]).length > 0
+    : otherBlocks != null;
+
   // Check if content should be collapsible (user messages only, uses theme constants)
   useEffect(() => {
     if (message.role === "user" && contentRef.current) {
@@ -211,32 +233,46 @@ export const MessageItem = memo(function MessageItem({
           "min-w-0"
         )}
       >
-        {/* Message content */}
-        <div
-          ref={contentRef}
-          id={`message-content-${message.id}`}
-          className={cn(
-            "min-w-0",
-            // Collapse long messages (using theme constant)
-            shouldCollapse && !isExpanded && "relative max-h-[168px] overflow-hidden"
-          )}
-        >
-          {Array.isArray(contentBlocks) ? (
-            renderContentBlocks(contentBlocks as (ContentBlock | string)[])
-          ) : (
-            // Fallback for non-array content
-            <div className={cn("text-sm leading-relaxed", roleStyles.text)}>
-              {typeof contentBlocks === "string"
-                ? contentBlocks
-                : JSON.stringify(contentBlocks, null, 2)}
-            </div>
-          )}
+        {/* Image thumbnails — always visible, not affected by collapse */}
+        {imageBlocks.length > 0 && (
+          <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
+            {imageBlocks.map((block, idx) => (
+              <BlockRenderer
+                key={`${message.id}:img:${idx}`}
+                block={block}
+                index={idx}
+                role="user"
+              />
+            ))}
+          </div>
+        )}
 
-          {/* Fade overlay for collapsed state - matches user message bg-accent */}
-          {shouldCollapse && !isExpanded && (
-            <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
-          )}
-        </div>
+        {/* Text content — collapsible for long messages */}
+        {hasTextContent && (
+          <div
+            ref={contentRef}
+            id={`message-content-${message.id}`}
+            className={cn(
+              "min-w-0",
+              shouldCollapse && !isExpanded && "relative max-h-[168px] overflow-hidden"
+            )}
+          >
+            {Array.isArray(otherBlocks) ? (
+              renderContentBlocks(otherBlocks as (ContentBlock | string)[])
+            ) : (
+              <div className={cn("text-sm leading-relaxed", roleStyles.text)}>
+                {typeof otherBlocks === "string"
+                  ? otherBlocks
+                  : JSON.stringify(otherBlocks, null, 2)}
+              </div>
+            )}
+
+            {/* Fade overlay for collapsed state - matches user message bg-accent */}
+            {shouldCollapse && !isExpanded && (
+              <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
+            )}
+          </div>
+        )}
 
         {/* Show more/less button */}
         {shouldCollapse && (

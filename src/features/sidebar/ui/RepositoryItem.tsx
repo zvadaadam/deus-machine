@@ -1,12 +1,12 @@
-import { Plus, Ellipsis } from "lucide-react";
+import { Plus, Ellipsis, ChevronRight } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
 import { getCleanRepoName } from "../lib/utils";
 import { sortByStatusPriority } from "../lib/status";
 import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
-import { DragHandle } from "./DragHandle";
 import { RepoAvatar } from "./RepoAvatar";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 
@@ -31,7 +31,6 @@ export function RepositoryItem({
   onArchive,
   diffStatsMap,
   sidebarExpanded,
-  dragHandleProps,
 }: RepositoryItemProps) {
   const repoName = getCleanRepoName(repository.repo_name);
 
@@ -41,84 +40,108 @@ export function RepositoryItem({
         data-state={isCollapsed ? "closed" : "open"}
         className="group/repository-item relative"
       >
-        {dragHandleProps && <DragHandle {...dragHandleProps} />}
-        <SidebarRow variant="repo">
-          <SidebarRowMain className="gap-2">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Toggle ${repoName} workspaces`}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-              >
-                <RepoAvatar repoName={repository.repo_name} />
-                <span className="text-text-secondary truncate text-sm font-medium">{repoName}</span>
-              </button>
-            </CollapsibleTrigger>
-          </SidebarRowMain>
-          {sidebarExpanded && (
-            <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100">
-              <button
-                type="button"
-                aria-label={`New workspace in ${repoName}`}
-                onClick={() => onNewWorkspace(repository.repo_id)}
-                className="text-text-muted hover:text-text-tertiary"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="More options"
-                className="text-text-muted hover:text-text-tertiary"
-              >
-                <Ellipsis className="h-4 w-4" />
-              </button>
-            </SidebarRowRight>
-          )}
-        </SidebarRow>
+        <CollapsibleTrigger asChild>
+          <SidebarRow variant="repo" role="button" aria-label={`Toggle ${repoName} workspaces`}>
+            <SidebarRowMain className="gap-2">
+              <RepoAvatar repoName={repository.repo_name} />
+              <span className="text-text-secondary truncate text-sm font-medium">{repoName}</span>
+              <ChevronRight
+                className={cn(
+                  "text-text-muted h-3.5 w-3.5 flex-shrink-0",
+                  "opacity-0 transition-all duration-200 group-hover/repository-item:opacity-100",
+                  !isCollapsed && "rotate-90"
+                )}
+              />
+            </SidebarRowMain>
+            {sidebarExpanded && (
+              <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-hover/repository-item:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`New workspace in ${repoName}`}
+                  onClick={(e) => { e.stopPropagation(); onNewWorkspace(repository.repo_id); }}
+                  className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="More options"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
+                >
+                  <Ellipsis className="h-4 w-4" />
+                </button>
+              </SidebarRowRight>
+            )}
+          </SidebarRow>
+        </CollapsibleTrigger>
       </SidebarMenuItem>
-      <CollapsibleContent>
-        <ul className="flex min-w-0 flex-col">
-          {sidebarExpanded &&
-            (() => {
-              const sortedWorkspaces = sortByStatusPriority(
-                repository.workspaces.filter((w) => w.state !== "archived")
-              );
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.ul
+            key="workspace-list"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
+            className="flex min-w-0 flex-col overflow-hidden"
+          >
+            {sidebarExpanded &&
+              (() => {
+                const sortedWorkspaces = sortByStatusPriority(
+                  repository.workspaces.filter((w) => w.state !== "archived")
+                );
 
-              return (
-                <>
-                  <li>
-                    <SidebarRow
-                      variant="action"
-                      asChild
-                      onClick={() => onNewWorkspace(repository.repo_id)}
-                      className="text-text-tertiary hover:text-text-secondary w-full text-left text-[13px]"
+                return (
+                  <>
+                    <motion.li
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1], delay: 0.03 }}
                     >
-                      <button type="button">
-                        <SidebarRowMain>
-                          <SidebarRowIconSlot>
-                            <Plus className="h-4 w-4" />
-                          </SidebarRowIconSlot>
-                          <span className="font-normal">New workspace</span>
-                        </SidebarRowMain>
-                      </button>
-                    </SidebarRow>
-                  </li>
+                      <SidebarRow
+                        variant="action"
+                        asChild
+                        onClick={() => onNewWorkspace(repository.repo_id)}
+                        className="text-text-tertiary hover:text-text-secondary w-full text-left text-[13px]"
+                      >
+                        <button type="button">
+                          <SidebarRowMain>
+                            <SidebarRowIconSlot>
+                              <Plus className="h-4 w-4" />
+                            </SidebarRowIconSlot>
+                            <span className="font-normal">New workspace</span>
+                          </SidebarRowMain>
+                        </button>
+                      </SidebarRow>
+                    </motion.li>
 
-                  {sortedWorkspaces.map((workspace) => (
-                    <WorkspaceItem
-                      key={workspace.id}
-                      workspace={workspace}
-                      isActive={workspace.id === selectedWorkspaceId}
-                      diffStats={diffStatsMap?.[workspace.id]}
-                      onClick={onWorkspaceClick}
-                      onArchive={onArchive}
-                    />
-                  ))}
-                </>
-              );
-            })()}
-        </ul>
-      </CollapsibleContent>
+                    {sortedWorkspaces.map((workspace, index) => (
+                      <motion.li
+                        key={workspace.id}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.18,
+                          ease: [0.165, 0.84, 0.44, 1],
+                          delay: Math.min(0.05 + index * 0.025, 0.12),
+                        }}
+                      >
+                        <WorkspaceItem
+                          workspace={workspace}
+                          isActive={workspace.id === selectedWorkspaceId}
+                          diffStats={diffStatsMap?.[workspace.id]}
+                          onClick={onWorkspaceClick}
+                          onArchive={onArchive}
+                        />
+                      </motion.li>
+                    ))}
+                  </>
+                );
+              })()}
+          </motion.ul>
+        )}
+      </AnimatePresence>
     </Collapsible>
   );
 }

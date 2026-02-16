@@ -69,9 +69,7 @@
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",
-    "sql:default",
-    "sql:allow-execute",
-    "sql:allow-select",
-    "deep-link:default"
+    "deep-link:default",
+    "window-state:default"
   ]
 }

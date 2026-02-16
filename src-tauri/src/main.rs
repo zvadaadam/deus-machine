@@ -11,6 +11,7 @@ use hive_lib::{
     pty::PtyManager,
     sidecar::SidecarManager,
     socket::SocketManager,
+    watcher::WatcherManager,
 };
 
 fn main() {
@@ -19,17 +20,30 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        // Persist window size/position/maximize/fullscreen across sessions.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(BackendManager::new())
         .manage(BrowserManager::new())
         .manage(DbManager::new())
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
+        .manage(WatcherManager::new())
         .setup(|app| {
+            let setup_start = std::time::Instant::now();
+
             // Set app handle for PTY manager so it can emit events
             let pty_manager: tauri::State<PtyManager> = app.state();
             pty_manager.set_app_handle(app.handle().clone());
@@ -39,6 +53,12 @@ fn main() {
             socket_manager.set_app_handle(app.handle().clone());
             socket_manager.start_event_listener();
             println!("[TAURI] ✅ Socket event listener started");
+
+            // Set app handle for Watcher manager so it can emit fs:changed events
+            let watcher_manager: tauri::State<WatcherManager> = app.state();
+            watcher_manager.set_app_handle(app.handle().clone());
+            watcher_manager.start_debounce_thread();
+            println!("[TAURI] ✅ File watcher manager initialized");
 
             // Compute database path early — both backend and sidecar need it
             let db_dir = app.path().app_data_dir()
@@ -161,6 +181,7 @@ fn main() {
                 }
             }
 
+            println!("[TAURI] ✅ Setup complete in {}ms", setup_start.elapsed().as_millis());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -180,6 +201,9 @@ fn main() {
 
                     let browser_manager: tauri::State<BrowserManager> = window.state();
                     browser_manager.stop().ok();
+
+                    let watcher_manager: tauri::State<WatcherManager> = window.state();
+                    watcher_manager.unwatch_all();
                 }
             }
         })
@@ -204,6 +228,7 @@ fn main() {
             commands::is_browser_running,
             commands::read_text_file,
             commands::scan_workspace_files,
+            commands::fuzzy_file_search,
             commands::invalidate_file_cache,
             commands::clear_file_cache,
             commands::git_clone,
@@ -236,6 +261,10 @@ fn main() {
             commands::db_get_stats,
             commands::db_get_session,
             commands::db_get_messages,
+            commands::watch_workspace,
+            commands::unwatch_workspace,
+            commands::is_workspace_watched,
+            commands::list_watched_workspaces,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

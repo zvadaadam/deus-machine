@@ -37,6 +37,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     handleTabChange,
     handleTabClose,
     handleTabAdd,
+    handleTabReorder,
     handleTabRestore,
     updateChatTabAgentType,
     markChatTabStarted,
@@ -60,6 +61,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         onTabChange={handleTabChange}
         onTabClose={handleTabClose}
         onTabAdd={handleTabAdd}
+        onTabReorder={handleTabReorder}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
         onCollapseChatPanel={onCollapseChatPanel}

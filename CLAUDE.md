@@ -10,7 +10,31 @@ We treat AI chat as a first-class citizen here, code it secondary.
 
 Desktop app built with Tauri (Rust) + React frontend + Node.js backend.
 
+**Package manager: Bun.** Always use `bun` for installing dependencies (`bun add`, `bun install`), running scripts (`bun run`), and executing tools (`bunx`). Never use `npm` or `yarn` — CI runs `bun install --frozen-lockfile` and will fail if `bun.lock` is out of sync.
+
 **Desktop-only:** We only target the Tauri desktop app. Do not write web-specific fallbacks, browser-mode polling, or `isTauriEnv` conditionals for feature parity. The HTTP/Node.js backend exists as a service layer — not as a standalone web app. Tauri IPC and events are the primary data transport.
+
+### ts-pattern (Pattern Matching)
+
+Use `ts-pattern` for switch/case and if/else chains on discriminated unions. Prefer `.exhaustive()` to catch missing cases at compile time.
+
+```tsx
+import { match, P } from "ts-pattern";
+
+// Discriminated union dispatch
+return match(block)
+  .with({ type: "text" }, (b) => <TextBlock block={b} />)
+  .with({ type: "tool_use" }, (b) => <ToolUseBlock block={b} />)
+  .with({ type: "thinking" }, (b) => <ThinkingBlock block={b} />)
+  .otherwise(() => null);
+
+// .exhaustive() — all cases MUST be handled (no default/fallback)
+// .otherwise() — intentional fallback for open-ended matching
+// P.union("a", "b") — match multiple values
+// P.when(pred) — guard conditions
+```
+
+**When to use:** Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields.
 
 ## System Architecture
 
@@ -112,30 +136,14 @@ Frontend → HTTP REST → Node.js → SQLite                ← writes + orches
 ## Rust Backend Structure (src-tauri/)
 
 ```
-src-tauri/
-├── src/
-│   ├── main.rs              App init, plugin registration, lifecycle hooks
-│   ├── lib.rs               Module exports
-│   ├── commands/
-│   │   ├── mod.rs           Re-exports all command modules
-│   │   ├── pty.rs           Terminal: spawn, resize, write, kill
-│   │   ├── socket.rs        Sidecar: connect, send, receive, disconnect
-│   │   ├── backend.rs       Backend port discovery
-│   │   ├── browser.rs       Dev-browser: start, stop, port, auth, status
-│   │   ├── apps.rs          App detection: get_installed_apps, open_in_app
-│   │   ├── files.rs         File scanning: scan, invalidate_cache, clear_cache
-│   │   └── git.rs           Git Tauri commands (diff, status, branch, content)
-│   ├── backend.rs           Node.js backend process manager
-│   ├── browser.rs           Dev-browser process manager
-│   ├── sidecar.rs           Sidecar process manager (spawns Node.js sidecar)
-│   ├── pty.rs               PTY session manager
-│   ├── socket.rs            Unix socket client (sidecar IPC relay)
-│   ├── files.rs             File scanner with 30s cache
-│   └── git.rs               Core git operations via libgit2
-└── resources/
-    └── bin/
-        └── index.bundled.cjs  Sidecar bundle (built from sidecar/)
+src-tauri/src/
+├── main.rs           App init, plugin registration, lifecycle hooks
+├── lib.rs            Module exports
+├── commands/         Tauri IPC command handlers (one per domain — thin wrappers over core modules)
+└── *.rs              Core managers: process lifecycle, I/O, git, DB reads, file watching, PTY, socket relay
 ```
+
+Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core module** (`src/{domain}.rs`) with the logic, and a **command module** (`src/commands/{domain}.rs`) that exposes it as Tauri IPC commands. The sidecar bundle lives at `src-tauri/resources/bin/index.bundled.cjs`.
 
 ### Git Diff Semantics (src-tauri/src/git.rs)
 
@@ -148,30 +156,15 @@ src-tauri/
 
 ```
 backend/src/
-├── app.ts               Hono app factory, mounts all routes under /api
-├── server.ts            Entry point, starts Hono via @hono/node-server
-├── lib/
-│   ├── database.ts      SQLite connection (better-sqlite3)
-│   ├── errors.ts        AppError, NotFoundError, ValidationError, ConflictError
-│   └── message-sanitizer.ts  JSON message safety for Claude responses
-├── middleware/
-│   ├── error-handler.ts Global error → JSON response mapper
-│   └── workspace-loader.ts  Loads workspace by :id, sets path on context
-├── services/
-│   ├── claude.service.ts  Tool permission checking (canUseTool)
-│   ├── git.service.ts     Git utilities (web-mode fallback, workspace creation)
-│   ├── config.service.ts  File-based config (~/.hive/)
-│   ├── settings.service.ts  SQLite key-value settings
-│   └── workspace.service.ts  City name generator for workspaces
-└── routes/
-    ├── workspaces.ts    CRUD + diff endpoints (diff routes use Rust in desktop)
-    ├── sessions.ts      Session CRUD + user message saving
-    ├── repos.ts         Repository management
-    ├── config.ts        MCP servers, commands, agents, hooks CRUD
-    ├── settings.ts      Key-value settings
-    ├── stats.ts         System statistics
-    └── health.ts        Health check + port discovery
+├── app.ts            Hono app factory, mounts all routes under /api
+├── server.ts         Entry point, starts Hono via @hono/node-server
+├── lib/              Database connection, error types, sanitizers
+├── middleware/        Error handler, workspace loader
+├── services/         Business logic (git, config, settings, workspace naming)
+└── routes/           REST endpoints (workspaces, sessions, repos, config, settings, stats, health)
 ```
+
+Pattern: each route file maps to a REST resource. Services contain reusable business logic. Middleware loads context (workspace by `:id`) and maps errors to JSON responses.
 
 ## Sidecar Structure (sidecar/)
 
@@ -183,31 +176,14 @@ The sidecar runs as a separate Node.js process, managed by Rust. It handles Clau
 
 ```
 sidecar/
-├── index.ts             Entry point, JSON-RPC server over Unix socket
-├── build.ts             esbuild config → outputs to src-tauri/resources/bin/
-├── vitest.config.ts     Test configuration
-├── package.json         Sidecar-specific dependencies
-├── rpc-connection.ts    Bidirectional JSON-RPC 2.0 peer over Unix socket
-├── frontend-client.ts   FrontendClient: typed notifications → Rust → Tauri events
-├── protocol.ts          Shared message type definitions
-├── agents/
-│   ├── agent-handler.ts   Abstract agent handler interface + registry
-│   ├── env-builder.ts     Shell environment builder for agent processes
-│   ├── shell-env.ts       Host shell environment detection
-│   ├── hive-tools.ts      Hive MCP tools (AskUser, Diff, Terminal, etc.)
-│   └── claude/
-│       ├── claude-handler.ts    Claude Agent SDK integration
-│       ├── claude-discovery.ts  Claude CLI executable discovery
-│       ├── claude-sdk-options.ts SDK query options builder
-│       ├── claude-session.ts    Session state management
-│       ├── claude-models.ts     Model configuration
-│       └── checkpoint.ts        Git checkpoint creation
-├── db/
-│   ├── index.ts         SQLite connection (better-sqlite3, WAL mode)
-│   ├── session-writer.ts  saveAssistantMessage, updateSessionStatus
-│   └── message-sanitizer.ts  JSON safety for Claude responses
-└── test/
-    └── ...              Unit tests for each module
+├── index.ts              Entry point, JSON-RPC server over Unix socket
+├── rpc-connection.ts     Bidirectional JSON-RPC 2.0 peer
+├── frontend-client.ts    Typed notifications → Rust → Tauri events
+├── protocol.ts           Shared message type definitions
+├── agents/               Agent handler interface + Claude SDK integration
+│   └── claude/           Claude-specific: discovery, session, models, SDK options
+├── db/                   Direct SQLite writes (assistant messages, session status)
+└── test/                 Unit tests
 ```
 
 ### Key Bun Scripts
@@ -762,10 +738,26 @@ src/components/ui/              ← Shadcn base primitives only
 - Do not animate blur values higher than 20px.
 - Use `will-change` to optimize your animation, but use it only for: `transform`, `opacity`, `clipPath`, `filter`.
 
-### Animation Strategy: CSS-First
+### Animation Strategy: CSS + Framer Motion Hybrid
 
-- **Primary approach:** CSS/Tailwind animations and transitions. The codebase uses `@keyframes` in `global.css` and Tailwind's built-in animation utilities.
-- **Framer Motion:** Available but use sparingly — only when CSS can't handle the interaction (gesture-driven animations, layout animations, shared element transitions). Most animations should be pure CSS.
+**CSS/Tailwind** — use for:
+- Hover/focus transitions (`transition-colors duration-200 ease`)
+- Infinite loops (spinners, shimmers, loading indicators)
+- Tooltip/popover enter/exit
+- Simple opacity/transform keyframes that don't need mount/unmount awareness
+
+**Framer Motion** (`motion`, `AnimatePresence`) — use for:
+- **Presence animations**: mount/unmount transitions (`AnimatePresence` + `initial`/`animate`/`exit`)
+- **Layout animations**: items shifting position after reorder or sibling changes (`layout` prop)
+- **Staggered lists**: children animating in sequence (`staggerChildren` in variants)
+- **Height auto**: expanding/collapsing containers to `height: "auto"` (CSS can't animate to `auto`)
+
+**Rules:**
+- Co-locate animation config with the component, not in `global.css`
+- Keep `global.css` for design tokens, complex effects Tailwind can't do, and truly global styles
+- Never define a `@keyframes` in global.css for a single component — use Framer Motion inline
+- Reuse transition configs: `{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }` (ease-out-quart)
+- Always wrap conditional renders in `AnimatePresence` when exit animations are needed
 
 ## Testing
 
