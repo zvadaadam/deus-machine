@@ -58,6 +58,22 @@ export function detectDefaultBranch(root_path: string): string {
   return 'main';
 }
 
+/**
+ * Resolve the best parent branch ref for diff comparisons.
+ *
+ * ─── ARCHITECTURE DECISION: Remote-first, ALWAYS ──────────────────
+ * We ALWAYS prefer origin/<branch> over local <branch>. This is NOT
+ * a fallback strategy — it's the intended behavior:
+ *
+ *   1. Workspace creation fetches origin/<parent> and branches from it
+ *      (see routes/workspaces.ts — POST /workspaces)
+ *   2. Diffs show "what changed in this workspace vs upstream"
+ *   3. PRs target the remote branch, so diffs match what the PR shows
+ *
+ * The Rust equivalent lives in src-tauri/src/git.rs::resolve_parent_branch.
+ * Both MUST stay in sync — same candidate order, same remote-first logic.
+ * ──────────────────────────────────────────────────────────────────
+ */
 export function resolveParentBranch(
   workspacePath: string,
   parentBranch: string | null,
@@ -71,7 +87,7 @@ export function resolveParentBranch(
 
   const candidates = [parentBranch, defaultBranch, 'main', 'master', 'develop'].filter(Boolean) as string[];
 
-  // Try remote branches first
+  // Try remote branches first — this is intentional, see docstring above
   for (const branch of candidates) {
     const ref = branch.startsWith('origin/') ? branch : `origin/${branch}`;
     try {

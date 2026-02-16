@@ -235,6 +235,8 @@ fn main() {
             commands::git_diff_stats,
             commands::git_diff_files,
             commands::git_diff_file,
+            commands::git_uncommitted_files,
+            commands::git_last_turn_files,
             commands::git_detect_default_branch,
             commands::git_list_branches,
             commands::create_browser_webview,
