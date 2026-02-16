@@ -12,6 +12,9 @@ interface UIState {
   showNewWorkspaceModal: boolean;
   showSystemPromptModal: boolean;
 
+  // Command palette
+  commandPaletteOpen: boolean;
+
   // Settings view (full-page, not a modal)
   settingsOpen: boolean;
   activeSettingsSection: SettingsSection;
@@ -21,6 +24,11 @@ interface UIState {
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
+
+  // Actions - Command palette
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
+  toggleCommandPalette: () => void;
 
   // Actions - Settings view
   openSettings: () => void;
@@ -40,6 +48,7 @@ export const useUIStore = create<UIState>()(
       // Initial state
       showNewWorkspaceModal: false,
       showSystemPromptModal: false,
+      commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
 
@@ -55,6 +64,20 @@ export const useUIStore = create<UIState>()(
 
       closeSystemPromptModal: () =>
         set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
+
+      // Command palette actions
+      openCommandPalette: () =>
+        set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
+
+      closeCommandPalette: () =>
+        set({ commandPaletteOpen: false }, false, "ui/closeCommandPalette"),
+
+      toggleCommandPalette: () =>
+        set(
+          (state) => ({ commandPaletteOpen: !state.commandPaletteOpen }),
+          false,
+          "ui/toggleCommandPalette"
+        ),
 
       // Settings view actions
       openSettings: () => set({ settingsOpen: true }, false, "ui/openSettings"),
@@ -73,6 +96,7 @@ export const useUIStore = create<UIState>()(
           {
             showNewWorkspaceModal: false,
             showSystemPromptModal: false,
+            commandPaletteOpen: false,
             settingsOpen: false,
           },
           false,
@@ -102,6 +126,11 @@ export const uiActions = {
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
   openSettings: () => useUIStore.getState().openSettings(),
   closeSettings: () => useUIStore.getState().closeSettings(),
+  openCommandPalette: () => useUIStore.getState().openCommandPalette(),
+  closeCommandPalette: () => useUIStore.getState().closeCommandPalette(),
+  toggleCommandPalette: () => useUIStore.getState().toggleCommandPalette(),
+  setActiveSettingsSection: (section: SettingsSection) =>
+    useUIStore.getState().setActiveSettingsSection(section),
   openSettingsModal: () => useUIStore.getState().openSettings(),
   closeSettingsModal: () => useUIStore.getState().closeSettings(),
   closeAllModals: () => useUIStore.getState().closeAllModals(),

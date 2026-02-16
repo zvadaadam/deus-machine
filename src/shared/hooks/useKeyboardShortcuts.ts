@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { uiActions } from "@/shared/stores/uiStore";
 import type { Workspace } from "@/shared/types";
 
 interface UseKeyboardShortcutsOptions {
@@ -20,6 +21,13 @@ export function useKeyboardShortcuts({
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     async function handleKeyDown(e: KeyboardEvent) {
+      // ⌘K or Ctrl+K - Toggle command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        uiActions.toggleCommandPalette();
+        return;
+      }
+
       // ⌘R or Ctrl+R - Refresh workspace data
       if ((e.metaKey || e.ctrlKey) && e.key === "r") {
         e.preventDefault();
