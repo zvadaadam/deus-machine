@@ -144,52 +144,17 @@
   --radius-sm: calc(var(--radius) - 4px);
 
   /* Animations - Choreographed timing: content exits fast, container follows smooth */
-  --animate-accordion-down: accordion-down 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
-  --animate-accordion-up: accordion-up 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
   --animate-fade-in: fadeIn 0.2s cubic-bezier(0, 0, 0.2, 1);
   --animate-fade-in-up: fadeInUp 0.25s cubic-bezier(0, 0, 0.2, 1);
-  --animate-fade-in-down: fadeInDown 0.25s cubic-bezier(0, 0, 0.2, 1);
-  --animate-slide-in-right: slideInRight 0.25s cubic-bezier(0, 0, 0.2, 1);
-  --animate-slide-in-left: slideInLeft 0.25s cubic-bezier(0, 0, 0.2, 1);
-  --animate-scale-in: scaleIn 0.25s cubic-bezier(0, 0, 0.2, 1);
   --animate-shimmer: shimmer 2s ease-in-out infinite;
   --animate-subtle-spin: subtle-spin 2s linear infinite;
-  --animate-breathing-glow: breathing-glow 2.5s ease-in-out infinite;
-  --animate-gentle-pulse: gentle-pulse 0.6s ease infinite;
+  --animate-drop-overlay-enter: drop-overlay-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 /* Custom typography utilities for sizes not in Tailwind's default scale */
 .text-2xs {
   font-size: 10px;
   line-height: 1.4;
-}
-
-/* GPU-accelerated accordion: use transform + opacity instead of height */
-/* Height animations cause layout recalculation every frame - very expensive */
-@keyframes accordion-down {
-  from {
-    height: 0;
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    height: var(--radix-accordion-content-height);
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes accordion-up {
-  from {
-    height: var(--radix-accordion-content-height);
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    height: 0;
-    opacity: 0;
-    transform: translateY(-4px);
-  }
 }
 
 @keyframes tooltip-enter {
@@ -236,59 +201,6 @@
   }
 }
 
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInFromRight {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @keyframes shimmer {
   0%,
   100% {
@@ -306,28 +218,6 @@
   }
   to {
     transform: rotate(360deg);
-  }
-}
-
-/* Breathing glow for working badges - gentle pulse like heartbeat */
-@keyframes breathing-glow {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-/* Gentle pulse for working indicators - subtle breathing effect */
-@keyframes gentle-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
   }
 }
 
@@ -371,19 +261,6 @@
  *   --pixel-glow-blur    : box-shadow blur radius (default 4px)
  *   --pixel-glow-spread  : box-shadow spread (default 1px)
  */
-@keyframes pixel-wave {
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  50% {
-    opacity: var(--pixel-peak-opacity, 1);
-    transform: scale(1);
-    box-shadow: 0 0 var(--pixel-glow-blur, 4px) var(--pixel-glow-spread, 1px) var(--pixel-glow);
-  }
-}
-
 @keyframes pixel-pulse {
   0%,
   100% {
@@ -425,52 +302,15 @@
   }
 }
 
-/* === Chat message entrance animations === */
-/* Assistant turn: fast, barely-there fade. The container shouldn't announce
-   itself — content blocks inside carry the expression (Cursor pattern). */
-@keyframes chat-message-enter {
+/* Full-panel drop overlay — fade + subtle scale for the drop zone */
+@keyframes drop-overlay-enter {
   from {
     opacity: 0;
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
-  }
-}
-
-/* User message: gentle rightward origin — acknowledgement, not a stage entrance.
-   4px is enough to hint at direction without being theatrical. */
-@keyframes chat-user-enter {
-  from {
-    opacity: 0;
-    transform: translateX(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* Individual content block fade-in (indicators, expanded sections) */
-@keyframes chat-block-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Content block entrance — tool calls, code blocks slide in like Cursor.
-   Short translateY(4px) + opacity gives directional hint without being dramatic.
-   Elastic curve (0.16, 1, 0.3, 1) adds subtle spring — matches Cursor's content-appear. */
-@keyframes chat-content-appear {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
@@ -1678,19 +1518,6 @@ diffs-container.diffs-theme-compact {
   margin-top: 8px;
 }
 
-/* Collapsible sidebar animation - GPU-accelerated (uses keyframes defined at top of file) */
-[data-radix-collapsible-content] {
-  overflow: hidden;
-}
-
-[data-radix-collapsible-content][data-state="open"] {
-  animation: accordion-down 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
-}
-
-[data-radix-collapsible-content][data-state="closed"] {
-  animation: accordion-up 0.18s cubic-bezier(0.165, 0.84, 0.44, 1);
-}
-
 /* ============================================
    Markdown Content Styles - Jony Ive Philosophy
    "Simplicity is about subtracting the obvious"
@@ -1901,7 +1728,7 @@ diffs-container.diffs-theme-compact {
   padding: 0;
   border-radius: 0;
   font-size: inherit;
-  color: color-mix(in oklch, var(--foreground) 88%, transparent); /* Softer */
+  color: var(--foreground);
 }
 
 /* Tables - Compact */

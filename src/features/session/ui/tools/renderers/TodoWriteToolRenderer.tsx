@@ -8,6 +8,7 @@
  * AFTER: ~120 LOC
  */
 
+import { match } from "ts-pattern";
 import { ListChecks, Circle, Loader2, CheckCircle2 } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
@@ -52,28 +53,22 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
     {} as Record<string, number>
   );
 
-  // Get status icon and color
-  const getStatusIcon = (status: Todo["status"]) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircle2 className="text-success h-4 w-4" aria-hidden="true" />;
-      case "in_progress":
-        return <Loader2 className="text-info h-4 w-4 animate-spin" aria-hidden="true" />;
-      case "pending":
-        return <Circle className="text-muted-foreground h-4 w-4" aria-hidden="true" />;
-    }
-  };
-
-  const getStatusColor = (status: Todo["status"]) => {
-    switch (status) {
-      case "completed":
-        return "text-success";
-      case "in_progress":
-        return "text-info";
-      case "pending":
-        return "text-muted-foreground";
-    }
-  };
+  // Status icon and color — single source of truth per status
+  const getStatusConfig = (status: Todo["status"]) =>
+    match(status)
+      .with("completed", () => ({
+        icon: <CheckCircle2 className="text-success h-4 w-4" aria-hidden="true" />,
+        color: "text-success" as const,
+      }))
+      .with("in_progress", () => ({
+        icon: <Loader2 className="text-info h-4 w-4 animate-spin" aria-hidden="true" />,
+        color: "text-info" as const,
+      }))
+      .with("pending", () => ({
+        icon: <Circle className="text-muted-foreground h-4 w-4" aria-hidden="true" />,
+        color: "text-muted-foreground" as const,
+      }))
+      .exhaustive();
 
   return (
     <BaseToolRenderer
@@ -105,7 +100,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
               )}
             >
               {/* Status icon */}
-              <div className="mt-0.5 flex-shrink-0">{getStatusIcon(todo.status)}</div>
+              <div className="mt-0.5 flex-shrink-0">{getStatusConfig(todo.status).icon}</div>
 
               {/* Todo content */}
               <div className="min-w-0 flex-1">
@@ -113,7 +108,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
                   className={cn(
                     "text-sm font-medium",
                     todo.status === "completed" && "line-through",
-                    getStatusColor(todo.status)
+                    getStatusConfig(todo.status).color
                   )}
                 >
                   {todo.status === "in_progress" ? todo.activeForm : todo.content}

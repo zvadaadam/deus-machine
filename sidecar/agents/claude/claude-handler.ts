@@ -461,9 +461,24 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           if (asyncIterableTerminated) break;
 
+          // Content can be plain text or a JSON-stringified content blocks array
+          // (when user attaches images). Parse to pass as MessageParam.content array
+          // so the SDK sends image blocks to Claude's vision API.
+          let content: string | unknown[] = message as string;
+          if (message && message.startsWith("[")) {
+            try {
+              const parsed = JSON.parse(message);
+              if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
+                content = parsed;
+              }
+            } catch {
+              // Not valid JSON — keep as plain text string
+            }
+          }
+
           yield {
             type: "user" as const,
-            message: { role: "user" as const, content: message },
+            message: { role: "user" as const, content },
             parent_tool_use_id: null,
             session_id: sessionId,
           };

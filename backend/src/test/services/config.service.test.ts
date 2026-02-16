@@ -112,7 +112,7 @@ describe('getCommands', () => {
     mockFs.readdirSync.mockReturnValue(['build.md', 'deploy.md', 'readme.txt'] as any);
     mockFs.readFileSync.mockImplementation((filePath: any) => {
       if (typeof filePath === 'string' && filePath.includes('build.md')) {
-        return '# Build Project\nnpm run build';
+        return '# Build Project\nbun run build';
       }
       if (typeof filePath === 'string' && filePath.includes('deploy.md')) {
         return '# Deploy\nkubectl apply';
@@ -125,7 +125,7 @@ describe('getCommands', () => {
     expect(commands).toHaveLength(2);
     expect(commands[0].name).toBe('build');
     expect(commands[0].description).toBe('Build Project');
-    expect(commands[0].content).toContain('npm run build');
+    expect(commands[0].content).toContain('bun run build');
     expect(commands[1].name).toBe('deploy');
   });
 
@@ -138,11 +138,11 @@ describe('getCommands', () => {
 
 describe('saveCommand', () => {
   it('calls writeFileSync with correct path', () => {
-    const result = saveCommand('build', '# Build\nnpm run build');
+    const result = saveCommand('build', '# Build\nbun run build');
     expect(result).toBe(true);
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       path.join(COMMANDS_DIR, 'build.md'),
-      '# Build\nnpm run build',
+      '# Build\nbun run build',
     );
   });
 });

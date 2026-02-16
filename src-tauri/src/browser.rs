@@ -35,8 +35,8 @@ impl BrowserManager {
 
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
-        // Run npm run start:http with PORT=0 for dynamic port allocation
-        let mut child = Command::new("npm")
+        // Run bun run start:http with PORT=0 for dynamic port allocation
+        let mut child = Command::new("bun")
             .arg("run")
             .arg("start:http")
             .env("PORT", "0")  // Use port 0 for dynamic allocation (avoids conflicts)
@@ -151,13 +151,19 @@ impl BrowserManager {
         let mut lock = self.process.lock().unwrap();
         if let Some(child) = lock.as_mut() {
             match child.try_wait() {
-                Ok(Some(_status)) => {
-                    // Process exited; clear handle
+                Ok(Some(status)) => {
+                    eprintln!("[BROWSER] Process exited unexpectedly (exit: {})", status);
                     *lock = None;
                     false
                 }
                 Ok(None) => true,  // Still running
-                Err(_) => false,   // Error checking status
+                Err(e) => {
+                    eprintln!("[BROWSER] Failed to check process status: {}", e);
+                    *lock = None;
+                    *self.port.lock().unwrap() = None;
+                    *self.auth_token.lock().unwrap() = None;
+                    false
+                }
             }
         } else {
             false
@@ -171,8 +177,10 @@ impl BrowserManager {
         if let Some(mut child) = process.take() {
             println!("[BROWSER] Stopping browser server (PID: {})", child.id());
             child.kill().context("Failed to kill browser server process")?;
-            child.wait().ok();
-            println!("[BROWSER] Browser server stopped");
+            match child.wait() {
+                Ok(status) => println!("[BROWSER] Browser server stopped (exit: {})", status),
+                Err(e) => eprintln!("[BROWSER] Browser server stopped (wait error: {})", e),
+            }
         }
 
         // Clear port and token

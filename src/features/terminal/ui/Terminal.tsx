@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Terminal as XTerm } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import { WebLinksAddon } from "xterm-addon-web-links";
+import { Terminal as XTerm } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { listen } from "@tauri-apps/api/event";
 import { ptyCommands, isTauriEnv } from "@/platform";
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
 
 interface TerminalProps {
@@ -120,7 +120,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
 
     if (!isTauriEnv) {
       xterm.write(
-        "\r\n  \x1b[90mTerminal requires the desktop app. Run \x1b[36mnpm run tauri:dev\x1b[90m to enable.\x1b[0m\r\n"
+        "\r\n  \x1b[90mTerminal requires the desktop app. Run \x1b[36mbun run dev\x1b[90m to enable.\x1b[0m\r\n"
       );
       return () => {
         xterm.dispose();

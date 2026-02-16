@@ -328,7 +328,10 @@ export function BrowserPanel({
   useEffect(() => {
     if (!devBrowserStatus.running && !devBrowserStatus.error) {
       startServer().catch((err) => {
-        console.error("Failed to auto-start dev-browser:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes("VITE_DEV_BROWSER_PATH")) {
+          console.error("Failed to auto-start dev-browser:", err);
+        }
       });
     }
   }, [devBrowserStatus.running, devBrowserStatus.error, startServer]);

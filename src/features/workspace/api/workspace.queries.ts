@@ -47,28 +47,27 @@ export function useStats() {
 
 /**
  * Fetch diff stats for a specific workspace
- * Conditionally polls only when workspace is actively working
+ * Conditionally polls only when workspace is actively working.
  *
- * NOTE: Polling is kept even on desktop because:
- * - No events implemented for git diff changes (would require file watching)
- * - Diff stats badges need updates when Claude edits files
- * - Polling only happens when workspace is actively working (96-100% reduction)
- * - Future: Implement file system events to eliminate polling on desktop
+ * When `isWatched` is true (file watcher active via notify crate),
+ * polling is disabled — cache invalidation comes from fs:changed events.
+ * Falls back to 5s polling when not watched.
  */
 export function useDiffStats(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo
+  workspace?: WorkspaceGitInfo,
+  isWatched: boolean = false
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!, workspace),
     enabled: !!workspaceId,
-    staleTime: 30000, // 30 seconds for idle workspaces
-    // ✅ Poll ONLY when workspace is actively working
-    // TODO: Disable on desktop once git diff events are implemented
-    refetchInterval: sessionStatus === "working" ? 5000 : false,
-    // Always refetch when switching workspaces or returning to tab
+    staleTime: 30000,
+    // Events handle invalidation when watched; fall back to polling otherwise
+    refetchInterval: isWatched
+      ? false
+      : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
@@ -169,18 +168,17 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 
 /**
  * Fetch file changes for a workspace
- * Conditionally polls only when workspace is actively working
+ * Conditionally polls only when workspace is actively working.
  *
- * NOTE: Polling is kept even on desktop because:
- * - No events implemented for git file changes (would require file watching)
- * - File changes panel needs updates when Claude edits files
- * - Polling only happens when workspace is actively working (96-100% reduction)
- * - Future: Implement file system events to eliminate polling on desktop
+ * When `isWatched` is true (file watcher active via notify crate),
+ * polling is disabled — cache invalidation comes from fs:changed events.
+ * Falls back to 5s polling when not watched.
  */
 export function useFileChanges(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo
+  workspace?: WorkspaceGitInfo,
+  isWatched: boolean = false
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
@@ -189,11 +187,11 @@ export function useFileChanges(
       return result.files || [];
     },
     enabled: !!workspaceId,
-    staleTime: 30000, // 30 seconds for idle workspaces
-    // ✅ Poll ONLY when workspace is actively working
-    // TODO: Disable on desktop once git file events are implemented
-    refetchInterval: sessionStatus === "working" ? 5000 : false,
-    // Always refetch when switching workspaces or returning to tab
+    staleTime: 30000,
+    // Events handle invalidation when watched; fall back to polling otherwise
+    refetchInterval: isWatched
+      ? false
+      : sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });

@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_BACKEND_PORT?: string;
+  readonly VITE_DEV_BROWSER_PATH?: string;
 }
 
 interface ImportMeta {

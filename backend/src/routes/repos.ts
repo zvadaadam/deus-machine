@@ -5,6 +5,8 @@ import { execFileSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
 import { ValidationError, ConflictError } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { CreateRepoBody } from '../lib/schemas';
 import { detectDefaultBranch } from '../services/git.service';
 import { getAllRepos, getRepoByRootPath, getRepoById, getMaxRepoDisplayOrder } from '../db';
 
@@ -17,8 +19,7 @@ app.get('/repos', (c) => {
 
 app.post('/repos', async (c) => {
   const db = getDatabase();
-  let { root_path } = await c.req.json();
-  if (!root_path) throw new ValidationError('root_path is required');
+  let { root_path } = parseBody(CreateRepoBody, await c.req.json());
 
   // Normalize path
   try { root_path = fs.realpathSync(root_path); }

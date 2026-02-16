@@ -45,6 +45,8 @@ interface RightSidePanelProps {
   onExitCompactMode?: () => void;
   /** Called when user switches sidecar back to Code (used to restore parked diff layout) */
   onReturnToCode?: () => void;
+  /** Whether file watcher is active — disables polling in useFileChanges */
+  isWatched?: boolean;
 }
 
 export function RightSidePanel({
@@ -59,6 +61,7 @@ export function RightSidePanel({
   chatPanelCollapsed,
   onExitCompactMode,
   onReturnToCode,
+  isWatched = false,
 }: RightSidePanelProps) {
   const {
     rightSideTab,
@@ -87,11 +90,12 @@ export function RightSidePanel({
     [workspace.root_path, workspace.directory_name]
   );
 
-  // File changes query
+  // File changes query — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
     workspace.id,
     workspace.session_status,
-    workspaceGitInfo
+    workspaceGitInfo,
+    isWatched
   );
   const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
 
