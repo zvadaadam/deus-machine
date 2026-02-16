@@ -12,8 +12,24 @@ import {
   getRuntimeModelId,
   type RuntimeAgentType,
 } from "../lib/agentRuntime";
+import { isTauriEnv } from "@/platform/tauri";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
+
+// Tauri native drag-drop: image detection for file drops from Finder
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?)$/i;
+const EXT_TO_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+};
 
 interface SessionPanelProps {
   sessionId: string;
@@ -123,6 +139,60 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       if (files.length > 0) {
         messageInputRef.current?.addFiles(files);
       }
+    }, []);
+
+    // Tauri native drag-drop — WKWebView on macOS intercepts file drops from Finder
+    // before JavaScript's dragover/drop events fire. Listen for Tauri's native event
+    // to handle file drops in the desktop app.
+    useEffect(() => {
+      if (!isTauriEnv) return;
+
+      let unlisten: (() => void) | undefined;
+
+      (async () => {
+        const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+        const { readFile } = await import("@tauri-apps/plugin-fs");
+
+        unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
+          const { type } = event.payload;
+
+          if (type === "enter") {
+            // Only show overlay if at least one file looks like an image
+            const hasImage = event.payload.paths.some((p) => IMAGE_EXTENSIONS.test(p));
+            if (hasImage) setIsDragging(true);
+          } else if (type === "over") {
+            // Keep overlay visible while hovering
+          } else if (type === "leave") {
+            setIsDragging(false);
+          } else if (type === "drop") {
+            setIsDragging(false);
+
+            const imagePaths = event.payload.paths.filter((p) => IMAGE_EXTENSIONS.test(p));
+            if (!imagePaths.length) return;
+
+            const files: File[] = [];
+            for (const filePath of imagePaths) {
+              try {
+                const data = await readFile(filePath);
+                const name = filePath.split("/").pop() || "image.png";
+                const ext = name.split(".").pop()?.toLowerCase() || "png";
+                const mime = EXT_TO_MIME[ext] || "image/png";
+                files.push(new File([data], name, { type: mime }));
+              } catch (err) {
+                console.error("[SessionPanel] Failed to read dropped file:", filePath, err);
+              }
+            }
+
+            if (files.length > 0) {
+              messageInputRef.current?.addFiles(files);
+            }
+          }
+        });
+      })();
+
+      return () => {
+        unlisten?.();
+      };
     }, []);
 
     // Local state for message input
