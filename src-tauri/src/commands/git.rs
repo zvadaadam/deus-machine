@@ -235,51 +235,66 @@ pub async fn git_clone(
         // libgit2 calls this again when auth fails — we MUST return a different
         // credential each time, or return Err to stop the loop.
         //
+        // IMPORTANT: returning Err(git2::Error::from_str(...)) produces raw_code = -1
+        // (GIT_ERROR), which aborts the auth loop entirely. Only GIT_EAUTH = -16
+        // (transport-level auth failure) triggers a retry. So we must never return
+        // Err for a missing key — we pre-filter to existing keys instead.
+        //
         // SSH strategy (one source per attempt):
         //   0: SSH agent (tries all agent identities internally)
-        //   1: ~/.ssh/id_ed25519
-        //   2: ~/.ssh/id_rsa
-        //   3: ~/.ssh/id_ecdsa
-        //   4+: give up
+        //   1..N: existing keys from [id_ed25519, id_rsa, id_ecdsa], filtered at setup
+        //   N+1: give up
         //
         // HTTPS strategy: credential helper once, then give up (no TTY).
         let auth_attempts = Arc::new(AtomicUsize::new(0));
+
+        // Pre-filter SSH keys to only those that exist on disk. This avoids
+        // returning Err for missing keys inside the callback, which would abort
+        // the entire libgit2 auth loop instead of retrying the next source.
+        let ssh_keys: Vec<PathBuf> = {
+            let home = std::env::var("HOME").unwrap_or_default();
+            let ssh_dir = PathBuf::from(&home).join(".ssh");
+            ["id_ed25519", "id_rsa", "id_ecdsa"]
+                .iter()
+                .map(|name| ssh_dir.join(name))
+                .filter(|path| path.exists())
+                .collect()
+        };
+        let ssh_keys = Arc::new(ssh_keys);
+        let ssh_keys_clone = ssh_keys.clone();
+
         callbacks.credentials(move |_url, username_from_url, allowed_types| {
             let attempt = auth_attempts.fetch_add(1, Ordering::Relaxed);
             let username = username_from_url.unwrap_or("git");
 
             if allowed_types.contains(CredentialType::SSH_KEY) {
-                let home = std::env::var("HOME").unwrap_or_default();
-                let ssh_dir = PathBuf::from(&home).join(".ssh");
-                let key_names = ["id_ed25519", "id_rsa", "id_ecdsa"];
-
                 match attempt {
                     // Attempt 0: SSH agent (iterates all agent identities internally)
                     0 => Cred::ssh_key_from_agent(username).map_err(|_| {
                         git2::Error::from_str("SSH agent not available")
                     }),
-                    // Attempts 1-3: try specific key files in priority order
-                    n @ 1..=3 => {
-                        let key_name = key_names[n - 1];
-                        let private_key = ssh_dir.join(key_name);
-                        if !private_key.exists() {
-                            return Err(git2::Error::from_str(&format!(
-                                "~/.ssh/{} not found",
-                                key_name
-                            )));
-                        }
-                        let public_key = ssh_dir.join(format!("{}.pub", key_name));
-                        let pub_path = if public_key.exists() {
-                            Some(public_key.as_path())
+                    // Attempts 1..N: try each existing key file in priority order
+                    n => {
+                        let key_idx = n - 1;
+                        if key_idx < ssh_keys_clone.len() {
+                            let private_key = &ssh_keys_clone[key_idx];
+                            let pub_file = private_key.with_file_name(format!(
+                                "{}.pub",
+                                private_key.file_name().unwrap_or_default().to_string_lossy()
+                            ));
+                            let pub_path = if pub_file.exists() {
+                                Some(pub_file.as_path())
+                            } else {
+                                None
+                            };
+                            Cred::ssh_key(username, pub_path, private_key, None)
                         } else {
-                            None
-                        };
-                        Cred::ssh_key(username, pub_path, &private_key, None)
+                            Err(git2::Error::from_str(
+                                "Authentication failed: no valid SSH key found. \
+                                 Add your SSH key to ssh-agent or use HTTPS.",
+                            ))
+                        }
                     }
-                    _ => Err(git2::Error::from_str(
-                        "Authentication failed: no valid SSH key found. \
-                         Add your SSH key to ssh-agent or use HTTPS.",
-                    )),
                 }
             } else if allowed_types.contains(CredentialType::USER_PASS_PLAINTEXT) {
                 if attempt > 0 {
