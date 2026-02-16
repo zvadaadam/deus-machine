@@ -12,6 +12,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { isTauriEnv, invoke } from "@/platform/tauri";
+import { initNotifications } from "@/platform/notifications";
+import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 
 // Detect if this window instance is the detached browser popup.
 // The main window creates it with ?window=browser-detached in the URL.
@@ -47,6 +49,14 @@ function ConditionalErrorBoundary({
 function AppContent({ reset }: { reset: () => void }) {
   const settingsQuery = useSettings();
   const windowShownRef = useRef(false);
+
+  // Request OS notification permission once on mount
+  useEffect(() => {
+    initNotifications();
+  }, []);
+
+  // Global listener: fire OS notifications for ALL session events when backgrounded
+  useGlobalSessionNotifications();
 
   const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
 
