@@ -1,4 +1,5 @@
 import React from "react";
+import { match } from "ts-pattern";
 import { Archive } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -106,18 +107,11 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   // 20px icon + 6px gap = 26px indent for rows without an icon
   const rowIndent = "pl-[26px]";
 
-  const statusTextClass = (() => {
-    switch (displayStatus) {
-      case "working":
-        return "text-text-tertiary";
-      case "unread":
-        return "text-text-secondary";
-      case "error":
-        return "text-accent-red-muted";
-      default:
-        return "text-text-disabled";
-    }
-  })();
+  const statusTextClass = match(displayStatus)
+    .with("working", () => "text-text-tertiary")
+    .with("unread", () => "text-text-secondary")
+    .with("error", () => "text-accent-red-muted")
+    .otherwise(() => "text-text-disabled");
 
   const getStatusText = () => {
     if (workspace.state === "archived" || !workspace.session_status) return "Archived";
