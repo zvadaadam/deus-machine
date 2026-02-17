@@ -516,7 +516,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           // Persist assistant messages to database
           if (cleanMessage.type === "assistant" && cleanMessage.message) {
-            const model = options?.model || "sonnet";
+            const model = options?.model || "opus";
             saveAssistantMessage(
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
