@@ -594,6 +594,7 @@
 
 :root {
   --radius: 0.5rem;
+  --traffic-light-clearance: 86px;
 
   /* --- Core surfaces (light mode — warm stone tones) --- */
   --background: #f5f5f4;
@@ -1112,12 +1113,13 @@ body {
 
 /* Traffic light clearance — horizontal offset for workspace header and welcome
  * toggle when sidebar is collapsed. Pushes content right of the stoplight dots
- * (~70px) instead of down, preserving vertical space. */
+ * instead of down, preserving vertical space. Uses --traffic-light-clearance
+ * token (defined in :root) and logical properties for RTL support. */
 .tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="workspace-header"] {
-  padding-left: 86px;
+  padding-inline-start: var(--traffic-light-clearance);
 }
 .tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="welcome-sidebar-toggle"] {
-  left: 86px;
+  transform: translateX(calc(var(--traffic-light-clearance) - 0.75rem));
 }
 
 /* Promote interactive sidebar elements to GPU layers (prevents hover flicker) */
