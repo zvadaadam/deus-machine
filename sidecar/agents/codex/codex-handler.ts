@@ -304,7 +304,7 @@ export class CodexAgentHandler implements AgentHandler {
               error: e.error.message,
               agentType: "codex",
             });
-            updateSessionStatus(sessionId, "error");
+            updateSessionStatus(sessionId, "error", e.error.message);
           })
           .with({ type: "error" }, (e) => {
             console.error(`[${queryId}] Stream error:`, e.message);
@@ -314,7 +314,7 @@ export class CodexAgentHandler implements AgentHandler {
               error: e.message,
               agentType: "codex",
             });
-            updateSessionStatus(sessionId, "error");
+            updateSessionStatus(sessionId, "error", e.message);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -343,17 +343,19 @@ export class CodexAgentHandler implements AgentHandler {
       // Only update status if this processQuery still owns the session.
       const ownsSession = getCodexSession(sessionId) === session;
 
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
       if (!isAbort && ownsSession) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMsg,
           agentType: "codex",
         });
       }
 
       if (ownsSession) {
-        updateSessionStatus(sessionId, isAbort ? "idle" : "error");
+        updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : errorMsg);
       }
     } finally {
       // Only clean up if this processQuery still owns the session.

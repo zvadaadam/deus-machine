@@ -1,19 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { Terminal } from "./Terminal";
 
 interface TerminalTab {
   id: string;
   title: string;
+  initialCommand?: string;
 }
 
 interface TerminalPanelProps {
+  workspaceId: string;
   workspacePath: string;
   onCollapse?: () => void;
 }
 
-export function TerminalPanel({ workspacePath, onCollapse }: TerminalPanelProps) {
+export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: TerminalPanelProps) {
   const [initialTab] = useState<TerminalTab>(() => ({
     id: `terminal-${Date.now()}`,
     title: "Terminal 1",
@@ -21,6 +24,29 @@ export function TerminalPanel({ workspacePath, onCollapse }: TerminalPanelProps)
   const [tabs, setTabs] = useState<TerminalTab[]>(() => [initialTab]);
   const [activeTabId, setActiveTabId] = useState<string | null>(() => initialTab.id);
   const [nextTerminalNum, setNextTerminalNum] = useState(2);
+
+  // Watch for pending terminal commands from the layout store (e.g. "claude login" from chat error)
+  const pendingCommand = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.pendingTerminalCommand ?? null
+  );
+
+  useEffect(() => {
+    if (!pendingCommand) return;
+
+    // Clear immediately to prevent duplicate tabs from rapid clicks
+    const cmd = pendingCommand;
+    workspaceLayoutActions.setPendingTerminalCommand(workspaceId, null);
+
+    const id = `terminal-${Date.now()}`;
+    const newTab: TerminalTab = {
+      id,
+      title: "Login",
+      initialCommand: cmd,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+    setNextTerminalNum((n) => n + 1);
+  }, [pendingCommand, workspaceId]);
 
   function addTerminal() {
     const id = `terminal-${Date.now()}`;
@@ -106,7 +132,7 @@ export function TerminalPanel({ workspacePath, onCollapse }: TerminalPanelProps)
               key={tab.id}
               className={`h-full w-full ${activeTabId === tab.id ? "block" : "hidden"}`}
             >
-              <Terminal id={tab.id} workspacePath={workspacePath} />
+              <Terminal id={tab.id} workspacePath={workspacePath} initialCommand={tab.initialCommand} />
             </div>
           ))
         )}
