@@ -14,7 +14,7 @@
  *   [workspaceId]: {
  *     rightPanelExpanded: boolean          // Panel in wide mode (file/browser open)
  *     activeRightTab: 'changes' | 'files'  // Code panel tab
- *     activeRightSideTab: 'code' | 'config' | 'terminal' | 'design' | 'browser' // Sidecar panel
+ *     activeRightSideTab: 'code' | 'config' | 'terminal' | 'notebook' | 'design' | 'browser' // Sidecar panel
  *     selectedFile: { path: string, source: 'changes' | 'files' } | null
  *     sidebarCollapsed: boolean            // Left sidebar state
  *   }
@@ -26,7 +26,7 @@ import { devtools, persist } from "zustand/middleware";
 import type { PersistedBrowserTab } from "@/features/browser/types";
 
 export type RightPanelTab = "changes" | "files";
-export type RightSideTab = "code" | "config" | "terminal" | "design" | "browser";
+export type RightSideTab = "code" | "config" | "terminal" | "notebook" | "design" | "browser";
 
 export interface SelectedFile {
   path: string;
