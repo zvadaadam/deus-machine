@@ -1,5 +1,18 @@
 export type RuntimeAgentType = "claude" | "codex" | "unknown";
 
+/**
+ * Agent type lock constraint:
+ * Once a session has messages (message_count > 0), its agent harness
+ * (claude or codex) is fixed for the session's lifetime. The sidecar
+ * binds to a specific SDK on first query and cannot switch mid-session.
+ *
+ * - Within the same harness: model switching is allowed (e.g. Sonnet → Opus)
+ * - Across harnesses: requires opening a new chat tab (new session)
+ *
+ * The UI enforces this by disabling cross-group items in the model picker
+ * when hasMessages is true. See MessageInput's model picker dropdown.
+ */
+
 export interface RuntimeModelOption {
   /** Unique picker value (harness:model) */
   value: string;
@@ -15,7 +28,7 @@ export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = [
   {
     value: "claude:opus",
     model: "opus",
-    label: "Opus 4.5",
+    label: "Opus 4.6",
     agentType: "claude",
     group: "claude",
     isNew: true,
@@ -30,29 +43,29 @@ export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = [
   {
     value: "claude:haiku",
     model: "haiku",
-    label: "Haiku 3.5",
+    label: "Haiku 4.5",
     agentType: "claude",
     group: "claude",
   },
   {
-    value: "codex:o3",
-    model: "o3",
-    label: "o3",
+    value: "codex:gpt-5.3-codex",
+    model: "gpt-5.3-codex",
+    label: "GPT-5.3 Codex",
     agentType: "codex",
     group: "codex",
     isNew: true,
   },
   {
-    value: "codex:o4-mini",
-    model: "o4-mini",
-    label: "o4-mini",
+    value: "codex:gpt-5.2-codex",
+    model: "gpt-5.2-codex",
+    label: "GPT-5.2 Codex",
     agentType: "codex",
     group: "codex",
   },
   {
-    value: "codex:gpt-4.1",
-    model: "gpt-4.1",
-    label: "GPT-4.1",
+    value: "codex:codex-spark",
+    model: "gpt-5.3-codex-spark",
+    label: "Codex Spark",
     agentType: "codex",
     group: "codex",
   },
@@ -79,7 +92,7 @@ export function getRuntimeModelOption(model: string): RuntimeModelOption | undef
 
   // Backward compatibility for persisted values
   if (normalized === "codex") {
-    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:o4-mini");
+    return RUNTIME_MODEL_OPTIONS.find((option) => option.value === "codex:gpt-5.3-codex");
   }
 
   // Legacy plain model values default to Claude harness

@@ -222,10 +222,11 @@ export function useAutoScroll({
       if (rafId !== null) return;
 
       // Track height delta for the resize-vs-scroll race condition guard.
+      let difference = 0;
       const entry = entries[0];
       if (entry) {
         const currentHeight = entry.contentRect.height;
-        const difference = currentHeight - (previousHeight ?? currentHeight);
+        difference = currentHeight - (previousHeight ?? currentHeight);
         previousHeight = currentHeight;
         resizeDifferenceRef.current = difference;
 
@@ -246,7 +247,13 @@ export function useAutoScroll({
       // frame. If we read the state inside the rAF callback, the IO may have
       // already transitioned to READING_HISTORY (sentinel pushed out of view
       // by content growth), causing a false skip.
-      const shouldScroll = scrollStateRef.current !== "READING_HISTORY";
+      //
+      // Only auto-scroll when content height actually grew (difference > 0).
+      // Width-only changes (from panel resize) fire ResizeObserver but don't
+      // need scroll adjustment — the unnecessary scrollTop write caused visible
+      // scrollbar flash during sidecar tab switching.
+      const shouldScroll =
+        scrollStateRef.current !== "READING_HISTORY" && difference > 0;
 
       rafId = requestAnimationFrame(() => {
         rafId = null;

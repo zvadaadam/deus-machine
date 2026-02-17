@@ -50,6 +50,19 @@ pub struct DiffFile {
 }
 
 #[derive(Serialize, Clone, Debug)]
+pub struct ChangedFilesResult {
+    pub files: Vec<DiffFile>,
+    /// True if the list was truncated to MAX_CHANGED_FILES
+    pub truncated: bool,
+    /// Total number of changed files (before truncation)
+    pub total_count: usize,
+}
+
+/// Safety cap on the number of changed files returned to the frontend.
+/// Prevents UI freeze when merge-base is stale and thousands of files show as changed.
+const MAX_CHANGED_FILES: usize = 1000;
+
+#[derive(Serialize, Clone, Debug)]
 pub struct FileDiffResult {
     pub file: String,
     pub diff: String,
@@ -283,10 +296,13 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
 
 /// Get per-file addition/deletion counts between the merge-base and the
 /// current working directory state (committed + staged + unstaged + untracked).
+///
+/// Caps results at MAX_CHANGED_FILES to prevent UI freeze when the merge-base
+/// is stale or wrong (e.g., origin fetch failed during workspace creation).
 pub fn get_changed_files(
     workspace_path: &str,
     parent_branch: &str,
-) -> Result<Vec<DiffFile>, String> {
+) -> Result<ChangedFilesResult, String> {
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
@@ -301,7 +317,14 @@ pub fn get_changed_files(
         .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
-    collect_diff_files(&diff)
+    let mut files = collect_diff_files(&diff)?;
+    let total_count = files.len();
+    let truncated = total_count > MAX_CHANGED_FILES;
+    if truncated {
+        files.truncate(MAX_CHANGED_FILES);
+    }
+
+    Ok(ChangedFilesResult { files, truncated, total_count })
 }
 
 // ---------------------------------------------------------------------------

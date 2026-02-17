@@ -64,7 +64,7 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
             )}
             <span
               className={cn(
-                "truncate text-[13px]",
+                "truncate text-base",
                 isActive
                   ? "text-text-primary font-medium"
                   : isWorking || isNeedsResponse

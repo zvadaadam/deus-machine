@@ -44,8 +44,14 @@ interface UseWorkspaceLayoutResult {
   sidebarCollapsed: boolean;
   /** Whether chat panel is collapsed */
   chatPanelCollapsed: boolean;
+  /** Whether right panel is collapsed */
+  rightPanelCollapsed: boolean;
   /** User-set right panel width in pixels, or null for auto */
   rightPanelWidth: number | null;
+  /** Stored width for normal tabs (code/config/terminal/design) in pixels */
+  rightPanelWidthNormal: number | null;
+  /** Stored width for browser tab in pixels */
+  rightPanelWidthBrowser: number | null;
 
   /** Set the active right panel tab */
   setRightPanelTab: (tab: RightPanelTab) => void;
@@ -59,6 +65,8 @@ interface UseWorkspaceLayoutResult {
   setSidebarCollapsed: (collapsed: boolean) => void;
   /** Set chat panel collapsed state */
   setChatPanelCollapsed: (collapsed: boolean) => void;
+  /** Set right panel collapsed state */
+  setRightPanelCollapsed: (collapsed: boolean) => void;
   /** Set right panel width (null = auto) */
   setRightPanelWidth: (width: number | null) => void;
   /** Update multiple layout properties at once */
@@ -141,10 +149,23 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
+  const setRightPanelCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (workspaceId) {
+        setLayout(workspaceId, { rightPanelCollapsed: collapsed });
+      }
+    },
+    [workspaceId, setLayout]
+  );
+
   const setRightPanelWidth = useCallback(
     (width: number | null) => {
       if (workspaceId) {
-        const sideTab = layout.activeRightSideTab ?? defaultLayout.activeRightSideTab;
+        // Read current tab from store at call time, not from the React closure.
+        // Fixes stale-closure bug: setRightSideTab(tab) + resize() fire in the
+        // same event handler, but the closure still sees the OLD activeRightSideTab.
+        const currentLayout = useWorkspaceLayoutStore.getState().layouts[workspaceId];
+        const sideTab = currentLayout?.activeRightSideTab ?? defaultLayout.activeRightSideTab;
         if (sideTab === "browser") {
           setLayout(workspaceId, { rightPanelWidthBrowser: width });
         } else {
@@ -152,7 +173,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
         }
       }
     },
-    [workspaceId, setLayout, layout.activeRightSideTab]
+    [workspaceId, setLayout]
   );
 
   const updateLayout = useCallback(
@@ -201,10 +222,13 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     selectedFilePath: layout.selectedFile?.path ?? null,
     sidebarCollapsed: layout.sidebarCollapsed,
     chatPanelCollapsed: layout.chatPanelCollapsed ?? false,
+    rightPanelCollapsed: layout.rightPanelCollapsed ?? false,
     rightPanelWidth:
       layout.activeRightSideTab === "browser"
         ? (layout.rightPanelWidthBrowser ?? null)
         : (layout.rightPanelWidth ?? null),
+    rightPanelWidthNormal: layout.rightPanelWidth ?? null,
+    rightPanelWidthBrowser: layout.rightPanelWidthBrowser ?? null,
 
     // Stable callbacks
     setRightPanelTab,
@@ -213,6 +237,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     setSelectedFilePath,
     setSidebarCollapsed,
     setChatPanelCollapsed,
+    setRightPanelCollapsed,
     setRightPanelWidth,
     updateLayout,
   };

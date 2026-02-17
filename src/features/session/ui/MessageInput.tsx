@@ -1,6 +1,6 @@
 import type { SessionStatus } from "@/shared/types";
 import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Minimize2,
   ArrowUp,
@@ -81,12 +81,21 @@ interface MessageInputProps {
   contextTokenCount?: number;
   /** Workspace path for @ file mention search */
   workspacePath?: string | null;
+  /**
+   * Whether the session already has messages.
+   * Once a session has messages, its agent type (claude/codex) is locked —
+   * the user can still switch models within the same agent type, but
+   * switching to a different agent type requires opening a new chat tab.
+   */
+  hasMessages?: boolean;
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
   onCompact?: () => void;
   onCreatePR?: () => void;
   onStop?: () => void;
   onModelChange?: (model: string) => void;
+  /** Called when user picks a model from a locked agent group (opens new tab) */
+  onOpenNewTab?: (initialModel?: string) => void;
   onThinkingLevelChange?: (level: string) => void;
   onAttachmentClick?: () => void;
   className?: string;
@@ -104,12 +113,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     mcpServers = [],
     contextTokenCount = 0,
     workspacePath = null,
+    hasMessages = false,
     onMessageChange,
     onSend,
     onCompact,
     onCreatePR: _onCreatePR,
     onStop,
     onModelChange,
+    onOpenNewTab,
     onThinkingLevelChange,
     onAttachmentClick,
     className,
@@ -295,7 +306,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   const modelLabel = getRuntimeModelLabel(model);
-  const selectedOptionValue = getRuntimeModelOption(model)?.value;
+  const selectedOption = getRuntimeModelOption(model);
+  const selectedOptionValue = selectedOption?.value;
+  // Agent group of the currently selected model (claude or codex)
+  const currentGroup = selectedOption?.group ?? "claude";
 
   // Thinking level - cycle through levels
   const cycleThinkingLevel = () => {
@@ -352,19 +366,28 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   return (
-    <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 bg-background px-4 pb-4", className)}>
       {/* File mention popover — anchored above the input group */}
-      {fileMention.isOpen && (
-        <div className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start">
-          <FileMentionPopover
-            results={fileMention.results}
-            loading={fileMention.loading}
-            selectedIndex={fileMention.selectedIndex}
-            query={fileMention.query}
-            onSelect={fileMention.selectFile}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {fileMention.isOpen && (
+          <motion.div
+            key="file-mention-popover"
+            initial={{ opacity: 0, scale: 0.96, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 4 }}
+            transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
+            className="absolute right-4 bottom-full left-4 z-50 mb-2 flex justify-start"
+          >
+            <FileMentionPopover
+              results={fileMention.results}
+              loading={fileMention.loading}
+              selectedIndex={fileMention.selectedIndex}
+              query={fileMention.query}
+              onSelect={fileMention.selectFile}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <InputGroup
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
@@ -447,78 +470,69 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 align="start"
                 side="top"
                 className={cn(
-                  "border-border/55 w-[320px] rounded-[18px] border p-2",
+                  "border-border/55 w-[240px] rounded-xl border p-1.5",
                   "from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
                   "shadow-[var(--shadow-elevated)]"
                 )}
               >
-                <DropdownMenuLabel>
-                  <span className="text-text-muted/90 px-1.5 text-[11px] font-normal tracking-[0.01em]">
-                    Claude Code
-                  </span>
-                </DropdownMenuLabel>
-                {RUNTIME_MODEL_OPTIONS.filter((option) => option.group === "claude").map(
-                  (option) => {
-                    const isSelected = selectedOptionValue === option.value;
-                    return (
-                      <DropdownMenuItem
-                        key={option.value}
-                        onClick={() => onModelChange?.(option.value)}
-                        className={cn(
-                          "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
-                          "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
-                          "flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[14px]"
-                        )}
-                      >
-                        {renderAgentIcon(option.agentType)}
-                        <span className="font-normal">{option.label}</span>
-                        {option.isNew && (
-                          <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[4px] border px-1.5 py-0.5 text-[10px] tracking-[0.08em] uppercase">
-                            New
-                          </span>
-                        )}
-                        {isSelected ? (
-                          <Check className="text-text-primary ml-auto h-3.5 w-3.5" />
-                        ) : (
-                          <ArrowUpRight className="text-text-muted/65 ml-auto h-3.5 w-3.5" />
-                        )}
-                      </DropdownMenuItem>
-                    );
-                  }
-                )}
+                {(["claude", "codex"] as const).map((group, groupIdx) => {
+                  /**
+                   * Agent type lock: once a session has messages, its agent harness
+                   * (claude/codex) is fixed. The user can switch models within the
+                   * same harness, but switching harnesses requires a new chat tab.
+                   * This is a DB-level constraint: sessions.agent_type is set on
+                   * first message and the sidecar binds to that harness for the
+                   * session's lifetime.
+                   */
+                  const isLockedGroup = hasMessages && group !== currentGroup;
 
-                <DropdownMenuSeparator className="bg-border/70 my-2" />
-
-                <DropdownMenuLabel>
-                  <span className="text-text-muted/90 px-1.5 text-[11px] font-normal tracking-[0.01em]">
-                    Codex
-                  </span>
-                </DropdownMenuLabel>
-                {RUNTIME_MODEL_OPTIONS.filter((option) => option.group === "codex").map(
-                  (option) => {
-                    const isSelected = selectedOptionValue === option.value;
-                    return (
-                      <DropdownMenuItem
-                        key={option.value}
-                        onClick={() => onModelChange?.(option.value)}
-                        className={cn(
-                          "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
-                          "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
-                          "flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[14px]"
-                        )}
-                      >
-                        {renderAgentIcon(option.agentType)}
-                        <span className="font-normal">{option.label}</span>
-                        {option.isNew && (
-                          <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[4px] border px-1.5 py-0.5 text-[10px] tracking-[0.08em] uppercase">
-                            New
-                          </span>
-                        )}
-                        {isSelected && <Check className="text-text-primary ml-auto h-3.5 w-3.5" />}
-                      </DropdownMenuItem>
-                    );
-                  }
-                )}
+                  return (
+                    <div key={group}>
+                      {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
+                      <DropdownMenuLabel>
+                        <span className="text-text-muted/90 px-1 text-2xs font-normal tracking-[0.02em]">
+                          {group === "claude" ? "Claude Code" : "Codex"}
+                        </span>
+                      </DropdownMenuLabel>
+                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === group).map((option) => {
+                        const isSelected = selectedOptionValue === option.value;
+                        return (
+                          <DropdownMenuItem
+                            key={option.value}
+                            onClick={() =>
+                              isLockedGroup
+                                ? onOpenNewTab?.(option.value)
+                                : onModelChange?.(option.value)
+                            }
+                            className={cn(
+                              "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
+                              "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
+                              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
+                            )}
+                          >
+                            {renderAgentIcon(option.agentType)}
+                            <span className="font-normal">{option.label}</span>
+                            {option.isNew && (
+                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-[9px] tracking-[0.08em] uppercase">
+                                New
+                              </span>
+                            )}
+                            <span className="ml-auto flex items-center">
+                              {isSelected ? (
+                                <Check className="text-text-primary h-3 w-3" />
+                              ) : isLockedGroup ? (
+                                <ArrowUpRight
+                                  className="text-text-muted/60 h-3 w-3"
+                                  title="Opens in new tab"
+                                />
+                              ) : null}
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
 

@@ -11,7 +11,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import { getRuntimeAgentLabel, type RuntimeAgentType } from "@/features/session/lib/agentRuntime";
+import {
+  getRuntimeAgentLabel,
+  getRuntimeAgentTypeForModel,
+  type RuntimeAgentType,
+} from "@/features/session/lib/agentRuntime";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Tab, ClosedTab } from "@/features/workspace/ui/MainContentTabs";
 import type { Session } from "@/features/session/types";
@@ -240,23 +244,34 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     [activeMainTabId]
   );
 
-  const handleTabAdd = useCallback(async () => {
-    try {
-      const newSession = await createSessionMutation.mutateAsync(workspaceId);
-      const newId = `tab-${newSession.id}`;
-      const newTab: Tab = {
-        id: newId,
-        label: NEW_CHAT_LABEL,
-        type: "chat",
-        data: { sessionId: newSession.id, agentType: "claude", hasStarted: false },
-      };
-      setMainTabs((prevTabs) => [...prevTabs, newTab]);
-      setActiveMainTabId(newId);
-    } catch (error) {
-      console.error("[useChatTabs] Failed to create new session:", error);
-      toast.error("Failed to create new chat session");
-    }
-  }, [workspaceId, createSessionMutation]);
+  const handleTabAdd = useCallback(
+    async (initialModel?: string) => {
+      try {
+        const newSession = await createSessionMutation.mutateAsync(workspaceId);
+        const agentType = initialModel
+          ? getRuntimeAgentTypeForModel(initialModel)
+          : "claude";
+        const newId = `tab-${newSession.id}`;
+        const newTab: Tab = {
+          id: newId,
+          label: NEW_CHAT_LABEL,
+          type: "chat",
+          data: {
+            sessionId: newSession.id,
+            agentType,
+            hasStarted: false,
+            initialModel,
+          },
+        };
+        setMainTabs((prevTabs) => [...prevTabs, newTab]);
+        setActiveMainTabId(newId);
+      } catch (error) {
+        console.error("[useChatTabs] Failed to create new session:", error);
+        toast.error("Failed to create new chat session");
+      }
+    },
+    [workspaceId, createSessionMutation]
+  );
 
   const handleTabRestore = useCallback((closedTab: ClosedTab) => {
     const newId = `tab-${closedTab.sessionId}`;

@@ -48,6 +48,8 @@ export interface Tab {
     agentType?: string;
     hasStarted?: boolean;
     agentSequence?: number;
+    /** Pre-selected model when tab is created from locked-group picker */
+    initialModel?: string;
   };
 }
 
@@ -162,7 +164,7 @@ export function MainContentTabBar({
                     className={cn(
                       "group relative flex items-center gap-1.5 overflow-hidden",
                       "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
-                      "cursor-pointer text-[13px] font-normal",
+                      "cursor-pointer text-base font-normal",
                       "transition-colors duration-150",
                       isActive
                         ? "bg-bg-raised text-text-secondary"
@@ -265,7 +267,7 @@ export function MainContentTabBar({
             )}
           </Tooltip>
           <PopoverContent align="end" sideOffset={6} className="w-56 p-1">
-            <p className="text-text-muted px-2 py-1.5 text-[11px] font-medium">Recently closed</p>
+            <p className="text-text-muted px-2 py-1.5 text-xs font-medium">Recently closed</p>
             <div className="max-h-48 overflow-y-auto">
               {closedTabs.map((ct, i) => (
                 <button
@@ -277,7 +279,7 @@ export function MainContentTabBar({
                   }}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
-                    "text-text-secondary text-left text-[13px]",
+                    "text-text-secondary text-left text-base",
                     "transition-colors duration-150",
                     "hover:bg-bg-raised"
                   )}

@@ -1,74 +1,13 @@
 /* ═══════════════════════════════════════════════════════
- * Font Stack — V2: Jony Ive
+ * Font Stack — System Native
  *
- * Sans:  Inter (variable, self-hosted)
- * Mono:  JetBrains Mono (variable, self-hosted)
+ * Sans:  System fonts (-apple-system / SF Pro Text / Segoe UI)
+ * Mono:  System mono (SF Mono / Menlo / Consolas)
  *
- * Both are variable fonts — single file, all weights.
- * font-display: swap prevents invisible text during load.
+ * Using system fonts for faster load, native feel, and
+ * consistent rendering across macOS. No custom font files
+ * needed for sans/mono — only Geist Pixel for branding.
  * ═══════════════════════════════════════════════════════ */
-
-/* Inter variable font (OFL licensed)
- * Covers weights 100-900. See: https://github.com/rsms/inter */
-@font-face {
-  font-family: "Inter";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url("./assets/fonts/InterVariable.woff2") format("woff2-variations");
-}
-
-@font-face {
-  font-family: "Inter";
-  font-style: italic;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2-variations");
-}
-
-/* JetBrains Mono variable font (OFL licensed)
- * Covers weights 100-800. See: https://github.com/JetBrains/JetBrainsMono
- * Falls back to Suisse Intl Mono if not available. */
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 100 800;
-  font-display: swap;
-  src: url("./assets/fonts/JetBrainsMono-Variable.woff2") format("woff2-variations");
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: italic;
-  font-weight: 100 800;
-  font-display: swap;
-  src: url("./assets/fonts/JetBrainsMono-VariableItalic.woff2") format("woff2-variations");
-}
-
-/* OLD: Helvetica Neue font family (commented out, replaced by Suisse Intl) */
-/* @font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueRoman.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueMedium.otf') format('opentype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue-5/HelveticaNeueBold.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-} */
 
 /* Geist Pixel Square - bitmap-inspired typeface for logo/branding */
 @font-face {
@@ -78,71 +17,3 @@
   font-style: normal;
   font-display: swap;
 }
-
-/* Suisse Intl Mono font family - WOFF2 optimized for web */
-/* Note: Suisse Intl Mono only has one weight, so we map it to all font-weights */
-@font-face {
-  font-family: "Suisse Intl Mono";
-  src:
-    url("/fonts/suisse-intl-mono/suisse-intl-mono.woff2") format("woff2"),
-    url("/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Mono.ttf") format("truetype");
-  font-weight: 100 900; /* Support all weights with single font file */
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Suisse Intl (sans-serif) font family - Regular, Medium, Bold */
-@font-face {
-  font-family: "Suisse Intl";
-  src:
-    url("/fonts/suisse-intl-mono/suisse-intl-regular.woff2") format("woff2"),
-    url("/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Suisse Intl";
-  src:
-    url("/fonts/suisse-intl-mono/suisse-intl-medium.woff2") format("woff2"),
-    url("/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Medium.ttf") format("truetype");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Suisse Intl";
-  src:
-    url("/fonts/suisse-intl-mono/suisse-intl-bold.woff2") format("woff2"),
-    url("/fonts/suisse-intl-mono/fonnts.com-Suisse_Intl_Bold.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* OLD: Ioskeley Mono font family (commented out, keeping as reference) */
-/* @font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  src: url('/fonts/ooskeley-mono-web/WOFF2-Unhinted/IoskeleyMono-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-} */

@@ -101,7 +101,7 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
                   )}
                   <span className="flex-1 break-all">{cleanItem}</span>
                   {isDir && (
-                    <span className="text-muted-foreground text-[0.65rem] opacity-60 transition-opacity group-hover:opacity-100">
+                    <span className="text-muted-foreground text-2xs opacity-60 transition-opacity group-hover:opacity-100">
                       DIR
                     </span>
                   )}

@@ -50,10 +50,9 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     return (
       <p
         className={cn(
-          "whitespace-pre-wrap text-sm leading-[1.5]",
+          "whitespace-pre-wrap text-base",
           chatTheme.message.user.text,
-          chatTheme.message.user.textColor,
-          weight === "muted" && "opacity-60" // Subtle if muted
+          chatTheme.message.user.textColor
         )}
       >
         {text}
