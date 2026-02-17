@@ -1,4 +1,4 @@
-import { Code2, Settings2, Terminal, PenTool, Globe } from "lucide-react";
+import { Code2, Settings2, Terminal, BookOpen, PenTool, Globe } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type { RightSideTab } from "@/features/workspace/store";
@@ -20,6 +20,7 @@ const sidecarItems: Array<{
   { id: "code", label: "Code", icon: Code2 },
   { id: "config", label: "Config", icon: Settings2 },
   { id: "terminal", label: "Terminal", icon: Terminal },
+  { id: "notebook", label: "Notebook", icon: BookOpen },
   { id: "design", label: "Design", icon: PenTool },
   { id: "browser", label: "Browser", icon: Globe },
 ];
