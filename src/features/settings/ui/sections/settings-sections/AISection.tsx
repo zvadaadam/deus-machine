@@ -112,14 +112,14 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         </Label>
         <p className="text-muted-foreground text-base">The model used for new conversations.</p>
         <Select
-          value={settings.claude_model ?? "sonnet"}
+          value={settings.claude_model ?? "opus"}
           onValueChange={(value) => saveSetting("claude_model", value)}
         >
           <SelectTrigger id="model" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="sonnet">Claude Sonnet 4.5</SelectItem>
+            <SelectItem value="sonnet">Claude Sonnet 4.6</SelectItem>
             <SelectItem value="opus">Claude Opus 4.6</SelectItem>
             <SelectItem value="haiku">Claude Haiku 4.5</SelectItem>
           </SelectContent>

@@ -20,7 +20,7 @@ export const V2_MIGRATIONS: string[] = [
   `ALTER TABLE session_messages ADD COLUMN turn_id TEXT`,
 
   // sessions: new columns
-  `ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT 'sonnet'`,
+  `ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT 'opus'`,
   `ALTER TABLE sessions ADD COLUMN sdk_session_id TEXT`,
   `ALTER TABLE sessions ADD COLUMN message_count INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE sessions ADD COLUMN error_message TEXT`,
@@ -91,7 +91,7 @@ export const SCHEMA_SQL = `
     agent_type TEXT NOT NULL DEFAULT 'claude',
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
-    model TEXT NOT NULL DEFAULT 'sonnet',
+    model TEXT NOT NULL DEFAULT 'opus',
     sdk_session_id TEXT,
     message_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,

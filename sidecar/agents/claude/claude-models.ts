@@ -3,13 +3,13 @@
 
 const BEDROCK_MAPPINGS: Record<string, string> = {
   opus: "global.anthropic.claude-opus-4-5-20251101-v1:0",
-  sonnet: "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+  sonnet: "global.anthropic.claude-sonnet-4-6-20260217-v1:0",
   haiku: "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 };
 
 const VERTEX_MAPPINGS: Record<string, string> = {
   opus: "claude-opus-4-5@20251101",
-  sonnet: "claude-sonnet-4-5@20250929",
+  sonnet: "claude-sonnet-4-6@20260217",
   haiku: "claude-haiku-4-5@20251001",
 };
 

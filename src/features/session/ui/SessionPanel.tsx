@@ -31,7 +31,7 @@ interface SessionPanelProps {
   sessionId: string;
   workspacePath: string;
   workspaceId?: string;
-  workspaceBranch?: string | null;
+  workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   isFirstSession?: boolean;
   onClose?: () => void;
@@ -58,7 +58,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       sessionId,
       workspacePath,
       workspaceId,
-      workspaceBranch,
+      workspaceRepoName,
       workspaceParentBranch,
       isFirstSession,
       onClose,
@@ -219,7 +219,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState("NONE");
-    const [model, setModel] = useState(initialModel ?? "sonnet");
+    const [model, setModel] = useState(initialModel ?? "opus");
     const runtimeModelId = getRuntimeModelId(model);
     const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
 
@@ -355,7 +355,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onStop={stopSession}
               onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
               onRetryInNewChat={handleRetryInNewChat}
-              workspaceBranch={workspaceBranch}
+              workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
             />
@@ -444,7 +444,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onStop={stopSession}
                     onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
                     onRetryInNewChat={handleRetryInNewChat}
-                    workspaceBranch={workspaceBranch}
+                    workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
                   />
 
