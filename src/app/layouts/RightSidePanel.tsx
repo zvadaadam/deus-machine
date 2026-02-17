@@ -187,7 +187,7 @@ export function RightSidePanel({
       )}
 
       {!compact && activeTab === "terminal" && (
-        <TerminalPanel workspacePath={workspace.workspace_path} />
+        <TerminalPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
       )}
 
       {!compact && activeTab === "config" && <ConfigPanel />}

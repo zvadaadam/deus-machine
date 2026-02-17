@@ -100,20 +100,27 @@ export function saveToolResultMessage(
  *
  * @param sessionId - The session ID
  * @param status - The new status ('idle', 'working', 'error')
+ * @param errorMessage - Optional error message (persisted when status is 'error', cleared otherwise)
  */
 export type SessionStatus = "idle" | "working" | "error";
 
-export function updateSessionStatus(sessionId: string, status: SessionStatus): void {
+export function updateSessionStatus(
+  sessionId: string,
+  status: SessionStatus,
+  errorMessage?: string | null
+): void {
   const db = getDatabase();
 
   try {
     db.prepare(
       `
-      UPDATE sessions SET status = ?, updated_at = datetime('now') WHERE id = ?
+      UPDATE sessions SET status = ?, error_message = ?, updated_at = datetime('now') WHERE id = ?
     `
-    ).run(status, sessionId);
+    ).run(status, status === "error" ? (errorMessage ?? null) : null, sessionId);
 
-    console.log(`[SESSION-WRITER] Updated session ${sessionId} status to '${status}'`);
+    console.log(
+      `[SESSION-WRITER] Updated session ${sessionId} status to '${status}'${errorMessage ? ` with error: ${errorMessage}` : ""}`
+    );
   } catch (error) {
     console.error(`[SESSION-WRITER] Failed to update session status:`, error);
   }

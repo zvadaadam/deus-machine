@@ -47,6 +47,7 @@ interface WorkspaceLayoutState {
   rightPanelCollapsed: boolean;
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
+  pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
 }
 
 interface WorkspaceLayoutStore {
@@ -102,6 +103,11 @@ interface WorkspaceLayoutStore {
   setRightPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
 
   /**
+   * Set a command to auto-run in a new terminal tab
+   */
+  setPendingTerminalCommand: (workspaceId: string, command: string | null) => void;
+
+  /**
    * Persist chat tab order and active tab for a workspace
    */
   setChatTabState: (
@@ -136,6 +142,7 @@ export const defaultLayout: WorkspaceLayoutState = {
   rightPanelCollapsed: false,
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
+  pendingTerminalCommand: null,
 };
 
 type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
@@ -301,6 +308,21 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             "workspaceLayout/setChatTabState"
           ),
 
+        setPendingTerminalCommand: (workspaceId, command) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  pendingTerminalCommand: command,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setPendingTerminalCommand"
+          ),
+
         // Utilities
         clearWorkspaceLayout: (workspaceId) =>
           set(
@@ -317,6 +339,19 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       {
         name: "workspace-layout-store", // localStorage key
         version: 7,
+        // Strip ephemeral one-shot signals that must not survive app restarts.
+        // pendingTerminalCommand is a transient signal consumed by TerminalPanel;
+        // if persisted and the app crashes before the effect clears it, the command
+        // would auto-execute on next launch.
+        partialize: (state) => ({
+          ...state,
+          layouts: Object.fromEntries(
+            Object.entries(state.layouts).map(([id, layout]) => [
+              id,
+              { ...layout, pendingTerminalCommand: null },
+            ])
+          ),
+        }),
         migrate: (persistedState: unknown, version: number) => {
           const state: PersistedStateV1 =
             typeof persistedState === "object" && persistedState !== null
@@ -408,6 +443,8 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setRightPanelCollapsed(workspaceId, collapsed),
   setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) =>
     useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
+  setPendingTerminalCommand: (workspaceId: string, command: string | null) =>
+    useWorkspaceLayoutStore.getState().setPendingTerminalCommand(workspaceId, command),
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),

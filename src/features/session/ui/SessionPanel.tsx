@@ -13,6 +13,7 @@ import {
   type RuntimeAgentType,
 } from "../lib/agentRuntime";
 import { isTauriEnv } from "@/platform/tauri";
+import { workspaceLayoutActions } from "@/features/workspace/store";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -82,6 +83,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
     // TanStack Query hooks
     const {
+      session,
       messages,
       hasOlder,
       sessionStatus,
@@ -295,6 +297,20 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       [setMessageInput]
     );
 
+    // Error action handlers
+    const handleOpenLoginTerminal = useCallback(() => {
+      if (!workspaceId) return;
+      workspaceLayoutActions.setLayout(workspaceId, {
+        activeRightSideTab: "terminal",
+        rightPanelCollapsed: false,
+      });
+      workspaceLayoutActions.setPendingTerminalCommand(workspaceId, "claude login");
+    }, [workspaceId]);
+
+    const handleRetryInNewChat = useCallback(() => {
+      onOpenNewTab?.();
+    }, [onOpenNewTab]);
+
     // Drop overlay shared between embedded and dialog layouts
     const dropOverlay = isDragging && (
       <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -330,11 +346,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               messages={messages}
               loading={loading}
               sessionStatus={sessionStatus}
+              errorMessage={session?.error_message}
+              agentType={session?.agent_type}
               latestMessageSentAt={latestMessageSentAt}
               hasOlder={hasOlder}
               loadingOlder={loadOlderMutation.isPending}
               onLoadOlder={handleLoadOlder}
               onStop={stopSession}
+              onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
+              onRetryInNewChat={handleRetryInNewChat}
               workspaceBranch={workspaceBranch}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
@@ -415,11 +435,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     messages={messages}
                     loading={loading}
                     sessionStatus={sessionStatus}
+                    errorMessage={session?.error_message}
+                    agentType={session?.agent_type}
                     latestMessageSentAt={latestMessageSentAt}
                     hasOlder={hasOlder}
                     loadingOlder={loadOlderMutation.isPending}
                     onLoadOlder={handleLoadOlder}
                     onStop={stopSession}
+                    onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
+                    onRetryInNewChat={handleRetryInNewChat}
                     workspaceBranch={workspaceBranch}
                     workspaceParentBranch={workspaceParentBranch}
                   />
