@@ -11,6 +11,7 @@
 
 import { useCallback, useMemo } from "react";
 import { TerminalPanel } from "@/features/terminal";
+import { NotebookPanel } from "@/features/notebook";
 import {
   useWorkspaceLayout,
   useFileChanges,
@@ -188,6 +189,13 @@ export function RightSidePanel({
 
       {!compact && activeTab === "terminal" && (
         <TerminalPanel workspacePath={workspace.workspace_path} />
+      )}
+
+      {!compact && activeTab === "notebook" && (
+        <NotebookPanel
+          workspacePath={workspace.workspace_path}
+          sessionStatus={workspace.session_status}
+        />
       )}
 
       {!compact && activeTab === "config" && <ConfigPanel />}
