@@ -17,7 +17,7 @@ import { prepareMessageContent } from "./message-sanitizer";
 export function saveAssistantMessage(
   sessionId: string,
   message: { id?: string; role?: string; content?: unknown },
-  model: string = "sonnet",
+  model: string = "opus",
   parentToolUseId: string | null = null
 ): string | null {
   const db = getDatabase();
