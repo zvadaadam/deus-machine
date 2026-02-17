@@ -721,6 +721,7 @@
 
 :root {
   --radius: 0.5rem;
+  --traffic-light-clearance: 86px;
 
   /* --- Core surfaces (light mode — warm stone tones) --- */
   --background: #f5f5f4;
@@ -1149,9 +1150,15 @@ body {
  * Two-layer shadow: crisp near-shadow for edge definition + diffuse far-shadow for depth. */
 .tauri [data-slot="sidebar-inset"] {
   box-shadow:
-    0 1px 3px 0 color-mix(in oklch, var(--foreground) 4%, transparent),
-    0 4px 12px -2px color-mix(in oklch, var(--foreground) 3%, transparent) !important;
-  transition: box-shadow 200ms ease;
+    0 1px 2px 0 color-mix(in oklch, var(--foreground) 2.5%, transparent),
+    0 3px 8px -2px color-mix(in oklch, var(--foreground) 2%, transparent) !important;
+  transition:
+    box-shadow 280ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+/* Edge-to-edge — sidebar collapsed: drop inset shadow so content stretches flush */
+.tauri [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] {
+  box-shadow: none !important;
 }
 
 /* Layer 3: main content — semi-translucent with inner shadow depth.
@@ -1171,14 +1178,21 @@ body {
   ) !important;
   box-shadow:
     /* Inner shadow — top-edge depth (Arc's InnerShadowView) */
-    inset 0 1px 3px 0
+    inset 0 0.5px 2px 0
       color-mix(in oklch, var(--foreground) var(--content-shadow-opacity), transparent),
     /* Inner hairline ring — 0.5px for crisp double-border effect */ inset 0 0 0 0.5px
       color-mix(in oklch, var(--foreground) var(--content-border-opacity), transparent);
   transition:
     background 200ms ease,
-    box-shadow 200ms ease,
-    border-color 200ms ease;
+    box-shadow 280ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-color 280ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-radius 280ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+/* Edge-to-edge — sidebar collapsed: flatten card to seamless full-bleed */
+.tauri [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="main-content"] {
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 /* Prevent CSS backdrop-filter from conflicting with native CABackdropLayer on sidebar */
@@ -1239,6 +1253,17 @@ body {
  * Removed in fullscreen since macOS hides traffic lights. See useTauriDragZone for drag logic. */
 .tauri:not(.fullscreen) [data-slot="sidebar-header"] {
   padding-top: 32px;
+}
+
+/* Traffic light clearance — horizontal offset for workspace header and welcome
+ * toggle when sidebar is collapsed. Pushes content right of the stoplight dots
+ * instead of down, preserving vertical space. Uses --traffic-light-clearance
+ * token (defined in :root) and logical properties for RTL support. */
+.tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="workspace-header"] {
+  padding-inline-start: var(--traffic-light-clearance);
+}
+.tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="welcome-sidebar-toggle"] {
+  transform: translateX(calc(var(--traffic-light-clearance) - 0.75rem));
 }
 
 /* Promote interactive sidebar elements to GPU layers (prevents hover flicker) */
