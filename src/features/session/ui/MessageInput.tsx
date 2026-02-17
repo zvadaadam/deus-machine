@@ -107,7 +107,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     sending,
     sessionStatus,
     embedded: _embedded = false,
-    model = "sonnet",
+    model = "opus",
     thinkingLevel = "NONE",
     showCompactButton = false,
     mcpServers = [],
@@ -366,7 +366,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   return (
-    <div className={cn("relative z-20 shrink-0 bg-background px-4 pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 bg-bg-surface px-4 pb-4", className)}>
       {/* File mention popover — anchored above the input group */}
       <AnimatePresence>
         {fileMention.isOpen && (

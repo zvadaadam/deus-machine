@@ -81,7 +81,7 @@ app.post('/sessions/:id/messages', async (c) => {
 
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
-  const messageModel = model || 'sonnet';
+  const messageModel = model || 'opus';
 
   const insertMessageAndUpdateSession = db.transaction(() => {
     db.prepare(`

@@ -102,7 +102,7 @@ interface ChatProps {
   hasOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
-  workspaceBranch?: string | null;
+  workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   isFirstSession?: boolean;
   className?: string;
@@ -116,7 +116,7 @@ export function Chat({
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
-  workspaceBranch,
+  workspaceRepoName,
   workspaceParentBranch,
   isFirstSession,
   className,
@@ -382,7 +382,7 @@ export function Chat({
           </div>
         ) : messages.length === 0 ? (
           <WorkspaceEmptyState
-            branch={workspaceBranch}
+            repoName={workspaceRepoName}
             parentBranch={workspaceParentBranch}
             isFirstSession={isFirstSession}
           />
