@@ -1201,11 +1201,12 @@ body {
 }
 
 /* Smooth panel resize for programmatic collapse/expand and boundary transitions.
- * ease at 300ms (Codex-style) — gentle curve avoids the aggressive start of
- * ease-out-quart that caused visible content reflow jolt during boundary resize.
- * will-change hints the browser to composite flex-grow changes on the GPU. */
+ * ease at 300ms — gentle curve avoids the aggressive start of ease-out-quart
+ * that caused visible content reflow jolt during boundary resize.
+ * flex-grow is a layout property (not GPU-compositable), so we skip will-change
+ * here. The transition is suppressed during drag, programmatic restore, and
+ * window resize — it only fires on discrete collapse/expand actions. */
 [data-slot="resizable-panel"] {
-  will-change: flex-grow;
   transition: flex-grow 300ms ease;
 }
 

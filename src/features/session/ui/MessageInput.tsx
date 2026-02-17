@@ -470,7 +470,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 align="start"
                 side="top"
                 className={cn(
-                  "border-border/55 w-[240px] rounded-xl border p-1.5",
+                  "border-border/55 w-60 rounded-xl border p-1.5",
                   "from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
                   "shadow-[var(--shadow-elevated)]"
                 )}
@@ -513,7 +513,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                             {renderAgentIcon(option.agentType)}
                             <span className="font-normal">{option.label}</span>
                             {option.isNew && (
-                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-[9px] tracking-[0.08em] uppercase">
+                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-2xs tracking-[0.08em] uppercase">
                                 New
                               </span>
                             )}
