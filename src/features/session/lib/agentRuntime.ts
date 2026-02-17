@@ -31,14 +31,14 @@ export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = [
     label: "Opus 4.6",
     agentType: "claude",
     group: "claude",
-    isNew: true,
   },
   {
     value: "claude:sonnet",
     model: "sonnet",
-    label: "Sonnet 4.5",
+    label: "Sonnet 4.6",
     agentType: "claude",
     group: "claude",
+    isNew: true,
   },
   {
     value: "claude:haiku",
@@ -128,7 +128,7 @@ export function getRuntimeModelId(model: string): string {
   const normalized = model.toLowerCase().trim();
   if (normalized.includes(":")) {
     const [, modelName] = normalized.split(":");
-    return modelName || "sonnet";
+    return modelName || "opus";
   }
 
   return normalized;
