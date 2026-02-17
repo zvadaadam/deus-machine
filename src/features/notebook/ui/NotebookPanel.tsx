@@ -182,7 +182,7 @@ function CellOutputRenderer({ output }: { output: NotebookCellOutput }) {
     .with({ output_type: "execute_result" }, (o) => <ExecuteResultOutput output={o} />)
     .with({ output_type: "display_data" }, (o) => <DisplayDataOutput output={o} />)
     .with({ output_type: "error" }, (o) => <ErrorOutput output={o} />)
-    .otherwise(() => null);
+    .exhaustive();
 }
 
 function NotebookCellView({ cell, index }: { cell: NotebookCell; index: number }) {

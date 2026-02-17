@@ -50,6 +50,11 @@ export function createNotebookMCPServer(
       command: "node",
       args: [serverPath],
       env: {
+        // Spread process.env so the spawned server inherits PATH, HOME,
+        // NODE_PATH, and any other env vars the sidecar was launched with.
+        // The MCP SDK's StdioClientTransport only auto-inherits a small
+        // whitelist (HOME, PATH, SHELL, TERM, USER, LOGNAME on macOS).
+        ...(process.env as Record<string, string>),
         NOTEBOOK_CWD: workingDirectory,
         NOTEBOOK_PATH: notebookPath,
       },
