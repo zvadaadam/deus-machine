@@ -372,6 +372,7 @@ export function useSendMessage() {
         if (!old) return old;
         return produce(old, (draft) => {
           draft.status = "working";
+          draft.error_message = null; // Clear error on retry
         });
       });
 

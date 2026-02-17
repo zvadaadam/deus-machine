@@ -15,10 +15,24 @@ import { useSession } from "../context";
 import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
+import { TerminalSquare } from "lucide-react";
 
 // Pull spacing from theme for consistency
 const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
 const TIGHT_MARGIN_CLASS = chatTheme.spacing.assistantTightMargin;
+
+/** Patterns that indicate an auth/login error vs a generic API error */
+const AUTH_PATTERNS = [
+  /not\s+logged\s+in/i,
+  /please\s+run\s+.*login/i,
+  /\b401\b.*unauthorized/i,
+  /invalid\s+api\s*key/i,
+  /authentication\s+(failed|required)/i,
+];
+
+function isAuthError(msg: string): boolean {
+  return AUTH_PATTERNS.some((p) => p.test(msg));
+}
 
 /**
  * Turn Types
@@ -97,8 +111,12 @@ interface ChatProps {
   messages: Message[];
   loading: boolean;
   sessionStatus: SessionStatus;
+  errorMessage?: string | null;
+  agentType?: string | null;
   latestMessageSentAt?: string | null;
   onStop?: () => void; // Callback to stop/cancel the session
+  onOpenLoginTerminal?: () => void;
+  onRetryInNewChat?: () => void;
   hasOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
@@ -112,7 +130,11 @@ export function Chat({
   messages,
   loading,
   sessionStatus,
+  errorMessage,
+  agentType,
   latestMessageSentAt,
+  onOpenLoginTerminal,
+  onRetryInNewChat,
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
@@ -467,6 +489,47 @@ export function Chat({
                   </motion.div>
                 );
               })}
+              {/* Session-level error — rendered inline in the chat flow (law of locality) */}
+              <AnimatePresence>
+                {sessionStatus === "error" && errorMessage && (
+                  <motion.div
+                    key="session-error"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className={cn(chatTheme.message.assistant.container, "mt-1 w-fit max-w-[60%]")}
+                    role="alert"
+                    aria-live="assertive"
+                  >
+                    <div className="flex items-center gap-4 rounded-lg border border-destructive/20 border-l-2 border-l-destructive bg-destructive/5 px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-destructive/80">
+                          {agentType
+                            ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
+                            : "Error"}
+                        </p>
+                        <p className="mt-0.5 text-sm text-foreground/80 break-words">{errorMessage}</p>
+                      </div>
+                      {(onOpenLoginTerminal || onRetryInNewChat) && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          {agentType === "claude" && isAuthError(errorMessage!) && onOpenLoginTerminal && (
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onOpenLoginTerminal}>
+                              <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
+                              Log in
+                            </Button>
+                          )}
+                          {onRetryInNewChat && (
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                              Retry in new chat
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <AnimatePresence>
                 {sessionStatus === "working" && (
                   <motion.div
