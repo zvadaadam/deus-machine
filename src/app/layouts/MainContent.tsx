@@ -6,6 +6,11 @@
  * 2. Code:    ChatArea (flex) <resize> Viewer <resize> RightSidePanel (compact) + Sidecar
  * 3. Browser: ChatArea (flex) <resize> RightSidePanel (expanded, resizable)
  *
+ * The RightSidecar (58px icon strip) lives OUTSIDE the ResizablePanelGroup
+ * so it's always visible — even when the content panel collapses to 0.
+ * This follows the VS Code activity bar pattern: click icon to toggle,
+ * click active icon to collapse.
+ *
  * Panel resizing uses react-resizable-panels for keyboard accessibility,
  * touch support, and built-in collapse/expand with snap behavior.
  *
@@ -13,27 +18,31 @@
  * than 1680px and restores when it closes. ESC closes the middle panel.
  */
 
-import { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
+import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
+import { useRightPanelSizing } from "@/features/workspace/hooks/useRightPanelSizing";
 import { useArchiveWorkspace } from "@/features/workspace/api/workspace.queries";
 import type { WorkspaceGitInfo } from "@/features/workspace";
+import type { RightSideTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
+import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { FileViewer } from "@/features/file-browser";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import { toast } from "sonner";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
-import { cn } from "@/shared/lib/utils";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
+import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 
 /** Sidebar auto-collapses when opening middle panel on screens narrower than this */
 const SIDEBAR_COLLAPSE_THRESHOLD = 1680;
@@ -65,11 +74,12 @@ export function MainContent({
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const {
-    rightPanelWidth,
-    setRightPanelWidth,
     rightSideTab,
+    setRightSideTab,
     chatPanelCollapsed,
     setChatPanelCollapsed,
+    rightPanelCollapsed,
+    setRightPanelCollapsed,
   } = useWorkspaceLayout(selectedWorkspaceId);
 
   // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
@@ -95,20 +105,16 @@ export function MainContent({
   // Sidebar state saved before auto-collapse, restored on close
   const [sidebarBeforePanel, setSidebarBeforePanel] = useState<boolean | null>(null);
 
-  // Reset state when workspace changes (React-recommended render-time pattern)
+  // Reset state when workspace changes (React-recommended render-time pattern).
+  // Capture flag so we can also reset the sizing hook's ref after it's created.
   const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
-  // Guard: true once stored width has been restored for the current workspace.
-  // Prevents useLayoutEffect from re-firing on every drag frame (which would
-  // cause a feedback loop: onResize → setRightPanelWidth → effect → resize()).
-  const hasRestoredWidthRef = useRef(false);
-  if (prevWorkspaceIdRef.current !== selectedWorkspaceId) {
+  const workspaceChanged = prevWorkspaceIdRef.current !== selectedWorkspaceId;
+  if (workspaceChanged) {
     prevWorkspaceIdRef.current = selectedWorkspaceId;
     if (middlePanel !== null) setMiddlePanel(null);
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
     setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
-    // eslint-disable-next-line react-hooks/refs -- intentional: reset on workspace change during render
-    hasRestoredWidthRef.current = false;
   }
 
   const middlePanelActive = middlePanel !== null;
@@ -125,22 +131,64 @@ export function MainContent({
     [selectedWorkspace]
   );
 
+  // Only start watching and querying diffs once the worktree checkout is complete.
+  // During "initializing", git is writing thousands of files — starting the watcher
+  // here would flood the system with events, triggering expensive scans + re-renders.
+  const isReady = selectedWorkspace?.state === "ready";
+
   // Watch workspace for file changes (event-driven cache invalidation)
-  const isWatched = useFileWatcher(selectedWorkspace?.workspace_path ?? null, selectedWorkspaceId);
+  const isWatched = useFileWatcher(
+    isReady ? selectedWorkspace?.workspace_path ?? null : null,
+    isReady ? selectedWorkspaceId : null,
+  );
 
   // File changes for prev/next navigation — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
-    selectedWorkspaceId,
+    isReady ? selectedWorkspaceId : null,
     selectedWorkspace?.session_status,
     workspaceGitInfo ?? undefined,
     isWatched
   );
-  const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
+  const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
   // --- Refs for imperative panel control ---
   const chatPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
-  const mainContentRef = useRef<HTMLDivElement>(null);
+  // Wraps only the ResizablePanelGroup (excludes 58px sidecar) for correct pixel↔percent math
+  const panelGroupContainerRef = useRef<HTMLDivElement>(null);
+
+  // Dynamic collapsed size: 36px strip → percentage of container width.
+  // Library supports dynamic updates — ResizeObserver keeps it accurate.
+  const MIN_PANEL_SIZE = 15;
+  const collapsedSizePct = useCollapsedSizePercent(panelGroupContainerRef, 36);
+  const safeCollapsedSize = Math.min(collapsedSizePct, MIN_PANEL_SIZE - 0.1);
+
+  // Per-tab sizing: normal tabs (30%) vs browser (60%), stored width restoration,
+  // and resize persistence. resizeToTab handles expand-from-collapsed + category
+  // boundary transitions. isCategoryBoundary detects when resize is needed.
+  const { resizeToTab, isCategoryBoundary, handleResize, hasRestoredWidthRef } =
+    useRightPanelSizing({
+      workspaceId: selectedWorkspaceId,
+      panelGroupContainerRef,
+      rightPanelRef,
+      isBrowserDetached,
+      middlePanelActive,
+    });
+
+  // Deferred reset: hasRestoredWidthRef comes from the hook above, but needs
+  // resetting on workspace change (detected earlier in the render pass).
+  if (workspaceChanged) {
+    // eslint-disable-next-line react-hooks/refs -- intentional: reset on workspace change during render
+    hasRestoredWidthRef.current = false;
+  }
+
+  // Smart default: browser gets 60%, everything else gets 30%.
+  // Stored widths are restored after mount via the hook's useLayoutEffect.
+  const rightPanelDefaultSize = isBrowserTab && !isBrowserDetached ? 60 : 30;
+
+  // Session status for breathing indicator on collapsed chat strip
+  const sessionStatus = selectedWorkspace?.session_status;
+  const isSessionWorking = sessionStatus === "working";
 
   // --- Middle panel operations ---
 
@@ -198,49 +246,85 @@ export function MainContent({
   }, [parkedMiddlePanel, middlePanel, collapseSidebarForPanel]);
 
   // --- Chat panel collapse/expand ---
+  // handleCollapseChatPanel is used both as the ResizablePanel onCollapse callback
+  // (when user drags to minimum) AND as the button click handler from the chat
+  // tab bar. When called from the button, we must also imperatively collapse
+  // the panel — setting the store flag alone doesn't physically resize it.
 
   const handleCollapseChatPanel = useCallback(() => {
     setChatPanelCollapsed(true);
+    chatPanelRef.current?.collapse();
   }, [setChatPanelCollapsed]);
 
   const handleExpandChatPanel = useCallback(() => {
     setChatPanelCollapsed(false);
   }, [setChatPanelCollapsed]);
 
-  // --- Right panel resize persistence ---
-  // Convert percentage size from react-resizable-panels to pixels for Zustand store
-  const handleRightPanelResize = useCallback(
-    (sizePercent: number) => {
-      const container = mainContentRef.current;
-      if (!container) return;
-      const total = container.getBoundingClientRect().width;
-      if (total > 0) {
-        setRightPanelWidth(Math.round((sizePercent / 100) * total));
+  // --- Right panel collapse/expand ---
+
+  const handleCollapseRightPanel = useCallback(() => {
+    setRightPanelCollapsed(true);
+  }, [setRightPanelCollapsed]);
+
+  const handleExpandRightPanel = useCallback(() => {
+    setRightPanelCollapsed(false);
+  }, [setRightPanelCollapsed]);
+
+  // --- Sidecar tab change (VS Code activity bar pattern) ---
+  // All toggle logic lives here so the sidecar component stays pure.
+  const handleSidecarTabChange = useCallback(
+    (tab: RightSideTab) => {
+      if (middlePanelActive) {
+        // Compact mode: clicking Code restores parked diff, other tabs park diff + switch
+        if (tab === "code") {
+          setRightSideTab(tab);
+          handleRestoreParkedMiddlePanel();
+        } else {
+          setRightSideTab(tab);
+          handleExitCompactMode();
+        }
+        return;
+      }
+
+      if (rightPanelCollapsed) {
+        // Content is collapsed — just switch the strip label/icon, don't expand.
+        // The strip click is the expand action; sidecar tabs pre-select content.
+        setRightSideTab(tab);
+        // Restore parked diff even while collapsed — the middle panel layout
+        // is a separate ResizablePanelGroup, so collapse state is irrelevant.
+        if (tab === "code") {
+          handleRestoreParkedMiddlePanel();
+        }
+      } else if (tab === rightSideTab) {
+        // Clicked the already-active tab — collapse content
+        rightPanelRef.current?.collapse();
+      } else {
+        // Switch to a different tab (content stays expanded).
+        // If crossing a size category boundary (normal <-> browser),
+        // resize to the new tab's target width.
+        setRightSideTab(tab);
+        if (isCategoryBoundary(rightSideTab, tab)) {
+          resizeToTab(tab);
+        }
+        // Returning to code tab — restore parked diff if one was saved.
+        // The diff gets parked when leaving compact mode (code → browser/terminal).
+        // Without this, the user loses their open diff viewer on round-trip.
+        if (tab === "code") {
+          handleRestoreParkedMiddlePanel();
+        }
       }
     },
-    [setRightPanelWidth]
+    [
+      middlePanelActive,
+      rightPanelCollapsed,
+      rightSideTab,
+      setRightSideTab,
+      handleRestoreParkedMiddlePanel,
+      handleExitCompactMode,
+      isCategoryBoundary,
+      resizeToTab,
+    ]
   );
-
-  // Default size for right panel — smart default only, no ref access needed.
-  // Stored pixel widths are restored after mount via useLayoutEffect below.
-  const rightPanelDefaultSize = isBrowserTab && !isBrowserDetached ? 60 : 30;
-
-  // Restore stored panel width once after mount / workspace switch.
-  // useLayoutEffect runs before paint so the user sees no flash.
-  // The hasRestoredWidthRef guard prevents this from re-firing during drag
-  // (onResize updates rightPanelWidth, which would otherwise re-trigger
-  // this effect and create a feedback loop with forced layout reflows).
-  useLayoutEffect(() => {
-    if (hasRestoredWidthRef.current) return;
-    if (rightPanelWidth === null || middlePanelActive) return;
-    const container = mainContentRef.current;
-    if (!container || !rightPanelRef.current) return;
-    const total = container.getBoundingClientRect().width;
-    if (total > 0) {
-      rightPanelRef.current.resize((rightPanelWidth / total) * 100);
-      hasRestoredWidthRef.current = true;
-    }
-  }, [rightPanelWidth, middlePanelActive]);
 
   // --- PR actions (used in WorkspaceHeader) ---
 
@@ -334,7 +418,7 @@ export function MainContent({
     return () => window.removeEventListener("keydown", handler);
   }, [middlePanelActive, handleCloseMiddlePanel]);
 
-  // Cmd+\ toggles chat panel collapse/expand via imperative panel API
+  // Cmd+\ toggles chat panel, Cmd+] toggles right panel
   useEffect(() => {
     if (!selectedWorkspace) return;
     const handler = (e: KeyboardEvent) => {
@@ -346,10 +430,18 @@ export function MainContent({
           chatPanelRef.current?.collapse();
         }
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "]") {
+        e.preventDefault();
+        if (rightPanelCollapsed) {
+          resizeToTab(rightSideTab);
+        } else {
+          rightPanelRef.current?.collapse();
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedWorkspace, chatPanelCollapsed]);
+  }, [selectedWorkspace, chatPanelCollapsed, rightPanelCollapsed, rightSideTab, resizeToTab]);
 
   // --- Sync workspace changes to detached browser window ---
   const detachedWorkspaceContext = useMemo(
@@ -407,140 +499,165 @@ export function MainContent({
               onTargetBranchChange={setSelectedTargetBranch}
             />
 
-            {/* Panels row */}
-            <div ref={mainContentRef} className="flex min-h-0 min-w-0 flex-1">
-              {middlePanelActive && workspaceGitInfo ? (
-                // --- Middle panel mode: Chat | Viewer | CompactPanel ---
-                <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-middle`}>
-                  {/* Chat panel (collapsible) */}
-                  <ResizablePanel
-                    ref={chatPanelRef}
-                    collapsible
-                    collapsedSize={0}
-                    minSize={15}
-                    defaultSize={chatPanelCollapsed ? 0 : undefined}
-                    onCollapse={handleCollapseChatPanel}
-                    onExpand={handleExpandChatPanel}
-                    className="min-w-0"
-                    order={1}
-                  >
-                    {chatPanelCollapsed ? (
-                      <CollapsedChatStrip onExpand={() => chatPanelRef.current?.expand()} />
-                    ) : (
-                      <ChatArea
-                        key={selectedWorkspace.id}
-                        workspace={selectedWorkspace}
-                        workspaceChatPanelRef={workspaceChatPanelRef}
-                        onCreatePRHandlerChange={setCreatePRHandler}
-                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
-                        onCollapseChatPanel={handleCollapseChatPanel}
-                      />
-                    )}
-                  </ResizablePanel>
+            {/* Panels row: [ResizablePanelGroup] [Sidecar 58px] */}
+            <div className="flex min-h-0 min-w-0 flex-1">
+              {/* Panel group container — excludes sidecar for correct pixel↔percent math */}
+              <div ref={panelGroupContainerRef} className="h-full min-w-0 flex-1">
+                {middlePanelActive && workspaceGitInfo ? (
+                  // --- Middle panel mode: Chat | Viewer | CompactPanel ---
+                  <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-middle`}>
+                    {/* Chat panel (collapsible) — collapses to 36px strip, not 0 */}
+                    <ResizablePanel
+                      ref={chatPanelRef}
+                      collapsible
+                      collapsedSize={safeCollapsedSize}
+                      minSize={MIN_PANEL_SIZE}
+                      defaultSize={chatPanelCollapsed ? safeCollapsedSize : undefined}
+                      onCollapse={handleCollapseChatPanel}
+                      onExpand={handleExpandChatPanel}
+                      className="min-w-0"
+                      order={1}
+                    >
+                      {chatPanelCollapsed ? (
+                        <CollapsedChatStrip
+                          onExpand={() => chatPanelRef.current?.expand()}
+                          isWorking={isSessionWorking}
+                        />
+                      ) : (
+                        <ChatArea
+                          key={selectedWorkspace.id}
+                          workspace={selectedWorkspace}
+                          workspaceChatPanelRef={workspaceChatPanelRef}
+                          onCreatePRHandlerChange={setCreatePRHandler}
+                          onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
+                          onCollapseChatPanel={handleCollapseChatPanel}
+                        />
+                      )}
+                    </ResizablePanel>
 
-                  <ResizableHandle />
+                    <ResizableHandle />
 
-                  {/* Middle section: viewer + compact right panel */}
-                  <ResizablePanel defaultSize={60} minSize={30} className="min-w-0" order={2}>
-                    <div className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden">
-                      <ResizablePanelGroup direction="horizontal">
-                        {/* Code viewer (diff or file preview) */}
-                        <ResizablePanel minSize={30} className="min-w-0" order={1}>
-                          <div className="flex h-full min-w-0 flex-col overflow-hidden">
-                            {middlePanel.type === "diff" ? (
-                              <DiffTabContent
-                                workspaceId={selectedWorkspace.id}
-                                filePath={middlePanel.filePath}
-                                workspaceGitInfo={workspaceGitInfo}
-                                onClose={handleCloseMiddlePanel}
-                                onPrevFile={onPrevFile}
-                                onNextFile={onNextFile}
-                                fileIndex={fileIndex}
-                                fileCount={fileCount}
-                              />
-                            ) : (
-                              <FileViewer
-                                filePath={middlePanel.filePath}
-                                onClose={handleCloseMiddlePanel}
-                              />
-                            )}
-                          </div>
-                        </ResizablePanel>
+                    {/* Middle section: viewer + compact right panel */}
+                    <ResizablePanel defaultSize={60} minSize={30} className="min-w-0" order={2}>
+                      <div className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden">
+                        <ResizablePanelGroup direction="horizontal">
+                          {/* Code viewer (diff or file preview) */}
+                          <ResizablePanel minSize={30} className="min-w-0" order={1}>
+                            <div className="flex h-full min-w-0 flex-col overflow-hidden">
+                              {middlePanel.type === "diff" ? (
+                                <DiffTabContent
+                                  workspaceId={selectedWorkspace.id}
+                                  filePath={middlePanel.filePath}
+                                  workspaceGitInfo={workspaceGitInfo}
+                                  onClose={handleCloseMiddlePanel}
+                                  onPrevFile={onPrevFile}
+                                  onNextFile={onNextFile}
+                                  fileIndex={fileIndex}
+                                  fileCount={fileCount}
+                                />
+                              ) : (
+                                <FileViewer
+                                  filePath={middlePanel.filePath}
+                                  onClose={handleCloseMiddlePanel}
+                                />
+                              )}
+                            </div>
+                          </ResizablePanel>
 
-                        <ResizableHandle />
+                          <ResizableHandle />
 
-                        {/* Compact right panel (file list + sidecar) */}
-                        <ResizablePanel defaultSize={25} minSize={12} className="min-w-0" order={2}>
-                          <RightSidePanel
-                            workspace={selectedWorkspace}
-                            onOpenDiffTab={handleOpenDiff}
-                            onOpenFilePreview={handleOpenFilePreview}
-                            compact
-                            chatPanelCollapsed={chatPanelCollapsed}
-                            onExitCompactMode={handleExitCompactMode}
-                            onReturnToCode={handleRestoreParkedMiddlePanel}
-                            isWatched={isWatched}
-                          />
-                        </ResizablePanel>
-                      </ResizablePanelGroup>
-                    </div>
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              ) : (
-                // --- Normal mode: Chat | RightSidePanel ---
-                <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-normal`}>
-                  {/* Chat panel (collapsible) */}
-                  <ResizablePanel
-                    ref={chatPanelRef}
-                    collapsible
-                    collapsedSize={0}
-                    minSize={15}
-                    defaultSize={chatPanelCollapsed ? 0 : undefined}
-                    onCollapse={handleCollapseChatPanel}
-                    onExpand={handleExpandChatPanel}
-                    className="min-w-0"
-                    order={1}
-                  >
-                    {chatPanelCollapsed ? (
-                      <CollapsedChatStrip onExpand={() => chatPanelRef.current?.expand()} />
-                    ) : (
-                      <ChatArea
-                        key={selectedWorkspace.id}
-                        workspace={selectedWorkspace}
-                        workspaceChatPanelRef={workspaceChatPanelRef}
-                        onCreatePRHandlerChange={setCreatePRHandler}
-                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
-                        onCollapseChatPanel={handleCollapseChatPanel}
-                      />
-                    )}
-                  </ResizablePanel>
+                          {/* Compact right panel (file list only — no sidecar) */}
+                          <ResizablePanel defaultSize={25} minSize={12} className="min-w-0" order={2}>
+                            <RightSidePanel
+                              workspace={selectedWorkspace}
+                              activeTab={rightSideTab}
+                              onOpenDiffTab={handleOpenDiff}
+                              onOpenFilePreview={handleOpenFilePreview}
+                              compact
+                              isWatched={isWatched}
+                            />
+                          </ResizablePanel>
+                        </ResizablePanelGroup>
+                      </div>
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
+                ) : (
+                  // --- Normal mode: Chat | RightSidePanel ---
+                  <ResizablePanelGroup direction="horizontal" key={`${selectedWorkspaceId}-normal`}>
+                    {/* Chat panel (collapsible) — collapses to 36px strip, not 0 */}
+                    <ResizablePanel
+                      ref={chatPanelRef}
+                      collapsible
+                      collapsedSize={safeCollapsedSize}
+                      minSize={MIN_PANEL_SIZE}
+                      defaultSize={chatPanelCollapsed ? safeCollapsedSize : undefined}
+                      onCollapse={handleCollapseChatPanel}
+                      onExpand={handleExpandChatPanel}
+                      className="min-w-0"
+                      order={1}
+                    >
+                      {chatPanelCollapsed ? (
+                        <CollapsedChatStrip
+                          onExpand={() => chatPanelRef.current?.expand()}
+                          isWorking={isSessionWorking}
+                        />
+                      ) : (
+                        <ChatArea
+                          key={selectedWorkspace.id}
+                          workspace={selectedWorkspace}
+                          workspaceChatPanelRef={workspaceChatPanelRef}
+                          onCreatePRHandlerChange={setCreatePRHandler}
+                          onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
+                          onCollapseChatPanel={handleCollapseChatPanel}
+                        />
+                      )}
+                    </ResizablePanel>
 
-                  <ResizableHandle />
+                    <ResizableHandle />
 
-                  {/* Right side panel */}
-                  <ResizablePanel
-                    ref={rightPanelRef}
-                    defaultSize={rightPanelDefaultSize}
-                    minSize={20}
-                    onResize={handleRightPanelResize}
-                    className="min-w-0"
-                    order={2}
-                  >
-                    <RightSidePanel
-                      workspace={selectedWorkspace}
-                      onOpenDiffTab={handleOpenDiff}
-                      onOpenFilePreview={handleOpenFilePreview}
-                      chatPanelCollapsed={chatPanelCollapsed}
-                      onReturnToCode={handleRestoreParkedMiddlePanel}
-                      isWatched={isWatched}
-                    />
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              )}
+                    {/* Right side panel (collapsible) — collapses to 36px strip */}
+                    <ResizablePanel
+                      ref={rightPanelRef}
+                      collapsible
+                      collapsedSize={safeCollapsedSize}
+                      defaultSize={rightPanelCollapsed ? safeCollapsedSize : rightPanelDefaultSize}
+                      minSize={MIN_PANEL_SIZE}
+                      onResize={handleResize}
+                      onCollapse={handleCollapseRightPanel}
+                      onExpand={handleExpandRightPanel}
+                      className="min-w-0"
+                      order={2}
+                    >
+                      {rightPanelCollapsed ? (
+                        <CollapsedContentStrip
+                          activeTab={rightSideTab}
+                          onExpand={() => resizeToTab(rightSideTab)}
+                        />
+                      ) : (
+                        <RightSidePanel
+                          workspace={selectedWorkspace}
+                          activeTab={rightSideTab}
+                          onOpenDiffTab={handleOpenDiff}
+                          onOpenFilePreview={handleOpenFilePreview}
+                          isWatched={isWatched}
+                        />
+                      )}
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
+                )}
+              </div>
+
+              {/* Always-visible sidecar — outside ResizablePanelGroup */}
+              <RightSidecar
+                activeTab={rightSideTab}
+                onTabChange={handleSidecarTabChange}
+                contentCollapsed={!middlePanelActive && rightPanelCollapsed}
+                compact={middlePanelActive}
+              />
             </div>
           </div>
         ) : (
-          <div ref={mainContentRef} className="flex min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1">
             <WelcomeView
               onCreateWorkspace={onCreateWorkspace}
               onOpenProject={onOpenProject}
@@ -553,21 +670,3 @@ export function MainContent({
   );
 }
 
-/** Thin collapsed strip — shows when chat panel is collapsed */
-function CollapsedChatStrip({ onExpand }: { onExpand: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label="Expand chat"
-      onClick={onExpand}
-      className={cn(
-        "border-border-subtle flex h-full w-full cursor-pointer items-center justify-center border-r",
-        "text-text-muted hover:text-text-secondary hover:bg-bg-overlay",
-        "transition-colors duration-200 ease-out",
-        "animate-[fadeIn_0.15s_0.15s_cubic-bezier(0,0,0.2,1)] [animation-fill-mode:backwards]"
-      )}
-    >
-      <PanelLeft className="h-4 w-4" />
-    </button>
-  );
-}

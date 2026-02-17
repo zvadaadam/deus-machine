@@ -100,8 +100,9 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
     // Create xterm instance with theme-aware colors
     const xterm = new XTerm({
       cursorBlink: true,
-      fontSize: 12,
-      fontFamily: 'Suisse Intl Mono, Menlo, Monaco, "Courier New", monospace',
+      fontSize: 11,
+      fontFamily: '"SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      letterSpacing: 0,
       theme: getTerminalTheme(),
       allowProposedApi: true,
     });

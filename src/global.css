@@ -119,11 +119,11 @@
   --z-tooltip: var(--z-tooltip);
   --z-notification: var(--z-notification);
 
-  /* Font families — Inter for UI, JetBrains Mono for code */
+  /* Font families — System native for UI and code */
   --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono:
-    "JetBrains Mono", "Suisse Intl Mono", "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-pixel: "Geist Pixel Square", monospace;
 
   /* Legacy aliases for backward compatibility */
@@ -132,10 +132,38 @@
   --font-family-pixel: var(--font-pixel);
 
   /*
-   * Typography System:
-   * We use Tailwind's built-in font scale (text-xs, text-sm, text-base, text-lg, etc.)
-   * Custom sizes are defined as utility classes below @theme block
+   * Typography Scale — Dense IDE system (12px base)
+   *
+   * Override Tailwind defaults for a compact productivity tool.
+   * Each size includes font-size and line-height.
+   *
+   * Scale: 2xs(9) → xs(10) → sm(11) → base(12) → lg(14) → xl(16) → 2xl(22) → 3xl(28)
    */
+  --text-2xs: 9px;
+  --text-2xs--line-height: 1.45;
+  --text-xs: 10px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 11px;
+  --text-sm--line-height: 1.5;
+  --text-base: 12px;
+  --text-base--line-height: 1.5;
+  --text-lg: 14px;
+  --text-lg--line-height: 1.45;
+  --text-xl: 16px;
+  --text-xl--line-height: 1.35;
+  --text-2xl: 22px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 1.2;
+
+  --tracking-tighter: -0.03em;
+  --tracking-tight: -0.015em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.015em;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
 
   /* Border radius */
   --radius-xl: calc(var(--radius) + 2px);
@@ -151,11 +179,7 @@
   --animate-drop-overlay-enter: drop-overlay-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
-/* Custom typography utilities for sizes not in Tailwind's default scale */
-.text-2xs {
-  font-size: 10px;
-  line-height: 1.4;
-}
+/* text-2xs is now defined in @theme above */
 
 @keyframes tooltip-enter {
   from {
@@ -181,7 +205,110 @@
   }
 }
 
+/* Dropdown / popover enter/exit — used by Radix DropdownMenu, ContextMenu, Select.
+ * Scale from 0.96 (not 0) + fade + directional slide for snappy, polished feel.
+ * ease-out-cubic (.215,.61,.355,1): fast start, gentle settle — per Kowalski. */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dropdown-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(var(--dropdown-slide-y, 0));
+  }
+}
+
+/* Overlay fade — used by Dialog, Sheet, AlertDialog overlays */
+@keyframes overlay-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes overlay-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Dialog center zoom — individual scale property avoids conflict with Tailwind translate */
+@keyframes dialog-enter {
+  from { opacity: 0; scale: 0.96; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes dialog-exit {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.96; }
+}
+
+/* Sheet slide — slides in from edge */
+@keyframes sheet-enter-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes sheet-exit-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@keyframes sheet-enter-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes sheet-exit-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+@keyframes sheet-enter-top {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+@keyframes sheet-exit-top {
+  from { transform: translateY(0); }
+  to { transform: translateY(-100%); }
+}
+@keyframes sheet-enter-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes sheet-exit-bottom {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
 @keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Breathing pulse for collapsed panel strip — signals active agent work.
+ * Slow 2s cycle with ease-in-out-cubic feels organic, not mechanical. */
+@keyframes strip-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Settle-in for collapsed strip content — pure opacity fade.
+ * No translate: the strip uses writing-mode: vertical-rl + rotate-180,
+ * and translateY would move along the wrong axis, causing a jarring multi-direction flash. */
+@keyframes strip-settle {
   from {
     opacity: 0;
   }
@@ -1073,10 +1200,25 @@ body {
   transition: none;
 }
 
+/* Smooth panel resize for programmatic collapse/expand and boundary transitions.
+ * ease at 300ms (Codex-style) — gentle curve avoids the aggressive start of
+ * ease-out-quart that caused visible content reflow jolt during boundary resize.
+ * will-change hints the browser to composite flex-grow changes on the GPU. */
+[data-slot="resizable-panel"] {
+  will-change: flex-grow;
+  transition: flex-grow 300ms ease;
+}
+
 /* Disable panel transitions during react-resizable-panels drag.
  * The library sets data-resize-handle-active on the handle during drag. */
 [data-resize-handle-active] ~ [data-slot="resizable-panel"],
 :has(> [data-resize-handle-active]) [data-slot="resizable-panel"] {
+  transition: none;
+}
+
+/* Suppress panel transitions during programmatic width restoration (workspace switch).
+ * Set by useRightPanelSizing's useLayoutEffect, removed after 2 rAF frames. */
+[data-suppress-transition] [data-slot="resizable-panel"] {
   transition: none;
 }
 
@@ -1087,7 +1229,8 @@ body {
 .window-resizing [data-slot="sidebar-container"],
 .window-resizing [data-slot="sidebar-inset"],
 .window-resizing [data-slot="sidebar-wrapper"],
-.window-resizing [data-slot="main-content"] {
+.window-resizing [data-slot="main-content"],
+.window-resizing [data-slot="resizable-panel"] {
   transition: none !important;
 }
 
@@ -1293,13 +1436,11 @@ diffs-container.diffs-theme {
   --diffs-dark-bg: var(--background);
   --diffs-light: var(--foreground);
   --diffs-dark: var(--foreground);
-  --diffs-gap-style: 1px solid var(--border);
-  --diffs-gap-inline: 10px;
-  --diffs-gap-block: 8px;
+  --diffs-gap-block: 0;
   --diffs-font-family: var(--font-family-mono);
-  --diffs-header-font-family: var(--font-family-sans);
-  --diffs-font-size: 10px;
-  --diffs-line-height: 15px;
+  --diffs-font-size: 11px;
+  --diffs-line-height: calc(11px * 1.8);
+  --diffs-min-number-column-width: 4ch;
   --diffs-fg-number-override: var(--diff-line-number);
 
   --diffs-addition-color-override: var(--diff-addition-text);
@@ -1338,8 +1479,8 @@ diffs-container.diffs-theme {
 }
 
 diffs-container.diffs-theme-compact {
-  --diffs-font-size: 12px;
-  --diffs-line-height: 21px;
+  --diffs-font-size: 10px;
+  --diffs-line-height: calc(10px * 1.8);
 }
 
 .diff-hover-action {
@@ -1372,7 +1513,7 @@ diffs-container.diffs-theme-compact {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10px;
   font-family: var(--font-family-sans);
 }
 
@@ -1387,8 +1528,9 @@ diffs-container.diffs-theme-compact {
   height: 36px;
   padding-inline: 12px;
   flex-shrink: 0;
-  background: var(--background);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-bottom: none;
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent);
 }
 
 .diff-viewer-title {
@@ -1413,7 +1555,7 @@ diffs-container.diffs-theme-compact {
   color: var(--muted-foreground);
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 10px;
   transition:
     color 120ms ease,
     background 120ms ease;
@@ -1464,7 +1606,7 @@ diffs-container.diffs-theme-compact {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted-foreground);
   font-weight: 500;
 }
@@ -1472,7 +1614,7 @@ diffs-container.diffs-theme-compact {
 .diff-comment-pill {
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -1489,7 +1631,7 @@ diffs-container.diffs-theme-compact {
 
 .diff-comment-text {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--foreground);
   white-space: pre-wrap;
 }
@@ -1536,11 +1678,11 @@ diffs-container.diffs-theme-compact {
    - Clear hierarchy without shouting
    ============================================ */
 
-/* Base markdown container - Dense IDE typography */
+/* Base markdown container - Dense IDE typography (12px base) */
 .markdown-content {
-  font-size: 14px;
-  line-height: 1.6;
-  color: color-mix(in oklch, var(--foreground) 92%, transparent); /* Softer than pure */
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--foreground);
   word-break: break-word;
 }
 
@@ -1552,40 +1694,40 @@ diffs-container.diffs-theme-compact {
 .markdown-content h5,
 .markdown-content h6 {
   color: var(--foreground);
-  line-height: 1.3;
-  margin-top: 1.5rem; /* MORE space above = separates sections */
-  margin-bottom: 0.375rem; /* LESS space below = groups with content */
+  line-height: 1.25;
+  margin-top: 0.75rem; /* Tighter separation between sections */
+  margin-bottom: 0.25rem; /* Groups with content below */
 }
 
 /* Top-level headers: Bold for scanability when scrolling */
 .markdown-content h1 {
-  font-size: 1.25rem; /* 20px */
-  font-weight: 700; /* Bold - primary visual anchor */
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .markdown-content h2 {
-  font-size: 1.125rem; /* 18px */
-  font-weight: 700; /* Bold - secondary visual anchor */
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* Lower-level headers: Semibold (hierarchy without shouting) */
 .markdown-content h3 {
-  font-size: 1rem; /* 16px */
+  font-size: 13px;
   font-weight: 600;
 }
 
 .markdown-content h4 {
-  font-size: 0.875rem; /* 14px */
+  font-size: 12px;
   font-weight: 600;
 }
 
 .markdown-content h5 {
-  font-size: 0.8125rem; /* 13px */
+  font-size: 11px;
   font-weight: 600;
 }
 
 .markdown-content h6 {
-  font-size: 0.75rem; /* 12px */
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1605,10 +1747,10 @@ diffs-container.diffs-theme-compact {
   display: none;
 }
 
-/* Paragraphs - Tighter spacing */
+/* Paragraphs - Tight spacing (4px like Codex) */
 .markdown-content p {
-  margin-top: 0.375rem; /* Reduced from 0.5rem */
-  margin-bottom: 0.375rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 /* Strong and emphasis */
@@ -1619,7 +1761,7 @@ diffs-container.diffs-theme-compact {
 
 .markdown-content em {
   font-style: italic;
-  color: color-mix(in oklch, var(--foreground) 85%, transparent);
+  color: color-mix(in oklch, var(--foreground) 90%, transparent);
 }
 
 /* Links */
@@ -1651,9 +1793,9 @@ diffs-container.diffs-theme-compact {
 /* Lists - Compact with visible bullets */
 .markdown-content ul,
 .markdown-content ol {
-  margin-top: 0.375rem; /* Reduced from 0.5rem */
-  margin-bottom: 0.75rem; /* Reduced from 1rem */
-  padding-left: 1.125rem; /* Reduced from 1.25rem (20px → 18px) */
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.125rem;
 }
 
 .markdown-content ul {
@@ -1709,7 +1851,7 @@ diffs-container.diffs-theme-compact {
 /* Inline code - Subtle pill */
 .markdown-content code:not(pre code) {
   font-family: var(--font-family-mono);
-  font-size: 0.8125em; /* 13px from 14px base */
+  font-size: 0.85em; /* ~10px from 12px base */
   padding: 0.125rem 0.375rem;
   background-color: color-mix(in oklch, var(--muted) 60%, transparent);
   border-radius: 0.25rem;
@@ -1725,7 +1867,7 @@ diffs-container.diffs-theme-compact {
   border-radius: 0.375rem; /* Slightly smaller radius */
   background-color: var(--bg-code);
   font-family: var(--font-family-mono);
-  font-size: 0.75rem; /* 12px (reduced from 14px - SMALLER) */
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1744,7 +1886,7 @@ diffs-container.diffs-theme-compact {
   margin-bottom: 0.75rem;
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem; /* 13px (reduced from 14px) */
+  font-size: 11px;
 }
 
 .markdown-content th,

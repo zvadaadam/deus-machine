@@ -10,7 +10,7 @@ import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
 import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
-import { Copy, ChevronDown, ChevronUp, User } from "lucide-react";
+import { Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
@@ -205,7 +205,7 @@ export const MessageItem = memo(function MessageItem({
     );
   }
 
-  // User messages - iMessage style with avatar above bubble, far right
+  // User messages - iMessage style bubble, aligned right
   return (
     <div
       key={message.id}
@@ -214,18 +214,9 @@ export const MessageItem = memo(function MessageItem({
         isWorking && "opacity-60"
       )}
     >
-      {/* User avatar - above the bubble, far right */}
-      <div
-        className="bg-primary flex size-6 flex-shrink-0 items-center justify-center rounded-md"
-        aria-hidden="true"
-      >
-        <User className="text-primary-foreground size-3" />
-      </div>
-
       {/* Message card */}
       <div
         className={cn(
-          "mt-2",
           roleStyles.maxWidth,
           roleStyles.container,
           chatTheme.message.user.shape,
@@ -254,7 +245,7 @@ export const MessageItem = memo(function MessageItem({
             id={`message-content-${message.id}`}
             className={cn(
               "min-w-0",
-              shouldCollapse && !isExpanded && "relative max-h-[168px] overflow-hidden"
+              shouldCollapse && !isExpanded && "relative max-h-[144px] overflow-hidden"
             )}
           >
             {Array.isArray(otherBlocks) ? (

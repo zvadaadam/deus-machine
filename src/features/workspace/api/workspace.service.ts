@@ -95,19 +95,26 @@ export const WorkspaceService = {
    * Fetch file changes for a workspace.
    * Uses Rust/libgit2 via Tauri IPC when available,
    * falls back to Node.js HTTP when in web mode.
+   *
+   * Returns { files, truncated, totalCount } — truncated is true when
+   * the diff contains more than 1000 files (capped to prevent UI freeze).
    */
   fetchDiffFiles: async (
     id: string,
     workspace?: WorkspaceGitInfo
-  ): Promise<{ files: FileChange[] }> => {
+  ): Promise<{ files: FileChange[]; truncated?: boolean; totalCount?: number }> => {
     if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
       try {
-        const files = await gitDiffFiles(
+        const result = await gitDiffFiles(
           getWorkspacePath(workspace),
           workspace.parent_branch || "",
           workspace.default_branch || ""
         );
-        return { files: files as FileChange[] };
+        return {
+          files: result.files as FileChange[],
+          truncated: result.truncated,
+          totalCount: result.total_count,
+        };
       } catch {
         // Rust git failed — fall through to HTTP
       }

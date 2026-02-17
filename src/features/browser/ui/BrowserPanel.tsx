@@ -819,7 +819,7 @@ export function BrowserPanel({
               (() => {
                 try {
                   return (
-                    <DropdownMenuLabel className="text-muted-foreground truncate text-[10px] font-normal">
+                    <DropdownMenuLabel className="text-muted-foreground truncate text-2xs font-normal">
                       {new URL(activeTab.currentUrl).hostname}
                     </DropdownMenuLabel>
                   );
@@ -844,13 +844,13 @@ export function BrowserPanel({
                 >
                   <span className="flex-1">{b.name}</span>
                   {!b.available && (
-                    <span className="text-muted-foreground text-[10px]">Not installed</span>
+                    <span className="text-muted-foreground text-2xs">Not installed</span>
                   )}
                   {b.available && cookieSyncing === b.name && (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   )}
                   {b.available && !cookieSyncing && lastSyncResult?.browser === b.name && (
-                    <span className="text-success text-[10px]">{lastSyncResult.count} synced</span>
+                    <span className="text-success text-2xs">{lastSyncResult.count} synced</span>
                   )}
                   {b.available && !cookieSyncing && lastSyncResult?.browser !== b.name && (
                     <Check className="text-muted-foreground/40 h-3 w-3" />

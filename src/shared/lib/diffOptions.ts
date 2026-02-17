@@ -6,13 +6,13 @@ import type { PatchDiffProps } from "@pierre/diffs/react";
 type DiffOptions<LAnnotation = undefined> = NonNullable<PatchDiffProps<LAnnotation>["options"]>;
 
 const DIFF_LIMITS = {
-  maxLineDiffLength: 200,
-  tokenizeMaxLineLength: 200,
+  maxLineDiffLength: 1000, // Match Codex — process longer lines for word-level diffs
+  tokenizeMaxLineLength: 1000,
 } as const;
 
 const DIFF_CONTEXT = {
   collapsedContextThreshold: 6,
-  expansionLineCount: 2000,
+  expansionLineCount: 100, // Match Codex — load context in smaller chunks
 } as const;
 
 const DIFF_UNSAFE_CSS = `
@@ -33,11 +33,12 @@ const DIFF_UNSAFE_CSS = `
     z-index: 4;
     min-height: 34px;
     padding-inline: 12px;
-    background: var(--background);
-    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated, var(--background));
+    border-bottom: none;
+    box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent);
   }
   [data-header-content] {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
   }
   [data-metadata] [data-additions-count],

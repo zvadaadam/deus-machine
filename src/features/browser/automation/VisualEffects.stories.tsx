@@ -57,7 +57,7 @@ function TestButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg border px-3 py-2 text-[13px] transition-colors duration-200 ${
+      className={`rounded-lg border px-3 py-2 text-base transition-colors duration-200 ${
         variant === "accent"
           ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
           : "border-border bg-muted/30 text-foreground hover:bg-muted/60"
@@ -74,7 +74,7 @@ function TestButton({
 function StatusBadge({ ready }: { ready: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs ${
         ready ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
       }`}
     >
@@ -101,10 +101,10 @@ function Section({
   return (
     <div className="border-border/40 rounded-xl border bg-black/20 p-5">
       <div className="mb-1 flex items-center gap-2">
-        <span className="text-primary font-mono text-[11px] font-semibold">{number}.</span>
+        <span className="text-primary font-mono text-xs font-semibold">{number}.</span>
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
-      <p className="text-muted-foreground mb-4 text-[12px]">{description}</p>
+      <p className="text-muted-foreground mb-4 text-sm">{description}</p>
       <div className="flex flex-wrap items-center gap-3">{children}</div>
     </div>
   );
@@ -188,7 +188,7 @@ function CursorMoveRipple() {
       <span
         ref={targetC}
         onClick={() => handleClick(targetC.current)}
-        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px]"
+        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-base"
       >
         Target C (far right)
       </span>
@@ -262,7 +262,7 @@ function CursorPin() {
       <input
         ref={inputRef}
         placeholder="Type target input"
-        className="border-border bg-muted/30 focus:border-primary rounded-lg border px-3 py-2 text-[13px] outline-none"
+        className="border-border bg-muted/30 focus:border-primary rounded-lg border px-3 py-2 text-base outline-none"
       />
       <TestButton onClick={testPin} variant="accent">
         Pin to Input
@@ -298,7 +298,7 @@ function RippleOnly() {
           if (!v) return;
           v.rippleAt(e.clientX, e.clientY);
         }}
-        className="border-border/40 text-muted-foreground cursor-crosshair rounded-lg border border-dashed px-6 py-3 text-[12px]"
+        className="border-border/40 text-muted-foreground cursor-crosshair rounded-lg border border-dashed px-6 py-3 text-sm"
       >
         Click anywhere in this box for ripple
       </div>
@@ -359,13 +359,13 @@ function ElementHighlight() {
       <StatusBadge ready={ready} />
       <input
         placeholder="Focus me first"
-        className="border-border bg-muted/30 focus:border-primary rounded-lg border px-3 py-2 text-[13px] outline-none"
+        className="border-border bg-muted/30 focus:border-primary rounded-lg border px-3 py-2 text-base outline-none"
       />
       <TestButton onClick={() => v?.keyFlash()}>Key Flash (focused)</TestButton>
       <button
         ref={buttonRef}
         onClick={() => v?.highlightElement(buttonRef.current!)}
-        className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg border px-3 py-2 text-[13px] transition-colors duration-200"
+        className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg border px-3 py-2 text-base transition-colors duration-200"
       >
         Highlight This Button
       </button>
@@ -506,11 +506,11 @@ function FullClickSequence() {
       <span
         ref={targetC}
         onClick={() => runSequence(targetC.current)}
-        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-[13px]"
+        className="border-border/40 text-muted-foreground cursor-pointer rounded-lg border border-dashed px-4 py-2.5 text-base"
       >
         Sequence C
       </span>
-      {log && <span className="font-mono text-[11px] text-emerald-400">{log}</span>}
+      {log && <span className="font-mono text-xs text-emerald-400">{log}</span>}
     </Section>
   );
 }
@@ -523,7 +523,7 @@ function VisualEffectsDemo() {
     <div className="flex max-w-3xl flex-col gap-5">
       <div>
         <h2 className="text-lg font-semibold">Hive Visual Effects</h2>
-        <p className="text-muted-foreground text-[13px]">
+        <p className="text-muted-foreground text-base">
           Interactive test for all browser automation visual effects. These are injected into the
           WKWebView during AI actions.
         </p>

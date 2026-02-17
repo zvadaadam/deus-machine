@@ -38,12 +38,18 @@ export function gitDiffStats(
   });
 }
 
+export interface TauriChangedFilesResult {
+  files: TauriDiffFile[];
+  truncated: boolean;
+  total_count: number;
+}
+
 export function gitDiffFiles(
   workspacePath: string,
   parentBranch: string,
   defaultBranch: string
-): Promise<TauriDiffFile[]> {
-  return invoke<TauriDiffFile[]>("git_diff_files", {
+): Promise<TauriChangedFilesResult> {
+  return invoke<TauriChangedFilesResult>("git_diff_files", {
     workspacePath,
     parentBranch,
     defaultBranch,

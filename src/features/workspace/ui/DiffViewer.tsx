@@ -329,10 +329,10 @@ export function DiffViewer({
     () => ({
       height: "100%",
       overflow: "auto",
-      fontSize: "12px",
-      lineHeight: "21px",
-      "--diffs-font-size": "12px",
-      "--diffs-line-height": "21px",
+      fontSize: "11px",
+      lineHeight: "20px",
+      "--diffs-font-size": "11px",
+      "--diffs-line-height": "20px",
     }),
     []
   );

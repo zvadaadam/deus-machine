@@ -86,7 +86,7 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
             <p className="text-foreground text-sm font-medium">No design files found</p>
             <p className="text-muted-foreground max-w-[240px] text-xs leading-relaxed">
               Add{" "}
-              <code className="bg-muted/60 rounded px-1 py-0.5 font-mono text-[11px]">.pen</code>{" "}
+              <code className="bg-muted/60 rounded px-1 py-0.5 font-mono text-xs">.pen</code>{" "}
               files to your project to design alongside your code.
             </p>
           </div>
@@ -99,7 +99,7 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
             Get started with Pencil
             <ExternalLink className="h-3 w-3" />
           </a>
-          <p className="text-muted-foreground/70 text-[11px]">Claude Code for Design</p>
+          <p className="text-muted-foreground/70 text-xs">Claude Code for Design</p>
         </div>
       )}
     </div>
