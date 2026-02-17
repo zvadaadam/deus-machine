@@ -74,9 +74,9 @@ export const chatTheme = {
 
   // Collapse constants for long messages
   collapse: {
-    lineHeight: 21, // 14px * 1.5 (text-sm * leading-[1.5])
+    lineHeight: 18, // 12px * 1.5 = 18px
     maxLines: 8, // Number of lines before collapse
-    maxHeight: 168, // 21 * 8 = 168px
+    maxHeight: 144, // 18 * 8 = 144px
     fadeHeight: 48, // h-12 in pixels (3rem = 48px) - subtle fade per user feedback
   },
 
@@ -110,7 +110,7 @@ export const chatTheme = {
     // Text blocks (px-2 py-1.5 to align with tool blocks - consistent 6px vertical padding)
     text: {
       container: "flex flex-col gap-1.5 px-2 py-1.5",
-      content: "m-0 leading-relaxed text-foreground text-base font-sans break-words",
+      content: "m-0 leading-relaxed text-foreground text-sm font-sans break-words",
     },
 
     // Code blocks

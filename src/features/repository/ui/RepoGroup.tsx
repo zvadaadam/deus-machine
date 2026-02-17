@@ -50,7 +50,7 @@ export function RepoGroup({
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2">
             {/* Repo badge */}
             <div className="bg-bg-muted flex h-5 w-5 shrink-0 items-center justify-center rounded-md">
-              <span className="text-text-tertiary text-[10px] font-semibold">{repoInitial}</span>
+              <span className="text-text-tertiary text-2xs font-semibold">{repoInitial}</span>
             </div>
             <span className="text-text-secondary min-w-0 flex-1 truncate text-left text-sm font-medium">
               {group.repo_name}

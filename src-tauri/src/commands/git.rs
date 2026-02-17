@@ -374,6 +374,15 @@ pub struct DiffFileResponse {
 }
 
 #[derive(serde::Serialize)]
+pub struct ChangedFilesResponse {
+    pub files: Vec<DiffFileResponse>,
+    /// True if the list was truncated (too many files)
+    pub truncated: bool,
+    /// Total number of changed files (before truncation)
+    pub total_count: usize,
+}
+
+#[derive(serde::Serialize)]
 pub struct FileDiffResponse {
     pub file: String,
     pub diff: String,
@@ -402,15 +411,24 @@ pub fn git_diff_files(
     workspace_path: String,
     parent_branch: String,
     default_branch: String,
-) -> Result<Vec<DiffFileResponse>, String> {
+) -> Result<ChangedFilesResponse, String> {
     let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
-    let files = git::get_changed_files(&workspace_path, &resolved)?;
+    let result = git::get_changed_files(&workspace_path, &resolved)?;
     let elapsed = start.elapsed();
-    if elapsed.as_millis() > 100 {
-        println!("[GIT] git_diff_files took {}ms ({}, {} files)", elapsed.as_millis(), workspace_path, files.len());
+    if elapsed.as_millis() > 100 || result.truncated {
+        println!("[GIT] git_diff_files took {}ms ({}, {}/{} files{})",
+            elapsed.as_millis(), workspace_path,
+            result.files.len(), result.total_count,
+            if result.truncated { " TRUNCATED" } else { "" });
     }
-    Ok(files.into_iter().map(|f| DiffFileResponse { file: f.file, additions: f.additions, deletions: f.deletions }).collect())
+    Ok(ChangedFilesResponse {
+        files: result.files.into_iter().map(|f| DiffFileResponse {
+            file: f.file, additions: f.additions, deletions: f.deletions
+        }).collect(),
+        truncated: result.truncated,
+        total_count: result.total_count,
+    })
 }
 
 #[tauri::command]

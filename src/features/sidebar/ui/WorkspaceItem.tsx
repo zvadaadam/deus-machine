@@ -64,7 +64,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               <SidebarRowIconSlot>
                 <PixelGrid variant="thinking" size={14} />
               </SidebarRowIconSlot>
-              <span className="text-text-disabled truncate text-[13px] font-normal">
+              <span className="text-text-disabled truncate text-base font-normal">
                 {workspace.branch || "New workspace"}
               </span>
             </div>
@@ -181,7 +181,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             )}
             <span
               className={cn(
-                "truncate text-[13px]",
+                "truncate text-base",
                 isActive
                   ? "text-text-primary font-medium"
                   : isActiveState

@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { Copy, Check, Loader2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { highlightFileLines } from "@/shared/lib/syntaxHighlighter";
 import { detectLanguageFromPath } from "@/features/session/ui/tools/utils/detectLanguage";
 import { useTheme } from "@/app/providers";
@@ -83,10 +82,10 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
     return (
       <div
         key={lineNum}
-        className="relative flex items-stretch font-mono text-[13px] leading-normal tracking-normal"
+        className="relative flex items-stretch font-mono text-base leading-normal tracking-normal"
       >
         {/* Line number gutter */}
-        <span className="w-12 flex-shrink-0 bg-[var(--diff-line-number-bg)] px-3 text-right text-[var(--diff-line-number)] select-none">
+        <span className="w-12 flex-shrink-0 px-3 text-right text-muted-foreground select-none">
           {lineNum}
         </span>
         {/* Code content */}
@@ -101,7 +100,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
   return (
     <div className="bg-background flex h-full flex-col overflow-hidden">
       {/* Header - Fixed at top, h-10 matches DiffViewer */}
-      <div className="border-border flex-shrink-0 border-b">
+      <div className="flex-shrink-0">
         <div className="flex h-10 items-center justify-between gap-4 px-4">
           {/* Left: File path hierarchy */}
           <div className="min-w-0 flex-1 text-xs">
@@ -111,41 +110,32 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
             <span className="text-foreground font-medium">{filename || "Untitled"}</span>
           </div>
 
-          {/* Right: Line count + Copy + Close buttons */}
-          <div className="flex items-center gap-2">
-            {/* Line count */}
-            {!isLoading && !error && lines.length > 0 && (
-              <span className="text-2xs text-muted-foreground/50 font-mono tabular-nums">
-                {lines.length} lines
-              </span>
-            )}
-
+          {/* Right: Copy + Close buttons */}
+          <div className="flex items-center gap-1">
             {/* Copy button */}
             {!isLoading && !error && content && (
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
+                type="button"
                 onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground h-6 w-6"
-                title="Copy file content"
+                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
+                title={copied ? "Copied" : "Copy file content"}
                 aria-label="Copy file content"
               >
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </button>
             )}
 
             {/* Close button */}
             {onClose && (
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
+                type="button"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground h-6 w-6"
+                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
                 title="Close file preview"
                 aria-label="Close file preview"
               >
-                <X className="h-3.5 w-3.5" />
-              </Button>
+                <X className="h-3 w-3" />
+              </button>
             )}
           </div>
         </div>

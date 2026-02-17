@@ -113,7 +113,7 @@ export function SubagentGroupBlock({
 
           {/* Subagent type badge */}
           {subagent_type && (
-            <span className="bg-muted text-muted-foreground/70 flex-shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] leading-none">
+            <span className="bg-muted text-muted-foreground/70 flex-shrink-0 rounded px-1.5 py-0.5 font-mono text-2xs leading-none">
               {subagent_type}
             </span>
           )}

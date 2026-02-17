@@ -85,7 +85,7 @@ function TooltipContent({
  */
 function TooltipKbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="bg-muted text-muted-foreground ml-auto rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tracking-wide">
+    <kbd className="bg-muted text-muted-foreground ml-auto rounded px-1.5 py-0.5 text-xs leading-none font-medium tracking-wide">
       {children}
     </kbd>
   );

@@ -17,7 +17,7 @@ export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewPro
         {/* Branding */}
         <div className="mb-10 flex flex-col items-center text-center">
           <h1
-            className="text-text-primary mb-3 text-[32px] tracking-wide"
+            className="text-text-primary mb-3 text-3xl tracking-wide"
             style={{ fontFamily: "var(--font-pixel)" }}
           >
             hivenet

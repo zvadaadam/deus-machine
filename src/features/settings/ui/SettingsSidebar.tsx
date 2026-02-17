@@ -54,7 +54,7 @@ export function SettingsSidebar() {
                   className="gap-2.5 px-3 py-1.5"
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="text-[13px]">{item.label}</span>
+                  <span className="text-base">{item.label}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             );

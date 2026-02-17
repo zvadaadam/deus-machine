@@ -50,6 +50,19 @@ pub struct DiffFile {
 }
 
 #[derive(Serialize, Clone, Debug)]
+pub struct ChangedFilesResult {
+    pub files: Vec<DiffFile>,
+    /// True if the list was truncated to MAX_CHANGED_FILES
+    pub truncated: bool,
+    /// Total number of changed files (before truncation)
+    pub total_count: usize,
+}
+
+/// Safety cap on the number of changed files returned to the frontend.
+/// Prevents UI freeze when merge-base is stale and thousands of files show as changed.
+const MAX_CHANGED_FILES: usize = 1000;
+
+#[derive(Serialize, Clone, Debug)]
 pub struct FileDiffResult {
     pub file: String,
     pub diff: String,
@@ -283,10 +296,13 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
 
 /// Get per-file addition/deletion counts between the merge-base and the
 /// current working directory state (committed + staged + unstaged + untracked).
+///
+/// Caps results at MAX_CHANGED_FILES to prevent UI freeze when the merge-base
+/// is stale or wrong (e.g., origin fetch failed during workspace creation).
 pub fn get_changed_files(
     workspace_path: &str,
     parent_branch: &str,
-) -> Result<Vec<DiffFile>, String> {
+) -> Result<ChangedFilesResult, String> {
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
@@ -301,7 +317,14 @@ pub fn get_changed_files(
         .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
         .map_err(|e| format!("Failed to compute diff: {}", e))?;
 
-    collect_diff_files(&diff)
+    let mut files = collect_diff_files(&diff)?;
+    let total_count = files.len();
+    let truncated = total_count > MAX_CHANGED_FILES;
+    if truncated {
+        files.truncate(MAX_CHANGED_FILES);
+    }
+
+    Ok(ChangedFilesResult { files, truncated, total_count })
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,7 +1146,7 @@ mod tests {
         let (_dir, path) = create_diverged_repo();
         let files = get_changed_files(&path, "main").unwrap();
 
-        let file_names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        let file_names: Vec<&str> = files.files.iter().map(|f| f.file.as_str()).collect();
 
         // Should include README.md (modified), new_file.txt (added), src/lib.rs (deleted)
         assert!(
@@ -1148,11 +1171,11 @@ mod tests {
         let (_dir, path) = create_diverged_repo();
         let files = get_changed_files(&path, "main").unwrap();
 
-        let new_file = files.iter().find(|f| f.file == "new_file.txt").unwrap();
+        let new_file = files.files.iter().find(|f| f.file == "new_file.txt").unwrap();
         assert!(new_file.additions > 0, "new_file.txt should have additions");
         assert_eq!(new_file.deletions, 0, "new_file.txt should have no deletions");
 
-        let deleted_file = files.iter().find(|f| f.file == "src/lib.rs").unwrap();
+        let deleted_file = files.files.iter().find(|f| f.file == "src/lib.rs").unwrap();
         assert_eq!(deleted_file.additions, 0, "src/lib.rs should have no additions");
         assert!(deleted_file.deletions > 0, "src/lib.rs should have deletions");
     }
@@ -1161,7 +1184,7 @@ mod tests {
     fn get_changed_files_no_changes_returns_empty() {
         let (_dir, path) = create_simple_repo();
         let files = get_changed_files(&path, "main").unwrap();
-        assert!(files.is_empty());
+        assert!(files.files.is_empty());
     }
 
     // -----------------------------------------------------------------------
@@ -1314,8 +1337,8 @@ mod tests {
         let files = get_changed_files(&path, "main").unwrap();
 
         // Sum of per-file stats should equal aggregate stats
-        let total_additions: u32 = files.iter().map(|f| f.additions).sum();
-        let total_deletions: u32 = files.iter().map(|f| f.deletions).sum();
+        let total_additions: u32 = files.files.iter().map(|f| f.additions).sum();
+        let total_deletions: u32 = files.files.iter().map(|f| f.deletions).sum();
 
         assert_eq!(
             stats.additions, total_additions,
@@ -1446,7 +1469,7 @@ mod tests {
 
         let files = get_changed_files(&path, "main").unwrap();
         assert!(
-            !files.is_empty(),
+            !files.files.is_empty(),
             "Workdir diff should list changed files even when HEAD == merge-base"
         );
     }
@@ -1467,7 +1490,7 @@ mod tests {
     fn get_changed_files_includes_uncommitted_modification() {
         let (_dir, path) = create_repo_with_workdir_changes();
         let files = get_changed_files(&path, "main").unwrap();
-        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        let names: Vec<&str> = files.files.iter().map(|f| f.file.as_str()).collect();
         assert!(
             names.contains(&"existing.txt"),
             "Expected uncommitted modified file in {:?}",
@@ -1479,7 +1502,7 @@ mod tests {
     fn get_changed_files_includes_untracked_file() {
         let (_dir, path) = create_repo_with_workdir_changes();
         let files = get_changed_files(&path, "main").unwrap();
-        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        let names: Vec<&str> = files.files.iter().map(|f| f.file.as_str()).collect();
         assert!(
             names.contains(&"untracked.txt"),
             "Expected untracked file in {:?}",
@@ -1531,7 +1554,7 @@ mod tests {
         );
 
         let files = get_changed_files(&path, "main").unwrap();
-        let names: Vec<&str> = files.iter().map(|f| f.file.as_str()).collect();
+        let names: Vec<&str> = files.files.iter().map(|f| f.file.as_str()).collect();
         assert!(
             names.contains(&"staged.txt"),
             "Expected staged file in {:?}",

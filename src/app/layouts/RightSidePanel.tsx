@@ -1,11 +1,12 @@
 /**
- * Right Side Panel — narrow sidebar with file tree, sidecar tabs.
+ * Right Side Panel — content area for the right panel.
+ *
+ * Renders file tree, browser, terminal, config, or design based on
+ * the active sidecar tab. The sidecar icon strip itself is rendered
+ * separately in MainContent (outside the ResizablePanelGroup).
  *
  * Diffs and file previews open in the middle panel (side-by-side with chat).
  * Panel sizing is managed by react-resizable-panels (parent PanelGroup).
- * PR actions have moved to WorkspaceHeader (unified header bar).
- *
- * Layout: [Content panel (file tree/browser/terminal)] [Sidecar tabs]
  */
 
 import { useCallback, useMemo } from "react";
@@ -20,7 +21,6 @@ import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
-import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { BrowserPanel } from "@/features/browser";
 import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
 import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
@@ -30,34 +30,34 @@ import type { Workspace } from "@/shared/types";
 
 interface RightSidePanelProps {
   workspace: Workspace;
+  /** Which sidecar tab is active — drives content switching */
+  activeTab: RightSideTab;
   /** Open a diff in the middle panel */
   onOpenDiffTab: (filePath: string) => void;
   /** Open a file preview in the middle panel */
   onOpenFilePreview: (filePath: string) => void;
   /** Compact mode — narrower panel when diff viewer is active */
   compact?: boolean;
-  /** Whether chat panel is collapsed — drives flex-1 expansion */
-  chatPanelCollapsed?: boolean;
-  /** Called when a non-code sidecar tab is clicked in compact mode (closes diff) */
-  onExitCompactMode?: () => void;
-  /** Called when user switches sidecar back to Code (used to restore parked diff layout) */
-  onReturnToCode?: () => void;
   /** Whether file watcher is active — disables polling in useFileChanges */
   isWatched?: boolean;
 }
 
 export function RightSidePanel({
   workspace,
+  activeTab,
   onOpenDiffTab,
   onOpenFilePreview,
   compact,
-  chatPanelCollapsed,
-  onExitCompactMode,
-  onReturnToCode,
   isWatched = false,
 }: RightSidePanelProps) {
-  const { rightSideTab, selectedFilePath, setRightSideTab, setSelectedFilePath } =
+  const { selectedFilePath, setSelectedFilePath, rightPanelTab, setRightPanelTab } =
     useWorkspaceLayout(workspace.id);
+
+  // Map store's RightPanelTab ("changes"|"files") → FileBrowserPanel's FilterMode ("changes"|"all")
+  const filterMode = rightPanelTab === "files" ? "all" : "changes";
+  const handleFilterModeChange = (mode: "all" | "changes") => {
+    setRightPanelTab(mode === "all" ? "files" : "changes");
+  };
 
   const {
     isDetached: isBrowserDetached,
@@ -86,7 +86,9 @@ export function RightSidePanel({
     workspaceGitInfo,
     isWatched
   );
-  const fileChanges = useMemo(() => fileChangesData ?? [], [fileChangesData]);
+  const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
+  const fileChangesTruncated = fileChangesData?.truncated ?? false;
+  const fileChangesTotalCount = fileChangesData?.totalCount ?? 0;
 
   // Uncommitted files (HEAD → workdir) and last-turn files (checkpoint → workdir)
   const { data: uncommittedData } = useUncommittedFiles(
@@ -140,74 +142,57 @@ export function RightSidePanel({
     [changedPaths, onOpenDiffTab, onOpenFilePreview, setSelectedFilePath, workspace.workspace_path]
   );
 
-  const handleRightSideTabChange = useCallback(
-    (tab: RightSideTab) => {
-      setRightSideTab(tab);
-      if (tab === "code") {
-        onReturnToCode?.();
-      }
-    },
-    [setRightSideTab, onReturnToCode]
-  );
-
   return (
-    <div
-      className={cn("flex h-full min-w-0 flex-col", !compact && "border-border-subtle border-l")}
-    >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Content panel: file tree, browser, terminal, config, design */}
-        <div className="bg-bg-raised flex h-full flex-1 flex-col overflow-hidden">
-          {/* In compact mode, force code tab content regardless of sidecar selection */}
-          {(compact || rightSideTab === "code") && (
-            <CodePanelContent
-              workspace={workspace}
-              fileChanges={fileChanges}
-              uncommittedFiles={uncommittedFiles}
-              lastTurnFiles={lastTurnFiles}
-              selectedFilePath={selectedFilePath}
-              onFileClick={handleFileClick}
-            />
-          )}
-
-          {/* Browser panel section: when detached, show placeholder; otherwise
-              keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
-          {isBrowserDetached ? (
-            <div
-              className={cn("h-full w-full", (compact || rightSideTab !== "browser") && "hidden")}
-            >
-              <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
-            </div>
-          ) : (
-            <div
-              className={cn(
-                "h-full w-full",
-                (compact || rightSideTab !== "browser") && "pointer-events-none invisible absolute"
-              )}
-            >
-              <BrowserPanel
-                workspaceId={workspace.id}
-                panelVisible={!compact && rightSideTab === "browser"}
-                onDetach={detachBrowser}
-              />
-            </div>
-          )}
-
-          {!compact && rightSideTab === "terminal" && (
-            <TerminalPanel workspacePath={workspace.workspace_path} />
-          )}
-
-          {!compact && rightSideTab === "config" && <ConfigPanel />}
-
-          {!compact && rightSideTab === "design" && <DesignPanel workspaceId={workspace.id} />}
-        </div>
-
-        <RightSidecar
-          activeTab={rightSideTab}
-          onTabChange={handleRightSideTabChange}
-          compact={compact}
-          onRequestExitCompact={onExitCompactMode}
+    <div className={cn(
+      "bg-bg-raised flex h-full min-w-0 flex-1 flex-col overflow-hidden",
+      !compact && "border-border-subtle border-l"
+    )}>
+      {/* In compact mode, force code tab content regardless of sidecar selection */}
+      {(compact || activeTab === "code") && (
+        <CodePanelContent
+          workspace={workspace}
+          fileChanges={fileChanges}
+          uncommittedFiles={uncommittedFiles}
+          lastTurnFiles={lastTurnFiles}
+          fileChangesTruncated={fileChangesTruncated}
+          fileChangesTotalCount={fileChangesTotalCount}
+          selectedFilePath={selectedFilePath}
+          onFileClick={handleFileClick}
+          filterMode={filterMode}
+          onFilterModeChange={handleFilterModeChange}
         />
-      </div>
+      )}
+
+      {/* Browser panel section: when detached, show placeholder; otherwise
+          keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
+      {isBrowserDetached ? (
+        <div
+          className={cn("h-full w-full", (compact || activeTab !== "browser") && "hidden")}
+        >
+          <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "h-full w-full",
+            (compact || activeTab !== "browser") && "pointer-events-none invisible absolute"
+          )}
+        >
+          <BrowserPanel
+            workspaceId={workspace.id}
+            panelVisible={!compact && activeTab === "browser"}
+            onDetach={detachBrowser}
+          />
+        </div>
+      )}
+
+      {!compact && activeTab === "terminal" && (
+        <TerminalPanel workspacePath={workspace.workspace_path} />
+      )}
+
+      {!compact && activeTab === "config" && <ConfigPanel />}
+
+      {!compact && activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
     </div>
   );
 }

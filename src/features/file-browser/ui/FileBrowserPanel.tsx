@@ -9,19 +9,18 @@ import {
   Loader2,
   GitBranch,
   FileCode,
-  MoreHorizontal,
+  Check,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  ChevronDown,
   X,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -42,12 +41,20 @@ interface FileBrowserPanelProps {
   uncommittedFiles?: FileChange[];
   /** Last-turn file changes (checkpoint → workdir) */
   lastTurnFiles?: FileChange[];
+  /** True if the file changes list was truncated (too many files) */
+  fileChangesTruncated?: boolean;
+  /** Total number of changed files (before truncation) */
+  fileChangesTotalCount?: number;
   /** Controlled selection path */
   selectedFilePath?: string | null;
   /** Called when any file is clicked */
   onFileClick?: (path: string) => void;
   /** Optional header slot rendered above the panel */
   headerSlot?: React.ReactNode;
+  /** Controlled filter mode — when provided, component uses this instead of local state */
+  filterMode?: FilterMode;
+  /** Called when user changes the filter tab (Changes / All files) */
+  onFilterModeChange?: (mode: FilterMode) => void;
 }
 
 /**
@@ -177,11 +184,18 @@ export function FileBrowserPanel({
   fileChanges = [],
   uncommittedFiles,
   lastTurnFiles,
+  fileChangesTruncated,
+  fileChangesTotalCount,
   selectedFilePath,
   onFileClick: onFileClickProp,
   headerSlot,
+  filterMode: controlledFilterMode,
+  onFilterModeChange,
 }: FileBrowserPanelProps) {
-  const [filterMode, setFilterMode] = useState<FilterMode>("changes");
+  // Controlled when parent provides filterMode, uncontrolled fallback otherwise.
+  const [localFilterMode, setLocalFilterMode] = useState<FilterMode>("changes");
+  const filterMode = controlledFilterMode ?? localFilterMode;
+  const setFilterMode = onFilterModeChange ?? setLocalFilterMode;
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -311,74 +325,80 @@ export function FileBrowserPanel({
     <div className="flex h-full flex-col overflow-hidden">
       {headerSlot}
 
-      {/* Header: filter toggle (left) + three-dot menu (right) */}
-      <div className="border-border/30 flex flex-shrink-0 items-center justify-between border-b px-2 py-1">
-        {/* Filter toggle: Changes first, All second */}
-        <div className="bg-muted/30 flex items-center rounded-md p-0.5">
+      {/* Header: tab toggle (left) + filter dropdown (right) */}
+      <div className="flex h-9 flex-shrink-0 items-center justify-between px-3">
+        {/* Tab toggle: Changes | All files */}
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => setFilterMode("changes")}
             className={cn(
-              "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors duration-200 ease-[ease]",
+              "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
               filterMode === "changes"
-                ? "bg-background text-foreground font-medium shadow-sm"
-                : "text-muted-foreground/60 hover:text-muted-foreground"
+                ? "bg-muted text-secondary-foreground font-medium"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <GitBranch className="h-3 w-3" />
             Changes
-            {changedCount > 0 && (
-              <span className="bg-muted-foreground/20 text-muted-foreground rounded px-1 text-[10px] leading-none font-medium">
-                {changedCount}
-              </span>
-            )}
           </button>
           <button
             onClick={() => setFilterMode("all")}
             className={cn(
-              "rounded px-2 py-0.5 text-[11px] transition-colors duration-200 ease-[ease]",
+              "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
               filterMode === "all"
-                ? "bg-background text-foreground font-medium shadow-sm"
-                : "text-muted-foreground/60 hover:text-muted-foreground"
+                ? "bg-muted text-secondary-foreground font-medium"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
-            All
+            All files
           </button>
         </div>
 
-        {/* Three-dot menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0">
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {/* Sub-filter radio group — only visible in Changes mode */}
-            {filterMode === "changes" && (
-              <>
-                <DropdownMenuRadioGroup
-                  value={changesFilter}
-                  onValueChange={(v) => setChangesFilter(v as ChangesFilter)}
+        {/* Filter dropdown — visible in Changes mode */}
+        {filterMode === "changes" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease]">
+                <SlidersHorizontal className="h-[11px] w-[11px]" />
+                <span>
+                  {changesFilter === "all-changes"
+                    ? "All Changes"
+                    : changesFilter === "uncommitted"
+                      ? "Uncommitted"
+                      : "Last Turn"}
+                </span>
+                <ChevronDown className="h-[10px] w-[10px]" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[140px]">
+              {(
+                [
+                  ["all-changes", "All changes"],
+                  ["uncommitted", "Uncommitted"],
+                  ["last-turn", "Last turn"],
+                ] as const
+              ).map(([value, label]) => (
+                <DropdownMenuItem
+                  key={value}
+                  onClick={() => setChangesFilter(value)}
+                  className="gap-2 text-xs"
                 >
-                  <DropdownMenuRadioItem value="all-changes" className="text-xs">
-                    All changes
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="uncommitted" className="text-xs">
-                    Uncommitted
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="last-turn" className="text-xs">
-                    Last turn
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem onClick={handleRefresh}>
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              Refresh files
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                  <Check
+                    className={cn(
+                      "h-3 w-3",
+                      changesFilter === value ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
+                <RefreshCw className="h-3 w-3" />
+                Refresh files
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Search bar — only for All files tab */}
@@ -391,7 +411,7 @@ export function FileBrowserPanel({
             placeholder="Filter files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-foreground placeholder:text-muted-foreground/40 h-5 min-w-0 flex-1 bg-transparent text-[11px] outline-none"
+            className="text-foreground placeholder:text-muted-foreground/40 h-5 min-w-0 flex-1 bg-transparent text-xs outline-none"
           />
           {searchQuery && (
             <button
@@ -401,6 +421,15 @@ export function FileBrowserPanel({
               <X className="h-3 w-3" />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Truncation warning — shown when diff has too many files */}
+      {fileChangesTruncated && filterMode === "changes" && (
+        <div className="border-border/30 bg-muted/20 border-b px-2.5 py-1.5">
+          <p className="text-muted-foreground text-xs">
+            Showing {fileChanges.length.toLocaleString()} of {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
+          </p>
         </div>
       )}
 

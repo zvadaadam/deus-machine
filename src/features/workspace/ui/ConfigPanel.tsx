@@ -88,7 +88,7 @@ export function ConfigPanel() {
               <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                 Context Window
               </p>
-              <span className="text-muted-foreground text-[11px]">{contextWindowLabel}</span>
+              <span className="text-muted-foreground text-xs">{contextWindowLabel}</span>
             </div>
             <div className="bg-muted/40 h-2 w-full overflow-hidden rounded-full">
               <div
@@ -98,7 +98,7 @@ export function ConfigPanel() {
                 }}
               />
             </div>
-            <p className="text-muted-foreground text-[11px]">
+            <p className="text-muted-foreground text-xs">
               Context usage metrics are not wired yet.
             </p>
           </section>

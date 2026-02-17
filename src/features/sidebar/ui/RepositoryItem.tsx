@@ -103,7 +103,7 @@ export function RepositoryItem({
                         variant="action"
                         asChild
                         onClick={() => onNewWorkspace(repository.repo_id)}
-                        className="text-text-tertiary hover:text-text-secondary w-full text-left text-[13px]"
+                        className="text-text-tertiary hover:text-text-secondary w-full text-left text-base"
                       >
                         <button type="button">
                           <SidebarRowMain>

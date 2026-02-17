@@ -83,7 +83,7 @@ export function BranchSelector({
               >
                 <span className="truncate">{branch.name}</span>
                 {branch.is_remote && (
-                  <span className="text-text-disabled flex-shrink-0 text-[10px]">remote</span>
+                  <span className="text-text-disabled flex-shrink-0 text-2xs">remote</span>
                 )}
               </button>
             ))
