@@ -97,7 +97,7 @@ export function WorkspaceHeader({
   const subtitle = [repositoryName, branch].filter(Boolean).join(" / ");
 
   return (
-    <div data-slot="workspace-header" className="bg-bg-elevated border-border-subtle flex h-9 flex-shrink-0 items-center justify-between border-b px-4 transition-[padding] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]">
+    <div data-slot="workspace-header" className="bg-bg-elevated border-border-subtle flex h-9 flex-shrink-0 items-center justify-between border-b px-4">
       {/* Left section */}
       <div className="flex min-w-0 items-center gap-[5px]">
         {/* Sidebar toggle — visible when collapsed */}
