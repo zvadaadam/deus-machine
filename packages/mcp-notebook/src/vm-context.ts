@@ -127,6 +127,7 @@ function isLastLineExpression(code: string): boolean {
     "let ",
     "var ",
     "function ",
+    "function*",
     "class ",
     "if ",
     "if(",
@@ -162,15 +163,85 @@ function isLastLineExpression(code: string): boolean {
   return true;
 }
 
+/**
+ * Strip comments and string literals from code, preserving template literal
+ * interpolation content so that `await` inside `${...}` is still detected.
+ */
+function stripCommentsAndStrings(code: string): string {
+  let result = "";
+  let i = 0;
+
+  while (i < code.length) {
+    const ch = code[i];
+
+    // Line comment — skip to end of line
+    if (ch === "/" && code[i + 1] === "/") {
+      const nl = code.indexOf("\n", i);
+      if (nl === -1) break;
+      i = nl + 1;
+      result += "\n";
+      continue;
+    }
+
+    // Block comment — skip to closing */
+    if (ch === "/" && code[i + 1] === "*") {
+      const end = code.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 2;
+      result += " ";
+      continue;
+    }
+
+    // Single or double-quoted string — replace with empty string literal
+    if (ch === '"' || ch === "'") {
+      const end = skipString(code, i);
+      i = end;
+      result += '""';
+      continue;
+    }
+
+    // Template literal — walk through it, preserving interpolation content
+    if (ch === "`") {
+      i++; // skip opening backtick
+      let tmplBraceDepth = 0;
+      while (i < code.length) {
+        if (tmplBraceDepth > 0) {
+          // Inside ${...} interpolation — keep the content (it may contain await)
+          if (code[i] === "{") { tmplBraceDepth++; result += code[i]; i++; continue; }
+          if (code[i] === "}") {
+            tmplBraceDepth--;
+            if (tmplBraceDepth === 0) { i++; continue; } // closing } of interpolation
+            result += code[i]; i++; continue;
+          }
+          // Skip nested strings inside interpolations (recursively strip them)
+          if (code[i] === '"' || code[i] === "'" || code[i] === "`") {
+            const end = skipString(code, i);
+            i = end;
+            result += '""';
+            continue;
+          }
+          result += code[i];
+          i++;
+          continue;
+        }
+        if (code[i] === "\\" && i + 1 < code.length) { i += 2; continue; }
+        if (code[i] === "$" && code[i + 1] === "{") { tmplBraceDepth = 1; i += 2; continue; }
+        if (code[i] === "`") { i++; break; } // closing backtick
+        i++;
+      }
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
 /** Check if code contains top-level await (simple heuristic) */
 function containsAwait(code: string): boolean {
-  // Remove string literals and comments to avoid false positives
-  const stripped = code
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
-    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+  const stripped = stripCommentsAndStrings(code);
   return /\bawait\s/.test(stripped);
 }
 
@@ -217,6 +288,40 @@ function skipString(code: string, start: number): number {
     i++;
   }
   return i;
+}
+
+/**
+ * At position `pos` in `code`, check whether a function or class declaration
+ * starts here. Returns the name and the index just past the name, or null.
+ * Matches: `function foo(`, `function* foo(`, `class Foo {`, `class Foo extends`.
+ * Only named declarations — anonymous expressions are ignored.
+ */
+function matchFunctionOrClassDeclaration(
+  code: string,
+  pos: number
+): { names: string[]; end: number } | null {
+  // Must be at start-of-code or preceded by newline (same rule as matchDeclaration)
+  if (pos > 0) {
+    let back = pos - 1;
+    while (back >= 0 && (code[back] === " " || code[back] === "\t")) back--;
+    if (back >= 0 && code[back] !== "\n" && code[back] !== "\r") return null;
+  }
+
+  const sub = code.slice(pos);
+
+  // function declarations: `function name(` or `function* name(`
+  const fnMatch = sub.match(/^function\s*\*?\s+(\w+)/);
+  if (fnMatch) {
+    return { names: [fnMatch[1]], end: pos + fnMatch[0].length };
+  }
+
+  // class declarations: `class Name` (followed by { or extends or implements)
+  const clsMatch = sub.match(/^class\s+(\w+)/);
+  if (clsMatch) {
+    return { names: [clsMatch[1]], end: pos + clsMatch[0].length };
+  }
+
+  return null;
 }
 
 /**
@@ -284,12 +389,13 @@ function matchDeclaration(
 }
 
 /**
- * Extract variable names from const/let/var declarations in source code.
- * Only extracts declarations at brace depth 0 (top-level), so variables
- * declared inside callbacks, if blocks, loops, or try/catch are excluded.
- * Handles simple identifiers, object destructuring { a, b: c }, and
- * array destructuring [a, b]. Used to hoist async IIFE-scoped variables
- * back to the vm.Context so they persist across cell executions.
+ * Extract declared names from top-level declarations in source code.
+ * Handles const/let/var (simple, object destructuring, array destructuring)
+ * and function/class declarations (including generator functions).
+ * Only extracts at brace depth 0 (top-level), so names declared inside
+ * callbacks, if blocks, loops, or try/catch are excluded.
+ * Used to hoist async IIFE-scoped declarations back to the vm.Context
+ * so they persist across cell executions.
  */
 function extractDeclaredNames(code: string): string[] {
   const names: string[] = [];
@@ -327,7 +433,8 @@ function extractDeclaredNames(code: string): string[] {
 
     // Only match declarations at the top level (depth 0)
     if (depth === 0) {
-      const match = matchDeclaration(code, i);
+      const match =
+        matchDeclaration(code, i) ?? matchFunctionOrClassDeclaration(code, i);
       if (match) {
         names.push(...match.names);
         i = match.end;
@@ -447,7 +554,9 @@ export class PersistentVMContext {
           const lines = code.trim().split("\n");
           const lastLine = lines.pop()!;
           const body = lines.join("\n");
-          wrappedCode = `(async () => { ${body}${hoistSuffix}\n  return (${lastLine}); })()`;
+          // Strip trailing semicolons to avoid syntax errors in `return (expr;)`
+          const expr = lastLine.replace(/;\s*$/, "");
+          wrappedCode = `(async () => { ${body}${hoistSuffix}\n  return (${expr}); })()`;
         } else {
           wrappedCode = `(async () => { ${code}${hoistSuffix} })()`;
         }

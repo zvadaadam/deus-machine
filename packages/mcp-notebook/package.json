@@ -4,7 +4,7 @@
   "type": "module",
   "main": "src/server.ts",
   "scripts": {
-    "start": "tsx src/server.ts",
+    "start": "bunx tsx src/server.ts",
     "build": "bun build src/server.ts --outdir dist --target node"
   },
   "dependencies": {

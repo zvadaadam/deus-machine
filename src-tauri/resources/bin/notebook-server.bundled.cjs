@@ -20927,6 +20927,7 @@ function isLastLineExpression(code) {
   const lines = code.trim().split("\n");
   const last = lines[lines.length - 1].trim();
   if (!last) return false;
+  if (last === "}") return false;
   const statementKeywords = [
     "import ",
     "export ",
@@ -20966,6 +20967,138 @@ function isLastLineExpression(code) {
 function containsAwait(code) {
   const stripped = code.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''").replace(/`(?:[^`\\]|\\.)*`/g, "``");
   return /\bawait\s/.test(stripped);
+}
+function skipString(code, start) {
+  const quote = code[start];
+  let i = start + 1;
+  if (quote === "`") {
+    let tmplBraceDepth = 0;
+    while (i < code.length) {
+      if (tmplBraceDepth > 0) {
+        if (code[i] === "{") {
+          tmplBraceDepth++;
+          i++;
+          continue;
+        }
+        if (code[i] === "}") {
+          tmplBraceDepth--;
+          i++;
+          continue;
+        }
+        if (code[i] === '"' || code[i] === "'" || code[i] === "`") {
+          i = skipString(code, i);
+          continue;
+        }
+        i++;
+        continue;
+      }
+      if (code[i] === "\\" && i + 1 < code.length) {
+        i += 2;
+        continue;
+      }
+      if (code[i] === "$" && code[i + 1] === "{") {
+        tmplBraceDepth = 1;
+        i += 2;
+        continue;
+      }
+      if (code[i] === "`") return i + 1;
+      i++;
+    }
+    return i;
+  }
+  while (i < code.length) {
+    if (code[i] === "\\" && i + 1 < code.length) {
+      i += 2;
+      continue;
+    }
+    if (code[i] === quote) return i + 1;
+    i++;
+  }
+  return i;
+}
+function matchDeclaration(code, pos) {
+  if (pos > 0) {
+    let back = pos - 1;
+    while (back >= 0 && (code[back] === " " || code[back] === "	")) back--;
+    if (back >= 0 && code[back] !== "\n" && code[back] !== "\r") return null;
+  }
+  const sub = code.slice(pos);
+  const kwMatch = sub.match(/^(const|let|var)\s+/);
+  if (!kwMatch) return null;
+  const afterKw = pos + kwMatch[0].length;
+  const names = [];
+  const simpleMatch = code.slice(afterKw).match(/^(\w+)/);
+  if (simpleMatch && code[afterKw] !== "{" && code[afterKw] !== "[") {
+    names.push(simpleMatch[1]);
+    return { names, end: afterKw + simpleMatch[0].length };
+  }
+  if (code[afterKw] === "{") {
+    const closeIdx = code.indexOf("}", afterKw);
+    if (closeIdx === -1) return null;
+    const inner = code.slice(afterKw + 1, closeIdx);
+    for (const part of inner.split(",")) {
+      const trimmed = part.trim();
+      const alias = trimmed.includes(":") ? trimmed.split(":").pop().trim() : trimmed;
+      const name = alias.split("=")[0].trim();
+      if (name && /^\w+$/.test(name)) names.push(name);
+    }
+    return { names, end: closeIdx + 1 };
+  }
+  if (code[afterKw] === "[") {
+    const closeIdx = code.indexOf("]", afterKw);
+    if (closeIdx === -1) return null;
+    const inner = code.slice(afterKw + 1, closeIdx);
+    for (const part of inner.split(",")) {
+      const name = part.trim().replace(/^\.\.\./, "").split("=")[0].trim();
+      if (name && /^\w+$/.test(name)) names.push(name);
+    }
+    return { names, end: closeIdx + 1 };
+  }
+  return null;
+}
+function extractDeclaredNames(code) {
+  const names = [];
+  let depth = 0;
+  let i = 0;
+  while (i < code.length) {
+    const ch = code[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      i = skipString(code, i);
+      continue;
+    }
+    if (ch === "/" && code[i + 1] === "/") {
+      const nl = code.indexOf("\n", i);
+      if (nl === -1) break;
+      i = nl + 1;
+      continue;
+    }
+    if (ch === "/" && code[i + 1] === "*") {
+      const end = code.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 2;
+      continue;
+    }
+    if (ch === "{") {
+      depth++;
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      depth--;
+      i++;
+      continue;
+    }
+    if (depth === 0) {
+      const match = matchDeclaration(code, i);
+      if (match) {
+        names.push(...match.names);
+        i = match.end;
+        continue;
+      }
+    }
+    i++;
+  }
+  return [...new Set(names)];
 }
 var PersistentVMContext = class {
   context;
@@ -21051,15 +21184,18 @@ var PersistentVMContext = class {
       const isAsync2 = containsAwait(code);
       const hasExpression = isLastLineExpression(code);
       if (isAsync2) {
+        const declaredNames = extractDeclaredNames(code);
+        const hoistSuffix = declaredNames.length > 0 ? `
+;Object.assign(this, {${declaredNames.join(",")}});` : "";
         let wrappedCode;
         if (hasExpression) {
           const lines = code.trim().split("\n");
           const lastLine = lines.pop();
           const body = lines.join("\n");
-          wrappedCode = `(async () => { ${body}
+          wrappedCode = `(async () => { ${body}${hoistSuffix}
   return (${lastLine}); })()`;
         } else {
-          wrappedCode = `(async () => { ${code} })()`;
+          wrappedCode = `(async () => { ${code}${hoistSuffix} })()`;
         }
         const script = new import_node_vm.default.Script(wrappedCode, { filename });
         result = await script.runInContext(this.context, { timeout });
@@ -21418,7 +21554,7 @@ server.tool(
           type: "text",
           text: cell_id ? `Cell '${cell_id}' not found.` : "No cells have been executed yet."
         }],
-        isError: !cell_id
+        isError: !!cell_id
       };
     }
     const lines = [
