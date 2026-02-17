@@ -375,15 +375,19 @@ export function MainContent({
     <SidebarInset className="min-w-0">
       <div
         data-slot="main-content"
-        className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 overflow-hidden rounded-xl border"
+        className={cn(
+          "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden border transition-[border-radius,border-color] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
+          sidebarOpen ? "border-border-subtle rounded-l-xl border-r-0" : "border-transparent rounded-none",
+        )}
       >
         {/* Sidebar toggle — visible when sidebar collapsed and no workspace */}
         {!sidebarOpen && !selectedWorkspace && (
           <button
             type="button"
+            data-slot="welcome-sidebar-toggle"
             aria-label="Expand sidebar"
             onClick={toggleSidebar}
-            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 ease-out"
+            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-md transition-[left,color,background-color] duration-200 ease-out"
           >
             <PanelLeft className="h-4 w-4" />
           </button>
