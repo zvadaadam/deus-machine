@@ -76,7 +76,7 @@ export function WorkspaceEmptyState({
         {STEPS.map((step, i) => (
           <div key={step.num} className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground/30 tabular-nums">
+              <span className="text-xs font-semibold text-muted-foreground/30 tabular-nums">
                 {step.num}.
               </span>
               <span className="text-xs text-muted-foreground/50 whitespace-nowrap">
@@ -84,7 +84,7 @@ export function WorkspaceEmptyState({
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <span className="text-muted-foreground/20 text-[10px]">—</span>
+              <span className="text-muted-foreground/20 text-xs">—</span>
             )}
           </div>
         ))}

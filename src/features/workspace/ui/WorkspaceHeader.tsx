@@ -108,7 +108,7 @@ export function WorkspaceHeader({
                 type="button"
                 aria-label="Expand sidebar"
                 onClick={toggleSidebar}
-                className="text-text-muted hover:text-text-secondary hover:bg-bg-muted mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+                className="text-text-muted hover:text-text-secondary hover:bg-bg-muted mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200"
               >
                 <PanelLeft className="h-3.5 w-3.5" />
               </button>
@@ -162,7 +162,7 @@ export function WorkspaceHeader({
           <button
             type="button"
             onClick={onReviewPR}
-            className="text-text-tertiary hover:text-text-secondary flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors duration-150"
+            className="text-text-tertiary hover:text-text-secondary flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors duration-200"
           >
             <Eye className="h-3 w-3" />
             <span>Review</span>
@@ -191,7 +191,7 @@ export function WorkspaceHeader({
           <button
             type="button"
             onClick={onArchive}
-            className="bg-primary text-primary-foreground flex h-[23px] items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-150 hover:opacity-90"
+            className="bg-primary text-primary-foreground flex h-[23px] items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-200 hover:opacity-90"
           >
             <Archive className="h-2.5 w-2.5" />
             <span>Archive</span>
@@ -388,7 +388,7 @@ function SplitButton({
         disabled={leftDisabled}
         className={cn(
           "bg-primary flex items-center gap-1.5 rounded-l-md px-2.5 text-xs font-semibold",
-          "transition-colors duration-150",
+          "transition-colors duration-200",
           leftDisabled
             ? "text-primary-foreground cursor-not-allowed opacity-50"
             : "text-primary-foreground hover:opacity-90"
@@ -408,7 +408,7 @@ function SplitButton({
           type="button"
           className={cn(
             "bg-accent-blue-surface border-primary text-primary flex items-center gap-1 border-l px-2 text-xs font-medium",
-            "rounded-r-md transition-colors duration-150 hover:opacity-90"
+            "rounded-r-md transition-colors duration-200 hover:opacity-90"
           )}
         >
           <span>{branchLabel}</span>
@@ -468,7 +468,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const trigger = (
     <button
       type="button"
-      className="text-text-subtle border-border-strong hover:bg-bg-muted flex items-center gap-1 rounded-[5px] border px-2 py-1 transition-colors duration-150"
+      className="text-text-subtle border-border-strong hover:bg-bg-muted flex items-center gap-1 rounded-[5px] border px-2 py-1 transition-colors duration-200"
       onPointerEnter={apps.length > 0 ? handleOpen : undefined}
       onPointerLeave={apps.length > 0 ? handleClose : undefined}
     >
