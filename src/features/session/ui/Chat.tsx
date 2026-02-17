@@ -3,9 +3,10 @@ import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
+import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, MessageSquare } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
@@ -101,6 +102,9 @@ interface ChatProps {
   hasOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
+  workspaceBranch?: string | null;
+  workspaceParentBranch?: string | null;
+  isFirstSession?: boolean;
   className?: string;
 }
 
@@ -112,6 +116,9 @@ export function Chat({
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
+  workspaceBranch,
+  workspaceParentBranch,
+  isFirstSession,
   className,
 }: ChatProps) {
   const { parseContent, toolResultMap, parentToolUseMap } = useSession();
@@ -374,17 +381,11 @@ export function Chat({
             <Skeleton className="h-4 w-[80%]" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 animate-fade-in-up">
-            <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-              <MessageSquare className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-            </div>
-            <div className="space-y-1 text-center">
-              <p className="text-muted-foreground/70 text-sm font-medium">No messages yet</p>
-              <p className="text-muted-foreground/50 text-xs">
-                Start a conversation to make changes to your workspace
-              </p>
-            </div>
-          </div>
+          <WorkspaceEmptyState
+            branch={workspaceBranch}
+            parentBranch={workspaceParentBranch}
+            isFirstSession={isFirstSession}
+          />
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">

@@ -80,13 +80,19 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {activeTab?.type === "chat" && tabSessionId && (
           <SessionPanel
+            key={tabSessionId}
             ref={workspaceChatPanelRef}
             sessionId={tabSessionId}
             workspaceId={workspace.id}
             workspacePath={workspace.workspace_path}
+            workspaceBranch={workspace.branch}
+            workspaceParentBranch={workspace.parent_branch}
+            isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
+            initialModel={activeTab.data?.initialModel}
             onAgentTypeChange={(agentType) => updateChatTabAgentType(activeTab.id, agentType)}
             onSessionStarted={() => markChatTabStarted(activeTab.id)}
+            onOpenNewTab={handleTabAdd}
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
             onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
           />

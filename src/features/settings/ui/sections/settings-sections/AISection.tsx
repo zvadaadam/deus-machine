@@ -57,7 +57,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
     <div className="space-y-5">
       <div>
         <h3 className="text-base font-semibold">AI</h3>
-        <p className="text-muted-foreground mt-1 text-[13px]">
+        <p className="text-muted-foreground mt-1 text-base">
           Configure your Claude API provider, model, and credentials.
         </p>
       </div>
@@ -67,7 +67,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         <Label htmlFor="api-key" className="text-sm">
           Anthropic API key
         </Label>
-        <p className="text-muted-foreground text-[13px]">
+        <p className="text-muted-foreground text-base">
           Used for direct API access. Stored locally on your machine.
         </p>
         <Input
@@ -86,7 +86,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         <Label htmlFor="provider" className="text-sm">
           Provider
         </Label>
-        <p className="text-muted-foreground text-[13px]">Where API requests are routed.</p>
+        <p className="text-muted-foreground text-base">Where API requests are routed.</p>
         <Select
           value={settings.claude_provider ?? "anthropic"}
           onValueChange={(value) => saveSetting("claude_provider", value)}
@@ -110,7 +110,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         <Label htmlFor="model" className="text-sm">
           Default model
         </Label>
-        <p className="text-muted-foreground text-[13px]">The model used for new conversations.</p>
+        <p className="text-muted-foreground text-base">The model used for new conversations.</p>
         <Select
           value={settings.claude_model ?? "sonnet"}
           onValueChange={(value) => saveSetting("claude_model", value)}
@@ -134,7 +134,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
             <Label htmlFor="custom-endpoint" className="text-sm">
               Custom endpoint URL
             </Label>
-            <p className="text-muted-foreground text-[13px]">
+            <p className="text-muted-foreground text-base">
               The base URL for your custom Claude-compatible API.
             </p>
             <Input

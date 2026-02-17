@@ -116,7 +116,7 @@ export const FileTreeNode = memo(function FileTreeNode({
       {/* Deleted files get strikethrough - semantic honesty, not decoration */}
       <span
         className={cn(
-          "min-w-0 flex-1 truncate text-[13px]",
+          "min-w-0 flex-1 truncate text-base",
           isDirectory ? "text-muted-foreground/50 font-normal" : "text-foreground/90 font-medium",
           node.status === "deleted" && "line-through opacity-50"
         )}
@@ -126,7 +126,7 @@ export const FileTreeNode = memo(function FileTreeNode({
 
       {/* Stats (files only) - muted pastel colors */}
       {node.type === "file" && (node.additions || node.deletions) && (
-        <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums opacity-60">
+        <div className="flex items-center gap-1.5 font-mono text-2xs tabular-nums opacity-60">
           {node.additions ? <NumberFlow value={node.additions} prefix="+" className="text-success/80" /> : null}
           {node.deletions ? <NumberFlow value={node.deletions} prefix="-" className="text-destructive/80" /> : null}
         </div>

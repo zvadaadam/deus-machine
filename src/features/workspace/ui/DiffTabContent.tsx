@@ -49,7 +49,7 @@ export function DiffTabContent({
       {/* File navigation bar — only shown when browsing multiple changed files */}
       {showNavigation && (
         <div className="border-border/40 bg-muted/20 flex h-7 flex-shrink-0 items-center justify-between border-b px-2">
-          <span className="text-muted-foreground/70 text-[10px] tabular-nums">
+          <span className="text-muted-foreground/70 text-2xs tabular-nums">
             {fileIndex + 1} / {fileCount}
           </span>
           <div className="flex items-center gap-0.5">

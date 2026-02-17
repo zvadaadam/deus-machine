@@ -63,22 +63,22 @@ export function FileMentionPopover({
   if (results.length === 0 && !loading) {
     if (!query) return null;
     return (
-      <div className="border-border/50 bg-popover/95 w-[360px] rounded-lg border p-3 shadow-lg backdrop-blur-xl">
+      <div className="border-border/50 bg-popover/95 w-[340px] rounded-lg border p-2.5 shadow-lg backdrop-blur-xl">
         <p className="text-muted-foreground text-center text-xs">No files found</p>
       </div>
     );
   }
 
   return (
-    <div className="border-border/50 bg-popover/95 w-[360px] overflow-hidden rounded-lg border shadow-lg backdrop-blur-xl">
+    <div className="border-border/50 bg-popover/95 w-[340px] overflow-hidden rounded-lg border shadow-lg backdrop-blur-xl">
       {loading && results.length === 0 && (
-        <div className="flex items-center justify-center gap-2 p-3">
-          <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+        <div className="flex items-center justify-center gap-1.5 p-2.5">
+          <Loader2 className="text-muted-foreground h-3 w-3 animate-spin" />
           <span className="text-muted-foreground text-xs">Searching...</span>
         </div>
       )}
 
-      <div ref={listRef} className="max-h-[240px] overflow-y-auto py-1">
+      <div ref={listRef} className="max-h-[200px] overflow-y-auto py-0.5">
         {results.map((result, index) => {
           const dir = getDirectory(result.path);
           const isSelected = index === selectedIndex;
@@ -87,7 +87,7 @@ export function FileMentionPopover({
             <button
               key={result.path}
               className={cn(
-                "flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-75",
+                "flex w-full items-center gap-2 px-2.5 py-1 text-left transition-colors duration-75",
                 isSelected
                   ? "bg-accent text-accent-foreground"
                   : "text-foreground hover:bg-accent/50"
@@ -98,12 +98,14 @@ export function FileMentionPopover({
                 onSelect(result.path);
               }}
             >
-              <File className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+              <File className="text-muted-foreground h-3 w-3 shrink-0" />
               <div className="min-w-0 flex-1">
-                <span className="text-[13px] leading-tight">
+                <span className="text-xs leading-tight">
                   {highlightMatch(result.name, query)}
                 </span>
-                {dir && <span className="text-muted-foreground ml-1.5 text-[11px]">{dir}</span>}
+                {dir && (
+                  <span className="text-muted-foreground ml-1.5 text-2xs">{dir}</span>
+                )}
               </div>
             </button>
           );

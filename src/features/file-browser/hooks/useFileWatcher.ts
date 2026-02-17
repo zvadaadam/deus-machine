@@ -12,12 +12,21 @@
  * 3. This hook receives event → invalidates Rust file cache + React Query caches
  * 4. React Query refetches only the invalidated queries
  * 5. Component unmounts → stops watching via Tauri IPC
+ *
+ * SETTLING DELAY:
+ * After a workspace becomes "ready", a 2-second delay is applied before
+ * starting the watcher. This lets the filesystem settle after git worktree
+ * checkout completes — without this, the watcher would pick up checkout
+ * events and trigger expensive scan + render cascades on large repos.
  */
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { listen, invoke, isTauriEnv } from "@/platform/tauri";
 import { queryKeys } from "@/shared/api/queryKeys";
+
+/** Delay before starting watcher to let filesystem settle after worktree checkout */
+const WATCHER_SETTLING_DELAY_MS = 2000;
 
 interface FileChangeEvent {
   workspace_path: string;
@@ -50,15 +59,21 @@ export function useFileWatcher(
       return;
     }
 
-    // Start watching
-    invoke("watch_workspace", { workspacePath })
-      .then(() => {
-        if (isActive) setIsWatching(true);
-      })
-      .catch((err: unknown) => {
-        console.warn("[FileWatcher] Failed to start watching:", err);
-        if (isActive) setIsWatching(false);
-      });
+    // Delay watcher start to let filesystem settle after worktree checkout.
+    // Without this, git worktree add checking out thousands of files would
+    // flood the watcher with events, triggering expensive scan + render cascades.
+    const settleTimeout = setTimeout(() => {
+      if (!isActive) return;
+
+      invoke("watch_workspace", { workspacePath })
+        .then(() => {
+          if (isActive) setIsWatching(true);
+        })
+        .catch((err: unknown) => {
+          console.warn("[FileWatcher] Failed to start watching:", err);
+          if (isActive) setIsWatching(false);
+        });
+    }, WATCHER_SETTLING_DELAY_MS);
 
     // Listen for debounced change events
     const unlistenPromise = listen<FileChangeEvent>(
@@ -92,9 +107,10 @@ export function useFileWatcher(
       },
     );
 
-    // Cleanup: stop watching + remove event listener
+    // Cleanup: cancel settle timer + stop watching + remove event listener
     return () => {
       isActive = false;
+      clearTimeout(settleTimeout);
       setIsWatching(false);
       invoke("unwatch_workspace", { workspacePath }).catch(() => {});
       unlistenPromise.then((unlisten) => unlisten()).catch(() => {});

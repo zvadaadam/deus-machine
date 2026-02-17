@@ -182,7 +182,11 @@ export function useFileChanges(
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
       const result = await WorkspaceService.fetchDiffFiles(workspaceId!, workspace);
-      return result.files || [];
+      return {
+        files: result.files || [],
+        truncated: result.truncated ?? false,
+        totalCount: result.totalCount ?? result.files?.length ?? 0,
+      };
     },
     enabled: !!workspaceId,
     staleTime: 30000,

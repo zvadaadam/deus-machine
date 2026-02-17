@@ -12,7 +12,7 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
     <div className="space-y-5">
       <div>
         <h3 className="text-base font-semibold">Extensions</h3>
-        <p className="text-muted-foreground mt-1 text-[13px]">
+        <p className="text-muted-foreground mt-1 text-base">
           MCP servers, commands, and agents loaded from your configuration files.
         </p>
       </div>
@@ -55,7 +55,7 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
               {agent.tools?.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {agent.tools.map((tool) => (
-                    <Badge key={tool} variant="secondary" className="text-[11px] font-normal">
+                    <Badge key={tool} variant="secondary" className="text-xs font-normal">
                       {tool}
                     </Badge>
                   ))}

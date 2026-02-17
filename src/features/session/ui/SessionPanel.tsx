@@ -30,6 +30,9 @@ interface SessionPanelProps {
   sessionId: string;
   workspacePath: string;
   workspaceId?: string;
+  workspaceBranch?: string | null;
+  workspaceParentBranch?: string | null;
+  isFirstSession?: boolean;
   onClose?: () => void;
   embedded?: boolean;
   onCompact?: (handler: () => void) => void;
@@ -38,6 +41,10 @@ interface SessionPanelProps {
   onStop?: (handler: () => void) => void;
   onAgentTypeChange?: (agentType: RuntimeAgentType) => void;
   onSessionStarted?: () => void;
+  /** Opens a new chat tab with the given model pre-selected */
+  onOpenNewTab?: (initialModel?: string) => void;
+  /** Model to pre-select when this tab was created from the locked-group picker */
+  initialModel?: string;
 }
 
 export interface SessionPanelRef {
@@ -50,6 +57,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       sessionId,
       workspacePath,
       workspaceId,
+      workspaceBranch,
+      workspaceParentBranch,
+      isFirstSession,
       onClose,
       embedded = false,
       onCompact,
@@ -57,7 +67,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onSendAgentMessage,
       onStop,
       onAgentTypeChange,
+      onOpenNewTab,
       onSessionStarted,
+      initialModel,
     },
     ref
   ) => {
@@ -205,7 +217,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Local state for message input
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState("NONE");
-    const [model, setModel] = useState("sonnet");
+    const [model, setModel] = useState(initialModel ?? "sonnet");
     const runtimeModelId = getRuntimeModelId(model);
     const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
 
@@ -323,6 +335,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               loadingOlder={loadOlderMutation.isPending}
               onLoadOlder={handleLoadOlder}
               onStop={stopSession}
+              workspaceBranch={workspaceBranch}
+              workspaceParentBranch={workspaceParentBranch}
+              isFirstSession={isFirstSession}
             />
 
             {/* Fade overlay: smoothly transitions chat scroll area into input */}
@@ -339,10 +354,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               mcpServers={mcpServers}
               contextTokenCount={contextTokenCount}
               workspacePath={workspacePath}
+              hasMessages={messages.length > 0}
               onMessageChange={setMessageInput}
               onSend={(content) => sendMessage(content)}
               onStop={stopSession}
               onModelChange={handleModelChange}
+              onOpenNewTab={onOpenNewTab}
               onThinkingLevelChange={handleThinkingLevelChange}
               onAttachmentClick={handleAttachmentClick}
             />
@@ -403,6 +420,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     loadingOlder={loadOlderMutation.isPending}
                     onLoadOlder={handleLoadOlder}
                     onStop={stopSession}
+                    workspaceBranch={workspaceBranch}
+                    workspaceParentBranch={workspaceParentBranch}
                   />
 
                   {/* Fade overlay: smoothly transitions chat scroll area into input */}
@@ -420,12 +439,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     mcpServers={mcpServers}
                     contextTokenCount={contextTokenCount}
                     workspacePath={workspacePath}
+                    hasMessages={messages.length > 0}
                     onMessageChange={setMessageInput}
                     onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}
                     onCreatePR={createPR}
                     onStop={stopSession}
                     onModelChange={handleModelChange}
+                    onOpenNewTab={onOpenNewTab}
                     onThinkingLevelChange={handleThinkingLevelChange}
                     onAttachmentClick={handleAttachmentClick}
                   />

@@ -123,7 +123,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
               {/* Status badge */}
               <div
                 className={cn(
-                  "flex-shrink-0 rounded-full px-1.5 py-0.5 text-[0.65rem] font-medium tracking-wide uppercase",
+                  "flex-shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium tracking-wide uppercase",
                   todo.status === "completed" && "bg-success/10 text-success",
                   todo.status === "in_progress" && "bg-info/10 text-info",
                   todo.status === "pending" && "bg-muted text-muted-foreground"

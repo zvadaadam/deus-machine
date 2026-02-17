@@ -20,7 +20,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
     <div className="space-y-5">
       <div>
         <h3 className="text-base font-semibold">General</h3>
-        <p className="text-muted-foreground mt-1 text-[13px]">
+        <p className="text-muted-foreground mt-1 text-base">
           Profile, appearance, and display preferences.
         </p>
       </div>
@@ -67,7 +67,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
         <Label htmlFor="diff-view" className="text-sm">
           Diff view mode
         </Label>
-        <p className="text-muted-foreground text-[13px]">
+        <p className="text-muted-foreground text-base">
           How file changes are displayed in the diff viewer.
         </p>
         <Select
@@ -90,7 +90,7 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
       <div className="flex items-center justify-between">
         <div>
           <Label className="text-sm">Onboarding</Label>
-          <p className="text-muted-foreground text-[13px]">Replay the setup walkthrough.</p>
+          <p className="text-muted-foreground text-base">Replay the setup walkthrough.</p>
         </div>
         <Button
           variant="outline"
