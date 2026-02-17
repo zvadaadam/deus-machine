@@ -560,18 +560,20 @@ export class ClaudeAgentHandler implements AgentHandler {
       console.error(`[${generatorId}] Error in Claude query:`, error);
 
       const isAbort = error instanceof Error && error.name === "AbortError";
+      const errorMsg = error instanceof Error ? error.message : String(error);
 
       if (!isAbort) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMsg,
           agentType: "claude",
         });
       }
 
       // Update DB status so session doesn't stay stuck as "working"
-      updateSessionStatus(sessionId, isAbort ? "idle" : "error");
+      // Persist error message so frontend can display it in the chat
+      updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : errorMsg);
     } finally {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;

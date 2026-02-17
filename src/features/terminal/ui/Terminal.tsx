@@ -10,6 +10,8 @@ import "./Terminal.css";
 interface TerminalProps {
   id: string;
   workspacePath: string;
+  /** Command to execute automatically after shell init (e.g. "claude login") */
+  initialCommand?: string;
 }
 
 // ANSI color palettes tuned for light and dark backgrounds
@@ -84,7 +86,7 @@ function getTerminalTheme() {
   return base;
 }
 
-export function Terminal({ id, workspacePath }: TerminalProps) {
+export function Terminal({ id, workspacePath, initialCommand }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -149,7 +151,20 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
         cwd: workspacePath,
       })
       .then(() => {
-        if (!disposed) ready = true;
+        if (!disposed) {
+          ready = true;
+          // Auto-run initial command after shell init settles
+          if (initialCommand) {
+            setTimeout(() => {
+              if (!disposed) {
+                const encoded = Array.from(new TextEncoder().encode(initialCommand + "\n"));
+                ptyCommands.write(ptyId, encoded).catch((err) => {
+                  console.error("Failed to write initial command:", err);
+                });
+              }
+            }, 300);
+          }
+        }
       })
       .catch((err) => {
         if (!disposed) {
@@ -193,7 +208,7 @@ export function Terminal({ id, workspacePath }: TerminalProps) {
       ptyCommands.kill(ptyId).catch(() => {});
       xterm.dispose();
     };
-  }, [id, workspacePath]);
+  }, [id, workspacePath, initialCommand]);
 
   return (
     <div className="terminal-container">

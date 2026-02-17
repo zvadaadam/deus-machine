@@ -1,12 +1,15 @@
 import { useState, useRef, useCallback } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Upload } from "lucide-react";
+import { Upload, TerminalSquare } from "lucide-react";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
 import { TextBlock } from "./blocks/TextBlock";
 import { ThinkingBlock } from "./blocks/ThinkingBlock";
+import { Button } from "@/components/ui/button";
+import { chatTheme } from "./theme";
+import { cn } from "@/shared/lib/utils";
 
 // MessageInput
 const inputMeta: Meta<typeof MessageInput> = {
@@ -420,4 +423,113 @@ export const DragAndDrop: StoryObj<typeof MessageInput> = {
     model: "sonnet",
     thinkingLevel: "NONE",
   },
+};
+
+// ── Session Error Message (inline in chat flow) ─────────────────────────
+
+/**
+ * Mirrors the inline error JSX from Chat.tsx.
+ * Shows how SDK errors (rate limits, API failures) appear in the conversation.
+ */
+function ErrorMessage({
+  message,
+  provider,
+  showLoginButton,
+  showRetryButton,
+}: {
+  message: string;
+  provider?: string;
+  showLoginButton?: boolean;
+  showRetryButton?: boolean;
+}) {
+  const label = provider
+    ? `${provider.charAt(0).toUpperCase() + provider.slice(1)} Error`
+    : "Error";
+
+  return (
+    <div className={cn(chatTheme.message.assistant.container, "w-fit max-w-[60%]")}>
+      <div className="flex items-center gap-4 rounded-lg border border-destructive/20 border-l-2 border-l-destructive bg-destructive/5 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-destructive/80">{label}</p>
+          <p className="mt-0.5 text-sm text-foreground/80 break-words">{message}</p>
+        </div>
+        {(showLoginButton || showRetryButton) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {showLoginButton && (
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => console.log("open login terminal")}>
+                <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
+                Log in
+              </Button>
+            )}
+            {showRetryButton && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => console.log("retry in new chat")}>
+                Retry in new chat
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export const SessionErrorRateLimit: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="You've hit your rate limit. Resets at 7:00 PM (Europe/Prague)."
+      provider="claude"
+      showRetryButton
+    />
+  ),
+};
+
+export const SessionErrorAPIFailure: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="API error: 529 Overloaded. The server is temporarily unable to handle the request."
+      provider="codex"
+      showRetryButton
+    />
+  ),
+};
+
+export const SessionErrorLong: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="Connection failed after 3 retries. The Claude API returned HTTP 503 Service Unavailable. This usually indicates a temporary server issue. Your message has been saved and will be retried automatically when the service recovers."
+      provider="claude"
+      showRetryButton
+    />
+  ),
+};
+
+export const SessionErrorAuth: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="Not logged in. Please run /login to authenticate with Claude."
+      provider="claude"
+      showLoginButton
+      showRetryButton
+    />
+  ),
+};
+
+export const SessionErrorCodexApiKey: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="OPENAI_API_KEY or CODEX_API_KEY not found in environment. Set it in Settings → Environment Variables."
+      provider="codex"
+      showRetryButton
+    />
+  ),
+};
+
+export const SessionErrorCodexRateLimit: StoryObj = {
+  render: () => (
+    <ErrorMessage
+      message="429 Too Many Requests — Rate limit exceeded. Please try again in 30 seconds."
+      provider="codex"
+      showRetryButton
+    />
+  ),
 };
