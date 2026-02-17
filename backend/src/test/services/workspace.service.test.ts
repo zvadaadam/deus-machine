@@ -1,5 +1,5 @@
 import { vi, describe, it, expect } from 'vitest';
-import { generateUniqueCityName, CITY_NAMES } from '../../services/workspace.service';
+import { generateUniqueName, CELESTIAL_NAMES } from '../../services/workspace.service';
 
 function createMockDb(existingNames: string[] = []) {
   return {
@@ -9,29 +9,29 @@ function createMockDb(existingNames: string[] = []) {
   };
 }
 
-describe('CITY_NAMES', () => {
+describe('CELESTIAL_NAMES', () => {
   it('is a non-empty array of strings', () => {
-    expect(Array.isArray(CITY_NAMES)).toBe(true);
-    expect(CITY_NAMES.length).toBeGreaterThan(0);
-    CITY_NAMES.forEach(name => {
+    expect(Array.isArray(CELESTIAL_NAMES)).toBe(true);
+    expect(CELESTIAL_NAMES.length).toBeGreaterThan(0);
+    CELESTIAL_NAMES.forEach(name => {
       expect(typeof name).toBe('string');
     });
   });
 });
 
-describe('generateUniqueCityName', () => {
-  it('returns a string from CITY_NAMES when no existing workspaces', () => {
+describe('generateUniqueName', () => {
+  it('returns a string from CELESTIAL_NAMES when no existing workspaces', () => {
     const mockDb = createMockDb([]);
-    const result = generateUniqueCityName(mockDb as any);
+    const result = generateUniqueName(mockDb as any);
 
     expect(typeof result).toBe('string');
-    expect(CITY_NAMES).toContain(result);
+    expect(CELESTIAL_NAMES).toContain(result);
   });
 
   it('returns a name not already in use', () => {
-    const taken = ['tokyo', 'delhi', 'shanghai'];
+    const taken = ['europa', 'titan', 'sirius'];
     const mockDb = createMockDb(taken);
-    const result = generateUniqueCityName(mockDb as any);
+    const result = generateUniqueName(mockDb as any);
 
     expect(taken).not.toContain(result);
     expect(typeof result).toBe('string');
@@ -39,17 +39,15 @@ describe('generateUniqueCityName', () => {
 
   it('queries the database for existing workspace directory names', () => {
     const mockDb = createMockDb([]);
-    generateUniqueCityName(mockDb as any);
+    generateUniqueName(mockDb as any);
 
     expect(mockDb.prepare).toHaveBeenCalledWith('SELECT directory_name FROM workspaces');
   });
 
-  it('falls back to versioned name when all cities are taken', () => {
-    const mockDb = createMockDb([...CITY_NAMES]);
-    const result = generateUniqueCityName(mockDb as any);
+  it('falls back to versioned name when all names are taken', () => {
+    const mockDb = createMockDb([...CELESTIAL_NAMES]);
+    const result = generateUniqueName(mockDb as any);
 
-    // When all base city names are taken, the function tries versioned names
-    // which contain '-v' (e.g., 'tokyo-v42')
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
     // It should either be a versioned name or a timestamp fallback
@@ -59,16 +57,16 @@ describe('generateUniqueCityName', () => {
   });
 
   it('falls back to timestamp-based name when everything else fails', () => {
-    // Create a mock that includes all CITY_NAMES and many versioned variants
-    // to exhaust both the random city and versioned name loops
-    const allPossibleNames: string[] = [...CITY_NAMES];
-    for (const city of CITY_NAMES) {
+    // Create a mock that includes all CELESTIAL_NAMES and many versioned variants
+    // to exhaust both the random name and versioned name loops
+    const allPossibleNames: string[] = [...CELESTIAL_NAMES];
+    for (const name of CELESTIAL_NAMES) {
       for (let v = 0; v < 100; v++) {
-        allPossibleNames.push(`${city}-v${v}`);
+        allPossibleNames.push(`${name}-v${v}`);
       }
     }
     const mockDb = createMockDb(allPossibleNames);
-    const result = generateUniqueCityName(mockDb as any);
+    const result = generateUniqueName(mockDb as any);
 
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
@@ -81,7 +79,7 @@ describe('generateUniqueCityName', () => {
     const results = new Set<string>();
     // Run multiple times to verify randomness (at least 2 unique over 20 calls)
     for (let i = 0; i < 20; i++) {
-      results.add(generateUniqueCityName(mockDb as any));
+      results.add(generateUniqueName(mockDb as any));
     }
     expect(results.size).toBeGreaterThanOrEqual(2);
   });
