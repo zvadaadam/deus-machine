@@ -11,7 +11,7 @@ import { NotFoundError, ValidationError } from '../lib/errors';
 import { parseBody } from '../lib/validate';
 import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib/schemas';
 import * as gitService from '../services/git.service';
-import { generateUniqueCityName } from '../services/workspace.service';
+import { generateUniqueName } from '../services/workspace.service';
 import {
   getAllWorkspaces,
   getWorkspacesByRepo,
@@ -360,7 +360,7 @@ app.post('/workspaces', async (c) => {
   const repo = getRepoById(db, repository_id);
   if (!repo) throw new NotFoundError('Repository not found');
 
-  const workspace_name = generateUniqueCityName(db);
+  const workspace_name = generateUniqueName(db);
   const parent_branch = repo.default_branch || 'main';
   const workspaceId = randomUUID();
 
