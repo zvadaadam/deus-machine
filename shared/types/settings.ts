@@ -59,4 +59,4 @@ export interface Agent {
  * Settings section identifiers
  * Used for navigation in settings UI
  */
-export type SettingsSection = "general" | "ai" | "extensions";
+export type SettingsSection = "general" | "ai" | "extensions" | "environment";

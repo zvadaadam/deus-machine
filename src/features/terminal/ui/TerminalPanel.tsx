@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTerminalTaskStore, consumeTerminalTask } from "../store/terminalTaskStore";
 import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { Terminal } from "./Terminal";
 
@@ -24,6 +25,25 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
   const [tabs, setTabs] = useState<TerminalTab[]>(() => [initialTab]);
   const [activeTabId, setActiveTabId] = useState<string | null>(() => initialTab.id);
   const [nextTerminalNum, setNextTerminalNum] = useState(2);
+
+  // Watch for queued task commands from the task store (e.g. "bun run build" from header buttons)
+  const pendingTask = useTerminalTaskStore((s) => s.pendingTask);
+
+  useEffect(() => {
+    if (!pendingTask) return;
+    const task = consumeTerminalTask();
+    if (!task) return;
+
+    const id = `task-${Date.now()}`;
+    const newTab: TerminalTab = {
+      id,
+      title: task.title,
+      initialCommand: task.command,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+    setNextTerminalNum((n) => n + 1);
+  }, [pendingTask]);
 
   // Watch for pending terminal commands from the layout store (e.g. "claude login" from chat error)
   const pendingCommand = useWorkspaceLayoutStore(

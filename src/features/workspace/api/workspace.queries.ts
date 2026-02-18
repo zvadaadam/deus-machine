@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { produce } from "immer";
-import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
+import { WorkspaceService, type WorkspaceGitInfo, type ManifestResponse } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
@@ -24,7 +24,7 @@ export function useWorkspacesByRepo(state: string = "ready,initializing") {
     refetchInterval: (query) => {
       const data = query.state.data as RepoGroup[] | undefined;
       const hasInitializing = data?.some((g) =>
-        g.workspaces.some((w) => w.state === "initializing")
+        g.workspaces.some((w) => w.state === "initializing" || w.setup_status === "running")
       );
       return hasInitializing ? 2_000 : 10_000;
     },
@@ -341,6 +341,8 @@ export function useCreateWorkspace() {
               repo_name: repoGroup.repo_name,
               root_path: "",
               workspace_path: "",
+              setup_status: "none",
+              setup_error: null,
             } satisfies Workspace);
           }
         });
@@ -492,6 +494,34 @@ export function useUpdateSystemPrompt() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.systemPrompt(variables.workspaceId),
       });
+    },
+  });
+}
+
+/**
+ * Fetch hive.json manifest + normalized tasks for a workspace.
+ * Manifest doesn't change during a session — staleTime: Infinity.
+ */
+export function useManifestTasks(workspaceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.workspaces.manifest(workspaceId || ""),
+    queryFn: () => WorkspaceService.fetchManifest(workspaceId!),
+    enabled: !!workspaceId,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Retry failed setup for a workspace.
+ * Invalidates workspace queries to refresh setup_status.
+ */
+export function useRetrySetup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceId: string) => WorkspaceService.retrySetup(workspaceId),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
   });
 }

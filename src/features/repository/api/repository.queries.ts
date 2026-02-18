@@ -5,6 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RepoService } from "./repository.service";
+import type { RepoManifestResponse } from "./repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Repo } from "../types";
 
@@ -28,6 +29,37 @@ export function useRepo(id: string | null) {
     queryFn: () => RepoService.fetchById(id!),
     enabled: !!id,
     staleTime: 10000,
+  });
+}
+
+/**
+ * Fetch hive.json manifest for a repo.
+ * staleTime: Infinity — manifest doesn't change unless user saves.
+ */
+export function useRepoManifest(repoId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.repos.manifest(repoId || ""),
+    queryFn: () => RepoService.fetchManifest(repoId!),
+    enabled: !!repoId,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Save hive.json manifest for a repo.
+ * Invalidates the manifest query on success.
+ */
+export function useSaveRepoManifest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ repoId, manifest }: { repoId: string; manifest: Record<string, unknown> }) =>
+      RepoService.saveManifest(repoId, manifest),
+    onSuccess: (_data, { repoId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.repos.manifest(repoId) });
+      // Also invalidate workspace manifests since they inherit from repo
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+    },
   });
 }
 

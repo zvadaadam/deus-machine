@@ -1,3 +1,4 @@
-export { GeneralSection } from "./settings-sections/GeneralSection";
-export { AISection } from "./settings-sections/AISection";
-export { ExtensionsSection } from "./settings-sections/ExtensionsSection";
+export { GeneralSection } from "./GeneralSection";
+export { AISection } from "./AISection";
+export { ExtensionsSection } from "./ExtensionsSection";
+export { EnvironmentSection } from "./EnvironmentSection";
