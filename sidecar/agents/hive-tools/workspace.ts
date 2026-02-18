@@ -42,10 +42,24 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
       async (args) => {
         console.log(`[hiveMCPServer] AskUserQuestion invoked for session ${sessionId}`);
 
-        const { answers } = await FrontendClient.requestAskUserQuestion({
-          sessionId,
-          questions: args.questions,
-        });
+        let answers: (string | string[])[];
+        try {
+          const response = await FrontendClient.requestAskUserQuestion({
+            sessionId,
+            questions: args.questions,
+          });
+          answers = response.answers;
+        } catch (err) {
+          console.error("[hiveMCPServer] AskUserQuestion request failed:", err);
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Question request failed (frontend may be unavailable or timed out). Please continue without this information or try again later.",
+              },
+            ],
+          };
+        }
 
         // Handle user cancellation
         if (answers.length === 1 && answers[0] === "USER_CANCELLED") {
