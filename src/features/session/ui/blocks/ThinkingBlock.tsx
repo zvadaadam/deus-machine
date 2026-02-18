@@ -9,7 +9,7 @@
 
 import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { Brain, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ChatMarkdown } from "@/components/markdown";
@@ -87,7 +87,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
       {/* Expanded: show FULL thinking text as markdown */}
       <AnimatePresence initial={false}>
         {isExpanded && (
-          <motion.div
+          <m.div
             key="thinking-content"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 0.7, height: "auto" }}
@@ -96,7 +96,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
             className="text-muted-foreground mt-0.5 ml-6 overflow-hidden text-sm"
           >
             <ChatMarkdown>{block.thinking}</ChatMarkdown>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

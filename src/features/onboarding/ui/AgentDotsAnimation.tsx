@@ -131,9 +131,9 @@ export function AgentDotsAnimation({
         preserveAspectRatio={cover ? "xMidYMid slice" : "xMidYMid meet"}
         style={{ display: "block" }}
       >
-        {dots.map((d, i) =>
+        {dots.map((d) =>
           d.o > 0.01 ? (
-            <circle key={i} cx={d.cx} cy={d.cy} r={d.r} fill={dotColor} opacity={d.o} />
+            <circle key={d.key} cx={d.cx} cy={d.cy} r={d.r} fill={dotColor} opacity={d.o} />
           ) : null
         )}
         {centerR > 0.1 && <circle cx={CX} cy={CY} r={centerR} fill={dotColor} />}
@@ -181,7 +181,7 @@ function computeFrame(frame: number) {
   const centerR = centerBaseR * prePullBreath * centerExpand;
 
   // Build ring dots
-  const dots: Array<{ cx: number; cy: number; r: number; o: number }> = [];
+  const dots: Array<{ key: string; cx: number; cy: number; r: number; o: number }> = [];
 
   for (let ringIdx = 0; ringIdx < RINGS.length; ringIdx++) {
     const ring = RINGS[ringIdx];
@@ -202,6 +202,7 @@ function computeFrame(frame: number) {
         (2 * Math.PI * j) / ring.count + 2 * Math.PI * TURNS * u + omega + alpha * (1 - u);
 
       dots.push({
+        key: `${ringIdx}-${j}`,
         cx: CX + Math.cos(theta) * radius,
         cy: CY + Math.sin(theta) * radius,
         r: ring.dot * appear,

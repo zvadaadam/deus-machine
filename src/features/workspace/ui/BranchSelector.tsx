@@ -3,6 +3,9 @@ import { Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useBranches } from "../api/workspace.queries";
 import { cn } from "@/shared/lib/utils";
+import type { TauriBranchInfo } from "@/platform/tauri/git";
+
+const EMPTY_BRANCHES: readonly TauriBranchInfo[] = [];
 
 interface BranchSelectorProps {
   workspacePath: string | null;
@@ -24,7 +27,7 @@ export function BranchSelector({
 }: BranchSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { data: branches = [], isLoading } = useBranches(open ? workspacePath : null);
+  const { data: branches = EMPTY_BRANCHES, isLoading } = useBranches(open ? workspacePath : null);
 
   const filtered = useMemo(() => {
     if (!search) return branches;
