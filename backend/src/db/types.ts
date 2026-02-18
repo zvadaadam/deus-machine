@@ -41,6 +41,8 @@ export interface WorkspaceRow {
   pr_number: number | null;
   archive_commit: string | null;
   archived_at: string | null;
+  setup_status: string;
+  setup_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +64,10 @@ export interface WorkspaceWithDetailsRow {
   active_session_id: string | null;
   created_at: string;
   updated_at: string;
+
+  // Setup tracking (hive.json manifest)
+  setup_status: string;
+  setup_error: string | null;
 
   // From repos JOIN
   repo_name: string | null;

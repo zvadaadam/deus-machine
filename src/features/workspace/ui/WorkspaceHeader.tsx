@@ -13,19 +13,36 @@ import {
   Loader2,
   MessageSquareWarning,
   FileWarning,
+  RotateCw,
+  ScrollText,
+  Sparkles,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { invoke } from "@/platform/tauri";
 import { BranchSelector } from "./BranchSelector";
 import { cn } from "@/shared/lib/utils";
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus, SetupStatus } from "@/shared/types";
+import type { NormalizedTask } from "../api/workspace.service";
+import { TaskStrip } from "./TaskStrip";
+import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
+import {
+  fixSetupErrorPrompt,
+  GENERATE_HIVE_JSON,
+  RESOLVE_CONFLICTS,
+  FIX_CI,
+  ADDRESS_REVIEW,
+  MERGE_PR,
+} from "@/features/session/lib/sessionPrompts";
 
 interface WorkspaceHeaderProps {
   title?: string;
@@ -35,10 +52,17 @@ interface WorkspaceHeaderProps {
   workspaceId?: string;
   prStatus?: PRStatus | null;
   ghStatus?: GhCliStatus | null;
+  setupStatus?: SetupStatus;
+  setupError?: string | null;
   onCreatePR?: () => void;
   onSendAgentMessage?: (text: string) => void;
   onReviewPR?: () => void;
   onArchive?: () => void;
+  onRetrySetup?: () => void;
+  onViewSetupLogs?: () => void;
+  tasks?: NormalizedTask[];
+  hasManifest?: boolean;
+  onRunTask?: (taskName: string) => void;
   targetBranch?: string;
   onTargetBranchChange?: (branch: string) => void;
 }
@@ -56,10 +80,17 @@ export function WorkspaceHeader({
   workspacePath,
   prStatus,
   ghStatus,
+  setupStatus,
+  setupError,
   onCreatePR,
   onSendAgentMessage,
   onReviewPR,
   onArchive,
+  onRetrySetup,
+  onViewSetupLogs,
+  tasks,
+  hasManifest,
+  onRunTask,
   targetBranch: targetBranchProp = "main",
   onTargetBranchChange,
 }: WorkspaceHeaderProps) {
@@ -136,13 +167,89 @@ export function WorkspaceHeader({
           </span>
         )}
 
-        {/* Chevron — placeholder for future workspace dropdown */}
-        {(title || subtitle) && (
-          <ChevronDown className="text-text-muted h-2.5 w-2.5 flex-shrink-0" />
-        )}
-
         {/* Open in editor button — always visible */}
         {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
+
+        {/* Setup status indicator — shown when running or failed */}
+        {setupStatus === "running" && (
+          <span className="text-text-muted flex items-center gap-1 text-xs">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Installing...</span>
+          </span>
+        )}
+        {setupStatus === "failed" && (
+          <div className="flex items-center gap-1">
+            <span className="text-accent-red-muted flex items-center gap-1 text-xs font-medium">
+              <AlertTriangle className="h-3 w-3" />
+              <span>Setup failed</span>
+            </span>
+            {onViewSetupLogs && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onViewSetupLogs}
+                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                  >
+                    <ScrollText className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">View setup logs</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {onSendAgentMessage && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))
+                    }
+                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Ask AI to fix</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {onRetrySetup && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onRetrySetup}
+                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                  >
+                    <RotateCw className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Retry setup</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+
+        {/* Task strip from hive.json manifest — expands on hover */}
+        {onRunTask && (
+          <TaskStrip
+            tasks={tasks ?? []}
+            hasManifest={hasManifest ?? false}
+            disabled={setupStatus === "running"}
+            onRunTask={onRunTask}
+            onSetupEnvironment={
+              onSendAgentMessage
+                ? () => onSendAgentMessage(GENERATE_HIVE_JSON)
+                : undefined
+            }
+          />
+        )}
       </div>
 
       {/* Right section — PR actions */}
@@ -201,9 +308,7 @@ export function WorkspaceHeader({
           <SplitButton
             icon={<FileWarning className="h-2.5 w-2.5" />}
             label="Resolve Conflicts"
-            onLeftClick={() =>
-              onSendAgentMessage?.("Resolve the merge conflicts on the PR and push the fix")
-            }
+            onLeftClick={() => onSendAgentMessage?.(RESOLVE_CONFLICTS)}
             leftDisabled={!onSendAgentMessage}
             branchLabel={effectiveTarget}
             workspacePath={workspacePath ?? null}
@@ -215,7 +320,7 @@ export function WorkspaceHeader({
           <SplitButton
             icon={<CircleX className="h-2.5 w-2.5" />}
             label="Fix CI"
-            onLeftClick={() => onSendAgentMessage?.("Fix the failing CI checks on the PR")}
+            onLeftClick={() => onSendAgentMessage?.(FIX_CI)}
             leftDisabled={!onSendAgentMessage}
             branchLabel={effectiveTarget}
             workspacePath={workspacePath ?? null}
@@ -227,7 +332,7 @@ export function WorkspaceHeader({
           <SplitButton
             icon={<MessageSquareWarning className="h-2.5 w-2.5" />}
             label="Address Review"
-            onLeftClick={() => onSendAgentMessage?.("Address the review comments on the PR")}
+            onLeftClick={() => onSendAgentMessage?.(ADDRESS_REVIEW)}
             leftDisabled={!onSendAgentMessage}
             branchLabel={effectiveTarget}
             workspacePath={workspacePath ?? null}
@@ -239,7 +344,7 @@ export function WorkspaceHeader({
           <SplitButton
             icon={<GitMerge className="h-2.5 w-2.5" />}
             label="Merge"
-            onLeftClick={() => onSendAgentMessage?.("Merge the PR")}
+            onLeftClick={() => onSendAgentMessage?.(MERGE_PR)}
             leftDisabled={!onSendAgentMessage}
             branchLabel={effectiveTarget}
             workspacePath={workspacePath ?? null}
@@ -420,18 +525,20 @@ function SplitButton({
 }
 
 // ---------------------------------------------------------------------------
-// HeaderOpenButton — custom open-in-editor button matching design
+// HeaderOpenButton — open workspace in external editors with product icons
 // ---------------------------------------------------------------------------
 
 interface InstalledApp {
   id: string;
   name: string;
   path: string;
+  icon?: string; // base64 PNG data URL from native macOS icon
 }
 
 function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isHoveringRef = useRef(false);
 
@@ -444,6 +551,17 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   function handleOpenInApp(appId: string) {
     setOpen(false);
     invoke("open_in_app", { appId, workspacePath }).catch(() => {});
+  }
+
+  function handleCopyPath() {
+    navigator.clipboard
+      .writeText(workspacePath)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+    setOpen(false);
   }
 
   function handleOpen() {
@@ -489,25 +607,55 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
     );
   }
 
+  // Group apps by category: editors → terminals → system
+  const groups = groupAppsByCategory(apps);
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
         sideOffset={4}
-        className="min-w-[140px]"
+        className="min-w-[140px] shadow-sm"
         onPointerEnter={handleOpen}
         onPointerLeave={handleClose}
       >
-        {apps.map((app) => (
-          <DropdownMenuItem
-            key={app.id}
-            onClick={() => handleOpenInApp(app.id)}
-            className="cursor-pointer text-xs"
-          >
-            {app.name}
-          </DropdownMenuItem>
+        {groups.map((group, groupIdx) => (
+          <div key={group.category}>
+            {groupIdx > 0 && <DropdownMenuSeparator />}
+            {group.apps.map((app) => (
+              <DropdownMenuItem
+                key={app.id}
+                onClick={() => handleOpenInApp(app.id)}
+                className="cursor-pointer gap-2 py-1 text-xs"
+              >
+                {app.icon ? (
+                  <img
+                    src={app.icon}
+                    alt=""
+                    className="h-5 w-5 flex-shrink-0 rounded-[3px]"
+                    draggable={false}
+                  />
+                ) : (
+                  <AppIcon appId={app.id} className="h-5 w-5 flex-shrink-0" />
+                )}
+                {app.name}
+              </DropdownMenuItem>
+            ))}
+          </div>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={handleCopyPath}
+          className="text-text-muted cursor-pointer gap-2 py-1 text-xs"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 flex-shrink-0" />
+          ) : (
+            <Copy className="h-3.5 w-3.5 flex-shrink-0" />
+          )}
+          {copied ? "Copied!" : "Copy path"}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
