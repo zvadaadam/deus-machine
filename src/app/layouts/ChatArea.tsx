@@ -9,6 +9,7 @@ import { forwardRef, useImperativeHandle } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
+import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
 import { MainContentTabBar } from "@/features/workspace";
 import { FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
@@ -96,6 +97,17 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             onOpenNewTab={handleTabAdd}
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
             onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
+          />
+        )}
+
+        {/* Workspace still initializing — show the same empty state with init progress */}
+        {activeTab?.type === "chat" && !tabSessionId && (
+          <WorkspaceEmptyState
+            branch={workspace.branch}
+            parentBranch={workspace.parent_branch}
+            isFirstSession={true}
+            initializing={workspace.state === "initializing"}
+            initStep={workspace.init_step}
           />
         )}
 

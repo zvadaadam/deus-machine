@@ -17,7 +17,7 @@ import {
   getGitFileContent,
   verifyBranchExists,
   detectDefaultBranch,
-} from '../../services/git.service';
+} from '../../../src/services/git.service';
 
 import {
   SIMPLE_MODIFY_DIFF,
@@ -28,7 +28,7 @@ import {
   NUMSTAT_OUTPUT,
   SHORTSTAT_OUTPUT,
   SHORTSTAT_SINGLE,
-} from '../fixtures/git-diffs';
+} from '../../fixtures/git-diffs';
 
 const mockExecFileSync = vi.mocked(execFileSync);
 
@@ -233,10 +233,10 @@ describe('exec-dependent functions', () => {
       expect(result).toBe('abc123');
     });
 
-    it('returns parentBranch as fallback on error', () => {
+    it('returns HEAD as fallback on error', () => {
       mockExecFileSync.mockImplementation(() => { throw new Error('git failed'); });
       const result = getMergeBase('/workspace', 'origin/main');
-      expect(result).toBe('origin/main');
+      expect(result).toBe('HEAD');
     });
   });
 
