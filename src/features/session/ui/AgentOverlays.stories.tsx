@@ -43,6 +43,7 @@ export const Hidden: StoryObj<typeof PlanApprovalOverlay> = {
     <div className="w-[600px]">
       <PlanApprovalOverlay
         request={null}
+        agentType="claude"
         onApprove={() => {}}
         onReject={() => {}}
       />
@@ -284,6 +285,7 @@ export const NoQuestion: StoryObj<typeof AgentQuestionOverlay> = {
     <div className="w-[600px]">
       <AgentQuestionOverlay
         request={null}
+        agentType="claude"
         onSubmit={() => {}}
         onDismiss={() => {}}
       />

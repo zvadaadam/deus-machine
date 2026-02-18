@@ -16,7 +16,7 @@
 //   - The overlay appears inline above MessageInput, same position as PlanApprovalOverlay.
 
 import { useState, useCallback, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -31,6 +31,8 @@ interface AgentQuestionOverlayProps {
 }
 
 export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }: AgentQuestionOverlayProps) {
+  const reduceMotion = useReducedMotion();
+
   // Track answers per question index
   const [answers, setAnswers] = useState<(string | string[] | null)[]>([]);
   // Track which question the user is currently answering
@@ -195,12 +197,12 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
                 <span
                   key={i}
                   className={cn(
-                    "h-1 rounded-full transition-all duration-200",
+                    "h-1 w-6 origin-left rounded-full transition-transform duration-200",
                     i < currentIndex
-                      ? "bg-primary w-4"
+                      ? "bg-primary scale-x-[0.667]"
                       : i === currentIndex
-                        ? "bg-primary w-6"
-                        : "bg-border w-2"
+                        ? "bg-primary scale-x-100"
+                        : "bg-border scale-x-[0.333]"
                   )}
                   aria-hidden="true"
                 />
@@ -277,9 +279,9 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
           <AnimatePresence>
             {isOtherOpen && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
+                initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
                 transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] }}
                 className="overflow-hidden"
               >
