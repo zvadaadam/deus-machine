@@ -15,7 +15,7 @@
 //   - All questions are answered before the response is sent (batch, not streaming).
 //   - The overlay appears inline above MessageInput, same position as PlanApprovalOverlay.
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,17 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
   const [showOtherInput, setShowOtherInput] = useState<Record<number, boolean>>({});
   const [otherText, setOtherText] = useState<Record<number, string>>({});
   const otherInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset all local state when a new request arrives so stale answers
+  // from a previous question flow never leak into the new one.
+  // (SessionPanel already keys this component by rpcId, but this makes
+  // the component self-resilient regardless of how the consumer mounts it.)
+  useEffect(() => {
+    setAnswers([]);
+    setCurrentIndex(0);
+    setShowOtherInput({});
+    setOtherText({});
+  }, [request?.rpcId]);
 
   const questions = request?.questions ?? [];
 
