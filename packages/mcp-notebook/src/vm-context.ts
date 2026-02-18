@@ -242,7 +242,7 @@ function stripCommentsAndStrings(code: string): string {
 /** Check if code contains top-level await (simple heuristic) */
 function containsAwait(code: string): boolean {
   const stripped = stripCommentsAndStrings(code);
-  return /\bawait\s/.test(stripped);
+  return /\bawait[\s(]/.test(stripped);
 }
 
 /**
@@ -325,6 +325,104 @@ function matchFunctionOrClassDeclaration(
 }
 
 /**
+ * Find the index of the matching closing bracket, respecting nesting.
+ * Returns -1 if no matching bracket is found.
+ */
+function findMatchingBracket(
+  code: string,
+  openPos: number,
+  open: string,
+  close: string
+): number {
+  let depth = 1;
+  for (let i = openPos + 1; i < code.length; i++) {
+    if (code[i] === open) depth++;
+    else if (code[i] === close) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Split a string on commas at bracket depth 0.
+ * Nested braces/brackets/parens are treated as opaque groups.
+ */
+function splitAtTopLevelCommas(s: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "{" || ch === "[" || ch === "(") depth++;
+    else if (ch === "}" || ch === "]" || ch === ")") depth--;
+    else if (ch === "," && depth === 0) {
+      parts.push(s.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(s.slice(start));
+  return parts;
+}
+
+/**
+ * Extract binding target names from a destructuring pattern's inner content.
+ * Handles nested object/array patterns and aliases recursively.
+ */
+function extractBindingNames(inner: string, isArray: boolean): string[] {
+  const names: string[] = [];
+  for (const part of splitAtTopLevelCommas(inner)) {
+    let trimmed = part.trim();
+    if (!trimmed) continue;
+
+    // Rest patterns: ...name or ...{a, b} or ...[a, b]
+    trimmed = trimmed.replace(/^\.\.\./, "");
+
+    if (trimmed.startsWith("{")) {
+      // Nested object destructuring
+      const close = findMatchingBracket(trimmed, 0, "{", "}");
+      if (close !== -1) names.push(...extractBindingNames(trimmed.slice(1, close), false));
+    } else if (trimmed.startsWith("[")) {
+      // Nested array destructuring
+      const close = findMatchingBracket(trimmed, 0, "[", "]");
+      if (close !== -1) names.push(...extractBindingNames(trimmed.slice(1, close), true));
+    } else if (!isArray && trimmed.includes(":")) {
+      // Object property with alias: key: target
+      // Find the first colon at depth 0
+      let colonIdx = -1;
+      let d = 0;
+      for (let i = 0; i < trimmed.length; i++) {
+        if (trimmed[i] === "{" || trimmed[i] === "[") d++;
+        else if (trimmed[i] === "}" || trimmed[i] === "]") d--;
+        else if (trimmed[i] === ":" && d === 0) { colonIdx = i; break; }
+      }
+      if (colonIdx === -1) {
+        const name = trimmed.split("=")[0].trim();
+        if (name && /^\w+$/.test(name)) names.push(name);
+      } else {
+        const afterColon = trimmed.slice(colonIdx + 1).trim();
+        if (afterColon.startsWith("{")) {
+          const close = findMatchingBracket(afterColon, 0, "{", "}");
+          if (close !== -1) names.push(...extractBindingNames(afterColon.slice(1, close), false));
+        } else if (afterColon.startsWith("[")) {
+          const close = findMatchingBracket(afterColon, 0, "[", "]");
+          if (close !== -1) names.push(...extractBindingNames(afterColon.slice(1, close), true));
+        } else {
+          const name = afterColon.split("=")[0].trim();
+          if (name && /^\w+$/.test(name)) names.push(name);
+        }
+      }
+    } else {
+      // Simple name, possibly with default value
+      const name = trimmed.split("=")[0].trim();
+      if (name && /^\w+$/.test(name)) names.push(name);
+    }
+  }
+  return names;
+}
+
+/**
  * At position `pos` in `code`, check whether a const/let/var declaration
  * starts here (the keyword must appear after a newline + optional whitespace,
  * or at the very start of the string). Returns the extracted names and the
@@ -348,40 +446,28 @@ function matchDeclaration(
   if (!kwMatch) return null;
 
   const afterKw = pos + kwMatch[0].length;
-  const names: string[] = [];
 
   // Simple identifier: const x = ...
   const simpleMatch = code.slice(afterKw).match(/^(\w+)/);
   if (simpleMatch && code[afterKw] !== "{" && code[afterKw] !== "[") {
-    names.push(simpleMatch[1]);
-    return { names, end: afterKw + simpleMatch[0].length };
+    return { names: [simpleMatch[1]], end: afterKw + simpleMatch[0].length };
   }
 
-  // Object destructuring: const { a, b: c } = ...
+  // Object destructuring: const { a, b: c, d: { e } } = ...
   if (code[afterKw] === "{") {
-    const closeIdx = code.indexOf("}", afterKw);
+    const closeIdx = findMatchingBracket(code, afterKw, "{", "}");
     if (closeIdx === -1) return null;
     const inner = code.slice(afterKw + 1, closeIdx);
-    for (const part of inner.split(",")) {
-      const trimmed = part.trim();
-      const alias = trimmed.includes(":")
-        ? trimmed.split(":").pop()!.trim()
-        : trimmed;
-      const name = alias.split("=")[0].trim();
-      if (name && /^\w+$/.test(name)) names.push(name);
-    }
+    const names = extractBindingNames(inner, false);
     return { names, end: closeIdx + 1 };
   }
 
-  // Array destructuring: const [a, b] = ...
+  // Array destructuring: const [a, [b, c]] = ...
   if (code[afterKw] === "[") {
-    const closeIdx = code.indexOf("]", afterKw);
+    const closeIdx = findMatchingBracket(code, afterKw, "[", "]");
     if (closeIdx === -1) return null;
     const inner = code.slice(afterKw + 1, closeIdx);
-    for (const part of inner.split(",")) {
-      const name = part.trim().replace(/^\.\.\./, "").split("=")[0].trim();
-      if (name && /^\w+$/.test(name)) names.push(name);
-    }
+    const names = extractBindingNames(inner, true);
     return { names, end: closeIdx + 1 };
   }
 
@@ -452,6 +538,7 @@ export class PersistentVMContext {
   private context: vm.Context;
   private cwd: string;
   private executionCount = 0;
+  private activeTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(cwd?: string) {
     this.cwd = cwd || process.cwd();
@@ -463,12 +550,41 @@ export class PersistentVMContext {
 
     const sandbox: Record<string, unknown> = {
       require: sandboxRequire,
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
-      setImmediate,
-      clearImmediate,
+      // Tracked timer wrappers — all timer IDs are recorded so reset()/destroy()
+      // can cancel them, preventing leaked callbacks on the host event loop.
+      setTimeout: (cb: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+        const id = setTimeout((...a: unknown[]) => {
+          this.activeTimers.delete(id);
+          cb(...a);
+        }, ms, ...args);
+        this.activeTimers.add(id);
+        return id;
+      },
+      setInterval: (cb: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+        const id = setInterval(cb, ms, ...args);
+        this.activeTimers.add(id);
+        return id;
+      },
+      clearTimeout: (id: ReturnType<typeof setTimeout>) => {
+        this.activeTimers.delete(id);
+        clearTimeout(id);
+      },
+      clearInterval: (id: ReturnType<typeof setInterval>) => {
+        this.activeTimers.delete(id);
+        clearInterval(id);
+      },
+      setImmediate: (cb: (...args: unknown[]) => void, ...args: unknown[]) => {
+        const id = setImmediate((...a: unknown[]) => {
+          this.activeTimers.delete(id as unknown as ReturnType<typeof setTimeout>);
+          cb(...a);
+        }, ...args);
+        this.activeTimers.add(id as unknown as ReturnType<typeof setTimeout>);
+        return id;
+      },
+      clearImmediate: (id: ReturnType<typeof setImmediate>) => {
+        this.activeTimers.delete(id as unknown as ReturnType<typeof setTimeout>);
+        clearImmediate(id);
+      },
       fetch: globalThis.fetch,
       URL,
       URLSearchParams,
@@ -562,7 +678,22 @@ export class PersistentVMContext {
         }
 
         const script = new vm.Script(wrappedCode, { filename });
-        result = await script.runInContext(this.context, { timeout });
+        // vm.Script timeout only guards synchronous execution. The async IIFE
+        // returns a Promise instantly, so we need Promise.race to enforce a
+        // timeout on the awaited result — otherwise code like
+        // `await new Promise(() => {})` hangs forever.
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`Execution timed out after ${timeout}ms`)),
+            timeout
+          );
+          // Ensure the timer doesn't keep the process alive
+          if (typeof timer === "object" && "unref" in timer) timer.unref();
+        });
+        result = await Promise.race([
+          script.runInContext(this.context, { timeout }),
+          timeoutPromise,
+        ]);
       } else if (hasExpression) {
         // Execute all lines, then eval last line for return value
         const lines = code.trim().split("\n");
@@ -656,9 +787,24 @@ export class PersistentVMContext {
     delete (this.context.require as NodeRequire).cache[resolved];
   }
 
+  /** Cancel all outstanding timers created by sandbox code. */
+  private clearAllTimers(): void {
+    for (const id of this.activeTimers) {
+      clearTimeout(id);
+      clearInterval(id);
+    }
+    this.activeTimers.clear();
+  }
+
   reset(): void {
+    this.clearAllTimers();
     this.context = this.createFreshContext();
     this.executionCount = 0;
+  }
+
+  /** Clean up all resources. Call when the VM context is no longer needed. */
+  destroy(): void {
+    this.clearAllTimers();
   }
 
   get currentExecutionCount(): number {
