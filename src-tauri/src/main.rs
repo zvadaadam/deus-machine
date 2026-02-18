@@ -77,8 +77,9 @@ fn main() {
                 Err(e) => eprintln!("[TAURI] ⚠️ Failed to open database for direct reads: {} — will fall back to HTTP", e),
             }
 
-            // Start backend server
+            // Set app handle for Backend manager so it can relay workspace progress events
             let backend_manager: tauri::State<BackendManager> = app.state();
+            backend_manager.set_app_handle(app.handle().clone());
 
             // Determine backend path
             // In dev: Get the workspace root (project directory)

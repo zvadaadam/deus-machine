@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn, execFile, execFileSync, execSync } from 'child_process';
+import { spawn, execFile, execSync } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import { getDatabase } from '../lib/database';
@@ -12,6 +12,7 @@ import { parseBody } from '../lib/validate';
 import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib/schemas';
 import * as gitService from '../services/git.service';
 import { generateUniqueName } from '../services/workspace.service';
+import { initializeWorkspace } from '../services/workspace-init.service';
 import {
   getAllWorkspaces,
   getWorkspacesByRepo,
@@ -401,9 +402,6 @@ app.post('/workspaces', async (c) => {
     console.warn(`[WORKSPACE] git fetch origin ${parent_branch} failed (continuing with local):`, fetchErr);
   }
 
-  const tmpDir = os.tmpdir();
-  const initLogPath = path.join(tmpDir, `hive-${Date.now()}-init.log`);
-
   db.prepare(`
     INSERT INTO workspaces (
       id, repository_id, directory_name, branch,
@@ -426,29 +424,27 @@ app.post('/workspaces', async (c) => {
   })();
 
   const workspacePath = path.join(repo.root_path!, '.hive', workspace_name);
-  const initLog = fs.createWriteStream(initLogPath);
-  const worktreeProcess = spawn('git', [
-    'worktree', 'add', '-b', placeholderBranchName, workspacePath, worktreeBase
-  ], { cwd: repo.root_path!, stdio: ['ignore', 'pipe', 'pipe'] });
 
-  worktreeProcess.stdout.pipe(initLog);
-  worktreeProcess.stderr.pipe(initLog);
-
-  worktreeProcess.on('error', (error) => {
-    console.error(`[WORKSPACE] Git worktree spawn error:`, error);
-    try { initLog.end(); } catch {}
-    db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
-  });
-
-  worktreeProcess.on('close', (code) => {
-    try { initLog.end(); } catch {}
-    if (code === 0) {
-      const sessionId = randomUUID();
-      db.prepare("INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))").run(sessionId, workspaceId);
-      db.prepare("UPDATE workspaces SET state = 'ready', active_session_id = ?, updated_at = datetime('now') WHERE id = ?").run(sessionId, workspaceId);
-    } else {
-      db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
-    }
+  // Fire-and-forget: run the init pipeline async (don't await).
+  // Pipeline handles: worktree creation → deps install → .env copy → session creation.
+  // Progress events flow: stdout → Rust backend.rs → Tauri events → Frontend.
+  // On fatal failure: reverse cleanup (rm dir, prune worktree, delete branch).
+  initializeWorkspace({
+    workspaceId,
+    repositoryId: repository_id,
+    repoRootPath: repo.root_path!,
+    workspacePath,
+    branchName: placeholderBranchName,
+    worktreeBase,
+    parentBranch: parent_branch,
+  }).catch((err) => {
+    // Belt-and-suspenders: initializeWorkspace handles its own errors,
+    // but if something truly unexpected escapes, don't leave workspace stuck.
+    console.error('[WORKSPACE] Unhandled init pipeline error:', err);
+    try {
+      db.prepare("UPDATE workspaces SET state = 'error', init_step = 'error:unhandled' WHERE id = ? AND state = 'initializing'")
+        .run(workspaceId);
+    } catch {}
   });
 
   const workspace = getWorkspaceWithRepo(db, workspaceId);

@@ -1,10 +1,16 @@
+import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { match } from "ts-pattern";
 
 interface WorkspaceEmptyStateProps {
   repoName?: string | null;
   parentBranch?: string | null;
   /** True when this workspace has never had any messages — show full onboarding */
   isFirstSession?: boolean;
+  /** Workspace is still being set up — show spinner + step text instead of "ready" */
+  initializing?: boolean;
+  /** Current init pipeline step (worktree, dependencies, hooks, session) */
+  initStep?: string | null;
   className?: string;
 }
 
@@ -31,6 +37,8 @@ export function WorkspaceEmptyState({
   repoName,
   parentBranch,
   isFirstSession = false,
+  initializing = false,
+  initStep,
   className,
 }: WorkspaceEmptyStateProps) {
   // New tab in active workspace — minimal prompt
@@ -59,12 +67,24 @@ export function WorkspaceEmptyState({
     >
       <div className="flex flex-col items-center gap-3.5">
         <div className="text-center">
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/50">
-            Workspace ready
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/50 flex items-center justify-center gap-1.5">
+            {initializing && (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            )}
+            {initializing
+              ? match(initStep)
+                  .with("worktree", () => "Creating worktree...")
+                  .with("dependencies", () => "Installing dependencies...")
+                  .with("hooks", () => "Setting up environment...")
+                  .with("session", () => "Finalizing...")
+                  .otherwise(() => "Setting up workspace...")
+              : "Workspace ready"}
           </h2>
-          <p className="mt-1 text-muted-foreground/30 text-xs max-w-[280px]">
-            {subtitle(repoName, parentBranch)}
-          </p>
+          {!initializing && (
+            <p className="mt-1 text-muted-foreground/30 text-xs max-w-[280px]">
+              {subtitle(repoName, parentBranch)}
+            </p>
+          )}
         </div>
 
         <div className="flex items-baseline gap-4">

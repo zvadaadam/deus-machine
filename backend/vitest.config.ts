@@ -8,10 +8,10 @@ export default defineConfig({
   test: {
     root: __dirname,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['test/**/*.test.ts'],
     globals: true,
     testTimeout: 10000,
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./test/setup.ts'],
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
     },

@@ -124,6 +124,39 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const createSessionMutation = useCreateSession();
 
+  // --- Patch default tab when workspace init completes ---
+  // When a workspace transitions from initializing → ready, activeSessionId
+  // goes from null to a UUID. Update the placeholder "tab-default" in-place
+  // so ChatArea can render SessionPanel without a full remount.
+  const prevActiveSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    const prev = prevActiveSessionIdRef.current;
+    prevActiveSessionIdRef.current = activeSessionId;
+
+    // Only act when transitioning from null/undefined → real session ID
+    if (prev || !activeSessionId) return;
+
+    setMainTabs((tabs) => {
+      const defaultIdx = tabs.findIndex((t) => t.id === "tab-default");
+      if (defaultIdx === -1) return tabs;
+
+      const updated = [...tabs];
+      updated[defaultIdx] = {
+        ...updated[defaultIdx],
+        id: `tab-${activeSessionId}`,
+        data: {
+          ...updated[defaultIdx].data,
+          sessionId: activeSessionId,
+        },
+      };
+      return updated;
+    });
+
+    setActiveMainTabId((prev) =>
+      prev === "tab-default" ? `tab-${activeSessionId}` : prev
+    );
+  }, [activeSessionId]);
+
   // --- Hydrate tabs with real session data when sessions load ---
 
   const hydrated = useRef(false);

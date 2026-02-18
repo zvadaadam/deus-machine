@@ -78,7 +78,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                   <span className="text-text-disabled text-xs">·</span>
                 </>
               )}
-              <span className="text-text-muted shrink-0 text-xs">Setting up...</span>
+              <span className="text-text-muted shrink-0 text-xs">
+                {match(workspace.init_step)
+                  .with("worktree", () => "Creating worktree...")
+                  .with("dependencies", () => "Installing dependencies...")
+                  .with("hooks", () => "Setting up environment...")
+                  .with("session", () => "Finalizing...")
+                  .otherwise(() => "Setting up...")}
+              </span>
             </div>
           </div>
         </SidebarRow>

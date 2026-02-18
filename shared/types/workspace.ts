@@ -30,6 +30,7 @@ export interface Workspace {
   /** Computed filesystem path to the workspace directory */
   workspace_path: string;
   default_branch?: string;
+  init_step?: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
   archive_commit?: string | null;

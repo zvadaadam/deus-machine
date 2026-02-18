@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use std::io::{BufRead, BufReader};
 use anyhow::{Result, Context};
+use tauri::{AppHandle, Emitter};
 
 /// Backend Manager
 ///
@@ -12,9 +13,15 @@ use anyhow::{Result, Context};
 ///
 /// The backend now uses dynamic port allocation. The actual port
 /// is discovered by parsing stdout from the Node.js process.
+///
+/// Also relays structured progress events from the backend to the
+/// frontend via Tauri events. The backend emits lines prefixed with
+/// `HIVE_WORKSPACE_PROGRESS:` containing JSON payloads that get
+/// parsed and emitted as `workspace:progress` Tauri events.
 pub struct BackendManager {
     process: Mutex<Option<Child>>,
     port: Arc<Mutex<Option<u16>>>,
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
 }
 
 impl BackendManager {
@@ -22,7 +29,14 @@ impl BackendManager {
         Self {
             process: Mutex::new(None),
             port: Arc::new(Mutex::new(None)),
+            app_handle: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Set app handle so we can emit Tauri events from the stdout reader thread.
+    /// Must be called before start() for workspace progress events to work.
+    pub fn set_app_handle(&self, handle: AppHandle) {
+        *self.app_handle.lock().unwrap() = Some(handle);
     }
 
     /// Start the backend server with dynamic port allocation
@@ -51,10 +65,11 @@ impl BackendManager {
         let stdout = child.stdout.take()
             .context("Failed to capture backend stdout")?;
 
-        // Clone Arc for thread
+        // Clone Arcs for thread
         let port_clone = Arc::clone(&self.port);
+        let app_handle_clone = Arc::clone(&self.app_handle);
 
-        // Spawn thread to read stdout and find port
+        // Spawn thread to read stdout and find port + relay workspace progress events
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
@@ -69,6 +84,19 @@ impl BackendManager {
                                 let mut port = port_clone.lock().unwrap();
                                 *port = Some(port_num);
                                 println!("[BACKEND] Detected port: {}", port_num);
+                            }
+                        }
+                    }
+
+                    // Parse workspace init progress events and relay as Tauri events.
+                    // Backend emits: HIVE_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
+                    // We parse the JSON and emit it as a "workspace:progress" Tauri event.
+                    if let Some(json_str) = line.strip_prefix("HIVE_WORKSPACE_PROGRESS:") {
+                        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
+                            if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
+                                if let Err(e) = handle.emit("workspace:progress", &payload) {
+                                    eprintln!("[BACKEND] Failed to emit workspace:progress: {}", e);
+                                }
                             }
                         }
                     }

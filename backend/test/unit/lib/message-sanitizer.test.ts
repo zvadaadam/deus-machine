@@ -4,7 +4,7 @@ import {
   prepareMessageContent,
   parseMessageContent,
   detectControlCharacters,
-} from '../../lib/message-sanitizer';
+} from '../../../src/lib/message-sanitizer';
 
 describe('isValidJsonString', () => {
   it('returns true for a normal string', () => {

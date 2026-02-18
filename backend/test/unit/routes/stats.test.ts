@@ -14,11 +14,11 @@ const mockStmt = {
 };
 const mockDb = { prepare: vi.fn(() => mockStmt) };
 
-vi.mock('../../lib/database', () => ({
+vi.mock('../../../src/lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import app from '../../routes/stats';
+import app from '../../../src/routes/stats';
 
 beforeEach(() => {
   vi.clearAllMocks();
