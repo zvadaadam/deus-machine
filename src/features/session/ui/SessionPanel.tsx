@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from "react";
 import { Chat, MessageInput } from ".";
 import type { MessageInputRef } from ".";
 import { useSocket } from "@/shared/hooks";
 import { useSessionActions, useSessionEvents } from "../hooks";
+import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
+import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
+import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import {
@@ -33,6 +36,8 @@ interface SessionPanelProps {
   workspaceId?: string;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
+  /** Default branch of the repo (e.g. "main"). Used for getDiff RPC auto-response. */
+  workspaceDefaultBranch?: string | null;
   isFirstSession?: boolean;
   onClose?: () => void;
   embedded?: boolean;
@@ -60,6 +65,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       workspaceId,
       workspaceRepoName,
       workspaceParentBranch,
+      workspaceDefaultBranch,
       isFirstSession,
       onClose,
       embedded = false,
@@ -80,6 +86,25 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Real-time message updates: Tauri events (desktop) + incremental polling (web)
     // workspaceId enables PR status invalidation when agent creates/updates PRs
     useSessionEvents(sessionId, workspaceId);
+
+    // Agent RPC handler — listens for sidecar:request events and manages pending UI state.
+    // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can
+    // auto-respond without round-tripping through Node.js.
+    const agentRpcContext = useMemo(() => {
+      const map = new Map<string, { workspacePath: string; parentBranch: string; defaultBranch: string }>();
+      // workspacePath is the minimum requirement — parentBranch and defaultBranch
+      // fall back to "main" when not provided so getDiff always has a usable context.
+      if (workspacePath) {
+        map.set(sessionId, {
+          workspacePath,
+          parentBranch: workspaceParentBranch ?? "main",
+          defaultBranch: workspaceDefaultBranch ?? "main",
+        });
+      }
+      return { sessionWorkspaces: map };
+    }, [sessionId, workspacePath, workspaceParentBranch, workspaceDefaultBranch]);
+
+    const { pendingRequests, resolvePlanMode, resolveQuestion } = useAgentRpcHandler(agentRpcContext);
 
     // TanStack Query hooks
     const {
@@ -311,6 +336,31 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onOpenNewTab?.();
     }, [onOpenNewTab]);
 
+    // Pending agent request for THIS session (plan approval or questions)
+    const pendingRequest = pendingRequests.get(sessionId) ?? null;
+    const pendingPlan = pendingRequest?.type === "exitPlanMode" ? pendingRequest : null;
+    const pendingQuestion = pendingRequest?.type === "askUserQuestion" ? pendingRequest : null;
+
+    const handlePlanApprove = useCallback(() => {
+      resolvePlanMode(sessionId, true);
+    }, [resolvePlanMode, sessionId]);
+
+    const handlePlanReject = useCallback(() => {
+      resolvePlanMode(sessionId, false);
+    }, [resolvePlanMode, sessionId]);
+
+    const handleQuestionSubmit = useCallback(
+      (answers: (string | string[])[]) => {
+        resolveQuestion(sessionId, answers);
+      },
+      [resolveQuestion, sessionId]
+    );
+
+    const handleQuestionDismiss = useCallback(() => {
+      // Dismiss sends a cancellation sentinel so the agent can branch appropriately
+      resolveQuestion(sessionId, ["USER_CANCELLED"]);
+    }, [resolveQuestion, sessionId]);
+
     // Drop overlay shared between embedded and dialog layouts
     const dropOverlay = isDragging && (
       <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -362,6 +412,21 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
             {/* Fade overlay: smoothly transitions chat scroll area into input */}
             <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
+
+            {/* Agent-initiated interaction overlays — appear above MessageInput */}
+            <PlanApprovalOverlay
+              request={pendingPlan}
+              agentType={session?.agent_type}
+              onApprove={handlePlanApprove}
+              onReject={handlePlanReject}
+            />
+            <AgentQuestionOverlay
+              key={pendingQuestion?.rpcId as string}
+              request={pendingQuestion}
+              agentType={session?.agent_type}
+              onSubmit={handleQuestionSubmit}
+              onDismiss={handleQuestionDismiss}
+            />
 
             <MessageInput
               ref={messageInputRef}
@@ -450,6 +515,21 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
                   {/* Fade overlay: smoothly transitions chat scroll area into input */}
                   <div className="bg-fade-overlay pointer-events-none relative z-10 -mb-8 h-8 shrink-0" />
+
+                  {/* Agent-initiated interaction overlays — appear above MessageInput */}
+                  <PlanApprovalOverlay
+                    request={pendingPlan}
+                    agentType={session?.agent_type}
+                    onApprove={handlePlanApprove}
+                    onReject={handlePlanReject}
+                  />
+                  <AgentQuestionOverlay
+                    key={pendingQuestion?.rpcId as string}
+                    request={pendingQuestion}
+                    agentType={session?.agent_type}
+                    onSubmit={handleQuestionSubmit}
+                    onDismiss={handleQuestionDismiss}
+                  />
 
                   <MessageInput
                     ref={messageInputRef}
