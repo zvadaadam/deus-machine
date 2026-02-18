@@ -21154,10 +21154,17 @@ function extractBindingNames(inner, isArray) {
     } else if (!isArray && trimmed.includes(":")) {
       let colonIdx = -1;
       let d = 0;
+      let ternaryDepth = 0;
       for (let i = 0; i < trimmed.length; i++) {
-        if (trimmed[i] === "{" || trimmed[i] === "[") d++;
-        else if (trimmed[i] === "}" || trimmed[i] === "]") d--;
-        else if (trimmed[i] === ":" && d === 0) {
+        const ch = trimmed[i];
+        if (ch === "{" || ch === "[" || ch === "(") d++;
+        else if (ch === "}" || ch === "]" || ch === ")") d--;
+        else if (ch === "?" && d === 0) ternaryDepth++;
+        else if (ch === ":" && d === 0) {
+          if (ternaryDepth > 0) {
+            ternaryDepth--;
+            continue;
+          }
           colonIdx = i;
           break;
         }
@@ -21481,6 +21488,14 @@ var PersistentVMContext = class {
     for (const id of this.activeTimers) {
       clearTimeout(id);
       clearInterval(id);
+    }
+    if (typeof clearImmediate === "function") {
+      for (const id of this.activeTimers) {
+        try {
+          clearImmediate(id);
+        } catch {
+        }
+      }
     }
     this.activeTimers.clear();
   }

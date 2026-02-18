@@ -389,13 +389,21 @@ function extractBindingNames(inner: string, isArray: boolean): string[] {
       if (close !== -1) names.push(...extractBindingNames(trimmed.slice(1, close), true));
     } else if (!isArray && trimmed.includes(":")) {
       // Object property with alias: key: target
-      // Find the first colon at depth 0
+      // Find the first colon at depth 0, skipping ternary operator colons.
+      // A `?` at depth 0 opens a ternary; the next `:` at depth 0 closes it
+      // rather than being an alias separator.
       let colonIdx = -1;
       let d = 0;
+      let ternaryDepth = 0;
       for (let i = 0; i < trimmed.length; i++) {
-        if (trimmed[i] === "{" || trimmed[i] === "[") d++;
-        else if (trimmed[i] === "}" || trimmed[i] === "]") d--;
-        else if (trimmed[i] === ":" && d === 0) { colonIdx = i; break; }
+        const ch = trimmed[i];
+        if (ch === "{" || ch === "[" || ch === "(") d++;
+        else if (ch === "}" || ch === "]" || ch === ")") d--;
+        else if (ch === "?" && d === 0) ternaryDepth++;
+        else if (ch === ":" && d === 0) {
+          if (ternaryDepth > 0) { ternaryDepth--; continue; }
+          colonIdx = i; break;
+        }
       }
       if (colonIdx === -1) {
         const name = trimmed.split("=")[0].trim();
@@ -792,6 +800,12 @@ export class PersistentVMContext {
     for (const id of this.activeTimers) {
       clearTimeout(id);
       clearInterval(id);
+    }
+    // setImmediate returns a different type — clearTimeout/clearInterval won't cancel them
+    if (typeof clearImmediate === "function") {
+      for (const id of this.activeTimers) {
+        try { clearImmediate(id as unknown as NodeJS.Immediate); } catch { /* ignore non-immediate ids */ }
+      }
     }
     this.activeTimers.clear();
   }

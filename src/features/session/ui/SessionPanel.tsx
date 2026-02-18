@@ -357,8 +357,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     );
 
     const handleQuestionDismiss = useCallback(() => {
-      // Dismiss sends empty answers — agent gets an empty response and can continue
-      resolveQuestion(sessionId, []);
+      // Dismiss sends a cancellation sentinel so the agent can branch appropriately
+      resolveQuestion(sessionId, ["USER_CANCELLED"]);
     }, [resolveQuestion, sessionId]);
 
     // Drop overlay shared between embedded and dialog layouts
@@ -519,12 +519,14 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   {/* Agent-initiated interaction overlays — appear above MessageInput */}
                   <PlanApprovalOverlay
                     request={pendingPlan}
+                    agentType={session?.agent_type}
                     onApprove={handlePlanApprove}
                     onReject={handlePlanReject}
                   />
                   <AgentQuestionOverlay
                     key={pendingQuestion?.rpcId as string}
                     request={pendingQuestion}
+                    agentType={session?.agent_type}
                     onSubmit={handleQuestionSubmit}
                     onDismiss={handleQuestionDismiss}
                   />
