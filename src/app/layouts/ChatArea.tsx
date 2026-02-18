@@ -87,6 +87,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             workspacePath={workspace.workspace_path}
             workspaceRepoName={workspace.repo_name}
             workspaceParentBranch={workspace.parent_branch}
+            workspaceDefaultBranch={workspace.default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
             initialModel={activeTab.data?.initialModel}

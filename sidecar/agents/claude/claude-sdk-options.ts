@@ -53,10 +53,22 @@ export function createCanUseTool(sessionId: string, workingDirectory: string | u
     if (toolName === "ExitPlanMode") {
       const currentSession = getSession(sessionId);
 
-      const response = await FrontendClient.requestExitPlanMode({
-        sessionId,
-        toolInput: input,
-      });
+      let response: { approved: boolean; turnId?: string };
+      try {
+        response = await FrontendClient.requestExitPlanMode({
+          sessionId,
+          toolInput: input,
+        });
+      } catch (err) {
+        console.error("[canUseTool] ExitPlanMode request failed:", err);
+        return {
+          behavior: "deny",
+          message:
+            "Plan approval request failed (frontend may be unavailable or timed out). " +
+            "Please wait for the user to reconnect and try again.",
+          interrupt: true,
+        };
+      }
 
       if (response.approved) {
         if (response.turnId && currentSession?.cwd) {
