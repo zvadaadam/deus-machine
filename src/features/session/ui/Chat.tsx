@@ -13,7 +13,7 @@ import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useSession } from "../context";
 import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 import { TerminalSquare } from "lucide-react";
 
@@ -444,7 +444,7 @@ export function Chat({
                   if (isNew) seenMessageIds.current.add(turn.message.id);
 
                   return (
-                    <motion.div
+                    <m.div
                       key={turn.message.id}
                       ref={isLastRendered ? lastMessageRef : undefined}
                       className={cn(spacingClass, "min-w-0")}
@@ -458,7 +458,7 @@ export function Chat({
                         isLastInTurn={true}
                         isWorking={sessionStatus === "working"}
                       />
-                    </motion.div>
+                    </m.div>
                   );
                 }
 
@@ -473,7 +473,7 @@ export function Chat({
                 turn.messages.forEach((m) => seenMessageIds.current.add(m.id));
 
                 return (
-                  <motion.div
+                  <m.div
                     key={turn.messages[0].id}
                     ref={isLastRendered ? lastMessageRef : undefined}
                     className={cn(spacingClass, "min-w-0")}
@@ -486,13 +486,13 @@ export function Chat({
                       isLatest={turn.isLatest}
                       isWorking={sessionStatus === "working"}
                     />
-                  </motion.div>
+                  </m.div>
                 );
               })}
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
                 {sessionStatus === "error" && errorMessage && (
-                  <motion.div
+                  <m.div
                     key="session-error"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -527,12 +527,12 @@ export function Chat({
                         </div>
                       )}
                     </div>
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
               <AnimatePresence>
                 {sessionStatus === "working" && (
-                  <motion.div
+                  <m.div
                     key="working-indicator"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -550,7 +550,7 @@ export function Chat({
                     <span className="text-foreground ml-1 font-mono text-xs tracking-tight tabular-nums opacity-50">
                       {formattedDuration || "0.0s"}
                     </span>
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
               {/* Sentinel for auto-scroll IntersectionObserver.

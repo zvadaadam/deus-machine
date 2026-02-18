@@ -9,7 +9,7 @@
  * CollapsedContentStrip: slot-machine roll animation on tab switch.
  */
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { MessageSquare, Code2, Settings2, Terminal, BookOpen, PenTool, Globe } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipKbd } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
@@ -120,7 +120,7 @@ export function CollapsedContentStrip({
            * Old content slides up + fades out, new content slides up from below.
            * Framer Motion y-transform is post-layout so writing-mode doesn't interfere. */}
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div
+            <m.div
               key={activeTab}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -137,7 +137,7 @@ export function CollapsedContentStrip({
               >
                 {label}
               </span>
-            </motion.div>
+            </m.div>
           </AnimatePresence>
         </button>
       </TooltipTrigger>
