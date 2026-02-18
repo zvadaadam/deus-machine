@@ -1357,10 +1357,10 @@ mod tests {
     fn get_file_patch_returns_patch_for_modified_file() {
         let (_dir, path) = create_diverged_repo();
         let diff = get_file_patch(&path, "main", "README.md").unwrap();
-        // Should contain the added line
+        // Should contain the added line with '+' prefix (unified diff format)
         assert!(
-            diff.contains("updated line"),
-            "Diff should contain 'updated line', got: {}",
+            diff.contains("+updated line"),
+            "Diff should contain '+updated line' (unified diff format), got: {}",
             diff
         );
     }
@@ -1372,6 +1372,12 @@ mod tests {
         assert!(
             diff.contains("brand new content"),
             "Diff for new file should contain its content, got: {}",
+            diff
+        );
+        // Verify unified diff format: new file lines must have '+' prefix
+        assert!(
+            diff.contains("+brand new content"),
+            "New file lines should have '+' prefix for proper unified diff format, got: {}",
             diff
         );
     }
@@ -1677,8 +1683,8 @@ mod tests {
         let (_dir, path) = create_repo_with_workdir_changes();
         let diff = get_file_patch(&path, "main", "existing.txt").unwrap();
         assert!(
-            diff.contains("line three"),
-            "Patch should contain uncommitted change 'line three', got: {}",
+            diff.contains("+line three"),
+            "Patch should contain '+line three' (unified diff format), got: {}",
             diff
         );
     }
@@ -1688,7 +1694,7 @@ mod tests {
         let (_dir, path) = create_repo_with_workdir_changes();
         let diff = get_file_patch(&path, "main", "untracked.txt").unwrap();
         assert!(
-            diff.contains("new untracked content"),
+            diff.contains("+new untracked content"),
             "Patch should contain untracked file content, got: {}",
             diff
         );

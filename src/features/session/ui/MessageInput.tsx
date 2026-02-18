@@ -368,7 +368,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   return (
-    <div className={cn("relative z-20 shrink-0 bg-bg-surface px-4 pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
       {/* File mention popover — anchored above the input group */}
       <AnimatePresence>
         {fileMention.isOpen && (

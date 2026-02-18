@@ -1364,6 +1364,12 @@ body {
   background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
 }
 
+/* CSS containment for all-diffs sections — browser skips layout/paint for offscreen sections */
+.diff-section-contained {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}
+
 /* Hide scrollbars (keep scroll behavior) */
 .scrollbar-hidden {
   scrollbar-width: none;
@@ -1458,6 +1464,8 @@ body {
 
 /* Diffs (Pierre) theme bridge */
 diffs-container.diffs-theme {
+  padding: 0;
+  margin: 0;
   --diffs-light-bg: var(--background);
   --diffs-dark-bg: var(--background);
   --diffs-light: var(--foreground);
@@ -1465,7 +1473,7 @@ diffs-container.diffs-theme {
   --diffs-gap-block: 0;
   --diffs-font-family: var(--font-family-mono);
   --diffs-font-size: 11px;
-  --diffs-line-height: calc(11px * 1.8);
+  --diffs-line-height: 16px;
   --diffs-min-number-column-width: 4ch;
   --diffs-fg-number-override: var(--diff-line-number);
 
@@ -1506,7 +1514,7 @@ diffs-container.diffs-theme {
 
 diffs-container.diffs-theme-compact {
   --diffs-font-size: 10px;
-  --diffs-line-height: calc(10px * 1.8);
+  --diffs-line-height: 15px;
 }
 
 .diff-hover-action {

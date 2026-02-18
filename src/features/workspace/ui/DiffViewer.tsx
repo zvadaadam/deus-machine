@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { Copy, Check, Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,8 @@ interface DiffViewerProps {
   isLoading?: boolean;
   error?: string | null;
   onClose?: () => void;
+  /** When true, renders with natural height (no h-full / internal scroll) for stacking inside a scrollable parent */
+  embedded?: boolean;
 }
 
 /**
@@ -57,10 +59,13 @@ export function DiffViewer({
   isLoading: isLoadingProp = false,
   error: errorProp = null,
   onClose,
+  embedded = false,
 }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [comments, setComments] = useState<DiffComment[]>([]);
   const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
+  const draftCommentRef = useRef<DiffCommentDraft | null>(null);
+  draftCommentRef.current = draftComment;
   const [showAll, setShowAll] = useState(false);
 
   const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
@@ -86,25 +91,31 @@ export function DiffViewer({
     const diffPaths = extractDiffPaths(diff);
     const oldName = diffPaths.oldPath || fallbackName;
     const newName = diffPaths.newPath || fallbackName;
-    const oldFile: FileContents | null =
-      oldContent != null ? { name: oldName, contents: oldContent } : null;
-    const newFile: FileContents | null =
-      newContent != null ? { name: newName, contents: newContent } : null;
-    if (oldFile && newFile) {
-      try {
-        const generated = parseDiffFromFile(oldFile, newFile);
-        return applyDisplayNames(generated, fallbackName);
-      } catch (error) {
-        console.warn("Failed to generate full diff, falling back to patch diff", error);
+
+    // Embedded mode (all-diffs view): lightweight patch-only parsing.
+    // Skips parseDiffFromFile which processes full file contents synchronously.
+    if (!embedded) {
+      const oldFile: FileContents | null =
+        oldContent != null ? { name: oldName, contents: oldContent } : null;
+      const newFile: FileContents | null =
+        newContent != null ? { name: newName, contents: newContent } : null;
+      if (oldFile && newFile) {
+        try {
+          const generated = parseDiffFromFile(oldFile, newFile);
+          return applyDisplayNames(generated, fallbackName);
+        } catch (error) {
+          console.warn("Failed to generate full diff, falling back to patch diff", error);
+        }
       }
     }
+
     try {
       return applyDisplayNames(getSingularPatch(diff), fallbackName);
     } catch (error) {
       console.warn("Failed to parse patch diff", error);
       return null;
     }
-  }, [diff, filePath, newContent, oldContent]);
+  }, [diff, embedded, filePath, newContent, oldContent]);
 
   const canExpand = Boolean(displayFileDiff);
 
@@ -116,6 +127,12 @@ export function DiffViewer({
     setShowAll(false);
   }, [filePath]);
 
+  // Disable word-level diffs for large diffs (Codex pattern: 2000 line threshold)
+  const isLargeDiff = useMemo(
+    () => displayFileDiff != null && countDiffLines(displayFileDiff) > LARGE_DIFF_LINE_THRESHOLD,
+    [displayFileDiff]
+  );
+
   const diffOptions = useMemo(
     () => ({
       ...baseDiffOptions,
@@ -123,8 +140,9 @@ export function DiffViewer({
       disableFileHeader: true,
       enableHoverUtility: hasContent,
       expandUnchanged: showAll && canExpand,
+      ...(isLargeDiff && { lineDiffType: "none" as const }),
     }),
-    [baseDiffOptions, canExpand, hasContent, showAll]
+    [baseDiffOptions, canExpand, hasContent, isLargeDiff, showAll]
   );
 
   const createCommentId = () =>
@@ -146,22 +164,23 @@ export function DiffViewer({
   );
 
   const handleSaveDraft = useCallback(() => {
-    if (!draftComment) return;
-    const trimmed = draftComment.text.trim();
+    const draft = draftCommentRef.current;
+    if (!draft) return;
+    const trimmed = draft.text.trim();
     if (!trimmed) {
       setDraftComment(null);
       return;
     }
     const newComment: DiffComment = {
       id: createCommentId(),
-      lineNumber: draftComment.lineNumber,
-      side: draftComment.side,
+      lineNumber: draft.lineNumber,
+      side: draft.side,
       text: trimmed,
       createdAt: new Date().toISOString(),
     };
     setComments((prev) => [...prev, newComment]);
     setDraftComment(null);
-  }, [draftComment]);
+  }, []);
 
   const handleCancelDraft = useCallback(() => {
     setDraftComment(null);
@@ -228,10 +247,11 @@ export function DiffViewer({
       if (!meta) return null;
 
       if (meta.isDraft) {
+        const draft = draftCommentRef.current;
         return (
           <div className="diff-comment-card">
             <Textarea
-              value={draftComment?.text ?? ""}
+              value={draft?.text ?? ""}
               onChange={(event) =>
                 setDraftComment((current) =>
                   current ? { ...current, text: event.target.value } : current
@@ -245,7 +265,7 @@ export function DiffViewer({
                 size="sm"
                 className="diff-comment-save"
                 onClick={handleSaveDraft}
-                disabled={!draftComment?.text.trim()}
+                disabled={!draft?.text.trim()}
               >
                 Save comment
               </Button>
@@ -280,7 +300,7 @@ export function DiffViewer({
         </div>
       );
     },
-    [draftComment, handleCancelDraft, handleRemoveComment, handleSaveDraft, handleSendToChat]
+    [handleCancelDraft, handleRemoveComment, handleSaveDraft, handleSendToChat]
   );
 
   const headerActions = (
@@ -327,19 +347,18 @@ export function DiffViewer({
 
   const diffContainerStyle = useMemo<CSSProperties>(
     () => ({
-      height: "100%",
-      overflow: "auto",
-      fontSize: "11px",
-      lineHeight: "20px",
+      height: embedded ? "auto" : "100%",
+      overflow: embedded ? "visible" : "auto",
+      // CSS variables pierce Shadow DOM — inline is the reliable delivery path
       "--diffs-font-size": "11px",
-      "--diffs-line-height": "20px",
+      "--diffs-line-height": "16px",
     }),
-    []
+    [embedded]
   );
 
   return (
-    <div className="bg-background flex h-full flex-col overflow-hidden">
-      {hasContent && displayFileDiff && (
+    <div className={embedded ? "" : "bg-background flex h-full flex-col overflow-hidden"}>
+      {hasContent && displayFileDiff && !embedded && (
         <div className="diff-viewer-header">
           <div className="min-w-0 flex-1">{headerTitle}</div>
           {headerActions}
@@ -347,7 +366,7 @@ export function DiffViewer({
       )}
 
       {/* Diff content */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className={embedded ? "relative" : "relative min-h-0 flex-1 overflow-hidden"}>
         {isLoading ? (
           <div className="flex h-full items-center justify-center px-6 py-10">
             <div className="w-full max-w-none animate-pulse space-y-3">
@@ -401,6 +420,17 @@ export function DiffViewer({
       </div>
     </div>
   );
+}
+
+// Above this threshold, disable word-level diffs (matches Codex at 2000 lines)
+const LARGE_DIFF_LINE_THRESHOLD = 2000;
+
+function countDiffLines(fileDiff: FileDiffMetadata): number {
+  let total = 0;
+  for (const hunk of fileDiff.hunks) {
+    total += hunk.additionCount + hunk.deletionCount;
+  }
+  return total;
 }
 
 function applyDisplayNames(fileDiff: FileDiffMetadata, fallbackName: string): FileDiffMetadata {
