@@ -15,6 +15,7 @@ import { isTauriEnv, invoke } from "@/platform/tauri";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
+import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
 
 // Detect if this window instance is the detached browser popup.
 // The main window creates it with ?window=browser-detached in the URL.
@@ -62,6 +63,10 @@ function AppContent({ reset }: { reset: () => void }) {
   // Global listener: workspace init progress → invalidate queries on completion
   useWorkspaceInitEvents();
 
+  // Auto-update: check on launch + every 5 min, show toast when ready
+  const autoUpdate = useAutoUpdate();
+  useUpdateToast(autoUpdate);
+
   const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
 
   // Show the main window whenever we transition OUT of onboarding.
@@ -89,7 +94,7 @@ function AppContent({ reset }: { reset: () => void }) {
   }
 
   return (
-    <>
+    <UpdateProvider value={autoUpdate}>
       <BrowserRouter>
         <Routes>
           <Route
@@ -103,7 +108,7 @@ function AppContent({ reset }: { reset: () => void }) {
         </Routes>
       </BrowserRouter>
       <Toaster />
-    </>
+    </UpdateProvider>
   );
 }
 
