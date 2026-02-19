@@ -13,7 +13,7 @@ import {
   useAgents,
   useUpdateSettings,
 } from "../api/settings.queries";
-import { GeneralSection, AISection, ExtensionsSection } from "./sections";
+import { GeneralSection, AISection, ExtensionsSection, EnvironmentSection } from "./sections";
 
 export function SettingsPage() {
   const activeSection = useUIStore((s) => s.activeSettingsSection);
@@ -36,7 +36,9 @@ export function SettingsPage() {
         mcpServersQuery.isLoading ||
         commandsQuery.isLoading ||
         agentsQuery.isLoading
-      : settingsQuery.isLoading;
+      : activeSection === "environment"
+        ? false // EnvironmentSection manages its own loading state
+        : settingsQuery.isLoading;
   const saving = updateSettingsMutation.isPending;
 
   // ESC closes settings
@@ -90,6 +92,7 @@ export function SettingsPage() {
       .with("extensions", () => (
         <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />
       ))
+      .with("environment", () => <EnvironmentSection />)
       .otherwise(() => null);
   }
 

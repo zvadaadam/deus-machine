@@ -5,6 +5,8 @@ pub struct InstalledApp {
     pub id: String,
     pub name: String,
     pub path: String,
+    /// Base64-encoded PNG data URL of the app icon (64x64), or None if extraction failed.
+    pub icon: Option<String>,
 }
 
 // Shared app definitions (id, display name, app path)
@@ -41,6 +43,70 @@ const APP_DEFINITIONS: &[(&str, &str, &str)] = &[
     ("warp", "Warp", "/Applications/Warp.app"),
 ];
 
+/// Extract the app icon as a base64 PNG data URL.
+/// Uses PlistBuddy to find the .icns file, then sips to convert to 64x64 PNG.
+#[cfg(target_os = "macos")]
+fn extract_app_icon(app_path: &str, app_id: &str) -> Option<String> {
+    use base64::Engine;
+
+    let resources_dir = format!("{}/Contents/Resources", app_path);
+    let plist_path = format!("{}/Contents/Info.plist", app_path);
+
+    // Try to read CFBundleIconFile from Info.plist
+    let icon_name = std::process::Command::new("/usr/libexec/PlistBuddy")
+        .arg("-c")
+        .arg("Print :CFBundleIconFile")
+        .arg(&plist_path)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    // Build candidate paths for the .icns file
+    let mut candidates = Vec::new();
+
+    if let Some(name) = &icon_name {
+        if name.ends_with(".icns") {
+            candidates.push(format!("{}/{}", resources_dir, name));
+        } else {
+            candidates.push(format!("{}/{}.icns", resources_dir, name));
+        }
+    }
+    // Common fallbacks
+    candidates.push(format!("{}/AppIcon.icns", resources_dir));
+    candidates.push(format!("{}/app.icns", resources_dir));
+    candidates.push(format!("{}/Icon.icns", resources_dir));
+
+    let icns_path = candidates.iter().find(|p| Path::new(p).exists())?;
+
+    // Convert .icns → 64x64 PNG using sips (built into macOS)
+    let tmp_path = format!("/tmp/hive_app_icon_{}.png", app_id);
+
+    let output = std::process::Command::new("sips")
+        .args([
+            "-s", "format", "png",
+            icns_path,
+            "--out", &tmp_path,
+            "--resampleHeightWidth", "64", "64",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let png_data = std::fs::read(&tmp_path).ok()?;
+    let _ = std::fs::remove_file(&tmp_path);
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_data);
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
 /// Get list of installed development apps on macOS
 #[tauri::command]
 pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
@@ -55,10 +121,12 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, String> {
 
         for (id, name, path) in APP_DEFINITIONS {
             if Path::new(path).exists() {
+                let icon = extract_app_icon(path, id);
                 apps.push(InstalledApp {
                     id: id.to_string(),
                     name: name.to_string(),
                     path: path.to_string(),
+                    icon,
                 });
             }
         }

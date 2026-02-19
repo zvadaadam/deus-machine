@@ -21,6 +21,7 @@ import { isTauriEnv } from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import type { Session, SessionStatus } from "@shared/types/session";
+import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
 /** Event payload from sidecar — same shape as useSessionEvents */
 interface SidecarEvent {
@@ -39,6 +40,8 @@ const BATCH_WINDOW_MS = 1500;
 export function useGlobalSessionNotifications() {
   // Track previous session statuses for transition detection
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
+  // Track previous workspace setup statuses for setup failure notifications
+  const prevSetupStatusMap = useRef(new Map<string, SetupStatus>());
   // Batch queue for "agent finished" notifications
   const finishedBatch = useRef<string[]>([]);
   const batchTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -144,10 +147,56 @@ export function useGlobalSessionNotifications() {
       // fire immediately — no need to duplicate them via cache transitions.
     });
 
+    // --- Setup failure notifications via workspace cache ---
+    const unsubscribeWorkspaces = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || !event.query.queryKey[0]) return;
+
+      // Watch workspace list queries: ["workspaces", "by-repo", ...]
+      const key = event.query.queryKey;
+      if (key[0] !== "workspaces" || key[1] !== "by-repo") return;
+
+      const groups = event.query.state.data as RepoGroup[] | undefined;
+      if (!groups) return;
+
+      for (const group of groups) {
+        for (const ws of group.workspaces) {
+          const prev = prevSetupStatusMap.current.get(ws.id);
+          prevSetupStatusMap.current.set(ws.id, ws.setup_status);
+
+          if (!prev) continue; // First observation
+          if (prev === ws.setup_status) continue; // No transition
+
+          // running → failed = setup failed
+          if (prev === "running" && ws.setup_status === "failed" && !isWindowFocused()) {
+            sendNotification({
+              title: "Setup failed",
+              body: `Workspace ${ws.display_name || ws.directory_name} setup failed${ws.setup_error ? `: ${ws.setup_error}` : ""}`,
+              sound: "Basso",
+            });
+          }
+
+          // running → completed = setup finished (success)
+          if (prev === "running" && ws.setup_status === "completed") {
+            // Invalidate manifest cache so task buttons appear
+            queryClient.invalidateQueries({ queryKey: ["workspaces", "manifest", ws.id] });
+
+            if (!isWindowFocused()) {
+              sendNotification({
+                title: "Setup complete",
+                body: `Workspace ${ws.display_name || ws.directory_name} is ready`,
+                sound: "Glass",
+              });
+            }
+          }
+        }
+      }
+    });
+
     return () => {
       unlistenError.then((fn) => fn());
       unlistenPlan.then((fn) => fn());
       unsubscribe();
+      unsubscribeWorkspaces();
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
     };
   }, [queryClient]);
