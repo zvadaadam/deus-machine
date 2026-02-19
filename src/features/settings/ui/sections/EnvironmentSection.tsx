@@ -119,7 +119,7 @@ export function EnvironmentSection() {
   if (reposLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" />
+        <Loader2 className="text-muted-foreground size-5 animate-spin motion-reduce:animate-none" />
       </div>
     );
   }
@@ -167,7 +167,7 @@ export function EnvironmentSection() {
 
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">
-          <Loader2 className="text-muted-foreground size-4 animate-spin" />
+          <Loader2 className="text-muted-foreground size-4 animate-spin motion-reduce:animate-none" />
         </div>
       ) : (
         <>
@@ -188,7 +188,7 @@ export function EnvironmentSection() {
                 disabled={detecting}
                 className="shrink-0"
               >
-                {detecting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                {detecting && <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />}
                 Generate
               </Button>
             </div>
@@ -435,14 +435,14 @@ export function EnvironmentSection() {
           {/* Save / Reset / Generate */}
           <div className="flex items-center gap-2">
             <Button onClick={handleSave} disabled={!isDirty || saveMutation.isPending} size="sm">
-              {saveMutation.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              {saveMutation.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />}
               Save
             </Button>
             <Button variant="outline" size="sm" onClick={handleReset} disabled={!isDirty}>
               Reset
             </Button>
             <Button variant="ghost" size="sm" onClick={handleDetect} disabled={detecting}>
-              {detecting ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Wand2 className="mr-1.5 size-3.5" />}
+              {detecting ? <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" /> : <Wand2 className="mr-1.5 size-3.5" />}
               Auto-detect
             </Button>
             {isDirty && <span className="text-muted-foreground text-xs">Unsaved changes</span>}

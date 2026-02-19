@@ -189,14 +189,17 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 Add
               </Button>
             </div>
-            {task.env.map((envVar, j) => (
-              <div key={j} className="flex items-center gap-1.5 pl-22">
+            {task.env.map((envVar) => (
+              <div key={envVar.id} className="flex items-center gap-1.5 pl-22">
                 <Input
                   value={envVar.key}
                   onChange={(e) => {
-                    const next = [...task.env];
-                    next[j] = { ...next[j], key: e.target.value };
-                    onChange({ ...task, env: next });
+                    onChange({
+                      ...task,
+                      env: task.env.map((ev) =>
+                        ev.id === envVar.id ? { ...ev, key: e.target.value } : ev,
+                      ),
+                    });
                   }}
                   placeholder="KEY"
                   className="flex-1 font-mono text-xs"
@@ -204,9 +207,12 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 <Input
                   value={envVar.value}
                   onChange={(e) => {
-                    const next = [...task.env];
-                    next[j] = { ...next[j], value: e.target.value };
-                    onChange({ ...task, env: next });
+                    onChange({
+                      ...task,
+                      env: task.env.map((ev) =>
+                        ev.id === envVar.id ? { ...ev, value: e.target.value } : ev,
+                      ),
+                    });
                   }}
                   placeholder="value"
                   className="flex-1 text-xs"
@@ -215,7 +221,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => onChange({ ...task, env: task.env.filter((_, k) => k !== j) })}
+                  onClick={() => onChange({ ...task, env: task.env.filter((ev) => ev.id !== envVar.id) })}
                   aria-label={`Remove env var ${envVar.key || "unnamed"}`}
                   className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
                 >
