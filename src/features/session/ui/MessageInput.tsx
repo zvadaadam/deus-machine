@@ -378,7 +378,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
   return (
-    <div className={cn("relative z-20 shrink-0 bg-bg-surface px-4 pb-4", className)}>
+    <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
       {/* Environment setup nudge — visible when no hive.json and chat is empty */}
       <AnimatePresence>
         {showSetupNudge && (
