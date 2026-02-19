@@ -1,5 +1,5 @@
 import { Plus, Ellipsis, ChevronRight } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
@@ -78,7 +78,7 @@ export function RepositoryItem({
       </SidebarMenuItem>
       <AnimatePresence initial={false}>
         {!isCollapsed && (
-          <motion.ul
+          <m.ul
             key="workspace-list"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -94,7 +94,7 @@ export function RepositoryItem({
 
                 return (
                   <>
-                    <motion.li
+                    <m.li
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1], delay: 0.03 }}
@@ -114,10 +114,10 @@ export function RepositoryItem({
                           </SidebarRowMain>
                         </button>
                       </SidebarRow>
-                    </motion.li>
+                    </m.li>
 
                     {sortedWorkspaces.map((workspace, index) => (
-                      <motion.li
+                      <m.li
                         key={workspace.id}
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -134,12 +134,12 @@ export function RepositoryItem({
                           onClick={onWorkspaceClick}
                           onArchive={onArchive}
                         />
-                      </motion.li>
+                      </m.li>
                     ))}
                   </>
                 );
               })()}
-          </motion.ul>
+          </m.ul>
         )}
       </AnimatePresence>
     </Collapsible>

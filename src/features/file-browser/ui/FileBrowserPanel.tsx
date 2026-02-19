@@ -33,6 +33,8 @@ import type { FileTreeNode } from "../types";
 type FilterMode = "all" | "changes";
 type ChangesFilter = "all-changes" | "uncommitted" | "last-turn";
 
+const EMPTY_FILE_CHANGES: FileChange[] = [];
+
 interface FileBrowserPanelProps {
   selectedWorkspace: Workspace | null;
   /** Git diff file changes — overlaid onto the tree as +N/-N indicators */
@@ -181,7 +183,7 @@ function buildPathSet(changes: FileChange[]): Set<string> {
 
 export function FileBrowserPanel({
   selectedWorkspace,
-  fileChanges = [],
+  fileChanges = EMPTY_FILE_CHANGES,
   uncommittedFiles,
   lastTurnFiles,
   fileChangesTruncated,

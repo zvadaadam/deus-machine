@@ -12,7 +12,7 @@
  */
 
 import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from "@/shared/types";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
@@ -76,7 +76,7 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   const isLoading = !toolResult;
 
   return (
-    <motion.div
+    <m.div
       className="my-1"
       style={{ contain: "paint" }}
       initial={{ opacity: 0, y: 4 }}
@@ -84,6 +84,6 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
     >
       <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />
-    </motion.div>
+    </m.div>
   );
 }

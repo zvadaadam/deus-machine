@@ -20,6 +20,8 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
+const EMPTY_MCP_SERVERS: { name: string; active: boolean; command: string }[] = [];
+
 // Tauri native drag-drop: only accept formats the Anthropic vision API supports
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
 const EXT_TO_MIME: Record<string, string> = {
@@ -268,7 +270,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     };
 
     // TODO: Fetch MCP servers from settings/API
-    const mcpServers: { name: string; active: boolean; command: string }[] = [];
+    const mcpServers = EMPTY_MCP_SERVERS;
 
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
