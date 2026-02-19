@@ -148,8 +148,9 @@ Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core 
 ### Git Diff Semantics (src-tauri/src/git.rs)
 
 - **Branch resolution** (`resolve_parent_branch`): Always prefers **remote** (`origin/{branch}`) over local. Worktrees are created from remote branches, so diffs must be against the upstream target. Never change this to local-first.
-- **Diff computation** (`get_diff_stats`, `get_changed_files`, `get_file_patch`): Uses `diff_tree_to_workdir_with_index` (not `diff_tree_to_tree`). This diffs the merge-base tree against the **working directory**, capturing committed + staged + unstaged + untracked changes. AI agents often leave uncommitted changes — `diff_tree_to_tree` would miss them entirely.
-- **Untracked files**: Diff options include `include_untracked(true)`, `recurse_untracked_dirs(true)`, `show_untracked_content(true)` so new files created by agents count toward diff stats.
+- **Diff computation** (`get_diff_stats`, `get_changed_files`, `get_file_patch`): Uses **git CLI** (`git diff --numstat <merge-base>`) instead of libgit2. libgit2's `diff_tree_to_workdir_with_index` had phantom diff issues in worktrees (thousands of false deletions). Diffs compare the merge-base against the **working directory**, capturing committed + staged + unstaged changes. AI agents often leave uncommitted changes — `diff_tree_to_tree` would miss them entirely.
+- **Untracked files**: Uses `git ls-files --others --exclude-standard` to list untracked files, then counts lines with size caps (10 MB) and binary detection. New files created by agents count toward diff stats.
+- **Timeouts**: All git CLI calls use `spawn()` + `try_wait()` with deadlines (5s for short ops, 15s for diffs) to prevent hung processes from blocking the UI.
 - **Tauri IPC fallback**: Frontend `workspace.service.ts` wraps all Rust git calls in try-catch and falls through to HTTP when Tauri IPC fails (e.g., worktree deleted, HEAD missing).
 
 ## Node.js Backend Structure (backend/)
@@ -723,6 +724,10 @@ src/components/ui/              ← Shadcn base primitives only
 ## Testing
 
 Test if the backend or frontend works using the browser tool or running tests.
+
+- **Backend tests** live in `backend/test/unit/` (organized by domain: `lib/`, `middleware/`, `routes/`, `services/`). Run with `bun run test:backend`.
+- **Sidecar tests** live in `sidecar/test/`. Run with `bun run test:sidecar`.
+- Tests use Vitest with `vi.mock()` and `vi.hoisted()` for module-level mocking. Keep tests outside `src/` — never colocate tests with source code.
 
 ### Debugging Frontend Layout & Spacing Issues
 

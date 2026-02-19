@@ -5,14 +5,21 @@
 // the repository on each call (fast -- libgit2 caches internally).
 //
 // DIFF SEMANTICS:
-// All diffs compare the merge-base tree to the WORKING DIRECTORY (not HEAD).
+// All diffs compare the merge-base to the WORKING DIRECTORY (not HEAD).
 // This captures committed + staged + unstaged + untracked changes -- important
 // because AI agents often leave uncommitted working tree changes.
 //
 // Steps:
-//   1. resolve_parent_branch() -> finds upstream ref (prefers origin/*, never local-first)
-//   2. get_merge_base_tree()   -> finds fork point (merge-base of HEAD and upstream)
-//   3. diff_tree_to_workdir_with_index(merge_base_tree) -> all changes since fork
+//   1. resolve_parent_branch()    -> finds upstream ref (prefers origin/*, never local-first)
+//   2. compute_merge_base_sha()   -> finds fork point via git CLI (merge-base of HEAD and upstream)
+//   3. git diff <merge-base>      -> all tracked changes since fork
+//   4. git ls-files --others      -> untracked files (new files created by agents)
+//
+// IMPLEMENTATION NOTE: We use git CLI (not libgit2) for the diff pipeline
+// because libgit2's diff_tree_to_workdir_with_index has issues with git
+// worktrees, causing phantom diffs (thousands of false deletions). Both
+// Conductor and Codex (competitor IDEs) use git CLI for the same reason.
+// libgit2 is still used for non-diff operations (branch listing, file content).
 //
 // PUBLIC API (called from commands/git.rs):
 //   - get_diff_stats()         -> aggregate { additions, deletions } counts
@@ -25,7 +32,7 @@
 // Branch resolution results are cached with a 5-second TTL to avoid
 // repeated ref lookups during rapid UI interactions (e.g., polling).
 
-use git2::{BranchType, DiffFormat, DiffOptions, Repository};
+use git2::{BranchType, DiffOptions, Repository};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -115,6 +122,209 @@ fn cache_set(key: String, value: String) {
 }
 
 // ---------------------------------------------------------------------------
+// Git CLI helpers
+//
+// The merge-base + diff pipeline uses git CLI instead of libgit2 because
+// libgit2's diff_tree_to_workdir_with_index has known issues with git
+// worktrees (phantom diffs where thousands of files appear as deleted).
+// Both Conductor and Codex (competitor IDEs) use git CLI for the same reason.
+// ---------------------------------------------------------------------------
+
+/// Default timeout for short git operations (rev-parse, ls-files, merge-base).
+const GIT_TIMEOUT_SHORT_MS: u64 = 5_000;
+/// Timeout for potentially large operations (diff --numstat on big repos).
+const GIT_TIMEOUT_LONG_MS: u64 = 15_000;
+
+/// Run a git CLI command with a timeout and return stdout as a trimmed string.
+/// Uses spawn + polling instead of output() to enforce a deadline.
+fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
+    run_git_with_timeout(cwd, args, GIT_TIMEOUT_SHORT_MS, true)
+}
+
+/// Run a git CLI command with a longer timeout (for diff operations).
+fn run_git_long(cwd: &str, args: &[&str]) -> Result<String, String> {
+    run_git_with_timeout(cwd, args, GIT_TIMEOUT_LONG_MS, true)
+}
+
+/// Run a git CLI command and return raw stdout (untrimmed, for diff patches).
+fn run_git_raw(cwd: &str, args: &[&str]) -> Result<String, String> {
+    run_git_with_timeout(cwd, args, GIT_TIMEOUT_LONG_MS, false)
+}
+
+/// Core git runner with configurable timeout and trimming.
+/// Spawns the process and polls try_wait() to enforce a deadline,
+/// matching the Node.js backend which uses execFileSync({ timeout }).
+fn run_git_with_timeout(
+    cwd: &str,
+    args: &[&str],
+    timeout_ms: u64,
+    trim: bool,
+) -> Result<String, String> {
+    let mut child = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "Failed to run git {}: {}",
+                args.first().unwrap_or(&""),
+                e
+            )
+        })?;
+
+    let deadline = Instant::now() + std::time::Duration::from_millis(timeout_ms);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process exited — read output
+                let output = child.wait_with_output().map_err(|e| {
+                    format!("Failed to read git output: {}", e)
+                })?;
+
+                if !status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(format!(
+                        "git {} failed: {}",
+                        args.join(" "),
+                        stderr.trim()
+                    ));
+                }
+
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                return Ok(if trim {
+                    stdout.trim().to_string()
+                } else {
+                    stdout.into_owned()
+                });
+            }
+            Ok(None) => {
+                // Still running — check deadline
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait(); // reap zombie
+                    return Err(format!(
+                        "git {} timed out after {}ms",
+                        args.join(" "),
+                        timeout_ms
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => {
+                return Err(format!("Failed to poll git process: {}", e));
+            }
+        }
+    }
+}
+
+/// Compute the merge-base SHA between HEAD and the parent branch via git CLI.
+/// Handles worktrees correctly (unlike libgit2 in some edge cases).
+/// Falls back to HEAD SHA if merge-base fails (shows only uncommitted changes).
+fn compute_merge_base_sha(workspace_path: &str, parent_branch: &str) -> Result<String, String> {
+    match run_git(workspace_path, &["merge-base", "HEAD", parent_branch]) {
+        Ok(sha) if !sha.is_empty() => Ok(sha),
+        Ok(_) | Err(_) => {
+            // Fallback: use HEAD (diff will show uncommitted changes only)
+            run_git(workspace_path, &["rev-parse", "HEAD"])
+        }
+    }
+}
+
+/// Maximum file size to read for line counting (10 MB).
+/// Matches the Node.js backend's countFileLines cap.
+const MAX_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Sample size for binary detection (first 8 KB).
+const BINARY_SAMPLE_BYTES: usize = 8 * 1024;
+
+/// Count lines in a file with safety guards:
+/// - Skips files larger than MAX_FILE_SIZE_BYTES (counts as 1 line)
+/// - Detects binary files via null-byte sampling (counts as 1 line)
+/// - Counts newlines at byte level without loading the full file into a String
+///
+/// Mirrors the Node.js backend's countFileLines behavior.
+fn count_file_lines(path: &std::path::Path) -> u32 {
+    use std::io::Read;
+
+    // Check file size — skip oversized files (e.g. lockfiles, generated code)
+    let metadata = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return 1,
+    };
+    if metadata.len() > MAX_FILE_SIZE_BYTES {
+        return 1;
+    }
+    if metadata.len() == 0 {
+        return 0;
+    }
+
+    // Read the first 8 KB to detect binary content (null bytes)
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return 1,
+    };
+    let mut sample = vec![0u8; BINARY_SAMPLE_BYTES.min(metadata.len() as usize)];
+    if file.read_exact(&mut sample).is_err() {
+        return 1;
+    }
+    if sample.contains(&0) {
+        // Binary file — count as 1 addition (matches Node.js behavior)
+        return 1;
+    }
+
+    // Count newlines at byte level — already read sample, count there first
+    let mut newlines = bytecount::count(&sample, b'\n') as u32;
+
+    // Read and count remaining bytes in chunks
+    let mut buf = vec![0u8; 64 * 1024]; // 64 KB chunks
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                newlines += bytecount::count(&buf[..n], b'\n') as u32;
+            }
+            Err(_) => break,
+        }
+    }
+
+    // A file with content but no trailing newline still has at least 1 line
+    if newlines == 0 && metadata.len() > 0 {
+        1
+    } else {
+        newlines
+    }
+}
+
+/// Count lines in untracked files and return them as DiffFile entries.
+/// Supplements `git diff --numstat` which excludes untracked files.
+fn collect_untracked_files(workspace_path: &str) -> Vec<DiffFile> {
+    let untracked = match run_git(
+        workspace_path,
+        &["ls-files", "--others", "--exclude-standard"],
+    ) {
+        Ok(output) => output,
+        Err(_) => return Vec::new(),
+    };
+
+    untracked
+        .lines()
+        .filter(|f| !f.is_empty())
+        .map(|file| {
+            let file_path = std::path::Path::new(workspace_path).join(file);
+            let line_count = count_file_lines(&file_path);
+            DiffFile {
+                file: file.to_string(),
+                additions: if line_count == 0 { 1 } else { line_count },
+                deletions: 0,
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Helper: resolve a branch name to a git2::Tree
 // ---------------------------------------------------------------------------
 
@@ -125,6 +335,7 @@ fn cache_set(key: String, value: String) {
 ///   - "refs/remotes/origin/…"  -> used as-is
 ///   - "refs/heads/…"           -> used as-is
 ///   - "main"                   -> tries refs/heads/main, then refs/remotes/origin/main
+#[cfg(test)]
 fn resolve_branch_tree<'a>(
     repo: &'a Repository,
     branch: &str,
@@ -195,11 +406,6 @@ pub fn resolve_parent_branch(
         return cached;
     }
 
-    let repo = match Repository::open(workspace_path) {
-        Ok(r) => r,
-        Err(_) => return "origin/main".to_string(),
-    };
-
     // Build ordered candidate list (deduplicated)
     let mut candidates: Vec<&str> = Vec::with_capacity(5);
     if let Some(b) = parent_branch {
@@ -221,6 +427,7 @@ pub fn resolve_parent_branch(
     for candidate in &candidates {
         // Try remote first (origin/{candidate}) — worktrees are created from
         // remote branches, so diffs should be against the upstream target.
+        // Uses git CLI (not libgit2) for reliable worktree ref resolution.
         let remote_ref = if candidate.starts_with("origin/") {
             format!("refs/remotes/{}", candidate)
         } else if candidate.starts_with("refs/") {
@@ -229,7 +436,7 @@ pub fn resolve_parent_branch(
             format!("refs/remotes/origin/{}", candidate)
         };
 
-        if repo.find_reference(&remote_ref).is_ok() {
+        if run_git(workspace_path, &["rev-parse", "--verify", &remote_ref]).is_ok() {
             let result = if candidate.starts_with("origin/") || candidate.starts_with("refs/") {
                 candidate.to_string()
             } else {
@@ -242,7 +449,7 @@ pub fn resolve_parent_branch(
         // Fall back to local (refs/heads/{candidate})
         if !candidate.starts_with("origin/") && !candidate.starts_with("refs/") {
             let local_ref = format!("refs/heads/{}", candidate);
-            if repo.find_reference(&local_ref).is_ok() {
+            if run_git(workspace_path, &["rev-parse", "--verify", &local_ref]).is_ok() {
                 let result = candidate.to_string();
                 cache_set(cache_key, result.clone());
                 return result;
@@ -263,30 +470,38 @@ pub fn resolve_parent_branch(
 /// Get aggregate addition/deletion counts between the merge-base and the
 /// current working directory state (committed + staged + unstaged + untracked).
 ///
-/// Uses `diff_tree_to_workdir_with_index` so that uncommitted changes made by
-/// AI agents are included in sidebar diff stats badges.
+/// Uses git CLI (`git diff --numstat`) instead of libgit2 because libgit2's
+/// `diff_tree_to_workdir_with_index` has issues with git worktrees that cause
+/// phantom diffs (thousands of false deletions).
 pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffStats, String> {
-    let repo = Repository::open(workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+    let merge_base = compute_merge_base_sha(workspace_path, parent_branch)?;
 
-    let base_tree = get_merge_base_tree(&repo, parent_branch)?;
+    // Tracked file changes: git diff <merge-base> --numstat (long timeout for big repos)
+    let numstat = run_git_long(workspace_path, &["diff", &merge_base, "--numstat"])?;
 
-    let mut opts = DiffOptions::new();
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    opts.show_untracked_content(true);
+    let mut additions = 0u32;
+    let mut deletions = 0u32;
 
-    let diff = repo
-        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
-        .map_err(|e| format!("Failed to compute diff: {}", e))?;
+    for line in numstat.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 2 {
+            // Binary files show "-" instead of numbers
+            additions += parts[0].parse::<u32>().unwrap_or(0);
+            deletions += parts[1].parse::<u32>().unwrap_or(0);
+        }
+    }
 
-    let stats = diff
-        .stats()
-        .map_err(|e| format!("Failed to get diff stats: {}", e))?;
+    // Untracked files (new files not yet git-added by agents)
+    for file in collect_untracked_files(workspace_path) {
+        additions += file.additions;
+    }
 
     Ok(DiffStats {
-        additions: stats.insertions() as u32,
-        deletions: stats.deletions() as u32,
+        additions,
+        deletions,
     })
 }
 
@@ -297,34 +512,46 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
 /// Get per-file addition/deletion counts between the merge-base and the
 /// current working directory state (committed + staged + unstaged + untracked).
 ///
-/// Caps results at MAX_CHANGED_FILES to prevent UI freeze when the merge-base
-/// is stale or wrong (e.g., origin fetch failed during workspace creation).
+/// Uses git CLI instead of libgit2 to avoid phantom diffs in worktrees.
+/// Caps results at MAX_CHANGED_FILES to prevent UI freeze.
 pub fn get_changed_files(
     workspace_path: &str,
     parent_branch: &str,
 ) -> Result<ChangedFilesResult, String> {
-    let repo = Repository::open(workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+    let merge_base = compute_merge_base_sha(workspace_path, parent_branch)?;
 
-    let base_tree = get_merge_base_tree(&repo, parent_branch)?;
+    let numstat = run_git_long(workspace_path, &["diff", &merge_base, "--numstat"])?;
 
-    let mut opts = DiffOptions::new();
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    opts.show_untracked_content(true);
+    let mut files: Vec<DiffFile> = Vec::new();
 
-    let diff = repo
-        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
-        .map_err(|e| format!("Failed to compute diff: {}", e))?;
+    for line in numstat.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            files.push(DiffFile {
+                file: parts[2].to_string(),
+                additions: parts[0].parse().unwrap_or(0),
+                deletions: parts[1].parse().unwrap_or(0),
+            });
+        }
+    }
 
-    let mut files = collect_diff_files(&diff)?;
+    // Add untracked files (new files not yet git-added by agents)
+    files.extend(collect_untracked_files(workspace_path));
+
     let total_count = files.len();
     let truncated = total_count > MAX_CHANGED_FILES;
     if truncated {
         files.truncate(MAX_CHANGED_FILES);
     }
 
-    Ok(ChangedFilesResult { files, truncated, total_count })
+    Ok(ChangedFilesResult {
+        files,
+        truncated,
+        total_count,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -333,36 +560,54 @@ pub fn get_changed_files(
 
 /// Get the unified diff patch for a single file between the merge-base and
 /// the current working directory state.
+///
+/// Uses git CLI instead of libgit2 to avoid phantom diffs in worktrees.
+/// For untracked files, generates a synthetic diff showing the full file content.
 pub fn get_file_patch(
     workspace_path: &str,
     parent_branch: &str,
     file_path: &str,
 ) -> Result<String, String> {
-    let repo = Repository::open(workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+    let merge_base = compute_merge_base_sha(workspace_path, parent_branch)?;
 
-    let base_tree = get_merge_base_tree(&repo, parent_branch)?;
+    // Try tracked file diff
+    let patch = run_git_raw(workspace_path, &["diff", &merge_base, "--", file_path])
+        .unwrap_or_default();
 
-    let mut diff_opts = DiffOptions::new();
-    diff_opts.pathspec(file_path);
-    diff_opts.context_lines(3);
-    diff_opts.include_untracked(true);
-    diff_opts.recurse_untracked_dirs(true);
-    diff_opts.show_untracked_content(true);
+    if !patch.trim().is_empty() {
+        return Ok(patch);
+    }
 
-    let diff = repo
-        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut diff_opts))
-        .map_err(|e| format!("Failed to compute diff: {}", e))?;
+    // Check if it's an untracked file (exists in workdir but not tracked by git)
+    let full_path = std::path::Path::new(workspace_path).join(file_path);
+    if full_path.exists() {
+        let is_untracked = run_git(
+            workspace_path,
+            &["ls-files", "--error-unmatch", file_path],
+        )
+        .is_err();
 
-    // Build patch as raw bytes then decode lossily (handles binary/invalid UTF-8)
-    let mut patch_bytes: Vec<u8> = Vec::new();
-    diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
-        patch_bytes.extend_from_slice(line.content());
-        true
-    })
-    .map_err(|e| format!("Failed to format diff: {}", e))?;
+        if is_untracked {
+            // Generate synthetic diff for untracked file
+            let content = std::fs::read_to_string(&full_path).unwrap_or_default();
+            let lines: Vec<&str> = content.lines().collect();
+            let n = lines.len();
+            let mut diff = format!(
+                "diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n@@ -0,0 +1,{n} @@\n",
+                f = file_path,
+                n = n,
+            );
+            for line in &lines {
+                diff.push('+');
+                diff.push_str(line);
+                diff.push('\n');
+            }
+            return Ok(diff);
+        }
+    }
 
-    Ok(String::from_utf8_lossy(&patch_bytes).into_owned())
+    // No changes for this file
+    Ok(String::new())
 }
 
 // ---------------------------------------------------------------------------
@@ -406,28 +651,10 @@ pub fn get_git_file_content(
 // ---------------------------------------------------------------------------
 
 /// Find the merge-base commit between HEAD and the given parent branch.
-/// Returns the hex SHA-1 of the merge-base commit, or falls back to the
-/// parent branch name on error.
+/// Returns the hex SHA-1 of the merge-base commit.
+/// Uses git CLI for correct worktree handling.
 pub fn get_merge_base(workspace_path: &str, parent_branch: &str) -> Result<String, String> {
-    let repo = Repository::open(workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
-
-    let head_oid = repo
-        .head()
-        .and_then(|h| h.resolve())
-        .map(|r| r.target().unwrap())
-        .map_err(|e| format!("Failed to resolve HEAD: {}", e))?;
-
-    let parent_oid = resolve_branch_oid(&repo, parent_branch)?;
-
-    match repo.merge_base(head_oid, parent_oid) {
-        Ok(oid) => Ok(oid.to_string()),
-        Err(_) => {
-            // Fallback: return the parent branch identifier so callers
-            // can still attempt a diff (graceful degradation).
-            Ok(parent_branch.to_string())
-        }
-    }
+    compute_merge_base_sha(workspace_path, parent_branch)
 }
 
 // ---------------------------------------------------------------------------
@@ -733,79 +960,10 @@ fn collect_diff_files(diff: &git2::Diff) -> Result<Vec<DiffFile>, String> {
     Ok(files)
 }
 
-/// Resolve a branch name to its OID (commit hash).
-fn resolve_branch_oid(repo: &Repository, branch: &str) -> Result<git2::Oid, String> {
-    let ref_name = if branch.starts_with("refs/") {
-        branch.to_string()
-    } else if branch.starts_with("origin/") {
-        format!("refs/remotes/{}", branch)
-    } else {
-        if repo
-            .find_reference(&format!("refs/heads/{}", branch))
-            .is_ok()
-        {
-            format!("refs/heads/{}", branch)
-        } else {
-            format!("refs/remotes/origin/{}", branch)
-        }
-    };
-
-    let reference = repo
-        .find_reference(&ref_name)
-        .map_err(|e| format!("Failed to find branch '{}' (ref: {}): {}", branch, ref_name, e))?;
-
-    let resolved = reference
-        .resolve()
-        .map_err(|e| format!("Failed to resolve ref '{}': {}", ref_name, e))?;
-
-    resolved
-        .target()
-        .ok_or_else(|| format!("Reference '{}' has no target OID", ref_name))
-}
-
-/// Get the tree at the fork point — where this workspace diverged from the
-/// upstream branch. This is the baseline for ALL diff operations.
-///
-/// Implements merge-base semantics:
-///   fork_point = merge_base(HEAD, origin/<parent>)
-///   tree = commit_at(fork_point).tree()
-///
-/// All diff functions compare this tree to the working directory, giving
-/// "everything that changed since we forked from upstream."
-///
-/// The `parent_branch` arg is typically `origin/main` (from resolve_parent_branch).
-/// Workspace creation fetches origin/<parent> first and branches the worktree from
-/// it, so HEAD and origin/<parent> share a recent common ancestor. If origin is
-/// stale, the merge-base drifts backward and phantom changes appear.
-///
-/// Falls back to the upstream branch tree directly if merge-base fails
-/// (e.g., unrelated histories).
-fn get_merge_base_tree<'a>(
-    repo: &'a Repository,
-    parent_branch: &str,
-) -> Result<git2::Tree<'a>, String> {
-    let head_oid = repo
-        .head()
-        .and_then(|h| h.resolve())
-        .ok()
-        .and_then(|r| r.target());
-
-    let parent_oid = resolve_branch_oid(repo, parent_branch).ok();
-
-    // Attempt merge-base resolution
-    if let (Some(h), Some(p)) = (head_oid, parent_oid) {
-        if let Ok(merge_oid) = repo.merge_base(h, p) {
-            if let Ok(commit) = repo.find_commit(merge_oid) {
-                if let Ok(tree) = commit.tree() {
-                    return Ok(tree);
-                }
-            }
-        }
-    }
-
-    // Fallback: use parent branch tree directly
-    resolve_branch_tree(repo, parent_branch)
-}
+// resolve_branch_oid and get_merge_base_tree removed — diff pipeline now uses
+// git CLI via compute_merge_base_sha() + `git diff --numstat` instead of
+// libgit2's diff_tree_to_workdir_with_index which had phantom diff issues
+// in worktrees. Both Conductor and Codex use git CLI for diffs.
 
 #[cfg(test)]
 mod tests {
@@ -985,7 +1143,6 @@ mod tests {
     fn get_diff_stats_invalid_repo_returns_error() {
         let result = get_diff_stats("/nonexistent/path", "main");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Failed to open repository"));
     }
 
     #[test]
@@ -1131,10 +1288,15 @@ mod tests {
     }
 
     #[test]
-    fn get_diff_stats_nonexistent_branch_errors() {
+    fn get_diff_stats_nonexistent_branch_degrades_gracefully() {
         let (_dir, path) = create_simple_repo();
+        // With git CLI, merge-base falls back to HEAD when branch doesn't exist.
+        // This means diff shows only uncommitted changes (zero for clean repo).
         let result = get_diff_stats(&path, "nonexistent-branch");
-        assert!(result.is_err());
+        assert!(result.is_ok(), "Should degrade gracefully, got: {:?}", result);
+        let stats = result.unwrap();
+        assert_eq!(stats.additions, 0);
+        assert_eq!(stats.deletions, 0);
     }
 
     // -----------------------------------------------------------------------

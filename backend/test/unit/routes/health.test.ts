@@ -1,15 +1,15 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockDb = {};
-vi.mock('../../lib/database', () => ({
+vi.mock('../../../src/lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-vi.mock('../../server', () => ({
+vi.mock('../../../src/server', () => ({
   getServerPort: vi.fn(() => 3000),
 }));
 
-import app from '../../routes/health';
+import app from '../../../src/routes/health';
 
 beforeEach(() => {
   vi.clearAllMocks();
