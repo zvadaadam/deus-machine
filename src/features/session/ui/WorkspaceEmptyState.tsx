@@ -50,14 +50,14 @@ export function WorkspaceEmptyState({
           className
         )}
       >
-        <p className="text-muted-foreground/40 text-xs">
+        <p className="text-sm text-muted-foreground/50">
           What would you like to work on?
         </p>
       </div>
     );
   }
 
-  // Fresh workspace — Dieter Rams inspired: functional, systematic, centered
+  // Fresh workspace — clean, confident, centered
   return (
     <div
       className={cn(
@@ -65,11 +65,11 @@ export function WorkspaceEmptyState({
         className
       )}
     >
-      <div className="flex flex-col items-center gap-3.5">
+      <div className="flex flex-col items-center gap-5">
         <div className="text-center">
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/50 flex items-center justify-center gap-1.5">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60 flex items-center justify-center gap-2">
             {initializing && (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             )}
             {initializing
               ? match(initStep)
@@ -81,19 +81,19 @@ export function WorkspaceEmptyState({
               : "Workspace ready"}
           </h2>
           {!initializing && (
-            <p className="mt-1 text-muted-foreground/30 text-xs max-w-[280px]">
+            <p className="mt-1.5 text-sm text-muted-foreground/45">
               {subtitle(repoName, parentBranch)}
             </p>
           )}
         </div>
 
-        <div className="flex items-baseline gap-4">
+        <div className="flex items-baseline gap-6">
           {STEPS.map((step) => (
             <div key={step.num} className="flex items-baseline gap-1.5">
-              <span className="font-mono text-[10px] font-medium text-muted-foreground/20">
+              <span className="font-mono text-xs font-medium text-muted-foreground/30">
                 {String(step.num).padStart(2, "0")}
               </span>
-              <span className="text-xs text-muted-foreground/40">{step.label}</span>
+              <span className="text-sm text-muted-foreground/50">{step.label}</span>
             </div>
           ))}
         </div>
