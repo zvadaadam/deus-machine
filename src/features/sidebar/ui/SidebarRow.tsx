@@ -14,7 +14,7 @@ interface SidebarRowProps extends React.ComponentProps<"div"> {
  * SidebarRow — V2: Jony Ive
  *
  * Active: bg-selection (warm white in light, elevated in dark)
- * Hover: bg-surface (subtle, not aggressive)
+ * Hover: 4% foreground overlay (barely visible, theme-agnostic)
  * Padding: repo=8px 12px, workspace/action=10px 12px
  * Workspace items use same left padding as repo — alignment comes from 20x20 icon wrappers.
  */
@@ -39,7 +39,7 @@ export function SidebarRow({
         "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-md",
         "transition-colors duration-100 ease-out",
         rowVariants[variant],
-        isActive ? "bg-bg-selection" : "hover:bg-bg-surface",
+        isActive ? "bg-bg-selection" : "hover:bg-foreground/[0.04]",
         className
       )}
       {...props}
