@@ -95,7 +95,7 @@ function AllDiffFileSectionInner({
     >
       {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
       <div
-        className={`flex w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[ease] ${
+        className={`flex w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] ${
           isActive
             ? "bg-muted/60"
             : collapsed
