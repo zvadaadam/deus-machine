@@ -103,7 +103,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         {/* Workspace still initializing — show the same empty state with init progress */}
         {activeTab?.type === "chat" && !tabSessionId && (
           <WorkspaceEmptyState
-            branch={workspace.branch}
+            repoName={workspace.repo_name}
             parentBranch={workspace.parent_branch}
             isFirstSession={true}
             initializing={workspace.state === "initializing"}
