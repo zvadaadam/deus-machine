@@ -29,6 +29,9 @@ fn read_workspace_row(row: &rusqlite::Row) -> Result<WorkspaceWithDetails, rusql
     let created_at: String = row.get("created_at")?;
     let updated_at: String = row.get("updated_at")?;
     let parent_branch: Option<String> = row.get("parent_branch")?;
+    let setup_status: Option<String> = row.get("setup_status")?;
+    let setup_error: Option<String> = row.get("setup_error")?;
+    let init_step: Option<String> = row.get("init_step")?;
     let repo_name: Option<String> = row.get("repo_name")?;
     let root_path: Option<String> = row.get("root_path")?;
     let default_branch: Option<String> = row.get("default_branch")?;
@@ -53,6 +56,9 @@ fn read_workspace_row(row: &rusqlite::Row) -> Result<WorkspaceWithDetails, rusql
         created_at,
         updated_at,
         parent_branch,
+        setup_status,
+        setup_error,
+        init_step,
         repo_name,
         root_path,
         default_branch,
@@ -103,7 +109,7 @@ pub fn db_get_workspaces_by_repo(
             "SELECT
                 w.id, w.repository_id, w.directory_name, w.display_name, w.branch, w.state,
                 w.active_session_id, w.created_at, w.updated_at,
-                w.parent_branch,
+                w.parent_branch, w.setup_status, w.setup_error, w.init_step,
                 r.name as repo_name, r.display_order as repo_display_order, r.root_path,
                 r.default_branch,
                 s.status as session_status, s.model,
