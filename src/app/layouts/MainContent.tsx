@@ -123,12 +123,17 @@ export function MainContent({
   const middlePanelActive = middlePanel !== null;
 
   // Workspace git info for DiffTabContent
+  // Must include all fields — missing parent_branch/workspace_path causes
+  // incorrect branch resolution and phantom diffs.
   const workspaceGitInfo: WorkspaceGitInfo | null = useMemo(
     () =>
       selectedWorkspace
         ? {
             root_path: selectedWorkspace.root_path,
             directory_name: selectedWorkspace.directory_name,
+            workspace_path: selectedWorkspace.workspace_path,
+            parent_branch: selectedWorkspace.parent_branch ?? undefined,
+            default_branch: selectedWorkspace.default_branch,
           }
         : null,
     [selectedWorkspace]

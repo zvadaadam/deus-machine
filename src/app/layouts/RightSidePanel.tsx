@@ -72,17 +72,26 @@ export function RightSidePanel({
   });
 
   // Workspace git info for file changes query (Tauri IPC path)
+  // Must include all fields — missing parent_branch/workspace_path causes
+  // incorrect branch resolution and phantom diffs.
   const workspaceGitInfo: WorkspaceGitInfo = useMemo(
     () => ({
       root_path: workspace.root_path,
       directory_name: workspace.directory_name,
+      workspace_path: workspace.workspace_path,
+      parent_branch: workspace.parent_branch ?? undefined,
+      default_branch: workspace.default_branch,
     }),
-    [workspace.root_path, workspace.directory_name]
+    [workspace.root_path, workspace.directory_name, workspace.workspace_path, workspace.parent_branch, workspace.default_branch]
   );
+
+  // Don't query diffs until the worktree checkout is complete — during "initializing"
+  // git is still writing files, producing phantom diffs that clear on next fetch.
+  const isReady = workspace.state === "ready";
 
   // File changes query — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
-    workspace.id,
+    isReady ? workspace.id : null,
     workspace.session_status,
     workspaceGitInfo,
     isWatched
@@ -93,14 +102,14 @@ export function RightSidePanel({
 
   // Uncommitted files (HEAD → workdir) and last-turn files (checkpoint → workdir)
   const { data: uncommittedData } = useUncommittedFiles(
-    workspace.id,
+    isReady ? workspace.id : null,
     workspace.session_status,
     workspaceGitInfo
   );
   const uncommittedFiles = useMemo(() => uncommittedData ?? [], [uncommittedData]);
 
   const { data: lastTurnData } = useLastTurnFiles(
-    workspace.id,
+    isReady ? workspace.id : null,
     workspace.active_session_id,
     workspace.session_status,
     workspaceGitInfo

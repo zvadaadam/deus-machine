@@ -33,6 +33,7 @@ export interface Workspace {
   default_branch?: string;
   setup_status: SetupStatus;
   setup_error: string | null;
+  init_step?: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
   archive_commit?: string | null;

@@ -13,6 +13,7 @@ import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib
 import * as gitService from '../services/git.service';
 import { generateUniqueName } from '../services/workspace.service';
 import { readManifest, readManifestWithFallback, getSetupCommand, getArchiveCommand, getHiveEnv, getNormalizedTasks, writeManifest, runSetupScript } from '../services/manifest.service';
+import { initializeWorkspace } from '../services/workspace-init.service';
 import {
   getAllWorkspaces,
   getWorkspacesByRepo,
@@ -433,9 +434,6 @@ app.post('/workspaces', async (c) => {
     console.warn(`[WORKSPACE] git fetch origin ${parent_branch} failed (continuing with local):`, fetchErr);
   }
 
-  const tmpDir = os.tmpdir();
-  const initLogPath = path.join(tmpDir, `hive-${Date.now()}-init.log`);
-
   db.prepare(`
     INSERT INTO workspaces (
       id, repository_id, directory_name, branch,
@@ -458,52 +456,36 @@ app.post('/workspaces', async (c) => {
   })();
 
   const workspacePath = path.join(repo.root_path!, '.hive', workspace_name);
-  const initLog = fs.createWriteStream(initLogPath);
-  const worktreeProcess = spawn('git', [
-    'worktree', 'add', '-b', placeholderBranchName, workspacePath, worktreeBase
-  ], { cwd: repo.root_path!, stdio: ['ignore', 'pipe', 'pipe'] });
 
-  worktreeProcess.stdout.pipe(initLog);
-  worktreeProcess.stderr.pipe(initLog);
-
-  let worktreeFinished = false;
-  worktreeProcess.on('error', (error) => {
-    if (worktreeFinished) return;
-    worktreeFinished = true;
-    console.error(`[WORKSPACE] Git worktree spawn error:`, error);
-    try { initLog.end(); } catch {}
-    db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
-  });
-
-  worktreeProcess.on('close', (code) => {
-    if (worktreeFinished) return;
-    worktreeFinished = true;
-    try { initLog.end(); } catch {}
-    if (code !== 0) {
-      db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
-      return;
-    }
-
-    const sessionId = randomUUID();
-    db.prepare("INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))").run(sessionId, workspaceId);
-
-    // Read manifest and check for setup script (fallback to repo root for pre-existing manifests)
+  // Fire-and-forget: run the init pipeline async (don't await).
+  // Pipeline handles: worktree creation → deps install → .env copy → session creation.
+  // Progress events flow: stdout → Rust backend.rs → Tauri events → Frontend.
+  // On fatal failure: reverse cleanup (rm dir, prune worktree, delete branch).
+  initializeWorkspace({
+    workspaceId,
+    repositoryId: repository_id,
+    repoRootPath: repo.root_path!,
+    workspacePath,
+    branchName: placeholderBranchName,
+    worktreeBase,
+    parentBranch: parent_branch,
+  }).then(() => {
+    // Workspace is ready — check for manifest setup script
     const manifest = readManifestWithFallback(workspacePath, repo.root_path!);
     const setupCmd = manifest ? getSetupCommand(manifest) : null;
-
-    if (!setupCmd || !manifest) {
-      // No setup — ready immediately (original behavior)
-      db.prepare("UPDATE workspaces SET state = 'ready', setup_status = 'none', active_session_id = ?, updated_at = datetime('now') WHERE id = ?")
-        .run(sessionId, workspaceId);
-      return;
+    if (setupCmd && manifest) {
+      db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
+      const setupEnv = getHiveEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
+      runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
     }
-
-    // Has setup — workspace is ready but setup is running in background
-    db.prepare("UPDATE workspaces SET state = 'ready', setup_status = 'running', active_session_id = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(sessionId, workspaceId);
-
-    const setupEnv = getHiveEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
-    runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
+  }).catch((err) => {
+    // Belt-and-suspenders: initializeWorkspace handles its own errors,
+    // but if something truly unexpected escapes, don't leave workspace stuck.
+    console.error('[WORKSPACE] Unhandled init pipeline error:', err);
+    try {
+      db.prepare("UPDATE workspaces SET state = 'error', init_step = 'error:unhandled' WHERE id = ? AND state = 'initializing'")
+        .run(workspaceId);
+    } catch {}
   });
 
   const workspace = getWorkspaceWithRepo(db, workspaceId);

@@ -14,6 +14,7 @@ import { useSettings } from "@/features/settings";
 import { isTauriEnv, invoke } from "@/platform/tauri";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
+import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
 
 // Detect if this window instance is the detached browser popup.
 // The main window creates it with ?window=browser-detached in the URL.
@@ -57,6 +58,9 @@ function AppContent({ reset }: { reset: () => void }) {
 
   // Global listener: fire OS notifications for ALL session events when backgrounded
   useGlobalSessionNotifications();
+
+  // Global listener: workspace init progress → invalidate queries on completion
+  useWorkspaceInitEvents();
 
   const showOnboarding = !settingsQuery.isError && !settingsQuery.data?.onboarding_completed;
 

@@ -27,7 +27,7 @@ const WORKSPACE_DETAILS_SELECT = `
   SELECT
     w.id, w.repository_id, w.directory_name, w.display_name, w.branch,
     w.parent_branch, w.state, w.active_session_id,
-    w.setup_status, w.setup_error,
+    w.setup_status, w.setup_error, w.init_step,
     w.created_at, w.updated_at,
     r.name as repo_name, r.root_path, r.default_branch,
     s.status as session_status, s.model,
@@ -61,7 +61,7 @@ export function getWorkspacesByRepo(
     SELECT
       w.id, w.repository_id, w.directory_name, w.display_name, w.branch,
       w.parent_branch, w.state, w.active_session_id,
-      w.setup_status, w.setup_error,
+      w.setup_status, w.setup_error, w.init_step,
       w.created_at, w.updated_at,
       r.name as repo_name, r.display_order as repo_display_order, r.root_path,
       r.default_branch,

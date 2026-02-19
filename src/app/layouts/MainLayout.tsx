@@ -39,6 +39,7 @@ import { invoke } from "@/platform/tauri";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
+import { createOptimisticWorkspace } from "@/features/workspace/lib/workspace.utils";
 
 /**
  * SidebarResizeHandle — drag handle on the sidebar's right edge.
@@ -92,6 +93,26 @@ export function MainLayout() {
 
   const repoGroups = workspacesQuery.data || [];
   const loading = workspacesQuery.isLoading || statsQuery.isLoading;
+
+  // Sync Zustand selectedWorkspace with React Query data.
+  // The store holds a snapshot from when the user clicked — it goes stale when
+  // the backend updates workspace fields (state, active_session_id, session_status).
+  // Without this sync, ChatArea never sees the session created by the init pipeline.
+  useEffect(() => {
+    if (!selectedWorkspace || !repoGroups.length) return;
+    const fresh = repoGroups
+      .flatMap((g) => g.workspaces)
+      .find((w) => w.id === selectedWorkspace.id);
+    if (!fresh) return;
+    if (
+      fresh.active_session_id !== selectedWorkspace.active_session_id ||
+      fresh.state !== selectedWorkspace.state ||
+      fresh.session_status !== selectedWorkspace.session_status ||
+      fresh.init_step !== selectedWorkspace.init_step
+    ) {
+      selectWorkspace(fresh);
+    }
+  }, [repoGroups, selectedWorkspace, selectWorkspace]);
 
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
@@ -232,12 +253,21 @@ export function MainLayout() {
     }
 
     setCreating(true);
+
+    // Optimistically select a placeholder so the UI immediately shows
+    // the "Setting up..." state while the backend creates the workspace.
+    const repoGroup = repoGroups.find((g) => g.repo_id === selectedRepoId);
+    const optimistic = createOptimisticWorkspace(selectedRepoId, repoGroup?.repo_name ?? "");
+    const repoIdToCreate = selectedRepoId;
+    selectWorkspace(optimistic);
+    setSelectedRepoId("");
+    closeNewWorkspaceModal();
+
     try {
-      const workspace = await createWorkspaceMutation.mutateAsync(selectedRepoId);
+      const workspace = await createWorkspaceMutation.mutateAsync(repoIdToCreate);
       selectWorkspace(workspace);
-      setSelectedRepoId("");
-      closeNewWorkspaceModal();
     } catch (error) {
+      selectWorkspace(null);
       console.error("Error creating workspace:", error);
       toast.error(extractErrorMessage(error));
     } finally {
@@ -257,10 +287,18 @@ export function MainLayout() {
       // When repoId is known (clicked "+" on a specific repo), skip the modal
       if (repoId) {
         setCreating(true);
+
+        // Optimistically select a placeholder so the UI immediately shows
+        // the "Setting up..." state instead of waiting for the HTTP round-trip.
+        const repoGroup = repoGroups.find((g) => g.repo_id === repoId);
+        const optimistic = createOptimisticWorkspace(repoId, repoGroup?.repo_name ?? "");
+        selectWorkspace(optimistic);
+
         try {
           const workspace = await createWorkspaceMutation.mutateAsync(repoId);
           selectWorkspace(workspace);
         } catch (error) {
+          selectWorkspace(null);
           console.error("Error creating workspace:", error);
           toast.error(extractErrorMessage(error));
         } finally {
@@ -271,7 +309,7 @@ export function MainLayout() {
       // No repo context — show the modal so user can pick one
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace]
+    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace, repoGroups]
   );
 
   async function saveSystemPrompt(newPrompt: string) {

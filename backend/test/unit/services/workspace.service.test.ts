@@ -1,5 +1,5 @@
 import { vi, describe, it, expect } from 'vitest';
-import { generateUniqueName, CELESTIAL_NAMES } from '../../services/workspace.service';
+import { generateUniqueName, CELESTIAL_NAMES } from '../../../src/services/workspace.service';
 
 function createMockDb(existingNames: string[] = []) {
   return {

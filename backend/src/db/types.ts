@@ -43,6 +43,7 @@ export interface WorkspaceRow {
   archived_at: string | null;
   setup_status: string;
   setup_error: string | null;
+  init_step: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +63,7 @@ export interface WorkspaceWithDetailsRow {
   parent_branch: string | null;
   state: string;
   active_session_id: string | null;
+  init_step: string | null;
   created_at: string;
   updated_at: string;
 
