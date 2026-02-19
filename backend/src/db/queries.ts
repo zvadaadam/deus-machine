@@ -111,7 +111,7 @@ export function getWorkspaceWithRepo(
   id: string
 ): WorkspaceWithDetailsRow | undefined {
   return db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path
+    SELECT w.*, r.name as repo_name, r.root_path, r.default_branch
     FROM workspaces w
     LEFT JOIN repos r ON w.repository_id = r.id
     WHERE w.id = ?
