@@ -230,7 +230,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             )}
             {statusText && (
               <span className={cn("flex shrink-0 items-center gap-1 text-xs", statusTextClass)}>
-                {isSetupRunning && <Loader2 className="h-3 w-3 animate-spin" />}
+                {isSetupRunning && <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />}
                 {statusText}
               </span>
             )}
