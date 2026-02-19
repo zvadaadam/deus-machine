@@ -466,13 +466,18 @@ app.post('/workspaces', async (c) => {
   worktreeProcess.stdout.pipe(initLog);
   worktreeProcess.stderr.pipe(initLog);
 
+  let worktreeFinished = false;
   worktreeProcess.on('error', (error) => {
+    if (worktreeFinished) return;
+    worktreeFinished = true;
     console.error(`[WORKSPACE] Git worktree spawn error:`, error);
     try { initLog.end(); } catch {}
     db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
   });
 
   worktreeProcess.on('close', (code) => {
+    if (worktreeFinished) return;
+    worktreeFinished = true;
     try { initLog.end(); } catch {}
     if (code !== 0) {
       db.prepare("UPDATE workspaces SET state = 'error', updated_at = datetime('now') WHERE id = ?").run(workspaceId);

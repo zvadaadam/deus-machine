@@ -127,7 +127,7 @@ function detectManifestFromProject(rootPath: string, repoName: string): Record<s
       if (scripts.test) tasks.test = { command: `${run} test`, description: 'Run tests', icon: 'check-circle' };
       if (scripts.lint) tasks.lint = { command: `${run} lint`, description: 'Lint code', icon: 'search-code' };
       if (scripts.format) tasks.format = { command: `${run} format`, description: 'Format code', icon: 'paintbrush' };
-      if (scripts.typecheck) tasks.typecheck = { command: `${run} typecheck`, description: 'Type check', icon: 'shield' };
+      if (scripts.typecheck) tasks.typecheck = { command: `${run} typecheck`, description: 'Type check', icon: 'search-code' };
       if (scripts.start) tasks.start = { command: `${run} start`, description: 'Start production server', icon: 'rocket', persistent: true };
     } catch { /* invalid package.json — skip */ }
   }

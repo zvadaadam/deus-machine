@@ -3,7 +3,7 @@
  *
  * Shows a single trigger icon (first task) that expands on hover to reveal
  * all task buttons + a Settings gear icon at the end. CSS-only animation
- * using group-hover + max-width transition for zero-JS hover state.
+ * using group-hover + clip-path transition for zero-JS hover state.
  *
  * When no manifest exists, shows a ghost Sparkles icon (text-text-disabled)
  * where task icons would appear — teaching spatial memory for the feature.
@@ -95,12 +95,12 @@ export function TaskStrip({ tasks, hasManifest, disabled, onRunTask, onSetupEnvi
           onClick={() => onRunTask(firstTask.name)}
         />
 
-        {/* Expandable strip — hidden by default, revealed on hover */}
+        {/* Expandable strip — hidden by default, revealed on hover via clip-path (GPU-composited) */}
         <div
           className={cn(
-            "flex max-w-0 items-center overflow-hidden opacity-0",
-            "transition-[max-width,opacity] duration-200 [transition-timing-function:cubic-bezier(.165,.84,.44,1)]",
-            "group-hover/tasks:max-w-[300px] group-hover/tasks:opacity-100"
+            "flex items-center opacity-0 [clip-path:inset(0_100%_0_0)]",
+            "transition-[clip-path,opacity] duration-200 [transition-timing-function:cubic-bezier(.165,.84,.44,1)]",
+            "group-hover/tasks:opacity-100 group-hover/tasks:[clip-path:inset(0_0%_0_0)]"
           )}
         >
           {restTasks.map((task) => (
