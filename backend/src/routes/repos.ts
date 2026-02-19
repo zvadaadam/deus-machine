@@ -10,6 +10,7 @@ import { CreateRepoBody } from '../lib/schemas';
 import { detectDefaultBranch } from '../services/git.service';
 import { getAllRepos, getRepoByRootPath, getRepoById, getMaxRepoDisplayOrder } from '../db';
 import { readManifest, getNormalizedTasks, writeManifest } from '../services/manifest.service';
+import { HiveManifestSchema } from '../lib/hive-manifest';
 import { NotFoundError } from '../lib/errors';
 
 const app = new Hono();
@@ -81,7 +82,9 @@ app.post('/repos/:id/manifest', async (c) => {
   if (!repo) throw new NotFoundError('Repository not found');
 
   const body = await c.req.json();
-  const success = writeManifest(repo.root_path, body);
+  const parsed = HiveManifestSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Invalid manifest', issues: parsed.error.issues }, 400);
+  const success = writeManifest(repo.root_path, parsed.data);
   if (!success) return c.json({ error: 'Failed to write manifest' }, 500);
   return c.json({ success: true });
 });
@@ -136,8 +139,8 @@ function detectManifestFromProject(rootPath: string, repoName: string): Record<s
   const cargoPath = path.join(rootPath, 'Cargo.toml');
   if (fs.existsSync(cargoPath)) {
     requires.cargo = '>= 1.0';
-    manifest.scripts = { setup: 'cargo build' };
-    manifest.lifecycle = { setup: 'cargo build' };
+    if (!manifest.scripts) manifest.scripts = { setup: 'cargo build' };
+    if (!manifest.lifecycle) manifest.lifecycle = { setup: 'cargo build' };
     if (!tasks.build) tasks.build = { command: 'cargo build --release', description: 'Build release', icon: 'hammer' };
     if (!tasks.test) tasks.test = { command: 'cargo test', description: 'Run tests', icon: 'check-circle' };
     tasks.clippy = { command: 'cargo clippy', description: 'Lint with Clippy', icon: 'search-code' };
@@ -150,8 +153,8 @@ function detectManifestFromProject(rootPath: string, repoName: string): Record<s
     requires.python = '>= 3.10';
     const hasUv = fs.existsSync(path.join(rootPath, 'uv.lock'));
     const pip = hasUv ? 'uv pip' : 'pip';
-    manifest.scripts = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
-    manifest.lifecycle = manifest.scripts;
+    if (!manifest.scripts) manifest.scripts = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
+    if (!manifest.lifecycle) manifest.lifecycle = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
     if (!tasks.test) tasks.test = { command: 'pytest', description: 'Run tests', icon: 'check-circle' };
   }
 

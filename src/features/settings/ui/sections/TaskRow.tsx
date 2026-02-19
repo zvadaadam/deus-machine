@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ interface TaskRowProps {
 }
 
 export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps) {
+  const rowId = useId();
   const [expanded, setExpanded] = useState(false);
 
   // Show a dot indicator when task has advanced config (visible when collapsed)
@@ -119,9 +120,9 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Label htmlFor={`persistent-${task.name}`} className="w-20 shrink-0 text-xs">Persistent</Label>
+            <Label htmlFor={`persistent-${rowId}`} className="w-20 shrink-0 text-xs">Persistent</Label>
             <Switch
-              id={`persistent-${task.name}`}
+              id={`persistent-${rowId}`}
               checked={task.persistent}
               onCheckedChange={(checked) => onChange({ ...task, persistent: checked })}
             />
@@ -181,7 +182,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => onChange({ ...task, env: [...task.env, { key: "", value: "" }] })}
+                onClick={() => onChange({ ...task, env: [...task.env, { id: crypto.randomUUID(), key: "", value: "" }] })}
                 className="h-6 gap-1 px-1.5 text-xs"
               >
                 <Plus className="size-2.5" />

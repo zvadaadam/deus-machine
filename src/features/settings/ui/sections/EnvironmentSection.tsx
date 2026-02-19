@@ -273,7 +273,7 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("requires", [...draft.requires, { tool: "", version: "" }])}
+                onClick={() => updateDraft("requires", [...draft.requires, { id: crypto.randomUUID(), tool: "", version: "" }])}
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -284,7 +284,7 @@ export function EnvironmentSection() {
               <p className="text-muted-foreground text-base">No tool requirements configured.</p>
             )}
             {draft.requires.map((req, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={req.id} className="flex items-center gap-2">
                 <Input
                   value={req.tool}
                   onChange={(e) => {
@@ -328,7 +328,7 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("env", [...draft.env, { key: "", value: "" }])}
+                onClick={() => updateDraft("env", [...draft.env, { id: crypto.randomUUID(), key: "", value: "" }])}
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -339,7 +339,7 @@ export function EnvironmentSection() {
               <p className="text-muted-foreground text-base">No environment variables configured.</p>
             )}
             {draft.env.map((envVar, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={envVar.id} className="flex items-center gap-2">
                 <Input
                   value={envVar.key}
                   onChange={(e) => {
@@ -383,7 +383,7 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("tasks", [...draft.tasks, { ...EMPTY_TASK }])}
+                onClick={() => updateDraft("tasks", [...draft.tasks, { ...EMPTY_TASK, id: crypto.randomUUID() }])}
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -397,7 +397,7 @@ export function EnvironmentSection() {
             )}
             {draft.tasks.map((task, i) => (
               <TaskRow
-                key={i}
+                key={task.id}
                 task={task}
                 allTaskNames={taskNames}
                 onChange={(updated) => {
