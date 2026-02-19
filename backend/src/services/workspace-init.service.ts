@@ -240,7 +240,13 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
   const completed: InitStage[] = [];
 
   for (const stage of STAGES) {
-    updateInitStep(ctx.workspaceId, stage.name);
+    try {
+      updateInitStep(ctx.workspaceId, stage.name);
+    } catch (err) {
+      // SQLITE_BUSY can fire when sidecar holds the DB — log but don't
+      // abort, otherwise cleanup never runs and worktrees leak.
+      console.warn('[WORKSPACE] Failed to update init_step:', err);
+    }
     emitProgress(ctx.workspaceId, stage.name, stage.label);
 
     try {
