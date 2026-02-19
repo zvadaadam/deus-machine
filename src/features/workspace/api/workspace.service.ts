@@ -17,6 +17,34 @@ import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
 
+/** Normalized task from hive.json manifest */
+export interface NormalizedTask {
+  name: string;
+  command: string;
+  description: string | null;
+  icon: string;
+  persistent: boolean;
+  mode: "concurrent" | "nonconcurrent";
+  depends: string[];
+  env: Record<string, string>;
+}
+
+/** Response from GET /workspaces/:id/manifest */
+export interface ManifestResponse {
+  manifest: Record<string, unknown> | null;
+  tasks: NormalizedTask[];
+}
+
+/** Response from POST /workspaces/:id/tasks/:name/run */
+export interface TaskRunResponse {
+  ptyId: string;
+  command: string;
+  cwd: string;
+  env: Record<string, string>;
+  persistent: boolean;
+  mode: "concurrent" | "nonconcurrent";
+}
+
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
   root_path: string;
@@ -263,5 +291,33 @@ export const WorkspaceService = {
     return apiClient.put<void>(ENDPOINTS.WORKSPACE_SYSTEM_PROMPT(id), {
       system_prompt: systemPrompt,
     });
+  },
+
+  /**
+   * Fetch parsed hive.json manifest + normalized tasks for a workspace
+   */
+  fetchManifest: async (id: string): Promise<ManifestResponse> => {
+    return apiClient.get<ManifestResponse>(ENDPOINTS.WORKSPACE_MANIFEST(id));
+  },
+
+  /**
+   * Retry a failed setup script
+   */
+  retrySetup: async (id: string): Promise<{ setup_status: string }> => {
+    return apiClient.post<{ setup_status: string }>(ENDPOINTS.WORKSPACE_RETRY_SETUP(id), {});
+  },
+
+  /**
+   * Get setup log output
+   */
+  fetchSetupLogs: async (id: string): Promise<{ logs: string | null }> => {
+    return apiClient.get<{ logs: string | null }>(ENDPOINTS.WORKSPACE_SETUP_LOGS(id));
+  },
+
+  /**
+   * Run a task — returns PTY spawn info
+   */
+  runTask: async (id: string, taskName: string): Promise<TaskRunResponse> => {
+    return apiClient.post<TaskRunResponse>(ENDPOINTS.WORKSPACE_TASK_RUN(id, taskName), {});
   },
 };

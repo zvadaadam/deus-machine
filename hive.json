@@ -1,7 +1,84 @@
 {
+  "$schema": "https://hive.net/schemas/hive.json",
+  "version": 1,
+  "name": "Hive IDE",
+
   "scripts": {
     "setup": "./scripts/hive-setup.sh",
     "run": "./scripts/dev.sh"
   },
-  "runScriptMode": "nonconcurrent"
+  "runScriptMode": "nonconcurrent",
+
+  "requires": {
+    "node": ">= 22",
+    "bun": ">= 1.2"
+  },
+
+  "env": {
+    "NODE_ENV": "development"
+  },
+
+  "lifecycle": {
+    "setup": "./scripts/hive-setup.sh"
+  },
+
+  "tasks": {
+    "dev": {
+      "command": "./scripts/dev.sh",
+      "description": "Start frontend + backend dev servers (web mode)",
+      "icon": "play",
+      "persistent": true,
+      "mode": "nonconcurrent"
+    },
+    "dev:desktop": {
+      "command": "bun run dev",
+      "description": "Start full Tauri desktop app",
+      "icon": "monitor",
+      "persistent": true,
+      "mode": "nonconcurrent",
+      "depends": ["build:sidecar"]
+    },
+    "build": {
+      "command": "bun run build",
+      "description": "Build frontend for production",
+      "icon": "hammer",
+      "depends": ["build:sidecar"]
+    },
+    "build:tauri": {
+      "command": "bun run build:tauri",
+      "description": "Build Tauri desktop binary",
+      "icon": "package",
+      "depends": ["build:sidecar"]
+    },
+    "build:sidecar": {
+      "command": "bun run build:sidecar",
+      "description": "Bundle sidecar to CJS",
+      "icon": "package"
+    },
+    "test": "bun run test",
+    "test:backend": "bun run test:backend",
+    "test:sidecar": "bun run test:sidecar:unit",
+    "test:e2e": "bun run test:sidecar:e2e",
+    "typecheck": {
+      "command": "bun run typecheck",
+      "description": "Run TypeScript type checker",
+      "icon": "search-code"
+    },
+    "lint": {
+      "command": "bun run lint",
+      "description": "Run ESLint on source files",
+      "icon": "search-code"
+    },
+    "format": {
+      "command": "bun run format",
+      "description": "Format code with Prettier",
+      "icon": "paintbrush"
+    },
+    "storybook": {
+      "command": "bun run storybook",
+      "description": "Launch Storybook component browser",
+      "icon": "book-open",
+      "persistent": true
+    }
+  }
 }

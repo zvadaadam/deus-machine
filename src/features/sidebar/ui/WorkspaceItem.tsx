@@ -1,6 +1,6 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive } from "lucide-react";
+import { Archive, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 
 import { cn } from "@/shared/lib/utils";
@@ -115,21 +115,32 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   // 20px icon + 6px gap = 26px indent for rows without an icon
   const rowIndent = "pl-[26px]";
 
-  const statusTextClass = match(displayStatus)
-    .with("working", () => "text-text-tertiary")
-    .with("unread", () => "text-text-secondary")
-    .with("error", () => "text-accent-red-muted")
-    .otherwise(() => "text-text-disabled");
+  const isSetupRunning = workspace.setup_status === "running";
+  const isSetupFailed = workspace.setup_status === "failed";
 
-  const getStatusText = () => {
+  const statusTextClass = isSetupFailed
+    ? "text-accent-red-muted"
+    : isSetupRunning
+      ? "text-text-muted"
+      : match(displayStatus)
+          .with("working", () => "text-text-tertiary")
+          .with("unread", () => "text-text-secondary")
+          .with("error", () => "text-accent-red-muted")
+          .otherwise(() => "text-text-disabled");
+
+  const getStatusText = (): string => {
+    if (isSetupRunning) return "Installing...";
+    if (isSetupFailed) return "Setup failed";
     if (workspace.state === "archived" || !workspace.session_status) return "Archived";
-    if (displayStatus === "idle") return formatTime(workspace.updated_at);
-    if (displayStatus === "unread") return "Needs response";
-    if (displayStatus === "working") {
-      return duration > 0 ? formatDuration(duration, false) : STATUS_CONFIG.working.labelActive;
-    }
-    if (displayStatus === "error") return STATUS_CONFIG.error.label;
-    return statusConfig.label;
+
+    return match(displayStatus)
+      .with("idle", () => formatTime(workspace.updated_at))
+      .with("unread", () => "Needs response")
+      .with("working", () =>
+        duration > 0 ? formatDuration(duration, false) : STATUS_CONFIG.working.labelActive
+      )
+      .with("error", () => STATUS_CONFIG.error.label)
+      .otherwise(() => statusConfig.label);
   };
 
   const statusText = getStatusText();
@@ -218,7 +229,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               </span>
             )}
             {statusText && (
-              <span className={cn("shrink-0 text-xs", statusTextClass)}>{statusText}</span>
+              <span className={cn("flex shrink-0 items-center gap-1 text-xs", statusTextClass)}>
+                {isSetupRunning && <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />}
+                {statusText}
+              </span>
             )}
           </div>
         </div>

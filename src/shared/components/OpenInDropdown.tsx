@@ -5,15 +5,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExternalLink, ChevronRight } from "lucide-react";
+import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 
 interface InstalledApp {
   id: string;
   name: string;
   path: string;
+  icon?: string;
 }
 
 interface OpenInDropdownProps {
@@ -109,22 +112,39 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
     </Button>
   );
 
+  const groups = groupAppsByCategory(installedApps);
+
   const menuContent = (
     <DropdownMenuContent
       align="end"
       sideOffset={2}
-      className="min-w-[140px]"
+      className="min-w-[140px] shadow-sm"
       onPointerEnter={handleOpen}
       onPointerLeave={handleClose}
     >
-      {installedApps.map((app) => (
-        <DropdownMenuItem
-          key={app.id}
-          onClick={() => handleOpenInApp(app.id)}
-          className="cursor-pointer"
-        >
-          {app.name}
-        </DropdownMenuItem>
+      {groups.map((group, groupIdx) => (
+        <div key={group.category}>
+          {groupIdx > 0 && <DropdownMenuSeparator />}
+          {group.apps.map((app) => (
+            <DropdownMenuItem
+              key={app.id}
+              onClick={() => handleOpenInApp(app.id)}
+              className="cursor-pointer gap-2 py-1 text-xs"
+            >
+              {app.icon ? (
+                <img
+                  src={app.icon}
+                  alt=""
+                  className="h-5 w-5 flex-shrink-0 rounded-[3px]"
+                  draggable={false}
+                />
+              ) : (
+                <AppIcon appId={app.id} className="h-5 w-5 flex-shrink-0" />
+              )}
+              {app.name}
+            </DropdownMenuItem>
+          ))}
+        </div>
       ))}
     </DropdownMenuContent>
   );

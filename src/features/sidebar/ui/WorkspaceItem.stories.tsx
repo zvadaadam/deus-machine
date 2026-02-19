@@ -19,6 +19,8 @@ const BASE_WORKSPACE: Workspace = {
   repo_name: "sample-backend",
   root_path: "/code/sample-backend",
   workspace_path: "/code/sample-backend/.hive/addis-ababa",
+  setup_status: "none",
+  setup_error: null,
 };
 
 function ws(overrides: Partial<Workspace>): Workspace {

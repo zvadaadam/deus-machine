@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { MCPServer, Command, Agent } from "../../../types";
+import type { MCPServer, Command, Agent } from "../../types";
 
 interface ExtensionsSectionProps {
   mcpServers: MCPServer[];

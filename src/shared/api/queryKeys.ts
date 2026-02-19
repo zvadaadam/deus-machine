@@ -24,6 +24,7 @@ export const queryKeys = {
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
     penFiles: (id: string) => ["workspaces", "pen-files", id] as const,
     systemPrompt: (id: string) => ["workspaces", "system-prompt", id] as const,
+    manifest: (id: string) => ["workspaces", "manifest", id] as const,
   },
 
   // Sessions
@@ -38,6 +39,7 @@ export const queryKeys = {
   repos: {
     all: ["repos"] as const,
     detail: (id: string) => ["repos", "detail", id] as const,
+    manifest: (id: string) => ["repos", "manifest", id] as const,
   },
 
   // Stats
