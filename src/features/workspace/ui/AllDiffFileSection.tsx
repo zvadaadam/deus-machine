@@ -93,11 +93,9 @@ function AllDiffFileSectionInner({
       data-diff-path={filePath}
       className="diff-section-contained"
     >
-      {/* Sticky file header */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((prev) => !prev)}
-        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors duration-200 ease-[ease] ${
+      {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
+      <div
+        className={`flex w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[ease] ${
           isActive
             ? "bg-muted/60"
             : collapsed
@@ -110,49 +108,45 @@ function AllDiffFileSectionInner({
           zIndex: 5,
         }}
       >
-        {collapsed ? (
-          <ChevronRight className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
-        ) : (
-          <ChevronDown className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
-        )}
-
-        <span className={`min-w-0 flex-1 truncate text-sm font-medium${
-          collapsed ? " text-muted-foreground/70" : ""
-        }`}>{filePath}</span>
-
-        {/* +N / -N stats */}
-        <span className="flex flex-shrink-0 items-center gap-1.5 text-sm tabular-nums">
-          {fileChange.additions > 0 && (
-            <span className="text-success/80">+{fileChange.additions}</span>
+        {/* Collapse toggle — covers chevron, path, and stats */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {collapsed ? (
+            <ChevronRight className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
+          ) : (
+            <ChevronDown className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
           )}
-          {fileChange.deletions > 0 && (
-            <span className="text-destructive/80">-{fileChange.deletions}</span>
-          )}
-        </span>
 
-        {/* Open in editor */}
+          <span className={`min-w-0 flex-1 truncate text-sm font-medium${
+            collapsed ? " text-muted-foreground/70" : ""
+          }`}>{filePath}</span>
+
+          {/* +N / -N stats */}
+          <span className="flex flex-shrink-0 items-center gap-1.5 text-sm tabular-nums">
+            {fileChange.additions > 0 && (
+              <span className="text-success/80">+{fileChange.additions}</span>
+            )}
+            {fileChange.deletions > 0 && (
+              <span className="text-destructive/80">-{fileChange.deletions}</span>
+            )}
+          </span>
+        </button>
+
+        {/* Open in editor — separate button, sibling to collapse toggle */}
         {onOpenFile && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenFile(filePath);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.stopPropagation();
-                e.preventDefault();
-                onOpenFile(filePath);
-              }
-            }}
+          <button
+            type="button"
+            onClick={() => onOpenFile(filePath)}
             className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded transition-colors duration-200 ease"
             title="Open in editor"
           >
             <FileCode className="h-3 w-3" />
-          </span>
+          </button>
         )}
-      </button>
+      </div>
 
       {/* Diff content — hidden when collapsed */}
       {!collapsed && (
