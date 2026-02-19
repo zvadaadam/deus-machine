@@ -69,6 +69,8 @@ export interface MessageInputRef {
 // Anthropic API only supports these image formats for vision
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
+const EMPTY_MCP_SERVERS: readonly MCPServer[] = [];
+
 interface MessageInputProps {
   messageInput: string;
   sending: boolean;
@@ -110,7 +112,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     model = "opus",
     thinkingLevel = "NONE",
     showCompactButton = false,
-    mcpServers = [],
+    mcpServers = EMPTY_MCP_SERVERS,
     contextTokenCount = 0,
     workspacePath = null,
     hasMessages = false,

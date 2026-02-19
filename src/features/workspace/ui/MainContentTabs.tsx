@@ -75,6 +75,7 @@ interface MainContentTabBarProps {
 
 const TAB_ICON_SIZE = "w-3.5 h-3.5";
 const AGENT_ICON_SIZE = "w-3.5 h-3.5";
+const EMPTY_CLOSED_TABS: ClosedTab[] = [];
 
 function getTabIcon(tab: Tab) {
   return match(tab)
@@ -116,7 +117,7 @@ export function MainContentTabBar({
   onTabClose,
   onTabAdd,
   onTabReorder,
-  closedTabs = [],
+  closedTabs = EMPTY_CLOSED_TABS,
   onTabRestore,
   onCollapseChatPanel,
 }: MainContentTabBarProps) {

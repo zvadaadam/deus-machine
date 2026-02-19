@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 
 interface PastedImageCardProps {
   preview: string;
@@ -9,7 +9,7 @@ interface PastedImageCardProps {
 
 export function PastedImageCard({ preview, fileName, onRemove }: PastedImageCardProps) {
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -25,6 +25,6 @@ export function PastedImageCard({ preview, fileName, onRemove }: PastedImageCard
       >
         <X className="text-muted-foreground h-3 w-3" />
       </button>
-    </motion.div>
+    </m.div>
   );
 }

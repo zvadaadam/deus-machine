@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -224,7 +224,7 @@ export function CloneRepositoryModal({
               {/* Progress bar */}
               <div className="bg-muted h-1 overflow-hidden rounded-full">
                 {statusMessage || isIndeterminate ? (
-                  <motion.div
+                  <m.div
                     className="bg-primary h-full w-1/3 rounded-full"
                     animate={{ x: ["-100%", "400%"] }}
                     transition={{

@@ -34,6 +34,7 @@ import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { FileViewer } from "@/features/file-browser";
 import { SidebarInset, useSidebar } from "@/components/ui";
+import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import { toast } from "sonner";
