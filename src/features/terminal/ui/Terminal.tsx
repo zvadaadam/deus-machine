@@ -10,7 +10,7 @@ import "./Terminal.css";
 interface TerminalProps {
   id: string;
   workspacePath: string;
-  /** Command to execute automatically after shell init (e.g. "claude login") */
+  /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
 }
 

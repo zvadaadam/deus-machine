@@ -30,3 +30,11 @@
 - `transition: flex-grow` on `[data-slot="resizable-panel"]` — flex-grow IS animatable per CSS spec
 - `window-resizing` class disables ALL layout transitions during native window resize
 - `[data-resize-handle-active]` sibling/parent selector disables panel transitions during drag
+
+## Icon Component Patterns (New)
+
+- `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function
+- Category grouping uses `Set` for O(1) lookups in `getAppCategory()` and `groupAppsByCategory()`
+- JetBrains family uses shared diamond shape with brand color prop — DRY approach for similar products
+- SVG icons: 16x16 viewBox, use stroke + fill, no animations, all white inner shapes on colored rect backgrounds
+- Icon components are pure (no state/hooks) — candidates for React.memo if used in frequently-rendering lists

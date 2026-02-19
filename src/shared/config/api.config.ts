@@ -210,6 +210,10 @@ export const ENDPOINTS = {
   WORKSPACE_PEN_FILES: (id: string) => `/workspaces/${id}/pen-files`,
   WORKSPACE_OPEN_PEN_FILE: (id: string) => `/workspaces/${id}/open-pen-file`,
   WORKSPACE_SESSIONS: (workspaceId: string) => `/workspaces/${workspaceId}/sessions`,
+  WORKSPACE_MANIFEST: (id: string) => `/workspaces/${id}/manifest`,
+  WORKSPACE_RETRY_SETUP: (id: string) => `/workspaces/${id}/retry-setup`,
+  WORKSPACE_SETUP_LOGS: (id: string) => `/workspaces/${id}/setup-logs`,
+  WORKSPACE_TASK_RUN: (id: string, taskName: string) => `/workspaces/${id}/tasks/${encodeURIComponent(taskName)}/run`,
 
   // Session endpoints
   SESSIONS: "/sessions",
@@ -220,6 +224,8 @@ export const ENDPOINTS = {
   // Repository endpoints
   REPOS: "/repos",
   REPO_BY_ID: (id: string) => `/repos/${id}`,
+  REPO_MANIFEST: (id: string) => `/repos/${id}/manifest`,
+  REPO_DETECT_MANIFEST: (id: string) => `/repos/${id}/detect-manifest`,
 
   // Stats endpoint
   STATS: "/stats",
