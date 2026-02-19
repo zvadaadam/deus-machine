@@ -355,8 +355,9 @@ export function FileBrowserPanel({
           </button>
         </div>
 
-        {/* Filter dropdown — visible in Changes mode */}
+        {/* Right-side actions — visible in Changes mode */}
         {filterMode === "changes" && (
+          <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease]">
@@ -400,6 +401,7 @@ export function FileBrowserPanel({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         )}
       </div>
 

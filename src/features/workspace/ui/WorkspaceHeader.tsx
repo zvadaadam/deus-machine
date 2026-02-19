@@ -128,7 +128,7 @@ export function WorkspaceHeader({
   const subtitle = [repositoryName, branch].filter(Boolean).join(" / ");
 
   return (
-    <div data-slot="workspace-header" className="bg-bg-elevated border-border-subtle flex h-9 flex-shrink-0 items-center justify-between border-b px-4">
+    <div data-slot="workspace-header" className="bg-bg-surface border-border-subtle flex h-10 flex-shrink-0 items-center justify-between border-b px-4">
       {/* Left section */}
       <div className="flex min-w-0 items-center gap-[5px]">
         {/* Sidebar toggle — visible when collapsed */}
@@ -152,7 +152,7 @@ export function WorkspaceHeader({
 
         {/* Title (primary) — shown only when available */}
         {title && (
-          <span className="text-foreground mr-0.5 max-w-[240px] truncate text-xs font-medium">
+          <span className="text-foreground mr-0.5 max-w-[240px] truncate text-sm font-medium">
             {title}
           </span>
         )}
@@ -160,7 +160,7 @@ export function WorkspaceHeader({
         {/* Repo / branch (secondary) */}
         {subtitle && (
           <span
-            className="text-text-subtle max-w-[280px] truncate text-xs font-medium"
+            className="text-text-subtle max-w-[280px] truncate text-sm font-medium"
             title={subtitle}
           >
             {subtitle}

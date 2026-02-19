@@ -30,10 +30,12 @@ import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import type { RightSideTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
-import { DiffTabContent } from "@/features/workspace/ui/DiffTabContent";
+import { AllFilesDiffViewer } from "@/features/workspace/ui/AllFilesDiffViewer";
+import type { AllFilesDiffViewerRef } from "@/features/workspace/ui/AllFilesDiffViewer";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
 import { FileViewer } from "@/features/file-browser";
+import { match } from "ts-pattern";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -51,7 +53,9 @@ import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrip
 const SIDEBAR_COLLAPSE_THRESHOLD = 1680;
 
 /** Union type for the single active view in the middle panel */
-type MiddlePanelView = { type: "diff"; filePath: string } | { type: "file"; filePath: string };
+type MiddlePanelView =
+  | { type: "file"; filePath: string }
+  | { type: "diff-all"; initialScrollTarget?: string };
 type ParkedMiddlePanel = { view: MiddlePanelView };
 
 interface MainContentProps {
@@ -107,6 +111,9 @@ export function MainContent({
   const [parkedMiddlePanel, setParkedMiddlePanel] = useState<ParkedMiddlePanel | null>(null);
   // Sidebar state saved before auto-collapse, restored on close
   const [sidebarBeforePanel, setSidebarBeforePanel] = useState<boolean | null>(null);
+  // All-diffs view: ref for scroll-to-file, active file for bidirectional sync
+  const allDiffsRef = useRef<AllFilesDiffViewerRef>(null);
+  const [allDiffsActiveFile, setAllDiffsActiveFile] = useState<string | null>(null);
 
   // Reset state when workspace changes (React-recommended render-time pattern).
   // Capture flag so we can also reset the sizing hook's ref after it's created.
@@ -118,6 +125,7 @@ export function MainContent({
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
     setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
+    setAllDiffsActiveFile(null);
   }
 
   const middlePanelActive = middlePanel !== null;
@@ -150,7 +158,7 @@ export function MainContent({
     isReady ? selectedWorkspaceId : null,
   );
 
-  // File changes for prev/next navigation — polling disabled when file watcher is active
+  // File changes for all-diffs view — polling disabled when file watcher is active
   const { data: fileChangesData } = useFileChanges(
     isReady ? selectedWorkspaceId : null,
     selectedWorkspace?.session_status,
@@ -213,13 +221,22 @@ export function MainContent({
     });
   }, [sidebarOpen, setSidebarOpen]);
 
+  // Extract type for stable callback deps — avoids re-creating on file path changes
+  const middlePanelType = middlePanel?.type;
+
   const handleOpenDiff = useCallback(
     (filePath: string) => {
+      // When all-diffs view is already open, scroll to the file
+      if (middlePanelType === "diff-all") {
+        allDiffsRef.current?.scrollToFile(filePath);
+        return;
+      }
+      // Open all-diffs view and scroll to the clicked file on mount
       collapseSidebarForPanel();
       setParkedMiddlePanel(null);
-      setMiddlePanel({ type: "diff", filePath });
+      setMiddlePanel({ type: "diff-all", initialScrollTarget: filePath });
     },
-    [collapseSidebarForPanel]
+    [collapseSidebarForPanel, middlePanelType]
   );
 
   const handleOpenFilePreview = useCallback(
@@ -229,6 +246,17 @@ export function MainContent({
       setMiddlePanel({ type: "file", filePath });
     },
     [collapseSidebarForPanel]
+  );
+
+  // Open file from all-diffs: converts relative path → full workspace path → file preview
+  const handleOpenFileFromDiff = useCallback(
+    (relativePath: string) => {
+      if (!selectedWorkspace) return;
+      const base = selectedWorkspace.workspace_path.replace(/\/+$/, "");
+      const rel = relativePath.replace(/^\/+/, "");
+      handleOpenFilePreview(`${base}/${rel}`);
+    },
+    [selectedWorkspace, handleOpenFilePreview]
   );
 
   const handleCloseMiddlePanel = useCallback(() => {
@@ -417,43 +445,6 @@ export function MainContent({
     [selectedWorkspace, setRightSideTab, rightPanelCollapsed, setRightPanelCollapsed]
   );
 
-  // --- Prev/next file navigation for diff views ---
-
-  const { onPrevFile, onNextFile, fileIndex, fileCount } = useMemo(() => {
-    if (!middlePanel || middlePanel.type !== "diff" || fileChanges.length === 0) {
-      return {
-        onPrevFile: undefined,
-        onNextFile: undefined,
-        fileIndex: undefined,
-        fileCount: undefined,
-      };
-    }
-
-    const currentPath = middlePanel.filePath;
-    const idx = fileChanges.findIndex((fc) => fc.file === currentPath);
-    if (idx === -1) {
-      return {
-        onPrevFile: undefined,
-        onNextFile: undefined,
-        fileIndex: undefined,
-        fileCount: undefined,
-      };
-    }
-
-    return {
-      fileIndex: idx,
-      fileCount: fileChanges.length,
-      onPrevFile:
-        idx > 0
-          ? () => setMiddlePanel({ type: "diff", filePath: fileChanges[idx - 1].file })
-          : undefined,
-      onNextFile:
-        idx < fileChanges.length - 1
-          ? () => setMiddlePanel({ type: "diff", filePath: fileChanges[idx + 1].file })
-          : undefined,
-    };
-  }, [middlePanel, fileChanges]);
-
   // ESC closes the middle panel
   useEffect(() => {
     if (!middlePanelActive) return;
@@ -545,7 +536,8 @@ export function MainContent({
           <div className="flex min-w-0 flex-1 flex-col">
             {/* Unified workspace header — spans full width above all panels */}
             <WorkspaceHeader
-              repositoryName={selectedWorkspace.directory_name}
+              title={selectedWorkspace.display_name ?? undefined}
+              repositoryName={selectedWorkspace.repo_name}
               branch={selectedWorkspace.branch ?? undefined}
               workspacePath={selectedWorkspace.workspace_path}
               workspaceId={selectedWorkspace.id}
@@ -608,33 +600,36 @@ export function MainContent({
                     <ResizablePanel defaultSize={60} minSize={30} className="min-w-0" order={2}>
                       <div className="flex h-full min-w-0 animate-[fadeIn_0.2s_cubic-bezier(0,0,0.2,1)] flex-col overflow-hidden">
                         <ResizablePanelGroup direction="horizontal">
-                          {/* Code viewer (diff or file preview) */}
+                          {/* Code viewer (diff, file preview, or all-diffs) */}
                           <ResizablePanel minSize={30} className="min-w-0" order={1}>
                             <div className="flex h-full min-w-0 flex-col overflow-hidden">
-                              {middlePanel.type === "diff" ? (
-                                <DiffTabContent
-                                  workspaceId={selectedWorkspace.id}
-                                  filePath={middlePanel.filePath}
-                                  workspaceGitInfo={workspaceGitInfo}
-                                  onClose={handleCloseMiddlePanel}
-                                  onPrevFile={onPrevFile}
-                                  onNextFile={onNextFile}
-                                  fileIndex={fileIndex}
-                                  fileCount={fileCount}
-                                />
-                              ) : (
-                                <FileViewer
-                                  filePath={middlePanel.filePath}
-                                  onClose={handleCloseMiddlePanel}
-                                />
-                              )}
+                              {match(middlePanel)
+                                .with({ type: "file" }, (panel) => (
+                                  <FileViewer
+                                    filePath={panel.filePath}
+                                    onClose={handleCloseMiddlePanel}
+                                  />
+                                ))
+                                .with({ type: "diff-all" }, (panel) => (
+                                  <AllFilesDiffViewer
+                                    ref={allDiffsRef}
+                                    workspaceId={selectedWorkspace.id}
+                                    fileChanges={fileChanges}
+                                    workspaceGitInfo={workspaceGitInfo}
+                                    onClose={handleCloseMiddlePanel}
+                                    onActiveFileChange={setAllDiffsActiveFile}
+                                    initialScrollTarget={panel.initialScrollTarget}
+                                    onOpenFile={handleOpenFileFromDiff}
+                                  />
+                                ))
+                                .exhaustive()}
                             </div>
                           </ResizablePanel>
 
                           <ResizableHandle />
 
                           {/* Compact right panel (file list only — no sidecar) */}
-                          <ResizablePanel defaultSize={25} minSize={12} className="min-w-0" order={2}>
+                          <ResizablePanel defaultSize={30} minSize={15} className="min-w-0" order={2}>
                             <RightSidePanel
                               workspace={selectedWorkspace}
                               activeTab={rightSideTab}
