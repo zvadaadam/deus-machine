@@ -9,11 +9,11 @@ const mockDb = {
   prepare: vi.fn(() => mockStmt),
 };
 
-vi.mock('../../lib/database', () => ({
+vi.mock('../../../src/lib/database', () => ({
   getDatabase: vi.fn(() => mockDb),
 }));
 
-import { getAllSettings, saveSetting } from '../../services/settings.service';
+import { getAllSettings, saveSetting } from '../../../src/services/settings.service';
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -11,6 +11,7 @@ import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
 import type { Workspace, RepoGroup, DiffStats } from "../types";
+import { createOptimisticWorkspace } from "../lib/workspace.utils";
 
 /**
  * Fetch workspaces grouped by repository with polling.
@@ -79,15 +80,28 @@ export function useDiffStats(
  * - Polling: only re-fetches workspaces with session_status === "working" (5s)
  * - Idle: no polling (staleTime 30s, refetch on window focus)
  * - On workspace list change: seeds from per-workspace cache, fetches only missing/working
+ *
+ * BUG FIX — Phantom diffs on new workspace:
+ * Root cause: this hook was fetching diffs for ALL workspaces including
+ * "initializing" ones. During worktree creation, git state is incomplete
+ * (e.g. missing HEAD, partial index), producing garbage diffs (+505K/-1M).
+ * These got cached for 30s (staleTime), so even after the workspace became
+ * "ready", the stale cached garbage persisted until the cache expired.
+ * Fix: workspaceIds, workspaceInfoMap, and workingIds all filter to only
+ * state === "ready" workspaces. When a workspace transitions to ready,
+ * workspaceIds changes → query key changes → fresh fetch with correct data.
  */
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
 
-  // Build workspace info map for Tauri fast path (5-20ms IPC vs 50-200ms HTTP)
+  // Only compute diffs for ready workspaces — initializing worktrees have
+  // incomplete git state that can produce garbage diffs (e.g. +500K/-1M).
+  // When a workspace transitions to "ready", workspaceIds changes → refetch.
   const workspaceInfoMap = useMemo(() => {
     const map = new Map<string, WorkspaceGitInfo>();
     repoGroups.forEach((g) => {
       g.workspaces.forEach((w) => {
+        if (w.state !== "ready") return;
         map.set(w.id, {
           root_path: w.root_path,
           directory_name: w.directory_name,
@@ -100,9 +114,11 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return map;
   }, [repoGroups]);
 
-  // Stable, de-duplicated IDs for query key
+  // Stable, de-duplicated IDs for query key — only ready workspaces
   const workspaceIds = useMemo(() => {
-    const ids = repoGroups.flatMap((g) => g.workspaces.map((w) => w.id));
+    const ids = repoGroups.flatMap((g) =>
+      g.workspaces.filter((w) => w.state === "ready").map((w) => w.id)
+    );
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
 
@@ -110,7 +126,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const workingIds = useMemo(() => {
     return repoGroups
       .flatMap((g) => g.workspaces)
-      .filter((w) => w.session_status === "working")
+      .filter((w) => w.state === "ready" && w.session_status === "working")
       .map((w) => w.id);
   }, [repoGroups]);
 
@@ -324,26 +340,9 @@ export function useCreateWorkspace() {
         return produce(old, (draft) => {
           const repoGroup = draft.find((g) => g.repo_id === repositoryId);
           if (repoGroup) {
-            repoGroup.workspaces.unshift({
-              id: `optimistic-${Date.now()}`,
-              repository_id: repositoryId,
-              directory_name: "",
-              display_name: null,
-              branch: null,
-              parent_branch: null,
-              state: "initializing",
-              active_session_id: null,
-              session_status: null,
-              model: null,
-              latest_message_sent_at: null,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              repo_name: repoGroup.repo_name,
-              root_path: "",
-              workspace_path: "",
-              setup_status: "none",
-              setup_error: null,
-            } satisfies Workspace);
+            repoGroup.workspaces.unshift(
+              createOptimisticWorkspace(repositoryId, repoGroup.repo_name)
+            );
           }
         });
       });
