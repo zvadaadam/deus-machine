@@ -70,6 +70,10 @@ pub struct WorkspaceWithDetails {
     pub created_at: String,
     pub updated_at: String,
     pub parent_branch: Option<String>,
+    // Setup tracking (hive.json manifest) — parity with Node.js getWorkspacesByRepo
+    pub setup_status: Option<String>,
+    pub setup_error: Option<String>,
+    pub init_step: Option<String>,
     // From repos JOIN
     pub repo_name: Option<String>,
     pub root_path: Option<String>,
