@@ -12,6 +12,7 @@ import { parseBody } from '../lib/validate';
 import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib/schemas';
 import * as gitService from '../services/git.service';
 import { generateUniqueName } from '../services/workspace.service';
+import { readManifest, readManifestWithFallback, getSetupCommand, getArchiveCommand, getHiveEnv, getNormalizedTasks, writeManifest, runSetupScript } from '../services/manifest.service';
 import { initializeWorkspace } from '../services/workspace-init.service';
 import {
   getAllWorkspaces,
@@ -71,6 +72,37 @@ app.patch('/workspaces/:id', async (c) => {
   const { state } = parseBody(PatchWorkspaceBody, await c.req.json());
   if (state) {
     db.prepare('UPDATE workspaces SET state = ? WHERE id = ?').run(state, c.req.param('id'));
+
+    // Run archive lifecycle hook (best-effort)
+    if (state === 'archived') {
+      try {
+        const ws = getWorkspaceById(db, c.req.param('id'));
+        if (ws && ws.root_path) {
+          const wsPath = computeWorkspacePath(ws);
+          const manifest = readManifestWithFallback(wsPath, ws.root_path);
+          const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
+          if (archiveCmd) {
+            const archiveEnv = getHiveEnv(manifest!, {
+              id: ws.id,
+              rootPath: ws.root_path,
+              workspacePath: wsPath,
+            });
+            const archiveProc = spawn('sh', ['-c', archiveCmd], {
+              cwd: wsPath,
+              env: { ...process.env, ...archiveEnv },
+              stdio: 'ignore',
+              detached: false,
+            });
+            archiveProc.on('error', (err) => {
+              console.error(`Archive hook error for workspace ${c.req.param('id')}:`, err.message);
+            });
+            archiveProc.unref();
+          }
+        }
+      } catch (err) {
+        console.warn('[WORKSPACE] Archive lifecycle hook failed (continuing):', err);
+      }
+    }
   }
   const updated = getWorkspaceRaw(db, c.req.param('id'));
   return c.json(updated);
@@ -437,6 +469,15 @@ app.post('/workspaces', async (c) => {
     branchName: placeholderBranchName,
     worktreeBase,
     parentBranch: parent_branch,
+  }).then(() => {
+    // Workspace is ready — check for manifest setup script
+    const manifest = readManifestWithFallback(workspacePath, repo.root_path!);
+    const setupCmd = manifest ? getSetupCommand(manifest) : null;
+    if (setupCmd && manifest) {
+      db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
+      const setupEnv = getHiveEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
+      runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
+    }
   }).catch((err) => {
     // Belt-and-suspenders: initializeWorkspace handles its own errors,
     // but if something truly unexpected escapes, don't leave workspace stuck.
@@ -486,6 +527,106 @@ app.post('/workspaces/:id/sessions', (c) => {
 
   const session = getSessionRaw(db, sessionId);
   return c.json(session);
+});
+
+// ─── Manifest & Task Endpoints ──────────────────────────────
+
+// Get parsed manifest + normalized tasks for a workspace
+app.get('/workspaces/:id/manifest', withWorkspace, (c) => {
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
+  if (!workspace.root_path) {
+    return c.json({ manifest: null, tasks: [] });
+  }
+  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
+  if (!manifest) return c.json({ manifest: null, tasks: [] });
+  const tasks = getNormalizedTasks(manifest);
+  return c.json({ manifest, tasks });
+});
+
+// Retry failed setup
+app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
+  const db = getDatabase();
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
+
+  if (workspace.setup_status !== 'failed') {
+    throw new ValidationError('Can only retry when setup_status is failed');
+  }
+
+  if (!workspace.root_path) {
+    throw new ValidationError('Repository path not found');
+  }
+
+  // Re-read manifest (AI agent may have fixed it, or it was added to repo root via settings)
+  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
+  const setupCmd = manifest ? getSetupCommand(manifest) : null;
+  if (!setupCmd || !manifest) {
+    db.prepare("UPDATE workspaces SET setup_status = 'none', setup_error = NULL, updated_at = datetime('now') WHERE id = ?")
+      .run(workspace.id);
+    return c.json({ setup_status: 'none' });
+  }
+
+  db.prepare("UPDATE workspaces SET setup_status = 'running', setup_error = NULL, updated_at = datetime('now') WHERE id = ?")
+    .run(workspace.id);
+
+  const setupEnv = getHiveEnv(manifest, {
+    id: workspace.id,
+    rootPath: workspace.root_path,
+    workspacePath,
+  });
+  runSetupScript(db, workspace.id, setupCmd, setupEnv, workspacePath);
+
+  return c.json({ setup_status: 'running' });
+});
+
+// Get setup logs
+app.get('/workspaces/:id/setup-logs', withWorkspace, (c) => {
+  const workspace = c.get('workspace');
+  const setupLogPath = path.join(os.tmpdir(), `hive-${workspace.id}-setup.log`);
+  try {
+    if (!fs.existsSync(setupLogPath)) return c.json({ logs: null });
+    const logs = fs.readFileSync(setupLogPath, 'utf8');
+    return c.json({ logs });
+  } catch {
+    return c.json({ logs: null });
+  }
+});
+
+// Run a task — validates task exists, returns info for frontend PTY spawn
+app.post('/workspaces/:id/tasks/:name/run', withWorkspace, (c) => {
+  const workspace = c.get('workspace');
+  const workspacePath = c.get('workspacePath');
+  const taskName = c.req.param('name');
+
+  if (!workspace.root_path) {
+    throw new ValidationError('Repository path not found');
+  }
+
+  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
+  if (!manifest) throw new NotFoundError('No hive.json manifest found');
+
+  const tasks = getNormalizedTasks(manifest);
+  const task = tasks.find(t => t.name === taskName);
+  if (!task) throw new NotFoundError(`Task "${taskName}" not found in manifest`);
+
+  const ptyId = `task-${workspace.id}-${taskName}-${Date.now()}`;
+  const env = {
+    ...(manifest.env ?? {}),
+    ...task.env,
+    HIVE_ROOT_PATH: workspace.root_path,
+    HIVE_WORKSPACE_PATH: workspacePath,
+    HIVE_WORKSPACE_ID: workspace.id,
+  };
+
+  return c.json({
+    ptyId,
+    command: task.command,
+    cwd: workspacePath,
+    env,
+    persistent: task.persistent,
+    mode: task.mode,
+  });
 });
 
 export default app;

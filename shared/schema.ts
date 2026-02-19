@@ -36,6 +36,11 @@ export const V2_MIGRATIONS: string[] = [
   // repos: new columns
   `ALTER TABLE repos ADD COLUMN github_url TEXT`,
 
+
+  // workspaces: setup tracking (hive.json manifest)
+  `ALTER TABLE workspaces ADD COLUMN setup_status TEXT NOT NULL DEFAULT 'none'`,
+  `ALTER TABLE workspaces ADD COLUMN setup_error TEXT`,
+
   // workspaces: init pipeline tracking
   `ALTER TABLE workspaces ADD COLUMN init_step TEXT`,
 ];
@@ -83,6 +88,8 @@ export const SCHEMA_SQL = `
     pr_number INTEGER,
     archive_commit TEXT,
     archived_at TEXT,
+    setup_status TEXT NOT NULL DEFAULT 'none',
+    setup_error TEXT,
     init_step TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

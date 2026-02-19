@@ -17,6 +17,7 @@ import { useSendMessage, useStopSession } from "../api/session.queries";
 import { socketService } from "@/platform/socket";
 import { isTauriEnv } from "@/platform/tauri";
 import { getRuntimeAgentLabel, type RuntimeAgentType } from "../lib/agentRuntime";
+import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 
 interface UseSessionActionsProps {
   sessionId: string;
@@ -25,6 +26,7 @@ interface UseSessionActionsProps {
   model?: string;
   agentType?: RuntimeAgentType;
   onMessageSent?: () => void;
+  targetBranch?: string;
 }
 
 interface UseSessionActionsReturn {
@@ -45,6 +47,7 @@ export function useSessionActions({
   model,
   agentType = "claude",
   onMessageSent,
+  targetBranch = "main",
 }: UseSessionActionsProps): UseSessionActionsReturn {
   const sendMessageMutation = useSendMessage();
   const stopSessionMutation = useStopSession();
@@ -122,9 +125,9 @@ export function useSessionActions({
     }
   }, [stopSessionMutation, sessionId, agentType]);
 
-  const compactConversation = useCallback(() => sendMessage("/compact"), [sendMessage]);
+  const compactConversation = useCallback(() => sendMessage(COMPACT_CONVERSATION), [sendMessage]);
 
-  const createPR = useCallback(() => sendMessage("Create a PR onto main"), [sendMessage]);
+  const createPR = useCallback(() => sendMessage(createPRPrompt(targetBranch)), [sendMessage, targetBranch]);
 
   return {
     sendMessage,

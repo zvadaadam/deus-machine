@@ -6,6 +6,7 @@
 import type { SessionStatus } from "./session";
 
 export type WorkspaceState = "ready" | "initializing" | "archived" | "error";
+export type SetupStatus = "none" | "running" | "completed" | "failed";
 
 /**
  * Core workspace entity
@@ -30,6 +31,8 @@ export interface Workspace {
   /** Computed filesystem path to the workspace directory */
   workspace_path: string;
   default_branch?: string;
+  setup_status: SetupStatus;
+  setup_error: string | null;
   init_step?: string | null;
   pr_url?: string | null;
   pr_number?: number | null;

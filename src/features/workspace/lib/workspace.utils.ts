@@ -23,6 +23,8 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     model: null,
     latest_message_sent_at: null,
     init_step: null,
+    setup_status: "none",
+    setup_error: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     repo_name: repoName,

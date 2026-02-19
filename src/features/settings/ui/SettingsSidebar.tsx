@@ -1,4 +1,4 @@
-import { ArrowLeft, Settings2, Sparkles, Puzzle } from "lucide-react";
+import { ArrowLeft, Settings2, Sparkles, Puzzle, Box } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   Sidebar,
@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "ai", label: "AI", icon: Sparkles },
   { id: "extensions", label: "Extensions", icon: Puzzle },
+  { id: "environment", label: "Environment", icon: Box },
 ];
 
 export function SettingsSidebar() {

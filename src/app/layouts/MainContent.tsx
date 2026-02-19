@@ -25,7 +25,8 @@ import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
 import { useRightPanelSizing } from "@/features/workspace/hooks/useRightPanelSizing";
-import { useArchiveWorkspace } from "@/features/workspace/api/workspace.queries";
+import { useArchiveWorkspace, useRetrySetup, useManifestTasks } from "@/features/workspace/api/workspace.queries";
+import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import type { RightSideTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
@@ -43,6 +44,7 @@ import { toast } from "sonner";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
+import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
@@ -395,6 +397,54 @@ export function MainContent({
     archiveWorkspace(selectedWorkspace.id);
   }, [selectedWorkspace, archiveWorkspace]);
 
+  const { mutate: retrySetup } = useRetrySetup();
+  const handleRetrySetup = useCallback(() => {
+    if (!selectedWorkspace) return;
+    retrySetup(selectedWorkspace.id);
+  }, [selectedWorkspace, retrySetup]);
+
+  const handleViewSetupLogs = useCallback(() => {
+    if (!selectedWorkspace) return;
+    WorkspaceService.fetchSetupLogs(selectedWorkspace.id).then(({ logs }) => {
+      if (!logs) {
+        toast.error("No setup logs available.");
+        return;
+      }
+      const blob = new Blob([logs], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }).catch(() => {
+      toast.error("Failed to fetch setup logs.");
+    });
+  }, [selectedWorkspace]);
+
+  // --- Manifest tasks (hive.json) ---
+  const isWorkspaceReady = selectedWorkspace?.state === "ready";
+  const { data: manifestData } = useManifestTasks(isWorkspaceReady ? selectedWorkspaceId : null);
+  const manifestTasks = manifestData?.tasks;
+  const hasManifest = manifestData?.manifest != null;
+
+  const handleRunTask = useCallback(
+    (taskName: string) => {
+      if (!selectedWorkspace) return;
+      WorkspaceService.runTask(selectedWorkspace.id, taskName)
+        .then(({ command }) => {
+          // Open a new terminal tab running the task command
+          queueTerminalTask(taskName, command);
+          // Switch to terminal tab and expand panel if collapsed
+          setRightSideTab("terminal");
+          if (rightPanelCollapsed) {
+            setRightPanelCollapsed(false);
+          }
+        })
+        .catch((err) => {
+          toast.error(`Failed to run task: ${err instanceof Error ? err.message : "Unknown error"}`);
+        });
+    },
+    [selectedWorkspace, setRightSideTab, rightPanelCollapsed, setRightPanelCollapsed]
+  );
+
   // ESC closes the middle panel
   useEffect(() => {
     if (!middlePanelActive) return;
@@ -493,10 +543,17 @@ export function MainContent({
               workspaceId={selectedWorkspace.id}
               prStatus={prStatus}
               ghStatus={ghStatus}
+              setupStatus={selectedWorkspace.setup_status}
+              setupError={selectedWorkspace.setup_error}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
               onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
+              onRetrySetup={selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined}
+              onViewSetupLogs={selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined}
+              tasks={manifestTasks}
+              hasManifest={hasManifest}
+              onRunTask={handleRunTask}
               targetBranch={selectedTargetBranch}
               onTargetBranchChange={setSelectedTargetBranch}
             />

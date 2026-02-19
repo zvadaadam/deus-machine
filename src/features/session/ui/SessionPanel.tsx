@@ -6,6 +6,7 @@ import { useSessionActions, useSessionEvents } from "../hooks";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
+import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
@@ -269,6 +270,11 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       // TODO: Implement file picker dialog
     };
 
+    // Manifest status — cache-only read (staleTime: Infinity, already fetched by MainContent)
+    // Default to true while loading to prevent the setup nudge from flashing briefly
+    const { data: manifestData } = useManifestTasks(workspaceId ?? null);
+    const hasManifest = manifestData === undefined ? true : manifestData?.manifest != null;
+
     // TODO: Fetch MCP servers from settings/API
     const mcpServers = EMPTY_MCP_SERVERS;
 
@@ -285,6 +291,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       messageInput,
       model: runtimeModelId,
       agentType: modelAgentType,
+      targetBranch: workspaceParentBranch ?? "main",
       onMessageSent: () => {
         setMessageInput("");
         messageInputRef.current?.clearPastedContent();
@@ -442,6 +449,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               contextTokenCount={contextTokenCount}
               workspacePath={workspacePath}
               hasMessages={messages.length > 0}
+              hasManifest={hasManifest}
               onMessageChange={setMessageInput}
               onSend={(content) => sendMessage(content)}
               onStop={stopSession}
@@ -546,6 +554,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     contextTokenCount={contextTokenCount}
                     workspacePath={workspacePath}
                     hasMessages={messages.length > 0}
+              hasManifest={hasManifest}
                     onMessageChange={setMessageInput}
                     onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}

@@ -12,9 +12,11 @@ import {
   ChevronDown,
   Check,
   ArrowUpRight,
+  Wrench,
 } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
 import { FileMentionPopover } from "./FileMentionPopover";
+import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
 import {
   InputGroup,
   InputGroupAddon,
@@ -90,6 +92,8 @@ interface MessageInputProps {
    * switching to a different agent type requires opening a new chat tab.
    */
   hasMessages?: boolean;
+  /** Whether a hive.json manifest exists for this workspace */
+  hasManifest?: boolean;
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
   onCompact?: () => void;
@@ -116,6 +120,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     contextTokenCount = 0,
     workspacePath = null,
     hasMessages = false,
+    hasManifest = true,
     onMessageChange,
     onSend,
     onCompact,
@@ -367,8 +372,37 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     return <LogoComponent className="h-4 w-4 flex-shrink-0" />;
   };
 
+  // Show "Set up your environment" nudge when no manifest and no messages yet
+  const showSetupNudge = !hasManifest && !hasMessages;
+
+  const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
+
   return (
     <div className={cn("relative z-20 shrink-0 px-4 pb-4", className)}>
+      {/* Environment setup nudge — visible when no hive.json and chat is empty */}
+      <AnimatePresence>
+        {showSetupNudge && (
+          <motion.div
+            key="setup-nudge"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+            className="mb-2 flex"
+          >
+            <button
+              type="button"
+              onClick={handleSetupEnvironment}
+              className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-colors duration-200"
+            >
+              <Wrench className="h-3 w-3 shrink-0" />
+              <span>Set up your environment</span>
+              <span className="text-text-disabled">&rarr;</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* File mention popover — anchored above the input group */}
       <AnimatePresence>
         {fileMention.isOpen && (
