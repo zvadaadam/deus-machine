@@ -127,11 +127,14 @@ export function runSetupScript(
     setTimeout(() => { try { setupProc.kill('SIGKILL'); } catch {} }, 5000);
   }, 5 * 60 * 1000);
 
+  let finished = false;
   const finish = (status: 'completed' | 'failed', error?: string) => {
+    if (finished) return;
+    finished = true;
     clearTimeout(timer);
     try { setupLog.end(); } catch {}
     if (status === 'completed') {
-      db.prepare("UPDATE workspaces SET setup_status = 'completed', updated_at = datetime('now') WHERE id = ?").run(workspaceId);
+      db.prepare("UPDATE workspaces SET setup_status = 'completed', setup_error = NULL, updated_at = datetime('now') WHERE id = ?").run(workspaceId);
     } else {
       db.prepare("UPDATE workspaces SET setup_status = 'failed', setup_error = ?, updated_at = datetime('now') WHERE id = ?").run(error, workspaceId);
     }

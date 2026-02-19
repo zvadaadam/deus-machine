@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle, XCircle, Clock, Minus, Loader2, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,7 @@ interface WorkspaceStatusDashboardProps {
 export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardProps) {
   const { data: repoGroups } = useWorkspacesByRepo();
   const retryMutation = useRetrySetup();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const workspaces = useMemo(() => {
     if (!repoId || !repoGroups) return [];
@@ -64,11 +65,16 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => retryMutation.mutate(ws.id)}
-                      disabled={retryMutation.isPending}
+                      onClick={() => {
+                        setRetryingId(ws.id);
+                        retryMutation.mutate(ws.id, {
+                          onSettled: () => setRetryingId(null),
+                        });
+                      }}
+                      disabled={retryMutation.isPending && retryingId === ws.id}
                       className="h-6 w-6 p-0"
                     >
-                      {retryMutation.isPending ? (
+                      {retryMutation.isPending && retryingId === ws.id ? (
                         <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <RotateCw className="size-3" />

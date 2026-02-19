@@ -37,6 +37,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
+          aria-label={expanded ? "Collapse task details" : "Expand task details"}
           className="text-text-muted hover:text-text-secondary relative transition-colors duration-200"
         >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -62,6 +63,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
           variant="ghost"
           size="sm"
           onClick={onRemove}
+          aria-label={`Remove task ${task.name || "unnamed"}`}
           className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
         >
           <Trash2 className="size-3.5" />
@@ -160,6 +162,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                     <button
                       type="button"
                       onClick={() => onChange({ ...task, depends: task.depends.filter((d) => d !== dep) })}
+                      aria-label={`Remove dependency ${dep}`}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       &times;
@@ -212,6 +215,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                   variant="ghost"
                   size="sm"
                   onClick={() => onChange({ ...task, env: task.env.filter((_, k) => k !== j) })}
+                  aria-label={`Remove env var ${envVar.key || "unnamed"}`}
                   className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
                 >
                   <Trash2 className="size-3" />
