@@ -13,6 +13,7 @@ import { DEFAULT_TASK_ICON } from "@/shared/lib/taskIcons";
 // ---------------------------------------------------------------------------
 
 export interface TaskDraft {
+  id: string;
   name: string;
   command: string;
   description: string;
@@ -20,7 +21,7 @@ export interface TaskDraft {
   persistent: boolean;
   mode: "concurrent" | "nonconcurrent";
   depends: string[];
-  env: Array<{ key: string; value: string }>;
+  env: Array<{ id: string; key: string; value: string }>;
 }
 
 export interface ManifestDraft {
@@ -30,12 +31,12 @@ export interface ManifestDraft {
   runScript: string;
   archiveScript: string;
   runScriptMode: "concurrent" | "nonconcurrent";
-  requires: Array<{ tool: string; version: string }>;
-  env: Array<{ key: string; value: string }>;
+  requires: Array<{ id: string; tool: string; version: string }>;
+  env: Array<{ id: string; key: string; value: string }>;
   tasks: TaskDraft[];
 }
 
-export const EMPTY_TASK: TaskDraft = {
+export const EMPTY_TASK: Omit<TaskDraft, "id"> = {
   name: "",
   command: "",
   description: "",
@@ -79,15 +80,16 @@ export function manifestToDraft(raw: Record<string, unknown> | null): ManifestDr
     runScript: scripts.run || "",
     archiveScript: lifecycle.archive || scripts.archive || "",
     runScriptMode: (raw.runScriptMode as "concurrent" | "nonconcurrent") || "nonconcurrent",
-    requires: Object.entries(requires).map(([tool, version]) => ({ tool, version })),
-    env: Object.entries(env).map(([key, value]) => ({ key, value })),
+    requires: Object.entries(requires).map(([tool, version]) => ({ id: crypto.randomUUID(), tool, version })),
+    env: Object.entries(env).map(([key, value]) => ({ id: crypto.randomUUID(), key, value })),
     tasks: Object.entries(tasks).map(([name, entry]) => {
       if (typeof entry === "string") {
-        return { ...EMPTY_TASK, name, command: entry };
+        return { ...EMPTY_TASK, id: crypto.randomUUID(), name, command: entry };
       }
       const obj = entry as Record<string, unknown>;
       const taskEnv = (obj.env as Record<string, string>) || {};
       return {
+        id: crypto.randomUUID(),
         name,
         command: (obj.command as string) || "",
         description: (obj.description as string) || "",
@@ -95,7 +97,7 @@ export function manifestToDraft(raw: Record<string, unknown> | null): ManifestDr
         persistent: (obj.persistent as boolean) || false,
         mode: (obj.mode as "concurrent" | "nonconcurrent") || "concurrent",
         depends: Array.isArray(obj.depends) ? (obj.depends as string[]) : [],
-        env: Object.entries(taskEnv).map(([key, value]) => ({ key, value })),
+        env: Object.entries(taskEnv).map(([key, value]) => ({ id: crypto.randomUUID(), key, value })),
       };
     }),
   };
@@ -144,6 +146,7 @@ export function draftToManifest(draft: ManifestDraft): Record<string, unknown> {
     const tasks: Record<string, unknown> = {};
     for (const t of draft.tasks) {
       if (!t.name.trim()) continue;
+      if (!t.command.trim()) continue;
 
       // Only use string shorthand when task truly has no extra configuration
       const hasEnv = t.env.some((e) => e.key.trim());

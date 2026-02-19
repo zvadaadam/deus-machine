@@ -50,7 +50,7 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
           return (
             <div key={ws.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm">
               {isRunning ? (
-                <Loader2 className="text-warning size-3.5 shrink-0 animate-spin" />
+                <Loader2 className="text-warning size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
               ) : (
                 <StatusIcon className={`size-3.5 shrink-0 ${config.className}`} />
               )}
@@ -75,7 +75,7 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
                       className="h-6 w-6 p-0"
                     >
                       {retryMutation.isPending && retryingId === ws.id ? (
-                        <Loader2 className="size-3 animate-spin" />
+                        <Loader2 className="size-3 animate-spin motion-reduce:animate-none" />
                       ) : (
                         <RotateCw className="size-3" />
                       )}
