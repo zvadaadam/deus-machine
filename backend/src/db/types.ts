@@ -41,6 +41,7 @@ export interface WorkspaceRow {
   pr_number: number | null;
   archive_commit: string | null;
   archived_at: string | null;
+  init_step: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +61,7 @@ export interface WorkspaceWithDetailsRow {
   parent_branch: string | null;
   state: string;
   active_session_id: string | null;
+  init_step: string | null;
   created_at: string;
   updated_at: string;
 

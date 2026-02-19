@@ -232,7 +232,11 @@ export function getMergeBase(workspacePath: string, parentBranch: string): strin
       cwd: workspacePath, encoding: 'utf-8', timeout: 5000
     }).toString().trim();
   } catch {
-    return parentBranch;
+    // Fallback to HEAD — shows only uncommitted changes.
+    // Previous fallback (parentBranch) caused phantom diffs when origin/main
+    // advanced far beyond HEAD (thousands of false deletions).
+    console.warn(`[GIT] merge-base failed for ${parentBranch}, falling back to HEAD`);
+    return 'HEAD';
   }
 }
 
