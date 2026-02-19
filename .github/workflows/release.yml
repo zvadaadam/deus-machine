@@ -53,8 +53,9 @@ jobs:
 
       - name: Validate version format
         id: validate
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format: $VERSION (expected semver X.Y.Z)"
             exit 1
@@ -74,15 +75,21 @@ jobs:
           bun-version: 1.2.19
 
       - name: Bump version in all config files
-        run: bash scripts/bump-version.sh "${{ steps.validate.outputs.version }}"
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.version }}
+        run: bash scripts/bump-version.sh "$RELEASE_VERSION"
 
       - name: Commit version bump
+        if: ${{ inputs.dry_run == false }}
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.version }}
+          RELEASE_TAG: ${{ steps.validate.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
-          git commit -m "release: v${{ steps.validate.outputs.version }}"
-          git tag "${{ steps.validate.outputs.tag }}"
+          git commit -m "release: v${RELEASE_VERSION}"
+          git tag "$RELEASE_TAG"
           git push origin HEAD --tags
 
   # ── Step 2: Build macOS (arm64), sign, notarize ─────────────────────
@@ -92,7 +99,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate-and-bump.outputs.tag }}
+          # Dry run: checkout current branch (no tag pushed); real release: checkout the tag
+          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -150,11 +158,11 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ needs.validate-and-bump.outputs.tag }}
-          releaseName: "${{ needs.validate-and-bump.outputs.tag }}"
+          # On dry run: build the binary but skip GitHub Release creation
+          # tagName controls release creation — omit it to skip
+          tagName: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || '' }}
+          releaseName: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || '' }}
           releaseBody: "See the assets below to download Command ${{ needs.validate-and-bump.outputs.tag }} for macOS."
           releaseDraft: true
           prerelease: false
           args: --target aarch64-apple-darwin
-          # Skip creating release on dry run
-          includeRelease: ${{ inputs.dry_run == false }}

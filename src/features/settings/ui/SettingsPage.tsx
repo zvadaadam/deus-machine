@@ -13,7 +13,13 @@ import {
   useAgents,
   useUpdateSettings,
 } from "../api/settings.queries";
-import { GeneralSection, AISection, ExtensionsSection, EnvironmentSection } from "./sections";
+import {
+  GeneralSection,
+  AISection,
+  ExtensionsSection,
+  EnvironmentSection,
+  UpdateSection,
+} from "./sections";
 
 export function SettingsPage() {
   const activeSection = useUIStore((s) => s.activeSettingsSection);
@@ -93,6 +99,7 @@ export function SettingsPage() {
         <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />
       ))
       .with("environment", () => <EnvironmentSection />)
+      .with("updates", () => <UpdateSection />)
       .otherwise(() => null);
   }
 

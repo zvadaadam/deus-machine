@@ -71,6 +71,7 @@
     "notification:allow-request-permission",
     "deep-link:default",
     "window-state:default",
-    "updater:default"
+    "updater:default",
+    "process:allow-restart"
   ]
 }
