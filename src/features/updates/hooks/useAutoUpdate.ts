@@ -23,8 +23,8 @@ export interface UpdateState {
 
 export interface UseAutoUpdateReturn {
   state: UpdateState;
-  /** Manually trigger an update check (for Settings button). */
-  check: () => Promise<void>;
+  /** Manually trigger an update check. Returns true if no update found (up-to-date). */
+  check: () => Promise<boolean>;
   /** Install the downloaded update and restart the app. */
   install: () => Promise<void>;
 }
@@ -65,8 +65,8 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     }
   }, []);
 
-  const check = useCallback(async () => {
-    if (!isTauriEnv) return;
+  const check = useCallback(async (): Promise<boolean> => {
+    if (!isTauriEnv) return true;
 
     setState((prev) => ({ ...prev, stage: "checking" }));
 
@@ -77,7 +77,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
 
       if (!update) {
         setState({ stage: "idle" });
-        return;
+        return true; // No update available — up to date
       }
 
       updateRef.current = update;
@@ -90,16 +90,18 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
           version: update.version,
           releaseNotes: update.body ?? undefined,
         });
-        return;
+        return false;
       }
 
       // Auto-download silently
       await downloadUpdate(update);
+      return false;
     } catch (err) {
       setState({
         stage: "error",
         error: err instanceof Error ? err.message : String(err),
       });
+      return false;
     }
   }, [downloadUpdate]);
 
