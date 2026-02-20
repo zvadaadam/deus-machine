@@ -89,7 +89,7 @@ jobs:
           git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
           git commit -m "release: v${RELEASE_VERSION}"
           git tag "$RELEASE_TAG"
-          git push origin HEAD --tags
+          git push origin HEAD "$RELEASE_TAG"
 
   # ── Step 2: Build macOS (arm64), sign, notarize ─────────────────────
   build-macos:
@@ -146,7 +146,8 @@ jobs:
       - name: Build sidecar
         run: bun run build:sidecar
 
-      - name: Build Tauri app (arm64)
+      - name: Build Tauri app + create release
+        if: ${{ inputs.dry_run == false }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -157,11 +158,24 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          # On dry run: build the binary but skip GitHub Release creation
-          # tagName controls release creation — omit it to skip
-          tagName: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || '' }}
-          releaseName: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || '' }}
+          tagName: ${{ needs.validate-and-bump.outputs.tag }}
+          releaseName: ${{ needs.validate-and-bump.outputs.tag }}
           releaseBody: "See the assets below to download Command ${{ needs.validate-and-bump.outputs.tag }} for macOS."
           releaseDraft: true
           prerelease: false
+          args: --target aarch64-apple-darwin
+
+      - name: Build Tauri app (dry run)
+        if: ${{ inputs.dry_run == true }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          # tagName, releaseName, releaseBody deliberately omitted to skip release creation
           args: --target aarch64-apple-darwin
