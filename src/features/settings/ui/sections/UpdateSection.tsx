@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, RefreshCw, CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { useUpdateContext } from "@/features/updates";
-import { isTauriEnv } from "@/platform/tauri";
 
 export function UpdateSection() {
   const updateCtx = useUpdateContext();
@@ -13,12 +12,8 @@ export function UpdateSection() {
   const [manualChecking, setManualChecking] = useState(false);
   const [manualResult, setManualResult] = useState<"up-to-date" | null>(null);
 
-  // Fetch current app version
+  // Fetch current app version from Tauri
   useEffect(() => {
-    if (!isTauriEnv) {
-      setCurrentVersion("dev");
-      return;
-    }
     import("@tauri-apps/api/app")
       .then(({ getVersion }) => getVersion())
       .then(setCurrentVersion)
