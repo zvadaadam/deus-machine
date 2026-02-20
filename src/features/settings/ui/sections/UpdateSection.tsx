@@ -25,19 +25,24 @@ export function UpdateSection() {
       .catch(() => setCurrentVersion("unknown"));
   }, []);
 
+  // Auto-dismiss "up to date" message after 3s
+  useEffect(() => {
+    if (manualResult !== "up-to-date") return;
+    const timer = setTimeout(() => setManualResult(null), 3000);
+    return () => clearTimeout(timer);
+  }, [manualResult]);
+
   async function handleCheckForUpdates() {
     if (!updateCtx) return;
     setManualChecking(true);
     setManualResult(null);
 
-    await updateCtx.check();
+    // check() returns true when no update is found (up to date)
+    const isUpToDate = await updateCtx.check();
 
-    // If still idle after check, we're up to date
     setManualChecking(false);
-    if (updateCtx.state.stage === "idle") {
+    if (isUpToDate) {
       setManualResult("up-to-date");
-      // Auto-dismiss the "up to date" message after 3s
-      setTimeout(() => setManualResult(null), 3000);
     }
   }
 

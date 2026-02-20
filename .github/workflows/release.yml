@@ -45,9 +45,8 @@ jobs:
 
       - name: Ensure release runs from main
         run: |
-          BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          if [[ "$BRANCH" != "main" ]]; then
-            echo "::error::Release must be triggered from main branch, got: $BRANCH"
+          if [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "::error::Release must be triggered from main branch, got: ${{ github.ref_name }}"
             exit 1
           fi
 
