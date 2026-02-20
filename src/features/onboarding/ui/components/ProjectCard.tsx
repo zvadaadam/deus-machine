@@ -26,7 +26,7 @@ export const ProjectCard = memo(function ProjectCard({
     <button
       onClick={handleClick}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-200",
+        "group relative flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-200",
         selected ? "bg-white/10" : "bg-white/[0.04] hover:bg-white/[0.07]"
       )}
     >
