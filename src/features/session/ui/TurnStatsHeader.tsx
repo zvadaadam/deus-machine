@@ -51,7 +51,7 @@ export function TurnStatsHeader({
         <div className="relative h-4 w-4 flex-shrink-0">
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-all duration-200",
+              "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-transform duration-200",
               isExpanded && "rotate-90"
             )}
             aria-hidden="true"
@@ -65,7 +65,7 @@ export function TurnStatsHeader({
           // Collapsed state: Show metrics breakdown
           <>
             {/* Primary metric: Message count (always shown) */}
-            <span className="text-muted-foreground truncate font-normal">
+            <span className="text-muted-foreground truncate font-normal tabular-nums">
               {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
             </span>
 
@@ -75,7 +75,7 @@ export function TurnStatsHeader({
                 <span className="text-muted-foreground/40" aria-hidden="true">
                   •
                 </span>
-                <span className="text-muted-foreground truncate">
+                <span className="text-muted-foreground truncate tabular-nums">
                   {subagentCount} subagent{subagentCount !== 1 ? "s" : ""}
                 </span>
               </>
@@ -87,7 +87,7 @@ export function TurnStatsHeader({
                 <span className="text-muted-foreground/40" aria-hidden="true">
                   •
                 </span>
-                <span className="text-muted-foreground truncate">
+                <span className="text-muted-foreground truncate tabular-nums">
                   {toolCount} tool call{toolCount !== 1 ? "s" : ""}
                 </span>
               </>
@@ -99,7 +99,7 @@ export function TurnStatsHeader({
                 <span className="text-muted-foreground/40" aria-hidden="true">
                   •
                 </span>
-                <span className="text-muted-foreground truncate">
+                <span className="text-muted-foreground truncate tabular-nums">
                   {filesChanged} file{filesChanged !== 1 ? "s" : ""} changed
                 </span>
               </>

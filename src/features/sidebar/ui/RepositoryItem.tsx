@@ -1,5 +1,5 @@
 import { Plus, Ellipsis, ChevronRight } from "lucide-react";
-import { AnimatePresence, m } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/shared/lib/utils";
@@ -32,6 +32,7 @@ export function RepositoryItem({
   diffStatsMap,
   sidebarExpanded,
 }: RepositoryItemProps) {
+  const reduceMotion = useReducedMotion();
   const repoName = getCleanRepoName(repository.repo_name);
 
   return (
@@ -48,7 +49,7 @@ export function RepositoryItem({
               <ChevronRight
                 className={cn(
                   "text-text-muted h-3.5 w-3.5 flex-shrink-0",
-                  "opacity-0 transition-all duration-200 group-hover/repository-item:opacity-100",
+                  "opacity-0 transition-[transform,opacity] duration-200 group-hover/repository-item:opacity-100",
                   !isCollapsed && "rotate-90"
                 )}
               />
@@ -80,9 +81,9 @@ export function RepositoryItem({
         {!isCollapsed && (
           <m.ul
             key="workspace-list"
-            initial={{ height: 0, opacity: 0 }}
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1] }}
             className="flex min-w-0 flex-col overflow-hidden"
           >
@@ -95,9 +96,9 @@ export function RepositoryItem({
                 return (
                   <>
                     <m.li
-                      initial={{ opacity: 0, y: -4 }}
+                      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1], delay: 0.03 }}
+                      transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1], delay: reduceMotion ? 0 : 0.03 }}
                     >
                       <SidebarRow
                         variant="action"
@@ -119,12 +120,12 @@ export function RepositoryItem({
                     {sortedWorkspaces.map((workspace, index) => (
                       <m.li
                         key={workspace.id}
-                        initial={{ opacity: 0, y: -4 }}
+                        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
                           duration: 0.18,
                           ease: [0.165, 0.84, 0.44, 1],
-                          delay: Math.min(0.05 + index * 0.025, 0.12),
+                          delay: reduceMotion ? 0 : Math.min(0.05 + index * 0.025, 0.12),
                         }}
                       >
                         <WorkspaceItem

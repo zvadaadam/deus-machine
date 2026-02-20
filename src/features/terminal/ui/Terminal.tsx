@@ -103,7 +103,7 @@ export function Terminal({ id, workspacePath, initialCommand }: TerminalProps) {
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 11,
-      fontFamily: '"SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || 'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       letterSpacing: 0,
       theme: getTerminalTheme(),
       allowProposedApi: true,
