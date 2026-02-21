@@ -48,7 +48,7 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
         onClick={onClick}
         className={cn(
           "flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150",
-          isActive ? "bg-bg-selection" : "hover:bg-bg-surface"
+          isActive ? "bg-bg-selection" : "hover:bg-foreground/[0.04]"
         )}
       >
         {/* Left: status + text */}

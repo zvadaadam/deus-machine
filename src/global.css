@@ -794,7 +794,7 @@
   /* --- Borders & inputs --- */
   --border: #e0e0e0;
   --input: #e0e0e0;
-  --input-surface: #fafaf9;
+  --input-surface: #ffffff;
   --input-tint: transparent;
   --ring: #266b9e66;
   --destructive-ring: color-mix(in oklch, var(--destructive) 20%, transparent);
