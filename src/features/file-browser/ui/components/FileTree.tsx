@@ -155,7 +155,7 @@ const TreeNode = memo(function TreeNode({
         className={cn(
           "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-sm",
           "transition-colors duration-150 ease-out",
-          "focus-visible:ring-primary/50 focus-visible:ring-1 focus-visible:outline-none",
+          "focus-visible:ring-ring/50 focus-visible:ring-1 focus-visible:outline-none",
           isSelected
             ? "bg-primary/10 text-primary"
             : "text-foreground/80 hover:bg-muted/30 hover:text-foreground",

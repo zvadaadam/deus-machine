@@ -55,7 +55,7 @@ export function BrowserTabBar({
             <button
               type="button"
               aria-label={`Close ${tab.title}`}
-              className="text-muted-foreground hover:bg-muted/80 hover:text-foreground flex h-3 w-3 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-sm leading-none transition-colors duration-200 ease-out"
+              className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative flex h-3 w-3 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-sm leading-none transition-colors duration-200 ease-out before:absolute before:inset-[-16px] before:content-['']"
               onClick={() => onTabClose(tab.id)}
             >
               ×
@@ -77,7 +77,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="Open browser in separate window"
-          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors duration-200 ease-out"
+          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors duration-200 ease-out before:absolute before:inset-[-10px] before:content-['']"
           onClick={onDetach}
           title="Open in separate window"
         >

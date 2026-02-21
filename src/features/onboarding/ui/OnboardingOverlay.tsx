@@ -39,7 +39,7 @@ const TIMELINE = {
 } as const;
 
 const TOTAL_STEPS = 4;
-const OVERLAY_BG = "rgba(9, 10, 14, 0.52)";
+const OVERLAY_BG = "oklch(0.06 0.005 264 / 0.52)";
 
 // Card surface — no border. Light and shadow define form, not lines.
 // Top inset highlight mimics an edge-lit surface (like brushed aluminium
@@ -50,9 +50,9 @@ const CARD_STYLE = {
   backdropFilter: "blur(40px) saturate(1.4)",
   WebkitBackdropFilter: "blur(40px) saturate(1.4)",
   boxShadow: [
-    "inset 0 0.5px 0 0 rgba(255, 255, 255, 0.06)",
-    "0 8px 20px -4px rgba(0, 0, 0, 0.25)",
-    "0 24px 68px -12px rgba(0, 0, 0, 0.5)",
+    "inset 0 0.5px 0 0 oklch(1 0 0 / 0.06)",
+    "0 8px 20px -4px oklch(0 0 0 / 0.25)",
+    "0 24px 68px -12px oklch(0 0 0 / 0.5)",
   ].join(", "),
 } as const;
 
@@ -117,7 +117,7 @@ export function OnboardingOverlay() {
         console.error("[Onboarding] enter_onboarding_mode failed:", e);
       });
     } else {
-      document.body.style.background = "#000";
+      document.body.style.background = "oklch(0 0 0)";
       document.getElementById("root")!.style.background = "transparent";
     }
 
@@ -215,7 +215,7 @@ export function OnboardingOverlay() {
         )}
         style={{
           background: [
-            "radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 55%)",
+            "radial-gradient(120% 80% at 50% 0%, oklch(1 0 0 / 0.05) 0%, oklch(1 0 0 / 0) 55%)",
             OVERLAY_BG,
           ].join(", "),
           animation: exiting
@@ -307,7 +307,7 @@ export function OnboardingOverlay() {
               className="pointer-events-none absolute inset-x-12 -bottom-16 h-24"
               style={{
                 background:
-                  "radial-gradient(ellipse 100% 100% at 50% 0%, rgba(0, 0, 0, 0.35) 0%, transparent 70%)",
+                  "radial-gradient(ellipse 100% 100% at 50% 0%, oklch(0 0 0 / 0.35) 0%, transparent 70%)",
                 filter: "blur(10px)",
               }}
             />

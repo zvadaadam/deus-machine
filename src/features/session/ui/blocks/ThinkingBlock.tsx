@@ -9,7 +9,7 @@
 
 import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
-import { AnimatePresence, m } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Brain, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ChatMarkdown } from "@/components/markdown";
@@ -21,6 +21,7 @@ interface ThinkingBlockProps {
 }
 
 export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps) {
+  const reduceMotion = useReducedMotion();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Width-based preview: 90 chars (balanced - not too short, not too long)
@@ -41,7 +42,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-xs",
           "w-full cursor-pointer text-left",
-          "opacity-80 transition-opacity duration-100 ease-in hover:opacity-100",
+          "opacity-80 transition-opacity duration-100 ease-out hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
       >
@@ -50,7 +51,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
           {/* Brain icon - default state (hides on hover or when expanded) */}
           <Brain
             className={cn(
-              "text-muted-foreground/70 absolute top-0 left-0 h-4 w-4 transition-opacity duration-100 ease-in",
+              "text-muted-foreground/70 absolute top-0 left-0 h-4 w-4 transition-opacity duration-100 ease-out",
               isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
             )}
           />
@@ -58,7 +59,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
           {/* Chevron - shows on hover or when expanded (fast like table row hover) */}
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-all duration-100 ease-in",
+              "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-100 ease-out",
               isExpanded && "rotate-90",
               isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             )}
@@ -89,9 +90,9 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         {isExpanded && (
           <m.div
             key="thinking-content"
-            initial={{ opacity: 0, height: 0 }}
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
             animate={{ opacity: 0.7, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
             transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
             className="text-muted-foreground mt-0.5 ml-6 overflow-hidden text-sm"
           >

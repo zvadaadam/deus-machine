@@ -38,6 +38,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Determine the actual theme to apply
     let resolved: "light" | "dark";
 
+    // Suppress color transitions during theme switch to prevent flash
+    const applyThemeClass = (newTheme: "light" | "dark") => {
+      root.setAttribute("data-theme-switching", "");
+      root.classList.remove("light", "dark");
+      root.classList.add(newTheme);
+      // Re-enable transitions after paint settles (double-rAF)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          root.removeAttribute("data-theme-switching");
+        });
+      });
+    };
+
     if (theme === "system") {
       // Check system preference
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -45,15 +58,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
       // Apply initial system theme to DOM
       setActualTheme(resolved);
-      root.classList.remove("light", "dark");
-      root.classList.add(resolved);
+      applyThemeClass(resolved);
 
       // Listen for system theme changes
       const listener = (e: MediaQueryListEvent) => {
         const newTheme = e.matches ? "dark" : "light";
         setActualTheme(newTheme);
-        root.classList.remove("light", "dark");
-        root.classList.add(newTheme);
+        applyThemeClass(newTheme);
       };
 
       mediaQuery.addEventListener("change", listener);
@@ -64,8 +75,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       resolved = theme;
       // Apply explicit theme choice to DOM
       setActualTheme(resolved);
-      root.classList.remove("light", "dark");
-      root.classList.add(resolved);
+      applyThemeClass(resolved);
     }
   }, [theme]);
 

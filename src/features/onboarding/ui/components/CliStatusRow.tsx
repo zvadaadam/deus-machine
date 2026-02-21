@@ -25,13 +25,13 @@ export function CliStatusRow({
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          installed === null ? "bg-white/10" : installed ? "bg-emerald-500/20" : "bg-white/10"
+          installed === null ? "bg-white/10" : installed ? "bg-success/20" : "bg-white/10"
         )}
       >
         {installed === null ? (
           <Loader2 className="h-4 w-4 animate-spin text-white/50" />
         ) : installed ? (
-          <Check className="h-4 w-4 text-emerald-400" />
+          <Check className="h-4 w-4 text-success" />
         ) : (
           <X className="h-4 w-4 text-white/40" />
         )}
