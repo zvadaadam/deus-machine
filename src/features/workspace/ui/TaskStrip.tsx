@@ -59,7 +59,7 @@ export function TaskStrip({ tasks, hasManifest, disabled, onRunTask, onSetupEnvi
           type="button"
           onClick={handleOpenSettings}
           aria-label="Open environment settings"
-          className="text-text-muted hover:text-text-secondary hover:bg-bg-muted flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-200"
+          className="text-text-muted hover:text-text-secondary hover:bg-bg-muted relative flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']"
         >
           <Settings className="h-3 w-3" />
         </button>

@@ -338,7 +338,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           <span
             key={i}
             className={cn(
-              "h-1 w-1 transition-all duration-200",
+              "h-1 w-1 transition-[width,height,background-color,border-color] duration-200",
               i < filledCount ? "bg-primary" : "border-primary/40 border"
             )}
           />
@@ -632,7 +632,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                   strokeWidth="2"
                   strokeDasharray={`${(contextPercentage / 100) * 37.7} 37.7`}
                   strokeLinecap="round"
-                  className="transition-all duration-300"
+                  className="transition-[stroke-dasharray] duration-300"
                 />
               </svg>
               {/* Token count text - only show if > 0 */}
