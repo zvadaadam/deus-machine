@@ -110,9 +110,17 @@ export function MainLayout() {
       fresh.session_status !== selectedWorkspace.session_status ||
       fresh.init_step !== selectedWorkspace.init_step
     ) {
+      // When workspace transitions to "ready", clear any stale diff caches.
+      // During "initializing", incomplete git state can produce garbage diffs
+      // that get cached. Clearing ensures the first "ready" fetch is clean.
+      if (selectedWorkspace.state === "initializing" && fresh.state === "ready") {
+        queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffStats(fresh.id) });
+        queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffFiles(fresh.id) });
+        queryClient.removeQueries({ queryKey: queryKeys.workspaces.uncommittedFiles(fresh.id) });
+      }
       selectWorkspace(fresh);
     }
-  }, [repoGroups, selectedWorkspace, selectWorkspace]);
+  }, [repoGroups, selectedWorkspace, selectWorkspace, queryClient]);
 
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
