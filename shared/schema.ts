@@ -87,7 +87,7 @@ export const SCHEMA_SQL = `
     parent_tool_use_id TEXT
   );
 
-  -- Indexes (8)
+  -- Indexes (9)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);

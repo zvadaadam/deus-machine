@@ -36,10 +36,12 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
   const isWorking = workspace.session_status === "working";
   const isNeedsResponse = workspace.session_status === "needs_response";
 
-  // Format branch name: show "owner/branch" or just "branch"
-  const displayName = workspace.git_branch?.includes("/")
-    ? workspace.git_branch
-    : `${workspace.slug}/${workspace.git_branch}`;
+  // Format branch name: show "owner/branch" or just "slug"
+  const displayName = workspace.git_branch
+    ? workspace.git_branch.includes("/")
+      ? workspace.git_branch
+      : `${workspace.slug}/${workspace.git_branch}`
+    : workspace.slug;
 
   return (
     <li className="list-none">
