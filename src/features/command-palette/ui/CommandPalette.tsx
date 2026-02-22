@@ -167,16 +167,16 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
             {allWorkspaces.map((ws) => (
               <CommandItem
                 key={ws.id}
-                value={`${ws.display_name || ws.directory_name} ${ws.repoName}`}
+                value={`${ws.title || ws.slug} ${ws.repoName}`}
                 onSelect={() => handleWorkspaceSelect(ws)}
               >
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm">
-                    {ws.display_name || ws.directory_name}
+                    {ws.title || ws.slug}
                   </span>
                   <span className="text-muted-foreground text-xs">
                     {ws.repoName}
-                    {ws.branch ? ` \u00b7 ${ws.branch}` : ""}
+                    {ws.git_branch ? ` \u00b7 ${ws.git_branch}` : ""}
                   </span>
                 </div>
               </CommandItem>

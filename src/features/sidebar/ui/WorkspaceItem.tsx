@@ -65,21 +65,21 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                 <PixelGrid variant="thinking" size={14} />
               </SidebarRowIconSlot>
               <span className="text-text-disabled truncate text-base font-normal">
-                {workspace.branch || "New workspace"}
+                {workspace.git_branch || "New workspace"}
               </span>
             </div>
             {/* Row 2: directory · status */}
             <div className="flex min-w-0 items-center gap-1.5 pl-[26px]">
-              {workspace.directory_name && (
+              {workspace.slug && (
                 <>
                   <span className="text-text-disabled truncate text-xs">
-                    {workspace.directory_name}
+                    {workspace.slug}
                   </span>
                   <span className="text-text-disabled text-xs">·</span>
                 </>
               )}
               <span className="text-text-muted shrink-0 text-xs">
-                {match(workspace.init_step)
+                {match(workspace.init_stage)
                   .with("worktree", () => "Creating worktree...")
                   .with("dependencies", () => "Installing dependencies...")
                   .with("hooks", () => "Setting up environment...")
@@ -144,7 +144,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   };
 
   const statusText = getStatusText();
-  const showStatusDot = Boolean(workspace.directory_name && statusText);
+  const showStatusDot = Boolean(workspace.slug && statusText);
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
@@ -172,7 +172,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         data-workspace-id={workspace.id}
         className="cursor-pointer"
         aria-current={isActive ? "page" : undefined}
-        aria-label={`Workspace ${workspace.branch} on ${workspace.directory_name}`}
+        aria-label={`Workspace ${workspace.git_branch} on ${workspace.slug}`}
         onClick={() => onClick(workspace)}
         onKeyDown={(e) => {
           if (e.key === " ") e.preventDefault();
@@ -207,7 +207,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                     : "text-text-tertiary font-normal"
               )}
             >
-              {workspace.branch}
+              {workspace.git_branch}
             </span>
           </div>
 
@@ -219,7 +219,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
                 isActiveState ? "text-text-tertiary" : "text-text-disabled"
               )}
             >
-              {workspace.directory_name}
+              {workspace.slug}
             </span>
             {showStatusDot && (
               <span
@@ -267,7 +267,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           <button
             type="button"
             onClick={handleArchive}
-            aria-label={`Archive workspace ${workspace.branch}`}
+            aria-label={`Archive workspace ${workspace.git_branch}`}
             title="Archive workspace"
             className={cn(
               "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-md",

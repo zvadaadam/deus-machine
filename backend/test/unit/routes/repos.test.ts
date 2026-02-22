@@ -37,8 +37,8 @@ vi.mock('fs', () => ({
   constants: { R_OK: 4, X_OK: 1 },
 }));
 
-vi.mock('crypto', () => ({
-  randomUUID: vi.fn(() => 'test-uuid-1234'),
+vi.mock('@shared/lib/uuid', () => ({
+  uuidv7: vi.fn(() => 'test-uuid-1234'),
 }));
 
 import reposRoutes from '../../../src/routes/repos';
@@ -92,15 +92,15 @@ describe('POST /repos', () => {
       id: 'test-uuid-1234',
       name: 'my-project',
       root_path: '/path/to/my-project',
-      default_branch: 'main',
+      git_default_branch: 'main',
     };
 
     // First call: check existing (none found)
-    // Second call: get max display_order
+    // Second call: get max sort_order
     // Third call: get created repo
     mockStmt.get
       .mockReturnValueOnce(undefined)   // no existing repo
-      .mockReturnValueOnce({ max: 0 })  // max display_order
+      .mockReturnValueOnce({ max: 0 })  // max sort_order
       .mockReturnValueOnce(createdRepo); // newly created
 
     const res = await app.request('/repos', {

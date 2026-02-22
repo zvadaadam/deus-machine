@@ -162,50 +162,24 @@ export function useSessionWithMessages(sessionId: string | null) {
   const parseContent = useCallback((content: string): string | (ContentBlock | string)[] | null => {
     try {
       const parsed = JSON.parse(content);
-
-      // User messages with images: content is stored as a JSON content blocks array
-      // (e.g., [{"type":"text","text":"..."}, {"type":"image","source":{...}}])
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
-        return normalizeContentBlocks(parsed);
-      }
-
-      // Assistant messages: wrapped in { message: { content: [...] } } envelope
-      // Use nullish coalescing to preserve explicit empty strings/arrays from the backend.
-      const blocks =
-        (parsed as { message?: { content?: unknown }; content?: unknown }).message?.content ??
-        (parsed as { content?: unknown }).content ??
-        [];
-      return normalizeContentBlocks(blocks);
+      return normalizeContentBlocks(parsed);
     } catch {
-      // If JSON.parse fails, treat it as plain text
       return [{ type: "text", text: content }];
     }
-  }, []); // Empty deps - pure function with no external dependencies
+  }, []);
 
-  // Build tool result map AND parent_tool_use_id map in a single pass.
-  // Both require JSON.parse of the outer envelope — merging avoids parsing twice per message.
+  // Build tool result map and parent_tool_use_id map in a single pass.
   const { toolResultMap, parentToolUseMap } = useMemo(() => {
     const resultMap = new Map();
     const parentMap = new Map<string, string>();
     if (!messages.length) return { toolResultMap: resultMap, parentToolUseMap: parentMap };
 
     messages.forEach((msg: Message) => {
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(msg.content);
-      } catch {
-        return;
+      if (msg.parent_tool_use_id) {
+        parentMap.set(msg.id, msg.parent_tool_use_id);
       }
 
-      // Extract parent_tool_use_id from outer envelope (subagent messages)
-      if (typeof parsed.parent_tool_use_id === "string") {
-        parentMap.set(msg.id, parsed.parent_tool_use_id);
-      }
-
-      // Extract tool_result blocks for linking tool_use → tool_result
-      const blocks = normalizeContentBlocks(
-        (parsed.message as Record<string, unknown> | undefined)?.content ?? parsed.content ?? []
-      );
+      const blocks = parseContent(msg.content);
       if (Array.isArray(blocks)) {
         blocks.forEach((block) => {
           if (
@@ -222,7 +196,7 @@ export function useSessionWithMessages(sessionId: string | null) {
     });
 
     return { toolResultMap: resultMap, parentToolUseMap: parentMap };
-  }, [messages]);
+  }, [messages, parseContent]);
 
   // Group subagent messages by their parent Task tool_use_id
   const subagentMessages = useMemo(() => {
@@ -330,19 +304,19 @@ export function useSendMessage() {
           : `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       // Content may be plain text or a JSON-stringified content blocks array (when images attached).
-      // Detect JSON arrays to wrap correctly for parseContent downstream.
+      // New flat format: store content blocks array directly (no envelope wrapper).
       let optimisticContentJson: string;
       try {
         const parsed = JSON.parse(content);
         if (Array.isArray(parsed)) {
-          // Already content blocks array — wrap in the envelope parseContent expects
-          optimisticContentJson = JSON.stringify({ content: parsed });
+          // Already content blocks array — store directly
+          optimisticContentJson = JSON.stringify(parsed);
         } else {
-          optimisticContentJson = JSON.stringify({ content: [{ type: "text", text: content }] });
+          optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
         }
       } catch {
         // Plain text
-        optimisticContentJson = JSON.stringify({ content: [{ type: "text", text: content }] });
+        optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
       }
 
       const optimisticMessage: Message = {
@@ -351,7 +325,6 @@ export function useSendMessage() {
         seq: Number.MAX_SAFE_INTEGER, // Placeholder — real seq assigned by DB trigger
         role: "user",
         content: optimisticContentJson,
-        created_at: new Date().toISOString(),
         sent_at: new Date().toISOString(),
         model: model ?? null,
       };
@@ -453,7 +426,7 @@ export function useStopSession() {
 /**
  * Create a new session for a workspace.
  * Used when user opens a new chat tab (Cmd+T).
- * Backend creates the session and updates workspace.active_session_id.
+ * Backend creates the session and updates workspace.current_session_id.
  */
 export function useCreateSession() {
   const queryClient = useQueryClient();
@@ -461,7 +434,7 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: (workspaceId: string) => SessionService.createSession(workspaceId),
     onSuccess: (_newSession, workspaceId) => {
-      // Invalidate workspace lists so sidebar picks up new active_session_id
+      // Invalidate workspace lists so sidebar picks up new current_session_id
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.byRepo(),
       });

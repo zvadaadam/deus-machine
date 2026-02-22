@@ -6,15 +6,14 @@
  */
 import type Database from 'better-sqlite3';
 import type {
-  RepoRow,
-  RepoWithCountsRow,
+  RepositoryRow,
+  RepositoryWithCountsRow,
   WorkspaceRow,
   WorkspaceWithDetailsRow,
   SessionRow,
   SessionWithDetailsRow,
   MessageRow,
   StatsRow,
-  SettingRow,
 } from './types';
 
 // ─── Workspace Queries ───────────────────────────────────────
@@ -25,16 +24,16 @@ import type {
  */
 const WORKSPACE_DETAILS_SELECT = `
   SELECT
-    w.id, w.repository_id, w.directory_name, w.display_name, w.branch,
-    w.parent_branch, w.state, w.active_session_id,
-    w.setup_status, w.setup_error, w.init_step,
-    w.created_at, w.updated_at,
-    r.name as repo_name, r.root_path, r.default_branch,
+    w.id, w.repository_id, w.slug, w.title, w.git_branch,
+    w.git_target_branch, w.state, w.current_session_id,
+    w.setup_status, w.error_message, w.init_stage,
+    w.updated_at,
+    r.name as repo_name, r.root_path, r.git_default_branch,
     s.status as session_status, s.model,
     s.last_user_message_at as latest_message_sent_at
   FROM workspaces w
-  LEFT JOIN repos r ON w.repository_id = r.id
-  LEFT JOIN sessions s ON w.active_session_id = s.id
+  LEFT JOIN repositories r ON w.repository_id = r.id
+  LEFT JOIN sessions s ON w.current_session_id = s.id
 `;
 
 export function getAllWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
@@ -59,19 +58,19 @@ export function getWorkspacesByRepo(
   }
   return db.prepare(`
     SELECT
-      w.id, w.repository_id, w.directory_name, w.display_name, w.branch,
-      w.parent_branch, w.state, w.active_session_id,
-      w.setup_status, w.setup_error, w.init_step,
-      w.created_at, w.updated_at,
-      r.name as repo_name, r.display_order as repo_display_order, r.root_path,
-      r.default_branch,
+      w.id, w.repository_id, w.slug, w.title, w.git_branch,
+      w.git_target_branch, w.state, w.current_session_id,
+      w.setup_status, w.error_message, w.init_stage,
+      w.updated_at,
+      r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
+      r.git_default_branch,
       s.status as session_status, s.model,
       s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.active_session_id = s.id
+    LEFT JOIN repositories r ON w.repository_id = r.id
+    LEFT JOIN sessions s ON w.current_session_id = s.id
     ${stateFilter}
-    ORDER BY r.display_order, r.name, w.updated_at DESC
+    ORDER BY r.sort_order, r.name, w.updated_at DESC
   `).all(...stateParams) as WorkspaceWithDetailsRow[];
 }
 
@@ -91,9 +90,9 @@ export function getWorkspaceForMiddleware(
   id: string
 ): WorkspaceWithDetailsRow | undefined {
   return db.prepare(`
-    SELECT w.*, r.root_path, r.default_branch, r.name as repo_name
+    SELECT w.*, r.root_path, r.git_default_branch, r.name as repo_name
     FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
+    LEFT JOIN repositories r ON w.repository_id = r.id
     WHERE w.id = ?
   `).get(id) as WorkspaceWithDetailsRow | undefined;
 }
@@ -111,58 +110,67 @@ export function getWorkspaceWithRepo(
   id: string
 ): WorkspaceWithDetailsRow | undefined {
   return db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path, r.default_branch
+    SELECT w.*, r.name as repo_name, r.root_path, r.git_default_branch
     FROM workspaces w
-    LEFT JOIN repos r ON w.repository_id = r.id
+    LEFT JOIN repositories r ON w.repository_id = r.id
     WHERE w.id = ?
   `).get(id) as WorkspaceWithDetailsRow | undefined;
 }
 
 // ─── Session Queries ─────────────────────────────────────────
 
+/** Coerce SQLite INTEGER booleans (0/1) to JS booleans so HTTP and Tauri IPC return the same shape. */
+function coerceSessionBooleans<T extends SessionRow>(row: T): T {
+  return { ...row, is_hidden: Boolean(row.is_hidden) as unknown as number };
+}
+
 /**
  * Session query — uses denormalized message_count column
  * instead of COUNT(m.id) JOIN, eliminating expensive aggregation.
  */
 const SESSION_DETAILS_SELECT = `
-  SELECT s.*, w.directory_name, w.state as workspace_state
+  SELECT s.*, w.slug, w.state as workspace_state
   FROM sessions s
-  LEFT JOIN workspaces w ON s.id = w.active_session_id
+  LEFT JOIN workspaces w ON s.id = w.current_session_id
 `;
 
 export function getAllSessions(db: Database.Database): SessionWithDetailsRow[] {
-  return db.prepare(`
+  const rows = db.prepare(`
     ${SESSION_DETAILS_SELECT}
     ORDER BY s.updated_at DESC
     LIMIT 50
   `).all() as SessionWithDetailsRow[];
+  return rows.map(coerceSessionBooleans);
 }
 
 export function getSessionById(
   db: Database.Database,
   id: string
 ): SessionWithDetailsRow | undefined {
-  return db.prepare(`
+  const row = db.prepare(`
     ${SESSION_DETAILS_SELECT}
     WHERE s.id = ?
   `).get(id) as SessionWithDetailsRow | undefined;
+  return row ? coerceSessionBooleans(row) : undefined;
 }
 
 export function getSessionRaw(
   db: Database.Database,
   id: string
 ): SessionRow | undefined {
-  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+  const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+  return row ? coerceSessionBooleans(row) : undefined;
 }
 
-/** All sessions for a workspace, ordered by creation time. Uses idx_sessions_workspace_id. */
+/** All sessions for a workspace, ordered by creation time (UUID7 is chronological). */
 export function getSessionsByWorkspaceId(
   db: Database.Database,
   workspaceId: string
 ): SessionRow[] {
-  return db.prepare(
-    'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY created_at ASC'
+  const rows = db.prepare(
+    'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY id ASC'
   ).all(workspaceId) as SessionRow[];
+  return rows.map(coerceSessionBooleans);
 }
 
 // ─── Message Queries ─────────────────────────────────────────
@@ -181,7 +189,7 @@ export function getMessages(
     // Load older: fetch N messages before seq, then re-sort ascending
     return db.prepare(`
       SELECT * FROM (
-        SELECT * FROM session_messages
+        SELECT * FROM messages
         WHERE session_id = ? AND seq < ?
         ORDER BY seq DESC
         LIMIT ?
@@ -192,7 +200,7 @@ export function getMessages(
   if (opts.after) {
     // Load newer: fetch N messages after seq, already in ascending order
     return db.prepare(`
-      SELECT * FROM session_messages
+      SELECT * FROM messages
       WHERE session_id = ? AND seq > ?
       ORDER BY seq ASC
       LIMIT ?
@@ -202,7 +210,7 @@ export function getMessages(
   // Default: load latest N messages (DESC then re-wrap ASC)
   return db.prepare(`
     SELECT * FROM (
-      SELECT * FROM session_messages
+      SELECT * FROM messages
       WHERE session_id = ?
       ORDER BY seq DESC
       LIMIT ?
@@ -216,7 +224,7 @@ export function hasOlderMessages(
   seq: number
 ): boolean {
   return !!db.prepare(
-    'SELECT 1 FROM session_messages WHERE session_id = ? AND seq < ? LIMIT 1'
+    'SELECT 1 FROM messages WHERE session_id = ? AND seq < ? LIMIT 1'
   ).get(sessionId, seq);
 }
 
@@ -226,27 +234,27 @@ export function hasNewerMessages(
   seq: number
 ): boolean {
   return !!db.prepare(
-    'SELECT 1 FROM session_messages WHERE session_id = ? AND seq > ? LIMIT 1'
+    'SELECT 1 FROM messages WHERE session_id = ? AND seq > ? LIMIT 1'
   ).get(sessionId, seq);
 }
 
-export function getLastAssistantSdkMessageId(
+export function getLastAssistantAgentMessageId(
   db: Database.Database,
   sessionId: string
 ): string | null {
   const row = db.prepare(`
-    SELECT sdk_message_id FROM session_messages
-    WHERE session_id = ? AND role = 'assistant' AND sdk_message_id IS NOT NULL
-    ORDER BY created_at DESC LIMIT 1
-  `).get(sessionId) as { sdk_message_id: string } | undefined;
-  return row?.sdk_message_id ?? null;
+    SELECT agent_message_id FROM messages
+    WHERE session_id = ? AND role = 'assistant' AND agent_message_id IS NOT NULL
+    ORDER BY id DESC LIMIT 1
+  `).get(sessionId) as { agent_message_id: string } | undefined;
+  return row?.agent_message_id ?? null;
 }
 
 export function getMessageById(
   db: Database.Database,
   id: string
 ): MessageRow | undefined {
-  return db.prepare('SELECT * FROM session_messages WHERE id = ?').get(id) as MessageRow | undefined;
+  return db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as MessageRow | undefined;
 }
 
 export function getLatestUserMessage(
@@ -254,43 +262,43 @@ export function getLatestUserMessage(
   sessionId: string
 ): MessageRow | undefined {
   return db.prepare(`
-    SELECT * FROM session_messages
+    SELECT * FROM messages
     WHERE session_id = ? AND role = 'user' AND cancelled_at IS NULL
-    ORDER BY created_at DESC LIMIT 1
+    ORDER BY id DESC LIMIT 1
   `).get(sessionId) as MessageRow | undefined;
 }
 
-// ─── Repo Queries ────────────────────────────────────────────
+// ─── Repository Queries ─────────────────────────────────────
 
-export function getAllRepos(db: Database.Database): RepoWithCountsRow[] {
+export function getAllRepositories(db: Database.Database): RepositoryWithCountsRow[] {
   return db.prepare(`
     SELECT r.*,
            COUNT(CASE WHEN w.state = 'ready' THEN 1 END) as ready_count,
            COUNT(CASE WHEN w.state = 'archived' THEN 1 END) as archived_count,
            COUNT(w.id) as total_count
-    FROM repos r
+    FROM repositories r
     LEFT JOIN workspaces w ON w.repository_id = r.id
     GROUP BY r.id
-    ORDER BY r.display_order, r.created_at DESC
-  `).all() as RepoWithCountsRow[];
+    ORDER BY r.sort_order, r.name
+  `).all() as RepositoryWithCountsRow[];
 }
 
-export function getRepoById(
+export function getRepositoryById(
   db: Database.Database,
   id: string
-): RepoRow | undefined {
-  return db.prepare('SELECT * FROM repos WHERE id = ?').get(id) as RepoRow | undefined;
+): RepositoryRow | undefined {
+  return db.prepare('SELECT * FROM repositories WHERE id = ?').get(id) as RepositoryRow | undefined;
 }
 
-export function getRepoByRootPath(
+export function getRepositoryByRootPath(
   db: Database.Database,
   rootPath: string
-): RepoRow | undefined {
-  return db.prepare('SELECT * FROM repos WHERE root_path = ?').get(rootPath) as RepoRow | undefined;
+): RepositoryRow | undefined {
+  return db.prepare('SELECT * FROM repositories WHERE root_path = ?').get(rootPath) as RepositoryRow | undefined;
 }
 
-export function getMaxRepoDisplayOrder(db: Database.Database): number {
-  const row = db.prepare('SELECT MAX(display_order) as max FROM repos').get() as { max: number | null };
+export function getMaxRepositorySortOrder(db: Database.Database): number {
+  const row = db.prepare('SELECT MAX(sort_order) as max FROM repositories').get() as { max: number | null };
   return row?.max ?? 0;
 }
 
@@ -302,16 +310,11 @@ export function getStats(db: Database.Database): StatsRow {
       (SELECT COUNT(*) FROM workspaces) as workspaces,
       (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
       (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-      (SELECT COUNT(*) FROM repos) as repos,
+      (SELECT COUNT(*) FROM repositories) as repositories,
       (SELECT COUNT(*) FROM sessions) as sessions,
       (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
       (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-      (SELECT COUNT(*) FROM session_messages) as messages
+      (SELECT COUNT(*) FROM messages) as messages
   `).get() as StatsRow;
 }
 
-// ─── Settings Queries ────────────────────────────────────────
-
-export function getAllSettingRows(db: Database.Database): SettingRow[] {
-  return db.prepare('SELECT key, value, updated_at FROM settings').all() as SettingRow[];
-}

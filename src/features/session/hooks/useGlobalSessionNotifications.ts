@@ -170,7 +170,7 @@ export function useGlobalSessionNotifications() {
           if (prev === "running" && ws.setup_status === "failed" && !isWindowFocused()) {
             sendNotification({
               title: "Setup failed",
-              body: `Workspace ${ws.display_name || ws.directory_name} setup failed${ws.setup_error ? `: ${ws.setup_error}` : ""}`,
+              body: `Workspace ${ws.title || ws.slug} setup failed${ws.error_message ? `: ${ws.error_message}` : ""}`,
               sound: "Basso",
             });
           }
@@ -183,7 +183,7 @@ export function useGlobalSessionNotifications() {
             if (!isWindowFocused()) {
               sendNotification({
                 title: "Setup complete",
-                body: `Workspace ${ws.display_name || ws.directory_name} is ready`,
+                body: `Workspace ${ws.title || ws.slug} is ready`,
                 sound: "Glass",
               });
             }

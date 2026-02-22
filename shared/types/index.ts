@@ -31,7 +31,7 @@ export type {
 } from "./session";
 
 // Repository types
-export type { Repo, Stats } from "./repository";
+export type { Repository, Stats } from "./repository";
 
 // Settings types
 export type { Settings, MCPServer, Command, Agent, SettingsSection } from "./settings";
