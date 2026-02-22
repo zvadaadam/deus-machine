@@ -5,22 +5,21 @@ import { WorkspaceItem } from "./WorkspaceItem";
 const BASE_WORKSPACE: Workspace = {
   id: "ws-1",
   repository_id: "repo-1",
-  directory_name: "addis-ababa",
-  display_name: "Addis Ababa",
-  branch: "zvadaadam/restart-expo-server",
-  parent_branch: "main",
+  slug: "addis-ababa",
+  title: "Addis Ababa",
+  git_branch: "zvadaadam/restart-expo-server",
+  git_target_branch: "main",
   state: "ready",
-  active_session_id: "session-1",
+  current_session_id: "session-1",
   session_status: "idle",
   model: "sonnet",
   latest_message_sent_at: new Date(Date.now() - 120_000).toISOString(),
-  created_at: new Date().toISOString(),
   updated_at: new Date(Date.now() - 120_000).toISOString(),
   repo_name: "echo-backend",
   root_path: "/code/echo-backend",
   workspace_path: "/code/echo-backend/.hive/addis-ababa",
   setup_status: "none",
-  setup_error: null,
+  error_message: null,
 };
 
 function ws(overrides: Partial<Workspace>): Workspace {
@@ -64,8 +63,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "working",
             session_status: "working",
-            branch: "zvadaadam/restart-expo-server",
-            directory_name: "addis-ababa",
+            git_branch: "zvadaadam/restart-expo-server",
+            slug: "addis-ababa",
             latest_message_sent_at: new Date(Date.now() - 90_000).toISOString(),
           })}
           isActive={false}
@@ -79,8 +78,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "unread",
             session_status: "needs_response",
-            branch: "zvadaadam/fix-websocket-conn",
-            directory_name: "rome-v1",
+            git_branch: "zvadaadam/fix-websocket-conn",
+            slug: "rome-v1",
             updated_at: new Date(Date.now() - 600_000).toISOString(),
           })}
           isActive={false}
@@ -94,8 +93,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "error",
             session_status: "error",
-            branch: "zvadaadam/fix-triple-sandbox",
-            directory_name: "vienna",
+            git_branch: "zvadaadam/fix-triple-sandbox",
+            slug: "vienna",
             updated_at: new Date(Date.now() - 3600_000).toISOString(),
           })}
           isActive={false}
@@ -109,8 +108,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "idle-recent",
             session_status: "idle",
-            branch: "zvadaadam/chat-image-url-input",
-            directory_name: "nairobi",
+            git_branch: "zvadaadam/chat-image-url-input",
+            slug: "nairobi",
             updated_at: new Date(Date.now() - 7 * 3600_000).toISOString(),
           })}
           isActive={false}
@@ -124,8 +123,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "idle-old",
             session_status: "idle",
-            branch: "zvadaadam/secure-api-key-passing",
-            directory_name: "istanbul-v1",
+            git_branch: "zvadaadam/secure-api-key-passing",
+            slug: "istanbul-v1",
             updated_at: new Date(Date.now() - 7 * 24 * 3600_000).toISOString(),
           })}
           isActive={false}
@@ -139,8 +138,8 @@ export const AllStates: Story = {
           workspace={ws({
             id: "idle-months",
             session_status: "idle",
-            branch: "simplify-claude-md",
-            directory_name: "muscat",
+            git_branch: "simplify-claude-md",
+            slug: "muscat",
             updated_at: new Date(Date.now() - 60 * 24 * 3600_000).toISOString(),
           })}
           isActive={false}
@@ -182,8 +181,8 @@ export const Unread: Story = {
   args: {
     workspace: ws({
       session_status: "needs_response",
-      branch: "zvadaadam/fix-websocket-conn",
-      directory_name: "rome-v1",
+      git_branch: "zvadaadam/fix-websocket-conn",
+      slug: "rome-v1",
     }),
     isActive: false,
     diffStats: { additions: 229, deletions: 12 },
@@ -195,8 +194,8 @@ export const UnreadSelected: Story = {
   args: {
     workspace: ws({
       session_status: "needs_response",
-      branch: "zvadaadam/fix-websocket-conn",
-      directory_name: "rome-v1",
+      git_branch: "zvadaadam/fix-websocket-conn",
+      slug: "rome-v1",
     }),
     isActive: true,
     diffStats: { additions: 229, deletions: 12 },
@@ -208,8 +207,8 @@ export const Error: Story = {
   args: {
     workspace: ws({
       session_status: "error",
-      branch: "zvadaadam/fix-triple-sandbox",
-      directory_name: "vienna",
+      git_branch: "zvadaadam/fix-triple-sandbox",
+      slug: "vienna",
     }),
     isActive: false,
     diffStats: { additions: 1131, deletions: 297 },
@@ -221,8 +220,8 @@ export const Idle: Story = {
   args: {
     workspace: ws({
       session_status: "idle",
-      branch: "zvadaadam/secure-api-key-passing",
-      directory_name: "istanbul-v1",
+      git_branch: "zvadaadam/secure-api-key-passing",
+      slug: "istanbul-v1",
       updated_at: new Date(Date.now() - 7 * 3600_000).toISOString(),
     }),
     isActive: false,
@@ -235,8 +234,8 @@ export const IdleNoChanges: Story = {
   args: {
     workspace: ws({
       session_status: "idle",
-      branch: "zvadaadam/chat-image-url-input",
-      directory_name: "nairobi",
+      git_branch: "zvadaadam/chat-image-url-input",
+      slug: "nairobi",
       updated_at: new Date(Date.now() - 7 * 3600_000).toISOString(),
     }),
     isActive: false,
@@ -249,8 +248,8 @@ export const IdleSelected: Story = {
   args: {
     workspace: ws({
       session_status: "idle",
-      branch: "zvadaadam/secure-api-key-passing",
-      directory_name: "istanbul-v1",
+      git_branch: "zvadaadam/secure-api-key-passing",
+      slug: "istanbul-v1",
       updated_at: new Date(Date.now() - 7 * 3600_000).toISOString(),
     }),
     isActive: true,
@@ -264,8 +263,8 @@ export const Archived: Story = {
     workspace: ws({
       state: "archived",
       session_status: null,
-      branch: "zvadaadam/old-feature",
-      directory_name: "lima",
+      git_branch: "zvadaadam/old-feature",
+      slug: "lima",
     }),
     isActive: false,
   },
@@ -276,8 +275,8 @@ export const LongBranchName: Story = {
   args: {
     workspace: ws({
       session_status: "working",
-      branch: "zvadaadam/very-long-branch-name-that-should-be-truncated-properly",
-      directory_name: "belo-horizonte",
+      git_branch: "zvadaadam/very-long-branch-name-that-should-be-truncated-properly",
+      slug: "belo-horizonte",
       latest_message_sent_at: new Date(Date.now() - 30_000).toISOString(),
     }),
     isActive: false,
@@ -290,8 +289,8 @@ export const LargeDiff: Story = {
   args: {
     workspace: ws({
       session_status: "idle",
-      branch: "zvadaadam/brasilia",
-      directory_name: "brasilia",
+      git_branch: "zvadaadam/brasilia",
+      slug: "brasilia",
       updated_at: new Date(Date.now() - 24 * 3600_000).toISOString(),
     }),
     isActive: false,

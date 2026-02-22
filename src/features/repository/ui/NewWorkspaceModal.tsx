@@ -1,4 +1,4 @@
-import type { Repo } from "../types";
+import type { Repository } from "../types";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 
 interface NewWorkspaceModalProps {
   show: boolean;
-  repos: Repo[];
+  repos: Repository[];
   selectedRepoId: string;
   creating: boolean;
   onClose: () => void;

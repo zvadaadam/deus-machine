@@ -3,4 +3,4 @@
  * esbuild resolves this relative path at bundle time.
  * @see shared/schema.ts
  */
-export { SCHEMA_SQL, V2_MIGRATIONS, V2_BACKFILL_SEQ } from "../../shared/schema";
+export { SCHEMA_SQL, MIGRATIONS } from "../../shared/schema";

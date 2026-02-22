@@ -4,7 +4,7 @@ import { generateUniqueName, CELESTIAL_NAMES } from '../../../src/services/works
 function createMockDb(existingNames: string[] = []) {
   return {
     prepare: vi.fn(() => ({
-      all: vi.fn(() => existingNames.map(name => ({ directory_name: name }))),
+      all: vi.fn(() => existingNames.map(name => ({ slug: name }))),
     })),
   };
 }
@@ -37,11 +37,11 @@ describe('generateUniqueName', () => {
     expect(typeof result).toBe('string');
   });
 
-  it('queries the database for existing workspace directory names', () => {
+  it('queries the database for existing workspace slugs', () => {
     const mockDb = createMockDb([]);
     generateUniqueName(mockDb as any);
 
-    expect(mockDb.prepare).toHaveBeenCalledWith('SELECT directory_name FROM workspaces');
+    expect(mockDb.prepare).toHaveBeenCalledWith('SELECT slug FROM workspaces');
   });
 
   it('falls back to versioned name when all names are taken', () => {

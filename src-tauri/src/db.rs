@@ -62,23 +62,22 @@ impl DbManager {
 pub struct WorkspaceWithDetails {
     pub id: String,
     pub repository_id: String,
-    pub directory_name: String,
-    pub display_name: Option<String>,
-    pub branch: Option<String>,
+    pub slug: String,
+    pub title: Option<String>,
+    pub git_branch: Option<String>,
     pub state: String,
-    pub active_session_id: Option<String>,
-    pub created_at: String,
+    pub current_session_id: Option<String>,
     pub updated_at: String,
-    pub parent_branch: Option<String>,
+    pub git_target_branch: Option<String>,
     // Setup tracking (hive.json manifest) — parity with Node.js getWorkspacesByRepo
     pub setup_status: Option<String>,
-    pub setup_error: Option<String>,
-    pub init_step: Option<String>,
+    pub error_message: Option<String>,
+    pub init_stage: Option<String>,
     // From repos JOIN
     pub repo_name: Option<String>,
     pub root_path: Option<String>,
-    pub default_branch: Option<String>,
-    pub repo_display_order: Option<i64>,
+    pub git_default_branch: Option<String>,
+    pub repo_sort_order: Option<i64>,
     // From sessions JOIN (null when no active session)
     pub session_status: Option<String>,
     pub model: Option<String>,
@@ -91,7 +90,7 @@ pub struct WorkspaceWithDetails {
 pub struct RepoGroup {
     pub repo_id: String,
     pub repo_name: String,
-    pub display_order: i64,
+    pub sort_order: i64,
     pub workspaces: Vec<WorkspaceWithDetails>,
 }
 
@@ -100,17 +99,19 @@ pub struct SessionWithDetails {
     pub id: String,
     pub workspace_id: String,
     pub agent_type: String,
+    pub model: String,
+    pub agent_session_id: Option<String>,
     pub title: Option<String>,
     pub status: String,
-    pub model: String,
-    pub sdk_session_id: Option<String>,
     pub message_count: i64,
     pub error_message: Option<String>,
     pub last_user_message_at: Option<String>,
-    pub created_at: String,
+    pub context_token_count: i64,
+    pub context_used_percent: f64,
+    pub is_hidden: bool,
     pub updated_at: String,
     // From JOINs
-    pub directory_name: Option<String>,
+    pub slug: Option<String>,
     pub workspace_state: Option<String>,
 }
 
@@ -122,11 +123,11 @@ pub struct MessageRow {
     pub role: String,
     pub content: Option<String>,
     pub turn_id: Option<String>,
-    pub created_at: String,
     pub sent_at: Option<String>,
     pub model: Option<String>,
-    pub sdk_message_id: Option<String>,
+    pub agent_message_id: Option<String>,
     pub cancelled_at: Option<String>,
+    pub parent_tool_use_id: Option<String>,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -141,7 +142,7 @@ pub struct StatsRow {
     pub workspaces: i64,
     pub workspaces_ready: i64,
     pub workspaces_archived: i64,
-    pub repos: i64,
+    pub repositories: i64,
     pub sessions: i64,
     pub sessions_idle: i64,
     pub sessions_working: i64,
@@ -152,22 +153,22 @@ pub struct StatsRow {
 
 /// Compute workspace filesystem path from DB fields.
 /// Mirrors backend/src/middleware/workspace-loader.ts computeWorkspacePath.
-/// All Hive workspaces live at {root_path}/.hive/{directory_name}.
+/// All Hive workspaces live at {root_path}/.hive/{slug}.
 pub fn compute_workspace_path(
     root_path: Option<&str>,
-    directory_name: Option<&str>,
+    slug: Option<&str>,
 ) -> String {
     let root = match root_path {
         Some(r) if !r.is_empty() => r,
         _ => return String::new(),
     };
-    let dir = match directory_name {
+    let s = match slug {
         Some(d) if !d.is_empty() => d,
         _ => return String::new(),
     };
 
     let mut path = std::path::PathBuf::from(root);
     path.push(".hive");
-    path.push(dir);
+    path.push(s);
     path.to_string_lossy().to_string()
 }

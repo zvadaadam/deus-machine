@@ -104,10 +104,10 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
         if (w.state !== "ready") return;
         map.set(w.id, {
           root_path: w.root_path,
-          directory_name: w.directory_name,
+          slug: w.slug,
           workspace_path: w.workspace_path,
-          parent_branch: w.parent_branch ?? undefined,
-          default_branch: w.default_branch,
+          git_target_branch: w.git_target_branch ?? undefined,
+          git_default_branch: w.git_default_branch,
         });
       });
     });

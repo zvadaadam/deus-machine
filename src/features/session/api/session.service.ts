@@ -93,7 +93,7 @@ export const SessionService = {
 
   /**
    * Create a new session for a workspace.
-   * Also updates workspace.active_session_id to the new session.
+   * Also updates workspace.current_session_id to the new session.
    */
   createSession: async (workspaceId: string): Promise<Session> => {
     return apiClient.post<Session>(ENDPOINTS.WORKSPACE_SESSIONS(workspaceId), {});
