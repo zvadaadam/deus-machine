@@ -93,6 +93,7 @@ export interface SessionRow {
   status: string;
   message_count: number;
   error_message: string | null;
+  error_category: string | null;
   last_user_message_at: string | null;
   context_token_count: number;
   context_used_percent: number;

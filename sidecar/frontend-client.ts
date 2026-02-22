@@ -18,6 +18,7 @@ import {
 } from "./protocol";
 import type {
   QueryRequest,
+  QueryAckResponse,
   CancelRequest,
   ClaudeAuthRequest,
   WorkspaceInitRequest,
@@ -455,12 +456,11 @@ class FrontendClientClass {
   // INCOMING EVENTS (frontend -> sidecar)
   // ==========================================================================
 
-  onQuery(handler: (request: Omit<QueryRequest, "type">) => Promise<void>): void {
-    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.QUERY, async (params) => {
-      if (!isQueryRequest(params)) return undefined;
+  onQuery(handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>): void {
+    this.requireTunnel().addMethod(SIDECAR_METHODS.QUERY, async (params) => {
+      if (!isQueryRequest(params)) return { accepted: false, reason: "Invalid query request" };
       const { type: _, ...input } = params;
-      await handler(input);
-      return undefined;
+      return handler(input);
     });
   }
 
