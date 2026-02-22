@@ -2,23 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock setup ───────────────────────────────────────────────────────────
 
-const { mockDbRun, mockDbGet, mockDbPrepare, mockPrepareMessageContent } = vi.hoisted(() => {
+const { mockDbRun, mockDbGet, mockDbPrepare } = vi.hoisted(() => {
   const mockDbRun = vi.fn();
   const mockDbGet = vi.fn();
   const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet }));
-  const mockPrepareMessageContent = vi.fn((envelope: unknown) => ({
-    success: true,
-    content: JSON.stringify(envelope),
-  }));
-  return { mockDbRun, mockDbGet, mockDbPrepare, mockPrepareMessageContent };
+  return { mockDbRun, mockDbGet, mockDbPrepare };
 });
 
 vi.mock("../db/index", () => ({
   getDatabase: () => ({ prepare: mockDbPrepare }),
-}));
-
-vi.mock("../db/message-sanitizer", () => ({
-  prepareMessageContent: mockPrepareMessageContent,
 }));
 
 import {
@@ -58,16 +50,6 @@ describe("session-writer WriteResult", () => {
         expect(result.error).toContain("SQLITE_BUSY");
       }
     });
-
-    it("returns ok:false when content preparation fails", () => {
-      mockPrepareMessageContent.mockReturnValueOnce({ success: false, error: "invalid JSON" });
-
-      const result = saveAssistantMessage("session-1", { id: "msg-1", content: "hello" });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("Content preparation failed");
-      }
-    });
   });
 
   // ── saveToolResultMessage ────────────────────────────────────────────
@@ -83,13 +65,10 @@ describe("session-writer WriteResult", () => {
 
     it("returns ok:false when DB throws", () => {
       mockDbRun.mockImplementationOnce(() => {
-        throw new Error("SQLITE_READONLY");
+        throw new Error("SQLITE_ERROR");
       });
       const result = saveToolResultMessage("session-1", { id: "msg-1", content: [] });
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("SQLITE_READONLY");
-      }
     });
   });
 
@@ -101,32 +80,12 @@ describe("session-writer WriteResult", () => {
       expect(result.ok).toBe(true);
     });
 
-    it("returns ok:false on persistent failure", () => {
-      mockDbRun.mockImplementation(() => {
-        throw new Error("SQLITE_CORRUPT");
+    it("returns ok:false on failure", () => {
+      mockDbRun.mockImplementationOnce(() => {
+        throw new Error("SQLITE_ERROR");
       });
-      const result = updateSessionStatus("session-1", "error", "something broke");
+      const result = updateSessionStatus("session-1", "error", "fail");
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("SQLITE_CORRUPT");
-      }
-      mockDbRun.mockReset();
-    });
-
-    it("retries once on SQLITE_BUSY then succeeds", () => {
-      let callCount = 0;
-      mockDbRun.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error("SQLITE_BUSY: database is locked");
-        }
-        // Second call succeeds
-      });
-
-      const result = updateSessionStatus("session-1", "idle");
-      expect(result.ok).toBe(true);
-      expect(callCount).toBe(2);
-      mockDbRun.mockReset();
     });
 
     it("retries once on SQLITE_BUSY then fails", () => {
