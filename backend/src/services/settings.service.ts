@@ -44,8 +44,12 @@ export function getAllSettings(): Record<string, any> {
 
 export function saveSetting(key: string, value: any): void {
   const current = readPreferences();
-  current[key] = value;
-  writePreferences(current);
+  // Guard against readPreferences returning a non-object (e.g. if Zod fails and raw is an array/string)
+  const obj = (typeof current === 'object' && current !== null && !Array.isArray(current))
+    ? current
+    : {};
+  obj[key] = value;
+  writePreferences(obj);
 }
 
 export { PREFS_PATH };

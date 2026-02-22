@@ -121,7 +121,7 @@ export function getWorkspaceWithRepo(
 
 /** Coerce SQLite INTEGER booleans (0/1) to JS booleans so HTTP and Tauri IPC return the same shape. */
 function coerceSessionBooleans<T extends SessionRow>(row: T): T {
-  return { ...row, is_hidden: Boolean(row.is_hidden) as unknown as number };
+  return { ...row, is_hidden: Boolean(row.is_hidden) };
 }
 
 /**

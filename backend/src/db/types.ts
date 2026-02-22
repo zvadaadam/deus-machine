@@ -96,7 +96,7 @@ export interface SessionRow {
   last_user_message_at: string | null;
   context_token_count: number;
   context_used_percent: number;
-  is_hidden: number; // SQLite boolean (0/1)
+  is_hidden: boolean; // SQLite stores as INTEGER 0/1, coerced by coerceSessionBooleans
   updated_at: string;
 }
 
