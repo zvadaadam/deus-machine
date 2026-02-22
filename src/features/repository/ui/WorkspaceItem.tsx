@@ -36,10 +36,12 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
   const isWorking = workspace.session_status === "working";
   const isNeedsResponse = workspace.session_status === "needs_response";
 
-  // Format branch name: show "owner/branch" or just "branch"
-  const displayName = workspace.branch?.includes("/")
-    ? workspace.branch
-    : `${workspace.directory_name}/${workspace.branch}`;
+  // Format branch name: show "owner/branch" or just "slug"
+  const displayName = workspace.git_branch
+    ? workspace.git_branch.includes("/")
+      ? workspace.git_branch
+      : `${workspace.slug}/${workspace.git_branch}`
+    : workspace.slug;
 
   return (
     <li className="list-none">
@@ -78,7 +80,7 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
 
           {/* Row 2: location · time/status */}
           <div className="flex items-center gap-1.5 pl-5">
-            <span className="text-text-muted truncate text-xs">{workspace.directory_name}</span>
+            <span className="text-text-muted truncate text-xs">{workspace.slug}</span>
             <span className="text-text-muted text-xs">·</span>
             {isWorking ? (
               <span className="text-accent-blue text-xs">Working...</span>

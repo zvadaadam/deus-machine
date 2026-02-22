@@ -2,13 +2,13 @@ import { Hono } from 'hono';
 import path from 'path';
 import fs from 'fs';
 import { execFileSync } from 'child_process';
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
 import { ValidationError, ConflictError } from '../lib/errors';
 import { parseBody } from '../lib/validate';
 import { CreateRepoBody } from '../lib/schemas';
 import { detectDefaultBranch } from '../services/git.service';
-import { getAllRepos, getRepoByRootPath, getRepoById, getMaxRepoDisplayOrder } from '../db';
+import { getAllRepositories, getRepositoryByRootPath, getRepositoryById, getMaxRepositorySortOrder } from '../db';
 import { readManifest, getNormalizedTasks, writeManifest } from '../services/manifest.service';
 import { HiveManifestSchema } from '../lib/hive-manifest';
 import { NotFoundError } from '../lib/errors';
@@ -17,7 +17,7 @@ const app = new Hono();
 
 app.get('/repos', (c) => {
   const db = getDatabase();
-  return c.json(getAllRepos(db));
+  return c.json(getAllRepositories(db));
 });
 
 app.post('/repos', async (c) => {
@@ -43,20 +43,20 @@ app.post('/repos', async (c) => {
   const defaultBranch = detectDefaultBranch(root_path);
 
   const insertRepo = db.transaction((root_path: string, repoId: string, repoName: string, defaultBranch: string) => {
-    const existing = getRepoByRootPath(db, root_path);
+    const existing = getRepositoryByRootPath(db, root_path);
     if (existing) throw new ConflictError('Repository already exists', existing);
 
-    const displayOrder = getMaxRepoDisplayOrder(db) + 1;
+    const sortOrder = getMaxRepositorySortOrder(db) + 1;
 
     db.prepare(`
-      INSERT INTO repos (id, name, root_path, default_branch, display_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `).run(repoId, repoName, root_path, defaultBranch, displayOrder);
+      INSERT INTO repositories (id, name, root_path, git_default_branch, sort_order)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(repoId, repoName, root_path, defaultBranch, sortOrder);
 
-    return getRepoById(db, repoId);
+    return getRepositoryById(db, repoId);
   });
 
-  const repoId = randomUUID();
+  const repoId = uuidv7();
   const repo = insertRepo(root_path, repoId, repoName, defaultBranch);
   return c.json(repo, 201);
 });
@@ -66,7 +66,7 @@ app.post('/repos', async (c) => {
 // Read manifest from repo root
 app.get('/repos/:id/manifest', (c) => {
   const db = getDatabase();
-  const repo = getRepoById(db, c.req.param('id'));
+  const repo = getRepositoryById(db, c.req.param('id'));
   if (!repo) throw new NotFoundError('Repository not found');
 
   const manifest = readManifest(repo.root_path);
@@ -78,7 +78,7 @@ app.get('/repos/:id/manifest', (c) => {
 // Write manifest to repo root
 app.post('/repos/:id/manifest', async (c) => {
   const db = getDatabase();
-  const repo = getRepoById(db, c.req.param('id'));
+  const repo = getRepositoryById(db, c.req.param('id'));
   if (!repo) throw new NotFoundError('Repository not found');
 
   const body = await c.req.json();
@@ -92,7 +92,7 @@ app.post('/repos/:id/manifest', async (c) => {
 // Auto-detect manifest from project files (package.json, Cargo.toml, etc.)
 app.get('/repos/:id/detect-manifest', (c) => {
   const db = getDatabase();
-  const repo = getRepoById(db, c.req.param('id'));
+  const repo = getRepositoryById(db, c.req.param('id'));
   if (!repo) throw new NotFoundError('Repository not found');
 
   const manifest = detectManifestFromProject(repo.root_path, repo.name);

@@ -55,7 +55,7 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
                 <StatusIcon className={`size-3.5 shrink-0 ${config.className}`} />
               )}
               <span className="min-w-0 flex-1 truncate font-medium">
-                {ws.display_name || ws.directory_name}
+                {ws.title || ws.slug}
               </span>
               <span className={`shrink-0 text-xs ${config.className}`}>{config.label}</span>
               {isFailed && (

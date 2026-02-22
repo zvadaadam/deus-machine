@@ -21,48 +21,46 @@ use crate::db::{
 fn read_workspace_row(row: &rusqlite::Row) -> Result<WorkspaceWithDetails, rusqlite::Error> {
     let id: String = row.get("id")?;
     let repository_id: String = row.get("repository_id")?;
-    let directory_name: String = row.get("directory_name")?;
-    let display_name: Option<String> = row.get("display_name")?;
-    let branch: Option<String> = row.get("branch")?;
+    let slug: String = row.get("slug")?;
+    let title: Option<String> = row.get("title")?;
+    let git_branch: Option<String> = row.get("git_branch")?;
     let state: String = row.get("state")?;
-    let active_session_id: Option<String> = row.get("active_session_id")?;
-    let created_at: String = row.get("created_at")?;
+    let current_session_id: Option<String> = row.get("current_session_id")?;
     let updated_at: String = row.get("updated_at")?;
-    let parent_branch: Option<String> = row.get("parent_branch")?;
+    let git_target_branch: Option<String> = row.get("git_target_branch")?;
     let setup_status: Option<String> = row.get("setup_status")?;
-    let setup_error: Option<String> = row.get("setup_error")?;
-    let init_step: Option<String> = row.get("init_step")?;
+    let error_message: Option<String> = row.get("error_message")?;
+    let init_stage: Option<String> = row.get("init_stage")?;
     let repo_name: Option<String> = row.get("repo_name")?;
     let root_path: Option<String> = row.get("root_path")?;
-    let default_branch: Option<String> = row.get("default_branch")?;
-    let repo_display_order: Option<i64> = row.get("repo_display_order")?;
+    let git_default_branch: Option<String> = row.get("git_default_branch")?;
+    let repo_sort_order: Option<i64> = row.get("repo_sort_order")?;
     let session_status: Option<String> = row.get("session_status")?;
     let model: Option<String> = row.get("model")?;
     let latest_message_sent_at: Option<String> = row.get("latest_message_sent_at")?;
 
     let workspace_path = compute_workspace_path(
         root_path.as_deref(),
-        Some(directory_name.as_str()),
+        Some(slug.as_str()),
     );
 
     Ok(WorkspaceWithDetails {
         id,
         repository_id,
-        directory_name,
-        display_name,
-        branch,
+        slug,
+        title,
+        git_branch,
         state,
-        active_session_id,
-        created_at,
+        current_session_id,
         updated_at,
-        parent_branch,
+        git_target_branch,
         setup_status,
-        setup_error,
-        init_step,
+        error_message,
+        init_stage,
         repo_name,
         root_path,
-        default_branch,
-        repo_display_order,
+        git_default_branch,
+        repo_sort_order,
         session_status,
         model,
         latest_message_sent_at,
@@ -107,18 +105,18 @@ pub fn db_get_workspaces_by_repo(
 
         let sql = format!(
             "SELECT
-                w.id, w.repository_id, w.directory_name, w.display_name, w.branch, w.state,
-                w.active_session_id, w.created_at, w.updated_at,
-                w.parent_branch, w.setup_status, w.setup_error, w.init_step,
-                r.name as repo_name, r.display_order as repo_display_order, r.root_path,
-                r.default_branch,
+                w.id, w.repository_id, w.slug, w.title, w.git_branch, w.state,
+                w.current_session_id, w.updated_at,
+                w.git_target_branch, w.setup_status, w.error_message, w.init_stage,
+                r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
+                r.git_default_branch,
                 s.status as session_status, s.model,
                 s.last_user_message_at as latest_message_sent_at
             FROM workspaces w
-            LEFT JOIN repos r ON w.repository_id = r.id
-            LEFT JOIN sessions s ON w.active_session_id = s.id
+            LEFT JOIN repositories r ON w.repository_id = r.id
+            LEFT JOIN sessions s ON w.current_session_id = s.id
             {}
-            ORDER BY r.display_order, r.name, w.updated_at DESC",
+            ORDER BY r.sort_order, r.name, w.updated_at DESC",
             state_filter
         );
 
@@ -149,14 +147,14 @@ pub fn db_get_workspaces_by_repo(
                 result.push(RepoGroup {
                     repo_id,
                     repo_name: ws.repo_name.clone().unwrap_or_else(|| "Unknown".to_string()),
-                    display_order: ws.repo_display_order.unwrap_or(999),
+                    sort_order: ws.repo_sort_order.unwrap_or(999),
                     workspaces: vec![ws],
                 });
             }
         }
 
-        // SQL already sorts by display_order, but sort again to be safe
-        result.sort_by_key(|g| g.display_order);
+        // SQL already sorts by sort_order, but sort again to be safe
+        result.sort_by_key(|g| g.sort_order);
         Ok(result)
     })
 }
@@ -174,18 +172,18 @@ pub fn db_get_stats(db: State<'_, DbManager>) -> Result<StatsRow, String> {
                 (SELECT COUNT(*) FROM workspaces) as workspaces,
                 (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
                 (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-                (SELECT COUNT(*) FROM repos) as repos,
+                (SELECT COUNT(*) FROM repositories) as repositories,
                 (SELECT COUNT(*) FROM sessions) as sessions,
                 (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
                 (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-                (SELECT COUNT(*) FROM session_messages) as messages",
+                (SELECT COUNT(*) FROM messages) as messages",
             [],
             |row| {
                 Ok(StatsRow {
                     workspaces: row.get(0)?,
                     workspaces_ready: row.get(1)?,
                     workspaces_archived: row.get(2)?,
-                    repos: row.get(3)?,
+                    repositories: row.get(3)?,
                     sessions: row.get(4)?,
                     sessions_idle: row.get(5)?,
                     sessions_working: row.get(6)?,
@@ -208,9 +206,9 @@ pub fn db_get_session(
 ) -> Result<Option<SessionWithDetails>, String> {
     db.with_conn(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT s.*, w.directory_name, w.state as workspace_state
+            "SELECT s.*, w.slug, w.state as workspace_state
              FROM sessions s
-             LEFT JOIN workspaces w ON s.id = w.active_session_id
+             LEFT JOIN workspaces w ON s.id = w.current_session_id
              WHERE s.id = ?1",
         )?;
 
@@ -219,16 +217,18 @@ pub fn db_get_session(
                 id: row.get("id")?,
                 workspace_id: row.get("workspace_id")?,
                 agent_type: row.get("agent_type")?,
+                model: row.get("model")?,
+                agent_session_id: row.get("agent_session_id")?,
                 title: row.get("title")?,
                 status: row.get("status")?,
-                model: row.get("model")?,
-                sdk_session_id: row.get("sdk_session_id")?,
                 message_count: row.get("message_count")?,
                 error_message: row.get("error_message")?,
                 last_user_message_at: row.get("last_user_message_at")?,
-                created_at: row.get("created_at")?,
+                context_token_count: row.get("context_token_count")?,
+                context_used_percent: row.get("context_used_percent")?,
+                is_hidden: row.get("is_hidden")?,
                 updated_at: row.get("updated_at")?,
-                directory_name: row.get("directory_name")?,
+                slug: row.get("slug")?,
                 workspace_state: row.get("workspace_state")?,
             })
         });
@@ -262,7 +262,7 @@ pub fn db_get_messages(
             // Fetch older messages (before cursor), then reverse for ASC order
             let mut stmt = conn.prepare(
                 "SELECT * FROM (
-                    SELECT * FROM session_messages
+                    SELECT * FROM messages
                     WHERE session_id = ?1 AND seq < ?2
                     ORDER BY seq DESC
                     LIMIT ?3
@@ -276,7 +276,7 @@ pub fn db_get_messages(
         } else if let Some(after_seq) = after {
             // Fetch newer messages (after cursor)
             let mut stmt = conn.prepare(
-                "SELECT * FROM session_messages
+                "SELECT * FROM messages
                  WHERE session_id = ?1 AND seq > ?2
                  ORDER BY seq ASC
                  LIMIT ?3",
@@ -290,7 +290,7 @@ pub fn db_get_messages(
             // Default: fetch latest messages
             let mut stmt = conn.prepare(
                 "SELECT * FROM (
-                    SELECT * FROM session_messages
+                    SELECT * FROM messages
                     WHERE session_id = ?1
                     ORDER BY seq DESC
                     LIMIT ?2
@@ -310,7 +310,7 @@ pub fn db_get_messages(
 
             let has_older = if let Some(seq) = first_seq {
                 conn.query_row(
-                    "SELECT 1 FROM session_messages WHERE session_id = ?1 AND seq < ?2 LIMIT 1",
+                    "SELECT 1 FROM messages WHERE session_id = ?1 AND seq < ?2 LIMIT 1",
                     rusqlite::params![session_id, seq],
                     |_| Ok(true),
                 )
@@ -321,7 +321,7 @@ pub fn db_get_messages(
 
             let has_newer = if let Some(seq) = last_seq {
                 conn.query_row(
-                    "SELECT 1 FROM session_messages WHERE session_id = ?1 AND seq > ?2 LIMIT 1",
+                    "SELECT 1 FROM messages WHERE session_id = ?1 AND seq > ?2 LIMIT 1",
                     rusqlite::params![session_id, seq],
                     |_| Ok(true),
                 )
@@ -349,10 +349,10 @@ fn read_message_row(row: &rusqlite::Row) -> Result<MessageRow, rusqlite::Error> 
         role: row.get("role")?,
         content: row.get("content")?,
         turn_id: row.get("turn_id")?,
-        created_at: row.get("created_at")?,
         sent_at: row.get("sent_at")?,
         model: row.get("model")?,
-        sdk_message_id: row.get("sdk_message_id")?,
+        agent_message_id: row.get("agent_message_id")?,
         cancelled_at: row.get("cancelled_at")?,
+        parent_tool_use_id: row.get("parent_tool_use_id")?,
     })
 }

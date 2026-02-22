@@ -33,7 +33,7 @@ describe('withWorkspace middleware', () => {
     mockStmt.get.mockReturnValue({
       id: 'ws-1',
       root_path: '/repo',
-      directory_name: 'tokyo',
+      slug: 'tokyo',
       default_branch: 'main',
     });
 
@@ -45,7 +45,7 @@ describe('withWorkspace middleware', () => {
     expect(body.workspace).toEqual({
       id: 'ws-1',
       root_path: '/repo',
-      directory_name: 'tokyo',
+      slug: 'tokyo',
       default_branch: 'main',
     });
     expect(body.workspacePath).toBe('/repo/.hive/tokyo');
@@ -66,7 +66,7 @@ describe('withWorkspace middleware', () => {
     mockStmt.get.mockReturnValue({
       id: 'ws-1',
       root_path: null,
-      directory_name: 'tokyo',
+      slug: 'tokyo',
     });
 
     const app = createTestApp();
@@ -77,11 +77,11 @@ describe('withWorkspace middleware', () => {
     expect(body.error).toBe('Workspace not found');
   });
 
-  it('returns 404 when directory_name is null', async () => {
+  it('returns 404 when slug is null', async () => {
     mockStmt.get.mockReturnValue({
       id: 'ws-1',
       root_path: '/repo',
-      directory_name: null,
+      slug: null,
     });
 
     const app = createTestApp();
@@ -96,7 +96,7 @@ describe('withWorkspace middleware', () => {
     mockStmt.get.mockReturnValue({
       id: 'ws-42',
       root_path: '/projects',
-      directory_name: 'paris',
+      slug: 'paris',
       default_branch: 'develop',
     });
 
@@ -110,20 +110,20 @@ describe('withWorkspace middleware', () => {
 });
 
 describe('computeWorkspacePath', () => {
-  it('returns .hive path from root_path and directory_name', () => {
+  it('returns .hive path from root_path and slug', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
-      directory_name: 'tokyo',
+      slug: 'tokyo',
     })).toBe('/repo/.hive/tokyo');
   });
 
   it('returns empty string when root_path is missing', () => {
     expect(computeWorkspacePath({
-      directory_name: 'tokyo',
+      slug: 'tokyo',
     })).toBe('');
   });
 
-  it('returns empty string when directory_name is missing', () => {
+  it('returns empty string when slug is missing', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
     })).toBe('');
