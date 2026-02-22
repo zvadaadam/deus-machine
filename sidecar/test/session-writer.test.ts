@@ -50,6 +50,31 @@ describe("session-writer WriteResult", () => {
         expect(result.error).toContain("SQLITE_BUSY");
       }
     });
+
+    it("wraps content in envelope when stop_reason is present", () => {
+      const result = saveAssistantMessage("session-1", {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+        stop_reason: "cancelled",
+      });
+      expect(result.ok).toBe(true);
+
+      // Verify the serialized content includes the envelope with stop_reason
+      const storedContent = mockDbRun.mock.calls[0][2]; // 3rd arg = content
+      const parsed = JSON.parse(storedContent);
+      expect(parsed.message.stop_reason).toBe("cancelled");
+      expect(parsed.blocks).toEqual([{ type: "text", text: "" }]);
+    });
+
+    it("stores content as flat array when no stop_reason", () => {
+      const blocks = [{ type: "text", text: "hello" }];
+      saveAssistantMessage("session-1", { content: blocks });
+
+      const storedContent = mockDbRun.mock.calls[0][2];
+      const parsed = JSON.parse(storedContent);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toEqual(blocks);
+    });
   });
 
   // ── saveToolResultMessage ────────────────────────────────────────────

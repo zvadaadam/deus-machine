@@ -24,7 +24,7 @@ export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; erro
  */
 export function saveAssistantMessage(
   sessionId: string,
-  message: { id?: string; role?: string; content?: unknown },
+  message: { id?: string; role?: string; content?: unknown; stop_reason?: string },
   model: string = "opus",
   parentToolUseId: string | null = null
 ): WriteResult {
@@ -33,8 +33,14 @@ export function saveAssistantMessage(
   const sentAt = new Date().toISOString();
 
   // Store content blocks directly (flattened — no envelope wrapper).
-  // message.content is the blocks array from the SDK.
-  const content = JSON.stringify(message.content ?? []);
+  // When stop_reason is present (e.g., "cancelled"), wrap in an envelope so
+  // the frontend can detect the message state via parsed.message?.stop_reason.
+  // Normal messages: [block1, block2, ...]
+  // Cancelled messages: { message: { stop_reason }, blocks: [...] }
+  const contentPayload = message.stop_reason
+    ? { message: { stop_reason: message.stop_reason }, blocks: message.content ?? [] }
+    : message.content ?? [];
+  const content = JSON.stringify(contentPayload);
 
   try {
     db.prepare(
