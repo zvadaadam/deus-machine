@@ -16,7 +16,7 @@ export type SessionStatus = "idle" | "working" | "error" | "needs_response" | "n
 /**
  * Base message entity
  * Core structure for all chat messages in a session
- * Matches the session_messages database table schema
+ * Matches the messages database table schema (id = UUID7, embeds created_at)
  */
 export interface Message {
   id: string;
@@ -24,12 +24,12 @@ export interface Message {
   seq: number; // Per-session monotonic sequence number (auto-assigned by trigger)
   role: MessageRole;
   content: string; // JSON-stringified MessageContent
-  created_at: string;
   turn_id?: string | null; // Conversation turn identifier
   sent_at?: string | null; // ISO timestamp when message sent to Claude
   cancelled_at?: string | null; // ISO timestamp when user cancels message
   model?: string | null; // Claude model used (e.g., 'sonnet')
-  sdk_message_id?: string | null; // SDK-provided message identifier
+  agent_message_id?: string | null; // Agent SDK-provided message identifier
+  parent_tool_use_id?: string | null; // Subagent parent task ID (promoted from JSON envelope)
 }
 
 /**
@@ -103,16 +103,18 @@ export interface Session {
   id: string;
   workspace_id: string;
   agent_type: string;
+  model: string;
+  agent_session_id?: string | null;
   title?: string | null;
   status: SessionStatus;
-  model: string;
-  sdk_session_id?: string | null;
   message_count: number;
   error_message?: string | null;
   last_user_message_at?: string | null;
-  created_at: string;
+  context_token_count: number;
+  context_used_percent: number;
+  is_hidden: boolean; // SQLite INTEGER → TS boolean (0/1)
   updated_at: string;
   // From JOINs (present in list/detail queries)
-  directory_name?: string | null;
+  slug?: string | null;
   workspace_state?: string | null;
 }

@@ -6,21 +6,20 @@
  * The `as` casts live in queries.ts, not in route handlers.
  */
 
-// ─── repos ───────────────────────────────────────────────────
+// ─── repositories ────────────────────────────────────────────
 
-export interface RepoRow {
+export interface RepositoryRow {
   id: string;
   name: string;
   root_path: string;
-  default_branch: string;
-  display_order: number;
-  github_url: string | null;
-  created_at: string;
+  git_default_branch: string;
+  sort_order: number;
+  git_origin_url: string | null;
   updated_at: string;
 }
 
-/** GET /repos — repos with workspace counts from LEFT JOIN aggregate. */
-export interface RepoWithCountsRow extends RepoRow {
+/** GET /repos — repositories with workspace counts from LEFT JOIN aggregate. */
+export interface RepositoryWithCountsRow extends RepositoryRow {
   ready_count: number;
   archived_count: number;
   total_count: number;
@@ -31,20 +30,19 @@ export interface RepoWithCountsRow extends RepoRow {
 export interface WorkspaceRow {
   id: string;
   repository_id: string;
-  directory_name: string;
-  display_name: string | null;
-  branch: string | null;
-  parent_branch: string | null;
+  slug: string;
+  title: string | null;
+  git_branch: string | null;
+  git_target_branch: string | null;
   state: string;
-  active_session_id: string | null;
+  current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
   archive_commit: string | null;
   archived_at: string | null;
   setup_status: string;
-  setup_error: string | null;
-  init_step: string | null;
-  created_at: string;
+  init_stage: string | null;
+  error_message: string | null;
   updated_at: string;
 }
 
@@ -57,26 +55,25 @@ export interface WorkspaceWithDetailsRow {
   // From workspaces table
   id: string;
   repository_id: string;
-  directory_name: string;
-  display_name: string | null;
-  branch: string | null;
-  parent_branch: string | null;
+  slug: string;
+  title: string | null;
+  git_branch: string | null;
+  git_target_branch: string | null;
   state: string;
-  active_session_id: string | null;
-  init_step: string | null;
-  created_at: string;
+  current_session_id: string | null;
+  init_stage: string | null;
   updated_at: string;
 
   // Setup tracking (hive.json manifest)
   setup_status: string;
-  setup_error: string | null;
+  error_message: string | null;
 
-  // From repos JOIN
+  // From repositories JOIN
   repo_name: string | null;
   root_path: string | null;
-  default_branch: string | null;
+  git_default_branch: string | null;
   /** Only in by-repo query */
-  repo_display_order?: number;
+  repo_sort_order?: number;
 
   // From sessions JOIN (null when no active session)
   session_status: string | null;
@@ -90,24 +87,26 @@ export interface SessionRow {
   id: string;
   workspace_id: string;
   agent_type: string;
+  model: string;
+  agent_session_id: string | null;
   title: string | null;
   status: string;
-  model: string;
-  sdk_session_id: string | null;
   message_count: number;
   error_message: string | null;
   last_user_message_at: string | null;
-  created_at: string;
+  context_token_count: number;
+  context_used_percent: number;
+  is_hidden: number; // SQLite boolean (0/1)
   updated_at: string;
 }
 
 /** Session joined with workspace info. */
 export interface SessionWithDetailsRow extends SessionRow {
-  directory_name: string | null;
+  slug: string | null;
   workspace_state: string | null;
 }
 
-// ─── session_messages ────────────────────────────────────────
+// ─── messages ────────────────────────────────────────────────
 
 export interface MessageRow {
   id: string;
@@ -117,10 +116,10 @@ export interface MessageRow {
   content: string | null;
   turn_id: string | null;
   model: string | null;
-  sdk_message_id: string | null;
+  agent_message_id: string | null;
   sent_at: string | null;
   cancelled_at: string | null;
-  created_at: string;
+  parent_tool_use_id: string | null;
 }
 
 // ─── stats ───────────────────────────────────────────────────
@@ -129,17 +128,10 @@ export interface StatsRow {
   workspaces: number;
   workspaces_ready: number;
   workspaces_archived: number;
-  repos: number;
+  repositories: number;
   sessions: number;
   sessions_idle: number;
   sessions_working: number;
   messages: number;
 }
 
-// ─── settings ────────────────────────────────────────────────
-
-export interface SettingRow {
-  key: string;
-  value: string;
-  updated_at: string;
-}

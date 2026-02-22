@@ -15,25 +15,24 @@ export type SetupStatus = "none" | "running" | "completed" | "failed";
 export interface Workspace {
   id: string;
   repository_id: string;
-  directory_name: string;
-  display_name: string | null;
-  branch: string | null;
-  parent_branch: string | null;
+  slug: string;
+  title: string | null;
+  git_branch: string | null;
+  git_target_branch: string | null;
   state: WorkspaceState;
-  active_session_id: string | null;
+  current_session_id: string | null;
   session_status: SessionStatus | null;
   model: string | null;
   latest_message_sent_at: string | null;
-  created_at: string;
   updated_at: string;
   repo_name: string;
   root_path: string;
   /** Computed filesystem path to the workspace directory */
   workspace_path: string;
-  default_branch?: string;
+  git_default_branch?: string;
   setup_status: SetupStatus;
-  setup_error: string | null;
-  init_step?: string | null;
+  init_stage?: string | null;
+  error_message: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
   archive_commit?: string | null;
@@ -47,7 +46,7 @@ export interface Workspace {
 export interface RepoGroup {
   repo_id: string;
   repo_name: string;
-  display_order: number;
+  sort_order: number;
   workspaces: Workspace[];
 }
 

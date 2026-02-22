@@ -48,15 +48,15 @@ export interface TaskRunResponse {
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
   root_path: string;
-  directory_name: string;
+  slug: string;
   workspace_path?: string;
-  parent_branch?: string;
-  default_branch?: string;
+  git_target_branch?: string;
+  git_default_branch?: string;
 }
 
 function getWorkspacePath(ws: WorkspaceGitInfo): string {
   if (ws.workspace_path) return ws.workspace_path;
-  return `${ws.root_path}/.hive/${ws.directory_name}`;
+  return `${ws.root_path}/.hive/${ws.slug}`;
 }
 
 export const WorkspaceService = {
@@ -105,12 +105,12 @@ export const WorkspaceService = {
    * See: src-tauri/src/git.rs::resolve_parent_branch for the resolution logic.
    */
   fetchDiffStats: async (id: string, workspace?: WorkspaceGitInfo): Promise<DiffStats> => {
-    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.slug) {
       try {
         return await gitDiffStats(
           getWorkspacePath(workspace),
-          workspace.parent_branch || "",
-          workspace.default_branch || ""
+          workspace.git_target_branch || "",
+          workspace.git_default_branch || ""
         );
       } catch {
         // Rust git failed (e.g., worktree deleted) — fall through to HTTP
@@ -131,12 +131,12 @@ export const WorkspaceService = {
     id: string,
     workspace?: WorkspaceGitInfo
   ): Promise<{ files: FileChange[]; truncated?: boolean; totalCount?: number }> => {
-    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.slug) {
       try {
         const result = await gitDiffFiles(
           getWorkspacePath(workspace),
-          workspace.parent_branch || "",
-          workspace.default_branch || ""
+          workspace.git_target_branch || "",
+          workspace.git_default_branch || ""
         );
         return {
           files: result.files as FileChange[],
@@ -160,12 +160,12 @@ export const WorkspaceService = {
     file: string,
     workspace?: WorkspaceGitInfo
   ): Promise<{ diff: string; oldContent: string | null; newContent: string | null }> => {
-    if (isTauriAvailable() && workspace?.root_path && workspace?.directory_name) {
+    if (isTauriAvailable() && workspace?.root_path && workspace?.slug) {
       try {
         const data = await gitDiffFile(
           getWorkspacePath(workspace),
-          workspace.parent_branch || "",
-          workspace.default_branch || "",
+          workspace.git_target_branch || "",
+          workspace.git_default_branch || "",
           file
         );
         return {
@@ -194,7 +194,7 @@ export const WorkspaceService = {
    * Tauri IPC only — no HTTP fallback needed.
    */
   fetchUncommittedFiles: async (workspace?: WorkspaceGitInfo): Promise<FileChange[]> => {
-    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.directory_name) {
+    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.slug) {
       return [];
     }
     try {
@@ -213,7 +213,7 @@ export const WorkspaceService = {
     workspace?: WorkspaceGitInfo,
     sessionId?: string
   ): Promise<FileChange[]> => {
-    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.directory_name || !sessionId) {
+    if (!isTauriAvailable() || !workspace?.root_path || !workspace?.slug || !sessionId) {
       return [];
     }
     try {

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
 import { NotFoundError } from '../lib/errors';
 import { parseBody } from '../lib/validate';
@@ -79,14 +79,14 @@ app.post('/sessions/:id/messages', async (c) => {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError('Session not found');
 
-  const messageId = randomUUID();
+  const messageId = uuidv7();
   const sentAt = new Date().toISOString();
   const messageModel = model || 'opus';
 
   const insertMessageAndUpdateSession = db.transaction(() => {
     db.prepare(`
-      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model)
-      VALUES (?, ?, 'user', ?, datetime('now'), ?, ?)
+      INSERT INTO messages (id, session_id, role, content, sent_at, model)
+      VALUES (?, ?, 'user', ?, ?, ?)
     `).run(messageId, sessionId, content, sentAt, messageModel);
 
     db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
@@ -114,7 +114,7 @@ app.post('/sessions/:id/stop', (c) => {
   const latestUserMessage = getLatestUserMessage(db, sessionId);
 
   if (latestUserMessage) {
-    db.prepare("UPDATE session_messages SET cancelled_at = datetime('now') WHERE id = ?").run(latestUserMessage.id);
+    db.prepare("UPDATE messages SET cancelled_at = datetime('now') WHERE id = ?").run(latestUserMessage.id);
   }
 
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);

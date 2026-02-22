@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import { spawn, execFile, execSync } from 'child_process';
 import { promisify } from 'util';
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
@@ -20,7 +20,7 @@ import {
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspaceWithRepo,
-  getRepoById,
+  getRepositoryById,
   getSessionRaw,
   getSessionsByWorkspaceId,
 } from '../db';
@@ -49,14 +49,14 @@ app.get('/workspaces/by-repo', (c) => {
       grouped[repoId] = {
         repo_id: repoId,
         repo_name: workspace.repo_name || 'Unknown',
-        display_order: workspace.repo_display_order || 999,
+        sort_order: workspace.repo_sort_order || 999,
         workspaces: []
       };
     }
     grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
   });
 
-  const result = Object.values(grouped).sort((a: any, b: any) => a.display_order - b.display_order);
+  const result = Object.values(grouped).sort((a: any, b: any) => a.sort_order - b.sort_order);
   return c.json(result);
 });
 
@@ -112,7 +112,7 @@ app.patch('/workspaces/:id', async (c) => {
 app.get('/workspaces/:id/diff-stats', withWorkspace, (c) => {
   const workspace = c.get('workspace');
   const workspacePath = c.get('workspacePath');
-  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
+  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.git_target_branch, workspace.git_default_branch);
   const stats = gitService.getDiffStats(workspacePath, parentBranch);
   return c.json(stats);
 });
@@ -121,7 +121,7 @@ app.get('/workspaces/:id/diff-stats', withWorkspace, (c) => {
 app.get('/workspaces/:id/diff-files', withWorkspace, (c) => {
   const workspace = c.get('workspace');
   const workspacePath = c.get('workspacePath');
-  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
+  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.git_target_branch, workspace.git_default_branch);
   const files = gitService.getDiffFiles(workspacePath, parentBranch);
   return c.json({ files });
 });
@@ -133,7 +133,7 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
 
   const workspace = c.get('workspace');
   const workspacePath = c.get('workspacePath');
-  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.parent_branch, workspace.default_branch);
+  const parentBranch = gitService.resolveParentBranch(workspacePath, workspace.git_target_branch, workspace.git_default_branch);
   const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
   if (!safeFilePath) throw new ValidationError('Invalid file path');
 
@@ -390,12 +390,12 @@ app.post('/workspaces', async (c) => {
   const db = getDatabase();
   const { repository_id } = parseBody(CreateWorkspaceBody, await c.req.json());
 
-  const repo = getRepoById(db, repository_id);
+  const repo = getRepositoryById(db, repository_id);
   if (!repo) throw new NotFoundError('Repository not found');
 
   const workspace_name = generateUniqueName(db);
-  const parent_branch = repo.default_branch || 'main';
-  const workspaceId = randomUUID();
+  const parent_branch = repo.git_default_branch || 'main';
+  const workspaceId = uuidv7();
 
   let branchPrefix = 'workspace';
   try {
@@ -436,9 +436,9 @@ app.post('/workspaces', async (c) => {
 
   db.prepare(`
     INSERT INTO workspaces (
-      id, repository_id, directory_name, branch,
-      parent_branch, state, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      id, repository_id, slug, git_branch,
+      git_target_branch, state, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
     parent_branch, 'initializing');
 
@@ -483,7 +483,7 @@ app.post('/workspaces', async (c) => {
     // but if something truly unexpected escapes, don't leave workspace stuck.
     console.error('[WORKSPACE] Unhandled init pipeline error:', err);
     try {
-      db.prepare("UPDATE workspaces SET state = 'error', init_step = 'error:unhandled' WHERE id = ? AND state = 'initializing'")
+      db.prepare("UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'")
         .run(workspaceId);
     } catch {}
   });
@@ -511,15 +511,15 @@ app.post('/workspaces/:id/sessions', (c) => {
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found');
 
-  const sessionId = randomUUID();
+  const sessionId = uuidv7();
 
   const createSession = db.transaction(() => {
     db.prepare(
-      "INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))"
+      "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
     ).run(sessionId, workspaceId);
 
     db.prepare(
-      "UPDATE workspaces SET active_session_id = ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
     ).run(sessionId, workspaceId);
   });
 
@@ -562,12 +562,12 @@ app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
   const setupCmd = manifest ? getSetupCommand(manifest) : null;
   if (!setupCmd || !manifest) {
-    db.prepare("UPDATE workspaces SET setup_status = 'none', setup_error = NULL, updated_at = datetime('now') WHERE id = ?")
+    db.prepare("UPDATE workspaces SET setup_status = 'none', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
       .run(workspace.id);
     return c.json({ setup_status: 'none' });
   }
 
-  db.prepare("UPDATE workspaces SET setup_status = 'running', setup_error = NULL, updated_at = datetime('now') WHERE id = ?")
+  db.prepare("UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
     .run(workspace.id);
 
   const setupEnv = getHiveEnv(manifest, {

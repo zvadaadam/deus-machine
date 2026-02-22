@@ -27,7 +27,7 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  Repo,
+  Repository,
   Stats,
   Settings,
   MCPServer,

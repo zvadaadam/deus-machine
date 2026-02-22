@@ -7,14 +7,13 @@
  * Repository entity
  * Represents a git repository registered in Hive
  */
-export interface Repo {
+export interface Repository {
   id: string;
   name: string;
   root_path: string;
-  default_branch: string;
-  display_order?: number;
-  github_url?: string | null;
-  created_at?: string;
+  git_default_branch: string;
+  sort_order?: number;
+  git_origin_url?: string | null;
   updated_at?: string;
 }
 
@@ -26,7 +25,7 @@ export interface Stats {
   workspaces: number;
   workspaces_ready: number;
   workspaces_archived: number;
-  repos: number;
+  repositories: number;
   sessions: number;
   sessions_idle: number;
   sessions_working: number;

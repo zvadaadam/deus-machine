@@ -66,9 +66,9 @@ export function RightSidePanel({
     reattach: reattachBrowser,
   } = useBrowserDetach({
     workspaceId: workspace.id,
-    directoryName: workspace.directory_name,
+    directoryName: workspace.slug,
     repoName: workspace.repo_name,
-    branch: workspace.branch,
+    branch: workspace.git_branch,
   });
 
   // Workspace git info for file changes query (Tauri IPC path)
@@ -77,12 +77,12 @@ export function RightSidePanel({
   const workspaceGitInfo: WorkspaceGitInfo = useMemo(
     () => ({
       root_path: workspace.root_path,
-      directory_name: workspace.directory_name,
+      slug: workspace.slug,
       workspace_path: workspace.workspace_path,
-      parent_branch: workspace.parent_branch ?? undefined,
-      default_branch: workspace.default_branch,
+      git_target_branch: workspace.git_target_branch ?? undefined,
+      git_default_branch: workspace.git_default_branch,
     }),
-    [workspace.root_path, workspace.directory_name, workspace.workspace_path, workspace.parent_branch, workspace.default_branch]
+    [workspace.root_path, workspace.slug, workspace.workspace_path, workspace.git_target_branch, workspace.git_default_branch]
   );
 
   // Don't query diffs until the worktree checkout is complete — during "initializing"
@@ -110,7 +110,7 @@ export function RightSidePanel({
 
   const { data: lastTurnData } = useLastTurnFiles(
     isReady ? workspace.id : null,
-    workspace.active_session_id,
+    workspace.current_session_id,
     workspace.session_status,
     workspaceGitInfo
   );

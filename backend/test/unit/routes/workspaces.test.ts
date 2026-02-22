@@ -51,8 +51,8 @@ vi.mock('util', () => ({
   promisify: () => mockExecFileAsync,
 }));
 
-vi.mock('crypto', () => ({
-  randomUUID: vi.fn(() => 'ws-test-uuid'),
+vi.mock('@shared/lib/uuid', () => ({
+  uuidv7: vi.fn(() => 'ws-test-uuid'),
 }));
 
 vi.mock('fs', () => ({
@@ -93,24 +93,22 @@ const MOCK_REPO = {
   id: 'repo-001',
   name: 'my-project',
   root_path: '/repos/my-project',
-  default_branch: 'main',
-  display_order: 0,
-  created_at: '2024-01-01T00:00:00Z',
+  git_default_branch: 'main',
+  sort_order: 0,
   updated_at: '2024-01-01T00:00:00Z',
 };
 
 const MOCK_CREATED_WORKSPACE = {
   id: 'ws-test-uuid',
   repository_id: 'repo-001',
-  directory_name: 'europa',
-  branch: 'testuser/europa',
-  parent_branch: 'main',
+  slug: 'europa',
+  git_branch: 'testuser/europa',
+  git_target_branch: 'main',
   state: 'initializing',
-  active_session_id: null,
-  init_step: null,
+  current_session_id: null,
+  init_stage: null,
   repo_name: 'my-project',
   root_path: '/repos/my-project',
-  created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
 
@@ -170,7 +168,7 @@ describe('POST /workspaces', () => {
 
     const body = await res.json();
     expect(body.id).toBe('ws-test-uuid');
-    expect(body.directory_name).toBe('europa');
+    expect(body.slug).toBe('europa');
     expect(body.state).toBe('initializing');
   });
 
@@ -353,11 +351,11 @@ describe('POST /workspaces', () => {
     expect(body.workspace_path).toBe('/repos/my-project/.hive/europa');
   });
 
-  it('uses repo default_branch as parent_branch', async () => {
-    const repoWithDev = { ...MOCK_REPO, default_branch: 'develop' };
+  it('uses repo git_default_branch as parent_branch', async () => {
+    const repoWithDev = { ...MOCK_REPO, git_default_branch: 'develop' };
     mockStmt.get
       .mockReturnValueOnce(repoWithDev)
-      .mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, parent_branch: 'develop' });
+      .mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, git_target_branch: 'develop' });
 
     mockExecFileAsync.mockResolvedValue({ stdout: '', stderr: '' });
 
@@ -377,9 +375,9 @@ describe('POST /workspaces', () => {
     );
   });
 
-  it('defaults parent_branch to main when repo has no default_branch', async () => {
+  it('defaults parent_branch to main when repo has no git_default_branch', async () => {
     mockStmt.get
-      .mockReturnValueOnce({ ...MOCK_REPO, default_branch: null })
+      .mockReturnValueOnce({ ...MOCK_REPO, git_default_branch: null })
       .mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
 
     await app.request('/workspaces', {

@@ -2,9 +2,8 @@
 // Handles message persistence for SDK messages (assistant + tool_result).
 // Also updates session status when queries complete.
 
-import { randomUUID } from "crypto";
+import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
-import { prepareMessageContent } from "./message-sanitizer";
 
 /**
  * Save an assistant message to the database.
@@ -21,28 +20,20 @@ export function saveAssistantMessage(
   parentToolUseId: string | null = null
 ): string | null {
   const db = getDatabase();
-  const messageId = randomUUID();
+  const messageId = uuidv7();
   const sentAt = new Date().toISOString();
 
-  // Prepare the message content (sanitize for JSON integrity)
-  // Include parent_tool_use_id in the envelope so frontend can identify subagent messages
-  const contentEnvelope = parentToolUseId
-    ? { message, parent_tool_use_id: parentToolUseId }
-    : { message };
-  const prepared = prepareMessageContent(contentEnvelope);
-
-  if (!prepared.success) {
-    console.error(`[SESSION-WRITER] Failed to prepare message content: ${prepared.error}`);
-    return null;
-  }
+  // Store content blocks directly (flattened — no envelope wrapper).
+  // message.content is the blocks array from the SDK.
+  const content = JSON.stringify(message.content ?? []);
 
   try {
     db.prepare(
       `
-      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, model, sdk_message_id)
-      VALUES (?, ?, 'assistant', ?, datetime('now'), ?, ?, ?)
+      INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
+      VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)
     `
-    ).run(messageId, sessionId, prepared.content, sentAt, model, message.id || null);
+    ).run(messageId, sessionId, content, sentAt, model, message.id || null, parentToolUseId);
 
     console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
     return messageId;
@@ -66,26 +57,19 @@ export function saveToolResultMessage(
   parentToolUseId: string | null = null
 ): string | null {
   const db = getDatabase();
-  const messageId = randomUUID();
+  const messageId = uuidv7();
   const sentAt = new Date().toISOString();
 
-  const contentEnvelope = parentToolUseId
-    ? { message, parent_tool_use_id: parentToolUseId }
-    : { message };
-  const prepared = prepareMessageContent(contentEnvelope);
-
-  if (!prepared.success) {
-    console.error(`[SESSION-WRITER] Failed to prepare tool_result content: ${prepared.error}`);
-    return null;
-  }
+  // Store content blocks directly (flattened — no envelope wrapper).
+  const content = JSON.stringify(message.content ?? []);
 
   try {
     db.prepare(
       `
-      INSERT INTO session_messages (id, session_id, role, content, created_at, sent_at, sdk_message_id)
-      VALUES (?, ?, 'user', ?, datetime('now'), ?, ?)
+      INSERT INTO messages (id, session_id, role, content, sent_at, agent_message_id, parent_tool_use_id)
+      VALUES (?, ?, 'user', ?, ?, ?, ?)
     `
-    ).run(messageId, sessionId, prepared.content, sentAt, message.id || null);
+    ).run(messageId, sessionId, content, sentAt, message.id || null, parentToolUseId);
 
     return messageId;
   } catch (error) {

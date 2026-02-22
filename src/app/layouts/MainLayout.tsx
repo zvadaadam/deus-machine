@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
-import type { Repo } from "@/features/repository/types";
+import type { Repository } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
@@ -96,7 +96,7 @@ export function MainLayout() {
 
   // Sync Zustand selectedWorkspace with React Query data.
   // The store holds a snapshot from when the user clicked — it goes stale when
-  // the backend updates workspace fields (state, active_session_id, session_status).
+  // the backend updates workspace fields (state, current_session_id, session_status).
   // Without this sync, ChatArea never sees the session created by the init pipeline.
   useEffect(() => {
     if (!selectedWorkspace || !repoGroups.length) return;
@@ -105,10 +105,10 @@ export function MainLayout() {
       .find((w) => w.id === selectedWorkspace.id);
     if (!fresh) return;
     if (
-      fresh.active_session_id !== selectedWorkspace.active_session_id ||
+      fresh.current_session_id !== selectedWorkspace.current_session_id ||
       fresh.state !== selectedWorkspace.state ||
       fresh.session_status !== selectedWorkspace.session_status ||
-      fresh.init_step !== selectedWorkspace.init_step
+      fresh.init_stage !== selectedWorkspace.init_stage
     ) {
       // When workspace transitions to "ready", clear any stale diff caches.
       // During "initializing", incomplete git state can produce garbage diffs
@@ -349,13 +349,13 @@ export function MainLayout() {
       const folderPath =
         typeof selected === "string" ? selected : (selected as { path: string }).path;
 
-      let repo: Repo;
+      let repo: Repository;
       try {
         repo = await addRepoMutation.mutateAsync(folderPath);
       } catch (err) {
         // If repo already exists (409 Conflict), use the existing one.
         // API error shape: { status: 409, details: { error: "...", details: repoObject } }
-        const addError = err as { status?: number; details?: { details?: Repo } };
+        const addError = err as { status?: number; details?: { details?: Repository } };
         const existingRepo = addError?.details?.details;
         if (addError?.status === 409 && existingRepo?.id) {
           repo = existingRepo;
@@ -406,13 +406,13 @@ export function MainLayout() {
 
       // Phase 2: Register repository
       setCloneStatus("Adding repository...");
-      let repo: Repo;
+      let repo: Repository;
       try {
         repo = await addRepoMutation.mutateAsync(cloneTarget);
       } catch (err) {
         // If repo already exists (409 Conflict), use the existing one.
         // API error shape: { status: 409, details: { error: "...", details: repoObject } }
-        const addError = err as { status?: number; details?: { details?: Repo } };
+        const addError = err as { status?: number; details?: { details?: Repository } };
         const existingRepo = addError?.details?.details;
         if (addError?.status === 409 && existingRepo?.id) {
           repo = existingRepo;
@@ -543,7 +543,7 @@ export function MainLayout() {
 
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}
-        workspaceName={selectedWorkspace?.directory_name || ""}
+        workspaceName={selectedWorkspace?.slug || ""}
         systemPrompt={systemPromptDraft}
         loading={systemPromptQuery.isLoading}
         saving={updateSystemPromptMutation.isPending}
