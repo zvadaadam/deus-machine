@@ -8,19 +8,22 @@
  * All tabs use absolute positioning (inset-0) so bounds are always measurable.
  * The native webview floats above the DOM; overlays only show when webview is hidden.
  *
- * Communication: Tauri events (browser:page-load, browser:title-changed,
- * browser:url-change, browser:console) replace iframe onLoad/postMessage.
+ * Communication channels (each concern gets its own reliable path):
+ *   - Tauri events: page-load, title-changed, url-change (push from Rust KVO)
+ *   - Completion handler: console drain + inspect event drain (pull from React)
  *
- * Console capture: An initialization_script on the Rust side intercepts
- * console.log/warn/error/debug and buffers them. This tab component
- * periodically drains the buffer (every 1.5s) via drain_browser_console,
- * which flushes logs through the title-channel bridge.
+ * Console & inspect events are both drained via eval_browser_webview_with_result
+ * (WKWebView's native evaluateJavaScript:completionHandler:). We do NOT use the
+ * title-channel (document.title) for inspect events — it has a race condition
+ * with BROWSER_INIT_SCRIPT's SPA nav detection (two independent writers on
+ * document.title causes WKWebView KVO to silently coalesce/drop messages).
  *
  * SPA navigation: pushState/replaceState patches in the init script fire
  * browser:url-change events so the URL bar stays current.
  */
 
 import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
 import { invoke, listen } from "@/platform/tauri";
@@ -30,8 +33,11 @@ import {
   INSPECT_MODE_SETUP,
   INSPECT_MODE_ENABLE,
   INSPECT_MODE_DISABLE,
+  INSPECT_MODE_DRAIN_EVENTS,
+  INSPECT_MODE_VERIFY,
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
+import { BROWSER_UTILS_SETUP } from "../automation/browser-utils";
 
 /** How often to drain console logs from the webview (ms) */
 const CONSOLE_DRAIN_INTERVAL_MS = 1500;
@@ -79,6 +85,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const rafRef = useRef(0);
   // Track whether automation scripts (inspect mode + visual effects) have been injected
   const automationInjectedRef = useRef(false);
+  // Stable ref for onElementSelected callback (used by title-channel listener + drain)
+  const onElementSelectedRef = useRef(onElementSelected);
+  onElementSelectedRef.current = onElementSelected;
 
   const tabId = tab.id;
   const webviewLabel = tab.webviewLabel;
@@ -235,17 +244,21 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
   // --- Tauri event listeners (page load, title, SPA nav, console) ---
   useEffect(() => {
-    let unlistenLoad: (() => void) | null = null;
-    let unlistenTitle: (() => void) | null = null;
-    let unlistenUrlChange: (() => void) | null = null;
-    let unlistenConsole: (() => void) | null = null;
-    let unlistenElementSelected: (() => void) | null = null;
-    let unlistenSelectionMode: (() => void) | null = null;
+    let aborted = false;
+    const unsubs: Array<() => void> = [];
+
+    /** Register a Tauri listener with race-safe cleanup */
+    function safeListen<T>(event: string, handler: (evt: { payload: T }) => void) {
+      listen<T>(event, handler).then((unsub) => {
+        if (aborted) { unsub(); return; }
+        unsubs.push(unsub);
+      });
+    }
 
     // Page load events
-    listen<{ label: string; url: string; event: string }>(
+    safeListen<{ label: string; url: string; event: string }>(
       "browser:page-load",
-      (evt: { payload: { label: string; url: string; event: string } }) => {
+      (evt) => {
         const { label, url, event: eventType } = evt.payload;
         if (label !== webviewLabel) return;
 
@@ -266,26 +279,22 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           onAddLog(tabId, "info", `Page loaded: ${url}`);
         }
       }
-    ).then((unsub: () => void) => {
-      unlistenLoad = unsub;
-    });
+    );
 
     // Title change events (regular, non-hive title changes)
-    listen<{ label: string; title: string }>(
+    safeListen<{ label: string; title: string }>(
       "browser:title-changed",
-      (evt: { payload: { label: string; title: string } }) => {
+      (evt) => {
         const { label, title } = evt.payload;
         if (label !== webviewLabel) return;
         onUpdateTab(tabId, { title });
       }
-    ).then((unsub: () => void) => {
-      unlistenTitle = unsub;
-    });
+    );
 
     // SPA navigation events (pushState/replaceState detected by init script)
-    listen<{ label: string; url: string }>(
+    safeListen<{ label: string; url: string }>(
       "browser:url-change",
-      (evt: { payload: { label: string; url: string } }) => {
+      (evt) => {
         const { label, url } = evt.payload;
         if (label !== webviewLabel) return;
         // Update URL bar and current URL, derive new title
@@ -295,118 +304,158 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           title: deriveTitleFromUrl(url),
         });
       }
-    ).then((unsub: () => void) => {
-      unlistenUrlChange = unsub;
-    });
+    );
 
-    // Console drain events (buffered logs flushed via title channel)
-    listen<{ label: string; logs: string }>(
-      "browser:console",
-      (evt: { payload: { label: string; logs: string } }) => {
-        const { label, logs: logsJson } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const logs: Array<{ l: string; m: string; t: number }> = JSON.parse(logsJson);
-          for (const log of logs) {
-            const level = (
-              log.l === "warn"
-                ? "warn"
-                : log.l === "error"
-                  ? "error"
-                  : log.l === "debug"
-                    ? "debug"
-                    : "info"
-            ) as ConsoleLog["level"];
-            onAddLog(tabId, level, log.m);
-          }
-        } catch {
-          // Invalid JSON from title channel — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenConsole = unsub;
-    });
-
-    // Inspect mode: element selected (click or drag-select)
-    listen<{ label: string; data: string }>(
-      "browser:element-selected",
-      (evt: { payload: { label: string; data: string } }) => {
-        const { label, data } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const parsed = JSON.parse(data) as ElementSelectedEvent;
-          onElementSelected?.(tabId, parsed);
-          onAddLog(
-            tabId,
-            "info",
-            parsed.type === "area-selected"
-              ? `Area selected: ${parsed.bounds?.width}×${parsed.bounds?.height}`
-              : `Element selected: ${parsed.element?.tagName}${parsed.reactComponent ? ` (${parsed.reactComponent.name})` : ""}`
-          );
-        } catch {
-          // Invalid JSON — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenElementSelected = unsub;
-    });
-
-    // Inspect mode: selection mode state change (enabled/disabled via Escape)
-    listen<{ label: string; data: string }>(
-      "browser:selection-mode",
-      (evt: { payload: { label: string; data: string } }) => {
-        const { label, data } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const parsed = JSON.parse(data) as { active: boolean };
-          onUpdateTab(tabId, { selectorActive: parsed.active });
-        } catch {
-          // Invalid JSON — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenSelectionMode = unsub;
-    });
+    // Console logs are drained via eval_browser_webview_with_result in the
+    // "Periodic console drain" effect below.
+    //
+    // Inspect mode events are delivered SOLELY via buffer + drain polling
+    // (eval_browser_webview_with_result every 200ms). We intentionally do NOT
+    // use the title-channel for inspect events — it has two independent writers
+    // (BROWSER_INIT_SCRIPT's SPA nav + inspect script) racing on document.title,
+    // causing silent message loss via WKWebView's title-change coalescing.
 
     return () => {
-      unlistenLoad?.();
-      unlistenTitle?.();
-      unlistenUrlChange?.();
-      unlistenConsole?.();
-      unlistenElementSelected?.();
-      unlistenSelectionMode?.();
+      aborted = true;
+      unsubs.forEach((fn) => fn());
     };
-  }, [webviewLabel, tabId, onUpdateTab, onAddLog, onElementSelected]);
+  }, [webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Periodic console drain (only when visible and webview ready) ---
+  // Uses eval_browser_webview_with_result (native completion handler) instead
+  // of the old title-channel approach (drain_browser_console). The title-channel
+  // suffers from WKWebView's title-change coalescing — when the 60ms restore
+  // window overlaps with another title write (SPA nav, page itself), the
+  // \x01CL: message is silently dropped and console logs are lost.
+  //
+  // The completion-handler path reads the log buffer directly and returns the
+  // JSON via WKWebView's evaluateJavaScript callback, which is reliable.
   useEffect(() => {
     if (!visible || !webviewReady || !hasLoaded) return;
 
-    const interval = setInterval(() => {
-      invoke("drain_browser_console", { label: webviewLabel }).catch(() => {});
+    const CONSOLE_DRAIN_JS = `(function(){
+      var b = window.__HIVE_LOGS__ || [];
+      window.__HIVE_LOGS__ = [];
+      return JSON.stringify(b);
+    })()`;
+
+    // Track consecutive failures for diagnostic logging
+    let consoleDrainFails = 0;
+
+    const interval = setInterval(async () => {
+      try {
+        const result = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: CONSOLE_DRAIN_JS,
+          timeoutMs: 2000,
+        });
+        // Reset on success
+        consoleDrainFails = 0;
+
+        if (!result || result === "[]" || result === "undefined") return;
+
+        let logs: Array<{ l: string; m: string; t: number }>;
+        try {
+          logs = JSON.parse(result);
+        } catch (parseErr) {
+          console.error("[BrowserTab] console drain: JSON.parse failed", parseErr, "raw:", result.slice(0, 200));
+          return;
+        }
+        for (const log of logs) {
+          const level = (
+            log.l === "warn"
+              ? "warn"
+              : log.l === "error"
+                ? "error"
+                : log.l === "debug"
+                  ? "debug"
+                  : "info"
+          ) as ConsoleLog["level"];
+          onAddLog(tabId, level, log.m);
+        }
+      } catch (err) {
+        consoleDrainFails++;
+        if (consoleDrainFails <= 3 || consoleDrainFails % 50 === 0) {
+          console.warn(
+            `[BrowserTab] console drain failed (${consoleDrainFails}x):`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      }
     }, CONSOLE_DRAIN_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [visible, webviewReady, hasLoaded, webviewLabel]);
+  }, [visible, webviewReady, hasLoaded, webviewLabel, tabId, onAddLog]);
 
-  // --- Auto-inject visual effects on first page load ---
-  // Visual effects (AI cursor + ripple) are lightweight and always useful
-  // because the sidecar may operate the browser at any time.
-  // Inspect mode is NOT auto-injected — it's only enabled on user action.
+  // --- Periodic inspect event drain (only when selector is active) ---
+  // Drains buffered events from the inject script via the reliable
+  // eval_browser_webview_with_result path (native completion handler).
+  // This is the FALLBACK path — the primary path is the title-channel
+  // listeners above. This drain catches events that the title channel
+  // drops (e.g. rapid-fire events during drag selection).
   useEffect(() => {
-    if (!hasLoaded || automationInjectedRef.current) return;
+    if (!visible || !webviewReady || !hasLoaded || !tab.selectorActive) return;
+    // Poll at 200ms — fast enough for responsive feel after click,
+    // cheap because eval_browser_webview_with_result returns immediately
+    // when the buffer is empty ("[]").
+    const INSPECT_DRAIN_MS = 200;
 
-    // Inject both scripts so they're ready for AI operations and inspect mode
-    Promise.all([
-      invoke("eval_browser_webview", { label: webviewLabel, js: VISUAL_EFFECTS_SETUP }),
-      invoke("eval_browser_webview", { label: webviewLabel, js: INSPECT_MODE_SETUP }),
-    ])
-      .then(() => {
-        automationInjectedRef.current = true;
-        onUpdateTab(tabId, { injected: true });
-      })
-      .catch(() => {});
-  }, [hasLoaded, webviewLabel, tabId, onUpdateTab]);
+    // Track consecutive failures to avoid log spam (log first 3, then every 50th)
+    let failCount = 0;
+
+    const interval = setInterval(async () => {
+      try {
+        const result = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: INSPECT_MODE_DRAIN_EVENTS,
+          timeoutMs: 2000,
+        });
+        // Reset fail counter on success
+        failCount = 0;
+
+        if (!result || result === "[]" || result === "undefined") return;
+
+        let events: Array<{ type: string; data: Record<string, unknown> }>;
+        try {
+          events = JSON.parse(result);
+        } catch (parseErr) {
+          // JSON parse failure — log the raw result for debugging
+          console.error("[BrowserTab] inspect drain: JSON.parse failed", parseErr, "raw result:", result.slice(0, 200));
+          return;
+        }
+
+        for (const evt of events) {
+          match(evt.type)
+            .with("element-event", () => {
+              const parsed = evt.data as unknown as ElementSelectedEvent;
+              onElementSelectedRef.current?.(tabId, parsed);
+              onAddLog(
+                tabId,
+                "info",
+                parsed.type === "area-selected"
+                  ? `Area selected: ${parsed.bounds?.width}\u00d7${parsed.bounds?.height}`
+                  : `Element selected: ${parsed.element?.tagName}${parsed.reactComponent ? ` (${parsed.reactComponent.name})` : ""}`
+              );
+            })
+            .with("selection-mode", () => {
+              const modeData = evt.data as { active: boolean };
+              onUpdateTab(tabId, { selectorActive: modeData.active });
+            })
+            .otherwise(() => {});
+        }
+      } catch (err) {
+        failCount++;
+        if (failCount <= 3 || failCount % 50 === 0) {
+          console.warn(
+            `[BrowserTab] inspect drain failed (${failCount}x):`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      }
+    }, INSPECT_DRAIN_MS);
+
+    return () => clearInterval(interval);
+  }, [visible, webviewReady, hasLoaded, tab.selectorActive, webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Imperative methods exposed to parent ---
 
@@ -434,6 +483,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     });
   }, [webviewLabel, tabId, onAddLog]);
 
+  // Inject browser utils, visual effects, and inspect mode into the WKWebView.
+  // Uses fire-and-forget eval for dispatch + eval_with_result for verification
+  // (fire-and-forget can't detect JS runtime errors in the IIFE).
   const injectAutomation = useCallback(async () => {
     if (!webviewCreatedRef.current) return;
     if (automationInjectedRef.current) {
@@ -442,17 +494,48 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }
 
     try {
-      // Inject inspect mode + visual effects via native eval (no HTTP fetch needed)
+      // Inject browser utils, visual effects, and inspect mode via native eval
+      await invoke("eval_browser_webview", { label: webviewLabel, js: BROWSER_UTILS_SETUP });
       await invoke("eval_browser_webview", { label: webviewLabel, js: INSPECT_MODE_SETUP });
       await invoke("eval_browser_webview", { label: webviewLabel, js: VISUAL_EFFECTS_SETUP });
+
+      // Wait a tick for the IIFEs to execute, then verify inspect mode
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        const verifyResult = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: INSPECT_MODE_VERIFY,
+          timeoutMs: 3000,
+        });
+        const status = JSON.parse(verifyResult);
+        if (!status.hiveInspect || !status.hasDrainEvents) {
+          onAddLog(tabId, "error",
+            `Inspect mode setup incomplete: ${JSON.stringify(status)}`
+          );
+          return; // Don't mark as injected
+        }
+      } catch (verifyErr) {
+        onAddLog(tabId, "warn",
+          `Inspect verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+        );
+        return;
+      }
+
       automationInjectedRef.current = true;
       onUpdateTab(tabId, { injected: true });
-      onAddLog(tabId, "info", "Automation scripts injected (inspect mode + visual effects)");
+      onAddLog(tabId, "info", "Automation scripts injected successfully");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       onAddLog(tabId, "error", `Injection failed: ${errorMsg}`);
+      onUpdateTab(tabId, { injectionFailed: true });
     }
   }, [tabId, webviewLabel, onUpdateTab, onAddLog]);
+
+  // Auto-inject on first page load — single call to injectAutomation().
+  useEffect(() => {
+    if (!hasLoaded || automationInjectedRef.current) return;
+    injectAutomation();
+  }, [hasLoaded, injectAutomation]);
 
   const toggleElementSelector = useCallback(async () => {
     if (!webviewCreatedRef.current) return;
@@ -462,14 +545,27 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       await injectAutomation();
     }
 
-    const js = tab.selectorActive ? INSPECT_MODE_DISABLE : INSPECT_MODE_ENABLE;
-    invoke("eval_browser_webview", { label: webviewLabel, js }).catch(() => {});
-    onUpdateTab(tabId, { selectorActive: !tab.selectorActive });
-    onAddLog(
-      tabId,
-      "info",
-      tab.selectorActive ? "Inspect mode deactivated" : "Inspect mode activated"
-    );
+    const enabling = !tab.selectorActive;
+    const js = enabling ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE;
+
+    // Use eval_browser_webview_with_result for the toggle so we can detect
+    // JS errors. The ENABLE/DISABLE IIFEs don't return a value (undefined),
+    // but any thrown error will be reported via the completion handler.
+    try {
+      await invoke<string>("eval_browser_webview_with_result", {
+        label: webviewLabel,
+        js,
+        timeoutMs: 3000,
+      });
+      onAddLog(tabId, "info",
+        enabling ? "Inspect mode activated" : "Inspect mode deactivated"
+      );
+      onUpdateTab(tabId, { selectorActive: enabling });
+    } catch (err) {
+      onAddLog(tabId, "error",
+        `Inspect mode toggle failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);
 
   useImperativeHandle(

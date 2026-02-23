@@ -441,7 +441,7 @@
   }
 }
 
-/* Tool loading shimmer — Cursor's "make-shine" pattern.
+/* Tool loading shimmer — "make-shine" pattern.
    Gradient slides across text via background-clip: text.
    Applied to tool headers while result is pending. */
 @keyframes tool-shimmer {

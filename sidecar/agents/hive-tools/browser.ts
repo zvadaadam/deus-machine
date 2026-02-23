@@ -18,7 +18,7 @@ import { FrontendClient } from "../../frontend-client";
 // Snapshot file-based fallback constants
 // ============================================================================
 
-// Two-tier thresholds matching Cursor's approach:
+// Two-tier thresholds:
 // - Action tools (click, type, hover, etc.): 25 KB — keeps context compact
 // - Dedicated snapshot tool: 200 KB — user explicitly asked for a snapshot
 const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024; // 25 KB for action tools

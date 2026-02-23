@@ -146,7 +146,7 @@ async function waitForPageLoad(
  * @param getActiveTab - Function to get the current active browser tab state
  * @param onAutoCreateTab - Optional callback to auto-create a browser tab when
  *   BrowserNavigate is called with no existing tab. Returns the new webviewLabel
- *   or null if creation failed. Follows Cursor's pattern: navigate auto-creates.
+ *   or null if creation failed. Navigate auto-creates a tab if none exists.
  * @param getTabs - Optional function to get all browser tabs for session-mapped lookups
  */
 export function useBrowserRpcHandler(
