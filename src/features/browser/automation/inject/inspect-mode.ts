@@ -228,7 +228,7 @@ if (!(window as any).__hiveInspectMode) {
     if (cached && Date.now() - cached.ts < VAR_CACHE_TTL) return cached.decls;
 
     const decls: Record<string, string> = {};
-    const colorProps = ['background-color', 'color', 'border-color'];
+    const varScanProps = ['background-color', 'color', 'border-color', 'padding', 'gap'];
     try {
       const sheets = document.styleSheets;
       for (let si = 0; si < sheets.length; si++) {
@@ -241,10 +241,10 @@ if (!(window as any).__hiveInspectMode) {
           if (!rule.selectorText || !rule.style) continue;
           try { if (!el.matches(rule.selectorText)) continue; }
           catch (_e) { continue; }
-          for (let ci = 0; ci < colorProps.length; ci++) {
-            const val = rule.style.getPropertyValue(colorProps[ci]);
+          for (let ci = 0; ci < varScanProps.length; ci++) {
+            const val = rule.style.getPropertyValue(varScanProps[ci]);
             if (val && val.indexOf('var(') !== -1) {
-              decls[colorProps[ci]] = val.trim();
+              decls[varScanProps[ci]] = val.trim();
             }
           }
         }
@@ -765,9 +765,9 @@ if (!(window as any).__hiveInspectMode) {
           // Has a var() token — always include (most actionable for local dev)
           styles[prop] = varVal;
         } else {
-          // Include font-size and border-radius even without var() tokens
+          // Include font-size, border-radius, and font-weight even without var() tokens
           const compVal = cs.getPropertyValue(prop);
-          if ((prop === 'font-size' || prop === 'border-radius') && compVal && compVal !== '0px' && compVal !== 'none') {
+          if ((prop === 'font-size' || prop === 'border-radius' || prop === 'font-weight') && compVal && compVal !== '0px' && compVal !== 'none' && compVal !== 'normal') {
             styles[prop] = compVal;
           }
         }

@@ -914,12 +914,13 @@ export function BrowserPanel({
             if (!activeTab?.webviewLabel) return;
             if (activeTab.devtoolsOpen) {
               invoke("close_browser_devtools", { label: activeTab.webviewLabel })
+                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
                 .catch((err) => handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`));
             } else {
               invoke("open_browser_devtools", { label: activeTab.webviewLabel })
+                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
                 .catch((err) => handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`));
             }
-            handleUpdateTab(activeTab.id, { devtoolsOpen: !activeTab.devtoolsOpen });
           }}
           disabled={!activeTab?.currentUrl}
           aria-pressed={activeTab?.devtoolsOpen}
