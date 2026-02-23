@@ -228,9 +228,10 @@ pub async fn create_browser_webview(
             }
 
             // Inspect mode: element event "\x01CE:{json}"
-            // Pushed by the inject script's sendViaTitle() for immediate delivery.
-            // The React side also drains events via eval_browser_webview_with_result
-            // as a fallback (dual mechanism for reliability).
+            // NOTE: The inject script no longer uses the title-channel for inspect
+            // events (buffer+drain via eval_browser_webview_with_result is the sole
+            // path). This handler is kept for backward compatibility but should not
+            // fire in normal operation.
             if title.starts_with("\x01CE:") {
                 let json_str = &title[4..];
                 app_for_title
