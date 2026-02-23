@@ -31,6 +31,23 @@
 - `window-resizing` class disables ALL layout transitions during native window resize
 - `[data-resize-handle-active]` sibling/parent selector disables panel transitions during drag
 
+## Cross-Component Event Bus Pattern
+
+- `window.dispatchEvent(new CustomEvent("insert-to-chat", { detail }))` is the established
+  pattern for browser panel → chat input communication (both text and element insertion).
+  The listener lives in `MainLayout.tsx` useEffect with no deps (stable ref via `workspaceChatPanelRef`).
+- Multi-tab (ChatArea with multiple SessionPanel tabs): only ONE SessionPanel tab is assigned the
+  ref at a time (last rendered wins via ref={workspaceChatPanelRef} directly on the component).
+  Element insertion always goes to the currently-active chat tab. Acceptable current limitation.
+
+## XML Attribute Serialization Risk Pattern
+
+- `serializeInspectElement` in `parseInspectTags.ts` embeds user-controlled string values (innerText,
+  path, tagName, reactComponent) into XML attribute values using double-quote delimiters with NO
+  escaping. A `"` in any of these fields breaks `attrRegex = /(\w+)="([^"]*)"/g` parsing and
+  corrupts the tag. Real DOM innerText can contain `"` (button labels, link text, etc.).
+  Fix pattern: HTML-escape values before embedding in attributes.
+
 ## Icon Component Patterns (New)
 
 - `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function

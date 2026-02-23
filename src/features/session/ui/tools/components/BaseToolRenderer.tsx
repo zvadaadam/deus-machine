@@ -131,7 +131,7 @@ export function BaseToolRenderer({
         </div>
       </button>
 
-      {/* Expanded content — error lives inside the collapsible body (like Cursor).
+      {/* Expanded content — error lives inside the collapsible body.
           The header "Error" label is the always-visible cue; details are behind the click. */}
       {isExpanded && (
         <div className="mt-0.5 ml-6">

@@ -29,6 +29,12 @@ if [ -n "$STALE_PID" ]; then
     sleep 0.3
 fi
 
+# Build browser inject scripts (TypeScript → IIFE for WKWebView)
+echo -e "${BLUE}Building browser inject scripts...${NC}"
+bun run build:inject
+echo -e "${GREEN}✓ Inject scripts built${NC}"
+echo ""
+
 # Start backend server with dynamic port
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
 PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &

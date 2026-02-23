@@ -38,6 +38,8 @@ import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
+import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
+import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   getRuntimeModelLabel,
   getRuntimeModelOption,
@@ -66,6 +68,7 @@ interface MCPServer {
 export interface MessageInputRef {
   addFiles: (files: File[]) => Promise<void>;
   clearPastedContent: () => void;
+  addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
 }
 
 // Anthropic API only supports these image formats for vision
@@ -140,6 +143,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   // Pasted text cards (long pastes shown as collapsed cards)
   const [pastedTexts, setPastedTexts] = useState<PastedText[]>([]);
 
+  // Inspected elements from InSpec mode (shown as pill cards)
+  const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
+
   // Browser MCP state (future integration)
   const [browserEnabled, setBrowserEnabled] = useState(false);
 
@@ -169,7 +175,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     if (valid.length) setAttachments((prev) => [...prev, ...valid]);
   }, []);
 
-  // Expose addFiles + clearPastedContent for parent-level drag & drop and success cleanup
+  // Expose addFiles + clearPastedContent + addInspectedElement for parent-level interactions
   useImperativeHandle(
     ref,
     () => ({
@@ -177,21 +183,34 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       clearPastedContent: () => {
         setPastedTexts([]);
         setAttachments([]);
+        setInspectedElements([]);
+      },
+      addInspectedElement: (element: Omit<InspectedElement, "id">) => {
+        setInspectedElements((prev) => [
+          ...prev,
+          { ...element, id: crypto.randomUUID() },
+        ]);
       },
     }),
     [processFiles]
   );
 
   /**
-   * Build combined content from pasted texts + typed input + images.
+   * Build combined content from pasted texts + inspected elements + typed input + images.
    * When images are present, returns a JSON-stringified content blocks array
    * (Anthropic API format). Otherwise returns plain text for backward compat.
    */
   const buildCombinedContent = () => {
     const hasImages = attachments.length > 0;
 
-    // Combine all text sources
+    // Combine all text sources (inspected elements serialized as <inspect> XML tags)
     const textParts: string[] = [];
+
+    // Inspected elements go first so the AI has element context before user's question
+    for (const el of inspectedElements) {
+      textParts.push(serializeInspectElement(el));
+    }
+
     for (const paste of pastedTexts) {
       textParts.push(paste.content);
     }
@@ -234,7 +253,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   const hasContent =
-    messageInput.trim().length > 0 || pastedTexts.length > 0 || attachments.length > 0;
+    messageInput.trim().length > 0 || pastedTexts.length > 0 || attachments.length > 0 || inspectedElements.length > 0;
 
   // Send with combined content (pasted texts + typed input + images)
   // Pasted content is NOT cleared here — it's cleared by the parent via
@@ -256,6 +275,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   });
 
   // Keyboard shortcut — file mention gets first pass for arrow/enter/escape
+  // Enter sends, Shift+Enter inserts newline (standard chat UX)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Let file mention popover handle navigation keys first
     if (fileMention.handleKeyDown(e)) {
@@ -263,7 +283,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       return;
     }
 
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -310,6 +330,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   const removePastedText = (id: string) => {
     setPastedTexts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const removeInspectedElement = (id: string) => {
+    setInspectedElements((prev) => prev.filter((el) => el.id !== id));
   };
 
   const modelLabel = getRuntimeModelLabel(model);
@@ -428,10 +452,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         data-no-ring={true}
         className="bg-input-surface relative overflow-visible rounded-2xl border-0 shadow-xs transition-colors duration-200"
       >
-        {/* Pasted content cards (images + text) — unified horizontal scroll */}
-        {(attachments.length > 0 || pastedTexts.length > 0) && (
+        {/* Pasted content cards (images + text + inspected elements) — unified horizontal scroll */}
+        {(attachments.length > 0 || pastedTexts.length > 0 || inspectedElements.length > 0) && (
           <div className="scrollbar-vibrancy flex w-full items-start gap-2 overflow-x-auto px-3 pt-3">
             <AnimatePresence mode="popLayout">
+              {inspectedElements.map((el) => (
+                <InspectedElementCard
+                  key={el.id}
+                  element={el}
+                  onRemove={() => removeInspectedElement(el.id)}
+                />
+              ))}
               {attachments.map((attachment) => (
                 <PastedImageCard
                   key={attachment.id}
@@ -587,6 +618,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               <Brain className="h-3 w-3" />
               {renderThinkingDots()}
             </InputGroupButton>
+
           </div>
 
           {/* Actions group (right) */}
@@ -719,7 +751,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               disabled={sending || !hasContent}
               variant={hasContent ? "default" : "outline"}
               size="icon-sm"
-              title="Send message (⌘ + Enter)"
+              title="Send message (Enter)"
               aria-label="Send message"
               className="rounded-full"
             >

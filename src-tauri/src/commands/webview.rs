@@ -77,7 +77,7 @@ const BROWSER_INIT_SCRIPT: &str = r#"(function(){
     try {
       _origTitle = document.title;
       document.title = '\x01CN:' + location.href;
-      setTimeout(function() { document.title = _origTitle; }, 0);
+      setTimeout(function() { document.title = _origTitle; }, 60);
     } catch(e) {}
   }
   history.pushState = function(){ _push.apply(history, arguments); notifyNav(); };
@@ -227,8 +227,10 @@ pub async fn create_browser_webview(
                 return;
             }
 
-            // Element selected in inspect mode: "\x01CE:{json}"
-            // Emitted when user clicks an element or drag-selects an area
+            // Inspect mode: element event "\x01CE:{json}"
+            // Pushed by the inject script's sendViaTitle() for immediate delivery.
+            // The React side also drains events via eval_browser_webview_with_result
+            // as a fallback (dual mechanism for reliability).
             if title.starts_with("\x01CE:") {
                 let json_str = &title[4..];
                 app_for_title
@@ -243,8 +245,7 @@ pub async fn create_browser_webview(
                 return;
             }
 
-            // Selection mode state change: "\x01CS:{json}"
-            // Emitted when inspect mode is enabled/disabled
+            // Inspect mode: selection-mode change "\x01CS:{json}"
             if title.starts_with("\x01CS:") {
                 let json_str = &title[4..];
                 app_for_title
@@ -339,9 +340,7 @@ pub async fn show_browser_webview(app: AppHandle, label: String) -> Result<(), S
         .get_webview(&label)
         .ok_or_else(|| format!("Webview '{}' not found", label))?;
 
-    webview
-        .show()
-        .map_err(|e| format!("Failed to show webview: {}", e))
+    webview.show().map_err(|e| format!("Failed to show webview: {}", e))
 }
 
 /// Hide a browser webview (keeps it alive but invisible).
@@ -351,9 +350,7 @@ pub async fn hide_browser_webview(app: AppHandle, label: String) -> Result<(), S
         .get_webview(&label)
         .ok_or_else(|| format!("Webview '{}' not found", label))?;
 
-    webview
-        .hide()
-        .map_err(|e| format!("Failed to hide webview: {}", e))
+    webview.hide().map_err(|e| format!("Failed to hide webview: {}", e))
 }
 
 /// Close and destroy a browser webview.
@@ -424,26 +421,212 @@ pub async fn eval_browser_webview_with_result(
     {
         let webview = app
             .get_webview(&label)
-            .ok_or_else(|| format!("Webview '{}' not found", label))?;
+            .ok_or_else(|| {
+                eprintln!("[eval_with_result] Webview '{}' not found", label);
+                format!("Webview '{}' not found", label)
+            })?;
 
         let (tx, rx) = std_mpsc::channel::<Result<String, String>>();
         let timeout = std::time::Duration::from_millis(timeout_ms.unwrap_or(30000));
+
+        // Log first 80 chars of JS for diagnostics (avoid spamming large scripts)
+        let js_preview: String = js.chars().take(80).collect();
+        let is_drain = js.contains("drainEvents") || js.contains("__HIVE_LOGS__");
 
         webview
             .with_webview(move |platform_wv| {
                 let raw_ptr = platform_wv.inner() as *mut std::ffi::c_void;
                 eval_js_wkwebview(raw_ptr, &js, tx);
             })
-            .map_err(|e| format!("Failed to access webview: {}", e))?;
+            .map_err(|e| {
+                eprintln!("[eval_with_result] with_webview failed for '{}': {}", label, e);
+                format!("Failed to access webview: {}", e)
+            })?;
 
-        rx.recv_timeout(timeout)
-            .map_err(|e| format!("JS eval timed out: {}", e))?
+        let result = rx.recv_timeout(timeout)
+            .map_err(|e| {
+                eprintln!("[eval_with_result] TIMEOUT for '{}' ({}ms) js: {}...", label, timeout.as_millis(), js_preview);
+                format!("JS eval timed out: {}", e)
+            })?;
+
+        // Log drain results at debug level (frequent calls)
+        if is_drain {
+            if let Ok(ref val) = result {
+                if val != "[]" && val != "undefined" {
+                    eprintln!("[eval_with_result] drain returned data for '{}': {}...",
+                        label,
+                        val.chars().take(120).collect::<String>());
+                }
+            } else if let Err(ref err) = result {
+                eprintln!("[eval_with_result] drain ERROR for '{}': {}", label, err);
+            }
+        }
+
+        result
     }
 
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (app, label, js, timeout_ms);
         Err("eval_browser_webview_with_result is only supported on macOS".to_string())
+    }
+}
+
+/// Open native DevTools (WebKit Inspector) for a browser webview.
+///
+/// Currently opens as a **detached floating window**. The `docked` parameter
+/// is accepted but ignored — docking inside the browser panel is not yet
+/// implemented (see TODO below).
+///
+/// ## TODO: Docked DevTools inside the browser panel
+///
+/// **Goal:** Inspector docked at the bottom of the browser panel (like Chrome),
+/// not in a separate floating window.
+///
+/// **Why it's hard:** `_inspector.show()` docks the inspector by splitting the
+/// WKWebView's superview. In Tauri v2 multi-webview, that superview is the
+/// NSWindow's content view — shared by ALL webviews (main app UI + browser).
+/// Splitting it breaks the entire layout.
+///
+/// **Approaches tried (all failed with ObjC exceptions):**
+///
+/// 1. **Container NSView wrapping** (recommended by 4/5 eng-explore personas):
+///    Wrap the WKWebView in an intermediate NSView (tag=9999) so inspector.show()
+///    splits the container instead of the content view.
+///    - Tried at creation time (in create_browser_webview): `with_webview` dispatches
+///      async to main thread — WKWebView not yet in view hierarchy → ObjC exception.
+///    - Tried lazily (first set_browser_webview_bounds call): WKWebView is live, but
+///      creating an NSView via `msg_send![class!(NSView), new]` and then calling ANY
+///      method on it (`setTag:`, `setFrame:`) triggers "Rust cannot catch foreign
+///      exceptions, aborting". The crash point is non-deterministic across runs,
+///      suggesting memory corruption — likely an ARM64 ABI mismatch where the `objc`
+///      crate (0.2.x) passes CGRect structs through `objc_msgSend`'s variadic calling
+///      convention instead of using HFA (Homogeneous Floating-point Aggregate) registers.
+///
+/// 2. **View Theft** (steal inspector from its floating window, reparent into app):
+///    Call show() + detach() to get a floating inspector window, then steal its
+///    contentView and reparent it into the main window. Successfully steals the view
+///    but crashes immediately: "Rust cannot catch foreign exceptions" — moving WebKit's
+///    internal views between windows violates internal invariants.
+///
+/// **Possible future approaches:**
+///
+/// - **objc2 crate** instead of objc 0.2.x: Uses typed selectors and correct ARM64 ABI
+///   for struct parameters. Would fix the suspected CGRect calling convention issue.
+///   Requires significant refactoring of all msg_send! calls in this file.
+///
+/// - **Small ObjC helper (.m file)** compiled as part of the build: Write the container
+///   wrapping logic in native ObjC (with @try/@catch for exception safety) and call it
+///   from Rust via C FFI. Avoids the `objc` crate's ABI issues entirely.
+///
+/// - **CALayer masking** instead of NSView container: Set masksToBounds on the content
+///   view's layer at the browser panel bounds. Doesn't require creating new NSViews.
+///   Downside: affects all views in the content view, not just the browser.
+///
+/// - **Tauri v3** may have better multi-webview support with proper view isolation,
+///   making the container approach unnecessary.
+#[tauri::command]
+pub async fn open_browser_devtools(
+    app: AppHandle,
+    label: String,
+    docked: Option<bool>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let webview = app
+            .get_webview(&label)
+            .ok_or_else(|| format!("Webview '{}' not found", label))?;
+
+        // docked param accepted for future use but currently always detaches
+        let _ = docked;
+
+        webview
+            .with_webview(move |platform_wv| {
+                use objc::runtime::Object;
+                use objc::{msg_send, sel, sel_impl};
+
+                #[repr(C)]
+                #[derive(Clone, Copy)]
+                struct CGSize { width: f64, height: f64 }
+                #[repr(C)]
+                #[derive(Clone, Copy)]
+                struct CGPoint { x: f64, y: f64 }
+                #[repr(C)]
+                #[derive(Clone, Copy)]
+                struct CGRect { origin: CGPoint, size: CGSize }
+
+                unsafe {
+                    let wk: *mut Object = platform_wv.inner() as *mut Object;
+                    if wk.is_null() {
+                        eprintln!("[devtools] WKWebView pointer is null");
+                        return;
+                    }
+                    let inspector: *mut Object = msg_send![wk, _inspector];
+                    if inspector.is_null() {
+                        eprintln!("[devtools] _inspector is null — devtools may be disabled");
+                        return;
+                    }
+
+                    // Save the WKWebView's frame before show() — inspector.show() docks
+                    // by splitting the superview, which resizes the WKWebView. After
+                    // detach() moves the inspector to a floating window, the WKWebView
+                    // frame isn't fully restored. We save and restore it explicitly.
+                    let saved_frame: CGRect = msg_send![wk, frame];
+
+                    // show() connects the inspector, detach() puts it in a floating window.
+                    // show() alone would dock (split content view), breaking multi-webview layout.
+                    let _: () = msg_send![inspector, show];
+                    let _: () = msg_send![inspector, detach];
+
+                    // Restore the WKWebView's original frame (undoes the split resize)
+                    let _: () = msg_send![wk, setFrame: saved_frame];
+
+                    eprintln!("[devtools] Inspector opened (floating window), frame restored");
+                }
+            })
+            .map_err(|e| format!("Failed to access webview: {}", e))?;
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, label, docked);
+        Err("DevTools are only supported on macOS".to_string())
+    }
+}
+
+/// Close the inspector for a browser webview.
+#[tauri::command]
+pub async fn close_browser_devtools(app: AppHandle, label: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let webview = app
+            .get_webview(&label)
+            .ok_or_else(|| format!("Webview '{}' not found", label))?;
+
+        webview
+            .with_webview(move |platform_wv| {
+                use objc::runtime::Object;
+                use objc::{msg_send, sel, sel_impl};
+                unsafe {
+                    let wk: *mut Object = platform_wv.inner() as *mut Object;
+                    if wk.is_null() { return; }
+                    let inspector: *mut Object = msg_send![wk, _inspector];
+                    if inspector.is_null() { return; }
+                    let _: () = msg_send![inspector, close];
+                    eprintln!("[devtools] Inspector closed");
+                }
+            })
+            .map_err(|e| format!("Failed to access webview: {}", e))?;
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, label);
+        Err("DevTools only supported on macOS".to_string())
     }
 }
 
@@ -476,8 +659,9 @@ pub async fn drain_browser_console(app: AppHandle, label: String) -> Result<(), 
         .get_webview(&label)
         .ok_or_else(|| format!("Webview '{}' not found", label))?;
 
-    // Uses setTimeout to restore title in next tick — prevents WKWebView
-    // from coalescing the title changes (same fix as SPA navigation detection).
+    // Uses setTimeout(60ms) to restore title — gives WKWebView's cross-process
+    // KVO enough time to observe the title change before it's restored.
+    // setTimeout(0) was too fast and caused message drops.
     webview
         .eval(
             r#"(function(){
@@ -486,7 +670,7 @@ pub async fn drain_browser_console(app: AppHandle, label: String) -> Result<(), 
                 if(b.length > 0) {
                     var t = document.title;
                     document.title = '\x01CL:' + JSON.stringify(b);
-                    setTimeout(function() { document.title = t; }, 0);
+                    setTimeout(function() { document.title = t; }, 60);
                 }
             })()"#,
         )

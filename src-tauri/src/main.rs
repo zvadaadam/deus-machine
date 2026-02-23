@@ -250,6 +250,8 @@ fn main() {
             commands::eval_browser_webview,
             commands::eval_browser_webview_with_result,
             commands::reload_browser_webview,
+            commands::open_browser_devtools,
+            commands::close_browser_devtools,
             commands::drain_browser_console,
             commands::get_cookie_browsers,
             commands::sync_browser_cookies,
