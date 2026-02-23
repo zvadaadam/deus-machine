@@ -192,7 +192,6 @@ impl DbManager {
     }
 }
 
-
 // ─── Helpers ────────────────────────────────────────────────
 
 /// Compute workspace filesystem path from DB fields.

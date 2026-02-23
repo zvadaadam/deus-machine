@@ -22,8 +22,6 @@ import {
   GatewaySection,
   RemoteAccessSection,
   UpdateSection,
-  GatewaySection,
-  RemoteAccessSection,
 } from "./sections";
 
 export function SettingsPage() {

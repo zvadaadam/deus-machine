@@ -201,7 +201,7 @@ function handleRelayFrame(frame: RelayFrame): void {
 
 /**
  * Push an initial state snapshot (workspaces + stats) to a newly-authenticated relay client.
- * Uses inline SQL against the real app DB schema (repos, workspaces, sessions, session_messages).
+ * Uses inline SQL against the real app DB schema (repositories, workspaces, sessions, messages).
  */
 function pushInitialState(clientId: string): void {
   try {
@@ -209,19 +209,19 @@ function pushInitialState(clientId: string): void {
 
     const workspaces = db.prepare(`
       SELECT
-        w.id, w.directory_name, w.display_name,
-        w.branch, w.parent_branch,
-        w.state, w.active_session_id,
-        w.pr_url, w.pr_number, w.setup_status, w.setup_error,
+        w.id, w.slug, w.title,
+        w.git_branch, w.git_target_branch,
+        w.state, w.current_session_id,
+        w.pr_url, w.pr_number, w.setup_status, w.error_message,
         w.updated_at,
-        r.name as repo_name, r.root_path, r.default_branch,
+        r.name as repo_name, r.root_path, r.git_default_branch,
         s.status as session_status, s.model,
         s.last_user_message_at as latest_message_sent_at
       FROM workspaces w
-      LEFT JOIN repos r ON w.repository_id = r.id
-      LEFT JOIN sessions s ON w.active_session_id = s.id
+      LEFT JOIN repositories r ON w.repository_id = r.id
+      LEFT JOIN sessions s ON w.current_session_id = s.id
       WHERE w.state != 'archived'
-      ORDER BY r.display_order ASC, r.name ASC, w.updated_at DESC
+      ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
     `).all();
 
     const stats = db.prepare(`
@@ -229,11 +229,11 @@ function pushInitialState(clientId: string): void {
         (SELECT COUNT(*) FROM workspaces) as workspaces,
         (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
         (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-        (SELECT COUNT(*) FROM repos) as repos,
+        (SELECT COUNT(*) FROM repositories) as repos,
         (SELECT COUNT(*) FROM sessions) as sessions,
         (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
         (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-        (SELECT COUNT(*) FROM session_messages) as messages
+        (SELECT COUNT(*) FROM messages) as messages
     `).get();
 
     sendToRelay({
@@ -279,7 +279,7 @@ function handleVirtualClientMessage(connectionId: string, msg: Record<string, un
 
 /**
  * Handle on-demand data requests from relay-connected web clients.
- * Uses inline SQL against the real app DB schema (repos, workspaces, sessions, session_messages).
+ * Uses inline SQL against the real app DB schema (repositories, workspaces, sessions, messages).
  */
 function handleDataRequest(connectionId: string, msg: Record<string, unknown>): void {
   let relayClientId: string | null = null;
@@ -300,17 +300,17 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
       .with("workspaces", () =>
         db.prepare(`
           SELECT
-            w.id, w.directory_name, w.display_name,
-            w.branch, w.state,
+            w.id, w.slug, w.title,
+            w.git_branch, w.state,
             r.name as repo_name,
             s.status as session_status, s.model,
             s.last_user_message_at as latest_message_sent_at,
             w.updated_at
           FROM workspaces w
-          LEFT JOIN repos r ON w.repository_id = r.id
-          LEFT JOIN sessions s ON w.active_session_id = s.id
+          LEFT JOIN repositories r ON w.repository_id = r.id
+          LEFT JOIN sessions s ON w.current_session_id = s.id
           WHERE w.state != 'archived'
-          ORDER BY r.display_order ASC, r.name ASC, w.updated_at DESC
+          ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
         `).all()
       )
       .with("stats", () =>
@@ -319,11 +319,11 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
             (SELECT COUNT(*) FROM workspaces) as workspaces,
             (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
             (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-            (SELECT COUNT(*) FROM repos) as repos,
+            (SELECT COUNT(*) FROM repositories) as repos,
             (SELECT COUNT(*) FROM sessions) as sessions,
             (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
             (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-            (SELECT COUNT(*) FROM session_messages) as messages
+            (SELECT COUNT(*) FROM messages) as messages
         `).get()
       )
       .with("sessions", () => {
@@ -343,7 +343,7 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
         const limit = (msg.limit as number) || 50;
         return db.prepare(`
           SELECT id, session_id, seq, role, content, sent_at, model
-          FROM session_messages
+          FROM messages
           WHERE session_id = ?
           ORDER BY seq DESC
           LIMIT ?
@@ -381,7 +381,7 @@ function handleWatchSession(connectionId: string, sessionId: string | null): voi
   try {
     const db = getDatabase();
     const row = db.prepare(`
-      SELECT COALESCE(MAX(seq), 0) as max_seq FROM session_messages WHERE session_id = ?
+      SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?
     `).get(sessionId) as { max_seq: number } | undefined;
 
     clientWatches.set(connectionId, {
@@ -445,7 +445,7 @@ function tickWatcher(): void {
 
       const newMessages = db.prepare(`
         SELECT id, session_id, seq, role, content, sent_at, model
-        FROM session_messages
+        FROM messages
         WHERE session_id = ? AND seq > ?
         ORDER BY seq ASC
       `).all(sessionId, minSeq) as Array<{ seq: number; [key: string]: unknown }>;
