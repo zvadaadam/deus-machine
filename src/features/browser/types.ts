@@ -32,8 +32,12 @@ export interface BrowserTabState {
   error: string | null;
   /** Whether automation script has been injected */
   injected: boolean;
+  /** Whether automation injection failed (shown as error indicator) */
+  injectionFailed: boolean;
   /** Whether element selector mode is active */
   selectorActive: boolean;
+  /** Whether DevTools inspector is docked (stolen NSView in main window) */
+  devtoolsOpen: boolean;
   /** Console logs for this tab */
   consoleLogs: ConsoleLog[];
 }
@@ -42,6 +46,8 @@ export interface BrowserTabState {
 export interface ElementSelectedEvent {
   type: "element-selected" | "area-selected";
   ref?: string;
+  /** "local" = own dev server (localhost), "external" = any other website */
+  context?: "local" | "external";
   element?: {
     tagName: string;
     id?: string;
@@ -49,7 +55,14 @@ export interface ElementSelectedEvent {
     innerText?: string;
     path: string;
     rect: { top: number; left: number; width: number; height: number };
-    computedStyle: Record<string, string>;
+    /** Context-aware CSS: var() tokens for local, visual props for external */
+    styles: Record<string, string>;
+    /** Serialized React props — primitives only (variant, size, disabled, etc.) */
+    props?: Record<string, string>;
+    /** Whitelisted HTML attributes (data-testid, href, type, role, aria-label, etc.) */
+    attributes?: Record<string, string>;
+    /** Shallow innerHTML capped at 500 chars — shows element structure */
+    innerHTML?: string;
   };
   reactComponent?: {
     name: string;
@@ -67,6 +80,10 @@ export interface BrowserTabHandle {
   reload: () => void;
   injectAutomation: () => Promise<void>;
   toggleElementSelector: () => void;
+  /** Force re-sync native webview position to placeholder bounds.
+   *  Call when the container layout shifts without a size change
+   *  (e.g., mobile view toggle repositions via flex centering). */
+  syncBounds: () => void;
 }
 
 /** Extract a readable title from a URL (domain or localhost:port) */
@@ -102,7 +119,9 @@ export function createBrowserTab(workspaceId?: string | null): BrowserTabState {
     loading: false,
     error: null,
     injected: false,
+    injectionFailed: false,
     selectorActive: false,
+    devtoolsOpen: false,
     consoleLogs: [],
   };
 }
@@ -129,7 +148,9 @@ export function hydratePersistedTab(
     loading: false,
     error: null,
     injected: false,
+    injectionFailed: false,
     selectorActive: false,
+    devtoolsOpen: false,
     consoleLogs: [],
   };
 }

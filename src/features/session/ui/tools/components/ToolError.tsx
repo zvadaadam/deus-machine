@@ -2,7 +2,7 @@
  * Tool Error Component
  *
  * Shared component for displaying tool execution errors consistently.
- * Follows Cursor's "errors whisper" philosophy — errors are common during
+ * "Errors whisper" philosophy — errors are common during
  * agent work (build failures, lint errors, retries). Aggressive red styling
  * creates unnecessary visual noise. Keep it subtle: a faint tint, a small
  * icon, and muted text. The error is distinguishable but not alarming.

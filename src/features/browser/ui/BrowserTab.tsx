@@ -5,22 +5,25 @@
  * ResizeObserver. Tells Rust to create/position a native WKWebView there.
  * Unlike iframes, native webviews bypass X-Frame-Options so any URL loads.
  *
- * All tabs use absolute positioning (inset-0) so bounds are always measurable.
+ * All tabs stack via CSS Grid ([grid-area:1/1]) in the parent container.
  * The native webview floats above the DOM; overlays only show when webview is hidden.
  *
- * Communication: Tauri events (browser:page-load, browser:title-changed,
- * browser:url-change, browser:console) replace iframe onLoad/postMessage.
+ * Communication channels (each concern gets its own reliable path):
+ *   - Tauri events: page-load, title-changed, url-change (push from Rust KVO)
+ *   - Completion handler: console drain + inspect event drain (pull from React)
  *
- * Console capture: An initialization_script on the Rust side intercepts
- * console.log/warn/error/debug and buffers them. This tab component
- * periodically drains the buffer (every 1.5s) via drain_browser_console,
- * which flushes logs through the title-channel bridge.
+ * Console & inspect events are both drained via eval_browser_webview_with_result
+ * (WKWebView's native evaluateJavaScript:completionHandler:). We do NOT use the
+ * title-channel (document.title) for inspect events — it has a race condition
+ * with BROWSER_INIT_SCRIPT's SPA nav detection (two independent writers on
+ * document.title causes WKWebView KVO to silently coalesce/drop messages).
  *
  * SPA navigation: pushState/replaceState patches in the init script fire
  * browser:url-change events so the URL bar stays current.
  */
 
-import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
 import { invoke, listen } from "@/platform/tauri";
@@ -30,8 +33,11 @@ import {
   INSPECT_MODE_SETUP,
   INSPECT_MODE_ENABLE,
   INSPECT_MODE_DISABLE,
+  INSPECT_MODE_DRAIN_EVENTS,
+  INSPECT_MODE_VERIFY,
 } from "../automation/inspect-mode";
 import { VISUAL_EFFECTS_SETUP } from "../automation/visual-effects";
+import { BROWSER_UTILS_SETUP } from "../automation/browser-utils";
 
 /** How often to drain console logs from the webview (ms) */
 const CONSOLE_DRAIN_INTERVAL_MS = 1500;
@@ -49,6 +55,10 @@ interface BrowserTabProps {
   onElementSelected?: (tabId: string, event: ElementSelectedEvent) => void;
   /** Which Tauri window to create child webviews in. Defaults to "main". */
   windowLabel?: string;
+  /** When true, the browser container is constrained to mobile width (390px).
+   *  Used to trigger a bounds sync — mx-auto centering shifts x-offset
+   *  and ResizeObserver may not catch position-only changes. */
+  mobileView?: boolean;
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
@@ -60,6 +70,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     visible,
     onElementSelected,
     windowLabel,
+    mobileView,
   },
   ref
 ) {
@@ -79,6 +90,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const rafRef = useRef(0);
   // Track whether automation scripts (inspect mode + visual effects) have been injected
   const automationInjectedRef = useRef(false);
+  // Stable ref for onElementSelected callback (used by the inspect drain loop)
+  const onElementSelectedRef = useRef(onElementSelected);
+  onElementSelectedRef.current = onElementSelected;
+  // Track previous mobileView value to detect actual toggles (vs initial mount)
+  const prevMobileViewRef = useRef(mobileView);
 
   const tabId = tab.id;
   const webviewLabel = tab.webviewLabel;
@@ -233,19 +249,71 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     };
   }, [visible, webviewReady, hasLoaded, webviewLabel]);
 
+  // --- Re-sync bounds when mobile view toggles ---
+  // The container CSS changes (w-full ↔ w-[390px] + mx-auto centering) change
+  // BOTH the placeholder's size and its x-offset. ResizeObserver catches the
+  // size change asynchronously, but it fires between layout and paint — racing
+  // with effect-based sync can produce stale x-offsets.
+  //
+  // useLayoutEffect runs synchronously after React commits DOM but BEFORE the
+  // browser paints. Calling getBoundingClientRect() here forces a synchronous
+  // reflow that includes the newly committed CSS classes (w-[390px], mx-auto).
+  // This guarantees correct width AND x-position in a single measurement — no
+  // rAF, no race with ResizeObserver, no timing ambiguity.
+  //
+  // The hide → setBounds → show cycle ensures WKWebView's native compositor
+  // actually repositions the view (setBounds on an already-visible native view
+  // can be coalesced/ignored by the compositor in some Tauri/WebKit versions).
+  useLayoutEffect(() => {
+    const changed = prevMobileViewRef.current !== mobileView;
+    prevMobileViewRef.current = mobileView;
+    if (!changed) return; // skip initial mount — visibility effect handles it
+
+    if (!visible || !webviewReady || !hasLoaded) return;
+    const el = placeholderRef.current;
+    if (!el || !webviewCreatedRef.current) return;
+
+    // Hide so the stale-position webview isn't visible during the transition.
+    invoke("hide_browser_webview", { label: webviewLabel }).catch(() => {});
+
+    // getBoundingClientRect() forces synchronous reflow — reads the post-toggle
+    // layout including mx-auto centering offsets. No rAF needed because React
+    // has already committed the DOM changes before useLayoutEffect runs.
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    invoke("set_browser_webview_bounds", {
+      label: webviewLabel,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    })
+      .then(() => invoke("show_browser_webview", { label: webviewLabel }))
+      .catch(() => {});
+  }, [mobileView, visible, webviewReady, hasLoaded, webviewLabel]);
+
   // --- Tauri event listeners (page load, title, SPA nav, console) ---
   useEffect(() => {
-    let unlistenLoad: (() => void) | null = null;
-    let unlistenTitle: (() => void) | null = null;
-    let unlistenUrlChange: (() => void) | null = null;
-    let unlistenConsole: (() => void) | null = null;
-    let unlistenElementSelected: (() => void) | null = null;
-    let unlistenSelectionMode: (() => void) | null = null;
+    let aborted = false;
+    const unsubs: Array<() => void> = [];
+
+    /** Register a Tauri listener with race-safe cleanup */
+    function safeListen<T>(event: string, handler: (evt: { payload: T }) => void) {
+      listen<T>(event, handler).then((unsub) => {
+        if (aborted) { unsub(); return; }
+        unsubs.push(unsub);
+      }).catch((err) => {
+        if (!aborted) {
+          console.warn(`[BrowserTab] listen(${event}) failed`, err);
+        }
+      });
+    }
 
     // Page load events
-    listen<{ label: string; url: string; event: string }>(
+    safeListen<{ label: string; url: string; event: string }>(
       "browser:page-load",
-      (evt: { payload: { label: string; url: string; event: string } }) => {
+      (evt) => {
         const { label, url, event: eventType } = evt.payload;
         if (label !== webviewLabel) return;
 
@@ -266,26 +334,22 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           onAddLog(tabId, "info", `Page loaded: ${url}`);
         }
       }
-    ).then((unsub: () => void) => {
-      unlistenLoad = unsub;
-    });
+    );
 
     // Title change events (regular, non-hive title changes)
-    listen<{ label: string; title: string }>(
+    safeListen<{ label: string; title: string }>(
       "browser:title-changed",
-      (evt: { payload: { label: string; title: string } }) => {
+      (evt) => {
         const { label, title } = evt.payload;
         if (label !== webviewLabel) return;
         onUpdateTab(tabId, { title });
       }
-    ).then((unsub: () => void) => {
-      unlistenTitle = unsub;
-    });
+    );
 
     // SPA navigation events (pushState/replaceState detected by init script)
-    listen<{ label: string; url: string }>(
+    safeListen<{ label: string; url: string }>(
       "browser:url-change",
-      (evt: { payload: { label: string; url: string } }) => {
+      (evt) => {
         const { label, url } = evt.payload;
         if (label !== webviewLabel) return;
         // Update URL bar and current URL, derive new title
@@ -295,118 +359,167 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           title: deriveTitleFromUrl(url),
         });
       }
-    ).then((unsub: () => void) => {
-      unlistenUrlChange = unsub;
-    });
+    );
 
-    // Console drain events (buffered logs flushed via title channel)
-    listen<{ label: string; logs: string }>(
-      "browser:console",
-      (evt: { payload: { label: string; logs: string } }) => {
-        const { label, logs: logsJson } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const logs: Array<{ l: string; m: string; t: number }> = JSON.parse(logsJson);
-          for (const log of logs) {
-            const level = (
-              log.l === "warn"
-                ? "warn"
-                : log.l === "error"
-                  ? "error"
-                  : log.l === "debug"
-                    ? "debug"
-                    : "info"
-            ) as ConsoleLog["level"];
-            onAddLog(tabId, level, log.m);
-          }
-        } catch {
-          // Invalid JSON from title channel — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenConsole = unsub;
-    });
-
-    // Inspect mode: element selected (click or drag-select)
-    listen<{ label: string; data: string }>(
-      "browser:element-selected",
-      (evt: { payload: { label: string; data: string } }) => {
-        const { label, data } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const parsed = JSON.parse(data) as ElementSelectedEvent;
-          onElementSelected?.(tabId, parsed);
-          onAddLog(
-            tabId,
-            "info",
-            parsed.type === "area-selected"
-              ? `Area selected: ${parsed.bounds?.width}×${parsed.bounds?.height}`
-              : `Element selected: ${parsed.element?.tagName}${parsed.reactComponent ? ` (${parsed.reactComponent.name})` : ""}`
-          );
-        } catch {
-          // Invalid JSON — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenElementSelected = unsub;
-    });
-
-    // Inspect mode: selection mode state change (enabled/disabled via Escape)
-    listen<{ label: string; data: string }>(
-      "browser:selection-mode",
-      (evt: { payload: { label: string; data: string } }) => {
-        const { label, data } = evt.payload;
-        if (label !== webviewLabel) return;
-        try {
-          const parsed = JSON.parse(data) as { active: boolean };
-          onUpdateTab(tabId, { selectorActive: parsed.active });
-        } catch {
-          // Invalid JSON — silently ignore
-        }
-      }
-    ).then((unsub: () => void) => {
-      unlistenSelectionMode = unsub;
-    });
+    // Console logs are drained via eval_browser_webview_with_result in the
+    // "Periodic console drain" effect below.
+    //
+    // Inspect mode events are delivered SOLELY via buffer + drain polling
+    // (eval_browser_webview_with_result every 200ms). We intentionally do NOT
+    // use the title-channel for inspect events — it has two independent writers
+    // (BROWSER_INIT_SCRIPT's SPA nav + inspect script) racing on document.title,
+    // causing silent message loss via WKWebView's title-change coalescing.
 
     return () => {
-      unlistenLoad?.();
-      unlistenTitle?.();
-      unlistenUrlChange?.();
-      unlistenConsole?.();
-      unlistenElementSelected?.();
-      unlistenSelectionMode?.();
+      aborted = true;
+      unsubs.forEach((fn) => fn());
     };
-  }, [webviewLabel, tabId, onUpdateTab, onAddLog, onElementSelected]);
+  }, [webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Periodic console drain (only when visible and webview ready) ---
+  // Uses eval_browser_webview_with_result (native completion handler) instead
+  // of the old title-channel approach (drain_browser_console). The title-channel
+  // suffers from WKWebView's title-change coalescing — when the 60ms restore
+  // window overlaps with another title write (SPA nav, page itself), the
+  // \x01CL: message is silently dropped and console logs are lost.
+  //
+  // The completion-handler path reads the log buffer directly and returns the
+  // JSON via WKWebView's evaluateJavaScript callback, which is reliable.
   useEffect(() => {
     if (!visible || !webviewReady || !hasLoaded) return;
 
-    const interval = setInterval(() => {
-      invoke("drain_browser_console", { label: webviewLabel }).catch(() => {});
+    const CONSOLE_DRAIN_JS = `(function(){
+      var b = window.__HIVE_LOGS__ || [];
+      window.__HIVE_LOGS__ = [];
+      return JSON.stringify(b);
+    })()`;
+
+    // Track consecutive failures for diagnostic logging
+    let consoleDrainFails = 0;
+    // Guard against overlapping async drains — if invoke() takes longer than
+    // the interval, skip until the previous call completes.
+    let inFlight = false;
+
+    const interval = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: CONSOLE_DRAIN_JS,
+          timeoutMs: 2000,
+        });
+        // Reset on success
+        consoleDrainFails = 0;
+
+        if (!result || result === "[]" || result === "undefined") return;
+
+        let logs: Array<{ l: string; m: string; t: number }>;
+        try {
+          logs = JSON.parse(result);
+        } catch (parseErr) {
+          console.error("[BrowserTab] console drain: JSON.parse failed", parseErr, "raw:", result.slice(0, 200));
+          return;
+        }
+        for (const log of logs) {
+          const level = match(log.l)
+            .with("warn", () => "warn" as const)
+            .with("error", () => "error" as const)
+            .with("debug", () => "debug" as const)
+            .otherwise(() => "info" as const);
+          onAddLog(tabId, level, log.m);
+        }
+      } catch (err) {
+        consoleDrainFails++;
+        if (consoleDrainFails <= 3 || consoleDrainFails % 50 === 0) {
+          console.warn(
+            `[BrowserTab] console drain failed (${consoleDrainFails}x):`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      } finally {
+        inFlight = false;
+      }
     }, CONSOLE_DRAIN_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [visible, webviewReady, hasLoaded, webviewLabel]);
+  }, [visible, webviewReady, hasLoaded, webviewLabel, tabId, onAddLog]);
 
-  // --- Auto-inject visual effects on first page load ---
-  // Visual effects (AI cursor + ripple) are lightweight and always useful
-  // because the sidecar may operate the browser at any time.
-  // Inspect mode is NOT auto-injected — it's only enabled on user action.
+  // --- Periodic inspect event drain (only when selector is active) ---
+  // Drains buffered events from the inject script via
+  // eval_browser_webview_with_result (native completion handler).
+  // This is the sole delivery path for inspect events — we do not use
+  // the title-channel for inspect events (see file-level comment).
   useEffect(() => {
-    if (!hasLoaded || automationInjectedRef.current) return;
+    if (!visible || !webviewReady || !hasLoaded || !tab.selectorActive) return;
+    // Poll at 200ms — fast enough for responsive feel after click,
+    // cheap because eval_browser_webview_with_result returns immediately
+    // when the buffer is empty ("[]").
+    const INSPECT_DRAIN_MS = 200;
 
-    // Inject both scripts so they're ready for AI operations and inspect mode
-    Promise.all([
-      invoke("eval_browser_webview", { label: webviewLabel, js: VISUAL_EFFECTS_SETUP }),
-      invoke("eval_browser_webview", { label: webviewLabel, js: INSPECT_MODE_SETUP }),
-    ])
-      .then(() => {
-        automationInjectedRef.current = true;
-        onUpdateTab(tabId, { injected: true });
-      })
-      .catch(() => {});
-  }, [hasLoaded, webviewLabel, tabId, onUpdateTab]);
+    // Track consecutive failures to avoid log spam (log first 3, then every 50th)
+    let failCount = 0;
+    // Guard against overlapping async drains — if invoke() takes longer than
+    // the interval, skip until the previous call completes.
+    let inFlight = false;
+
+    const interval = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: INSPECT_MODE_DRAIN_EVENTS,
+          timeoutMs: 2000,
+        });
+        // Reset fail counter on success
+        failCount = 0;
+
+        if (!result || result === "[]" || result === "undefined") return;
+
+        let events: Array<{ type: string; data: Record<string, unknown> }>;
+        try {
+          events = JSON.parse(result);
+        } catch (parseErr) {
+          // JSON parse failure — log the raw result for debugging
+          console.error("[BrowserTab] inspect drain: JSON.parse failed", parseErr, "raw result:", result.slice(0, 200));
+          return;
+        }
+
+        for (const evt of events) {
+          match(evt.type)
+            .with("element-event", () => {
+              const parsed = evt.data as unknown as ElementSelectedEvent;
+              onElementSelectedRef.current?.(tabId, parsed);
+              onAddLog(
+                tabId,
+                "info",
+                parsed.type === "area-selected"
+                  ? `Area selected: ${parsed.bounds?.width}\u00d7${parsed.bounds?.height}`
+                  : `Element selected: ${parsed.element?.tagName}${parsed.reactComponent ? ` (${parsed.reactComponent.name})` : ""}`
+              );
+            })
+            .with("selection-mode", () => {
+              const modeData = evt.data as { active: boolean };
+              onUpdateTab(tabId, { selectorActive: modeData.active });
+            })
+            .otherwise(() => {});
+        }
+      } catch (err) {
+        failCount++;
+        if (failCount <= 3 || failCount % 50 === 0) {
+          console.warn(
+            `[BrowserTab] inspect drain failed (${failCount}x):`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      } finally {
+        inFlight = false;
+      }
+    }, INSPECT_DRAIN_MS);
+
+    return () => clearInterval(interval);
+  }, [visible, webviewReady, hasLoaded, tab.selectorActive, webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Imperative methods exposed to parent ---
 
@@ -434,6 +547,9 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     });
   }, [webviewLabel, tabId, onAddLog]);
 
+  // Inject browser utils, visual effects, and inspect mode into the WKWebView.
+  // Uses fire-and-forget eval for dispatch + eval_with_result for verification
+  // (fire-and-forget can't detect JS runtime errors in the IIFE).
   const injectAutomation = useCallback(async () => {
     if (!webviewCreatedRef.current) return;
     if (automationInjectedRef.current) {
@@ -442,17 +558,48 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }
 
     try {
-      // Inject inspect mode + visual effects via native eval (no HTTP fetch needed)
+      // Inject browser utils, visual effects, and inspect mode via native eval
+      await invoke("eval_browser_webview", { label: webviewLabel, js: BROWSER_UTILS_SETUP });
       await invoke("eval_browser_webview", { label: webviewLabel, js: INSPECT_MODE_SETUP });
       await invoke("eval_browser_webview", { label: webviewLabel, js: VISUAL_EFFECTS_SETUP });
+
+      // Wait a tick for the IIFEs to execute, then verify inspect mode
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        const verifyResult = await invoke<string>("eval_browser_webview_with_result", {
+          label: webviewLabel,
+          js: INSPECT_MODE_VERIFY,
+          timeoutMs: 3000,
+        });
+        const status = JSON.parse(verifyResult);
+        if (!status.hiveInspect || !status.hasDrainEvents) {
+          onAddLog(tabId, "error",
+            `Inspect mode setup incomplete: ${JSON.stringify(status)}`
+          );
+          return; // Don't mark as injected
+        }
+      } catch (verifyErr) {
+        onAddLog(tabId, "warn",
+          `Inspect verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+        );
+        return;
+      }
+
       automationInjectedRef.current = true;
-      onUpdateTab(tabId, { injected: true });
-      onAddLog(tabId, "info", "Automation scripts injected (inspect mode + visual effects)");
+      onUpdateTab(tabId, { injected: true, injectionFailed: false });
+      onAddLog(tabId, "info", "Automation scripts injected successfully");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       onAddLog(tabId, "error", `Injection failed: ${errorMsg}`);
+      onUpdateTab(tabId, { injectionFailed: true });
     }
   }, [tabId, webviewLabel, onUpdateTab, onAddLog]);
+
+  // Auto-inject on first page load — single call to injectAutomation().
+  useEffect(() => {
+    if (!hasLoaded || automationInjectedRef.current) return;
+    injectAutomation();
+  }, [hasLoaded, injectAutomation]);
 
   const toggleElementSelector = useCallback(async () => {
     if (!webviewCreatedRef.current) return;
@@ -462,94 +609,126 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       await injectAutomation();
     }
 
-    const js = tab.selectorActive ? INSPECT_MODE_DISABLE : INSPECT_MODE_ENABLE;
-    invoke("eval_browser_webview", { label: webviewLabel, js }).catch(() => {});
-    onUpdateTab(tabId, { selectorActive: !tab.selectorActive });
-    onAddLog(
-      tabId,
-      "info",
-      tab.selectorActive ? "Inspect mode deactivated" : "Inspect mode activated"
-    );
+    const enabling = !tab.selectorActive;
+    const js = enabling ? INSPECT_MODE_ENABLE : INSPECT_MODE_DISABLE;
+
+    // Use eval_browser_webview_with_result for the toggle so we can detect
+    // JS errors. The ENABLE/DISABLE IIFEs don't return a value (undefined),
+    // but any thrown error will be reported via the completion handler.
+    try {
+      await invoke<string>("eval_browser_webview_with_result", {
+        label: webviewLabel,
+        js,
+        timeoutMs: 3000,
+      });
+      onAddLog(tabId, "info",
+        enabling ? "Inspect mode activated" : "Inspect mode deactivated"
+      );
+      onUpdateTab(tabId, { selectorActive: enabling });
+    } catch (err) {
+      onAddLog(tabId, "error",
+        `Inspect mode toggle failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);
+
+  const syncBounds = useCallback(() => {
+    const el = placeholderRef.current;
+    if (!el || !webviewCreatedRef.current) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    invoke("set_browser_webview_bounds", {
+      label: webviewLabel,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    }).catch(() => {});
+  }, [webviewLabel]);
 
   useImperativeHandle(
     ref,
-    () => ({ navigateToUrl, reload, injectAutomation, toggleElementSelector }),
-    [navigateToUrl, reload, injectAutomation, toggleElementSelector]
+    () => ({ navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds }),
+    [navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds]
   );
 
   return (
-    // All tabs use absolute positioning so bounds are always measurable
-    // (native webview show/hide controls visibility, not CSS display)
-    <div className="absolute inset-0">
-      {/* Placeholder div — native webview is positioned to overlay this area */}
-      <div ref={placeholderRef} className="relative h-full w-full">
-        {/* Loading progress bar — NProgress-style, top of viewport.
-         * Shows during page loads (indeterminate animation → fills to 92%).
-         * On load complete: fills to 100% then fades out.
-         * Uses transform: scaleX() for GPU-accelerated animation. */}
-        {visible && (tab.loading || completingLoad) && (
-          <div
-            className="bg-primary absolute inset-x-0 top-0 z-10 h-[2px] origin-left"
-            style={{
-              animation: tab.loading
-                ? "browser-loading 8s cubic-bezier(.19,1,.22,1) forwards"
-                : "browser-loading-complete 0.4s ease-out forwards",
-            }}
-          />
-        )}
+    // Placeholder div — native webview is positioned to overlay this area.
+    //
+    // All tabs stack in the same grid cell via [grid-area:1/1] (parent is
+    // display:grid). This replaced the old `absolute inset-0` wrapper because
+    // absolute positioning didn't reliably inherit width constraints from the
+    // containing block when parent containers toggled mobile view (w-full ↔
+    // w-[390px] + mx-auto). getBoundingClientRect() returned stale full-width
+    // values, so the native WKWebView never repositioned. Grid stacking keeps
+    // tabs in normal document flow — they inherit the container's width
+    // naturally and ResizeObserver fires on actual size changes.
+    <div ref={placeholderRef} className="relative [grid-area:1/1]">
+      {/* Loading progress bar — NProgress-style, top of viewport.
+       * Shows during page loads (indeterminate animation → fills to 92%).
+       * On load complete: fills to 100% then fades out.
+       * Uses transform: scaleX() for GPU-accelerated animation. */}
+      {visible && (tab.loading || completingLoad) && (
+        <div
+          className="bg-primary absolute inset-x-0 top-0 z-10 h-[2px] origin-left"
+          style={{
+            animation: tab.loading
+              ? "browser-loading 8s cubic-bezier(.19,1,.22,1) forwards"
+              : "browser-loading-complete 0.4s ease-out forwards",
+          }}
+        />
+      )}
 
-        {/* Empty state: no URL entered yet — minimal, engineer-friendly */}
-        {visible && !webviewReady && !tab.currentUrl && (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
-              <Globe
-                className="text-muted-foreground/60 h-5 w-5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </div>
-            <div className="text-center">
-              <p className="text-muted-foreground text-sm">
-                Paste a URL above or ask the Agent to browse
-              </p>
-              <p className="text-muted-foreground/40 mt-1 text-xs">
-                Supports any website — cookies, auth, and devtools included
-              </p>
-            </div>
+      {/* Empty state: no URL entered yet — minimal, engineer-friendly */}
+      {visible && !webviewReady && !tab.currentUrl && (
+        <div className="flex h-full flex-col items-center justify-center gap-3">
+          <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
+            <Globe
+              className="text-muted-foreground/60 h-5 w-5"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </div>
-        )}
+          <div className="text-center">
+            <p className="text-muted-foreground text-sm">
+              Paste a URL above or ask the Agent to browse
+            </p>
+            <p className="text-muted-foreground/40 mt-1 text-xs">
+              Supports any website — cookies, auth, and devtools included
+            </p>
+          </div>
+        </div>
+      )}
 
-        {/* Loading overlay: only during initial page load (webview hidden) */}
-        {visible && tab.loading && !hasLoaded && (
-          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-            <Loader2 className="text-primary h-8 w-8 animate-spin" />
-          </div>
-        )}
+      {/* Loading overlay: only during initial page load (webview hidden) */}
+      {visible && tab.loading && !hasLoaded && (
+        <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+          <Loader2 className="text-primary h-8 w-8 animate-spin" />
+        </div>
+      )}
 
-        {/* Error overlay: only if initial load failed */}
-        {visible && tab.error && !hasLoaded && (
-          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-            <div className="max-w-sm p-8 text-center">
-              <div className="bg-destructive/10 mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
-                <AlertCircle className="text-destructive h-5 w-5" />
-              </div>
-              <h3 className="mb-1 text-sm font-semibold">Unable to Load Page</h3>
-              <p className="text-muted-foreground mb-4 text-xs">{tab.error}</p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  onUpdateTab(tabId, { error: null });
-                  if (tab.currentUrl) navigateToUrl(tab.currentUrl);
-                }}
-              >
-                Try Again
-              </Button>
+      {/* Error overlay: only if initial load failed */}
+      {visible && tab.error && !hasLoaded && (
+        <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+          <div className="max-w-sm p-8 text-center">
+            <div className="bg-destructive/10 mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
+              <AlertCircle className="text-destructive h-5 w-5" />
             </div>
+            <h3 className="mb-1 text-sm font-semibold">Unable to Load Page</h3>
+            <p className="text-muted-foreground mb-4 text-xs">{tab.error}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                onUpdateTab(tabId, { error: null });
+                if (tab.currentUrl) navigateToUrl(tab.currentUrl);
+              }}
+            >
+              Try Again
+            </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 });

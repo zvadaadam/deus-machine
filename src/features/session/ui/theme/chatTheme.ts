@@ -97,7 +97,7 @@ export const chatTheme = {
         info: "border-l-2 border-l-info",
         warning: "border-l-2 border-l-warning",
       },
-      // Content hierarchy for tool outputs (matches Cursor's 12px/11px system)
+      // Content hierarchy for tool outputs (12px/11px system)
       contentHierarchy: {
         metadata: "text-xs text-muted-foreground font-normal", // 12px, muted - secondary info
         body: "text-sm text-foreground", // 14px, standard - main content

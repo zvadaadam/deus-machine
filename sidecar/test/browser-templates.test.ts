@@ -14,7 +14,6 @@ import { describe, it, expect } from "vitest";
 // Import templates directly — they're pure functions with no platform deps
 import {
   SNAPSHOT_JS,
-  BROWSER_UTILS,
   CONSOLE_MESSAGES_JS,
   NETWORK_REQUESTS_JS,
   buildClickJs,
@@ -38,10 +37,14 @@ import {
 // Helpers
 // ========================================================================
 
-/** Check that a JS string is a self-invoking function expression */
+/** Check that a JS string is a self-invoking function expression.
+ *  Accepts both classic IIFEs `(function(){...})()` and arrow IIFEs
+ *  `(() => {...})()` — esbuild's `format: "iife"` emits the latter. */
 function assertIsIIFE(js: string, name: string) {
   const trimmed = js.trim();
-  expect(trimmed, `${name} should start with (function`).toMatch(/^\(function\s*\(/);
+  // esbuild may prepend "use strict"; — strip it for the shape check
+  const body = trimmed.replace(/^"use strict";\s*/, "");
+  expect(body, `${name} should start with (function or (() =>`).toMatch(/^\((?:function\s*\(|(?:\(\)\s*=>))/);
   expect(trimmed, `${name} should end with )()`).toMatch(/\)\(\)\s*;?\s*$/);
 }
 
@@ -189,14 +192,6 @@ describe("browser-utils JS templates", () => {
 
     it("returns JSON", () => {
       assertHasReturnJson(buildPressKeyJs("Enter"), "buildPressKeyJs");
-    });
-
-    it("includes BROWSER_UTILS inside the IIFE", () => {
-      const js = buildPressKeyJs("Tab");
-      // BROWSER_UTILS should be inside the IIFE, not before it
-      const iifeStart = js.indexOf("(function(){");
-      const utilsStart = js.indexOf("buildPageSnapshot");
-      expect(iifeStart).toBeLessThan(utilsStart);
     });
 
     it("supports modifier keys", () => {

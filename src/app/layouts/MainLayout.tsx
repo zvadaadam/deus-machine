@@ -215,13 +215,40 @@ export function MainLayout() {
     },
   });
 
-  // Listen for 'insert-to-chat' events from BrowserPanel
+  // Listen for 'insert-to-chat' events from BrowserPanel / DiffViewer
   useEffect(() => {
     const handleInsertToChat = (event: Event) => {
-      if (!(event instanceof CustomEvent)) return;
-      const raw = (event.detail as { text?: string } | undefined)?.text;
-      const text = typeof raw === "string" ? raw.trim() : "";
-      if (text && workspaceChatPanelRef.current) {
+      if (!(event instanceof CustomEvent) || !workspaceChatPanelRef.current) return;
+      const detail = event.detail as { text?: string; element?: Record<string, unknown>; files?: File[] } | undefined;
+
+      // File attachment (e.g., browser screenshot)
+      if (detail?.files?.length) {
+        workspaceChatPanelRef.current.addFiles(detail.files);
+        return;
+      }
+
+      // Element insertion from InSpec mode
+      if (detail?.element) {
+        workspaceChatPanelRef.current.addInspectedElement(detail.element as {
+          ref: string;
+          tagName: string;
+          path: string;
+          innerText?: string;
+          context?: "local" | "external";
+          reactComponent?: string;
+          file?: string;
+          line?: string;
+          styles?: string;
+          props?: string;
+          attributes?: string;
+          innerHTML?: string;
+        });
+        return;
+      }
+
+      // Plain text insertion (e.g., from DiffViewer)
+      const text = typeof detail?.text === "string" ? detail.text.trim() : "";
+      if (text) {
         workspaceChatPanelRef.current.insertText(text);
       }
     };
