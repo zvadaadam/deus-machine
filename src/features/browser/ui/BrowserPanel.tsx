@@ -34,6 +34,8 @@ import {
   Loader2,
   Trash2,
   Camera,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 import { BrowserTabBar } from "./BrowserTabBar";
@@ -118,6 +120,9 @@ export function BrowserPanel({
 
   // Track previous workspaceId to detect switches
   const prevWorkspaceIdRef = useRef(workspaceId);
+
+  // Mobile viewport toggle — constrains webview width to 390px (iPhone 14 logical width)
+  const [mobileView, setMobileView] = useState(false);
 
   // Shared dev-browser server (called once in container, status passed to all tabs)
   const { status: devBrowserStatus, startServer } = useBrowser();
@@ -815,6 +820,23 @@ export function BrowserPanel({
           <Camera className="h-4 w-4" />
         </Button>
 
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => setMobileView((v) => !v)}
+          disabled={!activeTab?.currentUrl}
+          aria-pressed={mobileView}
+          title={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
+          aria-label={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
+        >
+          {mobileView ? (
+            <Monitor className="h-4 w-4 text-primary" />
+          ) : (
+            <Smartphone className="h-4 w-4" />
+          )}
+        </Button>
+
         <DropdownMenu
           onOpenChange={(open) => {
             if (open) {
@@ -937,27 +959,39 @@ export function BrowserPanel({
       </div>
 
       {/* Tab content — devtools opens as floating window (docked not yet supported).
-        * See open_browser_devtools in webview.rs for full history of docking attempts. */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {tabs.length === 0 ? (
-          <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
-            Click + to open a browser tab
-          </div>
-        ) : (
-          tabs.map((tab) => (
-            <BrowserTab
-              key={tab.id}
-              ref={setTabRef(tab.id)}
-              tab={tab}
-              devBrowserStatus={devBrowserStatus}
-              onUpdateTab={handleUpdateTab}
-              onAddLog={handleAddLog}
-              onElementSelected={handleElementSelected}
-              visible={tab.id === activeTabId && panelVisible}
-              windowLabel={windowLabel}
-            />
-          ))
-        )}
+        * See open_browser_devtools in webview.rs for full history of docking attempts.
+        *
+        * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
+        * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
+        * broke mobile view: the placeholder's getBoundingClientRect() returned
+        * stale full-width values because absolute-positioned elements don't
+        * reliably inherit width constraints from their containing block when
+        * parent containers restructure (mx-auto, flex centering). Grid stacking
+        * keeps tabs in normal flow so they inherit w-[390px] naturally and
+        * ResizeObserver fires on actual size changes. */}
+      <div className={`relative min-h-0 flex-1 overflow-hidden ${mobileView ? "bg-muted/30" : ""}`}>
+        <div className={`grid h-full ${mobileView ? "mx-auto w-[390px] border-border/40 border-x" : "w-full"}`}>
+          {tabs.length === 0 ? (
+            <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
+              Click + to open a browser tab
+            </div>
+          ) : (
+            tabs.map((tab) => (
+              <BrowserTab
+                key={tab.id}
+                ref={setTabRef(tab.id)}
+                tab={tab}
+                devBrowserStatus={devBrowserStatus}
+                onUpdateTab={handleUpdateTab}
+                onAddLog={handleAddLog}
+                onElementSelected={handleElementSelected}
+                visible={tab.id === activeTabId && panelVisible}
+                windowLabel={windowLabel}
+                mobileView={mobileView}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

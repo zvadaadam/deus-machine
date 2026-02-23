@@ -80,6 +80,10 @@ export interface BrowserTabHandle {
   reload: () => void;
   injectAutomation: () => Promise<void>;
   toggleElementSelector: () => void;
+  /** Force re-sync native webview position to placeholder bounds.
+   *  Call when the container layout shifts without a size change
+   *  (e.g., mobile view toggle repositions via flex centering). */
+  syncBounds: () => void;
 }
 
 /** Extract a readable title from a URL (domain or localhost:port) */
