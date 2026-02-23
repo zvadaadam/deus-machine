@@ -135,6 +135,7 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
             onClick={onCollapse}
             className="mr-2 h-5 w-5"
             title="Collapse terminal"
+            aria-label="Collapse terminal"
           >
             <ChevronDown className="h-3 w-3" />
           </Button>

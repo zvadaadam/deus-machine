@@ -140,7 +140,7 @@ async function testCreateWorkspace() {
   try {
     // Get repository from database
     const db = new Database(DB_PATH, { readonly: true });
-    const repo = db.prepare("SELECT * FROM repos WHERE name = 'box-ide' LIMIT 1").get();
+    const repo = db.prepare("SELECT * FROM repositories WHERE name = 'box-ide' LIMIT 1").get();
     db.close();
 
     if (!repo) {
@@ -302,12 +302,12 @@ async function testVerifyDatabaseStorage() {
     }
 
     // Check messages
-    const messages = db.prepare('SELECT * FROM session_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 5').all(testSessionId);
+    const messages = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT 5').all(testSessionId);
 
     logSuccess(`Found ${messages.length} message(s) in database`);
 
     messages.forEach((msg, i) => {
-      logInfo(`  ${i + 1}. ${msg.role} - ${msg.created_at}`);
+      logInfo(`  ${i + 1}. ${msg.role} - ${msg.id}`);
     });
 
     db.close();

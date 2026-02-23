@@ -36,7 +36,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-surface: var(--input-surface);
+  --color-input-tint: var(--input-tint);
   --color-ring: var(--ring);
+  --color-destructive-ring: var(--destructive-ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -86,6 +88,14 @@
   --color-text-subtle: var(--text-subtle);
   --color-text-muted: var(--text-muted);
   --color-text-disabled: var(--text-disabled);
+
+  /* Component surface tokens — variant backgrounds that flip with theme */
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-control-surface: var(--control-surface);
+  --color-control-surface-hover: var(--control-surface-hover);
+  --color-checked-tint: var(--checked-tint);
+  --color-tooltip-kbd: var(--tooltip-kbd);
 
   /* Accent palette */
   --color-accent-blue-surface: var(--accent-blue-surface);
@@ -732,7 +742,7 @@
   --popover-foreground: #1d1d1f;
 
   /* --- Interactive accent (vivid blue, light variant) --- */
-  --primary: #3b82b8;
+  --primary: #266b9e;
   --primary-foreground: #ffffff;
 
   /* --- Secondary / structural --- */
@@ -744,31 +754,31 @@
   --accent-foreground: #1d1d1f;
 
   /* --- Semantic signals --- */
-  --destructive: #d93e4c;
+  --destructive: #bf3543;
   --destructive-foreground: #ffffff;
-  --success: #1a9a3e;
+  --success: #158232;
   --success-foreground: #ffffff;
-  --warning: #a07830;
+  --warning: #8a6828;
   --warning-foreground: #ffffff;
-  --info: #3b82b8;
+  --info: #266b9e;
   --info-foreground: #ffffff;
 
   /* --- Status indicators --- */
-  --status-working: #1a9a3e;
+  --status-working: #158232;
   --status-working-fg: #ffffff;
-  --status-compacting: #3b82b8;
+  --status-compacting: #266b9e;
   --status-compacting-fg: #ffffff;
-  --status-unread: #a07830;
+  --status-unread: #8a6828;
   --status-unread-fg: #ffffff;
 
   /* --- File type colors --- */
-  --file-typescript: #3b82b8;
-  --file-rust: #d93e4c;
-  --file-data: #a07830;
-  --file-docs: #1a9a3e;
-  --file-styles: #3b82b8;
-  --file-markup: #d93e4c;
-  --file-image: #a07830;
+  --file-typescript: #266b9e;
+  --file-rust: #bf3543;
+  --file-data: #8a6828;
+  --file-docs: #158232;
+  --file-styles: #266b9e;
+  --file-markup: #bf3543;
+  --file-image: #8a6828;
 
   /* --- Z-index scale --- */
   --z-base: 0;
@@ -785,17 +795,19 @@
   --border: #e0e0e0;
   --input: #e0e0e0;
   --input-surface: #ffffff;
-  --ring: #3b82b866;
+  --input-tint: transparent;
+  --ring: #266b9e66;
+  --destructive-ring: color-mix(in oklch, var(--destructive) 20%, transparent);
 
   /* --- Sidebar (cool gray — recedes behind warm content) --- */
   --sidebar: #f3f4f6;
   --sidebar-foreground: #6e6e73;
-  --sidebar-primary: #3b82b8;
+  --sidebar-primary: #266b9e;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #efefed;
   --sidebar-accent-foreground: #1d1d1f;
   --sidebar-border: #ebebeb;
-  --sidebar-ring: #3b82b866;
+  --sidebar-ring: #266b9e66;
 
   /* --- Extended background tiers (warm stone) --- */
   --bg-base: #f5f5f4;
@@ -823,19 +835,27 @@
   --text-muted: #8e8e93;
   --text-disabled: #aeaeb2;
 
+  /* --- Component surface tokens (light mode) --- */
+  --destructive-surface: var(--destructive);
+  --destructive-tint: color-mix(in oklch, var(--destructive) 10%, transparent);
+  --control-surface: var(--background);
+  --control-surface-hover: var(--accent);
+  --checked-tint: color-mix(in oklch, var(--primary) 5%, transparent);
+  --tooltip-kbd: color-mix(in oklch, var(--background) 20%, transparent);
+
   /* --- Accent palette (vivid for light mode) --- */
-  --accent-blue: #3b82b8;
+  --accent-blue: #266b9e;
   --accent-blue-surface: #e8edf4;
-  --accent-green: #1a9a3e;
+  --accent-green: #158232;
   --accent-green-muted: #5c8a6e;
-  --accent-red: #d93e4c;
+  --accent-red: #bf3543;
   --accent-red-muted: #a07272;
-  --accent-gold: #a07830;
+  --accent-gold: #8a6828;
 
   /* --- Neutral scale --- */
   --neutral-50: #fafafa;
   --neutral-100: #ebebeb;
-  --neutral-200: #d4d4d4;
+  --neutral-200: #c8c8c8;
   --neutral-300: #a3a3a3;
   --neutral-400: #8a8a8a;
   --neutral-500: #737373;
@@ -916,7 +936,7 @@
   /* --- Semantic signals (earned color) --- */
   --destructive: #f97583; /* accent-red */
   --destructive-foreground: #e0e0e0;
-  --success: #7ee787; /* accent-green */
+  --success: #6bd574; /* accent-green */
   --success-foreground: #0b0b0b;
   --warning: #d4a050; /* accent-gold */
   --warning-foreground: #0b0b0b;
@@ -924,7 +944,7 @@
   --info-foreground: #0b0b0b;
 
   /* --- Status indicators (workspace session states) --- */
-  --status-working: #7ee787;
+  --status-working: #6bd574;
   --status-working-fg: #0b0b0b;
   --status-compacting: #8494a8;
   --status-compacting-fg: #0b0b0b;
@@ -944,7 +964,9 @@
   --border: #252525; /* border-default */
   --input: #252525;
   --input-surface: #141414;
+  --input-tint: color-mix(in oklch, var(--input) 30%, transparent);
   --ring: #8494a866;
+  --destructive-ring: color-mix(in oklch, var(--destructive) 40%, transparent);
 
   /* --- Sidebar (inherits base, minimal distinction) --- */
   --sidebar: #0b0b0b; /* Same as bg-base: unified canvas */
@@ -958,7 +980,7 @@
 
   /* --- Extended background tiers --- */
   --bg-base: #0b0b0b;
-  --bg-surface: #0f0f0f;
+  --bg-surface: #121212;
   --bg-elevated: #141414;
   --bg-raised: #1a1a1a;
   --bg-overlay: #1e1e1e;
@@ -978,14 +1000,22 @@
   --text-primary: #d8d8d8;
   --text-secondary: #b0b0b0;
   --text-tertiary: #808080;
-  --text-subtle: #707070;
-  --text-muted: #606060;
+  --text-subtle: #777777;
+  --text-muted: #6a6a6a;
   --text-disabled: #404040;
+
+  /* --- Component surface tokens (dark mode) --- */
+  --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
+  --destructive-tint: color-mix(in oklch, var(--destructive) 20%, transparent);
+  --control-surface: color-mix(in oklch, var(--input) 30%, transparent);
+  --control-surface-hover: color-mix(in oklch, var(--input) 50%, transparent);
+  --checked-tint: color-mix(in oklch, var(--primary) 10%, transparent);
+  --tooltip-kbd: color-mix(in oklch, var(--background) 10%, transparent);
 
   /* --- Accent palette --- */
   --accent-blue: #8494a8;
   --accent-blue-surface: #252830;
-  --accent-green: #7ee787;
+  --accent-green: #6bd574;
   --accent-green-muted: #6a9a70;
   --accent-red: #f97583;
   --accent-red-muted: #6a3838;
@@ -1028,7 +1058,7 @@
   --diff-deletion-text: #f97583;
 
   --diff-line-number: #404040;
-  --diff-line-number-bg: #0f0f0f;
+  --diff-line-number-bg: #121212;
 }
 
 /* Apply semantic border color to all elements with border utilities */
@@ -1056,6 +1086,8 @@ body {
   color: var(--foreground);
   font-family: var(--font-family-sans);
   background: var(--background); /* Web: solid background */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -1308,6 +1340,23 @@ body {
 }
 
 /* Custom utilities */
+
+/* Touch: prevent 300ms double-tap delay on interactive elements */
+button,
+[role="button"],
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+/* Theme switching: suppress color transitions during theme toggle */
+[data-theme-switching],
+[data-theme-switching] * {
+  transition-duration: 0s !important;
+}
+
 /* Accessibility: Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1381,23 +1430,27 @@ body {
   height: 0;
 }
 
-/* Global scrollbar styles - applies to all scrollable elements */
-/* Force custom scrollbars (overrides macOS overlay scrollbars) */
-* {
+/* Scoped scrollbar styles — only for app scrollable containers, not page-level.
+ * Per Emil's design principles: never replace page scrollbars. */
+[data-slot="sidebar"],
+[data-radix-scroll-area-viewport] {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent) transparent;
 }
 
-*::-webkit-scrollbar {
+[data-slot="sidebar"]::-webkit-scrollbar,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-*::-webkit-scrollbar-track {
+[data-slot="sidebar"]::-webkit-scrollbar-track,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
   background: transparent;
 }
 
-*::-webkit-scrollbar-thumb {
+[data-slot="sidebar"]::-webkit-scrollbar-thumb,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
   background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
   border-radius: 6px;
   border: 2px solid transparent;
@@ -1405,24 +1458,27 @@ body {
   transition: background 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-*::-webkit-scrollbar-thumb:hover {
+[data-slot="sidebar"]::-webkit-scrollbar-thumb:hover,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-thumb:active {
+[data-slot="sidebar"]::-webkit-scrollbar-thumb:active,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:active {
   background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-corner {
+[data-slot="sidebar"]::-webkit-scrollbar-corner,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-/* Scrollbar buttons (helps webkit take control) */
-*::-webkit-scrollbar-button {
+[data-slot="sidebar"]::-webkit-scrollbar-button,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-button {
   display: none;
 }
 
@@ -1433,7 +1489,8 @@ body {
     transition: none;
   }
 
-  *::-webkit-scrollbar-thumb,
+  [data-slot="sidebar"]::-webkit-scrollbar-thumb,
+  [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb,
   .scrollbar-vibrancy::-webkit-scrollbar-thumb {
     transition: none !important;
   }
@@ -1554,7 +1611,7 @@ diffs-container.diffs-theme-compact {
 .diff-viewer-header {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1731,6 +1788,7 @@ diffs-container.diffs-theme-compact {
   line-height: 1.25;
   margin-top: 0.75rem; /* Tighter separation between sections */
   margin-bottom: 0.25rem; /* Groups with content below */
+  text-wrap: balance;
 }
 
 /* Top-level headers: Bold for scanability when scrolling */

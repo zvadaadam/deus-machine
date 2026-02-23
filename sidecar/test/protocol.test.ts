@@ -42,6 +42,7 @@ import {
 
 describe("RPC constants", () => {
   it("defines sidecar methods", () => {
+    expect(SIDECAR_METHODS.QUERY).toBe("query");
     expect(SIDECAR_METHODS.CANCEL).toBe("cancel");
     expect(SIDECAR_METHODS.CLAUDE_AUTH).toBe("claudeAuth");
     expect(SIDECAR_METHODS.WORKSPACE_INIT).toBe("workspaceInit");
@@ -49,7 +50,6 @@ describe("RPC constants", () => {
   });
 
   it("defines sidecar notifications", () => {
-    expect(SIDECAR_NOTIFICATIONS.QUERY).toBe("query");
     expect(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE).toBe("updatePermissionMode");
     expect(SIDECAR_NOTIFICATIONS.RESET_GENERATOR).toBe("resetGenerator");
   });

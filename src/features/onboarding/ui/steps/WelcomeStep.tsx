@@ -31,9 +31,9 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       {/* Get Started button — pill shape, subtle glow */}
       <button
         onClick={onNext}
-        className="mt-2 rounded-full bg-white px-10 py-3 text-sm font-semibold text-black/90 transition-all duration-200 hover:scale-[1.03] hover:bg-white/95 active:scale-[0.98]"
+        className="mt-2 rounded-full bg-white px-10 py-3 text-sm font-semibold text-black/90 transition-[transform,background-color] duration-200 hover:scale-[1.03] hover:bg-white/95 active:scale-[0.98]"
         style={{
-          boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px rgba(0,0,0,0.2)",
+          boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px oklch(0 0 0 / 0.2)",
         }}
       >
         Get Started

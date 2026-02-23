@@ -99,7 +99,7 @@ export function MainContent({
 
   // Target branch for PR creation/merge — synced from WorkspaceHeader's branch selector
   const [selectedTargetBranch, setSelectedTargetBranch] = useState<string>(
-    selectedWorkspace?.default_branch ?? "main"
+    selectedWorkspace?.git_default_branch ?? "main"
   );
 
   // Derived from store — no useState/callback delay on workspace load
@@ -124,7 +124,7 @@ export function MainContent({
     if (middlePanel !== null) setMiddlePanel(null);
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
     if (sidebarBeforePanel !== null) setSidebarBeforePanel(null);
-    setSelectedTargetBranch(selectedWorkspace?.default_branch ?? "main");
+    setSelectedTargetBranch(selectedWorkspace?.git_default_branch ?? "main");
     setAllDiffsActiveFile(null);
   }
 
@@ -138,10 +138,10 @@ export function MainContent({
       selectedWorkspace
         ? {
             root_path: selectedWorkspace.root_path,
-            directory_name: selectedWorkspace.directory_name,
+            slug: selectedWorkspace.slug,
             workspace_path: selectedWorkspace.workspace_path,
-            parent_branch: selectedWorkspace.parent_branch ?? undefined,
-            default_branch: selectedWorkspace.default_branch,
+            git_target_branch: selectedWorkspace.git_target_branch ?? undefined,
+            git_default_branch: selectedWorkspace.git_default_branch,
           }
         : null,
     [selectedWorkspace]
@@ -496,9 +496,9 @@ export function MainContent({
       selectedWorkspace
         ? {
             workspaceId: selectedWorkspace.id,
-            directoryName: selectedWorkspace.directory_name,
+            directoryName: selectedWorkspace.slug,
             repoName: selectedWorkspace.repo_name,
-            branch: selectedWorkspace.branch,
+            branch: selectedWorkspace.git_branch,
           }
         : null,
     [selectedWorkspace]
@@ -536,15 +536,15 @@ export function MainContent({
           <div className="flex min-w-0 flex-1 flex-col">
             {/* Unified workspace header — spans full width above all panels */}
             <WorkspaceHeader
-              title={selectedWorkspace.display_name ?? undefined}
+              title={selectedWorkspace.title ?? undefined}
               repositoryName={selectedWorkspace.repo_name}
-              branch={selectedWorkspace.branch ?? undefined}
+              branch={selectedWorkspace.git_branch ?? undefined}
               workspacePath={selectedWorkspace.workspace_path}
               workspaceId={selectedWorkspace.id}
               prStatus={prStatus}
               ghStatus={ghStatus}
               setupStatus={selectedWorkspace.setup_status}
-              setupError={selectedWorkspace.setup_error}
+              setupError={selectedWorkspace.error_message}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
               onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
               onReviewPR={handleOpenPR}

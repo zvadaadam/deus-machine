@@ -134,9 +134,9 @@ export function runSetupScript(
     clearTimeout(timer);
     try { setupLog.end(); } catch {}
     if (status === 'completed') {
-      db.prepare("UPDATE workspaces SET setup_status = 'completed', setup_error = NULL, updated_at = datetime('now') WHERE id = ?").run(workspaceId);
+      db.prepare("UPDATE workspaces SET setup_status = 'completed', error_message = NULL, updated_at = datetime('now') WHERE id = ?").run(workspaceId);
     } else {
-      db.prepare("UPDATE workspaces SET setup_status = 'failed', setup_error = ?, updated_at = datetime('now') WHERE id = ?").run(error, workspaceId);
+      db.prepare("UPDATE workspaces SET setup_status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?").run(error, workspaceId);
     }
   };
 

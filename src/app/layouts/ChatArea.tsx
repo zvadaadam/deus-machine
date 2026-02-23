@@ -55,14 +55,14 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     openFileTab,
   } = useChatTabs({
     workspaceId: workspace.id,
-    activeSessionId: workspace.active_session_id,
+    activeSessionId: workspace.current_session_id,
   });
 
   useImperativeHandle(ref, () => ({ openFileTab }), [openFileTab]);
 
   // Resolve sessionId: tab's own session, falling back to workspace's active session
   const tabSessionId =
-    activeTab?.type === "chat" ? activeTab.data?.sessionId || workspace.active_session_id : null;
+    activeTab?.type === "chat" ? activeTab.data?.sessionId || workspace.current_session_id : null;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -87,8 +87,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             workspaceId={workspace.id}
             workspacePath={workspace.workspace_path}
             workspaceRepoName={workspace.repo_name}
-            workspaceParentBranch={workspace.parent_branch}
-            workspaceDefaultBranch={workspace.default_branch}
+            workspaceParentBranch={workspace.git_target_branch}
+            workspaceDefaultBranch={workspace.git_default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
             initialModel={activeTab.data?.initialModel}
@@ -104,10 +104,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         {activeTab?.type === "chat" && !tabSessionId && (
           <WorkspaceEmptyState
             repoName={workspace.repo_name}
-            parentBranch={workspace.parent_branch}
+            parentBranch={workspace.git_target_branch}
             isFirstSession={true}
             initializing={workspace.state === "initializing"}
-            initStep={workspace.init_step}
+            initStep={workspace.init_stage}
           />
         )}
 

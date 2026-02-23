@@ -7,7 +7,7 @@
  *   3. Post-create hooks: .env / .env.local copy (non-fatal)
  *   4. Session creation + state transition to 'ready' (fatal)
  *
- * Each step updates the workspace's `init_step` column in DB and emits
+ * Each step updates the workspace's `init_stage` column in DB and emits
  * a structured stdout line that Rust parses and relays as a Tauri event:
  *   HIVE_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
  *
@@ -22,7 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { randomUUID } from 'crypto';
+import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
 
 const execFileAsync = promisify(execFile);
@@ -66,9 +66,9 @@ function emitProgress(workspaceId: string, step: string, label: string): void {
   process.stdout.write(`HIVE_WORKSPACE_PROGRESS:${payload}\n`);
 }
 
-function updateInitStep(workspaceId: string, step: string): void {
+function updateInitStage(workspaceId: string, stage: string): void {
   const db = getDatabase();
-  db.prepare('UPDATE workspaces SET init_step = ? WHERE id = ?').run(step, workspaceId);
+  db.prepare('UPDATE workspaces SET init_stage = ? WHERE id = ?').run(stage, workspaceId);
 }
 
 // ─── Package Manager Detection ──────────────────────────────────
@@ -203,17 +203,17 @@ const STAGES: InitStage[] = [
       // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
       // errors that can occur when the sidecar is concurrently accessing the DB.
       const db = getDatabase();
-      const sessionId = randomUUID();
+      const sessionId = uuidv7();
       const maxAttempts = 3;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           const finalize = db.transaction(() => {
             db.prepare(
-              "INSERT INTO sessions (id, workspace_id, status, created_at, updated_at) VALUES (?, ?, 'idle', datetime('now'), datetime('now'))"
+              "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
             ).run(sessionId, ctx.workspaceId);
             db.prepare(
-              "UPDATE workspaces SET state = 'ready', active_session_id = ?, init_step = 'done' WHERE id = ?"
+              "UPDATE workspaces SET state = 'ready', current_session_id = ?, init_stage = 'done' WHERE id = ?"
             ).run(sessionId, ctx.workspaceId);
           });
           finalize();
@@ -241,11 +241,11 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
 
   for (const stage of STAGES) {
     try {
-      updateInitStep(ctx.workspaceId, stage.name);
+      updateInitStage(ctx.workspaceId, stage.name);
     } catch (err) {
       // SQLITE_BUSY can fire when sidecar holds the DB — log but don't
       // abort, otherwise cleanup never runs and worktrees leak.
-      console.warn('[WORKSPACE] Failed to update init_step:', err);
+      console.warn('[WORKSPACE] Failed to update init_stage:', err);
     }
     emitProgress(ctx.workspaceId, stage.name, stage.label);
 
@@ -267,8 +267,8 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
 
         const db = getDatabase();
         db.prepare(
-          "UPDATE workspaces SET state = 'error', init_step = ? WHERE id = ?"
-        ).run(`error:${stage.name}`, ctx.workspaceId);
+          "UPDATE workspaces SET state = 'error', init_stage = ?, error_message = ? WHERE id = ?"
+        ).run(stage.name, (err as Error).message, ctx.workspaceId);
 
         emitProgress(ctx.workspaceId, 'error', `Failed at: ${stage.name}`);
         return;

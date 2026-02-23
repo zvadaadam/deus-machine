@@ -26,6 +26,9 @@ import { TurnStatsHeader } from "./TurnStatsHeader";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useSession } from "../context";
 import { calculateTurnStats } from "./utils";
+import { Square } from "lucide-react";
+import { chatTheme } from "./theme";
+import { cn } from "@/shared/lib/utils";
 
 interface AssistantTurnProps {
   messages: Message[];
@@ -54,6 +57,16 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
   // Split messages: all except last = hidden, last = summary (always visible)
   const summaryMessage = messages[messages.length - 1];
   const hiddenMessages = messages.slice(0, -1);
+
+  // Detect if the last message is a cancellation marker (stop_reason: "cancelled")
+  const isCancelled = useMemo(() => {
+    try {
+      const parsed = JSON.parse(summaryMessage.content);
+      return parsed.message?.stop_reason === "cancelled";
+    } catch {
+      return false;
+    }
+  }, [summaryMessage.content]);
 
   // Check if this is the last message in the turn (always true for summary message)
   const isLastInTurn = true;
@@ -95,12 +108,19 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
       )}
 
       {/* Summary message - always visible */}
-      <MessageItem
-        message={summaryMessage}
-        isLatestAssistant={isLatest}
-        isLastInTurn={isLastInTurn}
-        isWorking={isWorking && isLatest} // Only latest turn can be "working"
-      />
+      {isCancelled ? (
+        <div className={cn(chatTheme.message.assistant.container, "flex items-center gap-1.5 py-1")}>
+          <Square className="h-3 w-3 fill-current text-muted-foreground/40" />
+          <span className="text-xs text-muted-foreground/60">Turn interrupted</span>
+        </div>
+      ) : (
+        <MessageItem
+          message={summaryMessage}
+          isLatestAssistant={isLatest}
+          isLastInTurn={isLastInTurn}
+          isWorking={isWorking && isLatest} // Only latest turn can be "working"
+        />
+      )}
     </div>
   );
 }

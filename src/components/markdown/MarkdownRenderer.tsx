@@ -70,7 +70,7 @@ function CopyButton({ getText }: { getText: () => string }) {
         "rounded p-1.5",
         "text-muted-foreground hover:text-foreground",
         "hover:bg-muted/50",
-        "transition-all duration-200 ease-out",
+        "transition-[color,background-color,opacity] duration-200 ease-out",
         "opacity-0 group-hover:opacity-100",
         copied && "text-success"
       )}

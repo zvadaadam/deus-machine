@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AlertCircle, FolderOpen, Loader2 } from "lucide-react";
-import { m } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +59,7 @@ export function CloneRepositoryModal({
   onClone,
   onClearError,
 }: CloneRepositoryModalProps) {
+  const reduceMotion = useReducedMotion();
   const [githubUrl, setGithubUrl] = useState("");
   const [targetPath, setTargetPath] = useState("");
   const [defaultPath, setDefaultPath] = useState("");
@@ -224,15 +225,19 @@ export function CloneRepositoryModal({
               {/* Progress bar */}
               <div className="bg-muted h-1 overflow-hidden rounded-full">
                 {statusMessage || isIndeterminate ? (
-                  <m.div
-                    className="bg-primary h-full w-1/3 rounded-full"
-                    animate={{ x: ["-100%", "400%"] }}
-                    transition={{
-                      duration: 1.5,
-                      ease: [0.645, 0.045, 0.355, 1],
-                      repeat: Infinity,
-                    }}
-                  />
+                  reduceMotion ? (
+                    <div className="bg-primary h-full w-1/3 rounded-full" />
+                  ) : (
+                    <m.div
+                      className="bg-primary h-full w-1/3 rounded-full"
+                      animate={{ x: ["-100%", "400%"] }}
+                      transition={{
+                        duration: 1.5,
+                        ease: [0.645, 0.045, 0.355, 1],
+                        repeat: Infinity,
+                      }}
+                    />
+                  )
                 ) : (
                   <div
                     className="bg-primary h-full rounded-full transition-[width] duration-300 ease-out"
