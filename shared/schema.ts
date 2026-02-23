@@ -4,7 +4,7 @@
  * Imported by both backend/src/lib/schema.ts and sidecar/db/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages, paired_devices
+ * Tables: repositories, workspaces, sessions, messages, settings, paired_devices
  * Indexes: 10
  * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
  */
@@ -89,6 +89,13 @@ export const SCHEMA_SQL = `
     sent_at TEXT,
     cancelled_at TEXT,
     parent_tool_use_id TEXT
+  );
+
+  -- App key-value settings (relay credentials, remote access flags)
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   -- Paired devices for remote access authentication
