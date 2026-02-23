@@ -83,7 +83,6 @@ if (!(window as any).__hiveInspectMode) {
   // ========================================================================
   // Enhanced React fiber detection — handles ForwardRef, Memo, and
   // elementType (which preserves the original unwrapped type).
-  // Handles ForwardRef, Memo, and elementType (which preserves the original unwrapped type).
   interface ReactComponentInfo {
     componentName: string | null;
     fileName: string | null;
@@ -183,7 +182,6 @@ if (!(window as any).__hiveInspectMode) {
   // ========================================================================
   // Converts modern color formats (oklch, oklab, etc.) to hex using
   // 1x1 Canvas pixel readback — the only reliable cross-browser method.
-  // Uses 1x1 Canvas pixel readback — the only reliable cross-browser method.
   let colorCanvas: HTMLCanvasElement | null = null;
   let colorCtx: CanvasRenderingContext2D | null = null;
 
@@ -442,7 +440,7 @@ if (!(window as any).__hiveInspectMode) {
     'id', 'data-testid', 'data-test-id', 'href', 'src', 'alt',
     'type', 'name', 'placeholder', 'disabled', 'checked',
     'role', 'aria-label', 'aria-expanded', 'aria-hidden',
-    'value', 'action', 'for', 'target', 'required', 'readonly',
+    'action', 'for', 'target', 'required', 'readonly',
     'min', 'max', 'pattern', 'method',
   ];
 
@@ -797,10 +795,12 @@ if (!(window as any).__hiveInspectMode) {
     let pathStr = pathParts.join(' > ');
     if (pathStr.length > 500) pathStr = pathStr.substring(pathStr.length - 500);
 
-    // Extract new data fields for AI context
-    const reactProps = getReactProps(element);
+    // Extract new data fields for AI context.
+    // Gate React props and innerHTML to local context only — external sites
+    // may expose sensitive data (user tokens in props, CSRF tokens in innerHTML).
+    const reactProps = context === 'local' ? getReactProps(element) : null;
     const htmlAttrs = getFilteredAttributes(element);
-    const innerHTML = getShallowInnerHTML(element);
+    const innerHTML = context === 'local' ? getShallowInnerHTML(element) : null;
 
     sendToFrontend('element-event', {
       type: 'element-selected',
