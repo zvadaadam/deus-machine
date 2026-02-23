@@ -9,6 +9,27 @@ import type { QueryOptions } from "../agent-handler";
 // Types
 // ============================================================================
 
+/**
+ * Mutable session record accumulated during a Claude SDK lifecycle.
+ *
+ * Lifecycle phases (fields set in each phase):
+ *
+ *   IDLE (freshly created via handleQuery → setSession):
+ *     currentSettings, currentModel, currentMaxThinkingTokens, turnId, cwd
+ *     generator/sendMessage/sendTerminate are undefined
+ *
+ *   ACTIVE (processWithGenerator running):
+ *     All fields populated. generator + sendMessage + sendTerminate set
+ *     by processWithGenerator after SDK query starts.
+ *
+ *   TERMINATED (terminateSession called, awaiting finally cleanup):
+ *     generator + sendMessage deleted. sendTerminate fired.
+ *     Session object is kept alive so processWithGenerator's finally block
+ *     can compare `currentSession === session` (reference identity check)
+ *     to avoid clobbering a rapid re-query's fresh session.
+ *
+ * Use `isSessionActive(session)` to check if a session is in the ACTIVE phase.
+ */
 export interface SessionState {
   generator?: AsyncIterator<SDKMessage>;
   sendMessage?: (message: string) => void;
@@ -58,6 +79,17 @@ export function setQuery(sessionId: string, query: Query): void {
 
 export function deleteQuery(sessionId: string): void {
   queries.delete(sessionId);
+}
+
+/**
+ * Check if a session is in the ACTIVE phase (generator running, can send messages).
+ * Use this instead of manually checking `session.generator && session.sendMessage`.
+ */
+export function isSessionActive(session: SessionState | undefined): session is SessionState & {
+  generator: AsyncIterator<SDKMessage>;
+  sendMessage: (message: string) => void;
+} {
+  return !!session?.generator && !!session?.sendMessage;
 }
 
 /**

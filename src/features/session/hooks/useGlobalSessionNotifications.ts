@@ -17,6 +17,7 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
+import { match } from "ts-pattern";
 import { isTauriEnv } from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
@@ -29,6 +30,9 @@ interface SidecarEvent {
   type: string;
   agentType: string;
   error?: string;
+  category?: string;
+  willRetry?: boolean;
+  retryAfterMs?: number;
 }
 
 /**
@@ -80,13 +84,20 @@ export function useGlobalSessionNotifications() {
       }
     }
 
-    // --- Error notifications (instant) ---
+    // --- Error notifications (instant, category-aware) ---
     const unlistenError = listen<SidecarEvent>("session:error", (event) => {
       if (isWindowFocused()) return;
 
-      const { id, error } = event.payload;
+      const { id, error, category } = event.payload;
+      const title = match(category)
+        .with("auth", () => "Authentication Error")
+        .with("rate_limit", () => "Rate Limited")
+        .with("context_limit", () => "Context Limit Reached")
+        .with("network", () => "Network Error")
+        .with("db_write", () => "Database Error")
+        .otherwise(() => "Agent Error");
       sendNotification({
-        title: "Agent error",
+        title,
         body: error || `Session ${id.substring(0, 8)} encountered an error`,
         sound: "Basso",
       });

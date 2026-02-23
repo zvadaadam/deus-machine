@@ -139,6 +139,8 @@ export function blockIfNotInitialized(sessionId: string): boolean {
       type: "error",
       error: `Cannot process Codex request: ${initializationResult?.error || "Codex initialization failed. Is codex CLI installed?"}`,
       agentType: "codex",
+      category: "internal",
+      willRetry: false,
     });
     console.log("Blocked Codex request due to initialization failure");
     return true;
