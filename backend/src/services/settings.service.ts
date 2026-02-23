@@ -48,6 +48,7 @@ export function getSetting(key: string): any {
   return key in prefs ? prefs[key] : null;
 }
 
+
 export function saveSetting(key: string, value: any): void {
   const current = readPreferences();
   // Guard against readPreferences returning a non-object (e.g. if Zod fails and raw is an array/string)
