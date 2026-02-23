@@ -423,7 +423,9 @@ pub async fn eval_browser_webview_with_result(
         let webview = app
             .get_webview(&label)
             .ok_or_else(|| {
-                eprintln!("[eval_with_result] Webview '{}' not found", label);
+                if cfg!(debug_assertions) {
+                    eprintln!("[eval_with_result] Webview '{}' not found", label);
+                }
                 format!("Webview '{}' not found", label)
             })?;
 
@@ -440,18 +442,22 @@ pub async fn eval_browser_webview_with_result(
                 eval_js_wkwebview(raw_ptr, &js, tx);
             })
             .map_err(|e| {
-                eprintln!("[eval_with_result] with_webview failed for '{}': {}", label, e);
+                if cfg!(debug_assertions) {
+                    eprintln!("[eval_with_result] with_webview failed for '{}': {}", label, e);
+                }
                 format!("Failed to access webview: {}", e)
             })?;
 
         let result = rx.recv_timeout(timeout)
             .map_err(|e| {
-                eprintln!("[eval_with_result] TIMEOUT for '{}' ({}ms) js: {}...", label, timeout.as_millis(), js_preview);
+                if cfg!(debug_assertions) {
+                    eprintln!("[eval_with_result] TIMEOUT for '{}' ({}ms) js: {}...", label, timeout.as_millis(), js_preview);
+                }
                 format!("JS eval timed out: {}", e)
             })?;
 
         // Log drain results at debug level (frequent calls)
-        if is_drain {
+        if cfg!(debug_assertions) && is_drain {
             if let Ok(ref val) = result {
                 if val != "[]" && val != "undefined" {
                     eprintln!("[eval_with_result] drain returned data for '{}': {}...",
@@ -541,6 +547,9 @@ pub async fn open_browser_devtools(
         // docked param accepted for future use but currently always detaches
         let _ = docked;
 
+        let err_holder = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let err_inner = err_holder.clone();
+
         webview
             .with_webview(move |platform_wv| {
                 use objc::runtime::Object;
@@ -559,12 +568,12 @@ pub async fn open_browser_devtools(
                 unsafe {
                     let wk: *mut Object = platform_wv.inner() as *mut Object;
                     if wk.is_null() {
-                        eprintln!("[devtools] WKWebView pointer is null");
+                        *err_inner.lock().unwrap() = Some("WKWebView pointer is null".into());
                         return;
                     }
                     let inspector: *mut Object = msg_send![wk, _inspector];
                     if inspector.is_null() {
-                        eprintln!("[devtools] _inspector is null — devtools may be disabled");
+                        *err_inner.lock().unwrap() = Some("_inspector is null — DevTools may be disabled".into());
                         return;
                     }
 
@@ -582,10 +591,16 @@ pub async fn open_browser_devtools(
                     // Restore the WKWebView's original frame (undoes the split resize)
                     let _: () = msg_send![wk, setFrame: saved_frame];
 
-                    eprintln!("[devtools] Inspector opened (floating window), frame restored");
+                    if cfg!(debug_assertions) {
+                        eprintln!("[devtools] Inspector opened (floating window), frame restored");
+                    }
                 }
             })
             .map_err(|e| format!("Failed to access webview: {}", e))?;
+
+        if let Some(err_msg) = err_holder.lock().unwrap().take() {
+            return Err(err_msg);
+        }
 
         Ok(())
     }
@@ -606,20 +621,35 @@ pub async fn close_browser_devtools(app: AppHandle, label: String) -> Result<(),
             .get_webview(&label)
             .ok_or_else(|| format!("Webview '{}' not found", label))?;
 
+        let err_holder = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let err_inner = err_holder.clone();
+
         webview
             .with_webview(move |platform_wv| {
                 use objc::runtime::Object;
                 use objc::{msg_send, sel, sel_impl};
                 unsafe {
                     let wk: *mut Object = platform_wv.inner() as *mut Object;
-                    if wk.is_null() { return; }
+                    if wk.is_null() {
+                        *err_inner.lock().unwrap() = Some("WKWebView pointer is null".into());
+                        return;
+                    }
                     let inspector: *mut Object = msg_send![wk, _inspector];
-                    if inspector.is_null() { return; }
+                    if inspector.is_null() {
+                        *err_inner.lock().unwrap() = Some("_inspector is null — DevTools may be disabled".into());
+                        return;
+                    }
                     let _: () = msg_send![inspector, close];
-                    eprintln!("[devtools] Inspector closed");
+                    if cfg!(debug_assertions) {
+                        eprintln!("[devtools] Inspector closed");
+                    }
                 }
             })
             .map_err(|e| format!("Failed to access webview: {}", e))?;
+
+        if let Some(err_msg) = err_holder.lock().unwrap().take() {
+            return Err(err_msg);
+        }
 
         Ok(())
     }

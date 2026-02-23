@@ -252,6 +252,10 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       listen<T>(event, handler).then((unsub) => {
         if (aborted) { unsub(); return; }
         unsubs.push(unsub);
+      }).catch((err) => {
+        if (!aborted) {
+          console.warn(`[BrowserTab] listen(${event}) failed`, err);
+        }
       });
     }
 
@@ -517,7 +521,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       }
 
       automationInjectedRef.current = true;
-      onUpdateTab(tabId, { injected: true });
+      onUpdateTab(tabId, { injected: true, injectionFailed: false });
       onAddLog(tabId, "info", "Automation scripts injected successfully");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
