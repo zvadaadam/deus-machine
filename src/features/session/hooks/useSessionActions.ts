@@ -65,7 +65,7 @@ export function useSessionActions({
         // In web mode, there's no direct sidecar connection
         if (isTauriEnv) {
           try {
-            await socketService.sendQuery(
+            const ack = await socketService.sendQuery(
               sessionId,
               content,
               {
@@ -75,6 +75,15 @@ export function useSessionActions({
               },
               agentType
             );
+            if (!ack.accepted) {
+              console.error("[useSessionActions] Query rejected:", ack.reason);
+              toast.error(ack.reason || "Agent rejected the query");
+              try {
+                await stopSessionMutation.mutateAsync(sessionId);
+              } catch {
+                // Best-effort cleanup
+              }
+            }
           } catch (socketError) {
             console.error("[useSessionActions] Socket query failed:", socketError);
             toast.error(

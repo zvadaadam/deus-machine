@@ -100,7 +100,7 @@ export function BaseToolRenderer({
             {/* Chevron - shows on hover or when expanded (Cursor: 0.1s ease-in) */}
             <ChevronRight
               className={cn(
-                "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-all duration-100 ease-in",
+                "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-100 ease-in",
                 isExpanded && "rotate-90",
                 isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}

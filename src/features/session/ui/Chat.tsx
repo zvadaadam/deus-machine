@@ -6,33 +6,19 @@ import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, TerminalSquare, RefreshCw, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { chatTheme } from "./theme";
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useSession } from "../context";
-import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
-import { TerminalSquare } from "lucide-react";
 
 // Pull spacing from theme for consistency
 const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
 const TIGHT_MARGIN_CLASS = chatTheme.spacing.assistantTightMargin;
-
-/** Patterns that indicate an auth/login error vs a generic API error */
-const AUTH_PATTERNS = [
-  /not\s+logged\s+in/i,
-  /please\s+run\s+.*login/i,
-  /\b401\b.*unauthorized/i,
-  /invalid\s+api\s*key/i,
-  /authentication\s+(failed|required)/i,
-];
-
-function isAuthError(msg: string): boolean {
-  return AUTH_PATTERNS.some((p) => p.test(msg));
-}
 
 /**
  * Turn Types
@@ -112,6 +98,12 @@ interface ChatProps {
   loading: boolean;
   sessionStatus: SessionStatus;
   errorMessage?: string | null;
+  /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
+  errorCategory?: string;
+  /** Whether the sidecar will automatically retry this error */
+  errorWillRetry?: boolean;
+  /** Milliseconds until the sidecar retries (for rate_limit countdown) */
+  errorRetryAfterMs?: number;
   agentType?: string | null;
   latestMessageSentAt?: string | null;
   onStop?: () => void; // Callback to stop/cancel the session
@@ -131,6 +123,9 @@ export function Chat({
   loading,
   sessionStatus,
   errorMessage,
+  errorCategory,
+  errorWillRetry,
+  errorRetryAfterMs,
   agentType,
   latestMessageSentAt,
   onOpenLoginTerminal,
@@ -505,27 +500,78 @@ export function Chat({
                     <div className="flex items-center gap-4 rounded-lg border border-destructive/20 border-l-2 border-l-destructive bg-destructive/5 px-3 py-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-destructive/80">
-                          {agentType
-                            ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
-                            : "Error"}
+                          {match(errorCategory)
+                            .with("auth", () => "Authentication Error")
+                            .with("rate_limit", () => "Rate Limited")
+                            .with("context_limit", () => "Context Limit Reached")
+                            .with("network", () => "Connection Error")
+                            .with("db_write", () => "Database Error")
+                            .otherwise(() =>
+                              agentType
+                                ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
+                                : "Error"
+                            )}
                         </p>
                         <p className="mt-0.5 text-sm text-foreground/80 break-words">{errorMessage}</p>
+                        {/* Retry hint for auto-retryable errors */}
+                        {errorWillRetry && errorRetryAfterMs && (
+                          <RetryCountdown durationMs={errorRetryAfterMs} />
+                        )}
                       </div>
-                      {(onOpenLoginTerminal || onRetryInNewChat) && (
-                        <div className="flex shrink-0 items-center gap-2">
-                          {agentType === "claude" && isAuthError(errorMessage!) && onOpenLoginTerminal && (
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onOpenLoginTerminal}>
-                              <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
-                              Log in
-                            </Button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {match(errorCategory)
+                          .with("auth", () =>
+                            onOpenLoginTerminal ? (
+                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onOpenLoginTerminal}>
+                                <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
+                                Log in
+                              </Button>
+                            ) : null
+                          )
+                          .with("context_limit", () =>
+                            onRetryInNewChat ? (
+                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
+                                New session
+                              </Button>
+                            ) : null
+                          )
+                          .with("rate_limit", () => (
+                            <div className="flex items-center gap-2">
+                              {errorWillRetry && (
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                </span>
+                              )}
+                              {onRetryInNewChat && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              )}
+                            </div>
+                          ))
+                          .with("network", () => (
+                            <div className="flex items-center gap-2">
+                              {errorWillRetry && (
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                </span>
+                              )}
+                              {onRetryInNewChat && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              )}
+                            </div>
+                          ))
+                          .otherwise(() =>
+                            onRetryInNewChat ? (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                Retry in new chat
+                              </Button>
+                            ) : null
                           )}
-                          {onRetryInNewChat && (
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
-                              Retry in new chat
-                            </Button>
-                          )}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   </m.div>
                 )}
@@ -588,5 +634,34 @@ export function Chat({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ── Retry Countdown ──────────────────────────────────────────────────────
+
+/** Animated countdown that ticks down from durationMs to 0. */
+function RetryCountdown({ durationMs }: { durationMs: number }) {
+  const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000));
+
+  useEffect(() => {
+    setRemaining(Math.ceil(durationMs / 1000));
+    const interval = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [durationMs]);
+
+  if (remaining <= 0) return null;
+
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      Retrying in {remaining}s...
+    </p>
   );
 }

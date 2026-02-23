@@ -725,6 +725,7 @@ export function BrowserPanel({
           onClick={handleGoBack}
           disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
           title="Go back"
+          aria-label="Go back"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -740,6 +741,7 @@ export function BrowserPanel({
             activeTab.historyIndex >= activeTab.history.length - 1
           }
           title="Go forward"
+          aria-label="Go forward"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -751,6 +753,7 @@ export function BrowserPanel({
           onClick={handleReload}
           disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
           title="Reload"
+          aria-label="Reload"
         >
           <RefreshCw className={`h-4 w-4 ${activeTab?.loading ? "animate-spin" : ""}`} />
         </Button>
@@ -786,6 +789,9 @@ export function BrowserPanel({
           aria-pressed={activeTab?.selectorActive}
           title={
             activeTab?.selectorActive ? "Exit element selector (Esc)" : "Select element to inspect"
+          }
+          aria-label={
+            activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
           }
         >
           <MousePointer2
@@ -828,6 +834,7 @@ export function BrowserPanel({
               className="h-7 w-7"
               disabled={!activeTab?.currentUrl || !!cookieSyncing}
               title="Import cookies from browser"
+              aria-label="Import cookies from browser"
             >
               {cookieSyncing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -917,6 +924,7 @@ export function BrowserPanel({
           disabled={!activeTab?.currentUrl}
           aria-pressed={activeTab?.devtoolsOpen}
           title={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
+          aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
         >
           <Terminal className={`h-4 w-4 ${activeTab?.devtoolsOpen ? "text-primary" : ""}`} />
         </Button>

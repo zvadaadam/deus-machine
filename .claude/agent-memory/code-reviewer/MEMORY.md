@@ -48,6 +48,14 @@
   corrupts the tag. Real DOM innerText can contain `"` (button labels, link text, etc.).
   Fix pattern: HTML-escape values before embedding in attributes.
 
+## Distribution / CI Patterns
+
+- `sed -i ''` is macOS/BSD syntax. On ubuntu-latest (GNU sed), use `sed -i "..."` (no empty-string arg). Scripts that use `sed -i ''` WILL fail in CI.
+- Tauri updater `pubkey` must be set to the minisign public key string — empty string `""` disables signature verification entirely (security regression, also may break tauri-plugin-updater at runtime).
+- `minimumSystemVersion` for arm64-only builds should be `"11.0"` — Apple Silicon Macs shipped with macOS 11.0; `"10.13"` is only valid for x86_64 Intel targets.
+- `tauri-action@v0` needs `includeUpdaterJson: true` (or it defaults true when updater is configured) — verify latest.json is uploaded as a release asset alongside the DMG.
+- `workflow_dispatch` without a branch filter can tag + push from any branch; restrict by adding `branches: [main]` under `on.workflow_dispatch` or add a guard step.
+- The app spawns system `node` binary (not bundled) — hardened runtime notarization may need `com.apple.security.cs.disable-library-validation` in Entitlements.plist if node's dylibs fail team-ID checks.
 ## Icon Component Patterns (New)
 
 - `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function

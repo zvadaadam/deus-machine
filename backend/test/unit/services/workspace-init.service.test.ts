@@ -33,8 +33,8 @@ vi.mock('util', () => ({
   promisify: () => mockExecFileAsync,
 }));
 
-vi.mock('crypto', () => ({
-  randomUUID: vi.fn(() => 'test-session-uuid'),
+vi.mock('@shared/lib/uuid', () => ({
+  uuidv7: vi.fn(() => 'test-session-uuid'),
 }));
 
 vi.mock('fs', () => ({
@@ -188,17 +188,17 @@ describe('initializeWorkspace', () => {
     expect(steps).toContain('done');
   });
 
-  it('updates init_step in DB for each stage', async () => {
+  it('updates init_stage in DB for each stage', async () => {
     mockFs.existsSync.mockReturnValue(false);
 
     await initializeWorkspace(createInitContext());
 
-    const initStepUpdates = mockDb.prepare.mock.calls
-      .filter((c: string[]) => c[0].includes('init_step = ?'))
+    const initStageUpdates = mockDb.prepare.mock.calls
+      .filter((c: string[]) => c[0].includes('init_stage = ?'))
       .map((c: string[]) => c[0]);
 
-    // Should update init_step for worktree, dependencies, hooks, session (+ session sets 'done')
-    expect(initStepUpdates.length).toBeGreaterThanOrEqual(4);
+    // Should update init_stage for worktree, dependencies, hooks, session (+ session sets 'done')
+    expect(initStageUpdates.length).toBeGreaterThanOrEqual(4);
   });
 
   it('uses correct worktreeBase for branching', async () => {
@@ -254,16 +254,19 @@ describe('initializeWorkspace', () => {
 
     const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
     expect(prepareCalls.some((q: string) =>
-      q.includes("state = 'error'") && q.includes('init_step')
+      q.includes("state = 'error'") && q.includes('init_stage') && q.includes('error_message')
     )).toBe(true);
 
-    // init_step should contain error:worktree
+    // init_stage should be the stage name, error_message should be the error text
+    // The error UPDATE call has 3 args: (init_stage, error_message, workspaceId)
     const runCalls = mockStmt.run.mock.calls;
     const errorCall = runCalls.find((c: unknown[]) =>
-      typeof c[0] === 'string' && (c[0] as string).startsWith('error:')
+      c.length === 3 && c[0] === 'worktree'
     );
     expect(errorCall).toBeTruthy();
-    expect(errorCall![0]).toBe('error:worktree');
+    expect(errorCall![0]).toBe('worktree');
+    expect(errorCall![1]).toBe('worktree already exists');
+    expect(errorCall![2]).toBe('ws-001');
   });
 
   it('does not reach session stage when worktree fails', async () => {
@@ -364,14 +367,14 @@ describe('initializeWorkspace', () => {
     expect(insertSession).toContain("'idle'");
   });
 
-  it('transitions workspace to ready with active_session_id', async () => {
+  it('transitions workspace to ready with current_session_id', async () => {
     mockFs.existsSync.mockReturnValue(false);
 
     await initializeWorkspace(createInitContext());
 
     const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
     const updateWorkspace = prepareCalls.find((q: string) =>
-      q.includes("state = 'ready'") && q.includes('active_session_id')
+      q.includes("state = 'ready'") && q.includes('current_session_id')
     );
     expect(updateWorkspace).toBeTruthy();
   });

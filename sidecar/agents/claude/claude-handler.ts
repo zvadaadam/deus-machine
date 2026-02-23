@@ -4,6 +4,7 @@
 
 import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
+import { classifyError } from "../error-classifier";
 import { createCheckpoint } from "./checkpoint";
 import {
   saveAssistantMessage,
@@ -28,6 +29,7 @@ import {
   deleteQuery,
   settingsChanged,
   terminateSession,
+  isSessionActive,
   type SessionState,
 } from "./claude-session";
 
@@ -112,14 +114,12 @@ export class ClaudeAgentHandler implements AgentHandler {
       session.cwd = options.cwd;
     }
 
-    const canUseExistingGenerator =
-      session &&
-      session.generator &&
-      session.sendMessage &&
+    const canReuse =
+      isSessionActive(session) &&
       options.shouldResetGenerator !== true &&
       !settingsChangedFlag;
 
-    if (canUseExistingGenerator) {
+    if (canReuse) {
       console.log(`Reusing existing generator for session ${sessionId}`);
 
       // Hot-swap model if it changed
@@ -168,20 +168,19 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       // Push the new prompt into the existing generator
-      const sendFn = session?.sendMessage;
-      if (!sendFn) return; // Narrowing guard — should never happen after canUseExistingGenerator check
-      sendFn(prompt);
+      // isSessionActive type guard narrows sendMessage to be defined
+      session.sendMessage(prompt);
     } else {
       const reason = !session
         ? "new session"
-        : !session.generator
-          ? "no existing generator"
+        : !isSessionActive(session)
+          ? "no active generator"
           : options.shouldResetGenerator
             ? "should reset generator"
             : "settings changed";
       console.log(`Creating new generator for session ${sessionId} for reason: "${reason}"`);
 
-      if (session?.generator) {
+      if (isSessionActive(session)) {
         terminateSession(sessionId);
       }
 
@@ -210,7 +209,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     const query = getQuery(sessionId);
     const session = getSession(sessionId);
 
-    if (session && query && session.generator) {
+    if (isSessionActive(session) && query) {
       console.log(`Interrupting query for session ${sessionId}`);
       try {
         await query.interrupt();
@@ -517,7 +516,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           // Persist assistant messages to database
           if (cleanMessage.type === "assistant" && cleanMessage.message) {
             const model = options?.model || "opus";
-            saveAssistantMessage(
+            const writeResult = saveAssistantMessage(
               sessionId,
               cleanMessage.message as { id?: string; role?: string; content?: unknown },
               model,
@@ -525,6 +524,9 @@ export class ClaudeAgentHandler implements AgentHandler {
                 ? cleanMessage.parent_tool_use_id
                 : null
             );
+            if (!writeResult.ok) {
+              console.error(`[${generatorId}] DB write failed for assistant message: ${writeResult.error}`);
+            }
           }
 
           // Persist user messages with tool_result blocks so the frontend
@@ -535,13 +537,16 @@ export class ClaudeAgentHandler implements AgentHandler {
             const hasToolResult =
               Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
             if (hasToolResult) {
-              saveToolResultMessage(
+              const writeResult = saveToolResultMessage(
                 sessionId,
                 cleanMessage.message as { id?: string; role?: string; content?: unknown },
                 typeof cleanMessage.parent_tool_use_id === "string"
                   ? cleanMessage.parent_tool_use_id
                   : null
               );
+              if (!writeResult.ok) {
+                console.error(`[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`);
+              }
             }
           }
 
@@ -557,23 +562,53 @@ export class ClaudeAgentHandler implements AgentHandler {
       updateSessionStatus(sessionId, "idle");
       console.log(`[${generatorId}] Session completed: ${sessionId}`);
     } catch (error) {
-      console.error(`[${generatorId}] Error in Claude query:`, error);
+      const classified = classifyError(error);
+      console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
 
-      const isAbort = error instanceof Error && error.name === "AbortError";
-      const errorMsg = error instanceof Error ? error.message : String(error);
-
-      if (!isAbort) {
+      if (classified.category !== "abort") {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
-          error: errorMsg,
+          error: classified.message,
           agentType: "claude",
+          category: classified.category,
+          willRetry: classified.willRetry,
+          retryAfterMs: classified.retryAfterMs,
         });
       }
 
       // Update DB status so session doesn't stay stuck as "working"
       // Persist error message so frontend can display it in the chat
-      updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : errorMsg);
+      const isAbort = classified.category === "abort";
+
+      // Record cancellation in message history so the chat shows what happened
+      // and the model has context on resume ("previous turn was interrupted").
+      if (isAbort) {
+        const model = options?.model || "opus";
+        saveAssistantMessage(sessionId, {
+          role: "assistant",
+          content: [{ type: "text", text: "" }],
+          stop_reason: "cancelled",
+        }, model);
+      }
+
+      const statusResult = updateSessionStatus(
+        sessionId,
+        isAbort ? "idle" : "error",
+        isAbort ? null : classified.message,
+        isAbort ? null : classified.category
+      );
+      if (!statusResult.ok) {
+        // Session is now stuck — notify frontend so it can attempt recovery
+        FrontendClient.sendError({
+          id: sessionId,
+          type: "error",
+          error: `Session status update failed: ${statusResult.error}`,
+          agentType: "claude",
+          category: "db_write",
+          willRetry: false,
+        });
+      }
     } finally {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;

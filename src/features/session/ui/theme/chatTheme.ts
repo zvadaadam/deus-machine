@@ -60,7 +60,7 @@ export const chatTheme = {
     container:
       "absolute -bottom-8 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
     button:
-      "h-6 px-2 rounded-md flex items-center gap-1.5 hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-all duration-200 ease text-xs",
+      "h-6 px-2 rounded-md flex items-center gap-1.5 hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors duration-200 ease text-xs",
     buttonActive: "text-success hover:bg-success/10",
     icon: "w-3 h-3",
   },
@@ -151,7 +151,7 @@ export const chatTheme = {
   input: {
     container: "flex-shrink-0 m-0 px-6 pb-4 z-10",
     chatBox: {
-      base: "relative flex items-center gap-3 px-5 py-4 bg-muted/30 backdrop-blur-xl border border-border/50 rounded-[24px] shadow-lg transition-all duration-200 ease-out motion-reduce:transition-none",
+      base: "relative flex items-center gap-3 px-5 py-4 bg-muted/30 backdrop-blur-xl border border-border/50 rounded-[24px] shadow-lg transition-[border-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
       focused: "border-primary/50 shadow-xl",
       hover: "hover:border-border",
     },
@@ -160,9 +160,9 @@ export const chatTheme = {
     actions: {
       container: "flex items-center gap-2 flex-shrink-0",
       button:
-        "flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-muted/50 border border-border/50 hover:border-border rounded-full text-body-sm text-muted-foreground hover:text-foreground transition-all duration-200 ease disabled:opacity-50 disabled:cursor-not-allowed",
+        "flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-muted/50 border border-border/50 hover:border-border rounded-full text-body-sm text-muted-foreground hover:text-foreground transition-colors duration-200 ease disabled:opacity-50 disabled:cursor-not-allowed",
       buttonDestructive:
-        "flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 border border-destructive/50 hover:border-destructive rounded-full text-body-sm text-destructive-foreground transition-all duration-200 ease",
+        "flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 border border-destructive/50 hover:border-destructive rounded-full text-body-sm text-destructive-foreground transition-colors duration-200 ease",
     },
   },
 

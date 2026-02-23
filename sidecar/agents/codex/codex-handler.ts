@@ -10,6 +10,7 @@
 import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
 import { FrontendClient } from "../../frontend-client";
+import { classifyError } from "../error-classifier";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
@@ -266,7 +267,7 @@ export class CodexAgentHandler implements AgentHandler {
 
             // Persist completed items to database
             if (e.type === "item.completed") {
-              saveAssistantMessage(
+              const writeResult = saveAssistantMessage(
                 sessionId,
                 {
                   id: `codex-${e.item.id}`,
@@ -275,6 +276,9 @@ export class CodexAgentHandler implements AgentHandler {
                 },
                 model
               );
+              if (!writeResult.ok) {
+                console.error(`[${queryId}] DB write failed for assistant message: ${writeResult.error}`);
+              }
             }
           })
           .with({ type: "turn.completed" }, (e) => {
@@ -297,24 +301,32 @@ export class CodexAgentHandler implements AgentHandler {
             turnContentBlocks = [];
           })
           .with({ type: "turn.failed" }, (e) => {
-            console.error(`[${queryId}] Turn failed:`, e.error.message);
+            const classified = classifyError(e.error);
+            console.error(`[${queryId}] Turn failed [${classified.category}]:`, classified.message);
             FrontendClient.sendError({
               id: sessionId,
               type: "error",
-              error: e.error.message,
+              error: classified.message,
               agentType: "codex",
+              category: classified.category,
+              willRetry: classified.willRetry,
+              retryAfterMs: classified.retryAfterMs,
             });
-            updateSessionStatus(sessionId, "error", e.error.message);
+            updateSessionStatus(sessionId, "error", classified.message, classified.category);
           })
           .with({ type: "error" }, (e) => {
-            console.error(`[${queryId}] Stream error:`, e.message);
+            const classified = classifyError(e);
+            console.error(`[${queryId}] Stream error [${classified.category}]:`, classified.message);
             FrontendClient.sendError({
               id: sessionId,
               type: "error",
-              error: e.message,
+              error: classified.message,
               agentType: "codex",
+              category: classified.category,
+              willRetry: classified.willRetry,
+              retryAfterMs: classified.retryAfterMs,
             });
-            updateSessionStatus(sessionId, "error", e.message);
+            updateSessionStatus(sessionId, "error", classified.message, classified.category);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -333,29 +345,56 @@ export class CodexAgentHandler implements AgentHandler {
         updateSessionStatus(sessionId, "idle");
       }
 
+      // Record cancellation if the loop exited via abort signal (break path).
+      // The catch block handles the throw path — this covers the break path.
+      if (abortController.signal.aborted) {
+        const model = resolveCodexModel(options?.model);
+        saveAssistantMessage(sessionId, {
+          role: "assistant",
+          content: [{ type: "text", text: "" }],
+          stop_reason: "cancelled",
+        }, model);
+      }
+
       console.log(`[${queryId}] Codex session completed: ${sessionId}`);
     } catch (error) {
-      console.error(`[${queryId}] Error in Codex query:`, error);
-
-      const isAbort =
-        error instanceof Error && (error.name === "AbortError" || abortController.signal.aborted);
+      const raw = classifyError(error);
+      // Also treat abortController.signal.aborted as abort (codex-specific:
+      // the error itself might not say "abort" but the signal was triggered)
+      const classified =
+        raw.category !== "abort" && abortController.signal.aborted
+          ? { ...raw, category: "abort" as const, willRetry: false }
+          : raw;
+      console.error(`[${queryId}] Error in Codex query [${classified.category}]:`, classified.message);
 
       // Only update status if this processQuery still owns the session.
       const ownsSession = getCodexSession(sessionId) === session;
-
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isAbort = classified.category === "abort";
 
       if (!isAbort && ownsSession) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
-          error: errorMsg,
+          error: classified.message,
           agentType: "codex",
+          category: classified.category,
+          willRetry: classified.willRetry,
+          retryAfterMs: classified.retryAfterMs,
         });
       }
 
       if (ownsSession) {
-        updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : errorMsg);
+        // Record cancellation in message history so the chat shows what happened
+        if (isAbort) {
+          const model = resolveCodexModel(options?.model);
+          saveAssistantMessage(sessionId, {
+            role: "assistant",
+            content: [{ type: "text", text: "" }],
+            stop_reason: "cancelled",
+          }, model);
+        }
+
+        updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : classified.message, isAbort ? null : classified.category);
       }
     } finally {
       // Only clean up if this processQuery still owns the session.

@@ -7,7 +7,7 @@ import { apiClient } from "@/shared/api/client";
 import { ENDPOINTS } from "@/shared/config/api.config";
 import { isTauriAvailable } from "@/platform/tauri/invoke";
 import { dbGetStats } from "@/platform/tauri/db";
-import type { Repo, Stats } from "../types";
+import type { Repository, Stats } from "../types";
 
 /** Shape returned by GET /repos/:id/manifest */
 export interface RepoManifestResponse {
@@ -28,15 +28,15 @@ export const RepoService = {
   /**
    * Fetch all repositories
    */
-  fetchAll: async (): Promise<Repo[]> => {
-    return apiClient.get<Repo[]>(ENDPOINTS.REPOS);
+  fetchAll: async (): Promise<Repository[]> => {
+    return apiClient.get<Repository[]>(ENDPOINTS.REPOS);
   },
 
   /**
    * Fetch repository by ID
    */
-  fetchById: async (id: string): Promise<Repo> => {
-    return apiClient.get<Repo>(ENDPOINTS.REPO_BY_ID(id));
+  fetchById: async (id: string): Promise<Repository> => {
+    return apiClient.get<Repository>(ENDPOINTS.REPO_BY_ID(id));
   },
 
   /**
@@ -58,8 +58,8 @@ export const RepoService = {
   /**
    * Add a new repository
    */
-  add: async (rootPath: string): Promise<Repo> => {
-    return apiClient.post<Repo>(ENDPOINTS.REPOS, { root_path: rootPath });
+  add: async (rootPath: string): Promise<Repository> => {
+    return apiClient.post<Repository>(ENDPOINTS.REPOS, { root_path: rootPath });
   },
 
   /**

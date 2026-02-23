@@ -21,9 +21,9 @@ const CELESTIAL_NAMES = [
 ];
 
 export function generateUniqueName(db: Database.Database): string {
-  const existingNames = db.prepare('SELECT directory_name FROM workspaces')
+  const existingNames = db.prepare('SELECT slug FROM workspaces')
     .all()
-    .map((w: any) => w.directory_name);
+    .map((w: any) => w.slug);
 
   // Try random celestial names first (100 attempts)
   for (let i = 0; i < 100; i++) {

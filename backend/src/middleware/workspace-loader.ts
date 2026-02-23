@@ -12,14 +12,14 @@ export interface WorkspaceContext {
 
 /**
  * Compute the filesystem path for a workspace.
- * All Hive workspaces live at {root_path}/.hive/{directory_name}.
+ * All Hive workspaces live at {root_path}/.hive/{slug}.
  */
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
-  directory_name?: string | null;
+  slug?: string | null;
 }): string {
-  if (!ws.root_path || !ws.directory_name) return '';
-  return path.join(ws.root_path, '.hive', ws.directory_name);
+  if (!ws.root_path || !ws.slug) return '';
+  return path.join(ws.root_path, '.hive', ws.slug);
 }
 
 /**
@@ -33,7 +33,7 @@ export const withWorkspace = createMiddleware(async (c, next) => {
 
   const workspace = getWorkspaceForMiddleware(db, id);
 
-  if (!workspace || !workspace.root_path || !workspace.directory_name) {
+  if (!workspace || !workspace.root_path || !workspace.slug) {
     throw new NotFoundError('Workspace not found');
   }
 

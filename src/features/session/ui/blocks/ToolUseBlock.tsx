@@ -12,7 +12,7 @@
  */
 
 import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from "@/shared/types";
-import { m } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
@@ -42,6 +42,7 @@ function ToolRendererWrapper({
 }
 
 export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
+  const reduceMotion = useReducedMotion();
   const { subagentMessages } = useSession();
 
   if (!block || !block.name) {
@@ -79,7 +80,7 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
     <m.div
       className="my-1"
       style={{ contain: "paint" }}
-      initial={{ opacity: 0, y: 4 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
     >

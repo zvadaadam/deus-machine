@@ -92,7 +92,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
       size={iconOnly ? "icon" : "sm"}
       className={
         iconOnly
-          ? "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-all duration-200 ease-out"
+          ? "text-muted-foreground/80 hover:text-foreground hover:bg-muted/10 h-9 w-9 rounded-lg transition-colors duration-200 ease-out"
           : "gap-2 px-3"
       }
       onPointerEnter={handleOpen}

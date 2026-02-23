@@ -95,6 +95,22 @@ export const SettingsFile = z.object({
 }).passthrough();
 
 // ============================================================================
+// Preferences File Schema (disk reads — used with safeParse for graceful fallback)
+// ============================================================================
+
+/** Shape of ~/Library/Application Support/com.hivenet.app/preferences.json */
+export const PreferencesFile = z.object({
+  theme: z.enum(['light', 'dark', 'system']).optional(),
+  diff_view_mode: z.string().optional(),
+  user_name: z.string().optional(),
+  onboarding_completed: z.boolean().optional(),
+  anthropic_api_key: z.string().optional(),
+  claude_provider: z.string().optional(),
+  claude_model: z.string().optional(),
+  custom_endpoint: z.string().optional(),
+}).passthrough();
+
+// ============================================================================
 // Settings Schemas
 // ============================================================================
 

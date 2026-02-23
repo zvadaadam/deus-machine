@@ -135,18 +135,17 @@ class UnifiedSidecar {
     FrontendClient.attachTunnel(rpcTunnel);
 
     // --- Query (dispatch to agent by agentType) ---
+    // Returns synchronous ACK/reject before async streaming begins.
+    // handleQuery is NOT awaited — the ACK returns immediately after validation.
     FrontendClient.onQuery(async (request) => {
       const agent = getAgent(request.agentType);
       if (!agent) {
-        FrontendClient.sendError({
-          id: request.id,
-          type: "error",
-          error: `No agent registered for type: ${request.agentType}`,
-          agentType: request.agentType,
-        });
-        return;
+        return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
       }
-      await agent.handleQuery(request.id, request.prompt, request.options);
+      agent.handleQuery(request.id, request.prompt, request.options).catch((err) => {
+        console.error(`[QUERY] Unhandled error in ${request.agentType} handleQuery:`, err);
+      });
+      return { accepted: true };
     });
 
     // --- Cancel (dispatch to agent by agentType) ---
