@@ -43,7 +43,7 @@ function initDatabase(): Database.Database {
         dbInstance.exec(sql);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : '';
-        if (!msg.includes('duplicate column')) throw e;
+        if (!msg.includes('duplicate column') && !msg.includes('no such table')) throw e;
       }
     }
 

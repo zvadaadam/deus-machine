@@ -8,6 +8,7 @@ use hive_lib::{
     backend::BackendManager,
     browser::BrowserManager,
     db::DbManager,
+    gateway::GatewayManager,
     pty::PtyManager,
     sidecar::SidecarManager,
     socket::SocketManager,
@@ -42,6 +43,7 @@ fn main() {
         .manage(DbManager::new())
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
+        .manage(GatewayManager::new())
         .manage(SocketManager::new())
         .manage(WatcherManager::new());
 
@@ -195,6 +197,65 @@ fn main() {
                 }
             }
 
+            // Auto-start messaging gateway if enabled in settings.
+            // Reads gateway_enabled, telegram_bot_token, whatsapp_session_dir
+            // from preferences.json. Env vars still work as override
+            // for developer testing (checked as fallback).
+            let backend_port = backend_manager.get_port();
+            let sidecar_socket = sidecar_manager.get_socket_path();
+
+            if let (Some(port), Some(socket_path)) = (backend_port, sidecar_socket) {
+                let gateway_manager: tauri::State<GatewayManager> = app.state();
+
+                // Check if gateway is enabled in settings (default: false)
+                let gateway_enabled = db_manager.read_setting("gateway_enabled")
+                    .unwrap_or(None)
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+
+                // Read tokens: prefer DB settings, fall back to env vars for dev convenience
+                let telegram_token = db_manager.read_setting("telegram_bot_token")
+                    .unwrap_or(None)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| std::env::var("TELEGRAM_BOT_TOKEN").ok());
+
+                let whatsapp_dir = db_manager.read_setting("whatsapp_session_dir")
+                    .unwrap_or(None)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| std::env::var("WHATSAPP_SESSION_DIR").ok());
+
+                let has_channels = telegram_token.is_some() || whatsapp_dir.is_some();
+                // Auto-start if explicitly enabled OR if env vars are set (dev mode)
+                let env_override = std::env::var("TELEGRAM_BOT_TOKEN").is_ok()
+                    || std::env::var("WHATSAPP_SESSION_DIR").is_ok();
+
+                if has_channels && (gateway_enabled || env_override) {
+                    let gateway_path = if cfg!(dev) {
+                        exe_dir.join("gateway/index.ts")
+                    } else {
+                        exe_dir.join("bin/gateway.bundled.cjs")
+                    };
+
+                    let backend_url = format!("http://localhost:{}", port);
+                    match gateway_manager.start(
+                        gateway_path,
+                        &backend_url,
+                        &socket_path,
+                        telegram_token.as_deref(),
+                        whatsapp_dir.as_deref(),
+                    ) {
+                        Ok(_) => println!("[TAURI] ✅ Messaging gateway started"),
+                        Err(e) => eprintln!("[TAURI] ⚠️ Failed to start messaging gateway: {} — messaging features won't work", e),
+                    }
+                } else if has_channels && !gateway_enabled {
+                    println!("[TAURI] Messaging gateway not started (disabled in settings — enable in Settings → Messaging)");
+                } else {
+                    println!("[TAURI] Messaging gateway not started (no channels configured)");
+                }
+            } else {
+                println!("[TAURI] Messaging gateway not started (backend or sidecar not ready)");
+            }
+
             println!("[TAURI] ✅ Setup complete in {}ms", setup_start.elapsed().as_millis());
             Ok(())
         })
@@ -209,6 +270,9 @@ fn main() {
                     // Stop backend, sidecar, and browser when main window closes
                     let backend_manager: tauri::State<BackendManager> = window.state();
                     backend_manager.stop().ok();
+
+                    let gateway_manager: tauri::State<GatewayManager> = window.state();
+                    gateway_manager.stop().ok();
 
                     let sidecar_manager: tauri::State<SidecarManager> = window.state();
                     sidecar_manager.stop().ok();
@@ -309,6 +373,9 @@ fn main() {
                         commands::unwatch_workspace,
                         commands::is_workspace_watched,
                         commands::list_watched_workspaces,
+                        commands::is_gateway_running,
+                        commands::start_gateway,
+                        commands::stop_gateway,
                         $(commands::$extra),*
                     ]
                 };
