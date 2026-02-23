@@ -5,7 +5,7 @@
  * ResizeObserver. Tells Rust to create/position a native WKWebView there.
  * Unlike iframes, native webviews bypass X-Frame-Options so any URL loads.
  *
- * All tabs use absolute positioning (inset-0) so bounds are always measurable.
+ * All tabs stack via CSS Grid ([grid-area:1/1]) in the parent container.
  * The native webview floats above the DOM; overlays only show when webview is hidden.
  *
  * Communication channels (each concern gets its own reliable path):
@@ -22,7 +22,7 @@
  * browser:url-change events so the URL bar stays current.
  */
 
-import { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
@@ -55,6 +55,10 @@ interface BrowserTabProps {
   onElementSelected?: (tabId: string, event: ElementSelectedEvent) => void;
   /** Which Tauri window to create child webviews in. Defaults to "main". */
   windowLabel?: string;
+  /** When true, the browser container is constrained to mobile width (390px).
+   *  Used to trigger a bounds sync — mx-auto centering shifts x-offset
+   *  and ResizeObserver may not catch position-only changes. */
+  mobileView?: boolean;
 }
 
 export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function BrowserTab(
@@ -66,6 +70,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     visible,
     onElementSelected,
     windowLabel,
+    mobileView,
   },
   ref
 ) {
@@ -88,6 +93,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   // Stable ref for onElementSelected callback (used by the inspect drain loop)
   const onElementSelectedRef = useRef(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
+  // Track previous mobileView value to detect actual toggles (vs initial mount)
+  const prevMobileViewRef = useRef(mobileView);
 
   const tabId = tab.id;
   const webviewLabel = tab.webviewLabel;
@@ -241,6 +248,50 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       cancelAnimationFrame(rafRef.current);
     };
   }, [visible, webviewReady, hasLoaded, webviewLabel]);
+
+  // --- Re-sync bounds when mobile view toggles ---
+  // The container CSS changes (w-full ↔ w-[390px] + mx-auto centering) change
+  // BOTH the placeholder's size and its x-offset. ResizeObserver catches the
+  // size change asynchronously, but it fires between layout and paint — racing
+  // with effect-based sync can produce stale x-offsets.
+  //
+  // useLayoutEffect runs synchronously after React commits DOM but BEFORE the
+  // browser paints. Calling getBoundingClientRect() here forces a synchronous
+  // reflow that includes the newly committed CSS classes (w-[390px], mx-auto).
+  // This guarantees correct width AND x-position in a single measurement — no
+  // rAF, no race with ResizeObserver, no timing ambiguity.
+  //
+  // The hide → setBounds → show cycle ensures WKWebView's native compositor
+  // actually repositions the view (setBounds on an already-visible native view
+  // can be coalesced/ignored by the compositor in some Tauri/WebKit versions).
+  useLayoutEffect(() => {
+    const changed = prevMobileViewRef.current !== mobileView;
+    prevMobileViewRef.current = mobileView;
+    if (!changed) return; // skip initial mount — visibility effect handles it
+
+    if (!visible || !webviewReady || !hasLoaded) return;
+    const el = placeholderRef.current;
+    if (!el || !webviewCreatedRef.current) return;
+
+    // Hide so the stale-position webview isn't visible during the transition.
+    invoke("hide_browser_webview", { label: webviewLabel }).catch(() => {});
+
+    // getBoundingClientRect() forces synchronous reflow — reads the post-toggle
+    // layout including mx-auto centering offsets. No rAF needed because React
+    // has already committed the DOM changes before useLayoutEffect runs.
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    invoke("set_browser_webview_bounds", {
+      label: webviewLabel,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    })
+      .then(() => invoke("show_browser_webview", { label: webviewLabel }))
+      .catch(() => {});
+  }, [mobileView, visible, webviewReady, hasLoaded, webviewLabel]);
 
   // --- Tauri event listeners (page load, title, SPA nav, console) ---
   useEffect(() => {
@@ -581,84 +632,103 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);
 
+  const syncBounds = useCallback(() => {
+    const el = placeholderRef.current;
+    if (!el || !webviewCreatedRef.current) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    invoke("set_browser_webview_bounds", {
+      label: webviewLabel,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    }).catch(() => {});
+  }, [webviewLabel]);
+
   useImperativeHandle(
     ref,
-    () => ({ navigateToUrl, reload, injectAutomation, toggleElementSelector }),
-    [navigateToUrl, reload, injectAutomation, toggleElementSelector]
+    () => ({ navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds }),
+    [navigateToUrl, reload, injectAutomation, toggleElementSelector, syncBounds]
   );
 
   return (
-    // All tabs use absolute positioning so bounds are always measurable
-    // (native webview show/hide controls visibility, not CSS display)
-    <div className="absolute inset-0">
-      {/* Placeholder div — native webview is positioned to overlay this area */}
-      <div ref={placeholderRef} className="relative h-full w-full">
-        {/* Loading progress bar — NProgress-style, top of viewport.
-         * Shows during page loads (indeterminate animation → fills to 92%).
-         * On load complete: fills to 100% then fades out.
-         * Uses transform: scaleX() for GPU-accelerated animation. */}
-        {visible && (tab.loading || completingLoad) && (
-          <div
-            className="bg-primary absolute inset-x-0 top-0 z-10 h-[2px] origin-left"
-            style={{
-              animation: tab.loading
-                ? "browser-loading 8s cubic-bezier(.19,1,.22,1) forwards"
-                : "browser-loading-complete 0.4s ease-out forwards",
-            }}
-          />
-        )}
+    // Placeholder div — native webview is positioned to overlay this area.
+    //
+    // All tabs stack in the same grid cell via [grid-area:1/1] (parent is
+    // display:grid). This replaced the old `absolute inset-0` wrapper because
+    // absolute positioning didn't reliably inherit width constraints from the
+    // containing block when parent containers toggled mobile view (w-full ↔
+    // w-[390px] + mx-auto). getBoundingClientRect() returned stale full-width
+    // values, so the native WKWebView never repositioned. Grid stacking keeps
+    // tabs in normal document flow — they inherit the container's width
+    // naturally and ResizeObserver fires on actual size changes.
+    <div ref={placeholderRef} className="relative [grid-area:1/1]">
+      {/* Loading progress bar — NProgress-style, top of viewport.
+       * Shows during page loads (indeterminate animation → fills to 92%).
+       * On load complete: fills to 100% then fades out.
+       * Uses transform: scaleX() for GPU-accelerated animation. */}
+      {visible && (tab.loading || completingLoad) && (
+        <div
+          className="bg-primary absolute inset-x-0 top-0 z-10 h-[2px] origin-left"
+          style={{
+            animation: tab.loading
+              ? "browser-loading 8s cubic-bezier(.19,1,.22,1) forwards"
+              : "browser-loading-complete 0.4s ease-out forwards",
+          }}
+        />
+      )}
 
-        {/* Empty state: no URL entered yet — minimal, engineer-friendly */}
-        {visible && !webviewReady && !tab.currentUrl && (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
-              <Globe
-                className="text-muted-foreground/60 h-5 w-5"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </div>
-            <div className="text-center">
-              <p className="text-muted-foreground text-sm">
-                Paste a URL above or ask the Agent to browse
-              </p>
-              <p className="text-muted-foreground/40 mt-1 text-xs">
-                Supports any website — cookies, auth, and devtools included
-              </p>
-            </div>
+      {/* Empty state: no URL entered yet — minimal, engineer-friendly */}
+      {visible && !webviewReady && !tab.currentUrl && (
+        <div className="flex h-full flex-col items-center justify-center gap-3">
+          <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
+            <Globe
+              className="text-muted-foreground/60 h-5 w-5"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
           </div>
-        )}
+          <div className="text-center">
+            <p className="text-muted-foreground text-sm">
+              Paste a URL above or ask the Agent to browse
+            </p>
+            <p className="text-muted-foreground/40 mt-1 text-xs">
+              Supports any website — cookies, auth, and devtools included
+            </p>
+          </div>
+        </div>
+      )}
 
-        {/* Loading overlay: only during initial page load (webview hidden) */}
-        {visible && tab.loading && !hasLoaded && (
-          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-            <Loader2 className="text-primary h-8 w-8 animate-spin" />
-          </div>
-        )}
+      {/* Loading overlay: only during initial page load (webview hidden) */}
+      {visible && tab.loading && !hasLoaded && (
+        <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+          <Loader2 className="text-primary h-8 w-8 animate-spin" />
+        </div>
+      )}
 
-        {/* Error overlay: only if initial load failed */}
-        {visible && tab.error && !hasLoaded && (
-          <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
-            <div className="max-w-sm p-8 text-center">
-              <div className="bg-destructive/10 mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
-                <AlertCircle className="text-destructive h-5 w-5" />
-              </div>
-              <h3 className="mb-1 text-sm font-semibold">Unable to Load Page</h3>
-              <p className="text-muted-foreground mb-4 text-xs">{tab.error}</p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  onUpdateTab(tabId, { error: null });
-                  if (tab.currentUrl) navigateToUrl(tab.currentUrl);
-                }}
-              >
-                Try Again
-              </Button>
+      {/* Error overlay: only if initial load failed */}
+      {visible && tab.error && !hasLoaded && (
+        <div className="vibrancy-bg absolute inset-0 flex items-center justify-center">
+          <div className="max-w-sm p-8 text-center">
+            <div className="bg-destructive/10 mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl">
+              <AlertCircle className="text-destructive h-5 w-5" />
             </div>
+            <h3 className="mb-1 text-sm font-semibold">Unable to Load Page</h3>
+            <p className="text-muted-foreground mb-4 text-xs">{tab.error}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                onUpdateTab(tabId, { error: null });
+                if (tab.currentUrl) navigateToUrl(tab.currentUrl);
+              }}
+            >
+              Try Again
+            </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 });
