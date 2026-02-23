@@ -337,7 +337,7 @@ export function useAutoScroll({
       lastScrollTopRef.current = currentTop;
 
       // RE-ENGAGEMENT: user scrolled back to bottom.
-      // Math-based check (like Cursor's approach) as a fast path.
+      // Math-based check as a fast path.
       // The IO will also fire but is async; this gives immediate re-engagement.
       // Note: Disengagement is now handled by the wheel listener (more reliable
       // than scroll-direction for distinguishing nested scrollables).

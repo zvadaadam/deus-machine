@@ -3,9 +3,8 @@
  *
  * Layout (top to bottom):
  *   BrowserTabBar (h-9)  — tab row with [Tab 1] [Tab 2] [+]
- *   Navigation Bar (h-9) — < > R [URL bar] link zap target console
+ *   Navigation Bar (h-9) — < > R [URL bar] inspect cookie devtools
  *   Tab Content (flex-1)  — all tabs rendered hidden/shown (preserves webview state)
- *   Console (resizable)   — collapsible panel, shows active tab's logs
  *
  * Persistence: Tab URLs/titles are synced to the workspace layout store
  * (localStorage) on a debounced 300ms timer. Webviews are destroyed on
@@ -13,14 +12,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { ImperativePanelHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,20 +26,21 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  Zap,
   Terminal,
-  Target,
+  MousePointer2,
   X,
   Cookie,
   Check,
   Loader2,
   Trash2,
+  Camera,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
 import { useBrowser } from "../hooks/useBrowser";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
-import type { BrowserTabState, BrowserTabHandle, ConsoleLog, PersistedBrowserTab } from "../types";
+import type { BrowserTabState, BrowserTabHandle, ConsoleLog, PersistedBrowserTab, ElementSelectedEvent } from "../types";
 import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
 import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
@@ -118,11 +112,6 @@ export function BrowserPanel({
     return tabs[0]?.id ?? "";
   });
 
-  // Console toggle (shared UI — one toggle, shows active tab's logs)
-  const [showConsole, setShowConsole] = useState(false);
-  const consolePanelRef = useRef<ImperativePanelHandle>(null);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
-
   // Imperative handles per tab
   const tabRefs = useRef<Map<string, BrowserTabHandle>>(new Map());
 
@@ -131,6 +120,9 @@ export function BrowserPanel({
 
   // Track previous workspaceId to detect switches
   const prevWorkspaceIdRef = useRef(workspaceId);
+
+  // Mobile viewport toggle — constrains webview width to 390px (iPhone 14 logical width)
+  const [mobileView, setMobileView] = useState(false);
 
   // Shared dev-browser server (called once in container, status passed to all tabs)
   const { status: devBrowserStatus, startServer } = useBrowser();
@@ -351,24 +343,6 @@ export function BrowserPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devBrowserStatus.running]);
 
-  // Auto-scroll console to bottom
-  useEffect(() => {
-    if (showConsole && consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [activeTab?.consoleLogs, showConsole]);
-
-  // Sync showConsole state ↔ console panel collapse/expand
-  useEffect(() => {
-    const panel = consolePanelRef.current;
-    if (!panel) return;
-    if (showConsole) {
-      if (panel.isCollapsed()) panel.expand();
-    } else {
-      if (!panel.isCollapsed()) panel.collapse();
-    }
-  }, [showConsole]);
-
   // --- Tab operations ---
 
   const addTab = useCallback(() => {
@@ -466,6 +440,63 @@ export function BrowserPanel({
     );
   }, []);
 
+  /** Dispatch element selection to the chat input via CustomEvent.
+   *  Only handles "element-selected" — "area-selected" is intentionally ignored
+   *  since area selections have no element metadata to reference. */
+  const handleElementSelected = useCallback(
+    (_tabId: string, event: ElementSelectedEvent) => {
+      if (event.type !== "element-selected" || !event.element) return;
+
+      // Serialize Record<string, string> fields as semicolon-separated strings
+      const serialize = (rec: Record<string, string> | undefined, sep: string) =>
+        rec ? Object.entries(rec).map(([k, v]) => `${k}${sep}${v}`).join("; ") : undefined;
+
+      window.dispatchEvent(
+        new CustomEvent("insert-to-chat", {
+          detail: {
+            element: {
+              ref: event.ref ?? "",
+              tagName: event.element.tagName,
+              path: event.element.path,
+              innerText: event.element.innerText,
+              context: event.context,
+              reactComponent: event.reactComponent?.name,
+              file: event.reactComponent?.fileName ?? undefined,
+              line: event.reactComponent?.lineNumber?.toString() ?? undefined,
+              styles: serialize(event.element.styles, ": "),
+              props: serialize(event.element.props, "="),
+              attributes: serialize(event.element.attributes, "="),
+              innerHTML: event.element.innerHTML,
+            },
+          },
+        })
+      );
+    },
+    []
+  );
+
+  /** Capture the active tab's WKWebView as JPEG and dispatch to chat input */
+  const handleScreenshot = useCallback(async () => {
+    if (!activeTab?.webviewLabel || !activeTab.currentUrl) return;
+    try {
+      const base64 = await invoke<string>("screenshot_browser_webview", {
+        label: activeTab.webviewLabel,
+      });
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "image/jpeg" });
+      const file = new File([blob], `browser-screenshot-${Date.now()}.jpg`, { type: "image/jpeg" });
+      window.dispatchEvent(
+        new CustomEvent("insert-to-chat", { detail: { files: [file] } })
+      );
+    } catch (err) {
+      console.error("Browser screenshot failed:", err);
+    }
+  }, [activeTab?.webviewLabel, activeTab?.currentUrl]);
+
   // --- Navigation (operates on active tab) ---
 
   const handleNavigate = useCallback(() => {
@@ -544,11 +575,6 @@ export function BrowserPanel({
     tabRefs.current.get(activeTab.id)?.reload();
   }, [activeTab]);
 
-  const handleInject = useCallback(() => {
-    if (!activeTab) return;
-    tabRefs.current.get(activeTab.id)?.injectAutomation();
-  }, [activeTab]);
-
   const handleToggleSelector = useCallback(() => {
     if (!activeTab) return;
     tabRefs.current.get(activeTab.id)?.toggleElementSelector();
@@ -569,12 +595,6 @@ export function BrowserPanel({
     },
     [activeTab, handleUpdateTab]
   );
-
-  const handleClearConsole = useCallback(() => {
-    if (activeTab) {
-      handleUpdateTab(activeTab.id, { consoleLogs: [] });
-    }
-  }, [activeTab, handleUpdateTab]);
 
   // Persist active tab ID changes — read tabs from ref to avoid stale closure
   const handleTabSelect = useCallback(
@@ -757,17 +777,17 @@ export function BrowserPanel({
           disabled={!activeTab || activeTab.loading}
         />
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleInject}
-          disabled={!activeTab?.currentUrl || !devBrowserStatus.running || activeTab?.injected}
-          title={activeTab?.injected ? "Automation active" : "Inject automation"}
-          aria-label={activeTab?.injected ? "Automation active" : "Inject automation"}
-        >
-          <Zap className={`h-4 w-4 ${activeTab?.injected ? "text-success" : ""}`} />
-        </Button>
+        {/* Injection failure indicator — red dot, only visible on error */}
+        {activeTab?.injectionFailed && (
+          <>
+            <span
+              className="bg-destructive h-2 w-2 shrink-0 rounded-full"
+              title="Automation injection failed — check console"
+              aria-hidden="true"
+            />
+            <span className="sr-only">Automation injection failed</span>
+          </>
+        )}
 
         <Button
           variant="ghost"
@@ -783,9 +803,38 @@ export function BrowserPanel({
             activeTab?.selectorActive ? "Exit element selector" : "Select element to inspect"
           }
         >
-          <Target
+          <MousePointer2
             className={`h-4 w-4 ${activeTab?.selectorActive ? "text-primary animate-pulse" : ""}`}
           />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleScreenshot}
+          disabled={!activeTab?.currentUrl}
+          title="Screenshot to chat"
+          aria-label="Screenshot to chat"
+        >
+          <Camera className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => setMobileView((v) => !v)}
+          disabled={!activeTab?.currentUrl}
+          aria-pressed={mobileView}
+          title={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
+          aria-label={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
+        >
+          {mobileView ? (
+            <Monitor className="h-4 w-4 text-primary" />
+          ) : (
+            <Smartphone className="h-4 w-4" />
+          )}
         </Button>
 
         <DropdownMenu
@@ -888,124 +937,62 @@ export function BrowserPanel({
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => setShowConsole(!showConsole)}
-          title={showConsole ? "Hide console" : "Show console"}
-          aria-label={showConsole ? "Hide console" : "Show console"}
+          onClick={() => {
+            if (!activeTab?.webviewLabel) return;
+            if (activeTab.devtoolsOpen) {
+              invoke("close_browser_devtools", { label: activeTab.webviewLabel })
+                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
+                .catch((err) => handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`));
+            } else {
+              invoke("open_browser_devtools", { label: activeTab.webviewLabel })
+                .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
+                .catch((err) => handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`));
+            }
+          }}
+          disabled={!activeTab?.currentUrl}
+          aria-pressed={activeTab?.devtoolsOpen}
+          title={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
+          aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
         >
-          <Terminal className={`h-4 w-4 ${showConsole ? "text-primary" : ""}`} />
+          <Terminal className={`h-4 w-4 ${activeTab?.devtoolsOpen ? "text-primary" : ""}`} />
         </Button>
       </div>
 
-      {/* Tab content + console — vertical resizable split */}
-      <ResizablePanelGroup direction="vertical" className="min-h-0 flex-1">
-        {/* Webview content: all tabs rendered, only active visible */}
-        <ResizablePanel minSize={30}>
-          <div className="relative h-full overflow-hidden">
-            {tabs.length === 0 ? (
-              <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
-                Click + to open a browser tab
-              </div>
-            ) : (
-              tabs.map((tab) => (
-                <BrowserTab
-                  key={tab.id}
-                  ref={setTabRef(tab.id)}
-                  tab={tab}
-                  devBrowserStatus={devBrowserStatus}
-                  onUpdateTab={handleUpdateTab}
-                  onAddLog={handleAddLog}
-                  visible={tab.id === activeTabId && panelVisible}
-                  windowLabel={windowLabel}
-                />
-              ))
-            )}
-          </div>
-        </ResizablePanel>
-
-        <ResizableHandle />
-
-        {/* Console panel — collapsible, drag to resize */}
-        <ResizablePanel
-          ref={consolePanelRef}
-          defaultSize={0}
-          minSize={10}
-          maxSize={60}
-          collapsible
-          collapsedSize={0}
-          onCollapse={() => setShowConsole(false)}
-          onExpand={() => setShowConsole(true)}
-        >
-          {showConsole && activeTab && (
-            <div className="border-border bg-muted/10 flex h-full flex-col border-t">
-              {/* Console Header */}
-              <div className="border-border bg-muted/30 flex flex-shrink-0 items-center justify-between border-b px-3 py-1.5">
-                <div className="flex items-center gap-2">
-                  <Terminal className="text-muted-foreground h-3.5 w-3.5" />
-                  <span className="text-muted-foreground text-xs font-medium">Console</span>
-                  <span className="text-muted-foreground/60 text-xs">
-                    ({activeTab.consoleLogs.length})
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={handleClearConsole}
-                    title="Clear console"
-                    aria-label="Clear console"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => setShowConsole(false)}
-                    title="Close console"
-                    aria-label="Close console"
-                  >
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Console Content */}
-              <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs">
-                {activeTab.consoleLogs.length === 0 ? (
-                  <div className="text-muted-foreground/50 italic">Console is empty</div>
-                ) : (
-                  <div className="space-y-0.5">
-                    {activeTab.consoleLogs.map((log, i) => (
-                      <div
-                        key={i}
-                        className={`flex gap-2 ${
-                          log.level === "error"
-                            ? "text-destructive"
-                            : log.level === "warn"
-                              ? "text-warning"
-                              : log.level === "debug"
-                                ? "text-info"
-                                : "text-foreground"
-                        }`}
-                      >
-                        <span className="text-muted-foreground/60 flex-shrink-0">
-                          {log.timestamp.toLocaleTimeString("en-US", { hour12: false })}
-                        </span>
-                        <span className="w-14 flex-shrink-0 font-semibold">
-                          [{log.level.toUpperCase()}]
-                        </span>
-                        <span className="flex-1">{log.message}</span>
-                      </div>
-                    ))}
-                    <div ref={consoleEndRef} />
-                  </div>
-                )}
-              </div>
+      {/* Tab content — devtools opens as floating window (docked not yet supported).
+        * See open_browser_devtools in webview.rs for full history of docking attempts.
+        *
+        * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
+        * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
+        * broke mobile view: the placeholder's getBoundingClientRect() returned
+        * stale full-width values because absolute-positioned elements don't
+        * reliably inherit width constraints from their containing block when
+        * parent containers restructure (mx-auto, flex centering). Grid stacking
+        * keeps tabs in normal flow so they inherit w-[390px] naturally and
+        * ResizeObserver fires on actual size changes. */}
+      <div className={`relative min-h-0 flex-1 overflow-hidden ${mobileView ? "bg-muted/30" : ""}`}>
+        <div className={`grid h-full ${mobileView ? "mx-auto w-[390px] border-border/40 border-x" : "w-full"}`}>
+          {tabs.length === 0 ? (
+            <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
+              Click + to open a browser tab
             </div>
+          ) : (
+            tabs.map((tab) => (
+              <BrowserTab
+                key={tab.id}
+                ref={setTabRef(tab.id)}
+                tab={tab}
+                devBrowserStatus={devBrowserStatus}
+                onUpdateTab={handleUpdateTab}
+                onAddLog={handleAddLog}
+                onElementSelected={handleElementSelected}
+                visible={tab.id === activeTabId && panelVisible}
+                windowLabel={windowLabel}
+                mobileView={mobileView}
+              />
+            ))
           )}
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
     </div>
   );
 }

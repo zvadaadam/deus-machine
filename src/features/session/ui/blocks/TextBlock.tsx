@@ -3,7 +3,7 @@
  *
  * Renders text content blocks from messages with semantic weight.
  * - Assistant messages: Rendered as markdown (secure, CSS-highlighted for speed)
- * - User messages: Rendered as plain text (user input)
+ * - User messages: Rendered as plain text with <inspect> pills (user input)
  *
  * Weight variants:
  * - 'muted': Transitional text between actions (60% opacity)
@@ -19,10 +19,13 @@
  * - Dense IDE-friendly typography
  */
 
+import { useMemo } from "react";
 import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
 import { chatTheme } from "../theme";
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
+import { parseInspectTags } from "../../lib/parseInspectTags";
+import { InspectElementPill } from "../InspectElementPill";
 
 export type TextWeight = "muted" | "normal";
 
@@ -36,6 +39,12 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Handle both TextBlock objects and plain strings
   const text = typeof block === "string" ? block : block.text;
 
+  // Parse <inspect> tags for user messages (memoized, short-circuits on no match)
+  const inspectSegments = useMemo(
+    () => (role === "user" && text?.includes("<inspect") ? parseInspectTags(text) : []),
+    [role, text]
+  );
+
   if (!text || text.trim() === "") {
     return null;
   }
@@ -44,9 +53,30 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Note: For assistant messages, we use opacity wrapper (line 77) instead of text color
   // because .markdown-content in global.css has explicit colors that override utilities
 
-  // User messages: plain text (preserve newlines)
-  // Maximum readability - theme-based bright text color
+  // User messages: plain text with inline <inspect> pills
   if (role === "user") {
+    // If <inspect> tags were found, render mixed text + pills
+    if (inspectSegments.length > 0) {
+      return (
+        <p
+          className={cn(
+            "whitespace-pre-wrap text-base",
+            chatTheme.message.user.text,
+            chatTheme.message.user.textColor
+          )}
+        >
+          {inspectSegments.map((segment, i) =>
+            typeof segment === "string" ? (
+              <span key={i}>{segment}</span>
+            ) : (
+              <InspectElementPill key={`inspect-${i}`} element={segment} />
+            )
+          )}
+        </p>
+      );
+    }
+
+    // No <inspect> tags: plain text
     return (
       <p
         className={cn(

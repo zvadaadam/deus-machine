@@ -9,3 +9,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Compiled JS files imported as raw strings (browser inject scripts) */
+declare module "*.js?raw" {
+  const content: string;
+  export default content;
+}

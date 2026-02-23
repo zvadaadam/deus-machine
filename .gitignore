@@ -15,6 +15,8 @@ src-tauri/target/
 src-tauri/WixTools/
 # Sidecar build artifact (built via `bun run build:sidecar`)
 src-tauri/resources/bin/index.bundled.cjs
+# Browser inject build artifacts (built via `bun run build:inject`)
+src/features/browser/automation/dist-inject/
 
 # Misc
 .DS_Store

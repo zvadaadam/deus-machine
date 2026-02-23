@@ -18,6 +18,7 @@ import {
 } from "../lib/agentRuntime";
 import { isTauriEnv } from "@/platform/tauri";
 import { workspaceLayoutActions } from "@/features/workspace/store";
+import type { InspectedElement } from "./InspectedElementCard";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -58,6 +59,8 @@ interface SessionPanelProps {
 
 export interface SessionPanelRef {
   insertText: (text: string) => void;
+  addInspectedElement: (element: Omit<InspectedElement, "id">) => void;
+  addFiles: (files: File[]) => void;
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
@@ -316,16 +319,21 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onStop,
     ]);
 
-    // Expose insertText method for browser element selector
+    // Expose imperative methods for browser element selector and text insertion
     useImperativeHandle(
       ref,
       () => ({
         insertText: (text: string) => {
-          // Add with double newline for proper formatting
           setMessageInput((prev) => {
             const separator = prev.trim() ? "\n\n" : "";
             return prev + separator + text;
           });
+        },
+        addInspectedElement: (element: Omit<InspectedElement, "id">) => {
+          messageInputRef.current?.addInspectedElement(element);
+        },
+        addFiles: (files: File[]) => {
+          messageInputRef.current?.addFiles(files);
         },
       }),
       [setMessageInput]
