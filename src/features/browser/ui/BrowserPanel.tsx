@@ -774,10 +774,14 @@ export function BrowserPanel({
 
         {/* Injection failure indicator — red dot, only visible on error */}
         {activeTab?.injectionFailed && (
-          <span
-            className="bg-destructive h-2 w-2 shrink-0 rounded-full"
-            title="Automation injection failed — check console"
-          />
+          <>
+            <span
+              className="bg-destructive h-2 w-2 shrink-0 rounded-full"
+              title="Automation injection failed — check console"
+              aria-hidden="true"
+            />
+            <span className="sr-only">Automation injection failed</span>
+          </>
         )}
 
         <Button
@@ -806,6 +810,7 @@ export function BrowserPanel({
           onClick={handleScreenshot}
           disabled={!activeTab?.currentUrl}
           title="Screenshot to chat"
+          aria-label="Screenshot to chat"
         >
           <Camera className="h-4 w-4" />
         </Button>

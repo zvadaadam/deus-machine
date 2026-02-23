@@ -85,7 +85,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   const rafRef = useRef(0);
   // Track whether automation scripts (inspect mode + visual effects) have been injected
   const automationInjectedRef = useRef(false);
-  // Stable ref for onElementSelected callback (used by title-channel listener + drain)
+  // Stable ref for onElementSelected callback (used by the inspect drain loop)
   const onElementSelectedRef = useRef(onElementSelected);
   onElementSelectedRef.current = onElementSelected;
 
@@ -345,8 +345,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
     // Track consecutive failures for diagnostic logging
     let consoleDrainFails = 0;
+    // Guard against overlapping async drains — if invoke() takes longer than
+    // the interval, skip until the previous call completes.
+    let inFlight = false;
 
     const interval = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await invoke<string>("eval_browser_webview_with_result", {
           label: webviewLabel,
@@ -381,6 +386,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
             err instanceof Error ? err.message : String(err)
           );
         }
+      } finally {
+        inFlight = false;
       }
     }, CONSOLE_DRAIN_INTERVAL_MS);
 
@@ -401,8 +408,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
 
     // Track consecutive failures to avoid log spam (log first 3, then every 50th)
     let failCount = 0;
+    // Guard against overlapping async drains — if invoke() takes longer than
+    // the interval, skip until the previous call completes.
+    let inFlight = false;
 
     const interval = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await invoke<string>("eval_browser_webview_with_result", {
           label: webviewLabel,
@@ -450,6 +462,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
             err instanceof Error ? err.message : String(err)
           );
         }
+      } finally {
+        inFlight = false;
       }
     }, INSPECT_DRAIN_MS);
 
