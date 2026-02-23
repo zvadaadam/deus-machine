@@ -26,6 +26,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "messaging", label: "Messaging", icon: MessageSquare },
   { id: "remote-access", label: "Remote Access", icon: Globe },
   { id: "updates", label: "Updates", icon: Download },
+  { id: "messaging", label: "Messaging", icon: MessageSquare },
+  { id: "remote-access", label: "Remote Access", icon: Globe },
 ];
 
 export function SettingsSidebar() {

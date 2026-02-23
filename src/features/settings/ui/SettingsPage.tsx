@@ -22,6 +22,8 @@ import {
   GatewaySection,
   RemoteAccessSection,
   UpdateSection,
+  GatewaySection,
+  RemoteAccessSection,
 } from "./sections";
 
 export function SettingsPage() {
@@ -106,6 +108,8 @@ export function SettingsPage() {
       .with("messaging", () => <GatewaySection {...sectionProps} />)
       .with("remote-access", () => <RemoteAccessSection {...sectionProps} />)
       .with("updates", () => <UpdateSection />)
+      .with("messaging", () => <GatewaySection {...sectionProps} />)
+      .with("remote-access", () => <RemoteAccessSection {...sectionProps} />)
       .exhaustive();
   }
 
