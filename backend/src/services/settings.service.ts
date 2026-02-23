@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DB_PATH, getDatabase } from '../lib/database';
+import { DB_PATH } from '../lib/database';
 import { PreferencesFile } from '../lib/schemas';
 
 // Co-locate with hive.db in the Tauri app data directory.
@@ -39,24 +39,7 @@ function writePreferences(settings: Record<string, any>): void {
 }
 
 export function getAllSettings(): Record<string, any> {
-  const prefs = readPreferences();
-
-  // Merge DB settings (relay credentials, remote_access_enabled) on top of file-based prefs.
-  // Auth/relay code writes to the DB settings table; UI writes to preferences.json.
-  try {
-    const db = getDatabase();
-    const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
-    for (const row of rows) {
-      // Only set if not already in preferences.json (file takes precedence)
-      if (!(row.key in prefs)) {
-        try { prefs[row.key] = JSON.parse(row.value); } catch { prefs[row.key] = row.value; }
-      }
-    }
-  } catch {
-    // DB not available (e.g. during early init) — return file-only prefs
-  }
-
-  return prefs;
+  return readPreferences();
 }
 
 /** Get a single setting value by key. Returns the parsed value or null. */
