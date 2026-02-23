@@ -9,13 +9,15 @@
 // - Custom SVG cursor replacing system cursor
 // - Escape to exit
 //
-// Communication back to frontend via DUAL mechanism:
-//   1. PRIMARY: Title-channel bridge (document.title = '\x01CE:' or '\x01CS:')
-//      — proven reliable, same KVO path used by SPA nav detection.
-//      Uses a serialized queue to avoid collision with console drain.
-//   2. FALLBACK: Pull-based event buffer (window.__HIVE_INSPECT_EVENTS__)
-//      drained by eval_browser_webview_with_result from the React side.
-//      Catches any events missed by the title channel.
+// Communication back to frontend via event buffer:
+//   JS pushes events to window.__HIVE_INSPECT_EVENTS__ array.
+//   React drains the buffer every 200ms via eval_browser_webview_with_result
+//   (WKWebView's native evaluateJavaScript:completionHandler:).
+//
+// We do NOT use the title-channel (document.title) for inspect events —
+// BROWSER_INIT_SCRIPT already uses it for SPA nav detection, and two
+// independent writers on document.title causes WKWebView KVO to silently
+// coalesce/drop messages. Buffer+drain is simple and 200ms is imperceptible.
 
 // Guard: prevent double-injection if eval'd multiple times
 if (!(window as any).__hiveInspectMode) {
@@ -36,21 +38,11 @@ if (!(window as any).__hiveInspectMode) {
   let elementIdCounter = 0;
 
   // ========================================================================
-  // Dual Communication: Title-Channel (primary) + Event Buffer (fallback)
+  // Event Buffer — sole communication path to React
   // ========================================================================
-  // Uses document.title as a side-channel (same KVO mechanism as SPA nav
-  // detection). Inspect events use dedicated prefixes:
-  //   \x01CE:{json} — element-event (element-selected, area-selected)
-  //   \x01CS:{json} — selection-mode change
-  //
-  // Title writes are serialized via a queue to avoid collision with the
-  // console drain (which also uses the title channel every 1500ms).
-  // Each title write holds for 80ms before restoring, and the queue
-  // waits for the current write to finish before starting the next.
-  //
-  // The event buffer is kept as a fallback — the React side still drains
-  // it periodically via eval_browser_webview_with_result in case a title
-  // write is dropped (e.g. rapid-fire events during drag selection).
+  // Events are pushed to an in-page array and drained every 200ms by the
+  // React side via eval_browser_webview_with_result (native completion handler).
+  // This avoids the title-channel race condition (see architecture note below).
 
   const eventBuffer: Array<{ type: string; data: unknown }> = [];
   (window as any).__HIVE_INSPECT_EVENTS__ = eventBuffer;

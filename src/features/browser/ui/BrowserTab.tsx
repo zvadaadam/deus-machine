@@ -362,15 +362,11 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           return;
         }
         for (const log of logs) {
-          const level = (
-            log.l === "warn"
-              ? "warn"
-              : log.l === "error"
-                ? "error"
-                : log.l === "debug"
-                  ? "debug"
-                  : "info"
-          ) as ConsoleLog["level"];
+          const level = match(log.l)
+            .with("warn", () => "warn" as const)
+            .with("error", () => "error" as const)
+            .with("debug", () => "debug" as const)
+            .otherwise(() => "info" as const);
           onAddLog(tabId, level, log.m);
         }
       } catch (err) {
@@ -388,11 +384,10 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
   }, [visible, webviewReady, hasLoaded, webviewLabel, tabId, onAddLog]);
 
   // --- Periodic inspect event drain (only when selector is active) ---
-  // Drains buffered events from the inject script via the reliable
-  // eval_browser_webview_with_result path (native completion handler).
-  // This is the FALLBACK path — the primary path is the title-channel
-  // listeners above. This drain catches events that the title channel
-  // drops (e.g. rapid-fire events during drag selection).
+  // Drains buffered events from the inject script via
+  // eval_browser_webview_with_result (native completion handler).
+  // This is the sole delivery path for inspect events — we do not use
+  // the title-channel for inspect events (see file-level comment).
   useEffect(() => {
     if (!visible || !webviewReady || !hasLoaded || !tab.selectorActive) return;
     // Poll at 200ms — fast enough for responsive feel after click,
