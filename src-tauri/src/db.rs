@@ -15,12 +15,14 @@ use std::sync::Mutex;
 
 pub struct DbManager {
     conn: Mutex<Option<rusqlite::Connection>>,
+    db_path: Mutex<Option<String>>,
 }
 
 impl DbManager {
     pub fn new() -> Self {
         Self {
             conn: Mutex::new(None),
+            db_path: Mutex::new(None),
         }
     }
 
@@ -40,6 +42,11 @@ impl DbManager {
 
         let mut guard = self.conn.lock().map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = Some(conn);
+
+        // Store the path so we can derive preferences.json location
+        let mut path_guard = self.db_path.lock().map_err(|e| format!("Lock poisoned: {}", e))?;
+        *path_guard = Some(path.to_string());
+
         Ok(())
     }
 
@@ -147,6 +154,42 @@ pub struct StatsRow {
     pub sessions_idle: i64,
     pub sessions_working: i64,
     pub messages: i64,
+}
+
+// ─── Settings Reads (from preferences.json) ────────────────
+
+impl DbManager {
+    /// Read a single setting value from preferences.json (co-located with hive.db).
+    /// Returns None if the key doesn't exist or the file is missing/invalid.
+    pub fn read_setting(&self, key: &str) -> Result<Option<String>, String> {
+        let path_guard = self.db_path.lock().map_err(|e| format!("Lock poisoned: {}", e))?;
+        let db_path = match path_guard.as_ref() {
+            Some(p) => p.clone(),
+            None => return Ok(None),
+        };
+        drop(path_guard);
+
+        let prefs_path = std::path::Path::new(&db_path)
+            .parent()
+            .map(|p| p.join("preferences.json"))
+            .ok_or("Cannot derive preferences.json path")?;
+
+        let content = match std::fs::read_to_string(&prefs_path) {
+            Ok(c) => c,
+            Err(_) => return Ok(None), // File doesn't exist yet
+        };
+
+        let json: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse preferences.json: {}", e))?;
+
+        match json.get(key) {
+            Some(serde_json::Value::String(s)) => Ok(Some(s.clone())),
+            Some(serde_json::Value::Bool(b)) => Ok(Some(b.to_string())),
+            Some(serde_json::Value::Number(n)) => Ok(Some(n.to_string())),
+            Some(serde_json::Value::Null) | None => Ok(None),
+            Some(other) => Ok(Some(other.to_string())),
+        }
+    }
 }
 
 // ─── Helpers ────────────────────────────────────────────────

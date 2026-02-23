@@ -163,25 +163,27 @@ const BROWSER_INTERACTION_TIMEOUT_MS = 15_000;
 // ============================================================================
 
 class FrontendClientClass {
-  private tunnel?: RpcConnection;
+  // Multi-tunnel: all connected clients receive notifications.
+  // The gateway and desktop app can be connected simultaneously.
+  private tunnels = new Set<RpcConnection>();
 
   attachTunnel(tunnel: RpcConnection): void {
-    if (this.tunnel) {
-      console.log("[FrontendClient] Replacing existing tunnel — old connection will be abandoned");
-    }
-    this.tunnel = tunnel;
+    this.tunnels.add(tunnel);
+    console.log(`[FrontendClient] Tunnel attached (${this.tunnels.size} active)`);
   }
 
   /**
-   * Detach a specific tunnel. Only clears if the provided tunnel is the current one,
-   * preventing a closing old connection from wiping out a newer replacement.
+   * Detach a specific tunnel. If tunnel is provided, removes only that one.
+   * If no tunnel is provided, clears all tunnels.
    */
   detachTunnel(tunnel?: RpcConnection): void {
-    if (tunnel && this.tunnel !== tunnel) {
-      console.log("[FrontendClient] Ignoring detach for stale tunnel");
-      return;
+    if (tunnel) {
+      this.tunnels.delete(tunnel);
+      console.log(`[FrontendClient] Tunnel detached (${this.tunnels.size} remaining)`);
+    } else {
+      this.tunnels.clear();
+      console.log("[FrontendClient] All tunnels cleared");
     }
-    this.tunnel = undefined;
   }
 
   // ==========================================================================
@@ -189,27 +191,19 @@ class FrontendClientClass {
   // ==========================================================================
 
   sendMessage(response: MessageResponse): void {
-    try {
-      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.MESSAGE, response);
-    } catch (err) {
-      console.error("[FrontendClient] sendMessage failed (frontend likely disconnected):", err);
-    }
+    this.broadcastNotification(FRONTEND_NOTIFICATIONS.MESSAGE, response, "sendMessage");
   }
 
   sendError(response: ErrorResponse): void {
-    try {
-      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.QUERY_ERROR, response);
-    } catch (err) {
-      console.error("[FrontendClient] sendError failed (frontend likely disconnected):", err);
-    }
+    this.broadcastNotification(FRONTEND_NOTIFICATIONS.QUERY_ERROR, response, "sendError");
   }
 
   sendEnterPlanModeNotification(response: EnterPlanModeNotification): void {
-    try {
-      this.requireTunnel().notify(FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE, response);
-    } catch (err) {
-      console.error("[FrontendClient] sendEnterPlanModeNotification failed:", err);
-    }
+    this.broadcastNotification(
+      FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE,
+      response,
+      "sendEnterPlanModeNotification"
+    );
   }
 
   // ==========================================================================
@@ -464,8 +458,8 @@ class FrontendClientClass {
     });
   }
 
-  onCancel(handler: (request: Omit<CancelRequest, "type">) => void): void {
-    this.requireTunnel().addMethod(SIDECAR_METHODS.CANCEL, (params) => {
+  onCancel(tunnel: RpcConnection, handler: (request: Omit<CancelRequest, "type">) => void): void {
+    tunnel.addMethod(SIDECAR_METHODS.CANCEL, (params) => {
       if (!isCancelRequest(params)) return Promise.resolve(undefined);
       const { type: _, ...input } = params;
       handler(input);
@@ -473,8 +467,8 @@ class FrontendClientClass {
     });
   }
 
-  onClaudeAuth(handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>): void {
-    this.requireTunnel().addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
+  onClaudeAuth(tunnel: RpcConnection, handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>): void {
+    tunnel.addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
       if (!isClaudeAuthRequest(params)) {
         return Promise.reject(new Error("Invalid claudeAuth request"));
       }
@@ -483,8 +477,8 @@ class FrontendClientClass {
     });
   }
 
-  onWorkspaceInit(handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>): void {
-    this.requireTunnel().addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
+  onWorkspaceInit(tunnel: RpcConnection, handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>): void {
+    tunnel.addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
       if (!isWorkspaceInitRequest(params)) {
         return Promise.reject(new Error("Invalid workspaceInit request"));
       }
@@ -493,8 +487,8 @@ class FrontendClientClass {
     });
   }
 
-  onContextUsage(handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>): void {
-    this.requireTunnel().addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
+  onContextUsage(tunnel: RpcConnection, handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>): void {
+    tunnel.addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
       if (!isContextUsageRequest(params)) {
         return Promise.reject(new Error("Invalid contextUsage request"));
       }
@@ -504,9 +498,10 @@ class FrontendClientClass {
   }
 
   onUpdatePermissionMode(
+    tunnel: RpcConnection,
     handler: (request: Omit<UpdatePermissionModeRequest, "type">) => void
   ): void {
-    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE, (params) => {
+    tunnel.addMethod(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE, (params) => {
       if (!isUpdatePermissionModeRequest(params)) return Promise.resolve(undefined);
       const { type: _, ...input } = params;
       handler(input);
@@ -514,8 +509,8 @@ class FrontendClientClass {
     });
   }
 
-  onResetGenerator(handler: (request: Omit<ResetGeneratorRequest, "type">) => void): void {
-    this.requireTunnel().addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
+  onResetGenerator(tunnel: RpcConnection, handler: (request: Omit<ResetGeneratorRequest, "type">) => void): void {
+    tunnel.addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
       if (!isResetGeneratorRequest(params)) return Promise.resolve(undefined);
       const { type: _, ...input } = params;
       handler(input);
@@ -527,11 +522,28 @@ class FrontendClientClass {
   // Internal helpers
   // ==========================================================================
 
+  /** Returns the first available tunnel, or throws if none are connected. */
   private requireTunnel(): RpcConnection {
-    if (!this.tunnel) {
+    const first = this.tunnels.values().next().value;
+    if (!first) {
       throw new Error("FrontendClient tunnel not attached.");
     }
-    return this.tunnel;
+    return first;
+  }
+
+  /**
+   * Broadcast a notification to all connected tunnels.
+   * Dead tunnels (those that throw on notify) are automatically removed.
+   */
+  private broadcastNotification(method: string, params: unknown, label: string): void {
+    for (const tunnel of this.tunnels) {
+      try {
+        tunnel.notify(method, params);
+      } catch (err) {
+        console.error(`[FrontendClient] ${label} failed, removing dead tunnel:`, err);
+        this.tunnels.delete(tunnel);
+      }
+    }
   }
 
   /**

@@ -149,19 +149,19 @@ class UnifiedSidecar {
     });
 
     // --- Cancel (dispatch to agent by agentType) ---
-    FrontendClient.onCancel((request) => {
+    FrontendClient.onCancel(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (agent) void agent.handleCancel(request.id);
     });
 
     // --- Auth check (Claude-specific RPC) ---
-    FrontendClient.onClaudeAuth((request) => {
+    FrontendClient.onClaudeAuth(rpcTunnel, (request) => {
       const claude = getAgent("claude") as ClaudeAgentHandler;
       return claude.claudeAuth({ id: request.id, cwd: request.options.cwd });
     });
 
     // --- Workspace init (Claude-specific RPC) ---
-    FrontendClient.onWorkspaceInit((request) => {
+    FrontendClient.onWorkspaceInit(rpcTunnel, (request) => {
       const claude = getAgent("claude") as ClaudeAgentHandler;
       return claude.workspaceInit({
         id: request.id,
@@ -172,19 +172,19 @@ class UnifiedSidecar {
     });
 
     // --- Context usage (Claude-specific RPC) ---
-    FrontendClient.onContextUsage((request) => {
+    FrontendClient.onContextUsage(rpcTunnel, (request) => {
       const claude = getAgent("claude") as ClaudeAgentHandler;
       return claude.getContextUsage(request);
     });
 
     // --- Permission mode updates (Claude-specific) ---
-    FrontendClient.onUpdatePermissionMode((request) => {
+    FrontendClient.onUpdatePermissionMode(rpcTunnel, (request) => {
       const claude = getAgent("claude") as ClaudeAgentHandler;
       if (claude) void claude.updatePermissionMode(request.id, request.permissionMode);
     });
 
     // --- Reset generator (dispatch to agent by agentType) ---
-    FrontendClient.onResetGenerator((request) => {
+    FrontendClient.onResetGenerator(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (agent) agent.handleReset(request.id);
     });
