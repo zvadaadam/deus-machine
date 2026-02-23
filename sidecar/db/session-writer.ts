@@ -1,31 +1,46 @@
 // sidecar/db/session-writer.ts
 // Handles message persistence for SDK messages (assistant + tool_result).
 // Also updates session status when queries complete.
+//
+// All write functions return WriteResult so callers can detect and
+// surface DB failures instead of silently swallowing them.
 
 import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
 
+// ── WriteResult ──────────────────────────────────────────────────────────
+
+/**
+ * Discriminated union for DB write outcomes.
+ * Replaces the old string|null pattern that silently swallowed failures.
+ */
+export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; error: string };
+
+// ── Save Messages ────────────────────────────────────────────────────────
+
 /**
  * Save an assistant message to the database.
  * Called after FrontendClient.sendMessage() in the Claude handler.
- *
- * @param sessionId - The session ID
- * @param message - The message object from Claude SDK
- * @returns The generated message ID
  */
 export function saveAssistantMessage(
   sessionId: string,
-  message: { id?: string; role?: string; content?: unknown },
+  message: { id?: string; role?: string; content?: unknown; stop_reason?: string },
   model: string = "opus",
   parentToolUseId: string | null = null
-): string | null {
+): WriteResult {
   const db = getDatabase();
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
 
   // Store content blocks directly (flattened — no envelope wrapper).
-  // message.content is the blocks array from the SDK.
-  const content = JSON.stringify(message.content ?? []);
+  // When stop_reason is present (e.g., "cancelled"), wrap in an envelope so
+  // the frontend can detect the message state via parsed.message?.stop_reason.
+  // Normal messages: [block1, block2, ...]
+  // Cancelled messages: { message: { stop_reason }, blocks: [...] }
+  const contentPayload = message.stop_reason
+    ? { message: { stop_reason: message.stop_reason }, blocks: message.content ?? [] }
+    : message.content ?? [];
+  const content = JSON.stringify(contentPayload);
 
   try {
     db.prepare(
@@ -36,10 +51,11 @@ export function saveAssistantMessage(
     ).run(messageId, sessionId, content, sentAt, model, message.id || null, parentToolUseId);
 
     console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
-    return messageId;
+    return { ok: true, value: messageId };
   } catch (error) {
-    console.error(`[SESSION-WRITER] Failed to save assistant message:`, error);
-    return null;
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to save assistant message:`, msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -55,7 +71,7 @@ export function saveToolResultMessage(
   sessionId: string,
   message: { id?: string; role?: string; content?: unknown },
   parentToolUseId: string | null = null
-): string | null {
+): WriteResult {
   const db = getDatabase();
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
@@ -71,52 +87,73 @@ export function saveToolResultMessage(
     `
     ).run(messageId, sessionId, content, sentAt, message.id || null, parentToolUseId);
 
-    return messageId;
+    return { ok: true, value: messageId };
   } catch (error) {
-    console.error(`[SESSION-WRITER] Failed to save tool_result message:`, error);
-    return null;
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to save tool_result message:`, msg);
+    return { ok: false, error: msg };
   }
 }
+
+// ── Session Status ───────────────────────────────────────────────────────
 
 /**
  * Update session status (e.g., from 'working' to 'idle').
  * Called when a query completes (result.type === 'result' && result.subtype === 'success').
  *
- * @param sessionId - The session ID
- * @param status - The new status ('idle', 'working', 'error')
- * @param errorMessage - Optional error message (persisted when status is 'error', cleared otherwise)
+ * Retries once on SQLITE_BUSY since this is the most critical write —
+ * a failed status update leaves the session stuck in "working" forever.
  */
 export type SessionStatus = "idle" | "working" | "error";
 
 export function updateSessionStatus(
   sessionId: string,
   status: SessionStatus,
-  errorMessage?: string | null
-): void {
+  errorMessage?: string | null,
+  errorCategory?: string | null
+): WriteResult<void> {
   const db = getDatabase();
 
-  try {
-    db.prepare(
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      db.prepare(
+        `
+        UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?
       `
-      UPDATE sessions SET status = ?, error_message = ?, updated_at = datetime('now') WHERE id = ?
-    `
-    ).run(status, status === "error" ? (errorMessage ?? null) : null, sessionId);
+      ).run(
+        status,
+        status === "error" ? (errorMessage ?? null) : null,
+        status === "error" ? (errorCategory ?? null) : null,
+        sessionId
+      );
 
-    console.log(
-      `[SESSION-WRITER] Updated session ${sessionId} status to '${status}'${errorMessage ? ` with error: ${errorMessage}` : ""}`
-    );
-  } catch (error) {
-    console.error(`[SESSION-WRITER] Failed to update session status:`, error);
+      console.log(
+        `[SESSION-WRITER] Updated session ${sessionId} status to '${status}'${errorMessage ? ` with error: ${errorMessage}` : ""}`
+      );
+      return { ok: true, value: undefined };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (attempt === 0 && (msg.includes("SQLITE_BUSY") || msg.includes("database is locked"))) {
+        console.log(`[SESSION-WRITER] SQLITE_BUSY on status update, retrying in 200ms...`);
+        // Synchronous wait — better-sqlite3 is sync anyway
+        const start = Date.now();
+        while (Date.now() - start < 200) {
+          /* spin */
+        }
+        continue;
+      }
+      console.error(`[SESSION-WRITER] Failed to update session status:`, msg);
+      return { ok: false, error: msg };
+    }
   }
+  return { ok: false, error: "unreachable" };
 }
 
 /**
  * Update session's last_user_message_at timestamp.
  * Called when user sends a message (for optimized workspace list queries).
- *
- * @param sessionId - The session ID
  */
-export function updateLastUserMessageAt(sessionId: string): void {
+export function updateLastUserMessageAt(sessionId: string): WriteResult<void> {
   const db = getDatabase();
 
   try {
@@ -125,16 +162,16 @@ export function updateLastUserMessageAt(sessionId: string): void {
       UPDATE sessions SET last_user_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
     `
     ).run(sessionId);
+    return { ok: true, value: undefined };
   } catch (error) {
-    console.error(`[SESSION-WRITER] Failed to update last_user_message_at:`, error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to update last_user_message_at:`, msg);
+    return { ok: false, error: msg };
   }
 }
 
 /**
  * Check if a session exists in the database.
- *
- * @param sessionId - The session ID
- * @returns true if session exists
  */
 export function sessionExists(sessionId: string): boolean {
   const db = getDatabase();

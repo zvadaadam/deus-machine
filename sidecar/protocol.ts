@@ -10,6 +10,7 @@ import { z } from "zod";
 
 /** Methods the frontend can call on the sidecar (request/response) */
 export const SIDECAR_METHODS = {
+  QUERY: "query",
   CANCEL: "cancel",
   CLAUDE_AUTH: "claudeAuth",
   WORKSPACE_INIT: "workspaceInit",
@@ -18,7 +19,6 @@ export const SIDECAR_METHODS = {
 
 /** Notifications the frontend sends to the sidecar (fire-and-forget) */
 export const SIDECAR_NOTIFICATIONS = {
-  QUERY: "query",
   UPDATE_PERMISSION_MODE: "updatePermissionMode",
   RESET_GENERATOR: "resetGenerator",
 } as const;
@@ -60,6 +60,24 @@ export const FRONTEND_RPC_METHODS = {
 // ============================================================================
 
 export const AgentTypeSchema = z.enum(["claude", "codex", "unknown"]);
+
+/** Error categories for structured error responses (inspired by Codex CodexErrorInfo) */
+export const ErrorCategorySchema = z.enum([
+  "auth",
+  "rate_limit",
+  "context_limit",
+  "network",
+  "abort",
+  "invalid_request",
+  "db_write",
+  "internal",
+]);
+
+/** Synchronous ACK/reject response for query method */
+export const QueryAckResponseSchema = z.object({
+  accepted: z.boolean(),
+  reason: z.string().optional(),
+});
 
 export const QueryRequestSchema = z.object({
   type: z.literal("query"),
@@ -146,6 +164,9 @@ export const ErrorResponseSchema = z.object({
   type: z.literal("error"),
   error: z.string(),
   agentType: AgentTypeSchema,
+  category: ErrorCategorySchema.optional(),
+  willRetry: z.boolean().optional(),
+  retryAfterMs: z.number().optional(),
 });
 
 export const EnterPlanModeNotificationSchema = z.object({
@@ -389,6 +410,8 @@ export const BrowserScreenshotResponseSchema = z.object({
 // ============================================================================
 
 export type AgentType = z.infer<typeof AgentTypeSchema>;
+export type ErrorCategory = z.infer<typeof ErrorCategorySchema>;
+export type QueryAckResponse = z.infer<typeof QueryAckResponseSchema>;
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
 export type CancelRequest = z.infer<typeof CancelRequestSchema>;
 export type ClaudeAuthRequest = z.infer<typeof ClaudeAuthRequestSchema>;

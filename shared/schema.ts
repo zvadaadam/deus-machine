@@ -18,7 +18,10 @@
  * Currently empty — SCHEMA_SQL defines the full schema for fresh installs.
  * Add ALTER TABLE statements here when the schema changes post-launch.
  */
-export const MIGRATIONS: string[] = [];
+export const MIGRATIONS: string[] = [
+  // sessions: structured error category for category-aware UI
+  `ALTER TABLE sessions ADD COLUMN error_category TEXT`,
+];
 
 export const SCHEMA_SQL = `
   -- Repositories tracked by the app (id = UUID7, embeds created_at)
@@ -63,6 +66,7 @@ export const SCHEMA_SQL = `
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
+    error_category TEXT,
     last_user_message_at TEXT,
     context_token_count INTEGER NOT NULL DEFAULT 0,
     context_used_percent REAL NOT NULL DEFAULT 0,

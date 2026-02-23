@@ -21,6 +21,12 @@ interface JsonRpcRequest {
   id?: string | number;
 }
 
+/** Synchronous ACK/reject from sidecar for query requests */
+export interface QueryAckResponse {
+  accepted: boolean;
+  reason?: string;
+}
+
 /** Agent query options */
 export interface QueryOptions {
   cwd: string;
@@ -158,16 +164,16 @@ class UnixSocketService {
   /**
    * Send agent query to sidecar-v2
    *
-   * This sends a "query" notification to start a Claude session.
-   * Responses are received via Tauri events (session:message).
+   * Sends a "query" request and waits for synchronous ACK/reject.
+   * Streaming responses are received via Tauri events (session:message).
    */
   async sendQuery(
     sessionId: string,
     prompt: string,
     options: QueryOptions,
     agentType: "claude" | "codex" | "unknown" = "claude"
-  ): Promise<void> {
-    await this.notify("query", {
+  ): Promise<QueryAckResponse> {
+    const ack = await this.request<QueryAckResponse>("query", {
       type: "query",
       id: sessionId,
       agentType,
@@ -176,7 +182,9 @@ class UnixSocketService {
     });
 
     if (import.meta.env.DEV)
-      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8));
+      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8), ack);
+
+    return ack;
   }
 
   /**
