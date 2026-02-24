@@ -13,8 +13,8 @@ static const NSTimeInterval kMinMoveInterval = 0.016; // ~60fps max
 /**
  * Load a symbol from Simulator.app executable.
  *
- * RADON APPROACH (from disassembly):
- * Radon uses [NSBundle bundleWithIdentifier:@"com.apple.iphonesimulator"] but this
+ * PRIMARY APPROACH (from Simulator.app disassembly):
+ * Uses [NSBundle bundleWithIdentifier:@"com.apple.iphonesimulator"] but this
  * only works when Simulator.app is running and its bundle is registered.
  *
  * FALLBACK APPROACH:
@@ -60,9 +60,9 @@ void init_touch_system(SimBridge *bridge) {
     if (bridge->touchInitialized) return;
     bridge->touchInitialized = true;
 
-    // Create serial touch queue (Radon pattern)
+    // Create serial touch queue for thread-safe HID injection
     bridge->touchQueue = dispatch_queue_create(
-        "com.radon.sim-bridge.touch", DISPATCH_QUEUE_SERIAL);
+        "com.hivenet.sim-bridge.touch", DISPATCH_QUEUE_SERIAL);
 
     // Load IndigoHID functions from Simulator.app
     bridge->indigoMouseFn = (IndigoHIDMouseFn)getSimulatorAppSymbol(
@@ -228,8 +228,8 @@ void init_touch_system(SimBridge *bridge) {
         bridge->touchStrategy = 0; // Client method (preferred — higher-level API)
         NSLog(@"[SimBridge] Touch strategy: CLIENT METHOD (touchMessageForTouchAt:)");
     } else if (bridge->indigoVerified) {
-        bridge->touchStrategy = 1; // Radon buffer format
-        NSLog(@"[SimBridge] Touch strategy: RADON BUFFER (IndigoHID + 352-byte format)");
+        bridge->touchStrategy = 1; // IndigoHID buffer format
+        NSLog(@"[SimBridge] Touch strategy: INDIGO BUFFER (IndigoHID + 352-byte format)");
     } else {
         bridge->touchStrategy = -1; // Nothing works
         NSLog(@"[SimBridge] WARNING: No touch strategy available!");
@@ -244,7 +244,7 @@ void init_touch_system(SimBridge *bridge) {
  * STRATEGY 0: High-level HID client method.
  *
  * Uses touchMessageForTouchAt:secondTouchAt:direction: which constructs
- * the correct HID message buffer internally. This is what the Radon
+ * the correct HID message buffer internally. This is what the
  * simulator-server binary uses (confirmed via disassembly).
  *
  * IMPORTANT: Uses a SEPARATE completion queue (global queue) to avoid
@@ -292,16 +292,16 @@ static bool send_via_client_method(SimBridge *bridge, CGPoint pt,
 }
 
 /**
- * STRATEGY 1: Radon 352-byte buffer format.
+ * STRATEGY 1: IndigoHID 352-byte buffer format.
  *
  * Uses IndigoHIDMessageForMouseNSEvent to create a raw HID message,
- * then wraps it in the Radon-specific 352-byte buffer format.
- * This is the IndigoHID fallback path from the Radon IDE source code.
+ * then wraps it in the 352-byte buffer format expected by sendWithMessage:.
+ * This is the IndigoHID fallback path derived from Simulator.app disassembly.
  *
  * COORDINATES: pixel coordinates (normalized [0,1] multiplied by screenWidth/Height)
- * DIRECTION: 1=Down, 2=Move, 6=Up (from Radon disassembly)
+ * DIRECTION: 1=Down, 2=Move, 6=Up (from Simulator.app disassembly)
  */
-static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
+static bool send_via_indigo_buffer(SimBridge *bridge, CGPoint point,
                                    int direction) {
     id client = bridge->hidClient;
     IndigoHIDMouseFn fn = bridge->indigoMouseFn;
@@ -318,7 +318,7 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
                 void *indigoResult = fn(&mutablePoint, NULL, HID_TYPE_CONSTANT,
                                          direction, unitSize);
                 if (!indigoResult) {
-                    NSLog(@"[SimBridge] Radon: IndigoHID returned NULL (dir=%d)", direction);
+                    NSLog(@"[SimBridge] IndigoBuffer: IndigoHID returned NULL (dir=%d)", direction);
                     return;
                 }
 
@@ -354,7 +354,7 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
                 *(uint64_t *)(secondTouch + 0x70) = 0x4012666666666666ULL; // 4.6
                 *(uint64_t *)(secondTouch + 0x78) = 0x400e666666666666ULL; // 3.7
 
-                NSLog(@"[SimBridge] Radon buffer: %zu bytes (indigo=%zu, dir=%d)",
+                NSLog(@"[SimBridge] IndigoBuffer: %zu bytes (indigo=%zu, dir=%d)",
                       BUFFER_SIZE, indigoSize, direction);
 
                 ((void (*)(id, SEL, void *, BOOL, dispatch_queue_t, id))objc_msgSend)(
@@ -362,7 +362,7 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
                 );
                 success = true;
             } @catch (NSException *e) {
-                NSLog(@"[SimBridge] Radon buffer touch exception: %@", e);
+                NSLog(@"[SimBridge] IndigoBuffer touch exception: %@", e);
             }
         }
     });
@@ -371,9 +371,9 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
 }
 
 /**
- * STRATEGY 2: Send raw IndigoHID result directly (no Radon buffer wrapping).
+ * STRATEGY 2: Send raw IndigoHID result directly (no 352-byte buffer wrapping).
  *
- * Some macOS versions may work without the Radon buffer format.
+ * Some macOS versions may work without the 352-byte buffer format.
  * We try passing the raw IndigoHID result directly to sendWithMessage:.
  * Uses a copy to avoid double-free issues.
  */
@@ -464,7 +464,7 @@ bool send_touch_event(SimBridge *bridge, double x, double y, int phase) {
     screenX = fmax(1, fmin(screenX, bridge->screenWidth - 2));
     screenY = fmax(1, fmin(screenY, bridge->screenHeight - 2));
 
-    // Map phase to IndigoHID direction values (from Radon IDE disassembly)
+    // Map phase to IndigoHID direction values (from Simulator.app disassembly)
     int direction;
     switch (phase) {
         case 0: direction = 1; bridge->touchActive = true;  break; // began
@@ -487,7 +487,7 @@ bool send_touch_event(SimBridge *bridge, double x, double y, int phase) {
     switch (bridge->touchStrategy) {
         case 0: {
             // Strategy 0: Client method (touchMessageForTouchAt:)
-            // Try pixel coordinates first (matches Radon IndigoHID pattern),
+            // Try pixel coordinates first (matches IndigoHID pattern),
             // then normalized [0,1], then points (pixels / scale_factor)
             if (send_via_client_method(bridge, pixelPt, direction)) return true;
 
@@ -503,19 +503,19 @@ bool send_touch_event(SimBridge *bridge, double x, double y, int phase) {
 
             NSLog(@"[SimBridge] Client method: all coordinate variants failed");
 
-            // Fall through to Radon buffer
+            // Fall through to IndigoHID buffer
             if (bridge->indigoVerified) {
-                NSLog(@"[SimBridge] Falling through to Radon buffer");
-                return send_via_radon_buffer(bridge, pixelPt, direction);
+                NSLog(@"[SimBridge] Falling through to IndigoHID buffer");
+                return send_via_indigo_buffer(bridge, pixelPt, direction);
             }
             return false;
         }
 
         case 1: {
-            // Strategy 1: Radon buffer format (pixel coordinates)
-            if (send_via_radon_buffer(bridge, pixelPt, direction)) return true;
+            // Strategy 1: IndigoHID buffer format (pixel coordinates)
+            if (send_via_indigo_buffer(bridge, pixelPt, direction)) return true;
 
-            NSLog(@"[SimBridge] Radon buffer failed, trying raw IndigoHID variants");
+            NSLog(@"[SimBridge] IndigoHID buffer failed, trying raw IndigoHID variants");
 
             // Try raw IndigoHID with various coordinate/size combinations
             // B1: pixel coords + screen size
@@ -546,9 +546,9 @@ bool send_touch_event(SimBridge *bridge, double x, double y, int phase) {
                 if (send_via_client_method(bridge, normPt, direction)) return true;
             }
 
-            // Try Radon buffer
+            // Try IndigoHID buffer
             if (bridge->indigoMouseFn) {
-                if (send_via_radon_buffer(bridge, pixelPt, direction)) return true;
+                if (send_via_indigo_buffer(bridge, pixelPt, direction)) return true;
                 // Try raw with various coords
                 CGPoint normPt = CGPointMake(x, y);
                 if (send_via_raw_indigo(bridge, normPt, CGSizeMake(1.0, 1.0),
@@ -724,7 +724,7 @@ bool send_button_event(SimBridge *bridge, int button_type, int direction) {
         return false;
     }
 
-    // Lock button is not supported on iOS (matches Radon IDE)
+    // Lock button is not supported on iOS simulator
     if (button_type == 1) {
         NSLog(@"[SimBridge] Lock button is not supported on iOS");
         return false;

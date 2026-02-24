@@ -16,10 +16,10 @@
 #include "sim_bridge.h"
 
 // ============================================================================
-// MARK: - Function pointer typedefs (from Radon IDE disassembly)
+// MARK: - Function pointer typedefs (from Simulator.app disassembly)
 // ============================================================================
 
-// CORRECT function signature from Radon disassembly (2026-02-04):
+// CORRECT function signature from Simulator.app disassembly (2026-02-04):
 // IndigoHIDMessageForMouseNSEvent is loaded from Simulator.app, NOT SimulatorKit!
 typedef void* (*IndigoHIDMouseFn)(
     CGPoint*,           // point1 - first touch
@@ -46,7 +46,7 @@ typedef void* (*IndigoHIDButtonFn)(
 // MARK: - Internal structs
 // ============================================================================
 
-// Persistent JPEG encoder (Radon approach: create once, reuse for all frames)
+// Persistent JPEG encoder (create once, reuse for all frames)
 typedef struct {
     VTCompressionSessionRef session;
     int32_t width;
@@ -61,7 +61,7 @@ typedef struct {
     id hidClient;               // SimDeviceLegacyHIDClient for touch injection
     dispatch_queue_t frameQueue;    // Serial queue for IOSurface callbacks + pendingSurface access
     dispatch_queue_t encodeQueue;   // Serial queue for VT JPEG encoding (one encode at a time)
-    dispatch_queue_t touchQueue;    // Serial queue for touch events (Radon pattern)
+    dispatch_queue_t touchQueue;    // Serial queue for touch events (thread-safe HID injection)
     dispatch_group_t pollingGroup;  // Group to track active polling loop
     FrameCallback rustCallback;
     void* rustContext;
@@ -85,16 +85,16 @@ typedef struct {
     // during idle screens (home screen, static apps).
     uint32_t lastSurfaceSeed;
 
-    // Screen adapter registration (Radon two-step approach)
+    // Screen adapter registration (two-step approach via LegacyClient)
     id adapterCallbackUUID;     // UUID for screen adapter callback registration
     id portDescriptor;          // Port descriptor (for unregistering adapter callbacks)
-    id legacyClient;            // SimDeviceLegacyClient (Radon pattern: the actual adapter host)
+    id legacyClient;            // SimDeviceLegacyClient (the actual adapter host)
     id deviceSet;               // SimDeviceSet (needed to create legacy client)
 
-    // Persistent JPEG encoder (Radon approach: session created once, reused)
+    // Persistent JPEG encoder (session created once, reused across frames)
     CachedJpegEncoder jpegEncoder;
 
-    // Cached function pointers (Radon pattern - load from Simulator.app, store during init)
+    // Cached function pointers (loaded from Simulator.app during init)
     IndigoHIDMouseFn indigoMouseFn;
     IndigoHIDKeyboardFn indigoKeyboardFn;
     IndigoHIDButtonFn indigoButtonFn;
@@ -107,7 +107,7 @@ typedef struct {
     // Per-instance touch strategy (was global statics in sim_input.m, moved here
     // for multi-instance safety — each HID client may have different capabilities).
     // WARNING: g_simulatorAppHandle stays global (process-wide Simulator.app dlopen).
-    int touchStrategy;              // -1=undetermined, 0=clientMethod, 1=radonBuffer
+    int touchStrategy;              // -1=undetermined, 0=clientMethod, 1=indigoBuffer
     SEL touchMsgSel;                // Cached selector for client method touch
     SEL sendSel;                    // Cached selector for sendWithMessage:
     bool indigoVerified;            // Whether IndigoHID function verification passed

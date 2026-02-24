@@ -66,7 +66,7 @@ NSData* iosurface_to_jpeg(IOSurfaceRef surface, float quality) {
 }
 
 // ============================================================================
-// MARK: - VideoToolbox JPEG encoding (hardware-accelerated, Radon approach)
+// MARK: - VideoToolbox JPEG encoding (hardware-accelerated, persistent session)
 // ============================================================================
 
 // Per-frame callback context — carries pointer to output NSData.
@@ -76,7 +76,7 @@ typedef struct {
     NSData * __strong *outputData;
 } VTJpegCallbackContext;
 
-// Output callback for PERSISTENT VTCompressionSession (Radon approach).
+// Output callback for PERSISTENT VTCompressionSession.
 // Uses sourceFrameRefCon (per-frame) instead of outputCallbackRefCon (per-session)
 // so the session can be reused across frames.
 static void vt_jpeg_output_callback(void *outputCallbackRefCon,
@@ -110,7 +110,7 @@ static void vt_jpeg_output_callback(void *outputCallbackRefCon,
 
 /**
  * Encode an IOSurface to JPEG using a PERSISTENT VTCompressionSession.
- * Matches Radon IDE's VTJpegEncoder: session created once, reused for all frames.
+ * Session created once, reused for all frames (VTJpegEncoder pattern).
  * Only recreated when dimensions change. Falls back to CGImageDestination on failure.
  */
 NSData* bridge_encode_jpeg(SimBridge *bridge, IOSurfaceRef surface, float quality) {
@@ -147,7 +147,7 @@ NSData* bridge_encode_jpeg(SimBridge *bridge, IOSurfaceRef surface, float qualit
 
         VTSessionSetProperty(enc->session, kVTCompressionPropertyKey_Quality,
                              (__bridge CFTypeRef)@(quality));
-        // Request hardware-accelerated encoding (Radon sets this too)
+        // Request hardware-accelerated encoding
         VTSessionSetProperty(enc->session, kVTCompressionPropertyKey_RealTime,
                              kCFBooleanTrue);
 

@@ -395,7 +395,7 @@ static void register_frame_callbacks_on_screen(SimBridge *bridge, id screen, dis
     // CRITICAL: This runs on the serial frameQueue. We do NOT encode here.
     // Instead, we store the latest surface and kick off encoding only when
     // the encoder is idle. If frames arrive faster than encoding, intermediate
-    // surfaces are silently dropped — only the latest matters (Radon pattern).
+    // surfaces are silently dropped — only the latest matters.
     void (^frameCallback)(id, id) = ^(id backSurface, id frontSurface) {
         capturedBridge->adapterCallbacksActive = true;
         capturedBridge->iosurfaceFrameCount++;
@@ -494,11 +494,11 @@ IOSurfaceRef try_get_surface_from_screen(id screenObject) {
 
 bool setup_screen_capture(SimBridge *bridge, char* error_buf, int error_buf_len) {
     bridge->frameQueue = dispatch_queue_create(
-        "com.radon.sim-bridge.frames",
+        "com.hivenet.sim-bridge.frames",
         DISPATCH_QUEUE_SERIAL
     );
     bridge->encodeQueue = dispatch_queue_create(
-        "com.radon.sim-bridge.encode",
+        "com.hivenet.sim-bridge.encode",
         DISPATCH_QUEUE_SERIAL
     );
 
@@ -617,7 +617,7 @@ bool setup_screen_capture(SimBridge *bridge, char* error_buf, int error_buf_len)
         }
 
         if (clientClass) {
-            NSLog(@"[SimBridge] Creating %s (Radon pattern)", class_getName(clientClass));
+            NSLog(@"[SimBridge] Creating %s (LegacyClient pattern)", class_getName(clientClass));
 
             // Try initWithUDID:deviceSet: first, then initWithDevice:error:
             SEL initSelectors[] = {
