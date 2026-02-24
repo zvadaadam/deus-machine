@@ -5,6 +5,8 @@
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
+import { getSetting } from "./settings.service";
+import { getRelayCredentials } from "./auth.service";
 import {
   addConnection,
   removeConnection,
@@ -72,11 +74,18 @@ export function disconnectFromRelay(): void {
 }
 
 export function getRelayStatus(): { connected: boolean; clients: number; serverId: string | null; relayUrl: string | null } {
+  // Fall back to settings when the relay hasn't been initialized yet
+  // (e.g., server just started, relay not connected). The URL and server ID
+  // are still useful for the UI to show the access URL.
+  const effectiveUrl = relayUrl ?? (getSetting("relay_url") as string | undefined) ?? null;
+  const creds = serverId ? null : getRelayCredentials();
+  const effectiveServerId = serverId ?? creds?.serverId ?? null;
+
   return {
     connected: tunnelWs?.readyState === WebSocket.OPEN,
     clients: clientMap.size,
-    serverId,
-    relayUrl,
+    serverId: effectiveServerId,
+    relayUrl: effectiveUrl,
   };
 }
 
