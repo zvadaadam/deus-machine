@@ -10,7 +10,7 @@
  */
 
 import { AnimatePresence, m } from "framer-motion";
-import { MessageSquare, Code2, Settings2, Terminal, BookOpen, PenTool, Globe } from "lucide-react";
+import { MessageSquare, Code2, Settings2, Terminal, BookOpen, PenTool, Globe, Smartphone } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipKbd } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type { RightSideTab } from "@/features/workspace/store";
@@ -23,6 +23,7 @@ const contentTabMeta: Record<RightSideTab, { icon: typeof Code2; label: string }
   notebook: { icon: BookOpen, label: "Notebook" },
   design: { icon: PenTool, label: "Design" },
   browser: { icon: Globe, label: "Browser" },
+  simulator: { icon: Smartphone, label: "Simulator" },
 };
 
 /**

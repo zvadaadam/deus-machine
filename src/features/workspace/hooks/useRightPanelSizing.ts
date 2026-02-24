@@ -29,8 +29,9 @@ const BROWSER_DEFAULT_PCT = 60;
 // of 30%/60%. Also guards getTargetPercent against already-corrupted values.
 const MIN_PERSIST_PCT = NORMAL_DEFAULT_PCT * 0.5; // 15%
 
-/** Whether a tab belongs to the "browser" size category */
+/** Whether a tab belongs to the "wide" size category (browser, simulator) */
 function isBrowserCategory(tab: RightSideTab, detached: boolean): boolean {
+  if (tab === "simulator") return true;
   return tab === "browser" && !detached;
 }
 

@@ -1,7 +1,10 @@
-import { Code2, Settings2, Terminal, BookOpen, PenTool, Globe } from "lucide-react";
+import { useMemo } from "react";
+import { Code2, Settings2, Terminal, BookOpen, PenTool, Globe, Smartphone } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { useSettings } from "@/features/settings/api/settings.queries";
 import type { RightSideTab } from "@/features/workspace/store";
+import type { Settings } from "@shared/types/settings";
 
 interface RightSidecarProps {
   activeTab: RightSideTab;
@@ -16,14 +19,30 @@ const sidecarItems: Array<{
   id: RightSideTab;
   label: string;
   icon: typeof Code2;
+  /** Settings key that controls visibility. Absent = always visible. */
+  visibilityKey?: keyof Settings;
 }> = [
   { id: "code", label: "Code", icon: Code2 },
   { id: "config", label: "Config", icon: Settings2 },
   { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "notebook", label: "Notebook", icon: BookOpen },
   { id: "design", label: "Design", icon: PenTool },
-  { id: "browser", label: "Browser", icon: Globe },
+  { id: "browser", label: "Browser", icon: Globe, visibilityKey: "experimental_browser" },
+  {
+    id: "simulator",
+    label: "Simulator",
+    icon: Smartphone,
+    visibilityKey: "experimental_simulator",
+  },
 ];
+
+/** Check if a tab should be visible given current settings. undefined = visible. */
+// eslint-disable-next-line react-refresh/only-export-components -- utility used by MainContent for effective-tab resolution
+export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
+  const item = sidecarItems.find((i) => i.id === tab);
+  if (!item?.visibilityKey) return true;
+  return settings?.[item.visibilityKey] !== false;
+}
 
 /**
  * RightSidecar — Always-visible activity bar.
@@ -32,6 +51,10 @@ const sidecarItems: Array<{
  * Click behavior (VS Code activity bar pattern) is handled by the
  * parent via onTabChange — this component just renders the icons
  * and visual states.
+ *
+ * Tabs with a `visibilityKey` are hidden when that setting is explicitly `false`.
+ * The parent (MainContent) owns effective-tab resolution — `activeTab` prop is
+ * already adjusted for hidden tabs, so this component trusts it directly.
  */
 export function RightSidecar({
   activeTab,
@@ -39,9 +62,16 @@ export function RightSidecar({
   contentCollapsed,
   compact,
 }: RightSidecarProps) {
+  const settings = useSettings().data;
+
+  const visibleItems = useMemo(
+    () => sidecarItems.filter((item) => isTabVisible(item.id, settings)),
+    [settings]
+  );
+
   return (
     <div className="bg-bg-elevated border-border-subtle flex h-full w-[58px] flex-shrink-0 flex-col items-center gap-3 border-l px-1.5 pt-3 pb-5">
-      {sidecarItems.map((item) => {
+      {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
         // Active but content is hidden — show dimmed indicator
@@ -58,7 +88,7 @@ export function RightSidecar({
                 aria-pressed={isActive && !contentCollapsed}
                 onClick={() => onTabChange(item.id)}
                 className={cn(
-                  "group relative flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-1.5 text-2xs font-medium transition-colors duration-150",
+                  "group text-2xs relative flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-1.5 font-medium transition-colors duration-150",
                   isActive && !contentCollapsed
                     ? "text-text-secondary"
                     : "text-text-muted hover:text-text-secondary"
@@ -77,7 +107,7 @@ export function RightSidecar({
                 <span className="font-sans">{item.label}</span>
                 {/* Subtle dot indicator when content is collapsed — shows which tab will reactivate */}
                 {isActiveCollapsed && (
-                  <span className="bg-text-muted absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full opacity-60" />
+                  <span className="bg-text-muted absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full opacity-60" />
                 )}
               </button>
             </TooltipTrigger>

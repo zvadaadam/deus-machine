@@ -23,6 +23,7 @@ import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
+import { SimulatorPanel } from "@/features/simulator";
 import { BrowserDetachedPlaceholder } from "@/features/browser/ui/BrowserDetachedPlaceholder";
 import { useBrowserDetach } from "@/features/browser/hooks/useBrowserDetach";
 import { cn } from "@/shared/lib/utils";
@@ -210,6 +211,10 @@ export function RightSidePanel({
       {!compact && activeTab === "config" && <ConfigPanel />}
 
       {!compact && activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
+
+      {!compact && activeTab === "simulator" && (
+        <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
+      )}
     </div>
   );
 }

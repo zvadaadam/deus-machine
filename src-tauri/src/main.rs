@@ -13,9 +13,11 @@ use hive_lib::{
     socket::SocketManager,
     watcher::WatcherManager,
 };
+#[cfg(target_os = "macos")]
+use hive_sim_core::manager::SimulatorState;
 
 fn main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -41,7 +43,17 @@ fn main() {
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
-        .manage(WatcherManager::new())
+        .manage(WatcherManager::new());
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(parking_lot::Mutex::new(SimulatorState {
+        capture: None,
+        server: None,
+        booted_udid: None,
+        installed_app: None,
+    }));
+
+    builder
         .setup(|app| {
             let setup_start = std::time::Instant::now();
 
@@ -206,72 +218,125 @@ fn main() {
 
                     let watcher_manager: tauri::State<WatcherManager> = window.state();
                     watcher_manager.unwatch_all();
+
+                    // Stop simulator streaming and shut down simulator
+                    #[cfg(target_os = "macos")]
+                    {
+                        let sim_state: tauri::State<parking_lot::Mutex<SimulatorState>> = window.state();
+                        let (server, capture, udid) = {
+                            let mut s = sim_state.lock();
+                            (s.server.take(), s.capture.take(), s.booted_udid.take())
+                        };
+                        if let Some(mut server) = server {
+                            server.stop();
+                        }
+                        drop(capture);
+                        if let Some(udid) = udid {
+                            std::thread::spawn(move || {
+                                let _ = std::process::Command::new("xcrun")
+                                    .args(["simctl", "shutdown", &udid])
+                                    .output();
+                            });
+                        }
+                    }
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::spawn_pty,
-            commands::resize_pty,
-            commands::write_to_pty,
-            commands::kill_pty,
-            commands::connect_to_sidecar,
-            commands::send_sidecar_message,
-            commands::receive_sidecar_message,
-            commands::disconnect_from_sidecar,
-            commands::is_sidecar_connected,
-            commands::get_sidecar_socket_path,
-            commands::get_backend_port,
-            commands::get_installed_apps,
-            commands::open_in_app,
-            commands::start_browser_server,
-            commands::stop_browser_server,
-            commands::get_browser_port,
-            commands::get_browser_auth_token,
-            commands::is_browser_running,
-            commands::read_text_file,
-            commands::scan_workspace_files,
-            commands::fuzzy_file_search,
-            commands::invalidate_file_cache,
-            commands::clear_file_cache,
-            commands::git_clone,
-            commands::git_diff_stats,
-            commands::git_diff_files,
-            commands::git_diff_file,
-            commands::git_uncommitted_files,
-            commands::git_last_turn_files,
-            commands::git_detect_default_branch,
-            commands::git_list_branches,
-            commands::create_browser_webview,
-            commands::navigate_browser_webview,
-            commands::set_browser_webview_bounds,
-            commands::show_browser_webview,
-            commands::hide_browser_webview,
-            commands::close_browser_webview,
-            commands::get_browser_webview_url,
-            commands::eval_browser_webview,
-            commands::eval_browser_webview_with_result,
-            commands::reload_browser_webview,
-            commands::open_browser_devtools,
-            commands::close_browser_devtools,
-            commands::drain_browser_console,
-            commands::get_cookie_browsers,
-            commands::sync_browser_cookies,
-            commands::inject_browser_cookies,
-            commands::screenshot_browser_webview,
-            commands::check_cli_tool,
-            commands::check_gh_auth,
-            commands::enter_onboarding_mode,
-            commands::exit_onboarding_mode,
-            commands::show_main_window,
-            commands::db_get_workspaces_by_repo,
-            commands::db_get_stats,
-            commands::db_get_session,
-            commands::db_get_messages,
-            commands::watch_workspace,
-            commands::unwatch_workspace,
-            commands::is_workspace_watched,
-            commands::list_watched_workspaces,
-        ])
+        .invoke_handler({
+            // Macro to list all shared commands once. macOS adds simulator commands;
+            // non-macOS uses just the common set.
+            macro_rules! common_handlers {
+                ($($extra:ident),* $(,)?) => {
+                    tauri::generate_handler![
+                        commands::spawn_pty,
+                        commands::resize_pty,
+                        commands::write_to_pty,
+                        commands::kill_pty,
+                        commands::connect_to_sidecar,
+                        commands::send_sidecar_message,
+                        commands::receive_sidecar_message,
+                        commands::disconnect_from_sidecar,
+                        commands::is_sidecar_connected,
+                        commands::get_sidecar_socket_path,
+                        commands::get_backend_port,
+                        commands::get_installed_apps,
+                        commands::open_in_app,
+                        commands::start_browser_server,
+                        commands::stop_browser_server,
+                        commands::get_browser_port,
+                        commands::get_browser_auth_token,
+                        commands::is_browser_running,
+                        commands::read_text_file,
+                        commands::scan_workspace_files,
+                        commands::fuzzy_file_search,
+                        commands::invalidate_file_cache,
+                        commands::clear_file_cache,
+                        commands::git_clone,
+                        commands::git_diff_stats,
+                        commands::git_diff_files,
+                        commands::git_diff_file,
+                        commands::git_uncommitted_files,
+                        commands::git_last_turn_files,
+                        commands::git_detect_default_branch,
+                        commands::git_list_branches,
+                        commands::create_browser_webview,
+                        commands::navigate_browser_webview,
+                        commands::set_browser_webview_bounds,
+                        commands::show_browser_webview,
+                        commands::hide_browser_webview,
+                        commands::close_browser_webview,
+                        commands::get_browser_webview_url,
+                        commands::eval_browser_webview,
+                        commands::eval_browser_webview_with_result,
+                        commands::reload_browser_webview,
+                        commands::open_browser_devtools,
+                        commands::close_browser_devtools,
+                        commands::drain_browser_console,
+                        commands::get_cookie_browsers,
+                        commands::sync_browser_cookies,
+                        commands::inject_browser_cookies,
+                        commands::screenshot_browser_webview,
+                        commands::check_cli_tool,
+                        commands::check_gh_auth,
+                        commands::enter_onboarding_mode,
+                        commands::exit_onboarding_mode,
+                        commands::show_main_window,
+                        commands::db_get_workspaces_by_repo,
+                        commands::db_get_stats,
+                        commands::db_get_session,
+                        commands::db_get_messages,
+                        commands::watch_workspace,
+                        commands::unwatch_workspace,
+                        commands::is_workspace_watched,
+                        commands::list_watched_workspaces,
+                        $(commands::$extra),*
+                    ]
+                };
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                common_handlers![
+                    list_simulators,
+                    start_streaming,
+                    stop_streaming,
+                    sim_send_touch,
+                    sim_send_scroll,
+                    sim_send_key,
+                    sim_send_button,
+                    sim_take_screenshot,
+                    sim_press_home,
+                    sim_install_app,
+                    sim_launch_app,
+                    sim_terminate_app,
+                    sim_uninstall_app,
+                    sim_build_and_run,
+                    sim_has_xcode_project,
+                ]
+            }
+            #[cfg(not(target_os = "macos"))]
+            { common_handlers![] }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
