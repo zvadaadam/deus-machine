@@ -5,7 +5,7 @@
 
 /** Frames sent from Hive server to relay via tunnel WebSocket */
 export type ServerFrame =
-  | { type: "register"; serverId: string; relayToken: string }
+  | { type: "register"; serverId: string; relayToken: string; serverName?: string }
   | { type: "data"; clientId: string; payload: string }
   | { type: "auth_response"; clientId: string; allowed: boolean; reason?: string }
   | { type: "pong" }
