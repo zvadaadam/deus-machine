@@ -113,6 +113,20 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
   const relayStatus = relayQuery.data;
   const devices = devicesQuery.data ?? [];
 
+  // Derive the web app URL from the relay WebSocket URL
+  // e.g., wss://relay.opendevs.sh → https://app.opendevs.sh/server/{serverId}
+  const accessUrl = (() => {
+    if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
+    try {
+      const url = new URL(relayStatus.relayUrl);
+      const host = url.hostname; // e.g., relay.opendevs.sh
+      const domain = host.replace(/^relay\./, "app.");
+      return `https://${domain}/server/${relayStatus.serverId}`;
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -144,23 +158,41 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
           {/* Relay connection status */}
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Connection</h4>
-            <div className="bg-muted/50 flex items-center gap-3 rounded-lg px-4 py-3">
-              <span
-                className={`size-2 shrink-0 rounded-full ${
-                  relayStatus?.connected ? "bg-emerald-500" : "bg-red-500"
-                }`}
-              />
-              <div>
-                <p className="text-sm font-medium">
-                  {relayStatus?.connected ? "Connected" : "Disconnected"}
-                </p>
-                {relayStatus?.connected && relayStatus.clients > 0 && (
-                  <p className="text-muted-foreground text-xs">
-                    {relayStatus.clients} {relayStatus.clients === 1 ? "client" : "clients"}{" "}
-                    connected
+            <div className="bg-muted/50 space-y-3 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`size-2 shrink-0 rounded-full ${
+                    relayStatus?.connected ? "bg-emerald-500" : "bg-red-500"
+                  }`}
+                />
+                <div>
+                  <p className="text-sm font-medium">
+                    {relayStatus?.connected ? "Connected" : "Disconnected"}
                   </p>
-                )}
+                  {relayStatus?.connected && relayStatus.clients > 0 && (
+                    <p className="text-muted-foreground text-xs">
+                      {relayStatus.clients} {relayStatus.clients === 1 ? "client" : "clients"}{" "}
+                      connected
+                    </p>
+                  )}
+                </div>
               </div>
+              {accessUrl && (
+                <div className="border-border/50 flex items-center justify-between gap-2 border-t pt-3">
+                  <div className="min-w-0">
+                    <p className="text-muted-foreground text-xs">Access URL</p>
+                    <p className="truncate font-mono text-sm">{accessUrl}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={() => copyToClipboard(accessUrl, "URL")}
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -170,7 +202,9 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Pair a Device</h4>
             <p className="text-muted-foreground text-base">
-              Generate a code, then enter it on your phone or browser to connect.
+              {accessUrl
+                ? "Open the access URL above on your phone or browser, then enter the pairing code."
+                : "Generate a code, then enter it on your phone or browser to connect."}
             </p>
 
             {pairCode ? (

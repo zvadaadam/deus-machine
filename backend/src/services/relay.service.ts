@@ -71,11 +71,12 @@ export function disconnectFromRelay(): void {
   clientMap.clear();
 }
 
-export function getRelayStatus(): { connected: boolean; clients: number; serverId: string | null } {
+export function getRelayStatus(): { connected: boolean; clients: number; serverId: string | null; relayUrl: string | null } {
   return {
     connected: tunnelWs?.readyState === WebSocket.OPEN,
     clients: clientMap.size,
     serverId,
+    relayUrl,
   };
 }
 
