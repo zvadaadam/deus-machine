@@ -132,8 +132,8 @@ export function MainContent({
   const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
   // eslint-disable-next-line react-hooks/refs -- intentional: React-recommended render-time comparison pattern
   const workspaceChanged = prevWorkspaceIdRef.current !== selectedWorkspaceId;
+  // eslint-disable-next-line react-hooks/refs -- derived from ref comparison above
   if (workspaceChanged) {
-    // eslint-disable-line react-hooks/refs -- derived from ref comparison above
     prevWorkspaceIdRef.current = selectedWorkspaceId;
     if (middlePanel !== null) setMiddlePanel(null);
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
@@ -207,8 +207,8 @@ export function MainContent({
 
   // Deferred reset: hasRestoredWidthRef comes from the hook above, but needs
   // resetting on workspace change (detected earlier in the render pass).
+  // eslint-disable-next-line react-hooks/refs -- intentional: derived from ref comparison above
   if (workspaceChanged) {
-    // eslint-disable-line react-hooks/refs -- derived from ref comparison above
     // eslint-disable-next-line react-hooks/refs -- intentional: reset on workspace change during render
     hasRestoredWidthRef.current = false;
   }
@@ -429,7 +429,7 @@ export function MainContent({
         const blob = new Blob([logs], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
       })
       .catch(() => {
         toast.error("Failed to fetch setup logs.");
