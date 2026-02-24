@@ -106,8 +106,6 @@ export function SettingsPage() {
       .with("messaging", () => <GatewaySection {...sectionProps} />)
       .with("remote-access", () => <RemoteAccessSection {...sectionProps} />)
       .with("updates", () => <UpdateSection />)
-      .with("messaging", () => <GatewaySection {...sectionProps} />)
-      .with("remote-access", () => <RemoteAccessSection {...sectionProps} />)
       .exhaustive();
   }
 
