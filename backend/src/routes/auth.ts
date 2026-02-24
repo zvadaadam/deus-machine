@@ -36,8 +36,9 @@ function isLocalhost(ip: string | undefined): boolean {
 function getClientIp(c: any): string | undefined {
   // Use the TCP socket address first — proxy headers are trivially spoofable
   // when no reverse proxy sits in front of the server.
+  // In @hono/node-server, the socket lives at c.env.incoming.socket.
   return (
-    c.env?.remoteAddress ||
+    c.env?.incoming?.socket?.remoteAddress ||
     c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
     c.req.header("x-real-ip")
   );

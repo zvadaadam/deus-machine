@@ -1,4 +1,14 @@
-import { ArrowLeft, Settings2, Sparkles, Puzzle, Box, FlaskConical, Download, MessageSquare, Globe } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings2,
+  Sparkles,
+  Puzzle,
+  Box,
+  FlaskConical,
+  Download,
+  MessageSquare,
+  Globe,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   Sidebar,
@@ -26,8 +36,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "messaging", label: "Messaging", icon: MessageSquare },
   { id: "remote-access", label: "Remote Access", icon: Globe },
   { id: "updates", label: "Updates", icon: Download },
-  { id: "messaging", label: "Messaging", icon: MessageSquare },
-  { id: "remote-access", label: "Remote Access", icon: Globe },
 ];
 
 export function SettingsSidebar() {
