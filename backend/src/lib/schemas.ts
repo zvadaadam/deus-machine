@@ -108,6 +108,8 @@ export const PreferencesFile = z.object({
   claude_provider: z.string().optional(),
   claude_model: z.string().optional(),
   custom_endpoint: z.string().optional(),
+  experimental_simulator: z.boolean().optional(),
+  experimental_browser: z.boolean().optional(),
 }).passthrough();
 
 // ============================================================================

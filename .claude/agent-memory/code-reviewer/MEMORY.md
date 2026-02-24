@@ -56,6 +56,32 @@
 - `tauri-action@v0` needs `includeUpdaterJson: true` (or it defaults true when updater is configured) — verify latest.json is uploaded as a release asset alongside the DMG.
 - `workflow_dispatch` without a branch filter can tag + push from any branch; restrict by adding `branches: [main]` under `on.workflow_dispatch` or add a guard step.
 - The app spawns system `node` binary (not bundled) — hardened runtime notarization may need `com.apple.security.cs.disable-library-validation` in Entitlements.plist if node's dylibs fail team-ID checks.
+
+## Experimental Feature Toggle Pattern (Confirmed)
+
+- `experimental_*` fields are `boolean | undefined` on `Settings` — `undefined` means ON (backwards-compat)
+- Visibility gate: `settings?.[key] !== false` — explicit `false` hides tab, undefined/true shows it
+- `isTabVisible(tab, settings)` in `RightSidecar.tsx` is exported for reuse in `MainContent.tsx`
+- `effectiveRightSideTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "code"` — store keeps original for re-enable restore
+- `RightSidecar` recomputes its own internal `effectiveTab` redundantly when `MainContent` already passes `effectiveRightSideTab` as `activeTab`. Benign but redundant.
+- `saveSetting` in `SettingsPage.tsx` is typed as `(key: string, value: unknown)` but `SettingsSectionProps.saveSetting` requires `(key: keyof Settings, value: Settings[keyof Settings])`. TypeScript accepts this because `string` is wider than `keyof Settings` at the assignment site. Not a runtime bug, but a type-safety gap.
+- `useRightPanelSizing`'s `isBrowserCategory` also includes `simulator` in the wide (60%) category — simulator tab gets 60% default width automatically.
+
+## Simulator / Rust Command Patterns (Confirmed)
+
+- `sim_has_xcode_project` is a `fn` (sync) Tauri command — safe ONLY because Pass 1 (filesystem
+  scan) dominates. Pass 2 (`xcodegen generate`) is a blocking subprocess; if triggered it will
+  block a Tokio thread. Probe commands must skip any subprocess paths; build commands can use them.
+- Pattern for "fast probe vs full build": split into `has_xcode_project_fast` (filesystem only)
+  and `find_xcode_project` (filesystem + xcodegen). Probe command uses the fast variant.
+- macOS-only Tauri commands: gated via `#[cfg(target_os = "macos")]` in both `commands/mod.rs`
+  and `main.rs` invoke_handler lists. Non-macOS rejection from `invoke()` sets probe to `false`
+  (button hidden) — this works but emits telemetry noise via `reportError` in `invoke.ts`.
+- Three-state probe pattern: `null | true | false` for async IPC probes. `null` = loading,
+  suppresses button flicker. `false` = either "not found" or "IPC error" — collapsed intentionally.
+- `hasProject === null` during loading: `null` is falsy in JS, so `hasProject ? <Button> : null`
+  hides the button while the probe is in flight. Correct UX, no flash of invalid state.
+
 ## Icon Component Patterns (New)
 
 - `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function
