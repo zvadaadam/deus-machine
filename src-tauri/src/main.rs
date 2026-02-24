@@ -13,6 +13,7 @@ use hive_lib::{
     socket::SocketManager,
     watcher::WatcherManager,
 };
+use hive_sim_core::manager::SimulatorState;
 
 fn main() {
     tauri::Builder::default()
@@ -42,6 +43,12 @@ fn main() {
         .manage(SidecarManager::new())
         .manage(SocketManager::new())
         .manage(WatcherManager::new())
+        .manage(parking_lot::Mutex::new(SimulatorState {
+            capture: None,
+            server: None,
+            booted_udid: None,
+            installed_app: None,
+        }))
         .setup(|app| {
             let setup_start = std::time::Instant::now();
 
@@ -206,6 +213,22 @@ fn main() {
 
                     let watcher_manager: tauri::State<WatcherManager> = window.state();
                     watcher_manager.unwatch_all();
+
+                    // Stop simulator streaming and shut down simulator
+                    let sim_state: tauri::State<parking_lot::Mutex<SimulatorState>> = window.state();
+                    let (server, capture, udid) = {
+                        let mut s = sim_state.lock();
+                        (s.server.take(), s.capture.take(), s.booted_udid.take())
+                    };
+                    if let Some(mut server) = server {
+                        server.stop();
+                    }
+                    drop(capture);
+                    if let Some(ref udid) = udid {
+                        let _ = std::process::Command::new("xcrun")
+                            .args(["simctl", "shutdown", udid])
+                            .output();
+                    }
                 }
             }
         })
@@ -271,6 +294,21 @@ fn main() {
             commands::unwatch_workspace,
             commands::is_workspace_watched,
             commands::list_watched_workspaces,
+            // iOS Simulator
+            commands::list_simulators,
+            commands::start_streaming,
+            commands::stop_streaming,
+            commands::sim_send_touch,
+            commands::sim_send_scroll,
+            commands::sim_send_key,
+            commands::sim_send_button,
+            commands::sim_take_screenshot,
+            commands::sim_press_home,
+            commands::sim_install_app,
+            commands::sim_launch_app,
+            commands::sim_terminate_app,
+            commands::sim_uninstall_app,
+            commands::sim_build_and_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

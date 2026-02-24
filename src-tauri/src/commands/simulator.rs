@@ -1,0 +1,374 @@
+use std::process::Command;
+
+use parking_lot::Mutex;
+use tauri::{Emitter, State};
+
+use hive_sim_core::app_manager;
+use hive_sim_core::input::{map_button_type, map_direction, map_touch_phase};
+use hive_sim_core::manager::{ensure_booted, parse_simctl_json, SimulatorState};
+use hive_sim_core::mjpeg_server::MjpegServer;
+use hive_sim_core::screen_capture::ScreenCapture;
+use hive_sim_core::types::{InstalledApp, SimulatorInfo, StreamInfo};
+
+#[tauri::command]
+pub fn list_simulators() -> Result<Vec<SimulatorInfo>, String> {
+    let output = Command::new("xcrun")
+        .args(["simctl", "list", "devices", "--json"])
+        .output()
+        .map_err(|e| format!("Failed to run xcrun simctl: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("simctl failed: {}", stderr));
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+    parse_simctl_json(&json_str).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn start_streaming(
+    udid: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<StreamInfo, String> {
+    // Stop any existing session first — extract under lock, cleanup outside lock
+    let (prev_server, prev_capture, prev_udid) = {
+        let mut sim_state = state.lock();
+        let prev_udid = sim_state.booted_udid.take();
+        (
+            sim_state.server.take(),
+            sim_state.capture.take(),
+            prev_udid,
+        )
+    };
+    if let Some(mut server) = prev_server {
+        server.stop();
+    }
+    drop(prev_capture);
+    if let Some(ref prev) = prev_udid {
+        if prev != &udid {
+            let _ = Command::new("xcrun")
+                .args(["simctl", "shutdown", prev])
+                .output();
+        }
+    }
+
+    // Boot the simulator headlessly if not already running
+    ensure_booted(&udid).await.map_err(|e| e.to_string())?;
+
+    // Create new screen capture
+    let mut capture = ScreenCapture::new(&udid)?;
+    capture.start()?;
+
+    // Start MJPEG server with a watch receiver (never misses frames)
+    let server = MjpegServer::start(capture.subscribe()).await?;
+
+    let hid_available = capture.is_hid_available();
+    let info = StreamInfo {
+        url: server.url(),
+        port: server.port(),
+        hid_available,
+    };
+
+    if !hid_available {
+        println!("[TAURI] WARNING: HID client not available — touch/scroll/key injection disabled");
+    }
+    println!("[TAURI] Simulator streaming started: {} (port {}, hid={})", info.url, info.port, hid_available);
+
+    // Store in managed state
+    let mut sim_state = state.lock();
+    sim_state.capture = Some(capture);
+    sim_state.server = Some(server);
+    sim_state.booted_udid = Some(udid);
+
+    Ok(info)
+}
+
+#[tauri::command]
+pub fn stop_streaming(state: State<'_, Mutex<SimulatorState>>) -> Result<(), String> {
+    // Extract resources from state under the lock, then release the lock
+    // BEFORE performing heavy cleanup (ObjC bridge destroy, simctl shutdown).
+    let (server, capture, udid) = {
+        let mut sim_state = state.lock();
+        (
+            sim_state.server.take(),
+            sim_state.capture.take(),
+            sim_state.booted_udid.take(),
+        )
+    };
+
+    // Stop MJPEG server first (signals shutdown, closes listener)
+    if let Some(mut server) = server {
+        server.stop();
+    }
+
+    // Drop ScreenCapture — triggers sim_bridge_destroy which drains dispatch queues.
+    drop(capture);
+
+    // Shut down the simulator (blocking command, can take seconds)
+    if let Some(ref udid) = udid {
+        println!("[TAURI] Shutting down simulator {}", udid);
+        let _ = Command::new("xcrun")
+            .args(["simctl", "shutdown", udid])
+            .output();
+    }
+
+    println!("[TAURI] Simulator streaming stopped");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sim_send_touch(
+    x: f64,
+    y: f64,
+    touch_type: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let Some(phase) = map_touch_phase(&touch_type) else {
+        return Err(format!("Unknown touch type: {}", touch_type));
+    };
+    let mut sim_state = state.lock();
+
+    if let Some(ref mut capture) = sim_state.capture {
+        if !capture.send_touch(x, y, phase) {
+            return Err("Touch injection failed — HID client may not be available".to_string());
+        }
+    } else {
+        return Err("No active capture for touch event".to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sim_send_scroll(
+    x: f64,
+    y: f64,
+    dx: f64,
+    dy: f64,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let sim_state = state.lock();
+
+    if let Some(ref capture) = sim_state.capture {
+        if !capture.send_scroll(x, y, dx, dy) {
+            eprintln!("[TAURI] Scroll injection failed at ({}, {})", x, y);
+        }
+    } else {
+        eprintln!("[TAURI] No active capture for scroll event");
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sim_send_key(
+    keycode: u16,
+    direction: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let Some(dir) = map_direction(&direction) else {
+        return Err(format!("Unknown key direction: {}", direction));
+    };
+    let sim_state = state.lock();
+
+    if let Some(ref capture) = sim_state.capture {
+        if !capture.send_key(keycode, dir) {
+            eprintln!("[TAURI] Key injection failed for keycode 0x{:04x}", keycode);
+        }
+    } else {
+        eprintln!("[TAURI] No active capture for key event");
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sim_send_button(
+    button_type: String,
+    direction: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let Some(btn) = map_button_type(&button_type) else {
+        return Err(format!("Unknown button type: {}", button_type));
+    };
+    let Some(dir) = map_direction(&direction) else {
+        return Err(format!("Unknown button direction: {}", direction));
+    };
+    let sim_state = state.lock();
+
+    if let Some(ref capture) = sim_state.capture {
+        if !capture.send_button(btn, dir) {
+            eprintln!("[TAURI] Button injection failed for type {}", button_type);
+        }
+    } else {
+        eprintln!("[TAURI] No active capture for button event");
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn sim_take_screenshot(
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<Vec<u8>, String> {
+    let sim_state = state.lock();
+
+    if let Some(ref capture) = sim_state.capture {
+        if let Some(data) = capture.screenshot() {
+            println!("[TAURI] Screenshot captured: {} bytes", data.len());
+            Ok(data)
+        } else {
+            Err("Failed to capture screenshot".to_string())
+        }
+    } else {
+        Err("No active capture for screenshot".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn sim_press_home(
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let sim_state = state.lock();
+
+    if let Some(ref capture) = sim_state.capture {
+        if !capture.press_home() {
+            return Err("Failed to press Home button".to_string());
+        }
+    } else {
+        return Err("No active capture for Home button".to_string());
+    }
+
+    Ok(())
+}
+
+// --- App Management Commands ---
+
+#[tauri::command]
+pub async fn sim_install_app(
+    app_path: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<InstalledApp, String> {
+    let udid = {
+        let sim_state = state.lock();
+        sim_state.booted_udid.clone()
+    };
+
+    let udid = udid.ok_or_else(|| "No simulator is currently booted".to_string())?;
+
+    let installed = app_manager::install_app(&udid, &app_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[TAURI] Installed app: {} ({})", installed.name, installed.bundle_id);
+
+    // Store in state
+    let mut sim_state = state.lock();
+    sim_state.installed_app = Some(installed.clone());
+
+    Ok(installed)
+}
+
+#[tauri::command]
+pub async fn sim_launch_app(
+    bundle_id: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let udid = {
+        let sim_state = state.lock();
+        sim_state.booted_udid.clone()
+    };
+
+    let udid = udid.ok_or_else(|| "No simulator is currently booted".to_string())?;
+
+    app_manager::launch_app(&udid, &bundle_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[TAURI] Launched app: {}", bundle_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sim_terminate_app(
+    bundle_id: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let udid = {
+        let sim_state = state.lock();
+        sim_state.booted_udid.clone()
+    };
+
+    let udid = udid.ok_or_else(|| "No simulator is currently booted".to_string())?;
+
+    app_manager::terminate_app(&udid, &bundle_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[TAURI] Terminated app: {}", bundle_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sim_uninstall_app(
+    bundle_id: String,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<(), String> {
+    let udid = {
+        let sim_state = state.lock();
+        sim_state.booted_udid.clone()
+    };
+
+    let udid = udid.ok_or_else(|| "No simulator is currently booted".to_string())?;
+
+    app_manager::uninstall_app(&udid, &bundle_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Clear installed app if it matches
+    let mut sim_state = state.lock();
+    if sim_state.installed_app.as_ref().is_some_and(|a| a.bundle_id == bundle_id) {
+        sim_state.installed_app = None;
+    }
+
+    println!("[TAURI] Uninstalled app: {}", bundle_id);
+    Ok(())
+}
+
+/// One-shot: detect Xcode project in workspace, build, install, and launch.
+/// Streams build log output via Tauri events ("sim:build-log").
+#[tauri::command]
+pub async fn sim_build_and_run(
+    workspace_path: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, Mutex<SimulatorState>>,
+) -> Result<InstalledApp, String> {
+    let udid = {
+        let sim_state = state.lock();
+        sim_state.booted_udid.clone()
+    };
+
+    let udid = udid.ok_or_else(|| "No simulator is currently booted".to_string())?;
+
+    println!("[TAURI] Building & running from: {}", workspace_path);
+
+    // Stream build log lines to the frontend via Tauri events
+    let on_log: Option<hive_sim_core::app_manager::BuildLogCallback> = Some(
+        std::sync::Arc::new(move |line: &str| {
+            let _ = app_handle.emit("sim:build-log", line.to_string());
+        }),
+    );
+
+    let installed = app_manager::build_and_run(&workspace_path, &udid, on_log)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    println!("[TAURI] Built & running: {} ({})", installed.name, installed.bundle_id);
+
+    // Store in state
+    let mut sim_state = state.lock();
+    sim_state.installed_app = Some(installed.clone());
+
+    Ok(installed)
+}

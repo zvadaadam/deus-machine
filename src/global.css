@@ -315,6 +315,19 @@
   }
 }
 
+/* Simulator idle state — subtle breathing on device silhouette.
+ * Oscillates around the element's base opacity (0.3) by scaling 0.7–1.0.
+ * The 6s cycle is intentionally slow — calm, unhurried. */
+@keyframes sim-idle-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* Settle-in for collapsed strip content — pure opacity fade.
  * No translate: the strip uses writing-mode: vertical-rl + rotate-180,
  * and translateY would move along the wrong axis, causing a jarring multi-direction flash. */
@@ -345,6 +358,17 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+/* Build progress shimmer — bar slides left-to-right within its container.
+   Used by the simulator panel's indeterminate build progress indicator. */
+@keyframes build-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
   }
 }
 

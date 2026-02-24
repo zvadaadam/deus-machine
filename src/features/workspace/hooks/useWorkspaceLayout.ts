@@ -166,7 +166,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
         // same event handler, but the closure still sees the OLD activeRightSideTab.
         const currentLayout = useWorkspaceLayoutStore.getState().layouts[workspaceId];
         const sideTab = currentLayout?.activeRightSideTab ?? defaultLayout.activeRightSideTab;
-        if (sideTab === "browser") {
+        if (sideTab === "browser" || sideTab === "simulator") {
           setLayout(workspaceId, { rightPanelWidthBrowser: width });
         } else {
           setLayout(workspaceId, { rightPanelWidth: width });
@@ -224,7 +224,7 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     chatPanelCollapsed: layout.chatPanelCollapsed ?? false,
     rightPanelCollapsed: layout.rightPanelCollapsed ?? false,
     rightPanelWidth:
-      layout.activeRightSideTab === "browser"
+      layout.activeRightSideTab === "browser" || layout.activeRightSideTab === "simulator"
         ? (layout.rightPanelWidthBrowser ?? null)
         : (layout.rightPanelWidth ?? null),
     rightPanelWidthNormal: layout.rightPanelWidth ?? null,
