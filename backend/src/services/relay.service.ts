@@ -16,7 +16,7 @@ import {
   removeSubscriptions,
   type WsSendable,
 } from "./ws.service";
-import { validateDeviceToken } from "./auth.service";
+import { validateDeviceToken, validatePairCode, createDeviceToken } from "./auth.service";
 import { getDatabase } from "../lib/database";
 
 // ---- State ----
@@ -94,8 +94,8 @@ export function getRelayStatus(): { connected: boolean; clients: number; serverI
 function openTunnel(): void {
   if (!relayUrl || !serverId || !relayToken) return;
 
-  const wsUrl = `${relayUrl}/api/servers/${serverId}/tunnel`;
-  console.log(`[Relay] Connecting to ${wsUrl}...`);
+  const wsUrl = `${relayUrl}/api/servers/${serverId}/tunnel?token=${encodeURIComponent(relayToken)}`;
+  console.log(`[Relay] Connecting to ${relayUrl}/api/servers/${serverId}/tunnel...`);
 
   try {
     tunnelWs = new WebSocket(wsUrl);
@@ -200,6 +200,9 @@ function handleRelayFrame(frame: RelayFrame): void {
         // Ignore malformed inner messages
       }
     })
+    .with({ type: "pair_request" }, (f) => {
+      handlePairRequest(f.pairId, f.code, f.deviceName);
+    })
     .with({ type: "ping" }, () => {
       sendToRelay({ type: "pong" });
     })
@@ -207,6 +210,23 @@ function handleRelayFrame(frame: RelayFrame): void {
       console.error(`[Relay] Error from relay: ${f.message}`);
     })
     .exhaustive();
+}
+
+/**
+ * Handle a pairing code request forwarded from the relay.
+ * Validates the one-time code (consumed on success), creates a device token,
+ * and sends the result back through the tunnel.
+ */
+function handlePairRequest(pairId: string, code: string, deviceName: string): void {
+  if (!validatePairCode(code)) {
+    sendToRelay({ type: "pair_response", pairId, success: false, reason: "Invalid or expired pairing code" });
+    console.log(`[Relay] Pair request ${pairId} rejected: invalid code`);
+    return;
+  }
+
+  const { token } = createDeviceToken(deviceName || "Web Portal", null, "relay-paired");
+  sendToRelay({ type: "pair_response", pairId, success: true, deviceToken: token });
+  console.log(`[Relay] Pair request ${pairId} succeeded, device "${deviceName}" paired`);
 }
 
 /**
