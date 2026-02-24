@@ -18,6 +18,7 @@ import {
   AISection,
   ExtensionsSection,
   EnvironmentSection,
+  ExperimentalSection,
   UpdateSection,
 } from "./sections";
 
@@ -99,8 +100,9 @@ export function SettingsPage() {
         <ExtensionsSection mcpServers={mcpServers} commands={commands} agents={agents} />
       ))
       .with("environment", () => <EnvironmentSection />)
+      .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("updates", () => <UpdateSection />)
-      .otherwise(() => null);
+      .exhaustive();
   }
 
   return (

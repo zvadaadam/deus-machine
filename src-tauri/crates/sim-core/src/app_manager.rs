@@ -74,7 +74,7 @@ pub async fn build_and_run(
 /// Searches up to 3 levels deep. Prefers .xcworkspace (Pods-aware). Skips Pods.xcworkspace.
 /// Also detects XcodeGen projects (project.yml) and runs `xcodegen generate` to create
 /// the .xcodeproj before returning.
-fn find_xcode_project(workspace_path: &str) -> Option<(PathBuf, bool)> {
+pub fn find_xcode_project(workspace_path: &str) -> Option<(PathBuf, bool)> {
     let root = PathBuf::from(workspace_path);
 
     // Collect candidate directories (up to 3 levels deep)
@@ -126,6 +126,32 @@ fn find_xcode_project(workspace_path: &str) -> Option<(PathBuf, bool)> {
     }
 
     None
+}
+
+/// Fast, side-effect-free probe: does this workspace contain a buildable Xcode project?
+/// Same 3-level-deep search as `find_xcode_project` but skips XcodeGen generation
+/// (Pass 2) to avoid blocking on a subprocess. Checks for project.yml existence
+/// as a signal that the project *can* be built, without running xcodegen.
+pub fn has_xcode_project(workspace_path: &str) -> bool {
+    let root = PathBuf::from(workspace_path);
+    let mut dirs = Vec::new();
+    collect_candidate_dirs(&root, 0, 3, &mut dirs);
+
+    // Check for existing .xcworkspace / .xcodeproj
+    for dir in &dirs {
+        if scan_dir_for_xcode_project(dir).is_some() {
+            return true;
+        }
+    }
+
+    // Check for XcodeGen project.yml (buildable, even if not yet generated)
+    for dir in &dirs {
+        if dir.join("project.yml").exists() {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Recursively collect directories to search, up to `max_depth` levels.

@@ -372,3 +372,10 @@ pub async fn sim_build_and_run(
 
     Ok(installed)
 }
+
+/// Fast probe: check if a workspace contains a buildable Xcode project.
+/// Pure filesystem scan — no subprocess, no xcodebuild, no state mutation.
+#[tauri::command]
+pub fn sim_has_xcode_project(workspace_path: String) -> bool {
+    app_manager::has_xcode_project(&workspace_path)
+}

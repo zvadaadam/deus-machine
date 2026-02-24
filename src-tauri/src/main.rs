@@ -321,6 +321,7 @@ fn main() {
                     commands::sim_terminate_app,
                     commands::sim_uninstall_app,
                     commands::sim_build_and_run,
+                    commands::sim_has_xcode_project,
                 ]
             }
             #[cfg(not(target_os = "macos"))]

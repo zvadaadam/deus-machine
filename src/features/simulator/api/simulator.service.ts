@@ -2,10 +2,13 @@ import { invoke } from "@/platform/tauri";
 import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
 
 export const simulatorService = {
+  /** Fast probe: does this workspace contain a buildable Xcode project? */
+  hasXcodeProject: (workspacePath: string) =>
+    invoke<boolean>("sim_has_xcode_project", { workspacePath }),
+
   listSimulators: () => invoke<SimulatorInfo[]>("list_simulators"),
 
-  startStreaming: (udid: string) =>
-    invoke<StreamInfo>("start_streaming", { udid }),
+  startStreaming: (udid: string) => invoke<StreamInfo>("start_streaming", { udid }),
 
   stopStreaming: () => invoke<void>("stop_streaming"),
 
@@ -25,17 +28,13 @@ export const simulatorService = {
 
   pressHome: () => invoke<void>("sim_press_home"),
 
-  installApp: (appPath: string) =>
-    invoke<InstalledApp>("sim_install_app", { appPath }),
+  installApp: (appPath: string) => invoke<InstalledApp>("sim_install_app", { appPath }),
 
-  launchApp: (bundleId: string) =>
-    invoke<void>("sim_launch_app", { bundleId }),
+  launchApp: (bundleId: string) => invoke<void>("sim_launch_app", { bundleId }),
 
-  terminateApp: (bundleId: string) =>
-    invoke<void>("sim_terminate_app", { bundleId }),
+  terminateApp: (bundleId: string) => invoke<void>("sim_terminate_app", { bundleId }),
 
-  uninstallApp: (bundleId: string) =>
-    invoke<void>("sim_uninstall_app", { bundleId }),
+  uninstallApp: (bundleId: string) => invoke<void>("sim_uninstall_app", { bundleId }),
 
   buildAndRun: (workspacePath: string) =>
     invoke<InstalledApp>("sim_build_and_run", { workspacePath }),
