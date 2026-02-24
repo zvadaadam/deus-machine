@@ -5,19 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import {
-  Globe,
-  Copy,
-  Trash2,
-  Smartphone,
-  Monitor,
-  RefreshCw,
-} from "lucide-react";
+import { Copy, Trash2, Smartphone, Monitor, RefreshCw } from "lucide-react";
 import {
   usePairedDevices,
   useGeneratePairCode,
   useRevokeDevice,
-  useNetworkInfo,
+  useRelayStatus,
 } from "../../api/auth.queries";
 import type { PairedDevice } from "../../api/auth.service";
 import type { SettingsSectionProps } from "./types";
@@ -49,7 +42,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
 
   // Queries — only active when remote access is ON
   const devicesQuery = usePairedDevices(enabled);
-  const networkQuery = useNetworkInfo(enabled);
+  const relayQuery = useRelayStatus(enabled);
   const generateCodeMutation = useGeneratePairCode();
   const revokeDeviceMutation = useRevokeDevice();
 
@@ -75,16 +68,19 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
     return () => clearInterval(interval);
   }, [pairCode, codeExpiresAt]);
 
-  const handleToggle = useCallback(async (on: boolean) => {
-    const ok = await saveSetting("remote_access_enabled", on);
-    if (ok) {
-      toast.success(on ? "Remote access enabled" : "Remote access disabled");
-      if (!on) {
-        setPairCode(null);
-        setCodeExpiresAt(0);
+  const handleToggle = useCallback(
+    async (on: boolean) => {
+      const ok = await saveSetting("remote_access_enabled", on);
+      if (ok) {
+        toast.success(on ? "Remote access enabled" : "Remote access disabled");
+        if (!on) {
+          setPairCode(null);
+          setCodeExpiresAt(0);
+        }
       }
-    }
-  }, [saveSetting]);
+    },
+    [saveSetting]
+  );
 
   async function handleGenerateCode() {
     try {
@@ -93,7 +89,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
       setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
     } catch (error) {
       toast.error(
-        `Failed to generate code: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to generate code: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -104,7 +100,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
       toast.success(`Revoked "${device.name}"`);
     } catch (error) {
       toast.error(
-        `Failed to revoke device: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to revoke device: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -114,11 +110,8 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
     toast.success(`${label} copied`);
   }
 
-  const networkInfo = networkQuery.data;
+  const relayStatus = relayQuery.data;
   const devices = devicesQuery.data ?? [];
-  const accessUrl = networkInfo?.ip && networkInfo?.port
-    ? `http://${networkInfo.ip}:${networkInfo.port}`
-    : null;
 
   return (
     <div className="space-y-5">
@@ -126,7 +119,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
       <div>
         <h3 className="text-base font-semibold">Remote Access</h3>
         <p className="text-muted-foreground mt-1 text-base">
-          Connect to Hive from your phone or another browser on the local network.
+          Connect to Hive from your phone or another browser via the cloud relay.
         </p>
       </div>
 
@@ -137,14 +130,10 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
             Enable remote access
           </Label>
           <p className="text-muted-foreground text-base">
-            Allow connections from other devices on your local network.
+            Allow connections from other devices via the cloud relay.
           </p>
         </div>
-        <Switch
-          id="remote-access-enabled"
-          checked={enabled}
-          onCheckedChange={handleToggle}
-        />
+        <Switch id="remote-access-enabled" checked={enabled} onCheckedChange={handleToggle} />
       </div>
 
       {/* Expanded content when enabled */}
@@ -152,32 +141,27 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
         <>
           <Separator />
 
-          {/* Network info */}
+          {/* Relay connection status */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Globe className="text-muted-foreground size-4" />
-              <h4 className="text-sm font-medium">Network</h4>
-            </div>
-            {accessUrl ? (
-              <div className="bg-muted/50 flex items-center justify-between rounded-lg px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">Access URL</p>
-                  <p className="text-muted-foreground font-mono text-sm">{accessUrl}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => copyToClipboard(accessUrl, "URL")}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
+            <h4 className="text-sm font-medium">Connection</h4>
+            <div className="bg-muted/50 flex items-center gap-3 rounded-lg px-4 py-3">
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  relayStatus?.connected ? "bg-emerald-500" : "bg-red-500"
+                }`}
+              />
+              <div>
+                <p className="text-sm font-medium">
+                  {relayStatus?.connected ? "Connected" : "Disconnected"}
+                </p>
+                {relayStatus?.connected && relayStatus.clients > 0 && (
+                  <p className="text-muted-foreground text-xs">
+                    {relayStatus.clients} {relayStatus.clients === 1 ? "client" : "clients"}{" "}
+                    connected
+                  </p>
+                )}
               </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Could not detect local network IP.
-              </p>
-            )}
+            </div>
           </div>
 
           <Separator />
@@ -192,9 +176,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
             {pairCode ? (
               <div className="space-y-2">
                 <div className="bg-muted/50 flex items-center justify-between rounded-lg px-4 py-4">
-                  <span className="font-mono text-2xl font-bold tracking-wider">
-                    {pairCode}
-                  </span>
+                  <span className="font-mono text-2xl font-bold tracking-wider">{pairCode}</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -237,9 +219,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
             </h4>
 
             {devices.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No devices paired yet.
-              </p>
+              <p className="text-muted-foreground text-sm">No devices paired yet.</p>
             ) : (
               <div className="space-y-2">
                 {devices.map((device) => {

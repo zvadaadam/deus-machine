@@ -4,10 +4,8 @@
 // POST /auth/generate-pair-code — localhost-only, creates a new code
 // GET /auth/devices — localhost-only, lists paired devices
 // DELETE /auth/devices/:id — localhost-only, revokes a device
-// GET /auth/local-ip — localhost-only, returns LAN IP for Settings UI
 
 import { Hono } from "hono";
-import { networkInterfaces } from "os";
 import { parseBody } from "../lib/validate";
 import { PairBody } from "../lib/schemas";
 import {
@@ -48,20 +46,6 @@ function requireLocalhost(c: any): Response | null {
   const ip = getClientIp(c);
   if (!isLocalhost(ip)) {
     return c.json({ error: "This endpoint is only available from localhost" }, 403);
-  }
-  return null;
-}
-
-/** Get local network IPv4 address (first non-internal). */
-function getLocalIp(): string | null {
-  const interfaces = networkInterfaces();
-  for (const iface of Object.values(interfaces)) {
-    if (!iface) continue;
-    for (const addr of iface) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        return addr.address;
-      }
-    }
   }
   return null;
 }
@@ -134,18 +118,6 @@ app.delete("/auth/devices/:id", (c) => {
     return c.json({ error: "Device not found" }, 404);
   }
   return c.json({ success: true });
-});
-
-// GET /auth/local-ip — localhost-only. Returns LAN IP + server port for the Settings UI.
-app.get("/auth/local-ip", (c) => {
-  const denied = requireLocalhost(c);
-  if (denied) return denied;
-
-  const ip = getLocalIp();
-  // Get port from the incoming request URL (most reliable)
-  const url = new URL(c.req.url);
-  const port = parseInt(url.port) || null;
-  return c.json({ ip, port });
 });
 
 export default app;

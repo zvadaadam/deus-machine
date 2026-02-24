@@ -26,6 +26,11 @@ export const AuthService = {
   revokeDevice: (id: string): Promise<{ success: boolean }> =>
     apiClient.delete<{ success: boolean }>(`/auth/devices/${id}`),
 
-  getLocalIp: (): Promise<{ ip: string | null; port: number | null }> =>
-    apiClient.get<{ ip: string | null; port: number | null }>("/auth/local-ip"),
+  getRelayStatus: (): Promise<RelayStatus> => apiClient.get<RelayStatus>("/relay/status"),
 };
+
+export interface RelayStatus {
+  connected: boolean;
+  clients: number;
+  serverId: string | null;
+}

@@ -5,7 +5,6 @@
  * with a real in-memory SQLite database. Nothing is mocked except:
  *   - getDatabase() (returns our test-local in-memory DB)
  *   - getServerPort() (health.ts imports server.ts which has side effects)
- *   - os.networkInterfaces() (unpredictable in CI)
  *
  * What this proves that unit tests can't:
  *   - Middleware ordering: remote-gate -> CORS -> auth -> route handlers
@@ -53,19 +52,6 @@ vi.mock("../../src/lib/database", () => ({
 vi.mock("../../src/server", () => ({
   getServerPort: () => 0,
 }));
-
-// Mock os.networkInterfaces so /auth/local-ip returns a deterministic value
-vi.mock("os", async (importOriginal) => {
-  const original = await importOriginal<typeof import("os")>();
-  return {
-    ...original,
-    networkInterfaces: () => ({
-      en0: [
-        { address: "192.168.1.100", family: "IPv4", internal: false, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: "192.168.1.100/24" },
-      ],
-    }),
-  };
-});
 
 // Now import everything (after mocks are hoisted)
 import fs from "fs";
@@ -439,15 +425,6 @@ describe("Gate page: server-rendered HTML", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Connect to Hive");
-  });
-});
-
-describe("Local IP endpoint", () => {
-  it("returns the mocked local IP from localhost", async () => {
-    const res = await app.request("/api/auth/local-ip", { headers: LOCAL_HEADERS });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.ip).toBe("192.168.1.100");
   });
 });
 

@@ -160,21 +160,3 @@ describe("DELETE /auth/devices/:id", () => {
   });
 });
 
-describe("GET /auth/local-ip", () => {
-  it("returns local IP from localhost", async () => {
-    const res = await authRoutes.request("/auth/local-ip", {
-      headers: { "x-forwarded-for": "127.0.0.1" },
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    // ip may be null in CI, just check it responded
-    expect(body).toHaveProperty("ip");
-  });
-
-  it("rejects from remote IP", async () => {
-    const res = await authRoutes.request("/auth/local-ip", {
-      headers: { "x-forwarded-for": "192.168.1.50" },
-    });
-    expect(res.status).toBe(403);
-  });
-});
