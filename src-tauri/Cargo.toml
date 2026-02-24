@@ -57,6 +57,8 @@ base64 = "0.22"
 nucleo-matcher = "0.3"
 # Fast byte-level newline counting for git diff stats
 bytecount = "0.6"
+# iOS Simulator integration (screen capture, MJPEG streaming, HID input)
+hive-sim-core = { path = "crates/sim-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

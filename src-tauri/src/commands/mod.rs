@@ -10,6 +10,7 @@ mod git;
 mod onboarding;
 mod db;
 mod watcher;
+mod simulator;
 
 pub use pty::*;
 pub use socket::*;
@@ -23,3 +24,4 @@ pub use git::*;
 pub use onboarding::*;
 pub use db::*;
 pub use watcher::*;
+pub use simulator::*;

@@ -12,6 +12,7 @@ build/
 
 # Tauri
 src-tauri/target/
+src-tauri/crates/*/target/
 src-tauri/WixTools/
 # Sidecar build artifact (built via `bun run build:sidecar`)
 src-tauri/resources/bin/index.bundled.cjs
