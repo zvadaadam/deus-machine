@@ -102,9 +102,9 @@ describe("FrontendClient", () => {
       FrontendClient.attachTunnel(createMockTunnel());
       FrontendClient.detachTunnel();
       // No tunnels left, request should reject
-      expect(
-        FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("FrontendClient tunnel not attached");
+      expect(FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })).rejects.toThrow(
+        "FrontendClient tunnel not attached"
+      );
     });
 
     it("detachTunnel with specific tunnel only removes that one", async () => {
@@ -262,7 +262,7 @@ describe("FrontendClient", () => {
   describe("onQuery", () => {
     it("registers a handler for query notifications on the given tunnel", () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onQuery(mockTunnel, vi.fn());
+      FrontendClient.onQuery(vi.fn());
 
       expect(mockTunnel.addMethod).toHaveBeenCalledWith("query", expect.any(Function));
     });
@@ -270,7 +270,7 @@ describe("FrontendClient", () => {
     it("calls handler with parsed request (type stripped)", async () => {
       FrontendClient.attachTunnel(mockTunnel);
       const handler = vi.fn().mockResolvedValue(undefined);
-      FrontendClient.onQuery(mockTunnel, handler);
+      FrontendClient.onQuery(handler);
 
       // Get the registered handler and call it
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
@@ -293,7 +293,7 @@ describe("FrontendClient", () => {
     it("ignores invalid requests", async () => {
       FrontendClient.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onQuery(mockTunnel, handler);
+      FrontendClient.onQuery(handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await registeredHandler({ invalid: true });
