@@ -329,8 +329,13 @@ uint64_t sim_bridge_screenshot(SimBridgeHandle handle,
         uint64_t copyLen = MIN(buffer_size, (uint64_t)jpegData.length);
         memcpy(out_buffer, jpegData.bytes, copyLen);
 
-        NSLog(@"[SimBridge] Screenshot captured: %llu bytes", (unsigned long long)jpegData.length);
-        return (uint64_t)jpegData.length;
+        if (copyLen < (uint64_t)jpegData.length) {
+            NSLog(@"[SimBridge] Screenshot truncated: buffer %llu < actual %llu bytes",
+                  (unsigned long long)buffer_size, (unsigned long long)jpegData.length);
+        } else {
+            NSLog(@"[SimBridge] Screenshot captured: %llu bytes", (unsigned long long)jpegData.length);
+        }
+        return copyLen;
     }
 }
 

@@ -164,7 +164,7 @@ function scoreSimulator(sim: SimulatorInfo): number {
 // ---------------------------------------------------------------------------
 
 export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: SimulatorPanelProps) {
-  const [simulators, setSimulators] = useState<SimulatorInfo[]>([]);
+  const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
   const [state, setState] = useState<SimPhase>({ phase: "idle" });
 
@@ -252,7 +252,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   // Filter to iOS-capable simulators
   const iosSimulators = useMemo(
     () =>
-      simulators
+      (simulators ?? [])
         .filter(
           (s) =>
             s.runtime.includes("iOS") ||
@@ -457,7 +457,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
 
   const getNormalizedCoords = useCallback(
-    (e: React.MouseEvent | MouseEvent): { x: number; y: number } | null => {
+    (e: React.MouseEvent | MouseEvent, updateLast = true): { x: number; y: number } | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
@@ -466,7 +466,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
         y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
       };
-      lastCoordsRef.current = coords;
+      if (updateLast) lastCoordsRef.current = coords;
       return coords;
     },
     []
@@ -529,7 +529,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (!isLive) return;
-      const coords = getNormalizedCoords(e as unknown as React.MouseEvent);
+      const coords = getNormalizedCoords(e as unknown as React.MouseEvent, false);
       if (!coords) return;
       e.preventDefault();
       simulatorService.sendScroll(coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
@@ -593,7 +593,6 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleKeyUp = useCallback(
     (e: React.KeyboardEvent) => {
       if (!isLive || !hidAvailable) return;
-      if (e.metaKey || e.ctrlKey) return;
       const keycode = MAC_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
@@ -606,6 +605,14 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   // -------------------------------------------------------------------------
   // Empty state — no simulators installed
   // -------------------------------------------------------------------------
+
+  if (simulators === null) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
 
   if (iosSimulators.length === 0 && state.phase !== "error") {
     return (
