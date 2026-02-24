@@ -102,7 +102,10 @@ export function generatePairCode(): { code: string; expiresAt: number } {
 export function validatePairCode(code: string): boolean {
   const upper = code.toUpperCase().trim();
   const entry = activeCodes.get(upper);
-  if (!entry) return false;
+  if (!entry) {
+    console.log(`[Auth] Code "${upper}" not found. Active codes: ${activeCodes.size} (keys: ${[...activeCodes.keys()].join(", ") || "none"})`);
+    return false;
+  }
   if (entry.expiresAt <= Date.now()) {
     activeCodes.delete(upper);
     return false;
