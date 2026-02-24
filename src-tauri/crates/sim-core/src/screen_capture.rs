@@ -68,6 +68,7 @@ impl Drop for TouchServer {
     fn drop(&mut self) {
         log::info!("[TouchServer] Stopping simulator-server");
         let _ = self.process.kill();
+        let _ = self.process.wait(); // Reap zombie process
     }
 }
 
