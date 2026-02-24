@@ -181,6 +181,14 @@ function handleRelayFrame(frame: RelayFrame): void {
       // Validate device token locally
       const device = validateDeviceToken(f.deviceToken);
       if (device) {
+        // Clean up existing connection for this clientId (relay may re-forward
+        // client_connected on tunnel reconnection — must be idempotent)
+        const existingConnId = clientMap.get(f.clientId);
+        if (existingConnId) {
+          clientWatches.delete(existingConnId);
+          removeConnection(existingConnId);
+        }
+
         // Create a virtual WsConnection that sends data back through the relay tunnel
         const virtualWs: WsSendable = {
           send(data: string | ArrayBuffer) {
