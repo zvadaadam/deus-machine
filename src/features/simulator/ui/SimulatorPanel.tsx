@@ -504,7 +504,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
     (e: React.MouseEvent) => {
       if (!isLive) return;
       const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(coords.x, coords.y, "ended").catch(warnTouchFailed);
+      if (coords) {
+        simulatorService.sendTouch(coords.x, coords.y, "ended").catch(warnTouchFailed);
+        lastCoordsRef.current = null; // Prevent window handler from sending duplicate "ended"
+      }
     },
     [isLive, getNormalizedCoords, warnTouchFailed]
   );

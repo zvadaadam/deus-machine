@@ -23,8 +23,9 @@ static const NSTimeInterval kMinMoveInterval = 0.016; // ~60fps max
  */
 static void* getSimulatorAppSymbol(const char* symbolName) {
     static void* g_simulatorAppHandle = NULL;
+    static dispatch_once_t onceToken;
 
-    if (!g_simulatorAppHandle) {
+    dispatch_once(&onceToken, ^{
         // Method 1: Try bundle identifier (works when Simulator.app is running)
         NSBundle *bundle = [NSBundle bundleWithIdentifier:@"com.apple.iphonesimulator"];
         if (bundle) {
@@ -48,10 +49,10 @@ static void* getSimulatorAppSymbol(const char* symbolName) {
         if (!g_simulatorAppHandle) {
             NSLog(@"[SimBridge] WARNING: Could not load Simulator.app - touch won't work");
             NSLog(@"[SimBridge] dlopen error: %s", dlerror());
-            return NULL;
         }
-    }
+    });
 
+    if (!g_simulatorAppHandle) return NULL;
     return dlsym(g_simulatorAppHandle, symbolName);
 }
 
@@ -111,6 +112,7 @@ void init_touch_system(SimBridge *bridge) {
                     else if ((i + 1) % 4 == 0) [hex appendString:@" "];
                 }
                 NSLog(@"[SimBridge] IndigoHID test buffer (first 64 bytes):\n%@", hex);
+                free(testResult);
             } else {
                 NSLog(@"[SimBridge] WARNING: IndigoHID returned NULL for test touch "
                        "(may not support type 0x32 on this macOS version)");
@@ -183,6 +185,7 @@ void init_touch_system(SimBridge *bridge) {
                 if (testMsg) {
                     size_t sz = malloc_size(testMsg);
                     NSLog(@"[SimBridge] touchMessageForTouchAt: test (px 100,100) returned %zu bytes", sz);
+                    free(testMsg);
                 } else {
                     NSLog(@"[SimBridge] touchMessageForTouchAt: test (px 100,100) returned NULL");
                 }
@@ -194,6 +197,7 @@ void init_touch_system(SimBridge *bridge) {
                 if (testMsg2) {
                     size_t sz2 = malloc_size(testMsg2);
                     NSLog(@"[SimBridge] touchMessageForTouchAt: test (norm 0.5,0.5) returned %zu bytes", sz2);
+                    free(testMsg2);
                 } else {
                     NSLog(@"[SimBridge] touchMessageForTouchAt: test (norm 0.5,0.5) returned NULL");
                 }
@@ -324,7 +328,7 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
                 const size_t EVENT_SIZE = 0xa0;   // 160 bytes per touch event
 
                 void *buffer = calloc(1, BUFFER_SIZE);
-                if (!buffer) return;
+                if (!buffer) { free(indigoResult); return; }
 
                 uint8_t *buf = (uint8_t *)buffer;
                 *(uint32_t *)(buf + 0x18) = EVENT_SIZE;
@@ -342,6 +346,7 @@ static bool send_via_radon_buffer(SimBridge *bridge, CGPoint point,
                 if (indigoSize >= 0x20 + EVENT_SIZE) {
                     memcpy(secondTouch, (uint8_t *)indigoResult + 0x20, EVENT_SIZE);
                 }
+                free(indigoResult); // Done reading — free the original IndigoHID buffer
                 *(uint64_t *)(secondTouch + 0x10) = 0x200000001ULL;
                 *(uint16_t *)(secondTouch + 0x40) = 0x8000;
                 *(uint16_t *)(secondTouch + 0x5c) = 0x3ff8;
@@ -395,8 +400,9 @@ static bool send_via_raw_indigo(SimBridge *bridge, CGPoint point,
 
                 // Copy so sendWithMessage: can safely free it
                 void *buf = malloc(rSize);
-                if (!buf) return;
+                if (!buf) { free(result); return; }
                 memcpy(buf, result, rSize);
+                free(result); // Free the original IndigoHID buffer
 
                 NSLog(@"[SimBridge] %s: %zu bytes (pt=%.1f,%.1f sz=%.0f,%.0f)",
                       label, rSize, point.x, point.y, size.width, size.height);
@@ -605,6 +611,10 @@ bool send_scroll_event(SimBridge *bridge, double x, double y, double dx, double 
                 CGPoint point1 = CGPointMake(screenX, screenY);
                 CGSize unitSize = CGSizeMake(1.0, 1.0);
                 const int HID_TYPE_CONSTANT = 0x32;
+                // TODO: dx/dy are currently unused. IndigoHID direction=22 generates
+                // a fixed scroll event regardless of magnitude. To support variable
+                // scroll speed, we'd need to reverse-engineer additional IndigoHID
+                // direction codes or patch the HID message buffer directly.
                 const int SCROLL_DIRECTION = 22;
 
                 void *indigoResult = fn(&point1, NULL, HID_TYPE_CONSTANT,
@@ -619,12 +629,15 @@ bool send_scroll_event(SimBridge *bridge, double x, double y, double dx, double 
                 void *buffer = malloc(indigoSize);
                 if (buffer) {
                     memcpy(buffer, indigoResult, indigoSize);
+                    free(indigoResult);
 
                     ((void (*)(id, SEL, void *, BOOL, dispatch_queue_t, id))objc_msgSend)(
                         client, bridge->sendSel, buffer, YES, completionQ, nil
                     );
                     success = true;
                     NSLog(@"[SimBridge] Scroll sent (%zu bytes)", indigoSize);
+                } else {
+                    free(indigoResult);
                 }
 
             } @catch (NSException *e) {
@@ -681,12 +694,15 @@ bool send_key_event(SimBridge *bridge, uint16_t keycode, int direction) {
                 void *buffer = malloc(indigoSize);
                 if (buffer) {
                     memcpy(buffer, indigoResult, indigoSize);
+                    free(indigoResult);
 
                     ((void (*)(id, SEL, void *, BOOL, dispatch_queue_t, id))objc_msgSend)(
                         client, bridge->sendSel, buffer, YES, completionQ, nil
                     );
                     success = true;
                     NSLog(@"[SimBridge] Key sent (keycode=0x%04x, %zu bytes)", keycode, indigoSize);
+                } else {
+                    free(indigoResult);
                 }
 
             } @catch (NSException *e) {
@@ -774,11 +790,14 @@ bool send_button_event(SimBridge *bridge, int button_type, int direction) {
                 void *buffer = malloc(indigoSize);
                 if (buffer) {
                     memcpy(buffer, indigoResult, indigoSize);
+                    free(indigoResult);
                     ((void (*)(id, SEL, void *, BOOL, dispatch_queue_t, id))objc_msgSend)(
                         client, bridge->sendSel, buffer, YES, completionQ, nil
                     );
                     success = true;
                     NSLog(@"[SimBridge] Button sent via IndigoHID (type=%d)", button_type);
+                } else {
+                    free(indigoResult);
                 }
             } @catch (NSException *e) {
                 NSLog(@"[SimBridge] Button IndigoHID exception: %@", e);

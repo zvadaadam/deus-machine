@@ -23,27 +23,40 @@ pub async fn build_and_run(
         }
     };
 
-    // 1. Find Xcode project (check root and ios/ subdirectory)
+    // 1-2. Find Xcode project + detect scheme (blocking filesystem I/O + subprocesses)
     log_line("Searching for Xcode project...");
-    let (xcode_project, is_workspace) = find_xcode_project(workspace_path)
-        .ok_or_else(|| SimulatorError::BuildFailed {
-            reason: format!(
-                "No .xcworkspace or .xcodeproj found under {} (searched up to 3 levels deep). \
-                 If this project uses XcodeGen, make sure `xcodegen` is installed.",
-                workspace_path
-            ),
-        })?;
+    let (xcode_project, is_workspace, scheme) = {
+        let ws_path = workspace_path.to_string();
+        let on_log_clone = on_log.clone();
+        tokio::task::spawn_blocking(move || {
+            let log = |msg: &str| {
+                if let Some(ref cb) = on_log_clone { cb(msg); }
+            };
+            let (xcode_project, is_workspace) = find_xcode_project(&ws_path)
+                .ok_or_else(|| SimulatorError::BuildFailed {
+                    reason: format!(
+                        "No .xcworkspace or .xcodeproj found under {} (searched up to 3 levels deep). \
+                         If this project uses XcodeGen, make sure `xcodegen` is installed.",
+                        ws_path
+                    ),
+                })?;
+            log::info!("Found Xcode project: {}", xcode_project.display());
+            log(&format!(
+                "Found: {}",
+                xcode_project.file_name().unwrap_or_default().to_string_lossy()
+            ));
 
-    log::info!("Found Xcode project: {}", xcode_project.display());
-    log_line(&format!(
-        "Found: {}",
-        xcode_project.file_name().unwrap_or_default().to_string_lossy()
-    ));
+            let scheme = find_scheme(&xcode_project, is_workspace)?;
+            log::info!("Using scheme: {}", scheme);
+            log(&format!("Scheme: {}", scheme));
 
-    // 2. Detect scheme
-    let scheme = find_scheme(&xcode_project, is_workspace)?;
-    log::info!("Using scheme: {}", scheme);
-    log_line(&format!("Scheme: {}", scheme));
+            Ok::<_, SimulatorError>((xcode_project, is_workspace, scheme))
+        })
+        .await
+        .map_err(|e| SimulatorError::BuildFailed {
+            reason: format!("Task join error: {}", e),
+        })??
+    };
 
     // 3. Build with xcodebuild
     let app_path = run_xcodebuild(

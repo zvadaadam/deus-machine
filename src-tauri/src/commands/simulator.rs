@@ -56,8 +56,11 @@ pub async fn start_streaming(
     // Boot the simulator headlessly if not already running
     ensure_booted(&udid).await.map_err(|e| e.to_string())?;
 
-    // Create new screen capture
-    let mut capture = ScreenCapture::new(&udid)?;
+    // Create new screen capture (wraps blocking ObjC init with 500ms sleep)
+    let capture_udid = udid.clone();
+    let mut capture = tokio::task::spawn_blocking(move || ScreenCapture::new(&capture_udid))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))??;
     capture.start()?;
 
     // Start MJPEG server with a watch receiver (never misses frames)
@@ -152,10 +155,10 @@ pub fn sim_send_scroll(
 
     if let Some(ref capture) = sim_state.capture {
         if !capture.send_scroll(x, y, dx, dy) {
-            eprintln!("[TAURI] Scroll injection failed at ({}, {})", x, y);
+            return Err("Scroll injection failed — HID client may not be available".to_string());
         }
     } else {
-        eprintln!("[TAURI] No active capture for scroll event");
+        return Err("No active capture for scroll event".to_string());
     }
 
     Ok(())
@@ -174,10 +177,10 @@ pub fn sim_send_key(
 
     if let Some(ref capture) = sim_state.capture {
         if !capture.send_key(keycode, dir) {
-            eprintln!("[TAURI] Key injection failed for keycode 0x{:04x}", keycode);
+            return Err(format!("Key injection failed for keycode 0x{:04x}", keycode));
         }
     } else {
-        eprintln!("[TAURI] No active capture for key event");
+        return Err("No active capture for key event".to_string());
     }
 
     Ok(())
@@ -199,10 +202,10 @@ pub fn sim_send_button(
 
     if let Some(ref capture) = sim_state.capture {
         if !capture.send_button(btn, dir) {
-            eprintln!("[TAURI] Button injection failed for type {}", button_type);
+            return Err(format!("Button injection failed for type {}", button_type));
         }
     } else {
-        eprintln!("[TAURI] No active capture for button event");
+        return Err("No active capture for button event".to_string());
     }
 
     Ok(())
