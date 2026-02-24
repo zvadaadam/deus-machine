@@ -31,22 +31,11 @@ import {
   MoreHorizontal,
   AlertCircle,
   Camera,
+  Check,
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,20 +75,68 @@ interface SimulatorPanelProps {
 // ---------------------------------------------------------------------------
 
 const MAC_KEYCODES: Record<string, number> = {
-  KeyA: 0, KeyS: 1, KeyD: 2, KeyF: 3, KeyH: 4, KeyG: 5,
-  KeyZ: 6, KeyX: 7, KeyC: 8, KeyV: 9, KeyB: 11, KeyQ: 12,
-  KeyW: 13, KeyE: 14, KeyR: 15, KeyY: 16, KeyT: 17,
-  Digit1: 18, Digit2: 19, Digit3: 20, Digit4: 21,
-  Digit6: 22, Digit5: 23, Equal: 24, Digit9: 25,
-  Digit7: 26, Minus: 27, Digit8: 28, Digit0: 29,
-  BracketRight: 30, KeyO: 31, KeyU: 32, BracketLeft: 33,
-  KeyI: 34, KeyP: 35, Enter: 36, KeyL: 37, KeyJ: 38,
-  Quote: 39, KeyK: 40, Semicolon: 41, Backslash: 42,
-  Comma: 43, Slash: 44, KeyN: 45, KeyM: 46, Period: 47,
-  Tab: 48, Space: 49, Backquote: 50, Backspace: 51,
-  ShiftLeft: 56, CapsLock: 57, AltLeft: 58, ControlLeft: 59,
-  ShiftRight: 60, AltRight: 61, ControlRight: 62,
-  ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126,
+  KeyA: 0,
+  KeyS: 1,
+  KeyD: 2,
+  KeyF: 3,
+  KeyH: 4,
+  KeyG: 5,
+  KeyZ: 6,
+  KeyX: 7,
+  KeyC: 8,
+  KeyV: 9,
+  KeyB: 11,
+  KeyQ: 12,
+  KeyW: 13,
+  KeyE: 14,
+  KeyR: 15,
+  KeyY: 16,
+  KeyT: 17,
+  Digit1: 18,
+  Digit2: 19,
+  Digit3: 20,
+  Digit4: 21,
+  Digit6: 22,
+  Digit5: 23,
+  Equal: 24,
+  Digit9: 25,
+  Digit7: 26,
+  Minus: 27,
+  Digit8: 28,
+  Digit0: 29,
+  BracketRight: 30,
+  KeyO: 31,
+  KeyU: 32,
+  BracketLeft: 33,
+  KeyI: 34,
+  KeyP: 35,
+  Enter: 36,
+  KeyL: 37,
+  KeyJ: 38,
+  Quote: 39,
+  KeyK: 40,
+  Semicolon: 41,
+  Backslash: 42,
+  Comma: 43,
+  Slash: 44,
+  KeyN: 45,
+  KeyM: 46,
+  Period: 47,
+  Tab: 48,
+  Space: 49,
+  Backquote: 50,
+  Backspace: 51,
+  ShiftLeft: 56,
+  CapsLock: 57,
+  AltLeft: 58,
+  ControlLeft: 59,
+  ShiftRight: 60,
+  AltRight: 61,
+  ControlRight: 62,
+  ArrowLeft: 123,
+  ArrowRight: 124,
+  ArrowDown: 125,
+  ArrowUp: 126,
 };
 
 // ---------------------------------------------------------------------------
@@ -131,6 +168,29 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
   const [state, setState] = useState<SimPhase>({ phase: "idle" });
 
+  // Whether this workspace has a buildable Xcode project (null = still checking).
+  // Gates the "Build & Run" button — simulator streaming works regardless.
+  const [hasProject, setHasProject] = useState<boolean | null>(null);
+
+  // Probe for Xcode project on mount and when workspace changes.
+  // Fast filesystem scan via Rust — no xcodebuild, no side effects.
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset probe state before async fetch
+    setHasProject(null);
+    simulatorService.hasXcodeProject(workspacePath).then(
+      (result) => {
+        if (!cancelled) setHasProject(result);
+      },
+      () => {
+        if (!cancelled) setHasProject(false);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
+
   // Canvas renders MJPEG frames — the img element is kept offscreen to avoid
   // WebKit's page-level loading indicator (MJPEG connections never "complete").
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -148,8 +208,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
 
   // Keep streaming ref in sync for unmount cleanup
   useEffect(() => {
-    isStreamingRef.current =
-      state.phase !== "idle" && state.phase !== "error";
+    isStreamingRef.current = state.phase !== "idle" && state.phase !== "error";
   }, [state.phase]);
 
   // Cleanup on unmount — stop the streaming pipeline (MJPEG server, ObjC bridge,
@@ -198,10 +257,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
           (s) =>
             s.runtime.includes("iOS") ||
             s.device_type.includes("iPhone") ||
-            s.device_type.includes("iPad"),
+            s.device_type.includes("iPad")
         )
         .sort((a, b) => scoreSimulator(b) - scoreSimulator(a)),
-    [simulators],
+    [simulators]
   );
 
   const selectedSim = iosSimulators.find((s) => s.udid === selectedUdid);
@@ -285,7 +344,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
             (s) =>
               s.runtime.includes("iOS") ||
               s.device_type.includes("iPhone") ||
-              s.device_type.includes("iPad"),
+              s.device_type.includes("iPad")
           )
           .sort((a, b) => scoreSimulator(b) - scoreSimulator(a));
         setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
@@ -295,8 +354,8 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
     }
   }, [selectedUdid]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount
     loadSimulators();
   }, [loadSimulators]);
 
@@ -410,7 +469,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       lastCoordsRef.current = coords;
       return coords;
     },
-    [],
+    []
   );
 
   // Log touch failure once, then suppress subsequent warnings
@@ -429,7 +488,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       const coords = getNormalizedCoords(e);
       if (coords) simulatorService.sendTouch(coords.x, coords.y, "began").catch(warnTouchFailed);
     },
-    [isLive, getNormalizedCoords, warnTouchFailed],
+    [isLive, getNormalizedCoords, warnTouchFailed]
   );
 
   const handleMouseMove = useCallback(
@@ -438,7 +497,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       const coords = getNormalizedCoords(e);
       if (coords) simulatorService.sendTouch(coords.x, coords.y, "moved").catch(warnTouchFailed);
     },
-    [isLive, getNormalizedCoords, warnTouchFailed],
+    [isLive, getNormalizedCoords, warnTouchFailed]
   );
 
   const handleMouseUp = useCallback(
@@ -447,7 +506,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       const coords = getNormalizedCoords(e);
       if (coords) simulatorService.sendTouch(coords.x, coords.y, "ended").catch(warnTouchFailed);
     },
-    [isLive, getNormalizedCoords, warnTouchFailed],
+    [isLive, getNormalizedCoords, warnTouchFailed]
   );
 
   // Window-level mouseup — catches drag-release outside the image
@@ -472,7 +531,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       e.preventDefault();
       simulatorService.sendScroll(coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
     },
-    [isLive, getNormalizedCoords],
+    [isLive, getNormalizedCoords]
   );
 
   // -------------------------------------------------------------------------
@@ -484,9 +543,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       const bytes = await simulatorService.takeScreenshot();
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
       if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
-        await navigator.clipboard.write([
-          new ClipboardItem({ "image/png": blob }),
-        ]);
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -527,7 +584,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         simulatorService.sendKey(keycode, "down").catch(() => {});
       }
     },
-    [isLive, hidAvailable, handleScreenshot],
+    [isLive, hidAvailable, handleScreenshot]
   );
 
   const handleKeyUp = useCallback(
@@ -540,7 +597,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         simulatorService.sendKey(keycode, "up").catch(() => {});
       }
     },
-    [isLive, hidAvailable],
+    [isLive, hidAvailable]
   );
 
   // -------------------------------------------------------------------------
@@ -550,10 +607,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   if (iosSimulators.length === 0 && state.phase !== "error") {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Smartphone className="h-8 w-8 text-text-muted" />
+        <Smartphone className="text-text-muted h-8 w-8" />
         <div>
-          <p className="text-sm font-medium text-text-secondary">No iOS Simulators</p>
-          <p className="mt-1 text-xs text-text-muted">
+          <p className="text-text-secondary text-sm font-medium">No iOS Simulators</p>
+          <p className="text-text-muted mt-1 text-xs">
             Open Xcode and create a simulator to get started.
           </p>
         </div>
@@ -574,109 +631,140 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   return (
     <div className="flex h-full flex-col">
       {/* ── Toolbar ─────────────────────────────────────────────── */}
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
+      <div className="border-border-subtle flex h-9 shrink-0 items-center gap-2 border-b px-3">
         <TooltipProvider delayDuration={200}>
-        {/* Status dot — reflects current phase, sits left of the selector */}
-        <div
-          className={cn("h-1.5 w-1.5 shrink-0 rounded-full", {
-            "bg-muted-foreground/50": state.phase === "idle",
-            "bg-warning animate-pulse": state.phase === "booting" || state.phase === "building",
-            "bg-success": state.phase === "streaming" || state.phase === "running",
-            "bg-destructive": state.phase === "error",
-          })}
-        />
+          {/* Status dot — reflects current phase, sits left of the selector */}
+          <div
+            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", {
+              "bg-muted-foreground/50": state.phase === "idle",
+              "bg-warning animate-pulse": state.phase === "booting" || state.phase === "building",
+              "bg-success": state.phase === "streaming" || state.phase === "running",
+              "bg-destructive": state.phase === "error",
+            })}
+          />
 
-        {/* Device selector */}
-        <Select
-          value={selectedUdid ?? ""}
-          onValueChange={setSelectedUdid}
-          disabled={selectDisabled}
-        >
-          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
-            <SelectValue placeholder="Select simulator..." />
-          </SelectTrigger>
-          <SelectContent>
-            {iosSimulators.map((sim) => (
-              <SelectItem key={sim.udid} value={sim.udid}>
-                <span className="flex items-center gap-1.5">
+          {/* Device selector — lightweight dropdown matching file-browser filter style */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                disabled={selectDisabled}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease] disabled:pointer-events-none disabled:opacity-50"
+              >
+                <Smartphone className="h-[11px] w-[11px] shrink-0" />
+                <span className="truncate">
+                  {selectedSim
+                    ? `${selectedSim.name}  ${selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}`
+                    : "Select simulator..."}
+                </span>
+                <ChevronDown className="h-[10px] w-[10px] shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[200px]">
+              {iosSimulators.map((sim) => (
+                <DropdownMenuItem
+                  key={sim.udid}
+                  onClick={() => setSelectedUdid(sim.udid)}
+                  className="gap-2 text-xs"
+                >
+                  <Check
+                    className={cn(
+                      "h-3 w-3 shrink-0",
+                      selectedUdid === sim.udid ? "opacity-100" : "opacity-0"
+                    )}
+                  />
                   {sim.state === "Booted" && (
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                    <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
                   )}
-                  {sim.name}
-                  <span className="ml-auto text-[10px] text-text-muted">
+                  <span className="truncate">{sim.name}</span>
+                  <span className="text-text-muted ml-auto text-[10px]">
                     {sim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
                   </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Spacer — pushes action buttons to the right */}
+          <div className="flex-1" />
+
+          {/* No-touch warning — inline in toolbar when HID is unavailable */}
+          {isLive && !hidAvailable && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-warning flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  <span className="text-[10px]">No touch</span>
                 </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px]">
+                <p className="text-xs">
+                  HID client not available. Touch, scroll, and keyboard input won't work. Check
+                  Xcode/Simulator.app installation.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
 
-        {/* No-touch warning — inline in toolbar when HID is unavailable */}
-        {isLive && !hidAvailable && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex items-center gap-1 text-warning">
-                <AlertCircle className="h-3 w-3" />
-                <span className="text-[10px]">No touch</span>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[220px]">
-              <p className="text-xs">
-                HID client not available. Touch, scroll, and keyboard input
-                won't work. Check Xcode/Simulator.app installation.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Primary action — morphs based on state. Idle CTA is in the viewport, not here. */}
+          {/* Primary action — morphs based on state. Idle CTA is in the viewport, not here. */}
           {match(state)
             .with({ phase: "idle" }, () => null)
             .with({ phase: "booting" }, () => (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="h-7 gap-1.5 px-2.5 text-xs"
-              >
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" />
                 Booting
               </Button>
             ))
-            .with({ phase: "streaming" }, () => (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBuildAndRun}
-                className="h-7 gap-1.5 px-2.5 text-xs"
-              >
-                <Rocket className="h-3.5 w-3.5" />
-                Build & Run
-              </Button>
-            ))
+            .with({ phase: "streaming" }, () =>
+              hasProject ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBuildAndRun}
+                  className="h-7 gap-1.5 px-2.5 text-xs"
+                >
+                  <Rocket className="h-3 w-3" />
+                  Build & Run
+                </Button>
+              ) : hasProject === false ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled
+                        className="h-7 gap-1.5 px-2.5 text-xs opacity-40"
+                      >
+                        <Rocket className="h-3 w-3" />
+                        Build & Run
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    No Xcode project found in this workspace
+                  </TooltipContent>
+                </Tooltip>
+              ) : null
+            )
             .with({ phase: "building" }, () => (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="h-7 gap-1.5 px-2.5 text-xs"
-              >
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" />
                 Building
               </Button>
             ))
-            .with({ phase: "running" }, () => (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBuildAndRun}
-                className="h-7 gap-1.5 px-2.5 text-xs"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Rebuild
-              </Button>
-            ))
+            .with({ phase: "running" }, () =>
+              hasProject ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBuildAndRun}
+                  className="h-7 gap-1.5 px-2.5 text-xs"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Rebuild
+                </Button>
+              ) : null
+            )
             .with({ phase: "error" }, (s) =>
               s.canRetry ? (
                 <Button
@@ -685,10 +773,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
                   onClick={handleRetry}
                   className="h-7 gap-1.5 px-2.5 text-xs"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
+                  <RotateCcw className="h-3 w-3" />
                   Retry
                 </Button>
-              ) : null,
+              ) : null
             )
             .exhaustive()}
 
@@ -696,13 +784,8 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
           {state.phase !== "idle" && state.phase !== "error" && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleStop}
-                  className="h-7 w-7 p-0"
-                >
-                  <Square className="h-3.5 w-3.5" />
+                <Button variant="ghost" size="sm" onClick={handleStop} className="h-7 w-7 p-0">
+                  <Square className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Stop simulator</TooltipContent>
@@ -713,13 +796,8 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
           {isLive && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleHome}
-                  className="h-7 w-7 p-0"
-                >
-                  <Home className="h-3.5 w-3.5" />
+                <Button variant="ghost" size="sm" onClick={handleHome} className="h-7 w-7 p-0">
+                  <Home className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Home</TooltipContent>
@@ -736,7 +814,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
                   onClick={handleScreenshot}
                   className="h-7 w-7 p-0"
                 >
-                  <Camera className="h-3.5 w-3.5" />
+                  <Camera className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Screenshot ⌘⇧S</TooltipContent>
@@ -750,8 +828,8 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         ref={viewportRef}
         tabIndex={isLive ? 0 : -1}
         className={cn(
-          "relative flex flex-1 cursor-default items-center justify-center overflow-hidden bg-bg-base outline-none select-none",
-          isLive && "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/30",
+          "bg-bg-base relative flex flex-1 cursor-default items-center justify-center overflow-hidden outline-none select-none",
+          isLive && "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
         )}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -814,11 +892,11 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
               </svg>
 
               <div className="flex flex-col items-center gap-1.5">
-                <p className="text-sm font-medium text-text-secondary">
+                <p className="text-text-secondary text-sm font-medium">
                   {selectedSim?.name ?? "No simulator selected"}
                 </p>
                 {selectedSim && (
-                  <p className="text-xs text-text-muted">
+                  <p className="text-text-muted text-xs">
                     {selectedSim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
                   </p>
                 )}
@@ -833,20 +911,25 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
                 <Play className="h-4 w-4" />
                 Start Simulator
               </Button>
+
+              {hasProject === false && (
+                <p className="text-text-muted max-w-[220px] text-center text-xs">
+                  No Xcode project found. You can still use the simulator, but Build & Run is not
+                  available.
+                </p>
+              )}
             </div>
           ))
           .with({ phase: "booting" }, () => (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <p className="text-xs text-text-secondary">Booting simulator...</p>
+              <Loader2 className="text-primary h-6 w-6 animate-spin" />
+              <p className="text-text-secondary text-xs">Booting simulator...</p>
             </div>
           ))
           .with({ phase: "error" }, (s) => (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
-              <AlertCircle className="h-5 w-5 text-destructive/70" />
-              <p className="max-w-[240px] text-center text-xs text-destructive">
-                {s.message}
-              </p>
+              <AlertCircle className="text-destructive/70 h-5 w-5" />
+              <p className="text-destructive max-w-[240px] text-center text-xs">{s.message}</p>
               {s.canRetry && (
                 <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
                   <RotateCcw className="mr-1.5 h-3 w-3" />
@@ -869,10 +952,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
 
       {/* ── App bar — bottom strip when app is running ──────────── */}
       {state.phase === "running" && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-t border-border-subtle px-3">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+        <div className="border-border-subtle flex h-8 shrink-0 items-center gap-2 border-t px-3">
+          <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
           <span
-            className="min-w-0 flex-1 truncate text-xs text-text-secondary"
+            className="text-text-secondary min-w-0 flex-1 truncate text-xs"
             title={state.app.bundle_id}
           >
             {state.app.name}
@@ -881,12 +964,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRelaunch}
-                  className="h-6 w-6 p-0"
-                >
+                <Button variant="ghost" size="sm" onClick={handleRelaunch} className="h-6 w-6 p-0">
                   <Rocket className="h-3 w-3" />
                 </Button>
               </TooltipTrigger>
@@ -917,7 +995,6 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
           </TooltipProvider>
         </div>
       )}
-
     </div>
   );
 }
@@ -960,39 +1037,37 @@ function BuildDrawer({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col border-t border-border-subtle",
-        expanded && "max-h-[40%]",
+        "border-border-subtle flex shrink-0 flex-col border-t",
+        expanded && "max-h-[40%]"
       )}
     >
       {/* Shimmer bar — 2px progress indicator at the top edge of the drawer */}
       <div className="h-0.5 shrink-0 overflow-hidden">
-        <div className="h-full w-1/3 bg-primary/80 animate-[build-shimmer_1.8s_cubic-bezier(.165,.84,.44,1)_infinite]" />
+        <div className="bg-primary/80 h-full w-1/3 animate-[build-shimmer_1.8s_cubic-bezier(.165,.84,.44,1)_infinite]" />
       </div>
 
       {/* Header strip — click to toggle log body. Shows latest line when collapsed. */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex h-7 shrink-0 items-center gap-2 bg-bg-surface px-3 transition-colors duration-200 ease hover:bg-bg-surface/80"
+        className="bg-bg-surface ease hover:bg-bg-surface/80 flex h-7 shrink-0 items-center gap-2 px-3 transition-colors duration-200"
       >
-        <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" />
-        <span className="text-xs font-medium text-text-secondary">Building</span>
+        <span className="bg-warning h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
+        <span className="text-text-secondary text-xs font-medium">Building</span>
 
         {/* Collapsed preview — truncated latest log line */}
         {!expanded && (
-          <span className="min-w-0 flex-1 truncate px-2 text-left font-mono text-[10px] text-text-muted">
+          <span className="text-text-muted min-w-0 flex-1 truncate px-2 text-left font-mono text-[10px]">
             {latestLine}
           </span>
         )}
 
         <span className="ml-auto flex items-center gap-2">
-          <span className="font-mono text-[10px] tabular-nums text-text-muted">
-            {formatted}
-          </span>
+          <span className="text-text-muted font-mono text-[10px] tabular-nums">{formatted}</span>
           <ChevronDown
             className={cn(
-              "h-3 w-3 text-text-muted transition-transform duration-200",
-              expanded && "rotate-180",
+              "text-text-muted h-3 w-3 transition-transform duration-200",
+              expanded && "rotate-180"
             )}
           />
         </span>
@@ -1000,9 +1075,9 @@ function BuildDrawer({
 
       {/* Scrollable log body — only visible when expanded */}
       {expanded && (
-        <div className="flex-1 overflow-y-auto bg-bg-base px-3 py-2">
+        <div className="bg-bg-base flex-1 overflow-y-auto px-3 py-2">
           {logs.length === 0 ? (
-            <p className="font-mono text-[10px] leading-relaxed text-text-muted">
+            <p className="text-text-muted font-mono text-[10px] leading-relaxed">
               Waiting for build output...
             </p>
           ) : (
@@ -1013,7 +1088,7 @@ function BuildDrawer({
                   "font-mono text-[10px] leading-relaxed",
                   i === logs.length - 1 ? "text-text-secondary" : "text-text-muted",
                   line.includes("error:") && "text-destructive",
-                  line.includes("warning:") && "text-warning",
+                  line.includes("warning:") && "text-warning"
                 )}
               >
                 {line}

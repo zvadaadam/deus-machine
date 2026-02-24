@@ -25,7 +25,11 @@ import { WelcomeView } from "@/features/repository";
 import { useWorkspaceLayout, useFileChanges } from "@/features/workspace";
 import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
 import { useRightPanelSizing } from "@/features/workspace/hooks/useRightPanelSizing";
-import { useArchiveWorkspace, useRetrySetup, useManifestTasks } from "@/features/workspace/api/workspace.queries";
+import {
+  useArchiveWorkspace,
+  useRetrySetup,
+  useManifestTasks,
+} from "@/features/workspace/api/workspace.queries";
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import type { RightSideTab } from "@/features/workspace/store";
@@ -33,7 +37,8 @@ import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { AllFilesDiffViewer } from "@/features/workspace/ui/AllFilesDiffViewer";
 import type { AllFilesDiffViewerRef } from "@/features/workspace/ui/AllFilesDiffViewer";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
-import { RightSidecar } from "@/features/workspace/ui/RightSidecar";
+import { RightSidecar, isTabVisible } from "@/features/workspace/ui/RightSidecar";
+import { useSettings } from "@/features/settings/api/settings.queries";
 import { FileViewer } from "@/features/file-browser";
 import { match } from "ts-pattern";
 import { SidebarInset, useSidebar } from "@/components/ui";
@@ -102,8 +107,15 @@ export function MainContent({
     selectedWorkspace?.git_default_branch ?? "main"
   );
 
+  // Effective tab: if the stored tab is hidden by experimental settings, fall back to "code".
+  // The store still holds the original value so re-enabling restores the user's previous tab.
+  const experimentalSettings = useSettings().data;
+  const effectiveRightSideTab = isTabVisible(rightSideTab, experimentalSettings)
+    ? rightSideTab
+    : "code";
+
   // Derived from store — no useState/callback delay on workspace load
-  const isBrowserTab = rightSideTab === "browser";
+  const isBrowserTab = effectiveRightSideTab === "browser";
   const isBrowserDetached = useBrowserWindowStore((s) => s.detachedWindowOpen);
 
   // --- Middle panel state (single active view) ---
@@ -118,8 +130,10 @@ export function MainContent({
   // Reset state when workspace changes (React-recommended render-time pattern).
   // Capture flag so we can also reset the sizing hook's ref after it's created.
   const prevWorkspaceIdRef = useRef(selectedWorkspaceId);
+  // eslint-disable-next-line react-hooks/refs -- intentional: React-recommended render-time comparison pattern
   const workspaceChanged = prevWorkspaceIdRef.current !== selectedWorkspaceId;
   if (workspaceChanged) {
+    // eslint-disable-line react-hooks/refs -- derived from ref comparison above
     prevWorkspaceIdRef.current = selectedWorkspaceId;
     if (middlePanel !== null) setMiddlePanel(null);
     if (parkedMiddlePanel !== null) setParkedMiddlePanel(null);
@@ -154,8 +168,8 @@ export function MainContent({
 
   // Watch workspace for file changes (event-driven cache invalidation)
   const isWatched = useFileWatcher(
-    isReady ? selectedWorkspace?.workspace_path ?? null : null,
-    isReady ? selectedWorkspaceId : null,
+    isReady ? (selectedWorkspace?.workspace_path ?? null) : null,
+    isReady ? selectedWorkspaceId : null
   );
 
   // File changes for all-diffs view — polling disabled when file watcher is active
@@ -194,6 +208,7 @@ export function MainContent({
   // Deferred reset: hasRestoredWidthRef comes from the hook above, but needs
   // resetting on workspace change (detected earlier in the render pass).
   if (workspaceChanged) {
+    // eslint-disable-line react-hooks/refs -- derived from ref comparison above
     // eslint-disable-next-line react-hooks/refs -- intentional: reset on workspace change during render
     hasRestoredWidthRef.current = false;
   }
@@ -331,7 +346,7 @@ export function MainContent({
         if (tab === "code") {
           handleRestoreParkedMiddlePanel();
         }
-      } else if (tab === rightSideTab) {
+      } else if (tab === effectiveRightSideTab) {
         // Clicked the already-active tab — collapse content
         rightPanelRef.current?.collapse();
       } else {
@@ -339,7 +354,7 @@ export function MainContent({
         // If crossing a size category boundary (normal <-> browser),
         // resize to the new tab's target width.
         setRightSideTab(tab);
-        if (isCategoryBoundary(rightSideTab, tab)) {
+        if (isCategoryBoundary(effectiveRightSideTab, tab)) {
           resizeToTab(tab);
         }
         // Returning to code tab — restore parked diff if one was saved.
@@ -353,7 +368,7 @@ export function MainContent({
     [
       middlePanelActive,
       rightPanelCollapsed,
-      rightSideTab,
+      effectiveRightSideTab,
       setRightSideTab,
       handleRestoreParkedMiddlePanel,
       handleExitCompactMode,
@@ -405,18 +420,20 @@ export function MainContent({
 
   const handleViewSetupLogs = useCallback(() => {
     if (!selectedWorkspace) return;
-    WorkspaceService.fetchSetupLogs(selectedWorkspace.id).then(({ logs }) => {
-      if (!logs) {
-        toast.error("No setup logs available.");
-        return;
-      }
-      const blob = new Blob([logs], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }).catch(() => {
-      toast.error("Failed to fetch setup logs.");
-    });
+    WorkspaceService.fetchSetupLogs(selectedWorkspace.id)
+      .then(({ logs }) => {
+        if (!logs) {
+          toast.error("No setup logs available.");
+          return;
+        }
+        const blob = new Blob([logs], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      })
+      .catch(() => {
+        toast.error("Failed to fetch setup logs.");
+      });
   }, [selectedWorkspace]);
 
   // --- Manifest tasks (hive.json) ---
@@ -439,7 +456,9 @@ export function MainContent({
           }
         })
         .catch((err) => {
-          toast.error(`Failed to run task: ${err instanceof Error ? err.message : "Unknown error"}`);
+          toast.error(
+            `Failed to run task: ${err instanceof Error ? err.message : "Unknown error"}`
+          );
         });
     },
     [selectedWorkspace, setRightSideTab, rightPanelCollapsed, setRightPanelCollapsed]
@@ -480,7 +499,7 @@ export function MainContent({
       if ((e.metaKey || e.ctrlKey) && e.key === "]") {
         e.preventDefault();
         if (rightPanelCollapsed) {
-          resizeToTab(rightSideTab);
+          resizeToTab(effectiveRightSideTab);
         } else {
           rightPanelRef.current?.collapse();
         }
@@ -488,7 +507,13 @@ export function MainContent({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedWorkspace, chatPanelCollapsed, rightPanelCollapsed, rightSideTab, resizeToTab]);
+  }, [
+    selectedWorkspace,
+    chatPanelCollapsed,
+    rightPanelCollapsed,
+    effectiveRightSideTab,
+    resizeToTab,
+  ]);
 
   // --- Sync workspace changes to detached browser window ---
   const detachedWorkspaceContext = useMemo(
@@ -516,7 +541,9 @@ export function MainContent({
         data-slot="main-content"
         className={cn(
           "bg-bg-surface flex h-full min-w-0 flex-1 overflow-hidden border transition-[border-radius,border-color] duration-[280ms] ease-[cubic-bezier(.19,1,.22,1)]",
-          sidebarOpen ? "border-border-subtle rounded-l-xl border-r-0" : "border-transparent rounded-none",
+          sidebarOpen
+            ? "border-border-subtle rounded-l-xl border-r-0"
+            : "rounded-none border-transparent"
         )}
       >
         {/* Sidebar toggle — visible when sidebar collapsed and no workspace */}
@@ -549,8 +576,12 @@ export function MainContent({
               onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
               onReviewPR={handleOpenPR}
               onArchive={handleArchive}
-              onRetrySetup={selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined}
-              onViewSetupLogs={selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined}
+              onRetrySetup={
+                selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
+              }
+              onViewSetupLogs={
+                selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined
+              }
               tasks={manifestTasks}
               hasManifest={hasManifest}
               onRunTask={handleRunTask}
@@ -629,10 +660,15 @@ export function MainContent({
                           <ResizableHandle />
 
                           {/* Compact right panel (file list only — no sidecar) */}
-                          <ResizablePanel defaultSize={30} minSize={15} className="min-w-0" order={2}>
+                          <ResizablePanel
+                            defaultSize={30}
+                            minSize={15}
+                            className="min-w-0"
+                            order={2}
+                          >
                             <RightSidePanel
                               workspace={selectedWorkspace}
-                              activeTab={rightSideTab}
+                              activeTab={effectiveRightSideTab}
                               onOpenDiffTab={handleOpenDiff}
                               onOpenFilePreview={handleOpenFilePreview}
                               compact
@@ -692,13 +728,13 @@ export function MainContent({
                     >
                       {rightPanelCollapsed ? (
                         <CollapsedContentStrip
-                          activeTab={rightSideTab}
-                          onExpand={() => resizeToTab(rightSideTab)}
+                          activeTab={effectiveRightSideTab}
+                          onExpand={() => resizeToTab(effectiveRightSideTab)}
                         />
                       ) : (
                         <RightSidePanel
                           workspace={selectedWorkspace}
-                          activeTab={rightSideTab}
+                          activeTab={effectiveRightSideTab}
                           onOpenDiffTab={handleOpenDiff}
                           onOpenFilePreview={handleOpenFilePreview}
                           isWatched={isWatched}
@@ -711,7 +747,7 @@ export function MainContent({
 
               {/* Always-visible sidecar — outside ResizablePanelGroup */}
               <RightSidecar
-                activeTab={rightSideTab}
+                activeTab={effectiveRightSideTab}
                 onTabChange={handleSidecarTabChange}
                 contentCollapsed={!middlePanelActive && rightPanelCollapsed}
                 compact={middlePanelActive}
@@ -731,4 +767,3 @@ export function MainContent({
     </SidebarInset>
   );
 }
-
