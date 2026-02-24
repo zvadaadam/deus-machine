@@ -2,6 +2,8 @@
 // Manages the outbound WebSocket tunnel to the cloud relay.
 // Creates virtual WsConnections in ws.service for relay-forwarded clients.
 
+import { execSync } from "child_process";
+import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
@@ -43,6 +45,37 @@ const WATCHER_POLL_MS = 1_000; // 1s server-side check — one query covers all 
 
 const MAX_RECONNECT_DELAY = 30_000;
 const BASE_RECONNECT_DELAY = 1_000;
+
+// ---- Server Name Detection ----
+
+/** Detect a human-friendly name for this computer from the OS.
+ *  macOS: "Adam's MacBook Pro" (scutil ComputerName)
+ *  Linux/other: hostname stripped of .local suffix
+ *  Last resort: "{username}'s computer" */
+function getServerName(): string {
+  // User-configured override in settings
+  const custom = getSetting("server_name") as string | undefined;
+  if (custom) return custom;
+
+  // macOS: scutil --get ComputerName returns the friendly name
+  if (platform() === "darwin") {
+    try {
+      const name = execSync("scutil --get ComputerName", { encoding: "utf-8", timeout: 2000 }).trim();
+      if (name) return name;
+    } catch { /* fall through */ }
+  }
+
+  // Any platform: use hostname, strip .local suffix
+  const host = hostname().replace(/\.local$/, "");
+  if (host && host !== "localhost") return host;
+
+  // Last resort
+  try {
+    return `${userInfo().username}'s computer`;
+  } catch {
+    return "Hive Server";
+  }
+}
 
 // ---- Public API ----
 
@@ -108,7 +141,7 @@ function openTunnel(): void {
   tunnelWs.on("open", () => {
     console.log("[Relay] Tunnel connected, registering...");
     reconnectAttempt = 0;
-    sendToRelay({ type: "register", serverId: serverId!, relayToken: relayToken! });
+    sendToRelay({ type: "register", serverId: serverId!, relayToken: relayToken!, serverName: getServerName() });
   });
 
   tunnelWs.on("message", (raw: Buffer | string) => {
@@ -269,7 +302,7 @@ function pushInitialState(clientId: string): void {
     sendToRelay({
       type: "data",
       clientId,
-      payload: JSON.stringify({ type: "initial_state", workspaces, stats }),
+      payload: JSON.stringify({ type: "initial_state", workspaces, stats, serverName: getServerName() }),
     });
     console.log(`[Relay] Pushed initial state to client ${clientId}: ${(workspaces as unknown[]).length} workspaces`);
   } catch (err) {
