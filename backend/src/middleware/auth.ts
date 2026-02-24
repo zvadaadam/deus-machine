@@ -80,8 +80,9 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   // Update last seen (fire-and-forget — don't block the request)
   updateLastSeen(device.token_hash);
 
-  // Attach device to context for downstream handlers
-  c.set("device", device);
+  // Strip token_hash before attaching to context — downstream handlers don't need it
+  const { token_hash: _, ...safeDevice } = device;
+  c.set("device", safeDevice);
 
   await next();
 });

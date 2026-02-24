@@ -179,8 +179,10 @@ impl DbManager {
             Err(_) => return Ok(None), // File doesn't exist yet
         };
 
-        let json: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse preferences.json: {}", e))?;
+        let json: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(j) => j,
+            Err(_) => return Ok(None), // Treat corrupt/invalid JSON same as missing file
+        };
 
         match json.get(key) {
             Some(serde_json::Value::String(s)) => Ok(Some(s.clone())),
