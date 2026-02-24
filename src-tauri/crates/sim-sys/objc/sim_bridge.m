@@ -136,9 +136,9 @@ void sim_bridge_destroy(SimBridgeHandle handle) {
         // wait for an already-executing handler to finish.
         stop_frame_polling(bridge);
 
-        // Step 3: Unregister screen adapter callbacks (Radon two-step approach).
+        // Step 3: Unregister screen adapter callbacks (two-step approach).
         // This tells SimulatorKit to stop enqueuing new frame callbacks.
-        // Try legacyClient first (Radon pattern), then portDescriptor (fallback)
+        // Try legacyClient first, then portDescriptor (fallback)
         id adapterHost = bridge->legacyClient ?: bridge->portDescriptor;
         if (adapterHost && bridge->adapterCallbackUUID) {
             SEL unregAdapterSel = NSSelectorFromString(

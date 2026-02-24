@@ -154,7 +154,7 @@ function scoreSimulator(sim: SimulatorInfo): number {
   if (sim.device_type.includes("iPhone")) score += 1000;
   else if (sim.device_type.includes("iPad")) score += 100;
   if (sim.state === "Booted") score += 500;
-  if (sim.name.toLowerCase().includes("pool") || sim.name.toLowerCase().includes("radon"))
+  if (sim.name.toLowerCase().includes("pool") || sim.name.toLowerCase().includes("test"))
     score -= 5000;
   return score;
 }
@@ -212,7 +212,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   }, [state.phase]);
 
   // Cleanup on unmount — stop the streaming pipeline (MJPEG server, ObjC bridge,
-  // dispatch queues, Radon subprocess) when the panel is destroyed.
+  // dispatch queues, touch server subprocess) when the panel is destroyed.
   // Without this, resources leak until the window closes.
   useEffect(() => {
     return () => {

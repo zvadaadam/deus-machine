@@ -10,26 +10,27 @@ use tokio::sync::watch;
 use hive_sim_sys as bridge;
 
 // ============================================================================
-// MARK: - RadonTouchServer (simulator-server binary for touch injection)
+// MARK: - TouchServer (simulator-server binary for touch injection)
 // ============================================================================
 
-/// Manages the Radon `simulator-server-macos` subprocess for reliable touch injection.
+/// Manages the `simulator-server-macos` subprocess for reliable touch injection.
 ///
-/// Radon IDE ships a pre-compiled binary that handles touch/gesture injection via
-/// a simple stdin line protocol. This is the PRIMARY touch path — IndigoHID via
-/// the ObjC bridge is the FALLBACK (broken on some macOS versions).
-struct RadonTouchServer {
+/// The React Native IDE extension ships a pre-compiled binary that handles
+/// touch/gesture injection via a simple stdin line protocol. This is the PRIMARY
+/// touch path — IndigoHID via the ObjC bridge is the FALLBACK (broken on some
+/// macOS versions).
+struct TouchServer {
     process: Child,
 }
 
-impl RadonTouchServer {
+impl TouchServer {
     fn new(udid: &str) -> Result<Self, String> {
-        let radon_binary = find_radon_binary()
+        let binary = find_touch_server_binary()
             .ok_or_else(|| "simulator-server binary not found in Cursor or VSCode extensions".to_string())?;
 
-        log::info!("[RadonTouch] Starting simulator-server: {}", radon_binary);
+        log::info!("[TouchServer] Starting simulator-server: {}", binary);
 
-        let process = Command::new(&radon_binary)
+        let process = Command::new(&binary)
             .args(["ios", "--id", udid])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -37,7 +38,7 @@ impl RadonTouchServer {
             .spawn()
             .map_err(|e| format!("Failed to spawn simulator-server: {}", e))?;
 
-        log::info!("[RadonTouch] simulator-server started with PID: {}", process.id());
+        log::info!("[TouchServer] simulator-server started with PID: {}", process.id());
 
         // Give it time to initialize
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -52,7 +53,7 @@ impl RadonTouchServer {
             .ok_or_else(|| "simulator-server stdin not available".to_string())?;
 
         let cmd = format!("touch {} {:.4},{:.4}\n", touch_type, x, y);
-        log::debug!("[RadonTouch] Sending: {}", cmd.trim());
+        log::debug!("[TouchServer] Sending: {}", cmd.trim());
 
         stdin.write_all(cmd.as_bytes())
             .map_err(|e| format!("Failed to write touch command: {}", e))?;
@@ -63,15 +64,15 @@ impl RadonTouchServer {
     }
 }
 
-impl Drop for RadonTouchServer {
+impl Drop for TouchServer {
     fn drop(&mut self) {
-        log::info!("[RadonTouch] Stopping simulator-server");
+        log::info!("[TouchServer] Stopping simulator-server");
         let _ = self.process.kill();
     }
 }
 
-/// Find the Radon simulator-server binary by searching Cursor and VSCode extension dirs.
-fn find_radon_binary() -> Option<String> {
+/// Find the simulator-server binary by searching Cursor and VSCode extension dirs.
+fn find_touch_server_binary() -> Option<String> {
     let home = std::env::var("HOME").ok()?;
 
     // Search order: Cursor extensions first, then VSCode
@@ -169,8 +170,8 @@ pub struct ScreenCapture {
     // Screen dimensions
     _screen_width: f64,
     _screen_height: f64,
-    // Radon simulator-server subprocess for touch injection (primary path)
-    radon_touch: Option<RadonTouchServer>,
+    // simulator-server subprocess for touch injection (primary path)
+    touch_server: Option<TouchServer>,
 }
 
 // The handle is a raw pointer to ObjC objects managed on the ObjC side.
@@ -210,15 +211,15 @@ impl ScreenCapture {
             bridge::sim_bridge_get_screen_size(handle, &mut width, &mut height);
         }
 
-        // Try to start the Radon simulator-server for touch injection (primary path).
+        // Try to start the simulator-server for touch injection (primary path).
         // Falls back to IndigoHID via ObjC bridge if unavailable.
-        let radon_touch = match RadonTouchServer::new(udid) {
+        let touch_server = match TouchServer::new(udid) {
             Ok(server) => {
-                log::info!("[ScreenCapture] Radon touch server initialized — touch via simulator-server");
+                log::info!("[ScreenCapture] Touch server initialized — touch via simulator-server");
                 Some(server)
             }
             Err(e) => {
-                log::warn!("[ScreenCapture] Radon touch server unavailable (will use IndigoHID fallback): {}", e);
+                log::warn!("[ScreenCapture] Touch server unavailable (will use IndigoHID fallback): {}", e);
                 None
             }
         };
@@ -230,7 +231,7 @@ impl ScreenCapture {
             _callback_context: None,
             _screen_width: width,
             _screen_height: height,
-            radon_touch,
+            touch_server,
         })
     }
 
@@ -281,11 +282,11 @@ impl ScreenCapture {
         self.frame_rx.clone()
     }
 
-    /// Send a touch event. Uses Radon simulator-server as primary path,
+    /// Send a touch event. Uses simulator-server as primary path,
     /// falls back to IndigoHID via ObjC bridge if unavailable.
     /// Coordinates are normalized [0.0, 1.0]. Phase: 0=began, 1=moved, 2=ended.
     pub fn send_touch(&mut self, x: f64, y: f64, phase: i32) -> bool {
-        // Convert phase to touch type string for Radon protocol
+        // Convert phase to touch type string for simulator-server protocol
         let touch_type = match phase {
             0 => "Down",
             1 => "Move",
@@ -293,15 +294,15 @@ impl ScreenCapture {
             _ => return false,
         };
 
-        // PRIMARY: Use Radon simulator-server if available (proven working)
-        if let Some(ref mut radon) = self.radon_touch {
-            match radon.send_touch(x, y, touch_type) {
+        // PRIMARY: Use simulator-server if available (proven working)
+        if let Some(ref mut server) = self.touch_server {
+            match server.send_touch(x, y, touch_type) {
                 Ok(_) => {
-                    log::debug!("[Touch] Sent via Radon: {} at ({:.3}, {:.3})", touch_type, x, y);
+                    log::debug!("[Touch] Sent via simulator-server: {} at ({:.3}, {:.3})", touch_type, x, y);
                     return true;
                 }
                 Err(e) => {
-                    log::warn!("[Touch] Radon failed (falling back to IndigoHID): {}", e);
+                    log::warn!("[Touch] simulator-server failed (falling back to IndigoHID): {}", e);
                 }
             }
         }
@@ -370,9 +371,9 @@ impl ScreenCapture {
 impl Drop for ScreenCapture {
     fn drop(&mut self) {
         log::info!("Destroying screen capture");
-        // Kill Radon subprocess first (before ObjC bridge teardown)
-        if let Some(radon) = self.radon_touch.take() {
-            drop(radon);
+        // Kill touch server subprocess first (before ObjC bridge teardown)
+        if let Some(server) = self.touch_server.take() {
+            drop(server);
         }
         unsafe {
             bridge::sim_bridge_destroy(self.handle);
