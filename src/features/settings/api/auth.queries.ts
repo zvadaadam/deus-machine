@@ -5,7 +5,7 @@ import { AuthService } from "./auth.service";
 
 const authKeys = {
   devices: ["auth", "devices"] as const,
-  localIp: ["auth", "local-ip"] as const,
+  relayStatus: ["auth", "relay-status"] as const,
 };
 
 /** Fetch paired devices. Polls every 10s when enabled. */
@@ -37,12 +37,13 @@ export function useRevokeDevice() {
   });
 }
 
-/** Fetch the local network IP and server port. */
-export function useNetworkInfo(enabled: boolean) {
+/** Fetch relay connection status. Polls every 5s when enabled. */
+export function useRelayStatus(enabled: boolean) {
   return useQuery({
-    queryKey: authKeys.localIp,
-    queryFn: () => AuthService.getLocalIp(),
+    queryKey: authKeys.relayStatus,
+    queryFn: () => AuthService.getRelayStatus(),
     enabled,
-    staleTime: 60_000, // IP/port rarely change
+    refetchInterval: enabled ? 5_000 : false,
+    staleTime: 3_000,
   });
 }

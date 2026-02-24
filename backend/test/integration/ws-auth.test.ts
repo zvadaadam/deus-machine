@@ -44,18 +44,6 @@ vi.mock("../../src/server", () => ({
   getServerPort: () => 0,
 }));
 
-vi.mock("os", async (importOriginal) => {
-  const original = await importOriginal<typeof import("os")>();
-  return {
-    ...original,
-    networkInterfaces: () => ({
-      en0: [
-        { address: "192.168.1.100", family: "IPv4", internal: false, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: "192.168.1.100/24" },
-      ],
-    }),
-  };
-});
-
 import fs from "fs";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
