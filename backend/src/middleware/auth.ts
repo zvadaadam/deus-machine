@@ -37,7 +37,8 @@ function isLocalhost(ip: string | undefined): boolean {
 export const authMiddleware = createMiddleware(async (c, next) => {
   // Use the TCP socket address first — proxy headers are trivially spoofable
   // when no reverse proxy sits in front of the server.
-  const clientIp = c.env?.remoteAddress
+  // In @hono/node-server, the socket lives at c.env.incoming.socket.
+  const clientIp = (c.env as any)?.incoming?.socket?.remoteAddress
     || c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
     || c.req.header("x-real-ip");
 
