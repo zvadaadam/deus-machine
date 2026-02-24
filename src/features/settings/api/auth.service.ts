@@ -33,4 +33,5 @@ export interface RelayStatus {
   connected: boolean;
   clients: number;
   serverId: string | null;
+  relayUrl: string | null;
 }
