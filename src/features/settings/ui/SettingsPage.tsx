@@ -19,8 +19,7 @@ import {
   ExtensionsSection,
   EnvironmentSection,
   ExperimentalSection,
-  GatewaySection,
-  RemoteAccessSection,
+  AccessSection,
   UpdateSection,
 } from "./sections";
 
@@ -103,8 +102,7 @@ export function SettingsPage() {
       ))
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
-      .with("messaging", () => <GatewaySection {...sectionProps} />)
-      .with("remote-access", () => <RemoteAccessSection {...sectionProps} />)
+      .with("access", () => <AccessSection {...sectionProps} />)
       .with("updates", () => <UpdateSection />)
       .exhaustive();
   }

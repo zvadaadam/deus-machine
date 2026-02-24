@@ -22,7 +22,6 @@ export interface Settings {
   claude_model?: string;
   custom_endpoint?: string;
 
-
   // Experimental (default: true when absent — backwards compatible)
   experimental_simulator?: boolean;
   experimental_browser?: boolean;
@@ -78,4 +77,11 @@ export interface Agent {
  * Settings section identifiers
  * Used for navigation in settings UI
  */
-export type SettingsSection = "general" | "ai" | "extensions" | "environment" | "experimental" | "messaging" | "remote-access" | "updates";
+export type SettingsSection =
+  | "general"
+  | "ai"
+  | "extensions"
+  | "environment"
+  | "experimental"
+  | "access"
+  | "updates";
