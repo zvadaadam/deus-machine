@@ -2,17 +2,18 @@ import { useState } from "react";
 import { FolderPlus, Github, Plus } from "lucide-react";
 import { SidebarFooter as SidebarFooterUI } from "@/components/ui/sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AIStatusIndicator } from "@/features/ai-status/ui/AIStatusIndicator";
 import type { SidebarFooterProps } from "../model/types";
 
 /**
- * SidebarFooter — just "Add project" with a popover for two paths.
- * Settings lives in the header profile area — one entry point, not two.
+ * SidebarFooter — "Add project" + ambient AI provider status indicator.
+ * The status indicator renders nothing when all providers are healthy.
  */
 export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFooterProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <SidebarFooterUI className="px-3.5 py-3.5">
+    <SidebarFooterUI className="flex flex-row items-center justify-between px-3.5 py-3.5">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -55,6 +56,7 @@ export function SidebarFooter({ onAddRepository, onCloneRepository }: SidebarFoo
           </button>
         </PopoverContent>
       </Popover>
+      <AIStatusIndicator />
     </SidebarFooterUI>
   );
 }
