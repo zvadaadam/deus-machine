@@ -20,6 +20,7 @@ import {
 } from "./ws.service";
 import { validateDeviceToken, validatePairCode, createDeviceToken } from "./auth.service";
 import { getDatabase } from "../lib/database";
+import { getStats } from "../db";
 
 // ---- State ----
 
@@ -272,7 +273,7 @@ function handlePairRequest(pairId: string, code: string, deviceName: string): vo
 
 /**
  * Push an initial state snapshot (workspaces + stats) to a newly-authenticated relay client.
- * Uses inline SQL against the real app DB schema (repositories, workspaces, sessions, messages).
+ * Stats use the canonical getStats() query; workspace SQL matches the relay/broadcast pattern.
  */
 function pushInitialState(clientId: string): void {
   try {
@@ -295,17 +296,7 @@ function pushInitialState(clientId: string): void {
       ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
     `).all();
 
-    const stats = db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM workspaces) as workspaces,
-        (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
-        (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-        (SELECT COUNT(*) FROM repositories) as repos,
-        (SELECT COUNT(*) FROM sessions) as sessions,
-        (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
-        (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-        (SELECT COUNT(*) FROM messages) as messages
-    `).get();
+    const stats = getStats(db);
 
     sendToRelay({
       type: "data",
@@ -350,7 +341,7 @@ function handleVirtualClientMessage(connectionId: string, msg: Record<string, un
 
 /**
  * Handle on-demand data requests from relay-connected web clients.
- * Uses inline SQL against the real app DB schema (repositories, workspaces, sessions, messages).
+ * Stats use the canonical getStats() query; workspace/session/message queries use inline SQL.
  */
 function handleDataRequest(connectionId: string, msg: Record<string, unknown>): void {
   let relayClientId: string | null = null;
@@ -372,11 +363,13 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
         db.prepare(`
           SELECT
             w.id, w.slug, w.title,
-            w.git_branch, w.state,
-            r.name as repo_name,
+            w.git_branch, w.git_target_branch,
+            w.state, w.current_session_id,
+            w.pr_url, w.pr_number, w.setup_status, w.error_message,
+            w.updated_at,
+            r.name as repo_name, r.root_path, r.git_default_branch,
             s.status as session_status, s.model,
-            s.last_user_message_at as latest_message_sent_at,
-            w.updated_at
+            s.last_user_message_at as latest_message_sent_at
           FROM workspaces w
           LEFT JOIN repositories r ON w.repository_id = r.id
           LEFT JOIN sessions s ON w.current_session_id = s.id
@@ -384,19 +377,7 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
           ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
         `).all()
       )
-      .with("stats", () =>
-        db.prepare(`
-          SELECT
-            (SELECT COUNT(*) FROM workspaces) as workspaces,
-            (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
-            (SELECT COUNT(*) FROM workspaces WHERE state = 'archived') as workspaces_archived,
-            (SELECT COUNT(*) FROM repositories) as repos,
-            (SELECT COUNT(*) FROM sessions) as sessions,
-            (SELECT COUNT(*) FROM sessions WHERE status = 'idle') as sessions_idle,
-            (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
-            (SELECT COUNT(*) FROM messages) as messages
-        `).get()
-      )
+      .with("stats", () => getStats(db))
       .with("sessions", () => {
         const workspaceId = msg.workspaceId as string;
         if (!workspaceId) return null;
@@ -561,6 +542,11 @@ function tickWatcher(): void {
   } catch (err) {
     console.error("[Relay] Watcher tick error:", err);
   }
+}
+
+/** Immediately run one tick of the session watcher (for /api/notify). */
+export function triggerWatcherTick(): void {
+  tickWatcher();
 }
 
 function sendToRelay(frame: ServerFrame): void {

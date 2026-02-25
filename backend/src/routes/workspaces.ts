@@ -25,6 +25,7 @@ import {
   getSessionsByWorkspaceId,
 } from '../db';
 import type { WorkspaceWithDetailsRow } from '../db';
+import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 
 const execFileAsync = promisify(execFile);
 
@@ -105,6 +106,7 @@ app.patch('/workspaces/:id', async (c) => {
     }
   }
   const updated = getWorkspaceRaw(db, c.req.param('id'));
+  broadcastWorkspacesAndStats();
   return c.json(updated);
 });
 
@@ -524,6 +526,7 @@ app.post('/workspaces/:id/sessions', (c) => {
   });
 
   createSession();
+  broadcastWorkspacesAndStats();
 
   const session = getSessionRaw(db, sessionId);
   return c.json(session);

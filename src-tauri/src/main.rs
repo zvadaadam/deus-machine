@@ -160,7 +160,10 @@ fn main() {
 
             println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
 
-            match sidecar_manager.start(sidecar_path, &db_path) {
+            let notify_url = backend_manager.get_port()
+                .map(|port| format!("http://localhost:{}/api/notify", port));
+
+            match sidecar_manager.start(sidecar_path, &db_path, notify_url.as_deref()) {
                 Ok(_) => {
                     if let Some(socket_path) = sidecar_manager.get_socket_path() {
                         println!("[TAURI] ✅ Sidecar started, socket: {}", socket_path);
