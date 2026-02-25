@@ -153,7 +153,7 @@ const TreeNode = memo(function TreeNode({
       <div
         tabIndex={0}
         className={cn(
-          "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-sm",
+          "relative flex cursor-pointer items-center gap-1.5 py-[3px] pr-3 text-xs",
           "transition-colors duration-150 ease-out",
           "focus-visible:ring-ring/50 focus-visible:ring-1 focus-visible:outline-none",
           isSelected
@@ -210,7 +210,7 @@ const TreeNode = memo(function TreeNode({
 
         {/* Change stats (+N, -N) for files with diff data */}
         {!isDirectory && (node.additions || node.deletions) && (
-          <div className="text-xs flex items-center gap-1 font-mono tabular-nums opacity-60">
+          <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums opacity-60">
             {node.additions ? <span className="text-success/80">+{node.additions}</span> : null}
             {node.deletions ? <span className="text-destructive/80">-{node.deletions}</span> : null}
           </div>

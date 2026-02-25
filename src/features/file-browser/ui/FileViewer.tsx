@@ -82,7 +82,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
     return (
       <div
         key={lineNum}
-        className="relative flex items-stretch font-mono text-base leading-normal"
+        className="relative flex items-stretch font-mono text-[11px] leading-4"
       >
         {/* Line number gutter */}
         <span className="w-12 flex-shrink-0 px-3 text-right text-muted-foreground select-none">
