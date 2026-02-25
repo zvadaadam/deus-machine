@@ -18,6 +18,16 @@ import {
   type StatuspageStatusResponse,
 } from "../lib/providers";
 
+// --- Runtime validation ---
+
+const KNOWN_INDICATORS: ReadonlySet<string> = new Set<string>(["none", "minor", "major", "critical"]);
+
+function toSafeIndicator(value: unknown): StatuspageIndicator {
+  return typeof value === "string" && KNOWN_INDICATORS.has(value)
+    ? (value as StatuspageIndicator)
+    : "none";
+}
+
 // --- Fetchers ---
 
 async function fetchProviderStatus(
@@ -76,7 +86,7 @@ export function useProviderStatuses() {
 
   const statuses: ProviderStatusEntry[] = queries.map((q, i) => ({
     providerId: ALL_PROVIDER_IDS[i],
-    indicator: (q.data?.status.indicator ?? "none") as StatuspageIndicator,
+    indicator: toSafeIndicator(q.data?.status?.indicator),
     description: q.data?.status.description ?? "",
     isLoading: q.isLoading,
     isError: q.isError,

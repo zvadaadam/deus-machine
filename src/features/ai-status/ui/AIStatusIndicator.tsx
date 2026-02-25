@@ -92,7 +92,10 @@ function StatusPopover({ statuses }: { statuses: ProviderStatusEntry[] }) {
           <div key={s.providerId} className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <span
-                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", visuals.dotClass)}
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  s.isError ? "bg-text-muted" : visuals.dotClass
+                )}
               />
               <span className="text-text-primary truncate text-sm">{config.name}</span>
             </div>
