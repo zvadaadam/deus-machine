@@ -16,7 +16,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-bold text-white">AI Coding Tools</h2>
+        <h2 className="text-2xl font-semibold text-white">AI Coding Tools</h2>
         <p className="text-sm text-white/50">
           Hive orchestrates these AI agents to write code in your projects.
         </p>

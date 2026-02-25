@@ -168,7 +168,7 @@ function ErrorOutput({ output }: { output: NotebookCellOutput }) {
         </span>
       </div>
       {output.traceback && output.traceback.length > 0 && (
-        <pre className="text-destructive/70 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+        <pre className="text-destructive/70 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
           {stripAnsi(output.traceback.join("\n"))}
         </pre>
       )}

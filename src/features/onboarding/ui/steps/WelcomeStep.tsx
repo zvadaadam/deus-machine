@@ -12,11 +12,11 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
     <div className="flex w-full flex-col items-center gap-6 py-6">
       {/* Logo / Title */}
       <div className="flex flex-col items-center gap-2">
-        <p className="text-xs font-medium tracking-[0.25em] text-white/25 uppercase">
+        <p className="text-xs font-medium tracking-wide text-white/25 uppercase">
           Welcome to
         </p>
         <h1
-          className="text-[42px] tracking-wide text-white"
+          className="text-[42px] tracking-[0.02em] text-white"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           hivenet
@@ -24,7 +24,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       </div>
 
       {/* Tagline */}
-      <p className="max-w-[280px] text-center text-[14px] leading-relaxed text-white/40">
+      <p className="max-w-[280px] text-center text-lg leading-relaxed text-white/40">
         Manage multiple AI coding agents in parallel. Ship faster with your dev team of AIs.
       </p>
 

@@ -557,7 +557,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                     <div key={group}>
                       {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
                       <DropdownMenuLabel>
-                        <span className="text-text-muted/90 px-1 text-2xs font-normal tracking-[0.02em]">
+                        <span className="text-text-muted/90 px-1 text-2xs font-normal tracking-wide">
                           {group === "claude" ? "Claude Code" : "Codex"}
                         </span>
                       </DropdownMenuLabel>
@@ -580,7 +580,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                             {renderAgentIcon(option.agentType)}
                             <span className="font-normal">{option.label}</span>
                             {option.isNew && (
-                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-2xs tracking-[0.08em] uppercase">
+                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-2xs tracking-wide uppercase">
                                 New
                               </span>
                             )}
