@@ -24,6 +24,7 @@ import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
 import authRoutes from './routes/auth';
 import gateRoutes from './routes/gate';
+import notifyRoutes from './routes/notify';
 
 function isLocalhostIp(ip: string): boolean {
   return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
@@ -51,6 +52,7 @@ export function createApp() {
   app.route('/api', configRoutes);
   app.route('/api', settingsRoutes);
   app.route('/api', statsRoutes);
+  app.route('/api', notifyRoutes);
   app.route('/api', onboardingRoutes);
 
   // Browser gate page — serves pairing form at "/" for remote clients
