@@ -217,7 +217,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   useEffect(() => {
     return () => {
       if (isStreamingRef.current) {
-        simulatorService.stopStreaming().catch(() => {});
+        simulatorService.stopStreaming().catch((err) => console.warn("[Simulator] cleanup failed:", err));
       }
     };
   }, []);
@@ -263,17 +263,24 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
     [simulators]
   );
 
-  const selectedSim = iosSimulators.find((s) => s.udid === selectedUdid);
+  const selectedSim = useMemo(
+    () => iosSimulators.find((s) => s.udid === selectedUdid),
+    [iosSimulators, selectedUdid]
+  );
 
   // Whether device select should be disabled (any active state)
   const selectDisabled = state.phase !== "idle";
 
   // Stream URL from state (available in streaming, building, running)
-  const streamUrl = match(state)
-    .with({ phase: "streaming" }, (s) => s.stream.url)
-    .with({ phase: "building" }, (s) => s.stream.url)
-    .with({ phase: "running" }, (s) => s.stream.url)
-    .otherwise(() => null);
+  const streamUrl = useMemo(
+    () =>
+      match(state)
+        .with({ phase: "streaming" }, (s) => s.stream.url)
+        .with({ phase: "building" }, (s) => s.stream.url)
+        .with({ phase: "running" }, (s) => s.stream.url)
+        .otherwise(() => null),
+    [state]
+  );
 
   // Whether HID (touch injection) is available
   const hidAvailable = match(state)
@@ -350,7 +357,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
       }
     } catch (e) {
-      setState({ phase: "error", message: `Failed to load simulators: ${e}`, canRetry: false });
+      setState({ phase: "error", message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`, canRetry: false });
     }
   }, [selectedUdid]);
 
@@ -374,7 +381,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       }
       setState({ phase: "streaming", udid: selectedUdid, stream });
     } catch (e) {
-      setState({ phase: "error", message: `Failed to boot simulator: ${e}`, canRetry: true });
+      setState({ phase: "error", message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
     }
   };
 
@@ -387,7 +394,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
       const app = await simulatorService.buildAndRun(workspacePath);
       setState({ phase: "running", udid: s.udid, stream: s.stream, app });
     } catch (e) {
-      setState({ phase: "error", message: `Build failed: ${e}`, canRetry: true });
+      setState({ phase: "error", message: `Build failed: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
     }
   };
 
@@ -457,7 +464,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
 
   const getNormalizedCoords = useCallback(
-    (e: React.MouseEvent | MouseEvent, updateLast = true): { x: number; y: number } | null => {
+    (e: React.MouseEvent | React.WheelEvent | MouseEvent, updateLast = true): { x: number; y: number } | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
@@ -529,7 +536,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (!isLive) return;
-      const coords = getNormalizedCoords(e as unknown as React.MouseEvent, false);
+      const coords = getNormalizedCoords(e, false);
       if (!coords) return;
       e.preventDefault();
       simulatorService.sendScroll(coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
@@ -658,6 +665,8 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
             <DropdownMenuTrigger asChild>
               <button
                 disabled={selectDisabled}
+                aria-label="Select simulator device"
+                aria-haspopup="listbox"
                 className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease] disabled:pointer-events-none disabled:opacity-50"
               >
                 <Smartphone className="h-[11px] w-[11px] shrink-0" />
@@ -686,7 +695,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
                     <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
                   )}
                   <span className="truncate">{sim.name}</span>
-                  <span className="text-text-muted ml-auto text-[10px]">
+                  <span className="text-text-muted ml-auto text-xs">
                     {sim.runtime.replace("com.apple.CoreSimulator.SimRuntime.", "")}
                   </span>
                 </DropdownMenuItem>
@@ -703,7 +712,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
               <TooltipTrigger asChild>
                 <span className="text-warning flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  <span className="text-[10px]">No touch</span>
+                  <span className="text-xs">No touch</span>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[220px]">
@@ -1067,13 +1076,13 @@ function BuildDrawer({
 
         {/* Collapsed preview — truncated latest log line */}
         {!expanded && (
-          <span className="text-text-muted min-w-0 flex-1 truncate px-2 text-left font-mono text-[10px]">
+          <span className="text-text-muted min-w-0 flex-1 truncate px-2 text-left font-mono text-xs">
             {latestLine}
           </span>
         )}
 
         <span className="ml-auto flex items-center gap-2">
-          <span className="text-text-muted font-mono text-[10px] tabular-nums">{formatted}</span>
+          <span className="text-text-muted font-mono text-xs tabular-nums">{formatted}</span>
           <ChevronDown
             className={cn(
               "text-text-muted h-3 w-3 transition-transform duration-200",
@@ -1087,7 +1096,7 @@ function BuildDrawer({
       {expanded && (
         <div className="bg-bg-base flex-1 overflow-y-auto px-3 py-2">
           {logs.length === 0 ? (
-            <p className="text-text-muted font-mono text-[10px] leading-relaxed">
+            <p className="text-text-muted font-mono text-xs leading-relaxed">
               Waiting for build output...
             </p>
           ) : (
@@ -1095,7 +1104,7 @@ function BuildDrawer({
               <p
                 key={i}
                 className={cn(
-                  "font-mono text-[10px] leading-relaxed",
+                  "font-mono text-xs leading-relaxed",
                   i === logs.length - 1 ? "text-text-secondary" : "text-text-muted",
                   line.includes("error:") && "text-destructive",
                   line.includes("warning:") && "text-warning"

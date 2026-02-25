@@ -67,7 +67,7 @@ export function WorkspaceEmptyState({
     >
       <div className="flex flex-col items-center gap-5">
         <div className="text-center">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60 flex items-center justify-center gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60 flex items-center justify-center gap-2">
             {initializing && (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             )}
