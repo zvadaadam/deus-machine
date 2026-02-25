@@ -103,7 +103,7 @@ export const chatTheme = {
         body: "text-sm text-foreground", // 12px, standard - main content
         emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-1.5 py-0.5", // 11px, mono - filenames, commands
         mono: "text-xs font-mono text-foreground leading-5", // 11px, mono - terminal/code output
-        summary: "text-muted-foreground truncate text-xs", // 12px, muted - collapsed summary text
+        summary: "text-muted-foreground truncate text-xs", // 11px, muted - collapsed summary text
       },
     },
 
