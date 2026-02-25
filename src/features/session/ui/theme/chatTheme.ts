@@ -97,13 +97,13 @@ export const chatTheme = {
         info: "border-l-2 border-l-info",
         warning: "border-l-2 border-l-warning",
       },
-      // Content hierarchy for tool outputs (12px/11px system)
+      // Content hierarchy for tool outputs (11px/12px scale)
       contentHierarchy: {
-        metadata: "text-xs text-muted-foreground font-normal", // 12px, muted - secondary info
-        body: "text-sm text-foreground", // 14px, standard - main content
-        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-1.5 py-0.5", // 12px, mono - filenames, commands
-        mono: "text-xs font-mono text-foreground leading-5", // 12px, mono - terminal/code output (Cursor: 12px, line-height 1.25)
-        summary: "text-muted-foreground truncate text-xs", // 12px, muted - collapsed summary text
+        metadata: "text-xs text-muted-foreground font-normal", // 11px, muted - secondary info
+        body: "text-sm text-foreground", // 12px, standard - main content
+        emphasis: "text-xs font-normal font-mono text-foreground/80 rounded-sm px-1.5 py-0.5", // 11px, mono - filenames, commands
+        mono: "text-xs font-mono text-foreground leading-5", // 11px, mono - terminal/code output
+        summary: "text-muted-foreground truncate text-xs", // 11px, muted - collapsed summary text
       },
     },
 
@@ -156,13 +156,13 @@ export const chatTheme = {
       hover: "hover:border-border",
     },
     field:
-      "flex-1 bg-transparent border-none outline-none resize-none text-body-lg text-foreground placeholder:text-muted-foreground min-h-[24px] max-h-[200px] font-sans overflow-y-auto scrollbar-vibrancy",
+      "flex-1 bg-transparent border-none outline-none resize-none text-lg text-foreground placeholder:text-muted-foreground min-h-[24px] max-h-[200px] font-sans overflow-y-auto scrollbar-vibrancy",
     actions: {
       container: "flex items-center gap-2 flex-shrink-0",
       button:
-        "flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-muted/50 border border-border/50 hover:border-border rounded-full text-body-sm text-muted-foreground hover:text-foreground transition-colors duration-200 ease disabled:opacity-50 disabled:cursor-not-allowed",
+        "flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-muted/50 border border-border/50 hover:border-border rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 ease disabled:opacity-50 disabled:cursor-not-allowed",
       buttonDestructive:
-        "flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 border border-destructive/50 hover:border-destructive rounded-full text-body-sm text-destructive-foreground transition-colors duration-200 ease",
+        "flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 border border-destructive/50 hover:border-destructive rounded-full text-sm text-destructive-foreground transition-colors duration-200 ease",
     },
   },
 

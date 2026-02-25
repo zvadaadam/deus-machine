@@ -67,7 +67,7 @@ export function CollapsedChatStrip({
           {/* Rotated label — reads bottom-to-top like a book spine */}
           <span
             className={cn(
-              "text-xs font-medium tracking-[0.05em] uppercase",
+              "text-xs font-medium tracking-wide uppercase",
               "[writing-mode:vertical-rl] rotate-180",
               "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]",
             )}
@@ -132,7 +132,7 @@ export function CollapsedContentStrip({
               <Icon className="h-[14px] w-[14px] flex-shrink-0" />
               <span
                 className={cn(
-                  "text-xs font-medium tracking-[0.05em] uppercase",
+                  "text-xs font-medium tracking-wide uppercase",
                   "[writing-mode:vertical-rl] rotate-180",
                 )}
               >

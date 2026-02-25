@@ -25,7 +25,7 @@ export function AppIcon({
   return (
     <div
       className={cn(
-        "bg-muted text-muted-foreground inline-flex items-center justify-center rounded-[3px] text-[9px] font-semibold",
+        "bg-muted text-muted-foreground inline-flex items-center justify-center rounded-[3px] text-2xs font-semibold",
         className,
       )}
     >

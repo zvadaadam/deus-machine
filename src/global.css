@@ -142,36 +142,55 @@
   --font-family-pixel: var(--font-pixel);
 
   /*
-   * Typography Scale — Dense IDE system (12px base)
+   * Typography Scale — Dense IDE system (13px base)
    *
    * Override Tailwind defaults for a compact productivity tool.
-   * Each size includes font-size and line-height.
+   * Each size bundles font-size, line-height, and letter-spacing.
+   * Negative tracking throughout — the "premium texture" layer.
    *
-   * Scale: 2xs(9) → xs(10) → sm(11) → base(12) → lg(14) → xl(16) → 2xl(22) → 3xl(28)
+   * Scale: 2xs(9) → xs(11) → sm(12) → base(13) → lg(15) → xl(18) → 2xl(24) → 3xl(32)
    */
   --text-2xs: 9px;
-  --text-2xs--line-height: 1.45;
-  --text-xs: 10px;
+  --text-2xs--line-height: 1.35;
+  --text-2xs--letter-spacing: -0.003em;
+  --text-xs: 11px;
   --text-xs--line-height: 1.45;
-  --text-sm: 11px;
+  --text-xs--letter-spacing: -0.006em;
+  --text-sm: 12px;
   --text-sm--line-height: 1.5;
-  --text-base: 12px;
+  --text-sm--letter-spacing: -0.011em;
+  --text-base: 13px;
   --text-base--line-height: 1.5;
-  --text-lg: 14px;
-  --text-lg--line-height: 1.45;
-  --text-xl: 16px;
-  --text-xl--line-height: 1.35;
-  --text-2xl: 22px;
-  --text-2xl--line-height: 1.3;
-  --text-3xl: 28px;
-  --text-3xl--line-height: 1.2;
+  --text-base--letter-spacing: -0.011em;
+  --text-lg: 15px;
+  --text-lg--line-height: 1.35;
+  --text-lg--letter-spacing: -0.014em;
+  --text-xl: 18px;
+  --text-xl--line-height: 1.25;
+  --text-xl--letter-spacing: -0.018em;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 1.15;
+  --text-2xl--letter-spacing: -0.022em;
+  --text-3xl: 32px;
+  --text-3xl--line-height: 1.1;
+  --text-3xl--letter-spacing: -0.022em;
 
-  --tracking-tighter: -0.03em;
-  --tracking-tight: -0.015em;
-  --tracking-normal: 0em;
-  --tracking-wide: 0.015em;
+  /* Letter-spacing tokens — semantic tracking for manual use */
+  --tracking-display: -0.022em;
+  --tracking-title: -0.014em;
+  --tracking-body: -0.011em;
+  --tracking-caption: -0.006em;
+  --tracking-caps: 0.06em;
+
+  /* Legacy aliases — backward compatibility during migration */
+  --tracking-tighter: -0.022em;
+  --tracking-tight: -0.014em;
+  --tracking-normal: -0.011em;
+  --tracking-wide: 0.06em;
+  --tracking-widest: 0.1em;
 
   --leading-tight: 1.25;
+  --leading-snug: 1.35;
   --leading-normal: 1.5;
   --leading-relaxed: 1.6;
 
@@ -759,14 +778,14 @@
 
   /* --- Core surfaces (light mode — warm stone tones) --- */
   --background: #f5f5f4;
-  --foreground: #1d1d1f;
+  --foreground: oklch(0.15 0 0);
   --card: #ffffff;
-  --card-foreground: #1d1d1f;
+  --card-foreground: oklch(0.15 0 0);
   --popover: #ffffff;
-  --popover-foreground: #1d1d1f;
+  --popover-foreground: oklch(0.15 0 0);
 
-  /* --- Interactive accent (vivid blue, light variant) --- */
-  --primary: #266b9e;
+  /* --- Interactive accent (cool rose — pastel, warm, human) --- */
+  --primary: oklch(0.66 0.11 345);
   --primary-foreground: #ffffff;
 
   /* --- Secondary / structural --- */
@@ -775,34 +794,34 @@
   --muted: #e8e8e6;
   --muted-foreground: #8e8e93;
   --accent: #efefed;
-  --accent-foreground: #1d1d1f;
+  --accent-foreground: oklch(0.15 0 0);
 
-  /* --- Semantic signals --- */
-  --destructive: #bf3543;
+  /* --- Semantic signals (equiluminant OKLCH — all L=0.53 for equal visual weight) --- */
+  --destructive: oklch(0.53 0.19 25);
   --destructive-foreground: #ffffff;
-  --success: #158232;
+  --success: oklch(0.53 0.16 155);
   --success-foreground: #ffffff;
-  --warning: #8a6828;
+  --warning: oklch(0.53 0.14 75);
   --warning-foreground: #ffffff;
-  --info: #266b9e;
-  --info-foreground: #ffffff;
+  --info: var(--primary);
+  --info-foreground: var(--primary-foreground);
 
-  /* --- Status indicators --- */
-  --status-working: #158232;
-  --status-working-fg: #ffffff;
-  --status-compacting: #266b9e;
-  --status-compacting-fg: #ffffff;
-  --status-unread: #8a6828;
-  --status-unread-fg: #ffffff;
+  /* --- Status indicators (reference semantic tokens) --- */
+  --status-working: var(--success);
+  --status-working-fg: var(--success-foreground);
+  --status-compacting: var(--primary);
+  --status-compacting-fg: var(--primary-foreground);
+  --status-unread: var(--warning);
+  --status-unread-fg: var(--warning-foreground);
 
-  /* --- File type colors --- */
-  --file-typescript: #266b9e;
-  --file-rust: #bf3543;
-  --file-data: #8a6828;
-  --file-docs: #158232;
-  --file-styles: #266b9e;
-  --file-markup: #bf3543;
-  --file-image: #8a6828;
+  /* --- File type colors (reference semantic tokens) --- */
+  --file-typescript: var(--primary);
+  --file-rust: var(--destructive);
+  --file-data: var(--warning);
+  --file-docs: var(--success);
+  --file-styles: var(--primary);
+  --file-markup: var(--destructive);
+  --file-image: var(--warning);
 
   /* --- Z-index scale --- */
   --z-base: 0;
@@ -815,23 +834,23 @@
   --z-tooltip: 1200;
   --z-notification: 1300;
 
-  /* --- Borders & inputs --- */
-  --border: #e0e0e0;
-  --input: #e0e0e0;
+  /* --- Borders & inputs (semi-transparent — adapt to any surface) --- */
+  --border: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --input: color-mix(in oklch, var(--foreground) 8%, transparent);
   --input-surface: #ffffff;
   --input-tint: transparent;
-  --ring: #266b9e66;
+  --ring: color-mix(in oklch, var(--primary) 40%, transparent);
   --destructive-ring: color-mix(in oklch, var(--destructive) 20%, transparent);
 
   /* --- Sidebar (cool gray — recedes behind warm content) --- */
   --sidebar: #f3f4f6;
   --sidebar-foreground: #6e6e73;
-  --sidebar-primary: #266b9e;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: #efefed;
-  --sidebar-accent-foreground: #1d1d1f;
-  --sidebar-border: #ebebeb;
-  --sidebar-ring: #266b9e66;
+  --sidebar-accent-foreground: oklch(0.15 0 0);
+  --sidebar-border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --sidebar-ring: var(--ring);
 
   /* --- Extended background tiers (warm stone) --- */
   --bg-base: #f5f5f4;
@@ -846,18 +865,18 @@
   --bg-selection: #fffdfb;
   --bg-code: #f7f7f5;
 
-  /* --- Extended border tiers --- */
-  --border-subtle: #ebebeb;
-  --border-default: #e0e0e0;
-  --border-strong: #d4d4d4;
+  /* --- Extended border tiers (semi-transparent) --- */
+  --border-subtle: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --border-default: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --border-strong: color-mix(in oklch, var(--foreground) 14%, transparent);
 
-  /* --- Extended text hierarchy (Apple system colors) --- */
-  --text-primary: #1d1d1f;
-  --text-secondary: #48484a;
-  --text-tertiary: #6e6e73;
-  --text-subtle: #78788a;
-  --text-muted: #8e8e93;
-  --text-disabled: #aeaeb2;
+  /* --- Extended text hierarchy (OKLCH — wider gaps for readability) --- */
+  --text-primary: oklch(0.15 0 0);
+  --text-secondary: oklch(0.35 0 0);
+  --text-tertiary: oklch(0.48 0 0);
+  --text-subtle: oklch(0.58 0 0);
+  --text-muted: oklch(0.65 0 0);
+  --text-disabled: oklch(0.75 0 0);
 
   /* --- Component surface tokens (light mode) --- */
   --destructive-surface: var(--destructive);
@@ -867,14 +886,14 @@
   --checked-tint: color-mix(in oklch, var(--primary) 5%, transparent);
   --tooltip-kbd: color-mix(in oklch, var(--background) 20%, transparent);
 
-  /* --- Accent palette (vivid for light mode) --- */
-  --accent-blue: #266b9e;
-  --accent-blue-surface: #e8edf4;
-  --accent-green: #158232;
-  --accent-green-muted: #5c8a6e;
-  --accent-red: #bf3543;
-  --accent-red-muted: #a07272;
-  --accent-gold: #8a6828;
+  /* --- Accent palette (reference semantic tokens) --- */
+  --accent-blue: var(--primary);
+  --accent-blue-surface: color-mix(in oklch, var(--primary) 10%, var(--background));
+  --accent-green: var(--success);
+  --accent-green-muted: color-mix(in oklch, var(--success) 50%, var(--muted-foreground));
+  --accent-red: var(--destructive);
+  --accent-red-muted: color-mix(in oklch, var(--destructive) 50%, var(--muted-foreground));
+  --accent-gold: var(--warning);
 
   /* --- Neutral scale --- */
   --neutral-50: #fafafa;
@@ -939,68 +958,68 @@
 
   /* --- Core surfaces --- */
   --background: #0b0b0b; /* bg-base: the canvas */
-  --foreground: #d8d8d8; /* text-primary */
+  --foreground: oklch(0.91 0 0); /* text-primary — brighter for readability */
   --card: #141414; /* bg-elevated */
-  --card-foreground: #d8d8d8;
+  --card-foreground: oklch(0.91 0 0);
   --popover: #1e1e1e; /* bg-overlay */
-  --popover-foreground: #d8d8d8;
+  --popover-foreground: oklch(0.91 0 0);
 
-  /* --- Interactive accent (steel blue — quiet authority) --- */
-  --primary: #8494a8;
+  /* --- Interactive accent (cool rose — pastel, warm, human) --- */
+  --primary: oklch(0.78 0.09 345);
   --primary-foreground: #0b0b0b;
 
   /* --- Secondary / structural --- */
   --secondary: #1a1a1a; /* bg-raised */
-  --secondary-foreground: #b0b0b0;
+  --secondary-foreground: oklch(0.75 0 0);
   --muted: #2a2a2a; /* bg-muted */
-  --muted-foreground: #808080; /* text-tertiary */
+  --muted-foreground: oklch(0.58 0 0); /* text-tertiary */
   --accent: #141414; /* bg-elevated */
-  --accent-foreground: #d8d8d8;
+  --accent-foreground: oklch(0.91 0 0);
 
-  /* --- Semantic signals (earned color) --- */
-  --destructive: #f97583; /* accent-red */
-  --destructive-foreground: #e0e0e0;
-  --success: #6bd574; /* accent-green */
+  /* --- Semantic signals (equiluminant OKLCH — all L=0.72 for equal visual weight) --- */
+  --destructive: oklch(0.68 0.18 20);
+  --destructive-foreground: oklch(0.91 0 0);
+  --success: oklch(0.72 0.17 150);
   --success-foreground: #0b0b0b;
-  --warning: #d4a050; /* accent-gold */
+  --warning: oklch(0.72 0.14 75);
   --warning-foreground: #0b0b0b;
-  --info: #8494a8; /* accent-blue */
-  --info-foreground: #0b0b0b;
+  --info: var(--primary);
+  --info-foreground: var(--primary-foreground);
 
-  /* --- Status indicators (workspace session states) --- */
-  --status-working: #6bd574;
-  --status-working-fg: #0b0b0b;
-  --status-compacting: #8494a8;
-  --status-compacting-fg: #0b0b0b;
-  --status-unread: #d4a050;
-  --status-unread-fg: #0b0b0b;
+  /* --- Status indicators (reference semantic tokens) --- */
+  --status-working: var(--success);
+  --status-working-fg: var(--success-foreground);
+  --status-compacting: var(--primary);
+  --status-compacting-fg: var(--primary-foreground);
+  --status-unread: var(--warning);
+  --status-unread-fg: var(--warning-foreground);
 
-  /* --- File type colors (muted, purposeful) --- */
-  --file-typescript: #8494a8;
-  --file-rust: #f97583;
-  --file-data: #d4a050;
-  --file-docs: #6a9a70;
-  --file-styles: #8494a8;
-  --file-markup: #f97583;
-  --file-image: #d4a050;
+  /* --- File type colors (reference semantic tokens) --- */
+  --file-typescript: var(--primary);
+  --file-rust: var(--destructive);
+  --file-data: var(--warning);
+  --file-docs: var(--success);
+  --file-styles: var(--primary);
+  --file-markup: var(--destructive);
+  --file-image: var(--warning);
 
-  /* --- Borders (3-tier depth) --- */
-  --border: #252525; /* border-default */
-  --input: #252525;
+  /* --- Borders (semi-transparent — adapt to any surface) --- */
+  --border: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --input: color-mix(in oklch, var(--foreground) 8%, transparent);
   --input-surface: #141414;
-  --input-tint: color-mix(in oklch, var(--input) 30%, transparent);
-  --ring: #8494a866;
+  --input-tint: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --ring: color-mix(in oklch, var(--primary) 40%, transparent);
   --destructive-ring: color-mix(in oklch, var(--destructive) 40%, transparent);
 
   /* --- Sidebar (inherits base, minimal distinction) --- */
   --sidebar: #0b0b0b; /* Same as bg-base: unified canvas */
-  --sidebar-foreground: #b0b0b0;
-  --sidebar-primary: #8494a8;
-  --sidebar-primary-foreground: #0b0b0b;
+  --sidebar-foreground: oklch(0.75 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: #141414;
-  --sidebar-accent-foreground: #d8d8d8;
-  --sidebar-border: #1a1a1a; /* border-subtle */
-  --sidebar-ring: #8494a866;
+  --sidebar-accent-foreground: oklch(0.91 0 0);
+  --sidebar-border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --sidebar-ring: var(--ring);
 
   /* --- Extended background tiers --- */
   --bg-base: #0b0b0b;
@@ -1015,18 +1034,18 @@
   --bg-selection: #1a1a1a;
   --bg-code: #171717;
 
-  /* --- Extended border tiers --- */
-  --border-subtle: #1a1a1a;
-  --border-default: #252525;
-  --border-strong: #303030;
+  /* --- Extended border tiers (semi-transparent) --- */
+  --border-subtle: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --border-default: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --border-strong: color-mix(in oklch, var(--foreground) 14%, transparent);
 
-  /* --- Extended text hierarchy --- */
-  --text-primary: #d8d8d8;
-  --text-secondary: #b0b0b0;
-  --text-tertiary: #808080;
-  --text-subtle: #777777;
-  --text-muted: #6a6a6a;
-  --text-disabled: #404040;
+  /* --- Extended text hierarchy (OKLCH — wider gaps for readability) --- */
+  --text-primary: oklch(0.91 0 0);
+  --text-secondary: oklch(0.75 0 0);
+  --text-tertiary: oklch(0.58 0 0);
+  --text-subtle: oklch(0.49 0 0);
+  --text-muted: oklch(0.42 0 0);
+  --text-disabled: oklch(0.32 0 0);
 
   /* --- Component surface tokens (dark mode) --- */
   --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
@@ -1036,14 +1055,14 @@
   --checked-tint: color-mix(in oklch, var(--primary) 10%, transparent);
   --tooltip-kbd: color-mix(in oklch, var(--background) 10%, transparent);
 
-  /* --- Accent palette --- */
-  --accent-blue: #8494a8;
-  --accent-blue-surface: #252830;
-  --accent-green: #6bd574;
-  --accent-green-muted: #6a9a70;
-  --accent-red: #f97583;
-  --accent-red-muted: #6a3838;
-  --accent-gold: #d4a050;
+  /* --- Accent palette (reference semantic tokens) --- */
+  --accent-blue: var(--primary);
+  --accent-blue-surface: color-mix(in oklch, var(--primary) 10%, var(--background));
+  --accent-green: var(--success);
+  --accent-green-muted: color-mix(in oklch, var(--success) 50%, var(--muted-foreground));
+  --accent-red: var(--destructive);
+  --accent-red-muted: color-mix(in oklch, var(--destructive) 50%, var(--muted-foreground));
+  --accent-gold: var(--warning);
 
   /* --- Neutral scale (pure gray ramp) --- */
   --neutral-50: #e0e0e0;
@@ -1110,8 +1129,28 @@ body {
   color: var(--foreground);
   font-family: var(--font-family-sans);
   background: var(--background); /* Web: solid background */
+  letter-spacing: -0.011em;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace tracking reset — negative body tracking (-0.011em) is designed
+ * for SF Pro proportional text. Monospace fonts have uniform character widths
+ * and must not inherit negative tracking from body or text-* scale tokens.
+ * Override the CSS variables that Tailwind text-* utilities reference. */
+code, pre, kbd, samp, .font-mono {
+  --text-2xs--letter-spacing: 0em;
+  --text-xs--letter-spacing: 0em;
+  --text-sm--letter-spacing: 0em;
+  --text-base--letter-spacing: 0em;
+  --text-lg--letter-spacing: 0em;
+  --text-xl--letter-spacing: 0em;
+  --text-2xl--letter-spacing: 0em;
+  --text-3xl--letter-spacing: 0em;
+  letter-spacing: 0em;
 }
 
 #root {
@@ -1202,45 +1241,22 @@ body {
   background: transparent !important;
 }
 
-/* SidebarInset — enhanced drop shadow (inspired by Arc's CellDropShadow pre-rendered shadow).
- * Two-layer shadow: crisp near-shadow for edge definition + diffuse far-shadow for depth. */
+/* SidebarInset — no drop shadow; relies on main-content border for separation (Linear-style). */
 .tauri [data-slot="sidebar-inset"] {
-  box-shadow:
-    0 1px 2px 0 color-mix(in oklch, var(--foreground) 2.5%, transparent),
-    0 3px 8px -2px color-mix(in oklch, var(--foreground) 2%, transparent) !important;
-  transition:
-    box-shadow 280ms cubic-bezier(0.19, 1, 0.22, 1);
-}
-
-/* Edge-to-edge — sidebar collapsed: drop inset shadow so content stretches flush */
-.tauri [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] {
   box-shadow: none !important;
 }
 
-/* Layer 3: main content — semi-translucent with inner shadow depth.
- * Double-border: 1px outer (from Tailwind border class) + 0.5px inner ring (box-shadow).
- * Inner shadow at top edge for recessed depth (Arc's InnerShadowView).
- * Border opacity varies by theme: subtle in light (5%), visible in dark (15%). */
+/* Layer 3: main content — semi-translucent surface with subtle border separation (Linear-style).
+ * Single 1px border from Tailwind class; no inset shadow or hairline ring. */
 .tauri [data-slot="main-content"] {
   background: color-mix(
     in oklch,
     var(--background) var(--content-tint-opacity),
     transparent
   ) !important;
-  border-color: color-mix(
-    in oklch,
-    var(--foreground) var(--content-border-opacity),
-    transparent
-  ) !important;
-  box-shadow:
-    /* Inner shadow — top-edge depth (Arc's InnerShadowView) */
-    inset 0 0.5px 2px 0
-      color-mix(in oklch, var(--foreground) var(--content-shadow-opacity), transparent),
-    /* Inner hairline ring — 0.5px for crisp double-border effect */ inset 0 0 0 0.5px
-      color-mix(in oklch, var(--foreground) var(--content-border-opacity), transparent);
+  box-shadow: none;
   transition:
     background 200ms ease,
-    box-shadow 280ms cubic-bezier(0.19, 1, 0.22, 1),
     border-color 280ms cubic-bezier(0.19, 1, 0.22, 1),
     border-radius 280ms cubic-bezier(0.19, 1, 0.22, 1);
 }
@@ -1248,7 +1264,6 @@ body {
 /* Edge-to-edge — sidebar collapsed: flatten card to seamless full-bleed */
 .tauri [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="main-content"] {
   border-color: transparent !important;
-  box-shadow: none !important;
 }
 
 /* Prevent CSS backdrop-filter from conflicting with native CABackdropLayer on sidebar */
@@ -1345,6 +1360,62 @@ body {
 }
 [data-hover-reveal="true"] [data-sidebar="sidebar"] {
   background: transparent !important;
+}
+
+/* Fullscreen — self-lit surfaces (no wallpaper behind in macOS fullscreen Space).
+ * macOS fullscreen puts the app in its own Space; underWindowBackground falls back
+ * to flat dark gray. Strategy: increase opacity to block the dead gray, but KEEP
+ * grain + wash — they become the primary source of surface life (no longer competing
+ * with wallpaper variation). Wash gets a whisper of primary chroma (hue 255) to
+ * replace the warmth/color the wallpaper provided. Pattern: Arc Browser. */
+.tauri.fullscreen [data-slot="sidebar-wrapper"] {
+  background: color-mix(
+    in oklch,
+    var(--sidebar) 94%,
+    transparent
+  ) !important;
+}
+
+/* Wash: same structure, but shift to a chromed base (primary hue whisper).
+ * In windowed mode, wallpaper bleeds natural color through the tint.
+ * In fullscreen, this gradient is the only color life — so we give it identity.
+ * Dark: cool blue whisper (hue 255). Light: warm golden whisper (hue 75). */
+.tauri.fullscreen.dark [data-slot="sidebar-wrapper"]::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, oklch(0.13 0.01 255) 22%, transparent) 0%,
+    transparent 100%
+  );
+}
+.tauri.fullscreen:not(.dark) [data-slot="sidebar-wrapper"]::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, oklch(0.94 0.008 75) 20%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+/* Grain: unchanged. At 94% sidebar opacity over a uniform base,
+ * soft-light grain naturally becomes MORE visible (no wallpaper noise competing).
+ * The same 0.04 reads as richer texture in fullscreen. */
+
+/* Content: fully opaque — no value in semi-transparency over flat gray */
+.tauri.fullscreen [data-slot="main-content"] {
+  background: var(--background) !important;
+}
+
+/* Hover-reveal in fullscreen — still needs to feel elevated */
+.tauri.fullscreen [data-hover-reveal="true"] [data-slot="sidebar-container"] {
+  background: color-mix(
+    in oklch,
+    var(--sidebar) 97%,
+    transparent
+  ) !important;
+}
+
+/* Fullscreen + inactive: sidebar goes near-opaque (same dim pattern as windowed) */
+.tauri.fullscreen.window-inactive [data-slot="sidebar-wrapper"] {
+  background: color-mix(in oklch, var(--sidebar) 96%, transparent) !important;
 }
 
 /* Window inactive state — dim vibrancy when Tauri window loses focus (like Arc/Dia) */
@@ -1547,55 +1618,56 @@ select {
 diffs-container.diffs-theme {
   padding: 0;
   margin: 0;
+  letter-spacing: 0em; /* Reset: monospace diff content must not inherit body tracking */
   --diffs-light-bg: var(--background);
   --diffs-dark-bg: var(--background);
   --diffs-light: var(--foreground);
   --diffs-dark: var(--foreground);
   --diffs-gap-block: 0;
   --diffs-font-family: var(--font-family-mono);
-  --diffs-font-size: 11px;
-  --diffs-line-height: 16px;
+  --diffs-font-size: 12px;
+  --diffs-line-height: 18px;
   --diffs-min-number-column-width: 4ch;
   --diffs-fg-number-override: var(--diff-line-number);
 
   --diffs-addition-color-override: var(--diff-addition-text);
-  --diffs-bg-addition-override: color-mix(in lab, var(--diff-addition-bg) 22%, var(--background));
+  --diffs-bg-addition-override: color-mix(in oklch, var(--diff-addition-bg) 22%, var(--background));
   --diffs-bg-addition-number-override: color-mix(
-    in lab,
+    in oklch,
     var(--diff-addition-gutter) 28%,
     var(--background)
   );
   --diffs-bg-addition-emphasis-override: color-mix(
-    in lab,
+    in oklch,
     var(--diff-addition-word) 30%,
     var(--background)
   );
 
   --diffs-deletion-color-override: var(--diff-deletion-text);
-  --diffs-bg-deletion-override: color-mix(in lab, var(--diff-deletion-bg) 20%, var(--background));
+  --diffs-bg-deletion-override: color-mix(in oklch, var(--diff-deletion-bg) 20%, var(--background));
   --diffs-bg-deletion-number-override: color-mix(
-    in lab,
+    in oklch,
     var(--diff-deletion-gutter) 26%,
     var(--background)
   );
   --diffs-bg-deletion-emphasis-override: color-mix(
-    in lab,
+    in oklch,
     var(--diff-deletion-word) 28%,
     var(--background)
   );
 
-  --diffs-bg-selection-override: color-mix(in lab, var(--primary) 14%, var(--background));
-  --diffs-bg-selection-number-override: color-mix(in lab, var(--primary) 22%, var(--background));
+  --diffs-bg-selection-override: color-mix(in oklch, var(--primary) 14%, var(--background));
+  --diffs-bg-selection-number-override: color-mix(in oklch, var(--primary) 22%, var(--background));
   --diffs-selection-color-override: var(--primary);
 
-  --diffs-bg-hover-override: color-mix(in lab, var(--foreground) 4%, var(--background));
+  --diffs-bg-hover-override: color-mix(in oklch, var(--foreground) 4%, var(--background));
   --diffs-bg-context-override: var(--background);
   --diffs-bg-separator-override: transparent;
 }
 
 diffs-container.diffs-theme-compact {
-  --diffs-font-size: 10px;
-  --diffs-line-height: 15px;
+  --diffs-font-size: 11px;
+  --diffs-line-height: 16px;
 }
 
 .diff-hover-action {
@@ -1611,7 +1683,7 @@ diffs-container.diffs-theme-compact {
   border: 1px solid var(--border);
   background: var(--background);
   color: var(--muted-foreground);
-  box-shadow: 0 1px 2px color-mix(in lab, var(--foreground) 10%, transparent);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 10%, transparent);
   transition:
     color 120ms ease,
     border-color 120ms ease,
@@ -1620,15 +1692,15 @@ diffs-container.diffs-theme-compact {
 
 .diff-hover-action:hover {
   color: var(--foreground);
-  border-color: color-mix(in lab, var(--foreground) 22%, var(--border));
-  background: color-mix(in lab, var(--background) 80%, var(--foreground));
+  border-color: color-mix(in oklch, var(--foreground) 22%, var(--border));
+  background: color-mix(in oklch, var(--background) 80%, var(--foreground));
 }
 
 .diff-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-family-sans);
 }
 
@@ -1652,7 +1724,7 @@ diffs-container.diffs-theme-compact {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--foreground);
   white-space: nowrap;
@@ -1670,7 +1742,7 @@ diffs-container.diffs-theme-compact {
   color: var(--muted-foreground);
   border-radius: 999px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 11px;
   transition:
     color 120ms ease,
     background 120ms ease;
@@ -1678,7 +1750,7 @@ diffs-container.diffs-theme-compact {
 
 .diff-header-btn[aria-pressed="true"] {
   color: var(--foreground);
-  background: color-mix(in lab, var(--foreground) 6%, transparent);
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
 }
 
 .diff-header-btn:disabled {
@@ -1704,7 +1776,7 @@ diffs-container.diffs-theme-compact {
 .diff-header-icon:hover,
 .diff-header-btn:hover {
   color: var(--foreground);
-  background: color-mix(in lab, var(--foreground) 8%, transparent);
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
 }
 
 .diff-comment-card {
@@ -1721,7 +1793,7 @@ diffs-container.diffs-theme-compact {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted-foreground);
   font-weight: 500;
 }
@@ -1731,7 +1803,7 @@ diffs-container.diffs-theme-compact {
   padding: 2px 8px;
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
 }
 
 .diff-comment-pill-addition {
@@ -1746,7 +1818,7 @@ diffs-container.diffs-theme-compact {
 
 .diff-comment-text {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--foreground);
   white-space: pre-wrap;
 }
@@ -1768,7 +1840,7 @@ diffs-container.diffs-theme-compact {
 }
 
 .diff-comment-save:hover {
-  background: color-mix(in lab, var(--primary) 90%, var(--foreground));
+  background: color-mix(in oklch, var(--primary) 90%, var(--foreground));
 }
 
 .diff-comment-save:disabled {
@@ -1789,14 +1861,15 @@ diffs-container.diffs-theme-compact {
    Design Principles:
    - Tight density (minimal waste)
    - Subtle colors (no harsh pure white/black)
-   - Small code (12px, less padding)
+   - Small code (13px base, compact padding)
    - Clear hierarchy without shouting
    ============================================ */
 
-/* Base markdown container - Dense IDE typography (12px base) */
+/* Base markdown container - Dense IDE typography (13px base) */
 .markdown-content {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
+  letter-spacing: -0.011em;
   color: var(--foreground);
   word-break: break-word;
 }
@@ -1815,36 +1888,42 @@ diffs-container.diffs-theme-compact {
   text-wrap: balance;
 }
 
-/* Top-level headers: Bold for scanability when scrolling */
+/* Top-level headers: Semibold with tighter tracking for scanability */
 .markdown-content h1 {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 
 .markdown-content h2 {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
 }
 
-/* Lower-level headers: Semibold (hierarchy without shouting) */
+/* Lower-level headers: Semibold at body-adjacent sizes */
 .markdown-content h3 {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.011em;
 }
 
 .markdown-content h4 {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.011em;
 }
 
 .markdown-content h5 {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: -0.006em;
 }
 
 .markdown-content h6 {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: -0.006em;
 }
 
 /* First heading has no top margin */
@@ -1967,7 +2046,8 @@ diffs-container.diffs-theme-compact {
 /* Inline code - Subtle pill */
 .markdown-content code:not(pre code) {
   font-family: var(--font-family-mono);
-  font-size: 0.85em; /* ~10px from 12px base */
+  font-size: 0.85em; /* ~11px from 13px base */
+  letter-spacing: 0em; /* Reset: mono must not inherit body's -0.011em */
   padding: 0.125rem 0.375rem;
   background-color: color-mix(in oklch, var(--muted) 60%, transparent);
   border-radius: 0.25rem;
@@ -1983,8 +2063,9 @@ diffs-container.diffs-theme-compact {
   border-radius: 0.375rem; /* Slightly smaller radius */
   background-color: var(--bg-code);
   font-family: var(--font-family-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
+  letter-spacing: 0em;
 }
 
 .markdown-content pre code {
@@ -2002,7 +2083,7 @@ diffs-container.diffs-theme-compact {
   margin-bottom: 0.75rem;
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .markdown-content th,
