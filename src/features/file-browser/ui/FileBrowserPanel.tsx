@@ -104,11 +104,16 @@ function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): Fi
   return walk(nodes);
 }
 
-/** Filter tree to only files with changes (and their ancestor directories) */
+/** Filter tree to only files with actual diff changes (and their ancestor directories).
+ *
+ * Uses `change_status` (set by enrichTreeWithChanges from diff query results) only.
+ * Does NOT use `git_status` (from the file scanner) because libgit2's status API
+ * produces phantom statuses in git worktrees, causing clean files to appear as changed.
+ */
 function filterToChangedOnly(nodes: FileTreeNode[]): FileTreeNode[] {
   return nodes.reduce((acc, node) => {
     if (node.type === "file") {
-      if (node.change_status || node.git_status) {
+      if (node.change_status) {
         acc.push(node);
       }
     } else if (node.children) {
@@ -161,11 +166,11 @@ function filterTreeBySearch(nodes: FileTreeNode[], query: string): FileTreeNode[
   }, [] as FileTreeNode[]);
 }
 
-/** Count changed files in tree */
+/** Count changed files in tree (only diff-confirmed changes, not scanner git_status) */
 function countChangedFiles(nodes: FileTreeNode[]): number {
   let count = 0;
   for (const node of nodes) {
-    if (node.type === "file" && (node.change_status || node.git_status)) count++;
+    if (node.type === "file" && node.change_status) count++;
     if (node.children) count += countChangedFiles(node.children);
   }
   return count;

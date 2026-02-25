@@ -41,11 +41,24 @@ export function useWorkspaceInitEvents() {
         const { step } = event.payload;
 
         if (import.meta.env.DEV) {
-          console.log("[Events] 🏗️ Workspace progress:", event.payload);
+          console.log("[Events] Workspace progress:", event.payload);
         }
 
-        // Terminal states: invalidate to pick up the final workspace state
+        // Terminal states: clear any diff caches that may have been populated
+        // during init (race window between state→ready and git checkout -- .),
+        // then invalidate workspace list to pick up the final state.
         if (step === "done" || step.startsWith("error")) {
+          const { workspaceId } = event.payload;
+
+          queryClient.removeQueries({
+            queryKey: queryKeys.workspaces.diffStats(workspaceId),
+          });
+          queryClient.removeQueries({
+            queryKey: queryKeys.workspaces.diffFiles(workspaceId),
+          });
+          queryClient.removeQueries({
+            queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId),
+          });
           queryClient.invalidateQueries({
             queryKey: queryKeys.workspaces.all,
           });

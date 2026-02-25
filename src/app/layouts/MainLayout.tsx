@@ -108,12 +108,16 @@ export function MainLayout() {
       fresh.current_session_id !== selectedWorkspace.current_session_id ||
       fresh.state !== selectedWorkspace.state ||
       fresh.session_status !== selectedWorkspace.session_status ||
-      fresh.init_stage !== selectedWorkspace.init_stage
+      fresh.init_stage !== selectedWorkspace.init_stage ||
+      fresh.setup_status !== selectedWorkspace.setup_status
     ) {
-      // When workspace transitions to "ready", clear any stale diff caches.
-      // During "initializing", incomplete git state can produce garbage diffs
-      // that get cached. Clearing ensures the first "ready" fetch is clean.
-      if (selectedWorkspace.state === "initializing" && fresh.state === "ready") {
+      // Clear stale diff caches when workspace transitions init→ready.
+      // During initialization, git state is incomplete and any cached diffs
+      // would be garbage (+500K/-1M). Force a fresh fetch on the detail panel.
+      const initJustFinished =
+        selectedWorkspace.state === "initializing" && fresh.state === "ready";
+
+      if (initJustFinished) {
         queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffStats(fresh.id) });
         queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffFiles(fresh.id) });
         queryClient.removeQueries({ queryKey: queryKeys.workspaces.uncommittedFiles(fresh.id) });

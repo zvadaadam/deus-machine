@@ -25,7 +25,7 @@ export function useWorkspacesByRepo(state: string = "ready,initializing") {
     refetchInterval: (query) => {
       const data = query.state.data as RepoGroup[] | undefined;
       const hasInitializing = data?.some((g) =>
-        g.workspaces.some((w) => w.state === "initializing" || w.setup_status === "running")
+        g.workspaces.some((w) => w.state === "initializing")
       );
       return hasInitializing ? 2_000 : 10_000;
     },
@@ -53,17 +53,24 @@ export function useStats() {
  * When `isWatched` is true (file watcher active via notify crate),
  * polling is disabled — cache invalidation comes from fs:changed events.
  * Falls back to 5s polling when not watched.
+ *
+ * IMPORTANT: Requires workspaceState === "ready" to avoid fetching diffs
+ * against incomplete worktrees during initialization. Running git diff on
+ * an initializing worktree produces garbage (e.g. +500K/-1M) that gets
+ * cached for 30s, persisting as phantom diffs even after the workspace
+ * becomes ready. Guard here, not in the UI.
  */
 export function useDiffStats(
   workspaceId: string | null,
   sessionStatus?: string | null,
   workspace?: WorkspaceGitInfo,
-  isWatched: boolean = false
+  isWatched: boolean = false,
+  workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!, workspace),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
     refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
@@ -76,27 +83,19 @@ export function useDiffStats(
  * Fetch diff stats for all sidebar workspaces in bulk.
  *
  * Replaces per-item useDiffStats() in the sidebar (N hooks → 1 query).
- * - Initial load: fetches ALL workspaces in parallel batches of 15
+ * - Initial load: fetches ALL ready workspaces in parallel batches of 15
  * - Polling: only re-fetches workspaces with session_status === "working" (5s)
  * - Idle: no polling (staleTime 30s, refetch on window focus)
  * - On workspace list change: seeds from per-workspace cache, fetches only missing/working
  *
- * BUG FIX — Phantom diffs on new workspace:
- * Root cause: this hook was fetching diffs for ALL workspaces including
- * "initializing" ones. During worktree creation, git state is incomplete
- * (e.g. missing HEAD, partial index), producing garbage diffs (+505K/-1M).
- * These got cached for 30s (staleTime), so even after the workspace became
- * "ready", the stale cached garbage persisted until the cache expired.
- * Fix: workspaceIds, workspaceInfoMap, and workingIds all filter to only
- * state === "ready" workspaces. When a workspace transitions to ready,
- * workspaceIds changes → query key changes → fresh fetch with correct data.
+ * Guard: state === "ready" — initializing worktrees have incomplete git state
+ * (missing HEAD, partial index → garbage diffs like +500K/-1M). Setup script
+ * diffs are fine — .gitignore handles them, and `git checkout -- .` in the
+ * init pipeline resets any tracked-file mutations from bun install.
  */
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
 
-  // Only compute diffs for ready workspaces — initializing worktrees have
-  // incomplete git state that can produce garbage diffs (e.g. +500K/-1M).
-  // When a workspace transitions to "ready", workspaceIds changes → refetch.
   const workspaceInfoMap = useMemo(() => {
     const map = new Map<string, WorkspaceGitInfo>();
     repoGroups.forEach((g) => {
@@ -114,15 +113,17 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return map;
   }, [repoGroups]);
 
-  // Stable, de-duplicated IDs for query key — only ready workspaces
+  // Stable, de-duplicated IDs for query key — only ready workspaces.
   const workspaceIds = useMemo(() => {
     const ids = repoGroups.flatMap((g) =>
-      g.workspaces.filter((w) => w.state === "ready").map((w) => w.id)
+      g.workspaces
+        .filter((w) => w.state === "ready")
+        .map((w) => w.id)
     );
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
 
-  // IDs of workspaces with active sessions — only these need polling
+  // IDs of workspaces with active sessions — only these need polling.
   const workingIds = useMemo(() => {
     return repoGroups
       .flatMap((g) => g.workspaces)
@@ -136,14 +137,12 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     queryKey: ["bulk-diff-stats", workspaceIds],
     enabled: workspaceIds.length > 0,
     staleTime: 30_000,
-    // Preserve previous data when workspaceIds change (avoids undefined flash)
     placeholderData: keepPreviousData,
-    // Poll only when workspaces are actively working (Claude editing files)
     refetchInterval: hasWorkingWorkspaces ? 5000 : false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     queryFn: async () => {
-      // Seed from per-workspace cache (survives query key changes)
+      // Seed from per-workspace cache for workspaces we already have data for
       const results: Record<string, DiffStats> = {};
       for (const id of workspaceIds) {
         const cached = queryClient.getQueryData<DiffStats>(queryKeys.workspaces.diffStats(id));
@@ -154,9 +153,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       const missingIds = workspaceIds.filter((id) => !(id in results));
       const idsToFetch = [...new Set([...missingIds, ...workingIds])];
 
-      if (idsToFetch.length === 0) {
-        return results;
-      }
+      if (idsToFetch.length === 0) return results;
 
       // Parallel batches of 15 — balances throughput vs resource pressure
       const BATCH_SIZE = 15;
@@ -169,7 +166,6 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
         batch.forEach((id, j) => {
           if (settled[j].status === "fulfilled") {
             results[id] = settled[j].value;
-            // Update per-workspace cache (for detail panel useDiffStats consumers)
             queryClient.setQueryData(queryKeys.workspaces.diffStats(id), settled[j].value);
           }
         });
@@ -187,12 +183,16 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * When `isWatched` is true (file watcher active via notify crate),
  * polling is disabled — cache invalidation comes from fs:changed events.
  * Falls back to 5s polling when not watched.
+ *
+ * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
+ * See useDiffStats comment for the full explanation of the phantom diff race.
  */
 export function useFileChanges(
   workspaceId: string | null,
   sessionStatus?: string | null,
   workspace?: WorkspaceGitInfo,
-  isWatched: boolean = false
+  isWatched: boolean = false,
+  workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
@@ -204,7 +204,7 @@ export function useFileChanges(
         totalCount: result.totalCount ?? result.files?.length ?? 0,
       };
     },
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
     refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
@@ -216,16 +216,19 @@ export function useFileChanges(
 /**
  * Fetch uncommitted files for a workspace (HEAD → workdir).
  * Tauri IPC only — polls when workspace is actively working.
+ *
+ * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
  */
 export function useUncommittedFiles(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo
+  workspace?: WorkspaceGitInfo,
+  workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId || ""),
     queryFn: () => WorkspaceService.fetchUncommittedFiles(workspace),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     refetchInterval: sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
@@ -236,17 +239,20 @@ export function useUncommittedFiles(
 /**
  * Fetch last-turn files for a workspace (checkpoint → workdir).
  * Tauri IPC only — polls when workspace is actively working.
+ *
+ * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
  */
 export function useLastTurnFiles(
   workspaceId: string | null,
   sessionId: string | null | undefined,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo
+  workspace?: WorkspaceGitInfo,
+  workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.lastTurnFiles(workspaceId || "", sessionId || undefined),
     queryFn: () => WorkspaceService.fetchLastTurnFiles(workspace, sessionId || undefined),
-    enabled: !!workspaceId && !!sessionId,
+    enabled: !!workspaceId && !!sessionId && workspaceState === "ready",
     staleTime: 30000,
     refetchInterval: sessionStatus === "working" ? 5000 : false,
     refetchOnMount: "always",
