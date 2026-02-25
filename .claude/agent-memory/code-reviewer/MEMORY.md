@@ -113,3 +113,40 @@
   double-slashes. Computed unconditionally (cheap string op), only used when `filterMode === "all"`.
 - **cn() still needed**: Tab button styling uses `cn()` for conditional class merging (active vs inactive
   state). Necessary for proper twMerge resolution of variants.
+
+## Framer Motion Patterns (Confirmed)
+
+- `LazyMotion` with `domAnimation` wraps the whole app in `ThemeProvider.tsx` — always use `m`
+  (compact alias) instead of `motion`. Using `motion` bypasses lazy loading and pulls in the full
+  bundle. Files `AgentQuestionOverlay.tsx` and `PlanApprovalOverlay.tsx` currently use `motion`
+  (not `m`) — this is a pre-existing violation, not introduced by new code.
+- `useReducedMotion()` is the established pattern for honoring prefers-reduced-motion. Used in
+  `RepositoryItem`, `ToolUseBlock`, `ThinkingBlock`, `PastedImageCard`, `PastedTextCard`,
+  `CloneRepositoryModal`. New animated components should follow the same pattern.
+- `AnimatePresence` exit animation bug: if a component conditionally returns `null` before
+  `AnimatePresence` renders, the exit animation never fires. Pattern must be:
+  `<AnimatePresence>{condition && <m.div exit={...}>...</m.div>}</AnimatePresence>` — NOT
+  `{condition ? <AnimatePresence><m.div>...</m.div></AnimatePresence> : null}`.
+
+## Global queryClient Defaults (Confirmed)
+
+- `refetchOnWindowFocus: false` globally in `queryClient.ts` — explicitly documented as critical
+  to prevent typing lag. Overriding to `true` per-query is acceptable only for git diff queries
+  (workspace.queries.ts does this intentionally). External status poll queries (ai-status.queries.ts)
+  should NOT override to `true` — the Tauri WebView "window focus" fires on every popover open/close,
+  causing redundant network requests to external URLs.
+
+## CORS / External Fetch Patterns
+
+- Tauri WebView uses WKWebView on macOS with a custom `tauri://localhost` origin.
+  Statuspage.io APIs (`status.claude.com`, `status.openai.com`) include permissive CORS headers
+  (`Access-Control-Allow-Origin: *`) so fetches work from the WebView in practice.
+  This is a third-party dependency — if those headers are removed, fetches silently fail in
+  production with a CORS error. The `retry: 1` + `"none"` fallback in the queries is appropriate
+  mitigation, but there is no way to distinguish CORS errors from genuine outages.
+
+## Design Token Completeness
+
+- `bg-accent-green`, `bg-accent-gold`, `bg-accent-red` ARE valid Tailwind tokens — defined in
+  `global.css` `@theme` block as `--color-accent-green`, `--color-accent-gold`, `--color-accent-red`.
+  Not hardcoded colors; they route through CSS variables to theme values.

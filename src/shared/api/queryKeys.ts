@@ -52,6 +52,12 @@ export const queryKeys = {
     ghStatus: ["github", "gh-status"] as const,
   },
 
+  // AI Provider Status (external health monitoring)
+  providerStatus: {
+    all: ["provider-status"] as const,
+    detail: (providerId: string) => ["provider-status", "detail", providerId] as const,
+  },
+
   // Settings
   settings: {
     all: ["settings"] as const,
