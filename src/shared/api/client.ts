@@ -2,10 +2,12 @@
  * Base API Client
  * Handles HTTP requests with proper error handling and type safety
  *
- * Now supports dynamic port allocation
+ * Now supports dynamic port allocation.
+ * Attaches Bearer token for remote (non-localhost) browser clients.
  */
 
 import { API_CONFIG, getBaseURL } from "../config/api.config";
+import { getStoredToken, needsRemoteAuth } from "@/features/auth";
 import type { ApiError } from "../types";
 
 class ApiClient {
@@ -63,7 +65,8 @@ class ApiClient {
   }
 
   /**
-   * Core request method with timeout and error handling
+   * Core request method with timeout and error handling.
+   * Attaches Authorization header for remote browser clients.
    */
   private async request<T>(endpoint: string, options: RequestInit): Promise<T> {
     const baseURL = await getBaseURL();
@@ -71,9 +74,19 @@ class ApiClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    // Attach Bearer token for remote (non-localhost) browser sessions
+    const headers = new Headers(options.headers);
+    if (needsRemoteAuth()) {
+      const token = getStoredToken();
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+
     try {
       const response = await fetch(url, {
         ...options,
+        headers,
         signal: controller.signal,
       });
 

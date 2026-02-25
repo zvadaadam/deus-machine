@@ -10,6 +10,7 @@ mod git;
 mod onboarding;
 mod db;
 mod watcher;
+mod gateway;
 #[cfg(target_os = "macos")]
 mod simulator;
 
@@ -25,5 +26,6 @@ pub use git::*;
 pub use onboarding::*;
 pub use db::*;
 pub use watcher::*;
+pub use gateway::*;
 #[cfg(target_os = "macos")]
 pub use simulator::*;

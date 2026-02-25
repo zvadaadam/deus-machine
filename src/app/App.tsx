@@ -11,6 +11,7 @@ import { QueryClientProvider, ThemeProvider } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
+import { useAuth, PairGatePage } from "@/features/auth";
 import { isTauriEnv, invoke } from "@/platform/tauri";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
@@ -49,6 +50,7 @@ function ConditionalErrorBoundary({
  * the desktop through the semi-transparent scrim, not the app's own UI.
  */
 function AppContent({ reset }: { reset: () => void }) {
+  const auth = useAuth();
   const settingsQuery = useSettings();
   const windowShownRef = useRef(false);
 
@@ -85,6 +87,10 @@ function AppContent({ reset }: { reset: () => void }) {
       windowShownRef.current = true;
     }
   }, [settingsQuery.isLoading, showOnboarding]);
+
+  // Remote browser auth gate: show pairing page if not authenticated
+  if (auth.isLoading) return null;
+  if (!auth.isAuthenticated) return <PairGatePage onPaired={auth.onPaired} />;
 
   // While settings load, render nothing — window is hidden anyway
   if (settingsQuery.isLoading) return null;

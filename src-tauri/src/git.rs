@@ -591,6 +591,15 @@ pub fn get_file_patch(
             // Generate synthetic diff for untracked file
             let content = std::fs::read_to_string(&full_path).unwrap_or_default();
             let lines: Vec<&str> = content.lines().collect();
+
+            // Empty file: return header-only diff (no hunk needed)
+            if lines.is_empty() {
+                return Ok(format!(
+                    "diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n",
+                    f = file_path,
+                ));
+            }
+
             let n = lines.len();
             let mut diff = format!(
                 "diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n@@ -0,0 +1,{n} @@\n",

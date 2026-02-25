@@ -4,8 +4,8 @@
  * Imported by both backend/src/lib/schema.ts and sidecar/db/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages
- * Indexes: 9
+ * Tables: repositories, workspaces, sessions, messages, paired_devices
+ * Indexes: 10
  * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
  */
 
@@ -91,7 +91,18 @@ export const SCHEMA_SQL = `
     parent_tool_use_id TEXT
   );
 
-  -- Indexes (9)
+  -- Paired devices for remote access authentication
+  CREATE TABLE IF NOT EXISTS paired_devices (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL DEFAULT 'Unknown Device',
+    token_hash TEXT NOT NULL UNIQUE,
+    ip_address TEXT,
+    user_agent TEXT,
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Indexes (10)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -101,6 +112,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id);
   CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_use ON messages(parent_tool_use_id);
+  CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash ON paired_devices(token_hash);
 
   -- Triggers: auto-update updated_at (3)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
