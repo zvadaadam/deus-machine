@@ -138,6 +138,12 @@ export function runSetupScript(
     } else {
       db.prepare("UPDATE workspaces SET setup_status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?").run(error, workspaceId);
     }
+    // Emit progress event so frontend clears diff caches and re-fetches clean data.
+    // Uses the same HIVE_WORKSPACE_PROGRESS protocol that initializeWorkspace() uses
+    // (Rust backend.rs parses the prefix → Tauri event → useWorkspaceInitEvents hook).
+    const step = status === 'completed' ? 'setup_done' : 'setup_failed';
+    const label = status === 'completed' ? 'Setup complete' : `Setup failed: ${error ?? 'unknown'}`;
+    console.log(`HIVE_WORKSPACE_PROGRESS:${JSON.stringify({ workspaceId, step, label })}`);
   };
 
   setupProc.on('close', (code) => {
