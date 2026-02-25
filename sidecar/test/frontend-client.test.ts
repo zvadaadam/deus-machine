@@ -42,8 +42,7 @@ describe("FrontendClient", () => {
   // ==========================================================================
 
   describe("attachTunnel / detachTunnel", () => {
-    it("sendMessage does not throw when no tunnel (error is caught internally)", () => {
-      // sendMessage has a try/catch that swallows the error for resilience
+    it("sendMessage does not throw when no tunnel (broadcasts to empty set)", () => {
       expect(() => FrontendClient.sendMessage(buildMessageResponse())).not.toThrow();
     });
 
@@ -61,11 +60,66 @@ describe("FrontendClient", () => {
 
     it("request rejects after detaching the tunnel", async () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.detachTunnel();
-      // sendMessage won't throw (catches internally), but requests will reject
+      FrontendClient.detachTunnel(mockTunnel);
+      // sendMessage won't throw (broadcasts to empty set), but requests will reject
       await expect(
         FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })
       ).rejects.toThrow("FrontendClient tunnel not attached");
+    });
+
+    it("broadcasts notifications to all attached tunnels", () => {
+      const tunnel2 = createMockTunnel();
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.attachTunnel(tunnel2);
+      const msg = buildMessageResponse();
+      FrontendClient.sendMessage(msg);
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
+      expect(tunnel2.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
+    });
+
+    it("removes dead tunnels that throw on notify", () => {
+      const tunnel2 = createMockTunnel();
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.attachTunnel(tunnel2);
+
+      // First tunnel throws (dead connection)
+      mockTunnel.notify.mockImplementation(() => {
+        throw new Error("Socket closed");
+      });
+
+      FrontendClient.sendMessage(buildMessageResponse());
+
+      // tunnel2 should still work, mockTunnel removed
+      tunnel2.notify.mockClear();
+      FrontendClient.sendMessage(buildMessageResponse());
+      expect(tunnel2.notify).toHaveBeenCalledTimes(1);
+      expect(mockTunnel.notify).toHaveBeenCalledTimes(1); // only the first call
+    });
+
+    it("detachTunnel without args clears all tunnels", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.attachTunnel(createMockTunnel());
+      FrontendClient.detachTunnel();
+      // No tunnels left, request should reject
+      expect(FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })).rejects.toThrow(
+        "FrontendClient tunnel not attached"
+      );
+    });
+
+    it("detachTunnel with specific tunnel only removes that one", async () => {
+      const tunnel2 = createMockTunnel();
+      tunnel2.request.mockResolvedValue({ approved: true });
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.attachTunnel(tunnel2);
+      FrontendClient.detachTunnel(mockTunnel);
+
+      // tunnel2 still available
+      const result = await FrontendClient.requestExitPlanMode({
+        sessionId: "s",
+        toolInput: {},
+      });
+      expect(result).toEqual({ approved: true });
     });
   });
 
@@ -206,7 +260,7 @@ describe("FrontendClient", () => {
   // ==========================================================================
 
   describe("onQuery", () => {
-    it("registers a handler for query notifications", () => {
+    it("registers a handler for query notifications on the given tunnel", () => {
       FrontendClient.attachTunnel(mockTunnel);
       FrontendClient.onQuery(vi.fn());
 
@@ -249,9 +303,9 @@ describe("FrontendClient", () => {
   });
 
   describe("onCancel", () => {
-    it("registers a handler for cancel requests", () => {
+    it("registers a handler for cancel requests on the given tunnel", () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onCancel(vi.fn());
+      FrontendClient.onCancel(mockTunnel, vi.fn());
 
       expect(mockTunnel.addMethod).toHaveBeenCalledWith("cancel", expect.any(Function));
     });
@@ -260,7 +314,7 @@ describe("FrontendClient", () => {
   describe("onClaudeAuth", () => {
     it("rejects invalid requests", async () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onClaudeAuth(vi.fn());
+      FrontendClient.onClaudeAuth(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -272,7 +326,7 @@ describe("FrontendClient", () => {
   describe("onWorkspaceInit", () => {
     it("rejects invalid requests", async () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onWorkspaceInit(vi.fn());
+      FrontendClient.onWorkspaceInit(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -284,7 +338,7 @@ describe("FrontendClient", () => {
   describe("onContextUsage", () => {
     it("rejects invalid requests", async () => {
       FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onContextUsage(vi.fn());
+      FrontendClient.onContextUsage(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -297,7 +351,7 @@ describe("FrontendClient", () => {
     it("ignores invalid requests without throwing", async () => {
       FrontendClient.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onUpdatePermissionMode(handler);
+      FrontendClient.onUpdatePermissionMode(mockTunnel, handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       const result = await registeredHandler({ invalid: true });
@@ -311,7 +365,7 @@ describe("FrontendClient", () => {
     it("ignores invalid requests without throwing", async () => {
       FrontendClient.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onResetGenerator(handler);
+      FrontendClient.onResetGenerator(mockTunnel, handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       const result = await registeredHandler({ invalid: true });

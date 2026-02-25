@@ -25,6 +25,20 @@ export interface Settings {
   // Experimental (default: true when absent — backwards compatible)
   experimental_simulator?: boolean;
   experimental_browser?: boolean;
+
+  // Messaging Gateway
+  telegram_bot_token?: string;
+  whatsapp_session_dir?: string;
+  gateway_enabled?: boolean;
+  gateway_allowed_user_ids?: string;
+
+  // Remote Access
+  remote_access_enabled?: boolean;
+
+  // Relay
+  relay_server_id?: string;
+  relay_token?: string;
+  relay_url?: string; // e.g., "wss://relay.opendevs.sh"
 }
 
 /**
@@ -69,4 +83,5 @@ export type SettingsSection =
   | "extensions"
   | "environment"
   | "experimental"
+  | "access"
   | "updates";

@@ -4,3 +4,4 @@ export { ExtensionsSection } from "./ExtensionsSection";
 export { EnvironmentSection } from "./EnvironmentSection";
 export { ExperimentalSection } from "./ExperimentalSection";
 export { UpdateSection } from "./UpdateSection";
+export { AccessSection } from "./AccessSection";

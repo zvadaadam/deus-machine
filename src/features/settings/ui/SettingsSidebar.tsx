@@ -1,4 +1,13 @@
-import { ArrowLeft, Settings2, Sparkles, Puzzle, Box, FlaskConical, Download } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings2,
+  Sparkles,
+  Puzzle,
+  Box,
+  FlaskConical,
+  Download,
+  Globe,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   Sidebar,
@@ -23,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "extensions", label: "Extensions", icon: Puzzle },
   { id: "environment", label: "Environment", icon: Box },
   { id: "experimental", label: "Experimental", icon: FlaskConical },
+  { id: "access", label: "Connect", icon: Globe },
   { id: "updates", label: "Updates", icon: Download },
 ];
 

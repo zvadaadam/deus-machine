@@ -1,6 +1,10 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
+import { closeAll as closeAllWsConnections } from './services/ws.service';
+import { connectToRelay, disconnectFromRelay } from './services/relay.service';
+import { getRelayCredentials, generateRelayCredentials } from './services/auth.service';
+import { getSetting, saveSetting } from './services/settings.service';
 
 /**
  * Hive Backend Server
@@ -12,8 +16,8 @@ import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 // Initialize database
 const db = initDatabase();
 
-// Create Hono app
-const app = createApp();
+// Create Hono app + WebSocket injector
+const { app, injectWebSocket } = createApp();
 
 // Global variable to store actual port (used by health endpoint)
 let actualServerPort: number | null = null;
@@ -25,9 +29,12 @@ export function getServerPort() {
 // Start server with dynamic port allocation
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 
+// Bind 0.0.0.0 to accept connections from all interfaces.
+// Remote access is gated by remoteGateMiddleware (rejects non-localhost when disabled).
 const server = serve({
   fetch: app.fetch,
   port: PORT,
+  hostname: '0.0.0.0',
 }, (info) => {
   actualServerPort = info.port;
 
@@ -35,10 +42,29 @@ const server = serve({
   console.log(`[BACKEND_PORT]${info.port}`);
 
   console.log('\nHive Backend Server');
-  console.log(`API Server: http://localhost:${info.port}`);
+  console.log(`API Server: http://0.0.0.0:${info.port}`);
   console.log(`Database: ${DB_PATH}`);
   console.log('Server ready!\n');
 });
+
+// Inject WebSocket support into the HTTP server
+injectWebSocket(server);
+
+// Connect to relay if remote access is enabled.
+// Auto-provisions relay URL and credentials if missing (same logic as settings route).
+const remoteEnabled = getSetting("remote_access_enabled");
+if (remoteEnabled === true) {
+  let relayUrl = getSetting("relay_url") as string | null;
+  if (!relayUrl) {
+    relayUrl = "wss://relay.opendevs.sh";
+    saveSetting("relay_url", relayUrl);
+  }
+  let creds = getRelayCredentials();
+  if (!creds) {
+    creds = generateRelayCredentials();
+  }
+  connectToRelay(relayUrl, creds.serverId, creds.relayToken);
+}
 
 // Global error handlers
 process.on('uncaughtException', (error, origin) => {
@@ -58,6 +84,8 @@ process.on('unhandledRejection', (reason) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\nShutting down...');
+  disconnectFromRelay();
+  closeAllWsConnections();
   closeDatabase();
   process.exit(0);
 }

@@ -19,6 +19,7 @@ import {
   ExtensionsSection,
   EnvironmentSection,
   ExperimentalSection,
+  AccessSection,
   UpdateSection,
 } from "./sections";
 
@@ -101,6 +102,7 @@ export function SettingsPage() {
       ))
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
+      .with("access", () => <AccessSection {...sectionProps} />)
       .with("updates", () => <UpdateSection />)
       .exhaustive();
   }
