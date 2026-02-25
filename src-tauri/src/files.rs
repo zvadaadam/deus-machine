@@ -42,7 +42,8 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use anyhow::Result;
-use git2::{Repository, Status};
+// git2 no longer used for status collection — git CLI avoids phantom
+// status issues in worktrees. See collect_git_statuses().
 
 //============================================================================
 // TYPE DEFINITIONS (Match Frontend TypeScript)
@@ -223,60 +224,52 @@ impl FileScanner {
         Ok(tree)
     }
 
-    /// Map a git2::Status bitflag to our GitStatus enum.
-    /// Returns None for unmodified or ignored files.
-    fn map_git2_status(file_status: Status) -> Option<GitStatus> {
-        // Check WT (working tree) status first, then INDEX status
-        if file_status.contains(Status::WT_NEW) {
-            Some(GitStatus::Untracked)
-        } else if file_status.contains(Status::INDEX_NEW) {
-            Some(GitStatus::Added)
-        } else if file_status.contains(Status::WT_MODIFIED) {
-            Some(GitStatus::Modified)
-        } else if file_status.contains(Status::INDEX_MODIFIED) {
-            Some(GitStatus::Modified)
-        } else if file_status.contains(Status::WT_DELETED) || file_status.contains(Status::INDEX_DELETED) {
-            Some(GitStatus::Deleted)
-        } else if file_status.contains(Status::WT_RENAMED) || file_status.contains(Status::INDEX_RENAMED) {
-            Some(GitStatus::Modified) // Treat renames as modified
-        } else {
-            None // Unmodified or ignored
-        }
-    }
-
-    /// Collect all git statuses in a single pass.
-    /// Returns a HashMap<relative_path_string, GitStatus> for O(1) lookup per file.
+    /// Collect all git statuses using git CLI (`git status --porcelain`).
     ///
-    /// This replaces the previous per-file `repo.status_file()` approach which was
-    /// O(n) syscalls — for a 50k file repo, this saves 5-10s per scan.
-    fn collect_git_statuses(repo: &Repository) -> HashMap<String, GitStatus> {
+    /// Uses git CLI instead of libgit2's `repo.statuses()` because libgit2
+    /// has phantom status issues in git worktrees — the same root cause that
+    /// required migrating the diff pipeline to git CLI (see git.rs header).
+    fn collect_git_statuses(root_path: &Path) -> HashMap<String, GitStatus> {
         let mut map = HashMap::new();
-        let statuses = match repo.statuses(None) {
-            Ok(s) => s,
-            Err(_) => return map,
+        let output = match std::process::Command::new("git")
+            .args(["status", "--porcelain", "-uall"])
+            .current_dir(root_path)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+        {
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+            _ => return map,
         };
-        for i in 0..statuses.len() {
-            if let Some(entry) = statuses.get(i) {
-                if let Some(path) = entry.path() {
-                    if let Some(status) = Self::map_git2_status(entry.status()) {
-                        map.insert(path.to_string(), status);
-                    }
-                }
+
+        // Porcelain format: "XY path" where X=index status, Y=worktree status
+        // Examples: " M file.txt" (modified in worktree), "?? file.txt" (untracked)
+        for line in output.lines() {
+            if line.len() < 4 {
+                continue;
             }
+            let index_char = line.as_bytes()[0];
+            let wt_char = line.as_bytes()[1];
+            let path = &line[3..];
+
+            let status = match (index_char, wt_char) {
+                (b'?', b'?') => GitStatus::Untracked,
+                (b'A', _) => GitStatus::Added,
+                (_, b'D') | (b'D', _) => GitStatus::Deleted,
+                (_, b'M') | (b'M', _) => GitStatus::Modified,
+                (b'R', _) | (_, b'R') => GitStatus::Modified,
+                _ => continue,
+            };
+
+            map.insert(path.to_string(), status);
         }
         map
     }
 
     /// Build file tree recursively with .gitignore filtering
     fn build_tree(&self, root_path: &Path) -> Result<Vec<FileNode>> {
-        // Try to open git repository (optional - workspace might not be a git repo)
-        let git_repo = Repository::discover(root_path).ok();
-
-        // Collect ALL git statuses in a single pass (O(1) lookup per file).
-        // This replaces per-file `repo.status_file()` which was O(n) syscalls.
-        let git_status_map = git_repo.as_ref()
-            .map(|repo| Self::collect_git_statuses(repo))
-            .unwrap_or_default();
+        // Collect git statuses via CLI (reliable in worktrees, unlike libgit2).
+        let git_status_map = Self::collect_git_statuses(root_path);
 
         // Use ignore crate for .gitignore-aware traversal
         // Build the full tree in one pass (don't manually recurse)
