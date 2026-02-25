@@ -27,11 +27,15 @@ import {
 import { useFilesRust, invalidateFileCache } from "../api/useFilesRust";
 import { FileTree } from "./components/FileTree";
 import { cn } from "@/shared/lib/utils";
+import {
+  CHANGES_FILTER_OPTIONS,
+  changesFilterLabel,
+  type ChangesFilter,
+} from "@/features/workspace/lib/changesFilter";
 import type { Workspace, FileChange } from "@/shared/types";
 import type { FileTreeNode } from "../types";
 
 type FilterMode = "all" | "changes";
-type ChangesFilter = "all-changes" | "uncommitted" | "last-turn";
 
 const EMPTY_FILE_CHANGES: FileChange[] = [];
 
@@ -57,6 +61,8 @@ interface FileBrowserPanelProps {
   filterMode?: FilterMode;
   /** Called when user changes the filter tab (Changes / All files) */
   onFilterModeChange?: (mode: FilterMode) => void;
+  /** Hide the internal tab toggle (when parent handles tab switching) */
+  hideTabToggle?: boolean;
 }
 
 /**
@@ -198,6 +204,7 @@ export function FileBrowserPanel({
   headerSlot,
   filterMode: controlledFilterMode,
   onFilterModeChange,
+  hideTabToggle = false,
 }: FileBrowserPanelProps) {
   // Controlled when parent provides filterMode, uncontrolled fallback otherwise.
   const [localFilterMode, setLocalFilterMode] = useState<FilterMode>("changes");
@@ -332,83 +339,73 @@ export function FileBrowserPanel({
     <div className="flex h-full flex-col overflow-hidden">
       {headerSlot}
 
-      {/* Header: tab toggle (left) + filter dropdown (right) */}
-      <div className="flex h-9 flex-shrink-0 items-center justify-between px-3">
-        {/* Tab toggle: Changes | All files */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => setFilterMode("changes")}
-            className={cn(
-              "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
-              filterMode === "changes"
-                ? "bg-muted text-secondary-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Changes
-          </button>
-          <button
-            onClick={() => setFilterMode("all")}
-            className={cn(
-              "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
-              filterMode === "all"
-                ? "bg-muted text-secondary-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            All files
-          </button>
-        </div>
-
-        {/* Right-side actions — visible in Changes mode */}
-        {filterMode === "changes" && (
-          <div className="flex items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease]">
-                <SlidersHorizontal className="h-[11px] w-[11px]" />
-                <span>
-                  {changesFilter === "all-changes"
-                    ? "All Changes"
-                    : changesFilter === "uncommitted"
-                      ? "Uncommitted"
-                      : "Last Turn"}
-                </span>
-                <ChevronDown className="h-[10px] w-[10px]" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[140px]">
-              {(
-                [
-                  ["all-changes", "All changes"],
-                  ["uncommitted", "Uncommitted"],
-                  ["last-turn", "Last turn"],
-                ] as const
-              ).map(([value, label]) => (
-                <DropdownMenuItem
-                  key={value}
-                  onClick={() => setChangesFilter(value)}
-                  className="gap-2 text-xs"
-                >
-                  <Check
-                    className={cn(
-                      "h-3 w-3",
-                      changesFilter === value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {label}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
-                <RefreshCw className="h-3 w-3" />
-                Refresh files
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Header: tab toggle (left) + filter dropdown (right) — hidden when parent manages tabs */}
+      {!hideTabToggle && (
+        <div className="flex h-9 flex-shrink-0 items-center justify-between px-3">
+          {/* Tab toggle: Changes | All files */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setFilterMode("changes")}
+              className={cn(
+                "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                filterMode === "changes"
+                  ? "bg-muted text-secondary-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Changes
+            </button>
+            <button
+              onClick={() => setFilterMode("all")}
+              className={cn(
+                "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                filterMode === "all"
+                  ? "bg-muted text-secondary-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All files
+            </button>
           </div>
-        )}
-      </div>
+
+          {/* Right-side actions — visible in Changes mode */}
+          {filterMode === "changes" && (
+            <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease]">
+                  <SlidersHorizontal className="h-[11px] w-[11px]" />
+                  <span>{changesFilterLabel(changesFilter)}</span>
+                  <ChevronDown className="h-[10px] w-[10px]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[140px]">
+                {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
+                  <DropdownMenuItem
+                    key={value}
+                    onClick={() => setChangesFilter(value)}
+                    className="gap-2 text-xs"
+                  >
+                    <Check
+                      className={cn(
+                        "h-3 w-3",
+                        changesFilter === value ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
+                  <RefreshCw className="h-3 w-3" />
+                  Refresh files
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search bar — only for All files tab */}
       {filterMode === "all" && (

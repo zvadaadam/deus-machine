@@ -36,7 +36,11 @@ interface AllFilesDiffViewerProps {
   workspaceId: string;
   fileChanges: FileChange[];
   workspaceGitInfo: WorkspaceGitInfo;
-  onClose: () => void;
+  /** Close handler — only needed when header is visible */
+  onClose?: () => void;
+  /** Hide the header bar (file count, collapse/expand, close). Used when
+   *  the viewer is embedded inside CodePanelContent which has its own chrome. */
+  hideHeader?: boolean;
   onActiveFileChange?: (filePath: string | null) => void;
   /** File to scroll to on mount (one-shot) */
   initialScrollTarget?: string;
@@ -46,7 +50,7 @@ interface AllFilesDiffViewerProps {
 
 export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiffViewerProps>(
   function AllFilesDiffViewer(
-    { workspaceId, fileChanges, workspaceGitInfo, onClose, onActiveFileChange, initialScrollTarget, onOpenFile },
+    { workspaceId, fileChanges, workspaceGitInfo, onClose, hideHeader, onActiveFileChange, initialScrollTarget, onOpenFile },
     ref
   ) {
     const sectionRefsMap = useRef(new Map<string, HTMLDivElement>());
@@ -219,30 +223,32 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
 
     return (
       <div className="flex h-full flex-col overflow-hidden">
-        {/* Header bar */}
-        <div className="bg-muted/20 border-border/40 flex h-8 flex-shrink-0 items-center justify-between border-b px-3">
-          <span className="text-muted-foreground/70 text-xs tabular-nums">
-            {fileChanges.length} {fileChanges.length === 1 ? "file" : "files"} changed
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleCollapseExpandAll}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
-              title="Reset expand/collapse"
-            >
-              <ChevronsUpDown className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
-              title="Close all diffs"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+        {/* Header bar — hidden when embedded in CodePanelContent */}
+        {!hideHeader && (
+          <div className="bg-muted/20 border-border/40 flex h-8 flex-shrink-0 items-center justify-between border-b px-3">
+            <span className="text-muted-foreground/70 text-xs tabular-nums">
+              {fileChanges.length} {fileChanges.length === 1 ? "file" : "files"} changed
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleCollapseExpandAll}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
+                title="Reset expand/collapse"
+              >
+                <ChevronsUpDown className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
+                title="Close all diffs"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Scrollable file sections */}
         <div ref={scrollContainerRef} className="scrollbar-vibrancy flex flex-1 flex-col gap-3 overflow-y-auto pb-3">

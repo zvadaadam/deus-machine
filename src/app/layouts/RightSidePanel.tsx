@@ -1,11 +1,10 @@
 /**
- * Right Side Panel — content area for the right panel.
+ * Content Panel -- renders the active content tab (Code, Terminal, Browser, etc.).
  *
- * Renders file tree, browser, terminal, config, or design based on
- * the active sidecar tab. The sidecar icon strip itself is rendered
- * separately in MainContent (outside the ResizablePanelGroup).
+ * Lives inside the right "content" panel of the two-panel layout
+ * (Session | Content). The content tab header (ContentTabBar + PRActions)
+ * is rendered by MainContent above this component.
  *
- * Diffs and file previews open in the middle panel (side-by-side with chat).
  * Panel sizing is managed by react-resizable-panels (parent PanelGroup).
  */
 
@@ -32,15 +31,13 @@ import type { Workspace } from "@/shared/types";
 
 interface RightSidePanelProps {
   workspace: Workspace;
-  /** Which sidecar tab is active — drives content switching */
+  /** Which content tab is active -- drives content switching */
   activeTab: RightSideTab;
-  /** Open a diff in the middle panel */
+  /** Open a diff (switches to code tab) */
   onOpenDiffTab: (filePath: string) => void;
-  /** Open a file preview in the middle panel */
+  /** Open a file preview (switches to code tab) */
   onOpenFilePreview: (filePath: string) => void;
-  /** Compact mode — narrower panel when diff viewer is active */
-  compact?: boolean;
-  /** Whether file watcher is active — disables polling in useFileChanges */
+  /** Whether file watcher is active -- disables polling in useFileChanges */
   isWatched?: boolean;
 }
 
@@ -49,7 +46,6 @@ export function RightSidePanel({
   activeTab,
   onOpenDiffTab,
   onOpenFilePreview,
-  compact,
   isWatched = false,
 }: RightSidePanelProps) {
   const { selectedFilePath, setSelectedFilePath, rightPanelTab, setRightPanelTab } =
@@ -157,12 +153,8 @@ export function RightSidePanel({
   );
 
   return (
-    <div className={cn(
-      "bg-bg-raised flex h-full min-w-0 flex-1 flex-col overflow-hidden",
-      !compact && "border-border-subtle border-l"
-    )}>
-      {/* In compact mode, force code tab content regardless of sidecar selection */}
-      {(compact || activeTab === "code") && (
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      {activeTab === "code" && (
         <CodePanelContent
           workspace={workspace}
           fileChanges={fileChanges}
@@ -174,6 +166,7 @@ export function RightSidePanel({
           onFileClick={handleFileClick}
           filterMode={filterMode}
           onFilterModeChange={handleFilterModeChange}
+          workspaceGitInfo={workspaceGitInfo}
         />
       )}
 
@@ -181,7 +174,7 @@ export function RightSidePanel({
           keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
       {isBrowserDetached ? (
         <div
-          className={cn("h-full w-full", (compact || activeTab !== "browser") && "hidden")}
+          className={cn("h-full w-full", activeTab !== "browser" && "hidden")}
         >
           <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
         </div>
@@ -189,33 +182,33 @@ export function RightSidePanel({
         <div
           className={cn(
             "h-full w-full",
-            (compact || activeTab !== "browser") && "pointer-events-none invisible absolute"
+            activeTab !== "browser" && "pointer-events-none invisible absolute"
           )}
         >
           <BrowserPanel
             workspaceId={workspace.id}
-            panelVisible={!compact && activeTab === "browser"}
+            panelVisible={activeTab === "browser"}
             onDetach={detachBrowser}
           />
         </div>
       )}
 
-      {!compact && activeTab === "terminal" && (
+      {activeTab === "terminal" && (
         <TerminalPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
       )}
 
-      {!compact && activeTab === "notebook" && (
+      {activeTab === "notebook" && (
         <NotebookPanel
           workspacePath={workspace.workspace_path}
           sessionStatus={workspace.session_status}
         />
       )}
 
-      {!compact && activeTab === "config" && <ConfigPanel />}
+      {activeTab === "config" && <ConfigPanel />}
 
-      {!compact && activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
+      {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
 
-      {!compact && activeTab === "simulator" && (
+      {activeTab === "simulator" && (
         <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
       )}
     </div>

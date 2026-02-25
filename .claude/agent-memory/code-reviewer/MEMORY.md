@@ -61,11 +61,10 @@
 
 - `experimental_*` fields are `boolean | undefined` on `Settings` — `undefined` means ON (backwards-compat)
 - Visibility gate: `settings?.[key] !== false` — explicit `false` hides tab, undefined/true shows it
-- `isTabVisible(tab, settings)` in `RightSidecar.tsx` is exported for reuse in `MainContent.tsx`
+- `isTabVisible(tab, settings)` is now exported from `ContentTabBar.tsx` (moved from deleted `RightSidecar.tsx`)
 - `effectiveRightSideTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "code"` — store keeps original for re-enable restore
-- `RightSidecar` recomputes its own internal `effectiveTab` redundantly when `MainContent` already passes `effectiveRightSideTab` as `activeTab`. Benign but redundant.
 - `saveSetting` in `SettingsPage.tsx` is typed as `(key: string, value: unknown)` but `SettingsSectionProps.saveSetting` requires `(key: keyof Settings, value: Settings[keyof Settings])`. TypeScript accepts this because `string` is wider than `keyof Settings` at the assignment site. Not a runtime bug, but a type-safety gap.
-- `useRightPanelSizing`'s `isBrowserCategory` also includes `simulator` in the wide (60%) category — simulator tab gets 60% default width automatically.
+- `useRightPanelSizing` and `RightSidecar.tsx` were deleted in content-panel-redesign branch. The panel is now a fixed 40/60 split (no per-tab resizing). The deleted CSS rule `[data-suppress-transition]` was owned by `useRightPanelSizing` — safe to remove alongside it.
 
 ## Simulator / Rust Command Patterns (Confirmed)
 
@@ -89,3 +88,28 @@
 - JetBrains family uses shared diamond shape with brand color prop — DRY approach for similar products
 - SVG icons: 16x16 viewBox, use stroke + fill, no animations, all white inner shapes on colored rect backgrounds
 - Icon components are pure (no state/hooks) — candidates for React.memo if used in frequently-rendering lists
+
+## Content Panel Redesign Pattern (New)
+
+- **AllFilesDiffViewer redesign**: Added `hideHeader?: boolean` prop (defaults to false) to support
+  embedding within CodePanelContent which renders its own tab chrome. Header bar (file count,
+  collapse/expand, close buttons) is conditionally hidden with `{!hideHeader && (...)}`.
+- **onClose handler**: Changed from required `onClose: () => void` to optional `onClose?: () => void`.
+  When `hideHeader=true`, `onClose` is never called (button not rendered). Safe because parent
+  CodePanelContent manages close logic via tab switching, not via this callback.
+- **Changes view architecture**: Replaces single-file diff viewer (DiffTabContent) with infinite-scroll
+  AllFilesDiffViewer. Uses ref-based communication: `diffViewerRef.current?.scrollToFile(path)` to
+  scroll/sync when user clicks ChangedFilesTree. AllFilesDiffViewer's scroll-spy updates store's
+  selectedFile, keeping tree highlighting in sync bidirectionally.
+- **Files view architecture**: Mirrors Changes structure. FileViewer (left) shows text preview of
+  selected file, FileBrowserPanel (220px fixed width, right) shows file tree. Both tabs (Changes/Files)
+  now have identical split layout: content | 1px separator | tree (220px fixed).
+- **selectedFilePath coercion**: `selectedFilePath ?? null` used in both Changes (line 142) and Files
+  (line 176) views because hook returns `string | null` and both expect `string | null`. Coercion is
+  safe because selectedFilePath is already `string | null | undefined` (hook extracts with `?.path ?? null`),
+  and `undefined ?? null` evaluates to `null`. Improves code clarity over `selectedFilePath || null`.
+- **absoluteFilePath computation**: Uses `workspace.workspace_path` (base) + relative `selectedFilePath`
+  to build full path for FileViewer. Path normalization removes trailing/leading slashes to avoid
+  double-slashes. Computed unconditionally (cheap string op), only used when `filterMode === "all"`.
+- **cn() still needed**: Tab button styling uses `cn()` for conditional class merging (active vs inactive
+  state). Necessary for proper twMerge resolution of variants.
