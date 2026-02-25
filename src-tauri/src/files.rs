@@ -291,10 +291,14 @@ impl FileScanner {
                 path = &path[arrow_pos + 4..];
             }
 
-            // Handle quoted paths (git quotes paths with special characters).
-            // Strip surrounding double quotes: "path with spaces" -> path with spaces
+            // Handle C-style quoted paths from git (core.quotePath=true by default).
+            // Git quotes paths containing non-ASCII or special chars, e.g.:
+            //   "caf\303\251.txt" → café.txt  (octal-encoded UTF-8 bytes)
+            //   "tab\there.txt"   → tab\there.txt  (\t, \n, \\, \" escapes)
+            let owned_path;
             let path = if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
-                &path[1..path.len() - 1]
+                owned_path = unescape_git_c_quoted(&path[1..path.len() - 1]);
+                owned_path.as_str()
             } else {
                 path
             };
@@ -492,6 +496,64 @@ impl FileScanner {
 }
 
 //============================================================================
+// Git C-style path unescaping
+//============================================================================
+
+/// Unescape a C-style quoted path from `git status --porcelain`.
+///
+/// When `core.quotePath=true` (the default), git outputs paths with non-ASCII
+/// or special characters using C-style quoting:
+///   - Octal sequences for non-ASCII bytes: `\303\251` → 0xC3 0xA9 → "é"
+///   - Standard C escapes: `\\`, `\"`, `\n`, `\t`
+///
+/// The caller strips the surrounding double quotes before passing the interior.
+fn unescape_git_c_quoted(s: &str) -> String {
+    let input = s.as_bytes();
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+
+    while i < input.len() {
+        if input[i] != b'\\' || i + 1 >= input.len() {
+            out.push(input[i]);
+            i += 1;
+            continue;
+        }
+
+        // Backslash-escaped sequence
+        match input[i + 1] {
+            b'\\' => { out.push(b'\\'); i += 2; }
+            b'"'  => { out.push(b'"');  i += 2; }
+            b'n'  => { out.push(b'\n'); i += 2; }
+            b't'  => { out.push(b'\t'); i += 2; }
+            b'a'  => { out.push(b'\x07'); i += 2; }
+            b'b'  => { out.push(b'\x08'); i += 2; }
+            b'r'  => { out.push(b'\r'); i += 2; }
+            // Octal: \NNN (3-digit, values 0-377)
+            d @ b'0'..=b'3' if i + 3 < input.len()
+                && input[i + 2].is_ascii_digit()
+                && input[i + 3].is_ascii_digit() =>
+            {
+                let octal = [d, input[i + 2], input[i + 3]];
+                if let Ok(val) = u8::from_str_radix(
+                    std::str::from_utf8(&octal).unwrap_or("0"),
+                    8,
+                ) {
+                    out.push(val);
+                    i += 4;
+                } else {
+                    out.push(input[i]);
+                    i += 1;
+                }
+            }
+            // Unknown escape — preserve literally
+            _ => { out.push(input[i]); i += 1; }
+        }
+    }
+
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
+//============================================================================
 // SINGLETON INSTANCE
 //============================================================================
 
@@ -641,5 +703,64 @@ mod tests {
         assert!(result.files.iter().any(|n| n.name == ".gitignore"));
         assert!(!result.files.iter().any(|n| n.name == "debug.log"));
         assert!(!result.files.iter().any(|n| n.name == "ignored"));
+    }
+
+    #[test]
+    fn test_unescape_git_c_quoted() {
+        // Plain ASCII — no change
+        assert_eq!(unescape_git_c_quoted("hello.txt"), "hello.txt");
+
+        // Octal-encoded UTF-8: café.txt → \303\251 are UTF-8 bytes for 'é'
+        assert_eq!(unescape_git_c_quoted("caf\\303\\251.txt"), "café.txt");
+
+        // Standard C escapes
+        assert_eq!(unescape_git_c_quoted("tab\\there.txt"), "tab\there.txt");
+        assert_eq!(unescape_git_c_quoted("back\\\\slash"), "back\\slash");
+        assert_eq!(unescape_git_c_quoted("quote\\\"inside"), "quote\"inside");
+        assert_eq!(unescape_git_c_quoted("new\\nline"), "new\nline");
+
+        // Mixed: directory with non-ASCII + standard escape
+        assert_eq!(
+            unescape_git_c_quoted("dir/\\303\\274ber/file\\t1.txt"),
+            "dir/über/file\t1.txt"
+        );
+
+        // Japanese hiragana あ = U+3042 = UTF-8 bytes E3 81 82 = octal 343 201 202
+        assert_eq!(unescape_git_c_quoted("\\343\\201\\202.txt"), "あ.txt");
+
+        // No escapes at all
+        assert_eq!(unescape_git_c_quoted(""), "");
+    }
+
+    #[test]
+    fn test_unescape_git_c_quoted_in_status_parsing() {
+        // Integration test: verify the full parsing pipeline handles quoted paths
+        // by checking that collect_git_statuses properly unescapes in a real repo
+        let temp_dir = TempDir::new().unwrap();
+
+        // Init git repo
+        let output = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to spawn git init");
+        assert!(output.status.success());
+
+        // Ensure core.quotePath is on (the default, but be explicit for test)
+        let _ = std::process::Command::new("git")
+            .args(["config", "core.quotePath", "true"])
+            .current_dir(temp_dir.path())
+            .output();
+
+        // Create a file with non-ASCII name
+        fs::write(temp_dir.path().join("café.txt"), "content").unwrap();
+
+        // Verify git status map has the correct filesystem path
+        let statuses = FileScanner::collect_git_statuses(temp_dir.path());
+        assert!(
+            statuses.contains_key("café.txt"),
+            "Expected 'café.txt' in status map, got keys: {:?}",
+            statuses.keys().collect::<Vec<_>>()
+        );
     }
 }
