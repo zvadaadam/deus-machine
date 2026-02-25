@@ -495,7 +495,8 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
     }
 
     // Untracked files (new files not yet git-added by agents)
-    for file in collect_untracked_files(workspace_path) {
+    let untracked = collect_untracked_files(workspace_path);
+    for file in &untracked {
         additions += file.additions;
     }
 
@@ -829,27 +830,36 @@ pub fn list_branches(workspace_path: &str) -> Result<Vec<BranchInfo>, String> {
 // ---------------------------------------------------------------------------
 
 /// Get per-file changes that are NOT yet committed (exist in workdir but not HEAD).
-/// Diffs HEAD tree → working directory instead of merge-base → workdir.
+/// Diffs HEAD → working directory instead of merge-base → workdir.
 /// This captures staged, unstaged, and untracked changes only.
+///
+/// Uses git CLI instead of libgit2's `diff_tree_to_workdir_with_index` because
+/// libgit2 has phantom diff issues in git worktrees — same root cause as the
+/// main diff pipeline (see file header comment).
 pub fn get_uncommitted_files(workspace_path: &str) -> Result<Vec<DiffFile>, String> {
-    let repo = Repository::open(workspace_path)
-        .map_err(|e| format!("Failed to open repository: {}", e))?;
+    // Tracked file changes: staged + unstaged (git diff HEAD --numstat)
+    let numstat = run_git(workspace_path, &["diff", "HEAD", "--numstat"])?;
 
-    let head_tree = repo
-        .head()
-        .and_then(|h| h.peel_to_tree())
-        .map_err(|e| format!("Failed to get HEAD tree: {}", e))?;
+    let mut files: Vec<DiffFile> = Vec::new();
 
-    let mut opts = DiffOptions::new();
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    opts.show_untracked_content(true);
+    for line in numstat.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            files.push(DiffFile {
+                file: parts[2].to_string(),
+                additions: parts[0].parse().unwrap_or(0),
+                deletions: parts[1].parse().unwrap_or(0),
+            });
+        }
+    }
 
-    let diff = repo
-        .diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut opts))
-        .map_err(|e| format!("Failed to compute HEAD→workdir diff: {}", e))?;
+    // Untracked files
+    files.extend(collect_untracked_files(workspace_path));
 
-    collect_diff_files(&diff)
+    Ok(files)
 }
 
 // ---------------------------------------------------------------------------

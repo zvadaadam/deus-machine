@@ -22,6 +22,7 @@ vi.mock('../../../src/services/git.service', () => ({
 
 vi.mock('child_process', () => ({
   execFileSync: vi.fn(),
+  execFile: vi.fn(),
 }));
 
 vi.mock('fs', () => ({

@@ -36,13 +36,15 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::sync::Arc;
+use std::time::Instant;
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use anyhow::Result;
-use git2::{Repository, Status};
+// git2 no longer used for status collection — git CLI avoids phantom
+// status issues in worktrees. See collect_git_statuses().
 
 //============================================================================
 // TYPE DEFINITIONS (Match Frontend TypeScript)
@@ -223,60 +225,102 @@ impl FileScanner {
         Ok(tree)
     }
 
-    /// Map a git2::Status bitflag to our GitStatus enum.
-    /// Returns None for unmodified or ignored files.
-    fn map_git2_status(file_status: Status) -> Option<GitStatus> {
-        // Check WT (working tree) status first, then INDEX status
-        if file_status.contains(Status::WT_NEW) {
-            Some(GitStatus::Untracked)
-        } else if file_status.contains(Status::INDEX_NEW) {
-            Some(GitStatus::Added)
-        } else if file_status.contains(Status::WT_MODIFIED) {
-            Some(GitStatus::Modified)
-        } else if file_status.contains(Status::INDEX_MODIFIED) {
-            Some(GitStatus::Modified)
-        } else if file_status.contains(Status::WT_DELETED) || file_status.contains(Status::INDEX_DELETED) {
-            Some(GitStatus::Deleted)
-        } else if file_status.contains(Status::WT_RENAMED) || file_status.contains(Status::INDEX_RENAMED) {
-            Some(GitStatus::Modified) // Treat renames as modified
-        } else {
-            None // Unmodified or ignored
-        }
-    }
-
-    /// Collect all git statuses in a single pass.
-    /// Returns a HashMap<relative_path_string, GitStatus> for O(1) lookup per file.
+    /// Collect all git statuses using git CLI (`git status --porcelain`).
     ///
-    /// This replaces the previous per-file `repo.status_file()` approach which was
-    /// O(n) syscalls — for a 50k file repo, this saves 5-10s per scan.
-    fn collect_git_statuses(repo: &Repository) -> HashMap<String, GitStatus> {
+    /// Uses git CLI instead of libgit2's `repo.statuses()` because libgit2
+    /// has phantom status issues in git worktrees — the same root cause that
+    /// required migrating the diff pipeline to git CLI (see git.rs header).
+    ///
+    /// Uses spawn + try_wait with a 5s timeout (matching GIT_TIMEOUT_SHORT_MS
+    /// in git.rs) to avoid blocking indefinitely on hung git processes.
+    fn collect_git_statuses(root_path: &Path) -> HashMap<String, GitStatus> {
         let mut map = HashMap::new();
-        let statuses = match repo.statuses(None) {
-            Ok(s) => s,
+
+        // Spawn git process with timeout to avoid blocking indefinitely.
+        // Same spawn + try_wait + deadline pattern used in git.rs.
+        let mut child = match std::process::Command::new("git")
+            .args(["status", "--porcelain", "-uall"])
+            .current_dir(root_path)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
             Err(_) => return map,
         };
-        for i in 0..statuses.len() {
-            if let Some(entry) = statuses.get(i) {
-                if let Some(path) = entry.path() {
-                    if let Some(status) = Self::map_git2_status(entry.status()) {
-                        map.insert(path.to_string(), status);
+
+        let deadline = Instant::now() + std::time::Duration::from_millis(5000);
+
+        let output = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let result = match child.wait_with_output() {
+                        Ok(o) => o,
+                        Err(_) => return map,
+                    };
+                    if !status.success() {
+                        return map;
                     }
+                    break String::from_utf8_lossy(&result.stdout).into_owned();
                 }
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return map;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(_) => return map,
             }
+        };
+
+        // Porcelain format: "XY path" where X=index status, Y=worktree status
+        // Examples: " M file.txt" (modified in worktree), "?? file.txt" (untracked)
+        for line in output.lines() {
+            if line.len() < 4 {
+                continue;
+            }
+            let index_char = line.as_bytes()[0];
+            let wt_char = line.as_bytes()[1];
+            let mut path = &line[3..];
+
+            // Handle rename format: "R  old_name -> new_name"
+            // Take the new (destination) name after the arrow.
+            if let Some(arrow_pos) = path.find(" -> ") {
+                path = &path[arrow_pos + 4..];
+            }
+
+            // Handle C-style quoted paths from git (core.quotePath=true by default).
+            // Git quotes paths containing non-ASCII or special chars, e.g.:
+            //   "caf\303\251.txt" → café.txt  (octal-encoded UTF-8 bytes)
+            //   "tab\there.txt"   → tab\there.txt  (\t, \n, \\, \" escapes)
+            let owned_path;
+            let path = if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
+                owned_path = unescape_git_c_quoted(&path[1..path.len() - 1]);
+                owned_path.as_str()
+            } else {
+                path
+            };
+
+            let status = match (index_char, wt_char) {
+                (b'?', b'?') => GitStatus::Untracked,
+                (b'A', _) => GitStatus::Added,
+                (_, b'D') | (b'D', _) => GitStatus::Deleted,
+                (_, b'M') | (b'M', _) => GitStatus::Modified,
+                (b'R', _) | (_, b'R') => GitStatus::Modified,
+                _ => continue,
+            };
+
+            map.insert(path.to_string(), status);
         }
         map
     }
 
     /// Build file tree recursively with .gitignore filtering
     fn build_tree(&self, root_path: &Path) -> Result<Vec<FileNode>> {
-        // Try to open git repository (optional - workspace might not be a git repo)
-        let git_repo = Repository::discover(root_path).ok();
-
-        // Collect ALL git statuses in a single pass (O(1) lookup per file).
-        // This replaces per-file `repo.status_file()` which was O(n) syscalls.
-        let git_status_map = git_repo.as_ref()
-            .map(|repo| Self::collect_git_statuses(repo))
-            .unwrap_or_default();
+        // Collect git statuses via CLI (reliable in worktrees, unlike libgit2).
+        let git_status_map = Self::collect_git_statuses(root_path);
 
         // Use ignore crate for .gitignore-aware traversal
         // Build the full tree in one pass (don't manually recurse)
@@ -452,6 +496,64 @@ impl FileScanner {
 }
 
 //============================================================================
+// Git C-style path unescaping
+//============================================================================
+
+/// Unescape a C-style quoted path from `git status --porcelain`.
+///
+/// When `core.quotePath=true` (the default), git outputs paths with non-ASCII
+/// or special characters using C-style quoting:
+///   - Octal sequences for non-ASCII bytes: `\303\251` → 0xC3 0xA9 → "é"
+///   - Standard C escapes: `\\`, `\"`, `\n`, `\t`
+///
+/// The caller strips the surrounding double quotes before passing the interior.
+fn unescape_git_c_quoted(s: &str) -> String {
+    let input = s.as_bytes();
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+
+    while i < input.len() {
+        if input[i] != b'\\' || i + 1 >= input.len() {
+            out.push(input[i]);
+            i += 1;
+            continue;
+        }
+
+        // Backslash-escaped sequence
+        match input[i + 1] {
+            b'\\' => { out.push(b'\\'); i += 2; }
+            b'"'  => { out.push(b'"');  i += 2; }
+            b'n'  => { out.push(b'\n'); i += 2; }
+            b't'  => { out.push(b'\t'); i += 2; }
+            b'a'  => { out.push(b'\x07'); i += 2; }
+            b'b'  => { out.push(b'\x08'); i += 2; }
+            b'r'  => { out.push(b'\r'); i += 2; }
+            // Octal: \NNN (3-digit, values 0-377)
+            d @ b'0'..=b'3' if i + 3 < input.len()
+                && input[i + 2].is_ascii_digit()
+                && input[i + 3].is_ascii_digit() =>
+            {
+                let octal = [d, input[i + 2], input[i + 3]];
+                if let Ok(val) = u8::from_str_radix(
+                    std::str::from_utf8(&octal).unwrap_or("0"),
+                    8,
+                ) {
+                    out.push(val);
+                    i += 4;
+                } else {
+                    out.push(input[i]);
+                    i += 1;
+                }
+            }
+            // Unknown escape — preserve literally
+            _ => { out.push(input[i]); i += 1; }
+        }
+    }
+
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
+//============================================================================
 // SINGLETON INSTANCE
 //============================================================================
 
@@ -601,5 +703,64 @@ mod tests {
         assert!(result.files.iter().any(|n| n.name == ".gitignore"));
         assert!(!result.files.iter().any(|n| n.name == "debug.log"));
         assert!(!result.files.iter().any(|n| n.name == "ignored"));
+    }
+
+    #[test]
+    fn test_unescape_git_c_quoted() {
+        // Plain ASCII — no change
+        assert_eq!(unescape_git_c_quoted("hello.txt"), "hello.txt");
+
+        // Octal-encoded UTF-8: café.txt → \303\251 are UTF-8 bytes for 'é'
+        assert_eq!(unescape_git_c_quoted("caf\\303\\251.txt"), "café.txt");
+
+        // Standard C escapes
+        assert_eq!(unescape_git_c_quoted("tab\\there.txt"), "tab\there.txt");
+        assert_eq!(unescape_git_c_quoted("back\\\\slash"), "back\\slash");
+        assert_eq!(unescape_git_c_quoted("quote\\\"inside"), "quote\"inside");
+        assert_eq!(unescape_git_c_quoted("new\\nline"), "new\nline");
+
+        // Mixed: directory with non-ASCII + standard escape
+        assert_eq!(
+            unescape_git_c_quoted("dir/\\303\\274ber/file\\t1.txt"),
+            "dir/über/file\t1.txt"
+        );
+
+        // Japanese hiragana あ = U+3042 = UTF-8 bytes E3 81 82 = octal 343 201 202
+        assert_eq!(unescape_git_c_quoted("\\343\\201\\202.txt"), "あ.txt");
+
+        // No escapes at all
+        assert_eq!(unescape_git_c_quoted(""), "");
+    }
+
+    #[test]
+    fn test_unescape_git_c_quoted_in_status_parsing() {
+        // Integration test: verify the full parsing pipeline handles quoted paths
+        // by checking that collect_git_statuses properly unescapes in a real repo
+        let temp_dir = TempDir::new().unwrap();
+
+        // Init git repo
+        let output = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(temp_dir.path())
+            .output()
+            .expect("Failed to spawn git init");
+        assert!(output.status.success());
+
+        // Ensure core.quotePath is on (the default, but be explicit for test)
+        let _ = std::process::Command::new("git")
+            .args(["config", "core.quotePath", "true"])
+            .current_dir(temp_dir.path())
+            .output();
+
+        // Create a file with non-ASCII name
+        fs::write(temp_dir.path().join("café.txt"), "content").unwrap();
+
+        // Verify git status map has the correct filesystem path
+        let statuses = FileScanner::collect_git_statuses(temp_dir.path());
+        assert!(
+            statuses.contains_key("café.txt"),
+            "Expected 'café.txt' in status map, got keys: {:?}",
+            statuses.keys().collect::<Vec<_>>()
+        );
     }
 }

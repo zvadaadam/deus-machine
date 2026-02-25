@@ -95,7 +95,8 @@ export function RightSidePanel({
     isReady ? workspace.id : null,
     workspace.session_status,
     workspaceGitInfo,
-    isWatched
+    isWatched,
+    workspace.state
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
   const fileChangesTruncated = fileChangesData?.truncated ?? false;
@@ -105,7 +106,8 @@ export function RightSidePanel({
   const { data: uncommittedData } = useUncommittedFiles(
     isReady ? workspace.id : null,
     workspace.session_status,
-    workspaceGitInfo
+    workspaceGitInfo,
+    workspace.state
   );
   const uncommittedFiles = useMemo(() => uncommittedData ?? [], [uncommittedData]);
 
@@ -113,7 +115,8 @@ export function RightSidePanel({
     isReady ? workspace.id : null,
     workspace.current_session_id,
     workspace.session_status,
-    workspaceGitInfo
+    workspaceGitInfo,
+    workspace.state
   );
   const lastTurnFiles = useMemo(() => lastTurnData ?? [], [lastTurnData]);
 
