@@ -62,7 +62,7 @@ interface InitStage {
  * Rust's backend.rs reads stdout line-by-line and relays lines
  * prefixed with HIVE_WORKSPACE_PROGRESS: as Tauri events.
  */
-function emitProgress(workspaceId: string, step: string, label: string): void {
+export function emitProgress(workspaceId: string, step: string, label: string): void {
   const payload = JSON.stringify({ workspaceId, step, label });
   process.stdout.write(`HIVE_WORKSPACE_PROGRESS:${payload}\n`);
 }
