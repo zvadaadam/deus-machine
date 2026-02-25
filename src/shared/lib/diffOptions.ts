@@ -38,7 +38,7 @@ const DIFF_UNSAFE_CSS = `
     box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 6%, transparent);
   }
   [data-header-content] {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
   }
   [data-metadata] [data-additions-count],

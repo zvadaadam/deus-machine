@@ -26,7 +26,7 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-bold text-white">GitHub</h2>
+        <h2 className="text-2xl font-semibold text-white">GitHub</h2>
         <p className="text-sm text-white/50">
           Connect GitHub to create branches and pull requests from your workspaces.
         </p>
