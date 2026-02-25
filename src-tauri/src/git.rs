@@ -495,7 +495,8 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
     }
 
     // Untracked files (new files not yet git-added by agents)
-    for file in collect_untracked_files(workspace_path) {
+    let untracked = collect_untracked_files(workspace_path);
+    for file in &untracked {
         additions += file.additions;
     }
 

@@ -400,8 +400,11 @@ pub fn git_diff_stats(
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let stats = git::get_diff_stats(&workspace_path, &resolved)?;
     let elapsed = start.elapsed();
-    if elapsed.as_millis() > 100 {
-        println!("[GIT] git_diff_stats took {}ms ({})", elapsed.as_millis(), workspace_path);
+    if elapsed.as_millis() > 200 {
+        println!(
+            "[GIT] git_diff_stats: +{}/-{} in {}ms | path={}",
+            stats.additions, stats.deletions, elapsed.as_millis(), workspace_path
+        );
     }
     Ok(DiffStatsResponse { additions: stats.additions, deletions: stats.deletions })
 }
@@ -416,10 +419,10 @@ pub fn git_diff_files(
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let result = git::get_changed_files(&workspace_path, &resolved)?;
     let elapsed = start.elapsed();
-    if elapsed.as_millis() > 100 || result.truncated {
-        println!("[GIT] git_diff_files took {}ms ({}, {}/{} files{})",
-            elapsed.as_millis(), workspace_path,
-            result.files.len(), result.total_count,
+    if elapsed.as_millis() > 200 || result.truncated {
+        println!("[GIT] git_diff_files: {}/{} files in {}ms | path={}{}",
+            result.files.len(), result.total_count, elapsed.as_millis(),
+            workspace_path,
             if result.truncated { " TRUNCATED" } else { "" });
     }
     Ok(ChangedFilesResponse {

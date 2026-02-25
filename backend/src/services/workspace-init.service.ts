@@ -5,7 +5,8 @@
  *   1. git worktree add (fatal — cleanup on failure)
  *   2. Dependency installation via lockfile-detected PM (non-fatal)
  *   3. Post-create hooks: .env / .env.local copy (non-fatal)
- *   4. Session creation + state transition to 'ready' (fatal)
+ *   4. Git clean: restore tracked files so diff starts at zero (non-fatal)
+ *   5. Session creation + state transition to 'ready' (fatal)
  *
  * Each step updates the workspace's `init_stage` column in DB and emits
  * a structured stdout line that Rust parses and relays as a Tauri event:
@@ -193,6 +194,22 @@ const STAGES: InitStage[] = [
           }
         }
       }
+    },
+  },
+  {
+    name: 'git-clean',
+    label: 'Verifying workspace...',
+    fatal: false,
+    async run(ctx) {
+      // After deps install and .env copy, the working directory may have
+      // tracked-file modifications (e.g., lockfile normalization by the
+      // package manager, generated build cache files). Reset tracked files
+      // to match the index so the diff pipeline sees zero changes on a
+      // fresh workspace branched from origin/main.
+      await execFileAsync('git', ['checkout', '--', '.'], {
+        cwd: ctx.workspacePath,
+        timeout: 10_000,
+      });
     },
   },
   {

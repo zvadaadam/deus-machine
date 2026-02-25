@@ -220,7 +220,7 @@ export function MainContentTabBar({
               <button
                 type="button"
                 aria-label="New chat tab"
-                onClick={onTabAdd}
+                onClick={() => onTabAdd?.()}
                 className={cn(
                   "flex items-center justify-center",
                   "h-7 flex-shrink-0 rounded-md px-1.5",

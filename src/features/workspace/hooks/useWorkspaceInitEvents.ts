@@ -41,7 +41,7 @@ export function useWorkspaceInitEvents() {
         const { step } = event.payload;
 
         if (import.meta.env.DEV) {
-          console.log("[Events] 🏗️ Workspace progress:", event.payload);
+          console.log("[Events] Workspace progress:", event.payload);
         }
 
         // Terminal states: invalidate to pick up the final workspace state

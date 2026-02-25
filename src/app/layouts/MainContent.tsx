@@ -177,7 +177,8 @@ export function MainContent({
     isReady ? selectedWorkspaceId : null,
     selectedWorkspace?.session_status,
     workspaceGitInfo ?? undefined,
-    isWatched
+    isWatched,
+    selectedWorkspace?.state
   );
   const fileChanges = useMemo(() => fileChangesData?.files ?? [], [fileChangesData]);
 
