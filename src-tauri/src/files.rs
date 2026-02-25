@@ -36,6 +36,7 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::sync::Arc;
+use std::time::Instant;
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
@@ -229,17 +230,49 @@ impl FileScanner {
     /// Uses git CLI instead of libgit2's `repo.statuses()` because libgit2
     /// has phantom status issues in git worktrees — the same root cause that
     /// required migrating the diff pipeline to git CLI (see git.rs header).
+    ///
+    /// Uses spawn + try_wait with a 5s timeout (matching GIT_TIMEOUT_SHORT_MS
+    /// in git.rs) to avoid blocking indefinitely on hung git processes.
     fn collect_git_statuses(root_path: &Path) -> HashMap<String, GitStatus> {
         let mut map = HashMap::new();
-        let output = match std::process::Command::new("git")
+
+        // Spawn git process with timeout to avoid blocking indefinitely.
+        // Same spawn + try_wait + deadline pattern used in git.rs.
+        let mut child = match std::process::Command::new("git")
             .args(["status", "--porcelain", "-uall"])
             .current_dir(root_path)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .output()
+            .spawn()
         {
-            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
-            _ => return map,
+            Ok(c) => c,
+            Err(_) => return map,
+        };
+
+        let deadline = Instant::now() + std::time::Duration::from_millis(5000);
+
+        let output = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let result = match child.wait_with_output() {
+                        Ok(o) => o,
+                        Err(_) => return map,
+                    };
+                    if !status.success() {
+                        return map;
+                    }
+                    break String::from_utf8_lossy(&result.stdout).into_owned();
+                }
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return map;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(_) => return map,
+            }
         };
 
         // Porcelain format: "XY path" where X=index status, Y=worktree status
@@ -250,7 +283,21 @@ impl FileScanner {
             }
             let index_char = line.as_bytes()[0];
             let wt_char = line.as_bytes()[1];
-            let path = &line[3..];
+            let mut path = &line[3..];
+
+            // Handle rename format: "R  old_name -> new_name"
+            // Take the new (destination) name after the arrow.
+            if let Some(arrow_pos) = path.find(" -> ") {
+                path = &path[arrow_pos + 4..];
+            }
+
+            // Handle quoted paths (git quotes paths with special characters).
+            // Strip surrounding double quotes: "path with spaces" -> path with spaces
+            let path = if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
+                &path[1..path.len() - 1]
+            } else {
+                path
+            };
 
             let status = match (index_char, wt_char) {
                 (b'?', b'?') => GitStatus::Untracked,

@@ -4,6 +4,7 @@ import os from 'os';
 import { spawn } from 'child_process';
 import type BetterSqlite3 from 'better-sqlite3';
 import { HiveManifestSchema, type HiveManifest, type NormalizedTask } from '../lib/hive-manifest';
+import { emitProgress } from './workspace-init.service';
 
 /**
  * Read and normalize hive.json manifests.
@@ -143,7 +144,7 @@ export function runSetupScript(
     // (Rust backend.rs parses the prefix → Tauri event → useWorkspaceInitEvents hook).
     const step = status === 'completed' ? 'setup_done' : 'setup_failed';
     const label = status === 'completed' ? 'Setup complete' : `Setup failed: ${error ?? 'unknown'}`;
-    console.log(`HIVE_WORKSPACE_PROGRESS:${JSON.stringify({ workspaceId, step, label })}`);
+    emitProgress(workspaceId, step, label);
   };
 
   setupProc.on('close', (code) => {
