@@ -26,6 +26,7 @@ export function notifyBackend(event: string, sessionId?: string): void {
 }
 
 function flush(): void {
+  if (!NOTIFY_URL) return;
   const batch = pending;
   pending = null;
   if (!batch || batch.length === 0) return;
