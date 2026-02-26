@@ -18,7 +18,7 @@ export interface PRStatus {
   has_conflicts?: boolean;
   ci_status?: "passing" | "failing" | "pending" | "unknown";
   review_status?: "approved" | "changes_requested" | "review_required" | "none";
-  error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | null;
+  error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "network" | null;
 }
 
 /**

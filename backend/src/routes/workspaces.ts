@@ -209,6 +209,18 @@ app.get('/gh-status', async (c) => {
   return c.json({ isInstalled: true, isAuthenticated: authResult.success });
 });
 
+// GitHub Check Suite conclusions that indicate a non-passing terminal state.
+// Full GraphQL enum: ACTION_REQUIRED, CANCELLED, FAILURE, NEUTRAL, SKIPPED,
+// STALE, STARTUP_FAILURE, SUCCESS, TIMED_OUT.
+// NEUTRAL/SKIPPED are intentionally non-blocking (count as passing).
+// STALE means re-run is needed (count as pending below).
+const FAILING_CONCLUSIONS = new Set([
+  'FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED', 'CANCELLED',
+]);
+// CheckRun `status` values that indicate the check hasn't completed yet.
+// Note: CheckRun uses `status` field, StatusContext uses `state` field.
+const PENDING_STATUSES = new Set(['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED']);
+
 // PR status — async, fork-aware, explicit errors
 app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
   const workspacePath = c.get('workspacePath');
@@ -247,6 +259,9 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
   if (isFork) attempts.push({ repoArg: upstreamUrl, headArg: headBranch });
   attempts.push({ repoArg: originUrl, headArg: headBranch });
 
+  let lastError: string | null = null;
+  let hadSuccessfulResponse = false;
+
   for (const { repoArg, headArg } of attempts) {
     const args = ['pr', 'list', '--head', headArg, '--author', '@me', '--state', 'all',
       '--json', 'number,title,url,state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,isDraft'];
@@ -254,33 +269,76 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
 
     const result = await runGh(args, { cwd: workspacePath });
     if (!result.success) {
-      // Surface specific errors (installed/auth) to the frontend
+      // Surface specific errors (installed/auth) to the frontend immediately
       if (result.error === 'gh_not_installed' || result.error === 'gh_not_authenticated' || result.error === 'timeout') {
         return c.json({ has_pr: false, error: result.error });
       }
-      continue; // Try next attempt for unknown errors (e.g. repo not found)
+      lastError = result.error; // Track for surfacing if all attempts fail
+      continue;
     }
 
     let prs: any[];
     try { prs = JSON.parse(result.stdout || '[]'); } catch { continue; }
     if (!Array.isArray(prs)) continue;
+    hadSuccessfulResponse = true;
 
+    // Priority: OPEN > MERGED > CLOSED. Open PRs are actionable,
+    // merged PRs show archive, closed PRs show a non-actionable status.
     const openPr = prs.find((pr: any) => pr.state?.toUpperCase() === 'OPEN');
     const mergedPr = prs.find((pr: any) => pr.state?.toUpperCase() === 'MERGED');
-    const pr = openPr ?? mergedPr;
+    const closedPr = prs.find((pr: any) => pr.state?.toUpperCase() === 'CLOSED');
+    const pr = openPr ?? mergedPr ?? closedPr;
 
     if (pr) {
-      const state = pr.state?.toUpperCase() === 'MERGED' ? 'merged' : 'open';
+      const upperState = pr.state?.toUpperCase();
+      const state: 'open' | 'merged' | 'closed' =
+        upperState === 'MERGED' ? 'merged' :
+        upperState === 'CLOSED' ? 'closed' : 'open';
+
+      // Closed PRs are terminal — no CI or merge status is relevant
+      if (state === 'closed') {
+        return c.json({
+          has_pr: true,
+          pr_number: pr.number,
+          pr_title: pr.title,
+          pr_url: pr.url,
+          pr_state: 'closed',
+          merge_status: 'blocked',
+          is_draft: pr.isDraft === true,
+          has_conflicts: false,
+          ci_status: 'unknown',
+          review_status: 'none',
+          error: null,
+        });
+      }
+
       let mergeStatus: 'ready' | 'blocked' | 'merged' = 'blocked';
       if (state === 'merged') mergeStatus = 'merged';
       else if (pr.mergeable === 'MERGEABLE') mergeStatus = 'ready';
 
-      // Derive CI status from statusCheckRollup
+      // Derive CI status from statusCheckRollup.
+      // The array contains TWO different object types:
+      //   - CheckRun (__typename: "CheckRun"): uses `conclusion` (SUCCESS/FAILURE/null) + `status`
+      //   - StatusContext (__typename: "StatusContext"): uses `state` (SUCCESS/FAILURE/PENDING/ERROR)
+      // We must handle both — StatusContext has no `conclusion` field at all.
       const checks: any[] = pr.statusCheckRollup ?? [];
       let ciStatus: 'passing' | 'failing' | 'pending' | 'unknown' = 'unknown';
       if (checks.length > 0) {
-        const hasFailing = checks.some((c: any) => c.conclusion === 'FAILURE' || c.conclusion === 'ERROR' || c.conclusion === 'TIMED_OUT');
-        const hasPending = checks.some((c: any) => !c.conclusion || c.state === 'PENDING' || c.state === 'QUEUED' || c.state === 'IN_PROGRESS');
+        const hasFailing = checks.some((c: any) => {
+          if (c.__typename === 'StatusContext') {
+            return c.state === 'FAILURE' || c.state === 'ERROR';
+          }
+          return FAILING_CONCLUSIONS.has(c.conclusion);
+        });
+        const hasPending = checks.some((c: any) => {
+          if (c.__typename === 'StatusContext') {
+            return c.state === 'PENDING' || c.state === 'EXPECTED';
+          }
+          // CheckRun: null conclusion means still running, STALE means re-run needed
+          return c.conclusion === 'STALE' ||
+            c.conclusion == null ||
+            PENDING_STATUSES.has(c.status);
+        });
         if (hasFailing) ciStatus = 'failing';
         else if (hasPending) ciStatus = 'pending';
         else ciStatus = 'passing';
@@ -308,7 +366,9 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
     }
   }
 
-  return c.json({ has_pr: false, error: null });
+  // If all attempts failed with errors, surface it instead of silently showing "no PR".
+  // lastError is only set for 'unknown' errors (timeout/auth/install return immediately).
+  return c.json({ has_pr: false, error: (!hadSuccessfulResponse && lastError) ? 'network' : null });
 });
 
 // Pen files
