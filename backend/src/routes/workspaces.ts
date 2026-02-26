@@ -260,6 +260,7 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
   attempts.push({ repoArg: originUrl, headArg: headBranch });
 
   let lastError: string | null = null;
+  let hadSuccessfulResponse = false;
 
   for (const { repoArg, headArg } of attempts) {
     const args = ['pr', 'list', '--head', headArg, '--author', '@me', '--state', 'all',
@@ -279,6 +280,7 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
     let prs: any[];
     try { prs = JSON.parse(result.stdout || '[]'); } catch { continue; }
     if (!Array.isArray(prs)) continue;
+    hadSuccessfulResponse = true;
 
     // Priority: OPEN > MERGED > CLOSED. Open PRs are actionable,
     // merged PRs show archive, closed PRs show a non-actionable status.
@@ -366,7 +368,7 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
 
   // If all attempts failed with errors, surface it instead of silently showing "no PR".
   // lastError is only set for 'unknown' errors (timeout/auth/install return immediately).
-  return c.json({ has_pr: false, error: lastError ? 'network' : null });
+  return c.json({ has_pr: false, error: (!hadSuccessfulResponse && lastError) ? 'network' : null });
 });
 
 // Pen files
