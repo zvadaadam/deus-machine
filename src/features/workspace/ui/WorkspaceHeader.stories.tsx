@@ -28,116 +28,56 @@ const meta: Meta<typeof WorkspaceHeader> = {
     title: { control: "text" },
     repositoryName: { control: "text" },
     branch: { control: "text" },
-    targetBranch: { control: "text" },
   },
 };
 export default meta;
 
 type Story = StoryObj<typeof WorkspaceHeader>;
 
-/** No PR — shows Create PR split button + Review */
-export const NoPR: Story = {
+/** Default — repo name + branch + Open button */
+export const Default: Story = {
   args: {
     repositoryName: "sample-backend",
     branch: "zvadaadam/fix-api-keys",
     workspacePath: "/tmp/workspace",
-    onCreatePR: () => console.log("Create PR"),
-    onReviewPR: () => console.log("Review PR"),
-    targetBranch: "longer name for target",
   },
 };
 
-/** Title with repo/branch + Create PR + Review */
+/** Title with repo/branch */
 export const WithTitle: Story = {
   args: {
     title: "Restart Dev Server",
     repositoryName: "sample-backend",
     branch: "restart-dev-server",
     workspacePath: "/tmp/workspace",
-    onCreatePR: () => console.log("Create PR"),
-    onReviewPR: () => console.log("Review PR"),
-    targetBranch: "main",
   },
 };
 
-/** PR ready to merge — Review + Merge split button */
-export const PRReady: Story = {
+/** Setup running — shows spinner */
+export const SetupRunning: Story = {
   args: {
     repositoryName: "sample-backend",
-    branch: "zvadaadam/fix-api-keys",
+    branch: "main",
     workspacePath: "/tmp/workspace",
-    prStatus: {
-      has_pr: true,
-      pr_number: 84,
-      pr_title: "fix: secure API key handling",
-      pr_url: "https://github.com/org/repo/pull/84",
-      merge_status: "ready",
-    },
-    onReviewPR: () => console.log("Review PR"),
+    setupStatus: "running",
+  },
+};
+
+/** Setup failed — shows error + retry actions */
+export const SetupFailed: Story = {
+  args: {
+    repositoryName: "sample-backend",
+    branch: "main",
+    workspacePath: "/tmp/workspace",
+    setupStatus: "failed",
+    setupError: "npm install failed with exit code 1",
+    onRetrySetup: () => console.log("Retry setup"),
+    onViewSetupLogs: () => console.log("View logs"),
     onSendAgentMessage: (text: string) => console.log("Agent message:", text),
-    targetBranch: "main",
   },
 };
 
-/** PR merged — shows Review + Archive button */
-export const PRMerged: Story = {
-  args: {
-    repositoryName: "sample-backend",
-    branch: "zvadaadam/fix-api-keys",
-    workspacePath: "/tmp/workspace",
-    prStatus: {
-      has_pr: true,
-      pr_number: 84,
-      pr_title: "fix: secure API key handling",
-      pr_url: "https://github.com/org/repo/pull/84",
-      merge_status: "merged",
-    },
-    onReviewPR: () => console.log("Review PR"),
-    onArchive: () => console.log("Archive workspace"),
-    targetBranch: "main",
-  },
-};
-
-/** PR blocked — merge left button disabled */
-export const PRBlocked: Story = {
-  args: {
-    repositoryName: "sample-backend",
-    branch: "zvadaadam/fix-api-keys",
-    workspacePath: "/tmp/workspace",
-    prStatus: {
-      has_pr: true,
-      pr_number: 84,
-      pr_title: "fix: secure API key handling",
-      pr_url: "https://github.com/org/repo/pull/84",
-      merge_status: "blocked",
-    },
-    onReviewPR: () => console.log("Review PR"),
-    onSendAgentMessage: (text: string) => console.log("Agent message:", text),
-    targetBranch: "main",
-  },
-};
-
-/** Full design state — title + repo/branch + Review + Merge */
-export const TitleWithPR: Story = {
-  args: {
-    title: "Restart Dev Server",
-    repositoryName: "sample-backend",
-    branch: "restart-dev-server",
-    workspacePath: "/tmp/workspace",
-    prStatus: {
-      has_pr: true,
-      pr_number: 42,
-      pr_title: "feat: restart expo server command",
-      pr_url: "https://github.com/org/repo/pull/42",
-      merge_status: "ready",
-    },
-    onReviewPR: () => console.log("Review PR"),
-    onSendAgentMessage: (text: string) => console.log("Agent message:", text),
-    targetBranch: "main",
-  },
-};
-
-/** Minimal — only repo name, no actions */
+/** Minimal — only repo name */
 export const MinimalRepoOnly: Story = {
   args: {
     repositoryName: "hive-ide",

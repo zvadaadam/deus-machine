@@ -12,11 +12,9 @@
  * const {
  *   rightSideTab,
  *   rightPanelTab,
- *   rightPanelExpanded,
  *   selectedFilePath,
  *   setRightSideTab,
  *   setRightPanelTab,
- *   setRightPanelExpanded,
  *   setSelectedFilePath,
  * } = useWorkspaceLayout(workspaceId);
  * ```
@@ -36,8 +34,6 @@ interface UseWorkspaceLayoutResult {
   rightPanelTab: RightPanelTab;
   /** Current right side panel tab (code, config, terminal, design, browser) */
   rightSideTab: RightSideTab;
-  /** Whether right panel is expanded (showing diff viewer) */
-  rightPanelExpanded: boolean;
   /** Currently selected file path (for highlighting in tree) */
   selectedFilePath: string | null;
   /** Whether sidebar is collapsed */
@@ -46,19 +42,11 @@ interface UseWorkspaceLayoutResult {
   chatPanelCollapsed: boolean;
   /** Whether right panel is collapsed */
   rightPanelCollapsed: boolean;
-  /** User-set right panel width in pixels, or null for auto */
-  rightPanelWidth: number | null;
-  /** Stored width for normal tabs (code/config/terminal/design) in pixels */
-  rightPanelWidthNormal: number | null;
-  /** Stored width for browser tab in pixels */
-  rightPanelWidthBrowser: number | null;
 
   /** Set the active right panel tab */
   setRightPanelTab: (tab: RightPanelTab) => void;
   /** Set the active right side panel tab */
   setRightSideTab: (tab: RightSideTab) => void;
-  /** Set right panel expanded state */
-  setRightPanelExpanded: (expanded: boolean) => void;
   /** Set selected file path */
   setSelectedFilePath: (path: string | null, source?: "changes" | "files") => void;
   /** Set sidebar collapsed state */
@@ -67,13 +55,10 @@ interface UseWorkspaceLayoutResult {
   setChatPanelCollapsed: (collapsed: boolean) => void;
   /** Set right panel collapsed state */
   setRightPanelCollapsed: (collapsed: boolean) => void;
-  /** Set right panel width (null = auto) */
-  setRightPanelWidth: (width: number | null) => void;
   /** Update multiple layout properties at once */
   updateLayout: (updates: {
     rightPanelTab?: RightPanelTab;
     rightSideTab?: RightSideTab;
-    rightPanelExpanded?: boolean;
     selectedFilePath?: string | null;
     sidebarCollapsed?: boolean;
   }) => void;
@@ -82,7 +67,7 @@ interface UseWorkspaceLayoutResult {
 export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayoutResult {
   // Subscribe directly to store state - this triggers re-renders when layout changes.
   // useShallow prevents re-renders when setLayout creates a new object via spread
-  // but no field values actually changed (e.g., setRightPanelExpanded(true) when already true).
+  // but no field values actually changed.
   const layout = useWorkspaceLayoutStore(
     useShallow((state) =>
       workspaceId ? (state.layouts[workspaceId] ?? defaultLayout) : defaultLayout
@@ -106,15 +91,6 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     (tab: RightSideTab) => {
       if (workspaceId) {
         setLayout(workspaceId, { activeRightSideTab: tab });
-      }
-    },
-    [workspaceId, setLayout]
-  );
-
-  const setRightPanelExpanded = useCallback(
-    (expanded: boolean) => {
-      if (workspaceId) {
-        setLayout(workspaceId, { rightPanelExpanded: expanded });
       }
     },
     [workspaceId, setLayout]
@@ -158,29 +134,10 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     [workspaceId, setLayout]
   );
 
-  const setRightPanelWidth = useCallback(
-    (width: number | null) => {
-      if (workspaceId) {
-        // Read current tab from store at call time, not from the React closure.
-        // Fixes stale-closure bug: setRightSideTab(tab) + resize() fire in the
-        // same event handler, but the closure still sees the OLD activeRightSideTab.
-        const currentLayout = useWorkspaceLayoutStore.getState().layouts[workspaceId];
-        const sideTab = currentLayout?.activeRightSideTab ?? defaultLayout.activeRightSideTab;
-        if (sideTab === "browser" || sideTab === "simulator") {
-          setLayout(workspaceId, { rightPanelWidthBrowser: width });
-        } else {
-          setLayout(workspaceId, { rightPanelWidth: width });
-        }
-      }
-    },
-    [workspaceId, setLayout]
-  );
-
   const updateLayout = useCallback(
     (updates: {
       rightPanelTab?: RightPanelTab;
       rightSideTab?: RightSideTab;
-      rightPanelExpanded?: boolean;
       selectedFilePath?: string | null;
       sidebarCollapsed?: boolean;
     }) => {
@@ -193,9 +150,6 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
       }
       if (updates.rightSideTab !== undefined) {
         layoutUpdates.activeRightSideTab = updates.rightSideTab;
-      }
-      if (updates.rightPanelExpanded !== undefined) {
-        layoutUpdates.rightPanelExpanded = updates.rightPanelExpanded;
       }
       if (updates.selectedFilePath !== undefined) {
         layoutUpdates.selectedFile = updates.selectedFilePath
@@ -218,27 +172,18 @@ export function useWorkspaceLayout(workspaceId: string | null): UseWorkspaceLayo
     // State (derived from store)
     rightPanelTab: normalizedRightPanelTab,
     rightSideTab: layout.activeRightSideTab ?? defaultLayout.activeRightSideTab,
-    rightPanelExpanded: layout.rightPanelExpanded,
     selectedFilePath: layout.selectedFile?.path ?? null,
     sidebarCollapsed: layout.sidebarCollapsed,
     chatPanelCollapsed: layout.chatPanelCollapsed ?? false,
     rightPanelCollapsed: layout.rightPanelCollapsed ?? false,
-    rightPanelWidth:
-      layout.activeRightSideTab === "browser" || layout.activeRightSideTab === "simulator"
-        ? (layout.rightPanelWidthBrowser ?? null)
-        : (layout.rightPanelWidth ?? null),
-    rightPanelWidthNormal: layout.rightPanelWidth ?? null,
-    rightPanelWidthBrowser: layout.rightPanelWidthBrowser ?? null,
 
     // Stable callbacks
     setRightPanelTab,
     setRightSideTab,
-    setRightPanelExpanded,
     setSelectedFilePath,
     setSidebarCollapsed,
     setChatPanelCollapsed,
     setRightPanelCollapsed,
-    setRightPanelWidth,
     updateLayout,
   };
 }

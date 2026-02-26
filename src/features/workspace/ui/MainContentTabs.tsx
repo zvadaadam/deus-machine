@@ -319,28 +319,3 @@ export function MainContentTabBar({
   );
 }
 
-/**
- * Legacy wrapper for backward compatibility
- * @deprecated Use MainContentTabBar directly for better control
- */
-export function MainContentTabs({
-  tabs,
-  activeTabId,
-  onTabChange,
-  onTabClose,
-  onTabAdd,
-  children,
-}: MainContentTabBarProps & { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full flex-col">
-      <MainContentTabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onTabChange={onTabChange}
-        onTabClose={onTabClose}
-        onTabAdd={onTabAdd}
-      />
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-    </div>
-  );
-}
