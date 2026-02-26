@@ -118,14 +118,14 @@ describe("buildAgentEnvironment", () => {
   it("hiveEnv overrides extraEnv", () => {
     const env = buildAgentEnvironment({
       extraEnv: { MY_KEY: "extra" },
-      hiveEnv: { MY_KEY: "hive" },
+      hiveEnv: { MY_KEY: "opendevs" },
     });
-    expect(env.MY_KEY).toBe("hive");
+    expect(env.MY_KEY).toBe("opendevs");
   });
 
   it("claudeEnvVars overrides hiveEnv", () => {
     const env = buildAgentEnvironment({
-      hiveEnv: { MY_KEY: "hive" },
+      hiveEnv: { MY_KEY: "opendevs" },
       claudeEnvVars: "MY_KEY=from-user",
     });
     expect(env.MY_KEY).toBe("from-user");

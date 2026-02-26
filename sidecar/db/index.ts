@@ -10,7 +10,7 @@ import { SCHEMA_SQL, MIGRATIONS } from "./schema";
 
 const DEFAULT_DB_PATH = path.join(
   process.env.HOME || os.homedir(),
-  "Library/Application Support/com.hivenet.app/hive.db"
+  "Library/Application Support/com.opendevs.app/opendevs.db"
 );
 
 let dbInstance: Database.Database | null = null;

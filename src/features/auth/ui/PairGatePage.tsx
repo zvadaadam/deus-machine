@@ -1,5 +1,5 @@
 // Browser gate page for remote device pairing.
-// Shown when a non-localhost browser accesses Hive without a valid token.
+// Shown when a non-localhost browser accesses OpenDevs without a valid token.
 // Provides a split input (WORD + NUMBER) to enter a pairing code.
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -108,7 +108,7 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
       <div className="w-full max-w-sm space-y-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Connect to Hive</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Connect to OpenDevs</h1>
           <p className="text-muted-foreground mt-2 text-sm">
             Enter the pairing code from your desktop app to connect this device.
           </p>
@@ -174,7 +174,7 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
 
         {/* Help text */}
         <p className="text-muted-foreground text-center text-xs">
-          Open Settings &gt; Remote Access in the Hive desktop app to generate a pairing code.
+          Open Settings &gt; Remote Access in the OpenDevs desktop app to generate a pairing code.
         </p>
       </div>
     </div>

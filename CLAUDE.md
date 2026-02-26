@@ -77,12 +77,12 @@ Frontend receives:
   Tauri event → useSessionEvents hook → invalidates React Query → UI updates
 ```
 
-## Database: Standalone Hive Database
+## Database: Standalone OpenDevs Database
 
 Our app owns its own SQLite database:
 
 ```
-~/Library/Application Support/com.hivenet.app/hive.db
+~/Library/Application Support/com.opendevs.app/opendevs.db
 ```
 
 `initDatabase()` (in both `backend/src/lib/database.ts` and `sidecar/db/index.ts`) creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in the corresponding `schema.ts` files. No external dependencies — the app is fully self-contained.

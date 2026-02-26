@@ -1,10 +1,10 @@
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
-  "name": "Hive IDE",
+  "name": "OpenDevs IDE",
 
   "scripts": {
-    "setup": "./scripts/hive-setup.sh",
+    "setup": "./scripts/opendevs-setup.sh",
     "run": "./scripts/dev.sh"
   },
   "runScriptMode": "nonconcurrent",
@@ -19,7 +19,7 @@
   },
 
   "lifecycle": {
-    "setup": "./scripts/hive-setup.sh"
+    "setup": "./scripts/opendevs-setup.sh"
   },
 
   "tasks": {

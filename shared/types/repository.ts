@@ -5,7 +5,7 @@
 
 /**
  * Repository entity
- * Represents a git repository registered in Hive
+ * Represents a git repository registered in OpenDevs
  */
 export interface Repository {
   id: string;
@@ -19,7 +19,7 @@ export interface Repository {
 
 /**
  * Statistics aggregation
- * System-wide metrics for the Hive application
+ * System-wide metrics for the OpenDevs application
  */
 export interface Stats {
   workspaces: number;

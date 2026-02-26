@@ -1,6 +1,6 @@
 # Workspace MCP Tools
 
-Hive MCP tools for user interaction and workspace state inspection.
+OpenDevs MCP tools for user interaction and workspace state inspection.
 
 ## AskUserQuestion
 
@@ -31,7 +31,7 @@ Returns `"User cancelled the question..."` if the user dismisses the dialog.
 
 ## GetWorkspaceDiff
 
-View all changes on the current branch (including uncommitted) compared against the merge base. Same diff shown in the Hive UI and used for PRs.
+View all changes on the current branch (including uncommitted) compared against the merge base. Same diff shown in the OpenDevs UI and used for PRs.
 
 **Input:**
 

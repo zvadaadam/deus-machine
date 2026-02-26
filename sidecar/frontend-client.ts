@@ -1,6 +1,6 @@
 // sidecar/frontend-client.ts
 // Singleton facade over the RPC connection that exposes typed methods
-// for every message the sidecar exchanges with the Hive frontend.
+// for every message the sidecar exchanges with the OpenDevs frontend.
 
 import type { RpcConnection } from "./rpc-connection";
 import {

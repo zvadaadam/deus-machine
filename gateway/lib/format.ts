@@ -100,7 +100,7 @@ export function formatWorkspaceList(
     workspaces: Array<{ id: string; name: string; state: string }>;
   }>
 ): string {
-  if (repos.length === 0) return "No repos found. Add a repo in the Hive desktop app first.";
+  if (repos.length === 0) return "No repos found. Add a repo in the OpenDevs desktop app first.";
 
   const lines: string[] = [];
   for (const repo of repos) {

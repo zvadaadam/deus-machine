@@ -15,7 +15,7 @@
  * Console capture: An initialization_script injected into every page load
  * intercepts console.log/warn/error/debug and buffers them. SPA navigation
  * (pushState/replaceState) is detected via a title-channel bridge — the
- * script temporarily sets document.title to a hive-prefixed message,
+ * script temporarily sets document.title to a opendevs-prefixed message,
  * which triggers on_document_title_changed in Rust and emits events.
  */
 
@@ -36,7 +36,7 @@ use std::sync::mpsc as std_mpsc;
 /// conversion (via UTF8String → CStr), silently dropping the entire message.
 const BROWSER_INIT_SCRIPT: &str = r#"(function(){
   // Console capture — intercept and buffer
-  var B = window.__HIVE_LOGS__ = [];
+  var B = window.__OPENDEVS_LOGS__ = [];
   var _l=console.log, _w=console.warn, _e=console.error, _d=console.debug;
   function F(lv, args) {
     try {
@@ -173,7 +173,7 @@ pub async fn create_browser_webview(
                 )
                 .ok();
         })
-        // Detect hive messages in title changes (SPA nav, console drain)
+        // Detect opendevs messages in title changes (SPA nav, console drain)
         .on_document_title_changed(move |_webview, title| {
             // SPA navigation: "\x01CN:{url}"
             if title.starts_with("\x01CN:") {
@@ -434,7 +434,7 @@ pub async fn eval_browser_webview_with_result(
 
         // Log first 80 chars of JS for diagnostics (avoid spamming large scripts)
         let js_preview: String = js.chars().take(80).collect();
-        let is_drain = js.contains("drainEvents") || js.contains("__HIVE_LOGS__");
+        let is_drain = js.contains("drainEvents") || js.contains("__OPENDEVS_LOGS__");
 
         webview
             .with_webview(move |platform_wv| {
@@ -680,7 +680,7 @@ pub async fn reload_browser_webview(app: AppHandle, label: String) -> Result<(),
 
 /// Drain buffered console logs from a browser webview.
 ///
-/// Evals a script that reads the __HIVE_LOGS__ buffer, clears it,
+/// Evals a script that reads the __OPENDEVS_LOGS__ buffer, clears it,
 /// and sends the data via the title-channel bridge (\x01CL:{json}).
 /// The on_document_title_changed callback catches this and emits
 /// a "browser:console" Tauri event.
@@ -696,8 +696,8 @@ pub async fn drain_browser_console(app: AppHandle, label: String) -> Result<(), 
     webview
         .eval(
             r#"(function(){
-                var b = window.__HIVE_LOGS__ || [];
-                window.__HIVE_LOGS__ = [];
+                var b = window.__OPENDEVS_LOGS__ || [];
+                window.__OPENDEVS_LOGS__ = [];
                 if(b.length > 0) {
                     var t = document.title;
                     document.title = '\x01CL:' + JSON.stringify(b);

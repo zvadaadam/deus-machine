@@ -1,5 +1,5 @@
 {
-  "name": "@hive/mcp-notebook",
+  "name": "@opendevs/mcp-notebook",
   "version": "0.1.0",
   "type": "module",
   "main": "src/server.ts",

@@ -494,11 +494,11 @@ IOSurfaceRef try_get_surface_from_screen(id screenObject) {
 
 bool setup_screen_capture(SimBridge *bridge, char* error_buf, int error_buf_len) {
     bridge->frameQueue = dispatch_queue_create(
-        "com.hivenet.sim-bridge.frames",
+        "com.opendevs.sim-bridge.frames",
         DISPATCH_QUEUE_SERIAL
     );
     bridge->encodeQueue = dispatch_queue_create(
-        "com.hivenet.sim-bridge.encode",
+        "com.opendevs.sim-bridge.encode",
         DISPATCH_QUEUE_SERIAL
     );
 

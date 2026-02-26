@@ -443,7 +443,7 @@ function ChatBotsSubsection({ settings, saveSetting }: SettingsSectionProps) {
               id="whatsapp-session"
               defaultValue={settings.whatsapp_session_dir ?? ""}
               onBlur={(e) => saveSetting("whatsapp_session_dir", e.currentTarget.value)}
-              placeholder="~/.hive/whatsapp-session"
+              placeholder="~/.opendevs/whatsapp-session"
             />
           </div>
 
@@ -485,7 +485,7 @@ function ChatBotsSubsection({ settings, saveSetting }: SettingsSectionProps) {
  *   3. Paired devices list
  *   4. Chat Bots (collapsible -- Telegram/WhatsApp configuration)
  *
- * Design rationale: "access Hive from elsewhere" is one user intention.
+ * Design rationale: "access OpenDevs from elsewhere" is one user intention.
  * The portal URL is the hero because it answers the first question every
  * user has: "where do I go?" The pairing code is step 2 in that flow.
  * Messaging channels are a secondary, power-user concern and live in a
@@ -593,7 +593,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       <div>
         <h3 className="text-base font-semibold">Connect</h3>
         <p className="text-muted-foreground mt-1 text-sm">
-          Access Hive from your phone, another browser, or a chat bot.
+          Access OpenDevs from your phone, another browser, or a chat bot.
         </p>
       </div>
 

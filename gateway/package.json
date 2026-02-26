@@ -1,8 +1,8 @@
 {
-  "name": "@hive/gateway",
+  "name": "@opendevs/gateway",
   "version": "0.1.0",
   "private": true,
-  "description": "Messaging gateway for Hive IDE — Telegram, WhatsApp",
+  "description": "Messaging gateway for OpenDevs IDE — Telegram, WhatsApp",
   "main": "index.ts",
   "scripts": {
     "start": "bun run index.ts",

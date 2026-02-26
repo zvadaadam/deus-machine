@@ -1,6 +1,6 @@
 // sidecar/protocol.ts
 // Zod-validated protocol definitions for JSON-RPC 2.0 communication
-// between the Hive frontend/backend and the sidecar agent runtime.
+// between the OpenDevs frontend/backend and the sidecar agent runtime.
 
 import { z } from "zod";
 

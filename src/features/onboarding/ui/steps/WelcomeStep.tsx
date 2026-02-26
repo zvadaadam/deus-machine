@@ -4,7 +4,7 @@ interface WelcomeStepProps {
 
 /**
  * Welcome step — rendered inside the onboarding card.
- * "Welcome to" subtitle + "hivenet" in Geist Pixel font + tagline + pill CTA.
+ * "Welcome to" subtitle + "OpenDevs" in Geist Pixel font + tagline + pill CTA.
  * The Agent Dots animation has already played and filled white before this appears.
  */
 export function WelcomeStep({ onNext }: WelcomeStepProps) {
@@ -19,7 +19,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
           className="text-[42px] tracking-[0.02em] text-white"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
-          hivenet
+          OpenDevs
         </h1>
       </div>
 

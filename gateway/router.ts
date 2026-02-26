@@ -87,7 +87,7 @@ export class Router {
         case "help":
           await reply(
             [
-              "*Hive Gateway Commands*",
+              "*OpenDevs Gateway Commands*",
               "",
               "/repos - List repos and workspaces",
               "/workspace <name> - Bind this chat to a workspace",

@@ -96,7 +96,7 @@ export function buildAgentEnvironment(options?: {
     }
   }
 
-  // Layer 4: Hive env (from frontend)
+  // Layer 4: OpenDevs env (from frontend)
   if (options?.hiveEnv) {
     for (const [key, value] of Object.entries(options.hiveEnv)) {
       env[key] = value;

@@ -1,5 +1,5 @@
 // gateway/index.ts
-// Entry point for the Hive messaging gateway.
+// Entry point for the OpenDevs messaging gateway.
 // Wires config, sidecar client, backend client, binding store,
 // router, and channel adapters together.
 
@@ -13,7 +13,7 @@ import { WhatsAppAdapter } from "./adapters/whatsapp";
 import type { ChannelAdapter } from "./adapters/types";
 
 async function main(): Promise<void> {
-  console.log("[Gateway] Starting Hive messaging gateway...");
+  console.log("[Gateway] Starting OpenDevs messaging gateway...");
 
   // 1. Load config
   const config = loadConfig();
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
 
   // Signal readiness (Rust process manager looks for this)
   console.log("GATEWAY_READY");
-  console.log("[Gateway] Hive messaging gateway is running");
+  console.log("[Gateway] OpenDevs messaging gateway is running");
 
   // 7. Graceful shutdown
   const shutdown = async () => {

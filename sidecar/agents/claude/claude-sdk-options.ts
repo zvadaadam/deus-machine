@@ -7,7 +7,7 @@ import * as path from "path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
-import { createHiveMCPServer } from "../hive-tools";
+import { createOpenDevsMCPServer } from "../opendevs-tools";
 import { createNotebookMCPServer } from "../notebook-server";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
@@ -30,9 +30,9 @@ export const DEFAULT_SETTING_SOURCES = ["user", "project", "local"];
  * and teaches the agent about the persistent notebook REPL.
  */
 export const APPEND_SYSTEM_PROMPT = `
-# Hive IDE
+# OpenDevs IDE
 
-You are running inside Hive, an IDE that orchestrates multiple AI coding agents in parallel. Each workspace is an isolated git worktree branched from the main repo — your working directory is that worktree. You can only edit files within it. The user sees your progress in real-time: chat, file changes, terminal output, and notebook cells.
+You are running inside OpenDevs, an IDE that orchestrates multiple AI coding agents in parallel. Each workspace is an isolated git worktree branched from the main repo — your working directory is that worktree. You can only edit files within it. The user sees your progress in real-time: chat, file changes, terminal output, and notebook cells.
 
 # Persistent Notebook REPL
 
@@ -253,7 +253,7 @@ export function buildSdkOptions(
 
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
-      hive: createHiveMCPServer(sessionId),
+      opendevs: createOpenDevsMCPServer(sessionId),
       ...createNotebookMCPServer(workingDirectory),
     };
   }

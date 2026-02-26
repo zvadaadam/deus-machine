@@ -321,7 +321,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           // Clear any pending completion animation
           if (completingTimerRef.current) clearTimeout(completingTimerRef.current);
           setCompletingLoad(false);
-          // Reset injection flag — new page context destroys window.__hiveVisuals
+          // Reset injection flag — new page context destroys window.__opendevsVisuals
           automationInjectedRef.current = false;
           setHasLoaded(false);
           onUpdateTab(tabId, { loading: true });
@@ -336,7 +336,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       }
     );
 
-    // Title change events (regular, non-hive title changes)
+    // Title change events (regular, non-opendevs title changes)
     safeListen<{ label: string; title: string }>(
       "browser:title-changed",
       (evt) => {
@@ -389,8 +389,8 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     if (!visible || !webviewReady || !hasLoaded) return;
 
     const CONSOLE_DRAIN_JS = `(function(){
-      var b = window.__HIVE_LOGS__ || [];
-      window.__HIVE_LOGS__ = [];
+      var b = window.__OPENDEVS_LOGS__ || [];
+      window.__OPENDEVS_LOGS__ = [];
       return JSON.stringify(b);
     })()`;
 

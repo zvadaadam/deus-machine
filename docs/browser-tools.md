@@ -1,6 +1,6 @@
 # Browser Automation MCP Tools
 
-Hive MCP tools for controlling the embedded browser via accessibility tree snapshots and element ref-based interactions.
+OpenDevs MCP tools for controlling the embedded browser via accessibility tree snapshots and element ref-based interactions.
 
 All browser tools accept an optional `webviewLabel` parameter to target a specific tab. When omitted, the active tab is used. In multi-agent setups, each session is automatically mapped to its own tab.
 

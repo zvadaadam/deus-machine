@@ -3,24 +3,24 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { VISUAL_EFFECTS_SETUP } from "./visual-effects";
 
 // ============================================================================
-// Shared hook: inject __hiveVisuals into the window on mount
+// Shared hook: inject __opendevsVisuals into the window on mount
 // ============================================================================
 function useVisualEffects() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!(window as any).__hiveVisuals) {
+    if (!(window as any).__opendevsVisuals) {
       eval(VISUAL_EFFECTS_SETUP);
     }
-    setReady(!!(window as any).__hiveVisuals);
+    setReady(!!(window as any).__opendevsVisuals);
     return () => {
       // Clean up cursor SVG + any leftover visual elements
-      document.querySelectorAll("[data-hive-visual]").forEach((el) => el.remove());
-      delete (window as any).__hiveVisuals;
+      document.querySelectorAll("[data-opendevs-visual]").forEach((el) => el.remove());
+      delete (window as any).__opendevsVisuals;
     };
   }, []);
 
-  return { ready, v: (window as any).__hiveVisuals as HiveVisuals | null };
+  return { ready, v: (window as any).__opendevsVisuals as HiveVisuals | null };
 }
 
 type HiveVisuals = {
@@ -79,7 +79,7 @@ function StatusBadge({ ready }: { ready: boolean }) {
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${ready ? "bg-emerald-400" : "bg-red-400"}`} />
-      {ready ? "__hiveVisuals injected" : "Not injected"}
+      {ready ? "__opendevsVisuals injected" : "Not injected"}
     </span>
   );
 }
@@ -522,7 +522,7 @@ function VisualEffectsDemo() {
   return (
     <div className="flex max-w-3xl flex-col gap-5">
       <div>
-        <h2 className="text-lg font-semibold">Hive Visual Effects</h2>
+        <h2 className="text-lg font-semibold">OpenDevs Visual Effects</h2>
         <p className="text-muted-foreground text-base">
           Interactive test for all browser automation visual effects. These are injected into the
           WKWebView during AI actions.
