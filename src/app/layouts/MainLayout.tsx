@@ -285,7 +285,11 @@ export function MainLayout() {
           duration: 5000,
           action: {
             label: "Undo",
-            onClick: () => void unarchiveMutationRef.current.mutateAsync(workspaceId),
+            onClick: () => {
+              unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
+                toast.error(extractErrorMessage(error));
+              });
+            },
           },
         });
       } catch (error) {
