@@ -39,6 +39,8 @@ interface RightSidePanelProps {
   onOpenFilePreview: (filePath: string) => void;
   /** Whether file watcher is active -- disables polling in useFileChanges */
   isWatched?: boolean;
+  /** Insert a code review prompt into the chat input */
+  onReview?: () => void;
 }
 
 export function RightSidePanel({
@@ -47,6 +49,7 @@ export function RightSidePanel({
   onOpenDiffTab,
   onOpenFilePreview,
   isWatched = false,
+  onReview,
 }: RightSidePanelProps) {
   const { selectedFilePath, setSelectedFilePath, rightPanelTab, setRightPanelTab } =
     useWorkspaceLayout(workspace.id);
@@ -167,6 +170,7 @@ export function RightSidePanel({
           filterMode={filterMode}
           onFilterModeChange={handleFilterModeChange}
           workspaceGitInfo={workspaceGitInfo}
+          onReview={onReview}
         />
       )}
 

@@ -34,6 +34,7 @@ import { cn } from "@/shared/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
+import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { ChatArea } from "./ChatArea";
@@ -91,7 +92,6 @@ export function MainContent({
     setSelectedTargetBranch,
     handleCreatePR,
     handleSendAgentMessage,
-    handleOpenPR,
     handleArchive,
     handleRetrySetup,
     handleViewSetupLogs,
@@ -100,7 +100,6 @@ export function MainContent({
     handleRunTask,
   } = useWorkspaceActions({
     selectedWorkspace,
-    prStatus,
     setRightSideTab,
   });
 
@@ -200,6 +199,11 @@ export function MainContent({
     },
     [setRightSideTab]
   );
+
+  // Insert code review prompt into chat input
+  const handleInsertReviewPrompt = useCallback(() => {
+    workspaceChatPanelRef.current?.insertText(REVIEW_CODE);
+  }, [workspaceChatPanelRef]);
 
   return (
     <SidebarInset className="min-w-0">
@@ -315,7 +319,6 @@ export function MainContent({
                         ghStatus={ghStatus}
                         onCreatePR={createPRHandler ? handleCreatePR : undefined}
                         onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
-                        onReviewPR={handleOpenPR}
                         onArchive={handleArchive}
                         targetBranch={selectedTargetBranch}
                         onTargetBranchChange={setSelectedTargetBranch}
@@ -331,6 +334,7 @@ export function MainContent({
                         onOpenDiffTab={handleOpenDiff}
                         onOpenFilePreview={handleOpenFilePreview}
                         isWatched={isWatched}
+                        onReview={handleInsertReviewPrompt}
                       />
                     </div>
                   </div>
