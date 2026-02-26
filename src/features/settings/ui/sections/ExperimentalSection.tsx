@@ -20,7 +20,7 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
             iOS Simulator
           </Label>
           <p className="text-muted-foreground text-base">
-            Stream and interact with iOS simulators in the IDE.
+            Let the AI agent interact with and test on iOS simulators.
           </p>
         </div>
         <Switch
@@ -39,13 +39,32 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
             Browser
           </Label>
           <p className="text-muted-foreground text-base">
-            Built-in browser with DevTools and cookie sync.
+            Let the AI agent use a browser to test and develop websites.
           </p>
         </div>
         <Switch
           id="experimental-browser"
           checked={settings.experimental_browser !== false}
           onCheckedChange={(checked) => saveSetting("experimental_browser", checked)}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Notebooks */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label htmlFor="experimental-notebooks" className="text-sm">
+            Notebooks
+          </Label>
+          <p className="text-muted-foreground text-base">
+            Give the AI agent a notebook to run code snippets and visualize results.
+          </p>
+        </div>
+        <Switch
+          id="experimental-notebooks"
+          checked={settings.experimental_notebooks !== false}
+          onCheckedChange={(checked) => saveSetting("experimental_notebooks", checked)}
         />
       </div>
     </div>

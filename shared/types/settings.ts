@@ -25,6 +25,7 @@ export interface Settings {
   // Experimental (default: true when absent — backwards compatible)
   experimental_simulator?: boolean;
   experimental_browser?: boolean;
+  experimental_notebooks?: boolean;
 
   // Messaging Gateway
   telegram_bot_token?: string;
