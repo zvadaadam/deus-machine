@@ -1,5 +1,5 @@
 /**
- * Hive Database Schema — Single source of truth.
+ * OpenDevs Database Schema — Single source of truth.
  *
  * Imported by both backend/src/lib/schema.ts and sidecar/db/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).

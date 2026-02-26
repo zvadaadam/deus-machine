@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * End-to-End Test for Hive Backend
+ * End-to-End Test for OpenDevs Backend
  *
  * Tests the complete flow:
  * 1. Create a workspace
@@ -22,7 +22,7 @@ const DB_PATH = process.env.DATABASE_PATH || (() => {
   if (!process.env.HOME) {
     throw new Error('HOME environment variable is not set. Please set DATABASE_PATH explicitly.');
   }
-  return require('path').join(process.env.HOME, 'Library/Application Support/com.hivenet.app/hive.db');
+  return require('path').join(process.env.HOME, 'Library/Application Support/com.opendevs.app/opendevs.db');
 })();
 
 // Test state
@@ -395,7 +395,7 @@ async function runTests() {
     console.clear();
   }
   log('╔═══════════════════════════════════════════════════════════╗', 'cyan');
-  log('║         HIVE E2E TEST SUITE                                ║', 'cyan');
+  log('║         OPENDEVS E2E TEST SUITE                                ║', 'cyan');
   log('╚═══════════════════════════════════════════════════════════╝', 'cyan');
 
   const results = [];

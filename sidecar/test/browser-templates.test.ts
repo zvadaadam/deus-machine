@@ -288,8 +288,8 @@ describe("visual-effects JS templates", () => {
       assertIsIIFE(VISUAL_EFFECTS_SETUP, "VISUAL_EFFECTS_SETUP");
     });
 
-    it("installs window.__hiveVisuals", () => {
-      expect(VISUAL_EFFECTS_SETUP).toContain("window.__hiveVisuals");
+    it("installs window.__opendevsVisuals", () => {
+      expect(VISUAL_EFFECTS_SETUP).toContain("window.__opendevsVisuals");
     });
   });
 

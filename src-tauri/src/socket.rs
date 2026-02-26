@@ -84,7 +84,7 @@ impl SocketManager {
     /**
      * Connect to the sidecar Unix socket
      *
-     * @param socket_path - Path to Unix socket (e.g., /tmp/hive-claude-12345.sock)
+     * @param socket_path - Path to Unix socket (e.g., /tmp/opendevs-claude-12345.sock)
      */
     pub fn connect(&self, socket_path: String) -> Result<(), String> {
         let path = PathBuf::from(&socket_path);

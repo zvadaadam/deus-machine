@@ -76,7 +76,7 @@ pub struct WorkspaceWithDetails {
     pub current_session_id: Option<String>,
     pub updated_at: String,
     pub git_target_branch: Option<String>,
-    // Setup tracking (hive.json manifest) — parity with Node.js getWorkspacesByRepo
+    // Setup tracking (opendevs.json manifest) — parity with Node.js getWorkspacesByRepo
     pub setup_status: Option<String>,
     pub error_message: Option<String>,
     pub init_stage: Option<String>,
@@ -159,7 +159,7 @@ pub struct StatsRow {
 // ─── Settings Reads (from preferences.json) ────────────────
 
 impl DbManager {
-    /// Read a single setting value from preferences.json (co-located with hive.db).
+    /// Read a single setting value from preferences.json (co-located with opendevs.db).
     /// Returns None if the key doesn't exist or the file is missing/invalid.
     pub fn read_setting(&self, key: &str) -> Result<Option<String>, String> {
         let path_guard = self.db_path.lock().map_err(|e| format!("Lock poisoned: {}", e))?;
@@ -198,7 +198,7 @@ impl DbManager {
 
 /// Compute workspace filesystem path from DB fields.
 /// Mirrors backend/src/middleware/workspace-loader.ts computeWorkspacePath.
-/// All Hive workspaces live at {root_path}/.hive/{slug}.
+/// All OpenDevs workspaces live at {root_path}/.opendevs/{slug}.
 pub fn compute_workspace_path(
     root_path: Option<&str>,
     slug: Option<&str>,
@@ -213,7 +213,7 @@ pub fn compute_workspace_path(
     };
 
     let mut path = std::path::PathBuf::from(root);
-    path.push(".hive");
+    path.push(".opendevs");
     path.push(s);
     path.to_string_lossy().to_string()
 }

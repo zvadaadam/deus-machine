@@ -135,12 +135,12 @@
     </style>
   </head>
   <body>
-    <h1>Hive Visual Effects Test</h1>
+    <h1>OpenDevs Visual Effects Test</h1>
     <p class="subtitle">
       Navigate here in the embedded browser, then click buttons to trigger each effect.
     </p>
 
-    <div id="status" class="status">Checking window.__hiveVisuals...</div>
+    <div id="status" class="status">Checking window.__opendevsVisuals...</div>
 
     <!-- =============================== -->
     <!-- 1. Cursor Movement + Ripple     -->
@@ -281,12 +281,12 @@
       const statusEl = document.getElementById("status");
 
       function checkReady() {
-        if (window.__hiveVisuals) {
-          statusEl.textContent = "window.__hiveVisuals is ready. All effects available.";
+        if (window.__opendevsVisuals) {
+          statusEl.textContent = "window.__opendevsVisuals is ready. All effects available.";
           statusEl.classList.remove("error");
         } else {
           statusEl.textContent =
-            "window.__hiveVisuals NOT FOUND. Visual effects setup has not been injected.";
+            "window.__opendevsVisuals NOT FOUND. Visual effects setup has not been injected.";
           statusEl.classList.add("error");
         }
       }
@@ -302,9 +302,9 @@
       }
 
       function guard() {
-        if (!window.__hiveVisuals) {
+        if (!window.__opendevsVisuals) {
           statusEl.textContent =
-            "ERROR: __hiveVisuals not injected. Navigate here from the embedded browser.";
+            "ERROR: __opendevsVisuals not injected. Navigate here from the embedded browser.";
           statusEl.classList.add("error");
           return false;
         }
@@ -317,7 +317,7 @@
 
       function testMoveAndRipple(el) {
         if (!guard()) return;
-        const v = window.__hiveVisuals;
+        const v = window.__opendevsVisuals;
         const dur = v.moveCursorToElement(el);
         log("Cursor moving... duration=" + dur + "ms. Ripple in " + (dur + 20) + "ms.");
         setTimeout(function () {
@@ -332,7 +332,7 @@
 
       function testFade(ms) {
         if (!guard()) return;
-        const v = window.__hiveVisuals;
+        const v = window.__opendevsVisuals;
         // First make sure cursor is visible somewhere
         v.moveCursorToViewport(200, 300);
         setTimeout(function () {
@@ -343,7 +343,7 @@
 
       function testHide() {
         if (!guard()) return;
-        const v = window.__hiveVisuals;
+        const v = window.__opendevsVisuals;
         v.moveCursorToViewport(200, 300);
         setTimeout(function () {
           v.hideCursor();
@@ -353,7 +353,7 @@
 
       function testPin() {
         if (!guard()) return;
-        const v = window.__hiveVisuals;
+        const v = window.__opendevsVisuals;
         const el = document.getElementById("pin-target");
         const dur = v.moveCursorToElement(el);
         setTimeout(function () {
@@ -366,13 +366,13 @@
 
       function testUnpin() {
         if (!guard()) return;
-        window.__hiveVisuals.hideCursor();
+        window.__opendevsVisuals.hideCursor();
         log("Cursor unpinned and hidden.");
       }
 
       function testRippleHere(evt) {
         if (!guard()) return;
-        window.__hiveVisuals.rippleAt(evt.clientX, evt.clientY);
+        window.__opendevsVisuals.rippleAt(evt.clientX, evt.clientY);
         log("Ripple at click position (" + evt.clientX + ", " + evt.clientY + ").");
       }
 
@@ -380,13 +380,13 @@
         if (!guard()) return;
         const cx = window.innerWidth / 2;
         const cy = window.innerHeight / 2;
-        window.__hiveVisuals.rippleAt(cx, cy);
+        window.__opendevsVisuals.rippleAt(cx, cy);
         log("Ripple at viewport center (" + Math.round(cx) + ", " + Math.round(cy) + ").");
       }
 
       function testFlashFull() {
         if (!guard()) return;
-        window.__hiveVisuals.screenshotFlash(null);
+        window.__opendevsVisuals.screenshotFlash(null);
         log("Full page screenshot flash.");
       }
 
@@ -394,7 +394,7 @@
         if (!guard()) return;
         const section = event.target.closest(".section");
         const rect = section.getBoundingClientRect();
-        window.__hiveVisuals.screenshotFlash({
+        window.__opendevsVisuals.screenshotFlash({
           x: rect.left,
           y: rect.top,
           width: rect.width,
@@ -411,7 +411,7 @@
 
       function testKeyFlash() {
         if (!guard()) return;
-        window.__hiveVisuals.keyFlash();
+        window.__opendevsVisuals.keyFlash();
         const focused = document.activeElement;
         log(
           "keyFlash() on " +
@@ -422,31 +422,31 @@
 
       function testHighlight(el) {
         if (!guard()) return;
-        window.__hiveVisuals.highlightElement(el);
+        window.__opendevsVisuals.highlightElement(el);
         log("highlightElement() — blue outline + fill pulse.");
       }
 
       function testScan() {
         if (!guard()) return;
-        window.__hiveVisuals.scanPage();
+        window.__opendevsVisuals.scanPage();
         log("scanPage() — luminance band sweeping down (800ms ease-out-expo).");
       }
 
       function testScanRepeat() {
         if (!guard()) return;
-        window.__hiveVisuals.scanPage();
+        window.__opendevsVisuals.scanPage();
         setTimeout(function () {
-          window.__hiveVisuals.scanPage();
+          window.__opendevsVisuals.scanPage();
         }, 300);
         setTimeout(function () {
-          window.__hiveVisuals.scanPage();
+          window.__opendevsVisuals.scanPage();
         }, 600);
         log("3x rapid scanPage() — staggered 300ms apart.");
       }
 
       function testFullSequence(el) {
         if (!guard()) return;
-        const v = window.__hiveVisuals;
+        const v = window.__opendevsVisuals;
         log("Full sequence: moving cursor...");
         const dur = v.moveCursorToElement(el);
         setTimeout(function () {

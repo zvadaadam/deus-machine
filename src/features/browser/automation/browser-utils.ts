@@ -12,24 +12,24 @@
 //
 // KEY CHANGE: BROWSER_UTILS (~390 lines) was previously string-interpolated
 // into every builder call. Now it's injected ONCE on page load via
-// BROWSER_UTILS_SETUP, and builders reference window.__hiveBrowserUtils.
+// BROWSER_UTILS_SETUP, and builders reference window.__opendevsBrowserUtils.
 
-/** The IIFE string to eval in WKWebView — installs browser utils on window.__hiveBrowserUtils. */
+/** The IIFE string to eval in WKWebView — installs browser utils on window.__opendevsBrowserUtils. */
 import BROWSER_UTILS_SETUP from './dist-inject/browser-utils.js?raw';
 export { BROWSER_UTILS_SETUP };
 
 // Shorthand preamble for builder functions — verifies utils are loaded.
-const HIVE = `var hive = window.__hiveBrowserUtils;
-if (!hive) return JSON.stringify({ success: false, error: 'Browser utils not initialized' });`;
+const OPENDEVS = `var opendevs = window.__opendevsBrowserUtils;
+if (!opendevs) return JSON.stringify({ success: false, error: 'Browser utils not initialized' });`;
 
 /**
  * JS code to capture a page snapshot.
  * Returns: { snapshot: string, url: string, title: string }
  */
 export const SNAPSHOT_JS = `(function(){
-${HIVE}
-var tree = hive.buildPageSnapshot();
-var yaml = hive.accessibilityTreeToYaml(tree, 0);
+${OPENDEVS}
+var tree = opendevs.buildPageSnapshot();
+var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
 return JSON.stringify({
   snapshot: yaml,
   url: window.location.href,
@@ -42,23 +42,23 @@ return JSON.stringify({
  */
 export function buildClickJs(ref: string, doubleClick?: boolean): string {
   return `(function(){
-${HIVE}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+${OPENDEVS}
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) {
   return JSON.stringify({ success: false, error: 'Element not found: ' + ${JSON.stringify(ref)} });
 }
 var urlBefore = window.location.href;
-hive.simulateClick(el, { doubleClick: ${!!doubleClick} });
-return hive.waitForDomSettle(150, 2000).then(function() {
+opendevs.simulateClick(el, { doubleClick: ${!!doubleClick} });
+return opendevs.waitForDomSettle(150, 2000).then(function() {
   // Double-settle for SPA navigation: if URL changed after first settle,
   // the framework is likely still fetching data before rendering the new page.
   // Wait a second round to catch the post-data-fetch re-render.
   if (window.location.href !== urlBefore) {
-    return hive.waitForDomSettle(150, 3000);
+    return opendevs.waitForDomSettle(150, 3000);
   }
 }).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -69,15 +69,15 @@ return hive.waitForDomSettle(150, 2000).then(function() {
  */
 export function buildTypeJs(ref: string, text: string, submit?: boolean, slowly?: boolean): string {
   return `(function(){
-${HIVE}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+${OPENDEVS}
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) {
   return JSON.stringify({ success: false, error: 'Element not found: ' + ${JSON.stringify(ref)} });
 }
-hive.simulateType(el, ${JSON.stringify(text)}, { submit: ${!!submit} });
-return hive.waitForDomSettle(150, 2000).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+opendevs.simulateType(el, ${JSON.stringify(text)}, { submit: ${!!submit} });
+return opendevs.waitForDomSettle(150, 2000).then(function() {
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -95,15 +95,15 @@ export function buildWaitForTextJs(
   intervalMs: number = 500
 ): string {
   return `(function(){
-${HIVE}
+${OPENDEVS}
 return new Promise(function(resolve) {
   var deadline = Date.now() + ${timeoutMs};
   var searchText = ${JSON.stringify(text)};
   function poll() {
     var bodyText = document.body.innerText || '';
     if (bodyText.indexOf(searchText) !== -1) {
-      var tree = hive.buildPageSnapshot();
-      var yaml = hive.accessibilityTreeToYaml(tree, 0);
+      var tree = opendevs.buildPageSnapshot();
+      var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
       resolve(JSON.stringify({
         success: true, snapshot: yaml,
         url: window.location.href, title: document.title
@@ -132,15 +132,15 @@ export function buildWaitForTextGoneJs(
   intervalMs: number = 500
 ): string {
   return `(function(){
-${HIVE}
+${OPENDEVS}
 return new Promise(function(resolve) {
   var deadline = Date.now() + ${timeoutMs};
   var searchText = ${JSON.stringify(text)};
   function poll() {
     var bodyText = document.body.innerText || '';
     if (bodyText.indexOf(searchText) === -1) {
-      var tree = hive.buildPageSnapshot();
-      var yaml = hive.accessibilityTreeToYaml(tree, 0);
+      var tree = opendevs.buildPageSnapshot();
+      var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
       resolve(JSON.stringify({
         success: true, snapshot: yaml,
         url: window.location.href, title: document.title
@@ -166,13 +166,13 @@ return new Promise(function(resolve) {
  */
 export function buildHoverJs(ref: string): string {
   return `(function(){
-${HIVE}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+${OPENDEVS}
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) {
   return JSON.stringify({ success: false, error: 'Element not found: ' + ${JSON.stringify(ref)} });
 }
-hive.scrollIntoViewIfNeeded(el);
-var center = hive.getElementCenter(el);
+opendevs.scrollIntoViewIfNeeded(el);
+var center = opendevs.getElementCenter(el);
 var opts = {
   bubbles: true, cancelable: true, view: window,
   clientX: center.x, clientY: center.y,
@@ -181,9 +181,9 @@ var opts = {
 el.dispatchEvent(new MouseEvent('mouseenter', Object.assign({}, opts, { bubbles: false })));
 el.dispatchEvent(new MouseEvent('mouseover', opts));
 el.dispatchEvent(new MouseEvent('mousemove', opts));
-return hive.waitForDomSettle(150, 2000).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+return opendevs.waitForDomSettle(150, 2000).then(function() {
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -278,8 +278,8 @@ export function buildPressKeyJs(
  */
 export function buildSelectOptionJs(ref: string, values: string[]): string {
   return `(function(){
-${HIVE}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+${OPENDEVS}
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) {
   return JSON.stringify({ success: false, error: 'Element not found: ' + ${JSON.stringify(ref)} });
 }
@@ -303,9 +303,9 @@ for (var i = 0; i < el.options.length; i++) {
 }
 el.dispatchEvent(new Event('input', { bubbles: true }));
 el.dispatchEvent(new Event('change', { bubbles: true }));
-return hive.waitForDomSettle(150, 2000).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+return opendevs.waitForDomSettle(150, 2000).then(function() {
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, matched: matched, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -325,16 +325,16 @@ export function buildEvaluateJs(jsCode: string, ref?: string): string {
   const finalize = `
   function __finalize(result) {
     var resultStr = result === undefined ? 'undefined' : JSON.stringify(result, null, 2);
-    var tree = hive.buildPageSnapshot();
-    var yaml = hive.accessibilityTreeToYaml(tree, 0);
+    var tree = opendevs.buildPageSnapshot();
+    var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
     return JSON.stringify({ result: resultStr, snapshot: yaml });
   }`;
 
   if (ref) {
     return `(function(){
-${HIVE}
+${OPENDEVS}
 ${finalize}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) return JSON.stringify({ error: 'Element not found: ' + ${JSON.stringify(ref)} });
 try {
   var fn = new Function('element', ${JSON.stringify(jsCode)});
@@ -351,7 +351,7 @@ try {
 })()`;
   }
   return `(function(){
-${HIVE}
+${OPENDEVS}
 ${finalize}
 try {
   var fn = new Function(${JSON.stringify(jsCode)});
@@ -383,15 +383,15 @@ export function buildScrollJs(direction?: string, amount?: number, ref?: string)
   if (ref) {
     // Scroll element into view, then snapshot
     return `(function(){
-${HIVE}
-var el = hive.findElementByRef(${JSON.stringify(ref)});
+${OPENDEVS}
+var el = opendevs.findElementByRef(${JSON.stringify(ref)});
 if (!el) {
   return JSON.stringify({ success: false, error: 'Element not found: ' + ${JSON.stringify(ref)} });
 }
 el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-return hive.waitForDomSettle(150, 2000).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+return opendevs.waitForDomSettle(150, 2000).then(function() {
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -407,11 +407,11 @@ return hive.waitForDomSettle(150, 2000).then(function() {
   const scrollCmd = scrollMap[direction ?? "down"] ?? scrollMap["down"];
 
   return `(function(){
-${HIVE}
+${OPENDEVS}
 ${scrollCmd};
-return hive.waitForDomSettle(150, 2000).then(function() {
-  var tree = hive.buildPageSnapshot();
-  var yaml = hive.accessibilityTreeToYaml(tree, 0);
+return opendevs.waitForDomSettle(150, 2000).then(function() {
+  var tree = opendevs.buildPageSnapshot();
+  var yaml = opendevs.accessibilityTreeToYaml(tree, 0);
   return JSON.stringify({ success: true, snapshot: yaml, url: window.location.href, title: document.title });
 });
 })()`;
@@ -428,7 +428,7 @@ return hive.waitForDomSettle(150, 2000).then(function() {
  */
 export const CONSOLE_MESSAGES_JS = `
 (function() {
-  var logs = window.__HIVE_LOGS__ || [];
+  var logs = window.__OPENDEVS_LOGS__ || [];
   var entries = logs.map(function(l) {
     return '[' + (l.l || 'info').toUpperCase() + '] ' + (l.m || '');
   });

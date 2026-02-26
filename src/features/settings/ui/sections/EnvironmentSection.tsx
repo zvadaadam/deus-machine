@@ -1,7 +1,7 @@
 /**
- * EnvironmentSection — per-repository hive.json manifest editor.
+ * EnvironmentSection — per-repository opendevs.json manifest editor.
  *
- * Lets users select a repo, view/edit its hive.json configuration
+ * Lets users select a repo, view/edit its opendevs.json configuration
  * (setup script, run script, archive script, requirements, env vars, tasks),
  * auto-detect from project files, and save.
  */
@@ -79,7 +79,7 @@ export function EnvironmentSection() {
       { repoId: selectedRepoId, manifest },
       {
         onSuccess: () => {
-          toast.success("hive.json saved");
+          toast.success("opendevs.json saved");
           setIsDirty(false);
         },
         onError: (err) => {
@@ -176,7 +176,7 @@ export function EnvironmentSection() {
             <div className="border-border-subtle flex items-center gap-3 rounded-lg border border-dashed p-4">
               <Wand2 className="text-muted-foreground size-5 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">No hive.json found</p>
+                <p className="text-sm font-medium">No opendevs.json found</p>
                 <p className="text-muted-foreground text-base">
                   Auto-detect tasks from your project files (package.json, Cargo.toml, etc.)
                 </p>

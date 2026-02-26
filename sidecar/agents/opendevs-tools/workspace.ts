@@ -1,4 +1,4 @@
-// sidecar/agents/hive-tools/workspace.ts
+// sidecar/agents/opendevs-tools/workspace.ts
 // Workspace-aware tools: user interaction, diff, comments, terminal output.
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -40,7 +40,7 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
           .max(4),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] AskUserQuestion invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] AskUserQuestion invoked for session ${sessionId}`);
 
         let answers: (string | string[])[];
         try {
@@ -50,7 +50,7 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
           });
           answers = response.answers;
         } catch (err) {
-          console.error("[hiveMCPServer] AskUserQuestion request failed:", err);
+          console.error("[opendevsMCPServer] AskUserQuestion request failed:", err);
           return {
             content: [
               {
@@ -100,7 +100,7 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
     tool(
       "GetWorkspaceDiff",
       `You can use this tool to see what the user is currently working on, or when the user refers to the "workspace diff", "PR diff", or "all changes". This compares all changes on the current branch (including uncommitted changes) against the merge base.
-It's the same diff the user will see in the Hive UI, and the same diff that will be used in any PRs.
+It's the same diff the user will see in the OpenDevs UI, and the same diff that will be used in any PRs.
 With stat: true, returns git diff --stat style output showing per-file statistics. With file: 'path/to/file', returns the full unified diff for that specific file. With no parameters, returns the full unified diff for all changes.`,
       {
         file: z
@@ -113,7 +113,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
           .describe("If true, return git diff --stat style output with per-file statistics"),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] getDiff invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] getDiff invoked for session ${sessionId}`);
 
         const response = await FrontendClient.requestGetDiff({
           sessionId,
@@ -149,7 +149,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
         ),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] DiffComment invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] DiffComment invoked for session ${sessionId}`);
 
         const { success } = await FrontendClient.requestDiffComment({
           sessionId,
@@ -194,7 +194,7 @@ Returns the terminal output along with information about what type of terminal i
           .describe("Maximum number of lines to return. Defaults to 1000."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] GetTerminalOutput invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] GetTerminalOutput invoked for session ${sessionId}`);
 
         const response = await FrontendClient.requestGetTerminalOutput({
           sessionId,

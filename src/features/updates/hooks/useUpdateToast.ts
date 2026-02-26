@@ -1,6 +1,6 @@
 /**
  * Shows a persistent Sonner toast when an update is ready to install.
- * Mirrors OpenDevs's pattern: never auto-dismiss, "Restart" button.
+ * Never auto-dismiss, "Restart" button.
  */
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";

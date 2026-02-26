@@ -7,7 +7,7 @@ import { getRelayCredentials, generateRelayCredentials } from './services/auth.s
 import { getSetting, saveSetting } from './services/settings.service';
 
 /**
- * Hive Backend Server
+ * OpenDevs Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
  * Agent runtime (Claude SDK) is now managed by sidecar-v2 (Rust-spawned).

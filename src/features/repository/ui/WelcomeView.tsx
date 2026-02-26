@@ -8,7 +8,7 @@ interface WelcomeViewProps {
 
 /**
  * WelcomeView — Empty state when no workspace is selected.
- * Shows hivenet branding in pixel font + two action cards.
+ * Shows OpenDevs branding in pixel font + two action cards.
  */
 export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewProps) {
   return (
@@ -20,7 +20,7 @@ export function WelcomeView({ onOpenProject, onCloneRepository }: WelcomeViewPro
             className="text-text-primary mb-3 text-3xl tracking-[0.02em]"
             style={{ fontFamily: "var(--font-pixel)" }}
           >
-            hivenet
+            OpenDevs
           </h1>
           <p className="text-text-tertiary max-w-xs text-sm">
             Manage multiple AI coding agents in parallel.

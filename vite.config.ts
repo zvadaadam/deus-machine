@@ -35,7 +35,7 @@ export default defineConfig(async () => ({
     // This allows running multiple dev instances simultaneously
     watch: {
       // Ignore generated/native/local workspace trees that cause noisy reload storms.
-      ignored: ["**/src-tauri/**", "**/.hive/**"],
+      ignored: ["**/src-tauri/**", "**/.opendevs/**"],
     },
   },
 }));

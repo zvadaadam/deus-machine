@@ -27376,7 +27376,7 @@ var ConfigSchema = external_exports.object({
   telegramBotToken: external_exports.string().min(1).optional(),
   /** WhatsApp session directory for auth state persistence (optional) */
   whatsappSessionDir: external_exports.string().min(1).optional(),
-  /** Base URL for the Hive backend HTTP API (e.g. http://localhost:50123) */
+  /** Base URL for the OpenDevs backend HTTP API (e.g. http://localhost:50123) */
   backendUrl: external_exports.string().url(),
   /** Path to the sidecar Unix domain socket */
   sidecarSocketPath: external_exports.string().min(1),
@@ -27393,7 +27393,7 @@ function loadConfig() {
     whatsappSessionDir: process.env.WHATSAPP_SESSION_DIR || void 0,
     backendUrl: process.env.BACKEND_URL ?? process.env.HIVE_BACKEND_URL,
     sidecarSocketPath: process.env.SIDECAR_SOCKET_PATH,
-    bindingsPath: process.env.BINDINGS_PATH ?? "/tmp/hive-gateway-bindings.json",
+    bindingsPath: process.env.BINDINGS_PATH ?? "/tmp/opendevs-gateway-bindings.json",
     allowedUserIds: process.env.ALLOWED_USER_IDS ? process.env.ALLOWED_USER_IDS.split(",").map((s) => s.trim()).filter(Boolean) : [],
     whatsappAllowedUserIds: process.env.WHATSAPP_ALLOWED_USER_IDS ? process.env.WHATSAPP_ALLOWED_USER_IDS.split(",").map((s) => s.trim()).filter(Boolean) : []
   };
@@ -27836,7 +27836,7 @@ function formatDiffStats(stats) {
   ].join("\n");
 }
 function formatWorkspaceList(repos) {
-  if (repos.length === 0) return "No repos found. Add a repo in the Hive desktop app first.";
+  if (repos.length === 0) return "No repos found. Add a repo in the OpenDevs desktop app first.";
   const lines = [];
   for (const repo of repos) {
     lines.push(`*${repo.repo_name}*`);
@@ -27904,7 +27904,7 @@ var Router = class {
         case "help":
           await reply(
             [
-              "*Hive Gateway Commands*",
+              "*OpenDevs Gateway Commands*",
               "",
               "/repos - List repos and workspaces",
               "/workspace <name> - Bind this chat to a workspace",
@@ -28283,7 +28283,7 @@ var WhatsAppAdapter = class {
 
 // gateway/index.ts
 async function main() {
-  console.log("[Gateway] Starting Hive messaging gateway...");
+  console.log("[Gateway] Starting OpenDevs messaging gateway...");
   const config2 = loadConfig();
   console.log("[Gateway] Config loaded:", {
     backendUrl: config2.backendUrl,
@@ -28323,7 +28323,7 @@ async function main() {
     });
   }
   console.log("GATEWAY_READY");
-  console.log("[Gateway] Hive messaging gateway is running");
+  console.log("[Gateway] OpenDevs messaging gateway is running");
   const shutdown = async () => {
     console.log("[Gateway] Shutting down...");
     for (const adapter of adapters) {

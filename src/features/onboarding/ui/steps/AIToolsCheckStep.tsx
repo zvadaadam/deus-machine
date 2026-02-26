@@ -18,7 +18,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold text-white">AI Coding Tools</h2>
         <p className="text-sm text-white/50">
-          Hive orchestrates these AI agents to write code in your projects.
+          OpenDevs orchestrates these AI agents to write code in your projects.
         </p>
       </div>
 

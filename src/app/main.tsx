@@ -19,9 +19,9 @@ window.addEventListener("focus", () =>
 window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
 
 if (typeof window !== "undefined") {
-  const w = window as Window & { __hiveErrorHandlers__?: boolean };
-  if (!w.__hiveErrorHandlers__) {
-    w.__hiveErrorHandlers__ = true;
+  const w = window as Window & { __opendevsErrorHandlers__?: boolean };
+  if (!w.__opendevsErrorHandlers__) {
+    w.__opendevsErrorHandlers__ = true;
 
     window.addEventListener("error", (event) => {
       reportError(event.error ?? event.message, {

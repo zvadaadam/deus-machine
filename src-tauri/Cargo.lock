@@ -1829,7 +1829,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "hive"
+name = "opendevs"
 version = "2.0.0"
 dependencies = [
  "aes",
@@ -1841,7 +1841,7 @@ dependencies = [
  "chrono",
  "git2",
  "glob",
- "hive-sim-core",
+ "opendevs-sim-core",
  "hmac",
  "ignore",
  "lazy_static",
@@ -1876,13 +1876,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "hive-sim-core"
+name = "opendevs-sim-core"
 version = "0.1.0"
 dependencies = [
  "async-stream",
  "axum",
  "bytes",
- "hive-sim-sys",
+ "opendevs-sim-sys",
  "log",
  "serde",
  "serde_json",
@@ -1891,7 +1891,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "hive-sim-sys"
+name = "opendevs-sim-sys"
 version = "0.1.0"
 dependencies = [
  "cc",

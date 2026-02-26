@@ -504,7 +504,7 @@ export function useUpdateSystemPrompt() {
 }
 
 /**
- * Fetch hive.json manifest + normalized tasks for a workspace.
+ * Fetch opendevs.json manifest + normalized tasks for a workspace.
  * Manifest doesn't change during a session — staleTime: Infinity.
  */
 export function useManifestTasks(workspaceId: string | null) {

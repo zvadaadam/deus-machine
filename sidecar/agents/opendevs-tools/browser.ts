@@ -1,9 +1,9 @@
-// sidecar/agents/hive-tools/browser.ts
+// sidecar/agents/opendevs-tools/browser.ts
 // Browser automation tools: snapshot, click, type, navigate, evaluate, etc.
 //
 // Snapshot file-based fallback (inspired by Cursor):
 // When a page snapshot exceeds SNAPSHOT_SIZE_THRESHOLD, the full snapshot
-// is written to ~/.hive/browser-logs/ and only a preview (first N lines)
+// is written to ~/.opendevs/browser-logs/ and only a preview (first N lines)
 // is returned to the AI context. The AI can read the full file if needed.
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -24,7 +24,7 @@ import { FrontendClient } from "../../frontend-client";
 const SNAPSHOT_SIZE_THRESHOLD = 25 * 1024; // 25 KB for action tools
 const SNAPSHOT_SIZE_THRESHOLD_LARGE = 200 * 1024; // 200 KB for BrowserSnapshot
 const PREVIEW_LINE_COUNT = 50;
-const BROWSER_LOGS_DIR = join(homedir(), ".hive", "browser-logs");
+const BROWSER_LOGS_DIR = join(homedir(), ".opendevs", "browser-logs");
 
 /**
  * Format a snapshot response with file-based fallback for large snapshots.
@@ -156,7 +156,7 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
           .describe("Target browser tab webview label. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserSnapshot({
@@ -215,7 +215,7 @@ The element is scrolled into view, focused, and clicked with proper mouse event 
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`
+          `[opendevsMCPServer] BrowserClick invoked for session ${sessionId}: ref=${args.ref}`
         );
 
         try {
@@ -279,7 +279,7 @@ The element is focused and text is entered. Use submit: true to press Enter afte
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserType invoked for session ${sessionId}: ref=${args.ref}`
+          `[opendevsMCPServer] BrowserType invoked for session ${sessionId}: ref=${args.ref}`
         );
 
         try {
@@ -336,7 +336,7 @@ The element is focused and text is entered. Use submit: true to press Enter afte
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`
+          `[opendevsMCPServer] BrowserNavigate invoked for session ${sessionId}: url=${args.url}`
         );
 
         try {
@@ -417,7 +417,7 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
               ? "time"
               : "unknown";
         console.log(
-          `[hiveMCPServer] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`
+          `[opendevsMCPServer] BrowserWaitFor invoked for session ${sessionId}: mode=${mode}`
         );
 
         try {
@@ -489,7 +489,7 @@ If a ref is provided, the matching element is passed as the 'element' argument. 
           .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserEvaluate({
@@ -550,7 +550,7 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`
+          `[opendevsMCPServer] BrowserPressKey invoked for session ${sessionId}: key=${args.key}`
         );
 
         try {
@@ -602,7 +602,7 @@ hover states, or any UI that appears on mouse hover. Returns a page snapshot aft
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`
+          `[opendevsMCPServer] BrowserHover invoked for session ${sessionId}: ref=${args.ref}`
         );
 
         try {
@@ -661,7 +661,7 @@ to select by option value or visible text. Returns a page snapshot after selecti
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`
+          `[opendevsMCPServer] BrowserSelectOption invoked for session ${sessionId}: ref=${args.ref}`
         );
 
         try {
@@ -712,7 +712,7 @@ to select by option value or visible text. Returns a page snapshot after selecti
           .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserNavigateBack({
@@ -757,7 +757,7 @@ Messages are formatted as [LEVEL] message.`,
           .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserConsoleMessages({
@@ -834,7 +834,7 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
           .describe("Crop to a specific region. Takes priority over ref."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserScreenshot invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserScreenshot invoked for session ${sessionId}`);
 
         try {
           let cropRect = args.rect;
@@ -937,7 +937,7 @@ Requests are formatted as [TYPE] URL (duration, size).`,
           .describe("Target browser tab. If omitted, uses the active tab."),
       },
       async (args) => {
-        console.log(`[hiveMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
+        console.log(`[opendevsMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
 
         try {
           const response = await FrontendClient.requestBrowserNetworkRequests({
@@ -1012,7 +1012,7 @@ Two modes:
       },
       async (args) => {
         console.log(
-          `[hiveMCPServer] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} amount=${args.amount} ref=${args.ref}`
+          `[opendevsMCPServer] BrowserScroll invoked for session ${sessionId}: dir=${args.direction} amount=${args.amount} ref=${args.ref}`
         );
 
         try {

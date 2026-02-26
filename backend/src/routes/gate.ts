@@ -18,7 +18,7 @@ function gatePage() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hive</title>
+  <title>OpenDevs</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -114,7 +114,7 @@ function gatePage() {
   <!-- Pairing View -->
   <div id="pair-view" class="pair-view">
     <div class="pair-card">
-      <h1>Connect to Hive</h1>
+      <h1>Connect to OpenDevs</h1>
       <p class="sub">Enter the pairing code from your desktop app.</p>
 
       <form id="pair-form">
@@ -130,14 +130,14 @@ function gatePage() {
         <button type="submit" id="btn" class="pair-btn" disabled>Connect</button>
       </form>
 
-      <p class="help">Open Settings &gt; Remote Access in the Hive desktop app to generate a code.</p>
+      <p class="help">Open Settings &gt; Remote Access in the OpenDevs desktop app to generate a code.</p>
     </div>
   </div>
 
   <!-- Dashboard View (shown after pairing) -->
   <div id="dash-view" class="dash-view">
     <div class="dash-header">
-      <h1>Hive</h1>
+      <h1>OpenDevs</h1>
       <div class="connected">
         <span class="connected-dot"></span>
         <span id="dash-device">Connected</span>
@@ -158,7 +158,7 @@ function gatePage() {
     const dashView = document.getElementById('dash-view');
 
     // Check if already paired (token in localStorage)
-    const existingToken = localStorage.getItem('hive_device_token');
+    const existingToken = localStorage.getItem('opendevs_device_token');
     if (existingToken) {
       showDashboard(existingToken, null);
     }
@@ -217,7 +217,7 @@ function gatePage() {
         }
 
         const data = await res.json();
-        localStorage.setItem('hive_device_token', data.token);
+        localStorage.setItem('opendevs_device_token', data.token);
         showDashboard(data.token, data.device?.name || null);
       } catch (err) {
         errorEl.textContent = err.message;
@@ -245,7 +245,7 @@ function gatePage() {
 
         if (res.status === 401 || res.status === 403) {
           // Token revoked or invalid — go back to pairing
-          localStorage.removeItem('hive_device_token');
+          localStorage.removeItem('opendevs_device_token');
           location.reload();
           return;
         }
@@ -254,7 +254,7 @@ function gatePage() {
 
         const repos = await res.json();
         if (!repos.length) {
-          content.innerHTML = '<div class="empty-state">No repositories added yet.<br>Add a repo in the Hive desktop app to get started.</div>';
+          content.innerHTML = '<div class="empty-state">No repositories added yet.<br>Add a repo in the OpenDevs desktop app to get started.</div>';
           return;
         }
 
