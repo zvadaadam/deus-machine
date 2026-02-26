@@ -57,6 +57,8 @@ interface CodePanelContentProps {
   onFilterModeChange?: (mode: FilterMode) => void;
   /** Git info for fetching diffs */
   workspaceGitInfo: WorkspaceGitInfo;
+  /** Callback to insert a code review prompt into the chat input */
+  onReview?: () => void;
 }
 
 export function CodePanelContent({
@@ -71,6 +73,7 @@ export function CodePanelContent({
   filterMode = "changes",
   onFilterModeChange,
   workspaceGitInfo,
+  onReview,
 }: CodePanelContentProps) {
   const diffViewerRef = useRef<AllFilesDiffViewerRef>(null);
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
@@ -142,7 +145,7 @@ export function CodePanelContent({
         {filterMode === "changes" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease">
+              <button type="button" className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors duration-200 ease">
                 <SlidersHorizontal className="h-[11px] w-[11px]" />
                 <span>{activeFilterLabel}</span>
                 <ChevronDown className="h-[10px] w-[10px]" />
@@ -204,6 +207,7 @@ export function CodePanelContent({
                 fileChanges={filteredFileChanges}
                 selectedFile={selectedFilePath ?? null}
                 onFileClick={handleChangesFileClick}
+                onReview={onReview}
               />
             </ResizablePanel>
           </ResizablePanelGroup>

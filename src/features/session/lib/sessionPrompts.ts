@@ -36,6 +36,16 @@ export const ADDRESS_REVIEW = "Address the review comments on the PR";
 /** Instructs the agent to merge the PR */
 export const MERGE_PR = "Merge the PR";
 
+/** Code review prompt — inserted into chat input from the Code panel Review button */
+export const REVIEW_CODE = `Review the current code changes in this workspace. Analyze the diff for:
+- Bugs, logic errors, or edge cases
+- Performance issues or unnecessary complexity
+- Security concerns (hardcoded secrets, injection, unsafe patterns)
+- Code style and consistency with the existing codebase
+- Missing error handling or tests
+
+Provide a concise summary of findings with specific file and line references.`;
+
 // ---------------------------------------------------------------------------
 // Workspace setup
 // ---------------------------------------------------------------------------

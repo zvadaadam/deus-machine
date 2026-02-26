@@ -16,6 +16,14 @@
 - `[animation-fill-mode:backwards]` survives twMerge when animate-[] class is replaced — benign
   but semantically imprecise on infinite animations
 
+## Dead Code Pattern (Confirmed)
+
+- When removing a prop from a call site, also check the destructuring site of the hook that
+  originally provided the handler. E.g., removing `onReviewPR={handleOpenPR}` from `<PRActions>`
+  leaves `handleOpenPR` destructured-but-unused in `MainContent.tsx` (from `useWorkspaceActions`).
+  TypeScript does not error on unused destructured variables — only ESLint's `no-unused-vars` rule
+  catches this. Always grep for all references after removing a prop.
+
 ## Common Pitfalls Seen
 
 - `useLayoutEffect` SSR warning: hook uses `typeof window` guard for SSR safety in `useState`
@@ -150,3 +158,40 @@
 - `bg-accent-green`, `bg-accent-gold`, `bg-accent-red` ARE valid Tailwind tokens — defined in
   `global.css` `@theme` block as `--color-accent-green`, `--color-accent-gold`, `--color-accent-red`.
   Not hardcoded colors; they route through CSS variables to theme values.
+- `bg-warning`, `bg-success`, `text-warning` ARE valid — `--color-warning` and `--color-success`
+  defined in `@theme` block (lines 30, 32 of global.css). Safe to use in action button variants.
+
+## PRStatus / GhCliStatus Patterns (Confirmed)
+
+- `PRStatus.pr_url` is optional (`pr_url?: string`). Falling back to `""` on undefined produces
+  `href=""` in a Tauri WebView which navigates to `tauri://localhost/` — silent app reload. Always
+  guard: use `pr_url ?? null` and skip rendering the anchor when null.
+- `PRStatus.pr_state` includes `"closed"` (abandoned PR, not merged). Failing to handle this case
+  causes the state machine to fall through to actionable states (Fix CI, Resolve Conflicts) on a
+  dead branch — prompting the agent to work on an already-closed PR.
+- `ghStatus` being `null`/`undefined` (TanStack Query loading) should be treated as "unknown, do
+  not surface action buttons" — not as "gh is available." The guard `if (ghStatus && ...)` silently
+  passes null/undefined through to PR state evaluation.
+- `derivePRActionState` in `src/features/workspace/lib/prState.ts` is the single source of truth
+  for PR state machine. Pure function, no tests exist yet — high-value test target.
+- `PRActionState` discriminated union: 11 variants (added `closed` and `error`). `match().exhaustive()`
+  used in PRActions.tsx main render. PRLink uses a non-exhaustive if-chain guard (early return for
+  `gh_unavailable`, `no_pr`, `error`) — this remains a type-safety gap when new variants are added.
+- `prUrl = prStatus.pr_url ?? ""` in `derivePRActionState` (line 75). The `""` fallback still produces
+  `href=""` → `tauri://localhost/` reload risk, BUT `PRLink` filters on `!= "gh_unavailable" | "no_pr" | "error"`
+  so the only states that render the anchor are states where `pr_url` is always set by the backend (has_pr=true path).
+  Risk is low in practice but the type system doesn't enforce it (string, not string & URL).
+- `FAILING_CONCLUSIONS` and `PENDING_STATES` sets are defined INSIDE the request handler function
+  (inside the `app.get(...)` callback), so they are re-created on every request. Move to module scope.
+- `lastError` logic: `runGh` returns only `'unknown'` for non-specific errors, so the check
+  `lastError === 'unknown' ? 'network' : null` always maps to `'network'` when set. Correct but
+  the conditional is redundant — could just be `lastError ? 'network' : null`.
+- CI `hasPending` check has a subtle issue: when `c.conclusion == null` AND `PENDING_STATES.has(c.state)`
+  are both truthy, the OR short-circuits at `c.conclusion == null`. This is correct for in-progress checks.
+  However, a check with `conclusion === null` and `state` NOT in PENDING_STATES (e.g. a weird state)
+  would still mark it pending — acceptable given the unknown = pending safety heuristic.
+- `query.state.data` in `usePRStatus` refetchInterval callback is cast to a loose object type instead
+  of `PRStatus | null`. Should use `import type { PRStatus }` and cast to `PRStatus | null | undefined`.
+- `review_required` and `approved` review statuses are not mapped to PRActionState variants. They both
+  fall through to `awaiting_review`. This is intentional (safest default) but `review_required` could
+  deserve its own state in a future iteration.
