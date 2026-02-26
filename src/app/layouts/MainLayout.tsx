@@ -21,6 +21,7 @@ import {
   useGhStatus,
   useCreateWorkspace,
   useArchiveWorkspace,
+  useUnarchiveWorkspace,
   useSystemPrompt,
   useUpdateSystemPrompt,
 } from "@/features/workspace/api";
@@ -181,6 +182,7 @@ export function MainLayout() {
   // Mutations
   const createWorkspaceMutation = useCreateWorkspace();
   const archiveWorkspaceMutation = useArchiveWorkspace();
+  const unarchiveMutation = useUnarchiveWorkspace();
   const addRepoMutation = useAddRepo();
   const updateSystemPromptMutation = useUpdateSystemPrompt();
 
@@ -267,6 +269,8 @@ export function MainLayout() {
   // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
   const archiveMutationRef = useRef(archiveWorkspaceMutation);
   archiveMutationRef.current = archiveWorkspaceMutation;
+  const unarchiveMutationRef = useRef(unarchiveMutation);
+  unarchiveMutationRef.current = unarchiveMutation;
   const selectedWorkspaceRef = useRef(selectedWorkspace);
   selectedWorkspaceRef.current = selectedWorkspace;
 
@@ -277,6 +281,17 @@ export function MainLayout() {
         if (selectedWorkspaceRef.current?.id === workspaceId) {
           selectWorkspace(null);
         }
+        toast("Workspace archived", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
+                toast.error(extractErrorMessage(error));
+              });
+            },
+          },
+        });
       } catch (error) {
         console.error("Error archiving workspace:", error);
         toast.error(extractErrorMessage(error));
