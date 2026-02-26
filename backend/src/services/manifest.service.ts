@@ -72,7 +72,7 @@ export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[]
 }
 
 /** Build environment variables for script execution */
-export function getHiveEnv(
+export function getOpenDevsEnv(
   manifest: OpenDevsManifest,
   ctx: { id: string; rootPath: string; workspacePath: string },
 ): Record<string, string> {
