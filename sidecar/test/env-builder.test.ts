@@ -115,17 +115,17 @@ describe("buildAgentEnvironment", () => {
     expect(env.PATH).toBe("/custom/path");
   });
 
-  it("hiveEnv overrides extraEnv", () => {
+  it("opendevsEnv overrides extraEnv", () => {
     const env = buildAgentEnvironment({
       extraEnv: { MY_KEY: "extra" },
-      hiveEnv: { MY_KEY: "opendevs" },
+      opendevsEnv: { MY_KEY: "opendevs" },
     });
     expect(env.MY_KEY).toBe("opendevs");
   });
 
-  it("claudeEnvVars overrides hiveEnv", () => {
+  it("claudeEnvVars overrides opendevsEnv", () => {
     const env = buildAgentEnvironment({
-      hiveEnv: { MY_KEY: "opendevs" },
+      opendevsEnv: { MY_KEY: "opendevs" },
       claudeEnvVars: "MY_KEY=from-user",
     });
     expect(env.MY_KEY).toBe("from-user");
@@ -164,7 +164,7 @@ describe("buildAgentEnvironment", () => {
   it("applies multiple layers together", () => {
     const env = buildAgentEnvironment({
       extraEnv: { TASKS: "true", AGENT: "claude" },
-      hiveEnv: { WORKSPACE: "/my/project" },
+      opendevsEnv: { WORKSPACE: "/my/project" },
       claudeEnvVars: "CUSTOM=value\nANOTHER=123",
       ghToken: "gh-token-123",
     });

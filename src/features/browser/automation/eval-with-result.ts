@@ -19,7 +19,7 @@
 import { invoke } from "@/platform/tauri";
 
 // Sentinel returned when JS produces a Promise result that needs async resolution
-const ASYNC_SENTINEL = "__HIVE_ASYNC__";
+const ASYNC_SENTINEL = "__OPENDEVS_ASYNC__";
 
 let evalCounter = 0;
 

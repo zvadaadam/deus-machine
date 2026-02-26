@@ -93,7 +93,7 @@ export const QueryRequestSchema = z.object({
     permissionMode: z.string().optional(),
     claudeEnvVars: z.string().optional(),
     ghToken: z.string().optional(),
-    hiveEnv: z.record(z.string(), z.string()).optional(),
+    opendevsEnv: z.record(z.string(), z.string()).optional(),
     additionalDirectories: z.array(z.string()).optional(),
     chromeEnabled: z.boolean().optional(),
     strictDataPrivacy: z.boolean().optional(),

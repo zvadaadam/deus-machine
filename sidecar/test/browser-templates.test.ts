@@ -335,7 +335,7 @@ describe("evalWithResult wrapper compatibility", () => {
     try {
       var __result = ${js};
       if (__result && typeof __result === 'object' && typeof __result.then === 'function') {
-        return '__HIVE_ASYNC__';
+        return '__OPENDEVS_ASYNC__';
       }
       return typeof __result === 'string' ? __result : String(__result);
     } catch(__e) {
