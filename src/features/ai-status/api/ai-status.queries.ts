@@ -1,8 +1,7 @@
 /**
  * AI Provider Status Queries
  *
- * Generic Statuspage.io fetcher + TanStack Query hooks.
- * Polls all registered providers in parallel every 5 minutes.
+ * TanStack Query hooks that poll all registered Statuspage.io providers.
  *
  * Budget: N providers x (1 req / 5 min) ≈ 0.007 req/s for 2 providers.
  * These are external fetches — they don't hit our backend.
@@ -11,46 +10,11 @@
 import { useQueries } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import {
-  PROVIDER_REGISTRY,
   ALL_PROVIDER_IDS,
   getWorstIndicator,
   type StatuspageIndicator,
-  type StatuspageStatusResponse,
 } from "../lib/providers";
-
-// --- Runtime validation ---
-
-const KNOWN_INDICATORS: ReadonlySet<string> = new Set<string>(["none", "minor", "major", "critical"]);
-
-function toSafeIndicator(value: unknown): StatuspageIndicator {
-  return typeof value === "string" && KNOWN_INDICATORS.has(value)
-    ? (value as StatuspageIndicator)
-    : "none";
-}
-
-// --- Fetchers ---
-
-async function fetchProviderStatus(
-  providerId: string
-): Promise<StatuspageStatusResponse> {
-  const config = PROVIDER_REGISTRY[providerId];
-  if (!config) throw new Error(`Unknown provider: ${providerId}`);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-  try {
-    const res = await fetch(`${config.statusPageBaseUrl}/status.json`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) throw new Error(`Status page returned ${res.status}`);
-    return res.json();
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
+import { fetchProviderStatus, toSafeIndicator } from "./ai-status.service";
 
 // --- Hooks ---
 
@@ -87,7 +51,7 @@ export function useProviderStatuses() {
   const statuses: ProviderStatusEntry[] = queries.map((q, i) => ({
     providerId: ALL_PROVIDER_IDS[i],
     indicator: toSafeIndicator(q.data?.status?.indicator),
-    description: q.data?.status.description ?? "",
+    description: q.data?.status?.description ?? "",
     isLoading: q.isLoading,
     isError: q.isError,
   }));
