@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { match } from "ts-pattern";
 import { cn } from "@/shared/lib/utils";
 import { AllFilesDiffViewer, type AllFilesDiffViewerRef } from "./AllFilesDiffViewer";
 import { DiffFilesTree } from "./DiffFilesTree";
@@ -75,19 +76,18 @@ export function CodePanelContent({
   const [changesFilter, setChangesFilter] = useState<ChangesFilter>("all-changes");
 
   // Apply the changes filter to get the active file list.
-  // "all-changes" → full fileChanges, "uncommitted" → uncommittedFiles, "last-turn" → lastTurnFiles
-  // Note: We check for the array itself (not .length) to distinguish "loaded but empty" ([])
+  // We check for the array itself (not .length) to distinguish "loaded but empty" ([])
   // from "not available" (undefined). An empty array means the filter is active but has no
   // matches — the user should see an empty state, not a fallback to all changes.
-  const filteredFileChanges = useMemo(() => {
-    if (changesFilter === "uncommitted" && uncommittedFiles !== undefined) {
-      return uncommittedFiles;
-    }
-    if (changesFilter === "last-turn" && lastTurnFiles !== undefined) {
-      return lastTurnFiles;
-    }
-    return fileChanges;
-  }, [changesFilter, fileChanges, uncommittedFiles, lastTurnFiles]);
+  const filteredFileChanges = useMemo(
+    () =>
+      match(changesFilter)
+        .with("uncommitted", () => uncommittedFiles ?? fileChanges)
+        .with("last-turn", () => lastTurnFiles ?? fileChanges)
+        .with("all-changes", () => fileChanges)
+        .exhaustive(),
+    [changesFilter, fileChanges, uncommittedFiles, lastTurnFiles]
+  );
 
   // Handle file click in Changes view — scroll the infinite scroll diff viewer
   // to the clicked file. AllFilesDiffViewer's scrollToFile also updates the
