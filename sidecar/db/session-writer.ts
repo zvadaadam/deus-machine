@@ -7,6 +7,7 @@
 
 import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
+import { notifyBackend } from "./backend-notifier";
 
 // ── WriteResult ──────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export function saveAssistantMessage(
     ).run(messageId, sessionId, content, sentAt, model, message.id || null, parentToolUseId);
 
     console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
+    notifyBackend("session:message", sessionId);
     return { ok: true, value: messageId };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -87,6 +89,7 @@ export function saveToolResultMessage(
     `
     ).run(messageId, sessionId, content, sentAt, message.id || null, parentToolUseId);
 
+    notifyBackend("session:message", sessionId);
     return { ok: true, value: messageId };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -130,6 +133,7 @@ export function updateSessionStatus(
       console.log(
         `[SESSION-WRITER] Updated session ${sessionId} status to '${status}'${errorMessage ? ` with error: ${errorMessage}` : ""}`
       );
+      notifyBackend("session:status", sessionId);
       return { ok: true, value: undefined };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -162,6 +166,7 @@ export function updateLastUserMessageAt(sessionId: string): WriteResult<void> {
       UPDATE sessions SET last_user_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
     `
     ).run(sessionId);
+    notifyBackend("session:updated", sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

@@ -14,6 +14,7 @@ import {
   getMessageById,
   getLatestUserMessage,
 } from '../db';
+import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 
 /**
  * Session Routes
@@ -93,6 +94,7 @@ app.post('/sessions/:id/messages', async (c) => {
   });
 
   insertMessageAndUpdateSession();
+  broadcastWorkspacesAndStats();
 
   const createdMessage = getMessageById(db, messageId);
   return c.json(createdMessage);
@@ -118,6 +120,7 @@ app.post('/sessions/:id/stop', (c) => {
   }
 
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
+  broadcastWorkspacesAndStats();
 
   const updatedSession = getSessionRaw(db, sessionId);
   return c.json({
