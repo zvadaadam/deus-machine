@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { ChevronDown, ChevronRight, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, ScanText } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { FileChange } from "@/shared/types";
 
@@ -15,6 +15,8 @@ interface DiffFilesTreeProps {
   fileChanges: FileChange[];
   selectedFile: string | null;
   onFileClick: (path: string) => void;
+  /** Callback to insert a code review prompt into the chat input */
+  onReview?: () => void;
 }
 
 interface FileEntry {
@@ -88,6 +90,7 @@ export function DiffFilesTree({
   fileChanges,
   selectedFile,
   onFileClick,
+  onReview,
 }: DiffFilesTreeProps) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
@@ -120,6 +123,23 @@ export function DiffFilesTree({
           />
         ))}
       </div>
+
+      {/* Review Changes — sticky footer action */}
+      {onReview && fileChanges.length > 0 && (
+        <div className="flex-shrink-0 px-2 py-2">
+          <button
+            type="button"
+            onClick={onReview}
+            className="bg-primary/8 hover:bg-primary/14 text-primary flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors duration-200 ease"
+          >
+            <ScanText className="h-3 w-3" />
+            <span>Review Changes</span>
+            <span className="text-primary/60 ml-0.5 text-[10px] font-normal">
+              {fileChanges.length}
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

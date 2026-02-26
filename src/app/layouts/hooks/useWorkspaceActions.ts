@@ -19,17 +19,15 @@ import {
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import type { RightSideTab } from "@/features/workspace/store";
-import type { Workspace, PRStatus } from "@/shared/types";
+import type { Workspace } from "@/shared/types";
 
 interface UseWorkspaceActionsOptions {
   selectedWorkspace: Workspace | null;
-  prStatus: PRStatus | null;
   setRightSideTab: (tab: RightSideTab) => void;
 }
 
 export function useWorkspaceActions({
   selectedWorkspace,
-  prStatus,
   setRightSideTab,
 }: UseWorkspaceActionsOptions) {
   // PR handler bridge: ChatArea sets it, WorkspaceHeader consumes it.
@@ -75,14 +73,6 @@ export function useWorkspaceActions({
     },
     [sendAgentMessageHandler]
   );
-
-  const handleOpenPR = useCallback(() => {
-    if (!prStatus?.pr_url) {
-      toast.error("PR link not available.");
-      return;
-    }
-    window.open(prStatus.pr_url, "_blank", "noopener,noreferrer");
-  }, [prStatus]);
 
   // --- Archive & retry ---
 
@@ -154,7 +144,6 @@ export function useWorkspaceActions({
     // Action handlers
     handleCreatePR,
     handleSendAgentMessage,
-    handleOpenPR,
     handleArchive,
     handleRetrySetup,
     handleViewSetupLogs,

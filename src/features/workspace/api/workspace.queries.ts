@@ -11,6 +11,7 @@ import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
 import type { Workspace, RepoGroup, DiffStats } from "../types";
+import type { PRStatus } from "@/shared/types";
 import { createOptimisticWorkspace } from "../lib/workspace.utils";
 
 /**
@@ -279,7 +280,8 @@ export function useGhStatus() {
  *
  * Gated on gh CLI being installed + authenticated (like Codex).
  * Polls every 30s while agent is working (to detect PR creation),
- * stops polling when idle. Auto-refetched on session completion
+ * 60s while CI is pending post-session (CI runs 2-15min after push),
+ * stops polling otherwise. Auto-refetched on session completion
  * via useSessionEvents invalidation.
  */
 export function usePRStatus(
@@ -292,10 +294,18 @@ export function usePRStatus(
     queryFn: () => WorkspaceService.fetchPRStatus(workspaceId!),
     enabled: !!workspaceId && ghInstalled && ghAuthenticated,
     staleTime: 10_000,
-    // Poll while agent is working so we detect PR creation without manual refresh.
-    // 30s aligns with CLAUDE.md polling budget; event-driven invalidation via
-    // useSessionEvents handles the fast path (agent just created/updated a PR).
-    refetchInterval: sessionStatus === "working" ? 30_000 : false,
+    refetchInterval: (query) => {
+      // While agent is working: poll every 30s to detect PR creation/updates.
+      if (sessionStatus === "working") return 30_000;
+
+      // After agent stops: CI checks typically run 2-15min. Poll every 60s
+      // while CI is pending so the user sees updates without manual refresh.
+      const data = query.state.data as PRStatus | null | undefined;
+      if (data?.has_pr && data?.ci_status === "pending") return 60_000;
+
+      // No PR or CI resolved: stop polling. Window focus refetch handles edge cases.
+      return false;
+    },
     refetchOnWindowFocus: true,
   });
 }
