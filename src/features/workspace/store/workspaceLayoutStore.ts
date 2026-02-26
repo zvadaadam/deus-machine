@@ -12,11 +12,12 @@
  * State Structure:
  * {
  *   [workspaceId]: {
- *     rightPanelExpanded: boolean          // Panel in wide mode (file/browser open)
  *     activeRightTab: 'changes' | 'files'  // Code panel tab
  *     activeRightSideTab: 'code' | 'config' | 'terminal' | 'notebook' | 'design' | 'browser' | 'simulator' // Sidecar panel
  *     selectedFile: { path: string, source: 'changes' | 'files' } | null
  *     sidebarCollapsed: boolean            // Left sidebar state
+ *     chatPanelCollapsed: boolean          // Chat panel collapsed via resizable panels
+ *     rightPanelCollapsed: boolean         // Content panel collapsed via resizable panels
  *   }
  * }
  */
@@ -34,13 +35,10 @@ export interface SelectedFile {
 }
 
 interface WorkspaceLayoutState {
-  rightPanelExpanded: boolean;
   activeRightTab: RightPanelTab;
   activeRightSideTab: RightSideTab;
   selectedFile: SelectedFile | null;
   sidebarCollapsed: boolean;
-  rightPanelWidth: number | null; // User-set width for code panel, null = auto (50/50 flex split)
-  rightPanelWidthBrowser: number | null; // User-set width for browser panel
   browserTabs: PersistedBrowserTab[]; // Persisted browser tab URLs/titles
   activeBrowserTabId: string | null; // Which browser tab was last active
   chatPanelCollapsed: boolean;
@@ -67,11 +65,6 @@ interface WorkspaceLayoutStore {
   setLayout: (workspaceId: string, layout: Partial<WorkspaceLayoutState>) => void;
 
   // Setters - Individual properties (convenience methods)
-  /**
-   * Expand/collapse right panel for a workspace
-   */
-  setRightPanelExpanded: (workspaceId: string, expanded: boolean) => void;
-
   /**
    * Switch active tab in right panel
    */
@@ -129,13 +122,10 @@ interface WorkspaceLayoutStore {
 }
 
 export const defaultLayout: WorkspaceLayoutState = {
-  rightPanelExpanded: false,
   activeRightTab: "changes",
   activeRightSideTab: "code",
   selectedFile: null,
   sidebarCollapsed: false,
-  rightPanelWidth: null,
-  rightPanelWidthBrowser: null,
   browserTabs: [],
   activeBrowserTabId: null,
   chatPanelCollapsed: false,
@@ -145,7 +135,10 @@ export const defaultLayout: WorkspaceLayoutState = {
   pendingTerminalCommand: null,
 };
 
+// Legacy fields that may exist in persisted data from older versions.
+// Kept here so the migration code compiles without errors.
 type PersistedLayoutV1 = Partial<WorkspaceLayoutState> & {
+  rightPanelExpanded?: boolean;
   rightPanelWidth?: number | null;
   rightPanelWidthBrowser?: number | null;
 };
@@ -187,21 +180,6 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
           ),
 
         // Setters - Individual properties
-        setRightPanelExpanded: (workspaceId, expanded) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  rightPanelExpanded: expanded,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setRightPanelExpanded"
-          ),
-
         setActiveRightTab: (workspaceId, tab) =>
           set(
             (state) => ({
@@ -427,8 +405,6 @@ export const workspaceLayoutActions = {
   getLayout: (workspaceId: string) => useWorkspaceLayoutStore.getState().getLayout(workspaceId),
   setLayout: (workspaceId: string, layout: Partial<WorkspaceLayoutState>) =>
     useWorkspaceLayoutStore.getState().setLayout(workspaceId, layout),
-  setRightPanelExpanded: (workspaceId: string, expanded: boolean) =>
-    useWorkspaceLayoutStore.getState().setRightPanelExpanded(workspaceId, expanded),
   setActiveRightTab: (workspaceId: string, tab: RightPanelTab) =>
     useWorkspaceLayoutStore.getState().setActiveRightTab(workspaceId, tab),
   setActiveRightSideTab: (workspaceId: string, tab: RightSideTab) =>

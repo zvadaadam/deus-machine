@@ -1302,12 +1302,6 @@ code, pre, kbd, samp, .font-mono {
   transition: none;
 }
 
-/* Suppress panel transitions during programmatic width restoration (workspace switch).
- * Set by useRightPanelSizing's useLayoutEffect, removed after 2 rAF frames. */
-[data-suppress-transition] [data-slot="resizable-panel"] {
-  transition: none;
-}
-
 /* Disable ALL layout transitions during native window resize (fullscreen exit, snap, drag).
  * WKWebView pauses rendering during resize — CSS transitions fighting the native animation
  * cause content to "stick" at the old size. Same pattern as [data-resizing] for sidebar drag. */
@@ -1593,9 +1587,12 @@ select {
 
 /* Redundant utilities removed - use Tailwind's shadow-* and p-* utilities instead */
 
-/* Chat tabs header — soft bottom fade to avoid sharp edge */
+/* Chat tabs header — soft bottom fade to avoid sharp edge.
+ * Uses --content-bg so the gradient matches the actual content background,
+ * which in Tauri is semi-translucent (vibrancy) rather than opaque --bg-surface. */
 .chat-tabs-header {
-  background: var(--bg-surface);
+  --content-bg: var(--bg-surface);
+  background: var(--content-bg);
 }
 
 .chat-tabs-header::after {
@@ -1606,12 +1603,24 @@ select {
   left: 0;
   height: 24px;
   pointer-events: none;
-  background: linear-gradient(to bottom, var(--bg-surface), transparent);
+  background: linear-gradient(to bottom, var(--content-bg), transparent);
 }
 
 /* Message input fade overlay utility */
 .bg-fade-overlay {
-  background: linear-gradient(to bottom, transparent 0%, var(--bg-surface) 100%);
+  --content-bg: var(--bg-surface);
+  background: linear-gradient(to bottom, transparent 0%, var(--content-bg) 100%);
+}
+
+/* Tauri desktop: content area is semi-translucent for vibrancy.
+ * Override gradients to use the same translucent mix as main-content. */
+.tauri .chat-tabs-header,
+.tauri .bg-fade-overlay {
+  --content-bg: color-mix(
+    in oklch,
+    var(--background) var(--content-tint-opacity),
+    transparent
+  );
 }
 
 /* Diffs (Pierre) theme bridge */

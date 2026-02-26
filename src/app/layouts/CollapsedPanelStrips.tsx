@@ -1,35 +1,22 @@
 /**
- * Collapsed Panel Strips — compressed panel representations.
+ * Collapsed Panel Strips -- compressed panel representations.
  *
- * When a panel collapses to its 36px minimum, these strips render
- * in place of the full content. Like a book on a shelf, spine facing
- * out: icon communicates identity, rotated label provides context.
+ * When a panel collapses to its 36px minimum, these strips render in
+ * place of the full content. Like a book on a shelf, spine facing out:
+ * icon communicates identity, rotated label provides context.
  *
- * CollapsedChatStrip: breathing pulse when agent is working.
- * CollapsedContentStrip: slot-machine roll animation on tab switch.
+ * CollapsedChatStrip:    breathing pulse when agent is working.
+ * CollapsedContentStrip: static strip for the content panel.
  */
 
-import { AnimatePresence, m } from "framer-motion";
-import { MessageSquare, Code2, Settings2, Terminal, BookOpen, PenTool, Globe, Smartphone } from "lucide-react";
+import { MessageSquare, Code } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipKbd } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
-import type { RightSideTab } from "@/features/workspace/store";
-
-/** Icon + label map for content strip — mirrors the sidecar tab icons */
-const contentTabMeta: Record<RightSideTab, { icon: typeof Code2; label: string }> = {
-  code: { icon: Code2, label: "Code" },
-  config: { icon: Settings2, label: "Config" },
-  terminal: { icon: Terminal, label: "Terminal" },
-  notebook: { icon: BookOpen, label: "Notebook" },
-  design: { icon: PenTool, label: "Design" },
-  browser: { icon: Globe, label: "Browser" },
-  simulator: { icon: Smartphone, label: "Simulator" },
-};
 
 /**
- * Compressed Chat Strip — the chat panel in its most reduced state.
+ * Compressed Chat Strip -- the chat panel in its most reduced state.
  *
- * Not a button that says "bring me back" — the panel itself, compressed.
+ * Not a button that says "bring me back" -- the panel itself, compressed.
  * Like a book on a shelf, spine facing out. Icon communicates identity,
  * rotated label provides context, breathing pulse signals active work.
  *
@@ -55,7 +42,7 @@ export function CollapsedChatStrip({
             "transition-colors duration-200 ease",
           )}
         >
-          {/* Icon — identity, not action. Breathes when agent is working. */}
+          {/* Icon -- identity, not action. Breathes when agent is working. */}
           <MessageSquare
             className={cn(
               "h-[14px] w-[14px] flex-shrink-0",
@@ -64,7 +51,7 @@ export function CollapsedChatStrip({
                 : "animate-[strip-settle_0.15s_0.12s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]"
             )}
           />
-          {/* Rotated label — reads bottom-to-top like a book spine */}
+          {/* Rotated label -- reads bottom-to-top like a book spine */}
           <span
             className={cn(
               "text-xs font-medium tracking-wide uppercase",
@@ -87,29 +74,25 @@ export function CollapsedChatStrip({
 }
 
 /**
- * Compressed Content Strip — the right content panel in its most reduced state.
+ * Compressed Content Strip -- the content panel in its most reduced state.
  *
- * Mirrors the chat strip pattern: icon + rotated label for the active tab.
- * Border on the left (content-facing) side. Tooltip shows keyboard shortcut.
+ * Mirrors CollapsedChatStrip's visual language but with a left border
+ * (content panel sits on the right). No breathing animation -- the content
+ * panel doesn't have a "working" state of its own.
  *
- * Uses Framer Motion AnimatePresence for smooth crossfade when the user
- * switches sidecar tabs while content is collapsed — icon and label transition
- * instead of hard-swapping.
+ * Width controlled by parent ResizablePanel's collapsedSize (36px).
  */
 export function CollapsedContentStrip({
-  activeTab,
   onExpand,
 }: {
-  activeTab: RightSideTab;
   onExpand: () => void;
 }) {
-  const { icon: Icon, label } = contentTabMeta[activeTab];
   return (
     <Tooltip delayDuration={400}>
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={`Show ${label} panel`}
+          aria-label="Show content panel"
           onClick={onExpand}
           className={cn(
             "border-border-subtle flex h-full w-full cursor-pointer flex-col items-center gap-3 border-l pt-4",
@@ -117,34 +100,25 @@ export function CollapsedContentStrip({
             "transition-colors duration-200 ease",
           )}
         >
-          {/* Slot-machine roll when switching tabs via sidecar (number-flow style).
-           * Old content slides up + fades out, new content slides up from below.
-           * Framer Motion y-transform is post-layout so writing-mode doesn't interfere. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <m.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1] }}
-              className="flex flex-col items-center gap-3"
-            >
-              <Icon className="h-[14px] w-[14px] flex-shrink-0" />
-              <span
-                className={cn(
-                  "text-xs font-medium tracking-wide uppercase",
-                  "[writing-mode:vertical-rl] rotate-180",
-                )}
-              >
-                {label}
-              </span>
-            </m.div>
-          </AnimatePresence>
+          {/* Icon -- identity, not action */}
+          <Code
+            className="animate-[strip-settle_0.15s_0.12s_cubic-bezier(0.165,0.84,0.44,1)] h-[14px] w-[14px] flex-shrink-0 [animation-fill-mode:backwards]"
+          />
+          {/* Rotated label -- reads bottom-to-top like a book spine */}
+          <span
+            className={cn(
+              "text-xs font-medium tracking-wide uppercase",
+              "[writing-mode:vertical-rl] rotate-180",
+              "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]",
+            )}
+          >
+            Content
+          </span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="left" sideOffset={6}>
         <div className="flex items-center gap-3">
-          <span className="text-xs">Show {label}</span>
+          <span className="text-xs">Show Content</span>
           <TooltipKbd>{"\u2318]"}</TooltipKbd>
         </div>
       </TooltipContent>
