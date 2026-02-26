@@ -131,7 +131,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   const getStatusText = (): string => {
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
-    if (workspace.state === "archived" || !workspace.session_status) return "Archived";
+    if (workspace.state === "archived") return "Archived";
+    if (!workspace.session_status) return formatTime(workspace.updated_at);
 
     return match(displayStatus)
       .with("idle", () => formatTime(workspace.updated_at))
