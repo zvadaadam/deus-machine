@@ -40,7 +40,7 @@ const contentTabItems: Array<{
   { id: "code", label: "Code", icon: GitBranch },
   { id: "config", label: "Config", icon: Settings2 },
   { id: "terminal", label: "Terminal", icon: Terminal },
-  { id: "notebook", label: "Notebook", icon: BookOpen },
+  { id: "notebook", label: "Notebook", icon: BookOpen, visibilityKey: "experimental_notebooks" },
   { id: "design", label: "Design", icon: PenTool },
   { id: "browser", label: "Browser", icon: Globe, visibilityKey: "experimental_browser" },
   {
