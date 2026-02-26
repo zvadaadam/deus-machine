@@ -423,8 +423,6 @@ export function useArchiveWorkspace() {
               break;
             }
           }
-          // Remove empty repos
-          return draft.filter((repo) => repo.workspaces.length > 0);
         });
       });
 
@@ -440,6 +438,22 @@ export function useArchiveWorkspace() {
     },
 
     // Always refetch after error or success to ensure consistency
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+    },
+  });
+}
+
+/**
+ * Unarchive workspace mutation — restores state to "ready".
+ * Used by the undo toast after archiving.
+ */
+export function useUnarchiveWorkspace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workspaceId: string) =>
+      WorkspaceService.update(workspaceId, { state: "ready" }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
