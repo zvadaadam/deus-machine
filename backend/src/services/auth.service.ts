@@ -43,7 +43,7 @@ const WORD_LIST = [
   "DAWN", "DELTA", "DRIFT", "DUNE", "EAGLE",
   "EMBER", "FERN", "FLAME", "FLASH", "FLINT",
   "FORGE", "FROST", "GLOW", "GROVE", "HAWK",
-  "HAVEN", "HAZE", "HELM", "OPENDEVS", "IRON",
+  "HAVEN", "HAZE", "HELM", "HIVE", "IRON",
   "JADE", "KEEN", "LAKE", "LARK", "LEAF",
   "LIGHT", "LIME", "LINK", "LUNA", "LYNX",
   "MAPLE", "MARS", "MESA", "MINT", "MIST",

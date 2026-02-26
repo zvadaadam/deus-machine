@@ -38,7 +38,7 @@ export const INSPECT_MODE_IS_ACTIVE = `(function(){
  *  JS runtime errors). */
 export const INSPECT_MODE_VERIFY = `(function(){
   return JSON.stringify({
-    hiveInspect: !!window.__opendevsInspect,
+    opendevsInspect: !!window.__opendevsInspect,
     hasDrainEvents: !!(window.__opendevsInspect && window.__opendevsInspect.drainEvents),
   });
 })()`;
