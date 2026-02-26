@@ -2,7 +2,7 @@
 // Core browser automation utilities — runs inside WKWebView page context.
 //
 // Compiled by esbuild into a self-contained IIFE (see build-inject.ts).
-// When eval'd, installs utilities on window.__hiveBrowserUtils:
+// When eval'd, installs utilities on window.__opendevsBrowserUtils:
 // - Accessibility tree builder (buildPageSnapshot, accessibilityTreeToYaml)
 // - Element finder (findElementByRef)
 // - Event simulation (simulateClick, simulateType)
@@ -10,11 +10,11 @@
 // - Scroll helpers (scrollIntoViewIfNeeded, getElementCenter)
 //
 // These are injected ONCE on page load. Action builder functions
-// (buildClickJs, buildTypeJs, etc.) reference window.__hiveBrowserUtils
+// (buildClickJs, buildTypeJs, etc.) reference window.__opendevsBrowserUtils
 // instead of embedding ~390 lines of utilities per call.
 
 // Guard: prevent double-injection
-if (!(window as any).__hiveBrowserUtils) {
+if (!(window as any).__opendevsBrowserUtils) {
 
   // ========================================================================
   // Accessibility Tree Builder
@@ -213,11 +213,11 @@ if (!(window as any).__hiveBrowserUtils) {
   function buildAccessibilityTree(element: Element, depth: number, maxDepth: number): any {
     if (depth > maxDepth || __nodeCount >= __NODE_LIMIT) return null;
     __nodeCount++;
-    // Assign or reuse data-hive-ref
-    let ref = element.getAttribute('data-hive-ref');
+    // Assign or reuse data-opendevs-ref
+    let ref = element.getAttribute('data-opendevs-ref');
     if (!ref) {
       ref = 'ref-' + Math.random().toString(36).substring(2, 15);
-      element.setAttribute('data-hive-ref', ref);
+      element.setAttribute('data-opendevs-ref', ref);
     }
     const role = element.getAttribute('role') || getImplicitRole(element);
     const name = computeAccessibleName(element, role);
@@ -282,7 +282,7 @@ if (!(window as any).__hiveBrowserUtils) {
   // ========================================================================
 
   function findElementByRef(ref: string): Element | null {
-    return document.querySelector('[data-hive-ref="' + ref + '"]');
+    return document.querySelector('[data-opendevs-ref="' + ref + '"]');
   }
 
   function scrollIntoViewIfNeeded(el: Element): void {
@@ -392,7 +392,7 @@ if (!(window as any).__hiveBrowserUtils) {
   // ========================================================================
   // Public API on window
   // ========================================================================
-  (window as any).__hiveBrowserUtils = {
+  (window as any).__opendevsBrowserUtils = {
     buildPageSnapshot,
     accessibilityTreeToYaml,
     findElementByRef,

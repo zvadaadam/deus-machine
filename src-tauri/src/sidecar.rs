@@ -60,7 +60,7 @@ impl SidecarManager {
 
         let pid = child.id();
         println!("[SIDECAR] Sidecar started with PID: {}", pid);
-        println!("[SIDECAR] Sidecar logs: /tmp/hive-{}.log", pid);
+        println!("[SIDECAR] Sidecar logs: /tmp/opendevs-{}.log", pid);
 
         // Take stdout to read the socket path
         let stdout = child.stdout.take()
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn test_socket_path_parsing() {
         // Test the socket path detection logic by simulating stdout
-        let test_output = "Some initialization output\nSOCKET_PATH=/tmp/hive-sidecar-12345.sock\nMore output\n";
+        let test_output = "Some initialization output\nSOCKET_PATH=/tmp/opendevs-sidecar-12345.sock\nMore output\n";
 
         // Find the SOCKET_PATH line
         let socket_path = test_output
@@ -235,7 +235,7 @@ mod tests {
             .and_then(|line| line.strip_prefix("SOCKET_PATH="))
             .map(|s| s.to_string());
 
-        assert_eq!(socket_path, Some("/tmp/hive-sidecar-12345.sock".to_string()));
+        assert_eq!(socket_path, Some("/tmp/opendevs-sidecar-12345.sock".to_string()));
     }
 
     #[test]

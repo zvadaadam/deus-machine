@@ -5,7 +5,7 @@
  * and invalidates React Query cache on terminal states (done/error).
  *
  * Event flow:
- * 1. Backend's initializeWorkspace() emits HIVE_WORKSPACE_PROGRESS:{json} to stdout
+ * 1. Backend's initializeWorkspace() emits OPENDEVS_WORKSPACE_PROGRESS:{json} to stdout
  * 2. Rust backend.rs parses the prefix and emits Tauri event "workspace:progress"
  * 3. This hook receives the event and invalidates workspace queries
  *

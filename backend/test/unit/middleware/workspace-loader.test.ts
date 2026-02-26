@@ -48,7 +48,7 @@ describe('withWorkspace middleware', () => {
       slug: 'tokyo',
       default_branch: 'main',
     });
-    expect(body.workspacePath).toBe('/repo/.hive/tokyo');
+    expect(body.workspacePath).toBe('/repo/.opendevs/tokyo');
   });
 
   it('returns 404 when workspace is not found', async () => {
@@ -110,11 +110,11 @@ describe('withWorkspace middleware', () => {
 });
 
 describe('computeWorkspacePath', () => {
-  it('returns .hive path from root_path and slug', () => {
+  it('returns .opendevs path from root_path and slug', () => {
     expect(computeWorkspacePath({
       root_path: '/repo',
       slug: 'tokyo',
-    })).toBe('/repo/.hive/tokyo');
+    })).toBe('/repo/.opendevs/tokyo');
   });
 
   it('returns empty string when root_path is missing', () => {

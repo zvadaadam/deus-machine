@@ -106,7 +106,7 @@ export function useWorkspaceActions({
       });
   }, [selectedWorkspace]);
 
-  // --- Manifest tasks (hive.json) ---
+  // --- Manifest tasks (opendevs.json) ---
 
   const isWorkspaceReady = selectedWorkspace?.state === "ready";
   const { data: manifestData } = useManifestTasks(isWorkspaceReady ? selectedWorkspaceId : null);

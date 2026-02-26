@@ -49,7 +49,7 @@ yarn-error.log*
 *.db
 *.db-shm
 *.db-wal
-hive.db
+opendevs.db
 database/
 
 # Logs
@@ -75,7 +75,7 @@ temp/
 .mcp.json
 
 # Local cloned workspaces (nested repos, not tracked in this repo)
-.hive/
+.opendevs/
 
 *storybook.log
 storybook-static

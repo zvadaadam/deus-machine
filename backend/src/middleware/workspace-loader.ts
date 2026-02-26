@@ -12,14 +12,14 @@ export interface WorkspaceContext {
 
 /**
  * Compute the filesystem path for a workspace.
- * All Hive workspaces live at {root_path}/.hive/{slug}.
+ * All OpenDevs workspaces live at {root_path}/.opendevs/{slug}.
  */
 export function computeWorkspacePath(ws: {
   root_path?: string | null;
   slug?: string | null;
 }): string {
   if (!ws.root_path || !ws.slug) return '';
-  return path.join(ws.root_path, '.hive', ws.slug);
+  return path.join(ws.root_path, '.opendevs', ws.slug);
 }
 
 /**

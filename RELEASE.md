@@ -184,4 +184,4 @@ gh secret set APPLE_TEAM_ID --repo zvadaadam/box-ide
 - **Never lose `~/.tauri/command.key`** — if you lose it, existing users can't verify updates and auto-update breaks. You'd need to regenerate and ship a full reinstall.
 - **Changing Apple Developer account is safe** — Apple signing is for Gatekeeper trust (first install). Auto-updates use the Tauri minisign key, which is independent of Apple certs.
 - **Releases are draft by default** — you must manually publish them on GitHub after verifying the build.
-- **arm64 only for now** — matching OpenDevs.app's approach. Intel support can be added later as a matrix entry.
+- **arm64 only for now** — Intel support can be added later as a matrix entry.

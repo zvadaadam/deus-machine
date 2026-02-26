@@ -1,5 +1,5 @@
 // gateway/clients/backend.ts
-// Thin HTTP client for the Hive backend REST API.
+// Thin HTTP client for the OpenDevs backend REST API.
 
 export class BackendClient {
   private baseUrl: string;

@@ -51,24 +51,24 @@ Provide a concise summary of findings with specific file and line references.`;
 // ---------------------------------------------------------------------------
 
 /**
- * Instructs the agent to analyze the project and generate a hive.json manifest.
+ * Instructs the agent to analyze the project and generate a opendevs.json manifest.
  * Sent when user clicks "Set up your environment" in a fresh workspace.
- * Keep in sync with .claude/skills/generate-hive-json/SKILL.md
+ * Keep in sync with .claude/skills/generate-opendevs-json/SKILL.md
  */
-export const GENERATE_HIVE_JSON = `Analyze this project and generate a \`hive.json\` manifest file at the project root. This manifest tells the IDE how to set up workspaces, run dev servers, and execute common tasks.
+export const GENERATE_HIVE_JSON = `Analyze this project and generate a \`opendevs.json\` manifest file at the project root. This manifest tells the IDE how to set up workspaces, run dev servers, and execute common tasks.
 
 **Steps:**
 1. Detect the tech stack from lockfiles and project files (package.json, Cargo.toml, pyproject.toml, etc.)
 2. Detect the package manager (bun, npm, yarn, pnpm, cargo, uv, pip, etc.)
-3. Check for existing configs to import from: \`hive.json\`, \`conductor.json\`, \`.codex/environments/environment.toml\`
+3. Check for existing configs to import from: \`opendevs.json\`, \`.codex/environments/environment.toml\`
 4. Extract scripts from package.json (or equivalent) and map them to tasks
 5. Detect runtime requirements (.nvmrc, engines field, rust-toolchain.toml, etc.)
-6. Write the \`hive.json\` file
+6. Write the \`opendevs.json\` file
 
 **Schema:**
 \`\`\`json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "<project name>",
   "scripts": { "setup": "<install command>", "run": "<main dev command>" },
@@ -104,5 +104,5 @@ export const GENERATE_HIVE_JSON = `Analyze this project and generate a \`hive.js
  * @param setupError - The error output from the failed setup command
  */
 export function fixSetupErrorPrompt(setupError: string | null): string {
-  return `The workspace setup script failed.\n\nError: ${setupError ?? "Unknown error"}\n\nPlease look at the hive.json manifest and the setup script, diagnose the issue, fix it, and then I'll retry the setup.`;
+  return `The workspace setup script failed.\n\nError: ${setupError ?? "Unknown error"}\n\nPlease look at the opendevs.json manifest and the setup script, diagnose the issue, fix it, and then I'll retry the setup.`;
 }

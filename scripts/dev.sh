@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Hive - Development Server Script
+# OpenDevs - Development Server Script
 # Runs both frontend and backend in parallel with dynamic ports
 
 set -e
 
 echo "======================================"
-echo "Hive - Development Mode"
+echo "OpenDevs - Development Mode"
 echo "======================================"
 echo ""
 

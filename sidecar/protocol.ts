@@ -1,6 +1,6 @@
 // sidecar/protocol.ts
 // Zod-validated protocol definitions for JSON-RPC 2.0 communication
-// between the Hive frontend/backend and the sidecar agent runtime.
+// between the OpenDevs frontend/backend and the sidecar agent runtime.
 
 import { z } from "zod";
 
@@ -93,7 +93,7 @@ export const QueryRequestSchema = z.object({
     permissionMode: z.string().optional(),
     claudeEnvVars: z.string().optional(),
     ghToken: z.string().optional(),
-    hiveEnv: z.record(z.string(), z.string()).optional(),
+    opendevsEnv: z.record(z.string(), z.string()).optional(),
     additionalDirectories: z.array(z.string()).optional(),
     chromeEnabled: z.boolean().optional(),
     strictDataPrivacy: z.boolean().optional(),

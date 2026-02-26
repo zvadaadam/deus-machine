@@ -21,7 +21,7 @@ interface TaskStripProps {
   hasManifest: boolean;
   disabled?: boolean;
   onRunTask: (taskName: string) => void;
-  /** Called when user clicks the ghost icon (no manifest). Sends /generate-hive-json to chat. */
+  /** Called when user clicks the ghost icon (no manifest). Sends /generate-opendevs-json to chat. */
   onSetupEnvironment?: () => void;
 }
 

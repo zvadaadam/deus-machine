@@ -12,7 +12,7 @@ import { parseBody } from '../lib/validate';
 import { PatchWorkspaceBody, CreateWorkspaceBody, OpenPenFileBody } from '../lib/schemas';
 import * as gitService from '../services/git.service';
 import { generateUniqueName } from '../services/workspace.service';
-import { readManifest, readManifestWithFallback, getSetupCommand, getArchiveCommand, getHiveEnv, getNormalizedTasks, writeManifest, runSetupScript } from '../services/manifest.service';
+import { readManifest, readManifestWithFallback, getSetupCommand, getArchiveCommand, getOpenDevsEnv, getNormalizedTasks, writeManifest, runSetupScript } from '../services/manifest.service';
 import { initializeWorkspace } from '../services/workspace-init.service';
 import {
   getAllWorkspaces,
@@ -83,7 +83,7 @@ app.patch('/workspaces/:id', async (c) => {
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
           const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
           if (archiveCmd) {
-            const archiveEnv = getHiveEnv(manifest!, {
+            const archiveEnv = getOpenDevsEnv(manifest!, {
               id: ws.id,
               rootPath: ws.root_path,
               workspacePath: wsPath,
@@ -517,7 +517,7 @@ app.post('/workspaces', async (c) => {
     }
   })();
 
-  const workspacePath = path.join(repo.root_path!, '.hive', workspace_name);
+  const workspacePath = path.join(repo.root_path!, '.opendevs', workspace_name);
 
   // Fire-and-forget: run the init pipeline async (don't await).
   // Pipeline handles: worktree creation → deps install → .env copy → session creation.
@@ -537,7 +537,7 @@ app.post('/workspaces', async (c) => {
     const setupCmd = manifest ? getSetupCommand(manifest) : null;
     if (setupCmd && manifest) {
       db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
-      const setupEnv = getHiveEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
+      const setupEnv = getOpenDevsEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
       runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
     }
   }).catch((err) => {
@@ -633,7 +633,7 @@ app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
   db.prepare("UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
     .run(workspace.id);
 
-  const setupEnv = getHiveEnv(manifest, {
+  const setupEnv = getOpenDevsEnv(manifest, {
     id: workspace.id,
     rootPath: workspace.root_path,
     workspacePath,
@@ -646,7 +646,7 @@ app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
 // Get setup logs
 app.get('/workspaces/:id/setup-logs', withWorkspace, (c) => {
   const workspace = c.get('workspace');
-  const setupLogPath = path.join(os.tmpdir(), `hive-${workspace.id}-setup.log`);
+  const setupLogPath = path.join(os.tmpdir(), `opendevs-${workspace.id}-setup.log`);
   try {
     if (!fs.existsSync(setupLogPath)) return c.json({ logs: null });
     const logs = fs.readFileSync(setupLogPath, 'utf8');
@@ -667,7 +667,7 @@ app.post('/workspaces/:id/tasks/:name/run', withWorkspace, (c) => {
   }
 
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  if (!manifest) throw new NotFoundError('No hive.json manifest found');
+  if (!manifest) throw new NotFoundError('No opendevs.json manifest found');
 
   const tasks = getNormalizedTasks(manifest);
   const task = tasks.find(t => t.name === taskName);
@@ -677,9 +677,9 @@ app.post('/workspaces/:id/tasks/:name/run', withWorkspace, (c) => {
   const env = {
     ...(manifest.env ?? {}),
     ...task.env,
-    HIVE_ROOT_PATH: workspace.root_path,
-    HIVE_WORKSPACE_PATH: workspacePath,
-    HIVE_WORKSPACE_ID: workspace.id,
+    OPENDEVS_ROOT_PATH: workspace.root_path,
+    OPENDEVS_WORKSPACE_PATH: workspacePath,
+    OPENDEVS_WORKSPACE_ID: workspace.id,
   };
 
   return c.json({

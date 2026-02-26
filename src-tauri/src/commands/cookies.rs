@@ -148,7 +148,7 @@ pub async fn sync_browser_cookies(
     // Step 3: Read and decrypt cookies from SQLite
     // Copy the DB first to avoid locking issues with the running browser
     let temp_dir = std::env::temp_dir();
-    let temp_db = temp_dir.join(format!("hive-cookies-{}.db", browser_name.to_lowercase()));
+    let temp_db = temp_dir.join(format!("opendevs-cookies-{}.db", browser_name.to_lowercase()));
     std::fs::copy(&cookie_db_path, &temp_db).map_err(|e| {
         format!(
             "Failed to copy cookie DB (is {} running?): {}",

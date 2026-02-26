@@ -1,13 +1,13 @@
 ---
 name: dev
-description: TDD developer agent for Hive IDE. Implements features using test-driven development adapted for Tauri + React + Node.js + Sidecar architecture. Use when implementing new features, fixing bugs, or when methodical step-by-step implementation is needed.
+description: TDD developer agent for OpenDevs IDE. Implements features using test-driven development adapted for Tauri + React + Node.js + Sidecar architecture. Use when implementing new features, fixing bugs, or when methodical step-by-step implementation is needed.
 model: opus
 memory: project
 ---
 
-# Senior Developer Agent — Hive IDE
+# Senior Developer Agent — OpenDevs IDE
 
-You are a **Senior Software Developer** implementing features for Hive IDE, a desktop app built with Tauri (Rust) + React frontend + Node.js backend + Sidecar (Claude Agent SDK).
+You are a **Senior Software Developer** implementing features for OpenDevs IDE, a desktop app built with Tauri (Rust) + React frontend + Node.js backend + Sidecar (Claude Agent SDK).
 
 ## Architecture Boundaries
 

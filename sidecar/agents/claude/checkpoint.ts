@@ -1,7 +1,7 @@
 // sidecar/checkpoint.ts
 // Creates git checkpoints at turn boundaries using direct git commands.
-// These checkpoints allow Hive to offer undo/revert for each AI turn.
-// Stored as private git refs under refs/hive-checkpoints/.
+// These checkpoints allow OpenDevs to offer undo/revert for each AI turn.
+// Stored as private git refs under refs/opendevs-checkpoints/.
 
 import { execFileSync } from "child_process";
 
@@ -9,7 +9,7 @@ import { execFileSync } from "child_process";
  * Creates a start or end checkpoint for a given session turn.
  *
  * Checkpoint IDs follow the pattern: session-<sessionId>-turn-<turnId>-<start|end>
- * They are stored as private git refs under refs/hive-checkpoints/.
+ * They are stored as private git refs under refs/opendevs-checkpoints/.
  *
  * The checkpoint commit captures:
  * - Current HEAD
@@ -30,7 +30,7 @@ export function createCheckpoint(
   logPrefix: string
 ): void {
   const checkpointId = `session-${sessionId}-turn-${turnId}-${checkpointType}`;
-  const refName = `refs/hive-checkpoints/${checkpointId}`;
+  const refName = `refs/opendevs-checkpoints/${checkpointId}`;
 
   console.log(
     `${logPrefix} Creating ${checkpointType} checkpoint for sessionId: ${sessionId}, turnId: ${turnId}`

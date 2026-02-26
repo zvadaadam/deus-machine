@@ -17,7 +17,7 @@ describe("SidecarClient", () => {
   let serverSocket: net.Socket | null = null;
 
   beforeEach(async () => {
-    socketPath = path.join(os.tmpdir(), `hive-test-sidecar-${Date.now()}.sock`);
+    socketPath = path.join(os.tmpdir(), `opendevs-test-sidecar-${Date.now()}.sock`);
 
     // Create a mock sidecar server
     server = net.createServer((socket) => {

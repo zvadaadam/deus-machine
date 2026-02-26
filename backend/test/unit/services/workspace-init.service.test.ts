@@ -51,7 +51,7 @@ function createInitContext(overrides: Partial<InitContext> = {}): InitContext {
     workspaceId: 'ws-001',
     repositoryId: 'repo-001',
     repoRootPath: '/repos/my-project',
-    workspacePath: '/repos/my-project/.hive/europa',
+    workspacePath: '/repos/my-project/.opendevs/europa',
     branchName: 'zvada/europa',
     worktreeBase: 'origin/main',
     parentBranch: 'main',
@@ -59,7 +59,7 @@ function createInitContext(overrides: Partial<InitContext> = {}): InitContext {
   };
 }
 
-/** Capture stdout writes for verifying HIVE_WORKSPACE_PROGRESS emissions */
+/** Capture stdout writes for verifying OPENDEVS_WORKSPACE_PROGRESS emissions */
 function captureStdout(): string[] {
   const lines: string[] = [];
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -167,18 +167,18 @@ describe('initializeWorkspace', () => {
     expect(prepareCalls.some((q: string) => q.includes("state = 'ready'"))).toBe(true);
   });
 
-  it('emits HIVE_WORKSPACE_PROGRESS for each stage', async () => {
+  it('emits OPENDEVS_WORKSPACE_PROGRESS for each stage', async () => {
     mockFs.existsSync.mockReturnValue(false);
     const lines = captureStdout();
 
     await initializeWorkspace(createInitContext());
 
-    const progressLines = lines.filter(l => l.startsWith('HIVE_WORKSPACE_PROGRESS:'));
+    const progressLines = lines.filter(l => l.startsWith('OPENDEVS_WORKSPACE_PROGRESS:'));
     // worktree, dependencies, hooks, session, done = 5 progress lines
     expect(progressLines.length).toBeGreaterThanOrEqual(5);
 
     const payloads = progressLines.map(l =>
-      JSON.parse(l.replace('HIVE_WORKSPACE_PROGRESS:', '').trim())
+      JSON.parse(l.replace('OPENDEVS_WORKSPACE_PROGRESS:', '').trim())
     );
     const steps = payloads.map((p: { step: string }) => p.step);
     expect(steps).toContain('worktree');
@@ -285,9 +285,9 @@ describe('initializeWorkspace', () => {
 
     await initializeWorkspace(createInitContext());
 
-    const progressLines = lines.filter(l => l.startsWith('HIVE_WORKSPACE_PROGRESS:'));
+    const progressLines = lines.filter(l => l.startsWith('OPENDEVS_WORKSPACE_PROGRESS:'));
     const payloads = progressLines.map(l =>
-      JSON.parse(l.replace('HIVE_WORKSPACE_PROGRESS:', '').trim())
+      JSON.parse(l.replace('OPENDEVS_WORKSPACE_PROGRESS:', '').trim())
     );
     expect(payloads.some((p: { step: string }) => p.step === 'error')).toBe(true);
   });
@@ -327,7 +327,7 @@ describe('initializeWorkspace', () => {
     mockFs.existsSync.mockImplementation((p: unknown) => {
       const s = String(p);
       if (s === '/repos/my-project/.env') return true;
-      if (s === '/repos/my-project/.hive/europa/.env') return false;
+      if (s === '/repos/my-project/.opendevs/europa/.env') return false;
       return false;
     });
 
@@ -335,7 +335,7 @@ describe('initializeWorkspace', () => {
 
     expect(mockFs.copyFileSync).toHaveBeenCalledWith(
       '/repos/my-project/.env',
-      '/repos/my-project/.hive/europa/.env',
+      '/repos/my-project/.opendevs/europa/.env',
     );
   });
 
@@ -343,7 +343,7 @@ describe('initializeWorkspace', () => {
     mockFs.existsSync.mockImplementation((p: unknown) => {
       const s = String(p);
       if (s === '/repos/my-project/.env') return true;
-      if (s === '/repos/my-project/.hive/europa/.env') return true;
+      if (s === '/repos/my-project/.opendevs/europa/.env') return true;
       return false;
     });
 

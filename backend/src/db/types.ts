@@ -64,7 +64,7 @@ export interface WorkspaceWithDetailsRow {
   init_stage: string | null;
   updated_at: string;
 
-  // Setup tracking (hive.json manifest)
+  // Setup tracking (opendevs.json manifest)
   setup_status: string;
   error_message: string | null;
 

@@ -11,13 +11,13 @@ const mockFs = vi.hoisted(() => ({
 vi.mock('fs', () => ({ default: mockFs }));
 
 vi.mock('../../../src/lib/database', () => ({
-  DB_PATH: '/tmp/test-hive/hive.db',
+  DB_PATH: '/tmp/test-opendevs/opendevs.db',
 }));
 
 import { getAllSettings, saveSetting } from '../../../src/services/settings.service';
 
-const EXPECTED_PREFS_PATH = '/tmp/test-hive/preferences.json';
-const EXPECTED_TMP_PATH = '/tmp/test-hive/preferences.json.tmp';
+const EXPECTED_PREFS_PATH = '/tmp/test-opendevs/preferences.json';
+const EXPECTED_TMP_PATH = '/tmp/test-opendevs/preferences.json.tmp';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,7 +95,7 @@ describe('saveSetting', () => {
 
     saveSetting('theme', 'dark');
 
-    expect(mockFs.mkdirSync).toHaveBeenCalledWith('/tmp/test-hive', { recursive: true });
+    expect(mockFs.mkdirSync).toHaveBeenCalledWith('/tmp/test-opendevs', { recursive: true });
   });
 
   it('preserves existing keys on partial update', () => {

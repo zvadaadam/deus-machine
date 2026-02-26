@@ -12,7 +12,7 @@ const mockDb = {
 
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn(() => mockDb),
-  DB_PATH: "/tmp/hive-test-unit-auth/hive.db",
+  DB_PATH: "/tmp/opendevs-test-unit-auth/opendevs.db",
 }));
 
 import {

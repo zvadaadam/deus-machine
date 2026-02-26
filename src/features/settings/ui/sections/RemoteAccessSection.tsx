@@ -133,7 +133,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
       <div>
         <h3 className="text-base font-semibold">Remote Access</h3>
         <p className="text-muted-foreground mt-1 text-base">
-          Connect to Hive from your phone or another browser via the cloud relay.
+          Connect to OpenDevs from your phone or another browser via the cloud relay.
         </p>
       </div>
 

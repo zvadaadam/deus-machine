@@ -18,7 +18,7 @@
 // IMPLEMENTATION NOTE: We use git CLI (not libgit2) for the diff pipeline
 // because libgit2's diff_tree_to_workdir_with_index has issues with git
 // worktrees, causing phantom diffs (thousands of false deletions). Both
-// OpenDevs and Codex (competitor IDEs) use git CLI for the same reason.
+// Other IDEs (e.g. Codex) use git CLI for the same reason.
 // libgit2 is still used for non-diff operations (branch listing, file content).
 //
 // PUBLIC API (called from commands/git.rs):
@@ -127,7 +127,7 @@ fn cache_set(key: String, value: String) {
 // The merge-base + diff pipeline uses git CLI instead of libgit2 because
 // libgit2's diff_tree_to_workdir_with_index has known issues with git
 // worktrees (phantom diffs where thousands of files appear as deleted).
-// Both OpenDevs and Codex (competitor IDEs) use git CLI for the same reason.
+// Other IDEs (e.g. Codex) use git CLI for the same reason.
 // ---------------------------------------------------------------------------
 
 /// Default timeout for short git operations (rev-parse, ls-files, merge-base).
@@ -867,7 +867,7 @@ pub fn get_uncommitted_files(workspace_path: &str) -> Result<Vec<DiffFile>, Stri
 // ---------------------------------------------------------------------------
 
 /// Get per-file changes since the last turn checkpoint.
-/// Finds the latest `refs/hive-checkpoints/session-{session_id}-turn-*-start` ref,
+/// Finds the latest `refs/opendevs-checkpoints/session-{session_id}-turn-*-start` ref,
 /// diffs that tree → working directory.
 pub fn get_last_turn_files(
     workspace_path: &str,
@@ -876,7 +876,7 @@ pub fn get_last_turn_files(
     let repo = Repository::open(workspace_path)
         .map_err(|e| format!("Failed to open repository: {}", e))?;
 
-    let prefix = format!("refs/hive-checkpoints/session-{}-turn-", session_id);
+    let prefix = format!("refs/opendevs-checkpoints/session-{}-turn-", session_id);
     let mut latest_ref: Option<(String, git2::Oid, i64)> = None;
 
     // Find the most recent checkpoint by commit timestamp (not ref name).
@@ -982,7 +982,7 @@ fn collect_diff_files(diff: &git2::Diff) -> Result<Vec<DiffFile>, String> {
 // resolve_branch_oid and get_merge_base_tree removed — diff pipeline now uses
 // git CLI via compute_merge_base_sha() + `git diff --numstat` instead of
 // libgit2's diff_tree_to_workdir_with_index which had phantom diff issues
-// in worktrees. Both OpenDevs and Codex use git CLI for diffs.
+// in worktrees. Other IDEs (e.g. Codex) also use git CLI for diffs.
 
 #[cfg(test)]
 mod tests {

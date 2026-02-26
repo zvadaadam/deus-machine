@@ -288,8 +288,8 @@ describe("visual-effects JS templates", () => {
       assertIsIIFE(VISUAL_EFFECTS_SETUP, "VISUAL_EFFECTS_SETUP");
     });
 
-    it("installs window.__hiveVisuals", () => {
-      expect(VISUAL_EFFECTS_SETUP).toContain("window.__hiveVisuals");
+    it("installs window.__opendevsVisuals", () => {
+      expect(VISUAL_EFFECTS_SETUP).toContain("window.__opendevsVisuals");
     });
   });
 
@@ -335,7 +335,7 @@ describe("evalWithResult wrapper compatibility", () => {
     try {
       var __result = ${js};
       if (__result && typeof __result === 'object' && typeof __result.then === 'function') {
-        return '__HIVE_ASYNC__';
+        return '__OPENDEVS_ASYNC__';
       }
       return typeof __result === 'string' ? __result : String(__result);
     } catch(__e) {

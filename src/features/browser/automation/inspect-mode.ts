@@ -15,21 +15,21 @@ export { INSPECT_MODE_SETUP };
 
 /** Enable inspect mode (call after INSPECT_MODE_SETUP has been eval'd) */
 export const INSPECT_MODE_ENABLE = `(function(){
-  if (window.__hiveInspect) {
-    window.__hiveInspect.enable();
+  if (window.__opendevsInspect) {
+    window.__opendevsInspect.enable();
   } else {
-    console.error('[hive-inspect] ENABLE FAILED: window.__hiveInspect is undefined');
+    console.error('[opendevs-inspect] ENABLE FAILED: window.__opendevsInspect is undefined');
   }
 })()`;
 
 /** Disable inspect mode */
 export const INSPECT_MODE_DISABLE = `(function(){
-  if (window.__hiveInspect) window.__hiveInspect.disable();
+  if (window.__opendevsInspect) window.__opendevsInspect.disable();
 })()`;
 
 /** Check if inspect mode is active */
 export const INSPECT_MODE_IS_ACTIVE = `(function(){
-  return JSON.stringify({ active: window.__hiveInspect ? window.__hiveInspect.isActive() : false });
+  return JSON.stringify({ active: window.__opendevsInspect ? window.__opendevsInspect.isActive() : false });
 })()`;
 
 /** Verify that the inspect mode IIFE completed and installed the public API.
@@ -38,8 +38,8 @@ export const INSPECT_MODE_IS_ACTIVE = `(function(){
  *  JS runtime errors). */
 export const INSPECT_MODE_VERIFY = `(function(){
   return JSON.stringify({
-    hiveInspect: !!window.__hiveInspect,
-    hasDrainEvents: !!(window.__hiveInspect && window.__hiveInspect.drainEvents),
+    opendevsInspect: !!window.__opendevsInspect,
+    hasDrainEvents: !!(window.__opendevsInspect && window.__opendevsInspect.drainEvents),
   });
 })()`;
 
@@ -53,8 +53,8 @@ export const INSPECT_MODE_VERIFY = `(function(){
  * instead of the title-channel, avoiding collision with console drain.
  */
 export const INSPECT_MODE_DRAIN_EVENTS = `(function(){
-  if (window.__hiveInspect && window.__hiveInspect.drainEvents) {
-    return window.__hiveInspect.drainEvents();
+  if (window.__opendevsInspect && window.__opendevsInspect.drainEvents) {
+    return window.__opendevsInspect.drainEvents();
   }
   return '[]';
 })()`;

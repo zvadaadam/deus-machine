@@ -15,22 +15,22 @@ import VISUAL_EFFECTS_SETUP from './dist-inject/visual-effects.js?raw';
 export { VISUAL_EFFECTS_SETUP };
 
 /**
- * Build JS to move cursor to an element by data-hive-ref,
+ * Build JS to move cursor to an element by data-opendevs-ref,
  * then ripple on arrival (used before click actions).
  * Returns duration (ms) via title-channel so frontend can wait.
  */
 export function buildMoveCursorAndRippleJs(ref: string): string {
   return `(function(){
-  if (!window.__hiveVisuals) return JSON.stringify({duration:0});
-  var el = document.querySelector('[data-hive-ref="${ref}"]');
+  if (!window.__opendevsVisuals) return JSON.stringify({duration:0});
+  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__hiveVisuals.moveCursorToElement(el);
+  var dur = window.__opendevsVisuals.moveCursorToElement(el);
   // Ripple after cursor arrives
   setTimeout(function(){
     var rect = el.getBoundingClientRect();
     var cx = Math.round(rect.left + rect.width / 2);
     var cy = Math.round(rect.top + rect.height / 2);
-    window.__hiveVisuals.rippleAt(cx, cy);
+    window.__opendevsVisuals.rippleAt(cx, cy);
   }, dur + 20);
   return JSON.stringify({duration: dur + 280});
 })()`;
@@ -41,12 +41,12 @@ export function buildMoveCursorAndRippleJs(ref: string): string {
  */
 export function buildPinCursorJs(ref: string): string {
   return `(function(){
-  if (!window.__hiveVisuals) return JSON.stringify({duration:0});
-  var el = document.querySelector('[data-hive-ref="${ref}"]');
+  if (!window.__opendevsVisuals) return JSON.stringify({duration:0});
+  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
   if (!el) return JSON.stringify({duration:0, error:'Element not found'});
-  var dur = window.__hiveVisuals.moveCursorToElement(el);
+  var dur = window.__opendevsVisuals.moveCursorToElement(el);
   setTimeout(function(){
-    window.__hiveVisuals.pinCursorToElement(el);
+    window.__opendevsVisuals.pinCursorToElement(el);
   }, dur + 20);
   return JSON.stringify({duration: dur + 20});
 })()`;
@@ -54,7 +54,7 @@ export function buildPinCursorJs(ref: string): string {
 
 /** Build JS to unpin and hide cursor (after typing finishes) */
 export const HIDE_CURSOR_JS = `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.hideCursor();
+  if (window.__opendevsVisuals) window.__opendevsVisuals.hideCursor();
 })()`;
 
 /**
@@ -64,7 +64,7 @@ export const HIDE_CURSOR_JS = `(function(){
  */
 export function buildFadeCursorJs(dwellMs = 1000): string {
   return `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.fadeCursor(${dwellMs});
+  if (window.__opendevsVisuals) window.__opendevsVisuals.fadeCursor(${dwellMs});
 })()`;
 }
 
@@ -82,7 +82,7 @@ export function buildScreenshotFlashJs(rect?: {
     ? `{x:${rect.x},y:${rect.y},width:${rect.width},height:${rect.height}}`
     : "null";
   return `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.screenshotFlash(${rectArg});
+  if (window.__opendevsVisuals) window.__opendevsVisuals.screenshotFlash(${rectArg});
 })()`;
 }
 
@@ -92,9 +92,9 @@ export function buildScreenshotFlashJs(rect?: {
  */
 export function buildHighlightElementJs(ref: string): string {
   return `(function(){
-  if (!window.__hiveVisuals) return;
-  var el = document.querySelector('[data-hive-ref="${ref}"]');
-  if (el) window.__hiveVisuals.highlightElement(el);
+  if (!window.__opendevsVisuals) return;
+  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
+  if (el) window.__opendevsVisuals.highlightElement(el);
 })()`;
 }
 
@@ -103,7 +103,7 @@ export function buildHighlightElementJs(ref: string): string {
  * Used to show the AI is reading/scanning the page (BrowserSnapshot).
  */
 export const SCAN_PAGE_JS = `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.scanPage();
+  if (window.__opendevsVisuals) window.__opendevsVisuals.scanPage();
 })()`;
 
 /**
@@ -111,7 +111,7 @@ export const SCAN_PAGE_JS = `(function(){
  * Used to show the AI pressing a key on an input/element.
  */
 export const KEY_FLASH_JS = `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.keyFlash();
+  if (window.__opendevsVisuals) window.__opendevsVisuals.keyFlash();
 })()`;
 
 /**
@@ -120,7 +120,7 @@ export const KEY_FLASH_JS = `(function(){
  * Call before tool execution begins; pair with HIDE_ACTIVE_GLOW_JS when done.
  */
 export const SHOW_ACTIVE_GLOW_JS = `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.showActiveGlow();
+  if (window.__opendevsVisuals) window.__opendevsVisuals.showActiveGlow();
 })()`;
 
 /**
@@ -128,5 +128,5 @@ export const SHOW_ACTIVE_GLOW_JS = `(function(){
  * Captures current breathing opacity for a smooth fade-out (no jump).
  */
 export const HIDE_ACTIVE_GLOW_JS = `(function(){
-  if (window.__hiveVisuals) window.__hiveVisuals.hideActiveGlow();
+  if (window.__opendevsVisuals) window.__opendevsVisuals.hideActiveGlow();
 })()`;

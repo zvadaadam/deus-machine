@@ -3,7 +3,7 @@
 #![allow(unexpected_cfgs)]
 
 use tauri::Manager;
-use hive_lib::{
+use opendevs_lib::{
     commands,
     backend::BackendManager,
     browser::BrowserManager,
@@ -15,7 +15,7 @@ use hive_lib::{
     watcher::WatcherManager,
 };
 #[cfg(target_os = "macos")]
-use hive_sim_core::manager::SimulatorState;
+use opendevs_sim_core::manager::SimulatorState;
 
 fn main() {
     let builder = tauri::Builder::default()
@@ -80,7 +80,7 @@ fn main() {
                 .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
             std::fs::create_dir_all(&db_dir)
                 .map_err(|e| format!("Failed to create app data dir {}: {e}", db_dir.display()))?;
-            let db_path = db_dir.join("hive.db");
+            let db_path = db_dir.join("opendevs.db");
             let db_path = db_path.to_string_lossy().to_string();
 
             println!("[TAURI] Using database at: {}", db_path);

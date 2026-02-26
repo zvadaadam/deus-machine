@@ -74,7 +74,7 @@ function getServerName(): string {
   try {
     return `${userInfo().username}'s computer`;
   } catch {
-    return "Hive Server";
+    return "OpenDevs Server";
   }
 }
 
