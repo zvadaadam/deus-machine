@@ -1,9 +1,9 @@
-# hive.json Specification
+# opendevs.json Specification
 
 Version: 1
 Last updated: 2026-02-18
 
-The `hive.json` manifest tells the Hive orchestrator how to set up, run, build, test, and manage workspaces. It lives at the root of every workspace/repository.
+The `opendevs.json` manifest tells the OpenDevs orchestrator how to set up, run, build, test, and manage workspaces. It lives at the root of every workspace/repository.
 
 ---
 
@@ -11,7 +11,7 @@ The `hive.json` manifest tells the Hive orchestrator how to set up, run, build, 
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "My Project",
 
@@ -67,7 +67,7 @@ The `hive.json` manifest tells the Hive orchestrator how to set up, run, build, 
 
 ### `scripts` (backwards-compatible)
 
-Legacy fields consumed by the current Hive app. Keep these for backwards compatibility.
+Legacy fields consumed by the current OpenDevs app. Keep these for backwards compatibility.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -82,7 +82,7 @@ Legacy fields consumed by the current Hive app. Keep these for backwards compati
 
 ### `requires`
 
-Runtime/tool version constraints. Hive validates these before running setup.
+Runtime/tool version constraints. OpenDevs validates these before running setup.
 
 | Field | Type | Example | Description |
 |-------|------|---------|-------------|
@@ -106,7 +106,7 @@ Environment variables set before any script execution.
 }
 ```
 
-Values are strings. Hive sets these as process environment variables before running lifecycle hooks and tasks.
+Values are strings. OpenDevs sets these as process environment variables before running lifecycle hooks and tasks.
 
 ### `lifecycle`
 
@@ -119,7 +119,7 @@ Automatic hooks triggered by workspace state changes. These are NOT shown as cli
 
 ### `tasks`
 
-Named commands that appear as clickable buttons in the Hive UI. Each task can be a **string** (shorthand) or an **object** (full config).
+Named commands that appear as clickable buttons in the OpenDevs UI. Each task can be a **string** (shorthand) or an **object** (full config).
 
 #### String shorthand
 
@@ -167,7 +167,7 @@ String tasks use default settings: no icon, not persistent, no dependencies.
 
 ## Icon Reference
 
-Icons use names from [lucide-react](https://lucide.dev/icons/), which is already a project dependency. The Hive UI renders these as icon buttons next to each task.
+Icons use names from [lucide-react](https://lucide.dev/icons/), which is already a project dependency. The OpenDevs UI renders these as icon buttons next to each task.
 
 | Icon name | Lucide component | Use case |
 |-----------|-----------------|----------|
@@ -190,15 +190,15 @@ When no icon is specified, the UI defaults to `terminal`.
 
 ---
 
-## Hive Environment Variables
+## OpenDevs Environment Variables
 
-Hive sets these environment variables automatically when running scripts:
+OpenDevs sets these environment variables automatically when running scripts:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `HIVE_ROOT_PATH` | Path to the root repository (not the worktree) | `/Users/me/projects/my-app` |
-| `HIVE_WORKSPACE_PATH` | Path to this workspace's worktree | `/Users/me/.hive/workspace-1` |
-| `HIVE_WORKSPACE_ID` | Unique workspace identifier | `ws_abc123` |
+| `OPENDEVS_ROOT_PATH` | Path to the root repository (not the worktree) | `/Users/me/projects/my-app` |
+| `OPENDEVS_WORKSPACE_PATH` | Path to this workspace's worktree | `/Users/me/.opendevs/workspace-1` |
+| `OPENDEVS_WORKSPACE_ID` | Unique workspace identifier | `ws_abc123` |
 
 Scripts can use these to locate shared configs, copy files from the root repo, etc.
 
@@ -210,7 +210,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "my-api",
   "scripts": { "setup": "bun install", "run": "bun run dev" },
@@ -231,7 +231,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "ml-service",
   "scripts": { "setup": "uv sync", "run": "uv run uvicorn app:main --reload" },
@@ -251,7 +251,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "my-cli",
   "scripts": { "setup": "cargo build", "run": "cargo run" },
@@ -272,7 +272,7 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "my-monorepo",
   "scripts": { "setup": "bun install", "run": "bun run dev" },
@@ -289,18 +289,18 @@ Scripts can use these to locate shared configs, copy files from the root repo, e
 }
 ```
 
-### Full-stack Tauri (Hive IDE)
+### Full-stack Tauri (OpenDevs IDE)
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
-  "name": "Hive IDE",
-  "scripts": { "setup": "./scripts/hive-setup.sh", "run": "./scripts/dev.sh" },
+  "name": "OpenDevs IDE",
+  "scripts": { "setup": "./scripts/opendevs-setup.sh", "run": "./scripts/dev.sh" },
   "runScriptMode": "nonconcurrent",
   "requires": { "node": ">= 22", "bun": ">= 1.2" },
   "env": { "NODE_ENV": "development" },
-  "lifecycle": { "setup": "./scripts/hive-setup.sh" },
+  "lifecycle": { "setup": "./scripts/opendevs-setup.sh" },
   "tasks": {
     "dev": {
       "command": "./scripts/dev.sh",
@@ -359,22 +359,22 @@ For backwards compatibility, always include the `scripts` and `runScriptMode` to
 | `scripts.archive` | `lifecycle.archive` |
 | `runScriptMode` | `tasks.dev.mode` |
 
-The current Hive app reads `scripts.*` and `runScriptMode`. Future versions will read `lifecycle` and `tasks` directly. Including both ensures forwards and backwards compatibility.
+The current OpenDevs app reads `scripts.*` and `runScriptMode`. Future versions will read `lifecycle` and `tasks` directly. Including both ensures forwards and backwards compatibility.
 
 ---
 
-## Generating hive.json
+## Generating opendevs.json
 
 Use the Claude Code skill to auto-generate a manifest:
 
 ```
-/generate-hive-json [path]
+/generate-opendevs-json [path]
 ```
 
 The skill:
-1. Imports from existing Hive (`hive.json`) or Codex (`environment.toml`) configs
+1. Imports from existing OpenDevs (`opendevs.json`) or Codex (`environment.toml`) configs
 2. Detects project type from files (`package.json`, `Cargo.toml`, `pyproject.toml`, etc.)
 3. Detects package manager from lockfiles
 4. Extracts scripts and maps them to tasks with appropriate icons
 5. Merges imported + detected (imported takes precedence)
-6. Writes `hive.json`
+6. Writes `opendevs.json`

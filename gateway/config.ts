@@ -8,7 +8,7 @@ const ConfigSchema = z.object({
   telegramBotToken: z.string().min(1).optional(),
   /** WhatsApp session directory for auth state persistence (optional) */
   whatsappSessionDir: z.string().min(1).optional(),
-  /** Base URL for the Hive backend HTTP API (e.g. http://localhost:50123) */
+  /** Base URL for the OpenDevs backend HTTP API (e.g. http://localhost:50123) */
   backendUrl: z.string().url(),
   /** Path to the sidecar Unix domain socket */
   sidecarSocketPath: z.string().min(1),
@@ -26,9 +26,9 @@ export function loadConfig(): GatewayConfig {
   const raw = {
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
     whatsappSessionDir: process.env.WHATSAPP_SESSION_DIR || undefined,
-    backendUrl: process.env.BACKEND_URL ?? process.env.HIVE_BACKEND_URL,
+    backendUrl: process.env.BACKEND_URL ?? process.env.OPENDEVS_BACKEND_URL,
     sidecarSocketPath: process.env.SIDECAR_SOCKET_PATH,
-    bindingsPath: process.env.BINDINGS_PATH ?? "/tmp/hive-gateway-bindings.json",
+    bindingsPath: process.env.BINDINGS_PATH ?? "/tmp/opendevs-gateway-bindings.json",
     allowedUserIds: process.env.ALLOWED_USER_IDS
       ? process.env.ALLOWED_USER_IDS.split(",").map((s) => s.trim()).filter(Boolean)
       : [],

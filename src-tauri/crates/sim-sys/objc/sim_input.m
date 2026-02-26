@@ -62,7 +62,7 @@ void init_touch_system(SimBridge *bridge) {
 
     // Create serial touch queue for thread-safe HID injection
     bridge->touchQueue = dispatch_queue_create(
-        "com.hivenet.sim-bridge.touch", DISPATCH_QUEUE_SERIAL);
+        "com.opendevs.sim-bridge.touch", DISPATCH_QUEUE_SERIAL);
 
     // Load IndigoHID functions from Simulator.app
     bridge->indigoMouseFn = (IndigoHIDMouseFn)getSimulatorAppSymbol(

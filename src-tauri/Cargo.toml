@@ -1,16 +1,16 @@
 [package]
-name = "hive"
+name = "opendevs"
 version = "2.0.0"
 description = "AI-powered development environment with Claude Code integration"
-authors = ["Hive Team"]
+authors = ["OpenDevs Team"]
 edition = "2021"
 
 [lib]
-name = "hive_lib"
+name = "opendevs_lib"
 crate-type = ["staticlib", "cdylib", "lib"]
 
 [[bin]]
-name = "hive"
+name = "opendevs"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -61,7 +61,7 @@ bytecount = "0.6"
 objc = "0.2"
 block = "0.1"
 # iOS Simulator integration (screen capture, MJPEG streaming, HID input)
-hive-sim-core = { path = "crates/sim-core" }
+opendevs-sim-core = { path = "crates/sim-core" }
 
 [dev-dependencies]
 tempfile = "3"

@@ -109,7 +109,7 @@ describe("QueryRequestSchema", () => {
         permissionMode: "plan",
         claudeEnvVars: "FOO=bar",
         ghToken: "gh-token",
-        hiveEnv: { KEY: "value" },
+        opendevsEnv: { KEY: "value" },
         additionalDirectories: ["/extra"],
         chromeEnabled: true,
         strictDataPrivacy: false,

@@ -19,7 +19,7 @@
 import { invoke } from "@/platform/tauri";
 
 // Sentinel returned when JS produces a Promise result that needs async resolution
-const ASYNC_SENTINEL = "__HIVE_ASYNC__";
+const ASYNC_SENTINEL = "__OPENDEVS_ASYNC__";
 
 let evalCounter = 0;
 
@@ -56,12 +56,12 @@ export async function evalWithResult(
     try {
       var __result = ${js};
       if (__result && typeof __result === 'object' && typeof __result.then === 'function') {
-        window.__hive_pending = window.__hive_pending || {};
-        window.__hive_pending['${requestId}'] = {done: false};
+        window.__opendevs_pending = window.__opendevs_pending || {};
+        window.__opendevs_pending['${requestId}'] = {done: false};
         __result.then(function(v) {
-          window.__hive_pending['${requestId}'] = {done: true, value: typeof v === 'string' ? v : String(v)};
+          window.__opendevs_pending['${requestId}'] = {done: true, value: typeof v === 'string' ? v : String(v)};
         }, function(e) {
-          window.__hive_pending['${requestId}'] = {done: true, error: e.message || String(e)};
+          window.__opendevs_pending['${requestId}'] = {done: true, error: e.message || String(e)};
         });
         return '${ASYNC_SENTINEL}';
       }
@@ -97,10 +97,10 @@ async function pollAsyncResult(
   timeoutMs: number
 ): Promise<string> {
   const pollJs = `(function(){
-    var p = window.__hive_pending && window.__hive_pending['${requestId}'];
+    var p = window.__opendevs_pending && window.__opendevs_pending['${requestId}'];
     if (!p) return JSON.stringify({done: false});
     if (p.done) {
-      delete window.__hive_pending['${requestId}'];
+      delete window.__opendevs_pending['${requestId}'];
       return p.error
         ? JSON.stringify({error: p.error})
         : (typeof p.value === 'string' ? p.value : String(p.value));
@@ -140,7 +140,7 @@ async function pollAsyncResult(
   // Clean up the pending entry
   invoke("eval_browser_webview", {
     label,
-    js: `delete (window.__hive_pending || {})['${requestId}']`,
+    js: `delete (window.__opendevs_pending || {})['${requestId}']`,
   }).catch(() => {});
 
   throw new Error(

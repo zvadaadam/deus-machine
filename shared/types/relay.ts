@@ -1,9 +1,9 @@
 // Relay envelope protocol types (copy from devs-web packages/types/src/relay.ts).
-// Defines the framing between Hive server <-> CF Durable Object relay <-> web clients.
+// Defines the framing between OpenDevs server <-> CF Durable Object relay <-> web clients.
 
 // ---- Server <-> Relay (tunnel) ----
 
-/** Frames sent from Hive server to relay via tunnel WebSocket */
+/** Frames sent from OpenDevs server to relay via tunnel WebSocket */
 export type ServerFrame =
   | { type: "register"; serverId: string; relayToken: string; serverName?: string }
   | { type: "data"; clientId: string; payload: string }
@@ -13,7 +13,7 @@ export type ServerFrame =
   | { type: "pair_response"; pairId: string; success: true; deviceToken: string }
   | { type: "pair_response"; pairId: string; success: false; reason: string };
 
-/** Frames sent from relay to Hive server via tunnel WebSocket */
+/** Frames sent from relay to OpenDevs server via tunnel WebSocket */
 export type RelayFrame =
   | { type: "registered" }
   | { type: "client_connected"; clientId: string; deviceToken: string }

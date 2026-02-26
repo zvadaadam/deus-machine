@@ -7,7 +7,7 @@ import { getRelayCredentials, generateRelayCredentials } from './services/auth.s
 import { getSetting, saveSetting } from './services/settings.service';
 
 /**
- * Hive Backend Server
+ * OpenDevs Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
  * Agent runtime (Claude SDK) is now managed by sidecar-v2 (Rust-spawned).
@@ -41,7 +41,7 @@ const server = serve({
   // CRITICAL: Machine-readable port output for Rust backend and dev.sh
   console.log(`[BACKEND_PORT]${info.port}`);
 
-  console.log('\nHive Backend Server');
+  console.log('\nOpenDevs Backend Server');
   console.log(`API Server: http://0.0.0.0:${info.port}`);
   console.log(`Database: ${DB_PATH}`);
   console.log('Server ready!\n');

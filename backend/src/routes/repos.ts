@@ -10,7 +10,7 @@ import { CreateRepoBody } from '../lib/schemas';
 import { detectDefaultBranch } from '../services/git.service';
 import { getAllRepositories, getRepositoryByRootPath, getRepositoryById, getMaxRepositorySortOrder } from '../db';
 import { readManifest, getNormalizedTasks, writeManifest } from '../services/manifest.service';
-import { HiveManifestSchema } from '../lib/hive-manifest';
+import { OpenDevsManifestSchema } from '../lib/opendevs-manifest';
 import { NotFoundError } from '../lib/errors';
 
 const app = new Hono();
@@ -82,7 +82,7 @@ app.post('/repos/:id/manifest', async (c) => {
   if (!repo) throw new NotFoundError('Repository not found');
 
   const body = await c.req.json();
-  const parsed = HiveManifestSchema.safeParse(body);
+  const parsed = OpenDevsManifestSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: 'Invalid manifest', issues: parsed.error.issues }, 400);
   const success = writeManifest(repo.root_path, parsed.data);
   if (!success) return c.json({ error: 'Failed to write manifest' }, 500);
@@ -100,7 +100,7 @@ app.get('/repos/:id/detect-manifest', (c) => {
 });
 
 /**
- * Scan a project directory and generate a suggested hive.json manifest.
+ * Scan a project directory and generate a suggested opendevs.json manifest.
  * Reads package.json, Cargo.toml, Makefile, etc. to infer scripts and tasks.
  */
 function detectManifestFromProject(rootPath: string, repoName: string): Record<string, unknown> {

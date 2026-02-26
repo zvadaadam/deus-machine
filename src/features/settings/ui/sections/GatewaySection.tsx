@@ -181,7 +181,7 @@ export function GatewaySection({ settings, saveSetting }: SettingsSectionProps) 
             id="whatsapp-session"
             defaultValue={settings.whatsapp_session_dir ?? ""}
             onBlur={(e) => saveSetting("whatsapp_session_dir", e.currentTarget.value)}
-            placeholder="~/.hive/whatsapp-session"
+            placeholder="~/.opendevs/whatsapp-session"
           />
         </div>
       </div>

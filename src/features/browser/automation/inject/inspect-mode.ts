@@ -10,7 +10,7 @@
 // - Escape to exit
 //
 // Communication back to frontend via event buffer:
-//   JS pushes events to window.__HIVE_INSPECT_EVENTS__ array.
+//   JS pushes events to window.__OPENDEVS_INSPECT_EVENTS__ array.
 //   React drains the buffer every 200ms via eval_browser_webview_with_result
 //   (WKWebView's native evaluateJavaScript:completionHandler:).
 //
@@ -20,8 +20,8 @@
 // coalesce/drop messages. Buffer+drain is simple and 200ms is imperceptible.
 
 // Guard: prevent double-injection if eval'd multiple times
-if (!(window as any).__hiveInspectMode) {
-  (window as any).__hiveInspectMode = true;
+if (!(window as any).__opendevsInspectMode) {
+  (window as any).__opendevsInspectMode = true;
 
   // ========================================================================
   // State
@@ -45,7 +45,7 @@ if (!(window as any).__hiveInspectMode) {
   // This avoids the title-channel race condition (see architecture note below).
 
   const eventBuffer: Array<{ type: string; data: unknown }> = [];
-  (window as any).__HIVE_INSPECT_EVENTS__ = eventBuffer;
+  (window as any).__OPENDEVS_INSPECT_EVENTS__ = eventBuffer;
 
   // ⚠️ ARCHITECTURE NOTE — DO NOT use document.title for inspect events.
   //
@@ -70,11 +70,11 @@ if (!(window as any).__hiveInspectMode) {
   // Monotonically increasing counter gives predictable, stable refs that
   // don't change between inspections — unlike random strings.
   function getOrAssignElementId(el: Element): string {
-    const existing = el.getAttribute('data-hive-ref');
+    const existing = el.getAttribute('data-opendevs-ref');
     if (existing) return existing;
     elementIdCounter++;
-    const id = 'hive-' + elementIdCounter;
-    el.setAttribute('data-hive-ref', id);
+    const id = 'opendevs-' + elementIdCounter;
+    el.setAttribute('data-opendevs-ref', id);
     return id;
   }
 
@@ -262,7 +262,7 @@ if (!(window as any).__hiveInspectMode) {
     cursor.setAttribute('height', '16');
     cursor.setAttribute('viewBox', '0 0 16 16');
     cursor.setAttribute('fill', 'none');
-    cursor.setAttribute('data-hive-inspect', 'true');
+    cursor.setAttribute('data-opendevs-inspect', 'true');
     cursor.setAttribute('aria-hidden', 'true');
     cursor.style.position = 'fixed';
     cursor.style.pointerEvents = 'none';
@@ -349,7 +349,7 @@ if (!(window as any).__hiveInspectMode) {
   // Inspect Element Helpers
   // ========================================================================
   function isInspectElement(el: Element | null): boolean {
-    return !!el && !!el.getAttribute && el.getAttribute('data-hive-inspect') === 'true';
+    return !!el && !!el.getAttribute && el.getAttribute('data-opendevs-inspect') === 'true';
   }
 
   /** Tailwind utility class pattern — skipped when building element paths and className */
@@ -458,7 +458,7 @@ if (!(window as any).__hiveInspectMode) {
     if (attrs) {
       for (let i = 0; i < attrs.length; i++) {
         const name = attrs[i].name;
-        if (name.startsWith('data-') && !result[name] && name !== 'data-hive-ref' && name !== 'data-hive-inspect') {
+        if (name.startsWith('data-') && !result[name] && name !== 'data-opendevs-ref' && name !== 'data-opendevs-inspect') {
           if (name.indexOf('test') !== -1 || name.indexOf('state') !== -1 || name.indexOf('variant') !== -1 || name.indexOf('status') !== -1) {
             result[name] = attrs[i].value.substring(0, 100);
           }
@@ -507,12 +507,12 @@ if (!(window as any).__hiveInspectMode) {
 
     if (!overlay) {
       overlay = document.createElement('div');
-      overlay.setAttribute('data-hive-inspect', 'true');
+      overlay.setAttribute('data-opendevs-inspect', 'true');
       overlay.style.cssText = 'position:fixed;background:rgba(58,150,221,0.3);border:2px solid #3a96dd;pointer-events:none;z-index:2147483647;transition:all 0.1s ease;display:none;';
       document.body.appendChild(overlay);
 
       overlayLabel = document.createElement('div');
-      overlayLabel.setAttribute('data-hive-inspect', 'true');
+      overlayLabel.setAttribute('data-opendevs-inspect', 'true');
       overlayLabel.style.cssText = 'position:fixed;background:#3a96dd;color:white;padding:2px 6px;font-size:11px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;border-radius:2px;pointer-events:none;z-index:2147483648;transition:all 0.1s ease;white-space:nowrap;display:none;';
       document.body.appendChild(overlayLabel);
     }
@@ -566,7 +566,7 @@ if (!(window as any).__hiveInspectMode) {
 
     if (!dragSelectionBox) {
       dragSelectionBox = document.createElement('div');
-      dragSelectionBox.setAttribute('data-hive-inspect', 'true');
+      dragSelectionBox.setAttribute('data-opendevs-inspect', 'true');
       dragSelectionBox.style.cssText = 'position:fixed;background:rgba(58,150,221,0.1);border:2px dashed #3a96dd;pointer-events:none;z-index:2147483647;';
       document.body.appendChild(dragSelectionBox);
     }
@@ -891,7 +891,7 @@ if (!(window as any).__hiveInspectMode) {
   // ========================================================================
   // Public API on window
   // ========================================================================
-  (window as any).__hiveInspect = {
+  (window as any).__opendevsInspect = {
     enable: enableSelectionMode,
     disable: disableSelectionMode,
     isActive: () => selectionMode,
@@ -903,5 +903,5 @@ if (!(window as any).__hiveInspectMode) {
     },
   };
 
-  console.log('[hive-inspect] SETUP complete — window.__hiveInspect installed');
+  console.log('[opendevs-inspect] SETUP complete — window.__opendevsInspect installed');
 }

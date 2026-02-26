@@ -17,7 +17,7 @@ import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
 
-/** Normalized task from hive.json manifest */
+/** Normalized task from opendevs.json manifest */
 export interface NormalizedTask {
   name: string;
   command: string;
@@ -56,7 +56,7 @@ export interface WorkspaceGitInfo {
 
 function getWorkspacePath(ws: WorkspaceGitInfo): string {
   if (ws.workspace_path) return ws.workspace_path;
-  return `${ws.root_path}/.hive/${ws.slug}`;
+  return `${ws.root_path}/.opendevs/${ws.slug}`;
 }
 
 export const WorkspaceService = {
@@ -294,7 +294,7 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch parsed hive.json manifest + normalized tasks for a workspace
+   * Fetch parsed opendevs.json manifest + normalized tasks for a workspace
    */
   fetchManifest: async (id: string): Promise<ManifestResponse> => {
     return apiClient.get<ManifestResponse>(ENDPOINTS.WORKSPACE_MANIFEST(id));

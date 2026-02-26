@@ -33,7 +33,7 @@ export function useRepo(id: string | null) {
 }
 
 /**
- * Fetch hive.json manifest for a repo.
+ * Fetch opendevs.json manifest for a repo.
  * staleTime: Infinity — manifest doesn't change unless user saves.
  */
 export function useRepoManifest(repoId: string | null) {
@@ -46,7 +46,7 @@ export function useRepoManifest(repoId: string | null) {
 }
 
 /**
- * Save hive.json manifest for a repo.
+ * Save opendevs.json manifest for a repo.
  * Invalidates the manifest query on success.
  */
 export function useSaveRepoManifest() {

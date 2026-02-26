@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter};
 ///
 /// Also relays structured progress events from the backend to the
 /// frontend via Tauri events. The backend emits lines prefixed with
-/// `HIVE_WORKSPACE_PROGRESS:` containing JSON payloads that get
+/// `OPENDEVS_WORKSPACE_PROGRESS:` containing JSON payloads that get
 /// parsed and emitted as `workspace:progress` Tauri events.
 pub struct BackendManager {
     process: Mutex<Option<Child>>,
@@ -89,9 +89,9 @@ impl BackendManager {
                     }
 
                     // Parse workspace init progress events and relay as Tauri events.
-                    // Backend emits: HIVE_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
+                    // Backend emits: OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
                     // We parse the JSON and emit it as a "workspace:progress" Tauri event.
-                    if let Some(json_str) = line.strip_prefix("HIVE_WORKSPACE_PROGRESS:") {
+                    if let Some(json_str) = line.strip_prefix("OPENDEVS_WORKSPACE_PROGRESS:") {
                         if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
                             if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
                                 if let Err(e) = handle.emit("workspace:progress", &payload) {
@@ -207,7 +207,7 @@ setTimeout(() => {
         let manager = BackendManager::new();
 
         // Start the mock backend
-        match manager.start(script_path.clone(), "/tmp/test-hive.db") {
+        match manager.start(script_path.clone(), "/tmp/test-opendevs.db") {
             Ok(_) => {
                 println!("✅ Mock backend started successfully");
 
@@ -253,7 +253,7 @@ setTimeout(() => process.exit(0), 1000);
 
         let manager = BackendManager::new();
 
-        match manager.start(script_path.clone(), "/tmp/test-hive.db") {
+        match manager.start(script_path.clone(), "/tmp/test-opendevs.db") {
             Ok(_) => {
                 // Port should be None since we didn't output it
                 // (or might still be None if detection hasn't completed)
@@ -283,11 +283,11 @@ setTimeout(() => process.exit(0), 3000);
 
         let manager = BackendManager::new();
 
-        if manager.start(script_path.clone(), "/tmp/test-hive.db").is_ok() {
+        if manager.start(script_path.clone(), "/tmp/test-opendevs.db").is_ok() {
             assert!(manager.is_running());
 
             // Try to start again - should return Ok but not actually start
-            let result = manager.start(script_path.clone(), "/tmp/test-hive.db");
+            let result = manager.start(script_path.clone(), "/tmp/test-opendevs.db");
             assert!(result.is_ok());
 
             manager.stop().ok();

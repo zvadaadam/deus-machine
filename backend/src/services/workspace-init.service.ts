@@ -10,13 +10,13 @@
  *
  * Each step updates the workspace's `init_stage` column in DB and emits
  * a structured stdout line that Rust parses and relays as a Tauri event:
- *   HIVE_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
+ *   OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
  *
  * Design decisions:
  * - Pipeline runs in-process (async), not as spawned child — proper try/catch
  * - Non-fatal steps (deps, hooks) log warnings but don't block workspace creation
  * - Reverse-order cleanup on fatal failure: rm dir → prune worktree → delete branch
- * - Aligns with Conductor's approach (structured init pipeline with deps install)
+ * - Structured init pipeline with deps install
  */
 
 import fs from 'fs';
@@ -60,11 +60,11 @@ interface InitStage {
 /**
  * Emit workspace init progress via stdout JSON protocol.
  * Rust's backend.rs reads stdout line-by-line and relays lines
- * prefixed with HIVE_WORKSPACE_PROGRESS: as Tauri events.
+ * prefixed with OPENDEVS_WORKSPACE_PROGRESS: as Tauri events.
  */
 export function emitProgress(workspaceId: string, step: string, label: string): void {
   const payload = JSON.stringify({ workspaceId, step, label });
-  process.stdout.write(`HIVE_WORKSPACE_PROGRESS:${payload}\n`);
+  process.stdout.write(`OPENDEVS_WORKSPACE_PROGRESS:${payload}\n`);
 }
 
 function updateInitStage(workspaceId: string, stage: string): void {

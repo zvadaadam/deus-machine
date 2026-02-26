@@ -7,7 +7,7 @@ use anyhow::{Result, Context};
 /// Gateway Manager
 ///
 /// Manages the Node.js messaging gateway process.
-/// The gateway bridges Telegram/WhatsApp to the Hive backend and sidecar,
+/// The gateway bridges Telegram/WhatsApp to the OpenDevs backend and sidecar,
 /// enabling remote agent interaction from messaging platforms.
 ///
 /// Optional — only spawns if at least one messaging channel is configured
@@ -29,7 +29,7 @@ impl GatewayManager {
     ///
     /// # Arguments
     /// * `gateway_path` - Path to the gateway entry point (index.bundled.cjs or index.ts)
-    /// * `backend_url` - URL of the running Hive backend (e.g. http://localhost:50123)
+    /// * `backend_url` - URL of the running OpenDevs backend (e.g. http://localhost:50123)
     /// * `sidecar_socket_path` - Path to the sidecar Unix domain socket
     /// * `telegram_bot_token` - Optional Telegram bot token
     /// * `whatsapp_session_dir` - Optional WhatsApp session directory

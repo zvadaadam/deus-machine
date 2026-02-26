@@ -1,7 +1,7 @@
 /**
  * Auto-update hook for Tauri desktop app.
  *
- * Mirrors Conductor/Chorus pattern:
+ * Update pattern:
  * - Check on launch + every 5 minutes
  * - Auto-download silently in background
  * - Deduplicate via localStorage

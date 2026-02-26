@@ -3,12 +3,12 @@ use std::process::Command;
 use parking_lot::Mutex;
 use tauri::{Emitter, State};
 
-use hive_sim_core::app_manager;
-use hive_sim_core::input::{map_button_type, map_direction, map_touch_phase};
-use hive_sim_core::manager::{ensure_booted, parse_simctl_json, SimulatorState};
-use hive_sim_core::mjpeg_server::MjpegServer;
-use hive_sim_core::screen_capture::ScreenCapture;
-use hive_sim_core::types::{InstalledApp, SimulatorInfo, StreamInfo};
+use opendevs_sim_core::app_manager;
+use opendevs_sim_core::input::{map_button_type, map_direction, map_touch_phase};
+use opendevs_sim_core::manager::{ensure_booted, parse_simctl_json, SimulatorState};
+use opendevs_sim_core::mjpeg_server::MjpegServer;
+use opendevs_sim_core::screen_capture::ScreenCapture;
+use opendevs_sim_core::types::{InstalledApp, SimulatorInfo, StreamInfo};
 
 #[tauri::command]
 pub fn list_simulators() -> Result<Vec<SimulatorInfo>, String> {
@@ -357,7 +357,7 @@ pub async fn sim_build_and_run(
     println!("[TAURI] Building & running from: {}", workspace_path);
 
     // Stream build log lines to the frontend via Tauri events
-    let on_log: Option<hive_sim_core::app_manager::BuildLogCallback> = Some(
+    let on_log: Option<opendevs_sim_core::app_manager::BuildLogCallback> = Some(
         std::sync::Arc::new(move |line: &str| {
             let _ = app_handle.emit("sim:build-log", line.to_string());
         }),

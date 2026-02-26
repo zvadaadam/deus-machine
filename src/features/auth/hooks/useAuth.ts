@@ -5,8 +5,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { isTauriEnv } from "@/platform/tauri";
 
-const TOKEN_KEY = "hive_device_token";
-const DEVICE_NAME_KEY = "hive_device_name";
+const TOKEN_KEY = "opendevs_device_token";
+const DEVICE_NAME_KEY = "opendevs_device_name";
 
 /** Whether this browser session needs remote auth (non-Tauri + non-localhost). */
 export function needsRemoteAuth(): boolean {

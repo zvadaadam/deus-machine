@@ -17,7 +17,7 @@ const BASE_WORKSPACE: Workspace = {
   updated_at: new Date(Date.now() - 120_000).toISOString(),
   repo_name: "echo-backend",
   root_path: "/code/echo-backend",
-  workspace_path: "/code/echo-backend/.hive/addis-ababa",
+  workspace_path: "/code/echo-backend/.opendevs/addis-ababa",
   setup_status: "none",
   error_message: null,
 };

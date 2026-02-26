@@ -438,7 +438,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Build environment using shared env-builder
       const envForClaude = buildAgentEnvironment({
         claudeEnvVars: options?.claudeEnvVars,
-        hiveEnv: options?.hiveEnv,
+        opendevsEnv: options?.opendevsEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });

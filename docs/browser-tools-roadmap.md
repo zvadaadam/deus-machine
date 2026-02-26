@@ -53,7 +53,7 @@ Agent interacts with browser normally
 
 **Implementation — 3 pieces (~300-400 lines, no Rust changes):**
 
-1. **Recording buffer** (~50 lines in `hive-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
+1. **Recording buffer** (~50 lines in `opendevs-tools/browser.ts`) — Per-session array. Each tool handler appends `{ tool, ref, role, name, selector, timestamp }`.
 
 2. **`BrowserGenerateTest` tool** (~150 lines) — New MCP tool. Input: `testName`, `testDescription`, optional `framework` (playwright/cypress). Reads buffer, transforms to target framework API, writes file to workspace, clears buffer.
 

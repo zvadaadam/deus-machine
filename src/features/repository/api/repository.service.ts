@@ -63,14 +63,14 @@ export const RepoService = {
   },
 
   /**
-   * Read hive.json manifest for a repo
+   * Read opendevs.json manifest for a repo
    */
   fetchManifest: async (repoId: string): Promise<RepoManifestResponse> => {
     return apiClient.get<RepoManifestResponse>(ENDPOINTS.REPO_MANIFEST(repoId));
   },
 
   /**
-   * Write hive.json manifest for a repo
+   * Write opendevs.json manifest for a repo
    */
   saveManifest: async (repoId: string, manifest: Record<string, unknown>): Promise<void> => {
     await apiClient.post(ENDPOINTS.REPO_MANIFEST(repoId), manifest);

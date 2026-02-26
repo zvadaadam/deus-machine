@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Zod schemas for hive.json manifest.
+ * Zod schemas for opendevs.json manifest.
  *
  * TaskEntry supports string shorthand ("bun run test") or full object form.
- * HiveManifest is the top-level schema — parsed with safeParse for graceful fallback.
+ * OpenDevsManifest is the top-level schema — parsed with safeParse for graceful fallback.
  */
 
 const TaskObjectSchema = z.object({
@@ -20,7 +20,7 @@ const TaskObjectSchema = z.object({
 
 const TaskEntrySchema = z.union([z.string().min(1), TaskObjectSchema]);
 
-export const HiveManifestSchema = z.object({
+export const OpenDevsManifestSchema = z.object({
   $schema: z.string().optional(),
   version: z.number(),
   name: z.string().optional(),
@@ -39,7 +39,7 @@ export const HiveManifestSchema = z.object({
   tasks: z.record(z.string(), TaskEntrySchema).optional(),
 }).passthrough();
 
-export type HiveManifest = z.infer<typeof HiveManifestSchema>;
+export type OpenDevsManifest = z.infer<typeof OpenDevsManifestSchema>;
 
 /** Normalized task — string shorthand expanded to full object form */
 export interface NormalizedTask {

@@ -23,7 +23,7 @@ describe("BindingStore", () => {
   let store: BindingStore;
 
   beforeEach(() => {
-    tmpFile = path.join(os.tmpdir(), `hive-test-bindings-${Date.now()}.json`);
+    tmpFile = path.join(os.tmpdir(), `opendevs-test-bindings-${Date.now()}.json`);
     store = new BindingStore(tmpFile);
   });
 

@@ -1,5 +1,5 @@
 [package]
-name = "hive-sim-sys"
+name = "opendevs-sim-sys"
 version = "0.1.0"
 edition = "2021"
 links = "sim_bridge"

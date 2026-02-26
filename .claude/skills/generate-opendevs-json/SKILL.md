@@ -1,10 +1,10 @@
 ---
-name: generate-hive-json
-description: Generate a hive.json manifest for a project. Auto-detects tech stack, package manager, scripts, and maps them to tasks with icons. Can import from existing Conductor or Codex configs. Use when setting up a new workspace or migrating from another tool.
+name: generate-opendevs-json
+description: Generate a opendevs.json manifest for a project. Auto-detects tech stack, package manager, scripts, and maps them to tasks with icons. Can import from existing Codex configs. Use when setting up a new workspace or migrating from another tool.
 argument-hint: "[path to project root, default: .]"
 ---
 
-Generate a `hive.json` manifest for the project at the given path.
+Generate a `opendevs.json` manifest for the project at the given path.
 
 $ARGUMENTS
 
@@ -14,7 +14,7 @@ Project root to analyze (default: current directory):
 !`ls package.json Cargo.toml pyproject.toml go.mod composer.json Gemfile build.gradle pom.xml Makefile 2>/dev/null || echo "No standard project files found"`
 
 Existing configs to import from:
-!`ls hive.json conductor.json 2>/dev/null || echo "No existing hive/conductor config"`
+!`ls opendevs.json 2>/dev/null || echo "No existing opendevs config"`
 !`ls .codex/environments/environment.toml 2>/dev/null || echo "No Codex environment.toml"`
 
 Package manager lockfiles:
@@ -22,11 +22,11 @@ Package manager lockfiles:
 
 ## Step 1: Import from existing configs (if any)
 
-Check for existing Conductor or Codex configurations and use them as the primary source. Imported values take precedence over auto-detected values.
+Check for existing Codex configurations and use them as the primary source. Imported values take precedence over auto-detected values.
 
-### Import from existing `hive.json` or `conductor.json` (old format)
+### Import from existing `opendevs.json` (or legacy format)
 
-If `hive.json` or `conductor.json` exists with the old simple format (`scripts.setup`, `scripts.run`, `runScriptMode`):
+If `opendevs.json` exists with the old simple format (`scripts.setup`, `scripts.run`, `runScriptMode`):
 
 | Old field | New field |
 |-----------|-----------|
@@ -104,13 +104,13 @@ Check runtime versions from:
 - `.python-version` -> `requires.python`
 - `go.mod` go directive -> `requires.go`
 
-## Step 5: Generate hive.json
+## Step 5: Generate opendevs.json
 
 Merge imported config + auto-detected config (imported takes precedence). Write the file using this structure:
 
 ```json
 {
-  "$schema": "https://hive.net/schemas/hive.json",
+  "$schema": "https://opendevs.dev/schemas/opendevs.json",
   "version": 1,
   "name": "<project name from package.json/Cargo.toml/pyproject.toml>",
 
@@ -174,5 +174,5 @@ Only use these icon names (they map to lucide-react components already in our de
 - Always include backwards-compatible `scripts.setup` and `scripts.run` fields
 - The `dev` task should always have `persistent: true` if it's a long-running server
 - Keep `env` minimal - only include vars that are truly needed at manifest level
-- If a setup script already exists (e.g., `scripts/hive-setup.sh`), reference it rather than inlining commands
+- If a setup script already exists (e.g., `scripts/opendevs-setup.sh`), reference it rather than inlining commands
 - Write the file, then show the user what was generated with a brief summary
