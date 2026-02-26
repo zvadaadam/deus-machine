@@ -15,7 +15,7 @@ use opendevs_lib::{
     watcher::WatcherManager,
 };
 #[cfg(target_os = "macos")]
-use hive_sim_core::manager::SimulatorState;
+use opendevs_sim_core::manager::SimulatorState;
 
 fn main() {
     let builder = tauri::Builder::default()

@@ -572,7 +572,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           timeoutMs: 3000,
         });
         const status = JSON.parse(verifyResult);
-        if (!status.hiveInspect || !status.hasDrainEvents) {
+        if (!status.opendevsInspect || !status.hasDrainEvents) {
           onAddLog(tabId, "error",
             `Inspect mode setup incomplete: ${JSON.stringify(status)}`
           );

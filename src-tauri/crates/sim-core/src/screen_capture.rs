@@ -7,7 +7,7 @@ use std::time::Instant;
 use bytes::Bytes;
 use tokio::sync::watch;
 
-use hive_sim_sys as bridge;
+use opendevs_sim_sys as bridge;
 
 // ============================================================================
 // MARK: - TouchServer (simulator-server binary for touch injection)
