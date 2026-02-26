@@ -74,7 +74,7 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
   );
 
   return (
-    <div data-slot="content-tab-bar" className="flex items-center gap-1">
+    <div data-slot="content-tab-bar" className="flex items-center gap-1" role="tablist" aria-label="Content panel">
       {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
@@ -83,8 +83,9 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
           <button
             key={item.id}
             type="button"
+            role="tab"
             aria-label={item.label}
-            aria-pressed
+            aria-selected={true}
             onClick={() => onTabChange(item.id)}
             className={cn(
               "bg-bg-raised text-text-secondary",
@@ -101,8 +102,9 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
             <TooltipTrigger asChild>
               <button
                 type="button"
+                role="tab"
                 aria-label={item.label}
-                aria-pressed={false}
+                aria-selected={false}
                 onClick={() => onTabChange(item.id)}
                 className={cn(
                   "text-text-muted hover:text-text-secondary hover:bg-bg-muted",

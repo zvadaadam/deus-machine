@@ -110,10 +110,10 @@ export function PRActions({
         .with(P.union({ ghMissing: true }, { ghUnauthenticated: true }), () => (
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
-              <div className="text-text-muted flex items-center gap-1 px-2 py-1">
+              <button type="button" aria-label="PR actions unavailable" className="text-text-muted flex items-center gap-1 px-2 py-1">
                 <AlertTriangle className="text-warning h-3 w-3" />
                 <span className="text-xs font-medium">PR</span>
-              </div>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
               <p className="text-xs">

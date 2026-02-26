@@ -17,5 +17,5 @@ export const CHANGES_FILTER_OPTIONS: readonly [ChangesFilter, string][] = [
 /** Human-readable label for the active filter value */
 export function changesFilterLabel(filter: ChangesFilter): string {
   const match = CHANGES_FILTER_OPTIONS.find(([v]) => v === filter);
-  return match ? match[1] : "All Changes";
+  return match ? match[1] : "All changes";
 }
