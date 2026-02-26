@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run build:inject && bun run build:sidecar && tauri dev",
-    "build:gateway": "bunx tsx gateway/build.ts",
+    "build:gateway": "bun install --frozen-lockfile --cwd gateway && bunx tsx gateway/build.ts",
     "dev:web": "./scripts/dev.sh",
     "dev:frontend": "vite",
     "dev:backend": "node backend/server.cjs",
