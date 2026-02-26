@@ -57,6 +57,15 @@ export function derivePRActionState(
     return { type: "gh_unavailable", reason: "not_authenticated" };
   }
 
+  // gh CLI errors from the PR status endpoint — can arrive during the ghStatus
+  // 5-minute stale window (e.g., gh is uninstalled between status checks).
+  if (prStatus?.error === "gh_not_installed") {
+    return { type: "gh_unavailable", reason: "not_installed" };
+  }
+  if (prStatus?.error === "gh_not_authenticated") {
+    return { type: "gh_unavailable", reason: "not_authenticated" };
+  }
+
   // GitHub unreachable — surface error before interpreting has_pr,
   // since has_pr: false might just mean the request failed.
   if (prStatus?.error === "timeout") {
