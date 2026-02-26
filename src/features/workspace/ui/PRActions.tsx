@@ -20,6 +20,7 @@ import {
   MessageSquareWarning,
   FileWarning,
 } from "lucide-react";
+import { match, P } from "ts-pattern";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "./BranchSelector";
@@ -104,104 +105,115 @@ export function PRActions({
         </button>
       )}
 
-      {/* gh CLI error states */}
-      {ghMissing || ghUnauthenticated ? (
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <div className="text-text-muted flex items-center gap-1 px-2 py-1">
-              <AlertTriangle className="text-warning h-3 w-3" />
-              <span className="text-xs font-medium">PR</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-xs">
-              {ghMissing
-                ? "GitHub CLI not installed — install gh to manage PRs"
-                : "Not authenticated — run gh auth login"}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      ) : isMerged && onArchive ? (
-        <button
-          type="button"
-          onClick={onArchive}
-          className="bg-primary text-primary-foreground flex h-[23px] items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-200 hover:opacity-90"
-        >
-          <Archive className="h-2.5 w-2.5" />
-          <span>Archive</span>
-        </button>
-      ) : hasPR && !isMerged && hasConflicts ? (
-        <SplitButton
-          icon={<FileWarning className="h-2.5 w-2.5" />}
-          label="Resolve Conflicts"
-          onLeftClick={() => onSendAgentMessage?.(RESOLVE_CONFLICTS)}
-          leftDisabled={!onSendAgentMessage}
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-          branchEditable={false}
-        />
-      ) : hasPR && !isMerged && ciStatus === "failing" ? (
-        <SplitButton
-          icon={<CircleX className="h-2.5 w-2.5" />}
-          label="Fix CI"
-          onLeftClick={() => onSendAgentMessage?.(FIX_CI)}
-          leftDisabled={!onSendAgentMessage}
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-          branchEditable={false}
-        />
-      ) : hasPR && !isMerged && reviewStatus === "changes_requested" ? (
-        <SplitButton
-          icon={<MessageSquareWarning className="h-2.5 w-2.5" />}
-          label="Address Review"
-          onLeftClick={() => onSendAgentMessage?.(ADDRESS_REVIEW)}
-          leftDisabled={!onSendAgentMessage}
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-          branchEditable={false}
-        />
-      ) : hasPR && !isMerged && isReady ? (
-        <SplitButton
-          icon={<GitMerge className="h-2.5 w-2.5" />}
-          label="Merge"
-          onLeftClick={() => onSendAgentMessage?.(MERGE_PR)}
-          leftDisabled={!onSendAgentMessage}
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-          branchEditable={false}
-        />
-      ) : hasPR && !isMerged ? (
-        <SplitButton
-          icon={<GitMerge className="h-2.5 w-2.5" />}
-          label={isDraft ? "Draft" : ciStatus === "pending" ? "CI Running" : "Blocked"}
-          onLeftClick={() => {}}
-          leftDisabled
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-          branchEditable={false}
-        />
-      ) : !hasPR && !isMerged ? (
-        <SplitButton
-          icon={<GitPullRequestCreate className="h-2.5 w-2.5" />}
-          label="Create PR"
-          onLeftClick={onCreatePR ?? (() => {})}
-          leftDisabled={!onCreatePR}
-          branchLabel={effectiveTarget}
-          workspacePath={workspacePath}
-          currentBranch={effectiveTarget}
-          onBranchSelect={handleBranchSelect}
-        />
-      ) : null}
+      {/* Primary action — dispatches on gh CLI status, PR state, and merge readiness */}
+      {match({ ghMissing, ghUnauthenticated, isMerged, hasPR, hasConflicts, ciStatus, reviewStatus, isReady, isDraft })
+        .with(P.union({ ghMissing: true }, { ghUnauthenticated: true }), () => (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <div className="text-text-muted flex items-center gap-1 px-2 py-1">
+                <AlertTriangle className="text-warning h-3 w-3" />
+                <span className="text-xs font-medium">PR</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">
+                {ghMissing
+                  ? "GitHub CLI not installed — install gh to manage PRs"
+                  : "Not authenticated — run gh auth login"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        ))
+        .with({ isMerged: true }, () =>
+          onArchive ? (
+            <button
+              type="button"
+              onClick={onArchive}
+              className="bg-primary text-primary-foreground flex h-[23px] items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors duration-200 hover:opacity-90"
+            >
+              <Archive className="h-2.5 w-2.5" />
+              <span>Archive</span>
+            </button>
+          ) : null
+        )
+        .with({ hasPR: true, hasConflicts: true }, () => (
+          <SplitButton
+            icon={<FileWarning className="h-2.5 w-2.5" />}
+            label="Resolve Conflicts"
+            onLeftClick={() => onSendAgentMessage?.(RESOLVE_CONFLICTS)}
+            leftDisabled={!onSendAgentMessage}
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+            branchEditable={false}
+          />
+        ))
+        .with({ hasPR: true, ciStatus: "failing" }, () => (
+          <SplitButton
+            icon={<CircleX className="h-2.5 w-2.5" />}
+            label="Fix CI"
+            onLeftClick={() => onSendAgentMessage?.(FIX_CI)}
+            leftDisabled={!onSendAgentMessage}
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+            branchEditable={false}
+          />
+        ))
+        .with({ hasPR: true, reviewStatus: "changes_requested" }, () => (
+          <SplitButton
+            icon={<MessageSquareWarning className="h-2.5 w-2.5" />}
+            label="Address Review"
+            onLeftClick={() => onSendAgentMessage?.(ADDRESS_REVIEW)}
+            leftDisabled={!onSendAgentMessage}
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+            branchEditable={false}
+          />
+        ))
+        .with({ hasPR: true, isReady: true }, () => (
+          <SplitButton
+            icon={<GitMerge className="h-2.5 w-2.5" />}
+            label="Merge"
+            onLeftClick={() => onSendAgentMessage?.(MERGE_PR)}
+            leftDisabled={!onSendAgentMessage}
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+            branchEditable={false}
+          />
+        ))
+        .with({ hasPR: true }, () => (
+          <SplitButton
+            icon={<GitMerge className="h-2.5 w-2.5" />}
+            label={isDraft ? "Draft" : ciStatus === "pending" ? "CI Running" : "Blocked"}
+            onLeftClick={() => {}}
+            leftDisabled
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+            branchEditable={false}
+          />
+        ))
+        .with({ hasPR: false, isMerged: false }, () => (
+          <SplitButton
+            icon={<GitPullRequestCreate className="h-2.5 w-2.5" />}
+            label="Create PR"
+            onLeftClick={onCreatePR ?? (() => {})}
+            leftDisabled={!onCreatePR}
+            branchLabel={effectiveTarget}
+            workspacePath={workspacePath}
+            currentBranch={effectiveTarget}
+            onBranchSelect={handleBranchSelect}
+          />
+        ))
+        .otherwise(() => null)}
     </div>
   );
 }
@@ -233,38 +245,38 @@ function PRStatusChips({
       color: "text-destructive",
     });
   }
-  if (ciStatus === "passing") {
-    chips.push({
+  const ciChip = match(ciStatus)
+    .with("passing", () => ({
       icon: <CircleCheck className="h-2.5 w-2.5" />,
-      label: "CI",
+      label: "CI" as const,
       color: "text-success",
-    });
-  } else if (ciStatus === "failing") {
-    chips.push({
+    }))
+    .with("failing", () => ({
       icon: <CircleX className="h-2.5 w-2.5" />,
-      label: "CI",
+      label: "CI" as const,
       color: "text-destructive",
-    });
-  } else if (ciStatus === "pending") {
-    chips.push({
+    }))
+    .with("pending", () => ({
       icon: <Loader2 className="h-2.5 w-2.5 animate-spin" />,
-      label: "CI",
+      label: "CI" as const,
       color: "text-warning",
-    });
-  }
-  if (reviewStatus === "approved") {
-    chips.push({
+    }))
+    .otherwise(() => null);
+  if (ciChip) chips.push(ciChip);
+
+  const reviewChip = match(reviewStatus)
+    .with("approved", () => ({
       icon: <CircleCheck className="h-2.5 w-2.5" />,
-      label: "Approved",
+      label: "Approved" as const,
       color: "text-success",
-    });
-  } else if (reviewStatus === "changes_requested") {
-    chips.push({
+    }))
+    .with("changes_requested", () => ({
       icon: <MessageSquareWarning className="h-2.5 w-2.5" />,
-      label: "Changes",
+      label: "Changes" as const,
       color: "text-warning",
-    });
-  }
+    }))
+    .otherwise(() => null);
+  if (reviewChip) chips.push(reviewChip);
 
   if (chips.length === 0) return null;
 

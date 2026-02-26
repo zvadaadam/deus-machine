@@ -76,11 +76,14 @@ export function CodePanelContent({
 
   // Apply the changes filter to get the active file list.
   // "all-changes" → full fileChanges, "uncommitted" → uncommittedFiles, "last-turn" → lastTurnFiles
+  // Note: We check for the array itself (not .length) to distinguish "loaded but empty" ([])
+  // from "not available" (undefined). An empty array means the filter is active but has no
+  // matches — the user should see an empty state, not a fallback to all changes.
   const filteredFileChanges = useMemo(() => {
-    if (changesFilter === "uncommitted" && uncommittedFiles?.length) {
+    if (changesFilter === "uncommitted" && uncommittedFiles !== undefined) {
       return uncommittedFiles;
     }
-    if (changesFilter === "last-turn" && lastTurnFiles?.length) {
+    if (changesFilter === "last-turn" && lastTurnFiles !== undefined) {
       return lastTurnFiles;
     }
     return fileChanges;
