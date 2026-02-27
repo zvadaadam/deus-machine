@@ -1,18 +1,17 @@
 import { useState, useCallback } from "react";
 import { Loader2, FolderOpen } from "lucide-react";
-import { useRecentProjects, useCompleteOnboarding } from "../../api";
+import { useRecentProjects } from "../../api";
 import { useAddRepo } from "@/features/repository/api";
 import { ProjectCard } from "../components/ProjectCard";
 
 interface ProjectSelectionStepProps {
   onBack: () => void;
-  onComplete: () => void;
+  onNext: () => void;
 }
 
-export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionStepProps) {
+export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepProps) {
   const projectsQuery = useRecentProjects();
   const addRepoMutation = useAddRepo();
-  const completeMutation = useCompleteOnboarding();
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
 
@@ -41,8 +40,7 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
           // Skip repos that fail (e.g. already added)
         }
       }
-      await completeMutation.mutateAsync();
-      onComplete();
+      onNext();
     } finally {
       setImporting(false);
     }
@@ -60,18 +58,12 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
       const folderPath = selected;
       setImporting(true);
       await addRepoMutation.mutateAsync(folderPath);
-      await completeMutation.mutateAsync();
-      onComplete();
+      onNext();
     } catch {
       // Dialog cancelled or failed
     } finally {
       setImporting(false);
     }
-  }
-
-  async function handleSkip() {
-    await completeMutation.mutateAsync();
-    onComplete();
   }
 
   return (
@@ -122,9 +114,8 @@ export function ProjectSelectionStep({ onBack, onComplete }: ProjectSelectionSte
         </button>
         <div className="flex-1" />
         <button
-          onClick={handleSkip}
-          disabled={completeMutation.isPending}
-          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white disabled:opacity-50"
+          onClick={onNext}
+          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
         >
           Skip
         </button>

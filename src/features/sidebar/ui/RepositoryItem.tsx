@@ -9,6 +9,7 @@ import type { RepositoryItemProps } from "../model/types";
 import { WorkspaceItem } from "./WorkspaceItem";
 import { RepoAvatar } from "./RepoAvatar";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
+import { OpenDevsRepositoryBanner } from "./OpenDevsRepositoryBanner";
 
 /**
  * RepositoryItem — V2: Jony Ive
@@ -34,6 +35,8 @@ export function RepositoryItem({
 }: RepositoryItemProps) {
   const reduceMotion = useReducedMotion();
   const repoName = getCleanRepoName(repository.repo_name);
+  // Detect the opendevs repo by clean name (works for "opendevs" or "org/opendevs")
+  const isOpenDevs = repoName === "opendevs";
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
@@ -95,6 +98,19 @@ export function RepositoryItem({
 
                 return (
                   <>
+                    {/* OpenDevs repo gets a special contribution nudge banner */}
+                    {isOpenDevs && (
+                      <m.li
+                        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1], delay: reduceMotion ? 0 : 0.02 }}
+                      >
+                        <OpenDevsRepositoryBanner
+                          onNewWorkspace={() => onNewWorkspace(repository.repo_id)}
+                        />
+                      </m.li>
+                    )}
+
                     <m.li
                       initial={reduceMotion ? false : { opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}

@@ -90,7 +90,7 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
             className={cn(
               "bg-bg-raised text-text-secondary",
               "flex h-7 items-center gap-1.5 rounded-md px-3",
-              "text-xs font-medium",
+              "text-sm font-medium",
               "transition-colors duration-150",
             )}
           >
