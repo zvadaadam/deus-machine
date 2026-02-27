@@ -345,12 +345,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   // Agent group of the currently selected model (claude or codex)
   const currentGroup = selectedOption?.group ?? "claude";
 
-  /**
-   * Thinking cycle — delegates to ThinkingIndicator module which encodes
-   * the per-agent-type cycle rules:
-   *   Claude: binary NONE ↔ HIGH (extended thinking on/off)
-   *   Codex:  NONE → LOW → MEDIUM → HIGH → NONE (graduated reasoning effort)
-   */
+  /** Thinking cycle — per-agent levels defined in agentRuntime's AgentConfig.
+   *  Claude: LOW ↔ HIGH   Codex: LOW → MEDIUM → HIGH → LOW */
   const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
 
   const handleCycleThinking = () => {
@@ -592,11 +588,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Chromatic thermometer — thinking effort indicator.
-                Brain icon + horizontal square pips shift hue green→amber→rose
-                as reasoning effort increases. Agent-adaptive:
-                  Claude: 2 states (NONE / HIGH) — binary extended thinking toggle.
-                  Codex:  4 states (NONE / LOW / MEDIUM / HIGH) — graduated effort. */}
+            {/* Thinking effort — text label cycles through agent-specific levels */}
             <ThinkingIndicator
               level={thinkingLevel as ThinkingLevel}
               onClick={handleCycleThinking}

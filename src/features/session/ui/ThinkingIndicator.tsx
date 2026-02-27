@@ -15,10 +15,6 @@ import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ThinkingLevel } from "../lib/agentRuntime";
 
-/** Re-export so existing consumers don't need to update imports */
-export type { ThinkingLevel } from "../lib/agentRuntime";
-export { cycleThinkingLevel } from "../lib/agentRuntime";
-
 /** Display label for each level */
 const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
   NONE: "Low",
@@ -27,15 +23,12 @@ const LEVEL_DISPLAY: Record<ThinkingLevel, string> = {
   HIGH: "High",
 };
 
-/** Visual treatment per level — font weight, opacity, and color token */
-const LEVEL_STYLE: Record<
-  ThinkingLevel,
-  { weight: number; opacity: number; color: string }
-> = {
-  NONE: { weight: 400, opacity: 0.4, color: "var(--muted-foreground)" },
-  LOW: { weight: 400, opacity: 0.6, color: "var(--muted-foreground)" },
-  MEDIUM: { weight: 500, opacity: 0.8, color: "var(--muted-foreground)" },
-  HIGH: { weight: 600, opacity: 1, color: "var(--muted-foreground)" },
+/** Visual treatment per level — font weight and opacity */
+const LEVEL_STYLE: Record<ThinkingLevel, { weight: number; opacity: number }> = {
+  NONE: { weight: 400, opacity: 0.4 },
+  LOW: { weight: 400, opacity: 0.6 },
+  MEDIUM: { weight: 500, opacity: 0.8 },
+  HIGH: { weight: 600, opacity: 1 },
 };
 
 interface ThinkingIndicatorProps {
@@ -51,7 +44,6 @@ export function ThinkingIndicator({
 }: ThinkingIndicatorProps) {
   const style = LEVEL_STYLE[level];
   const displayLabel = LEVEL_DISPLAY[level];
-  const tooltip = "Thinking level";
 
   return (
     <Tooltip delayDuration={200}>
@@ -59,7 +51,7 @@ export function ThinkingIndicator({
         <button
           type="button"
           onClick={onClick}
-          aria-label={tooltip}
+          aria-label={`Thinking: ${displayLabel}`}
           className={cn(
             "flex h-8 items-center rounded-lg px-2",
             "transition-colors duration-200 ease",
@@ -77,13 +69,12 @@ export function ThinkingIndicator({
               transition={{ duration: 0.12, ease: [0.165, 0.84, 0.44, 1] }}
               style={{
                 fontWeight: style.weight,
-                color: style.color,
                 originX: 0.5,
               }}
               className={cn(
-                "text-xs select-none",
+                "text-muted-foreground text-xs select-none",
                 // Minimum width so the button doesn't jump between "Low" and "High"
-                "inline-block min-w-[28px] text-center"
+                "inline-block min-w-7 text-center"
               )}
             >
               {displayLabel}
@@ -91,9 +82,7 @@ export function ThinkingIndicator({
           </AnimatePresence>
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">
-        <p className="text-xs">{tooltip}</p>
-      </TooltipContent>
+      <TooltipContent side="bottom">Thinking level</TooltipContent>
     </Tooltip>
   );
 }
