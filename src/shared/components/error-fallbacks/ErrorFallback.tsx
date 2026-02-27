@@ -1,14 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FallbackProps } from "react-error-boundary";
 import { Button } from "@/components/ui/button";
+import { isTauriEnv, invoke } from "@/platform/tauri";
 
 /**
  * Default error fallback for the app-level error boundary.
  * Shows a user-friendly error message with retry option.
  * Stack trace only visible in development.
+ *
+ * IMPORTANT: The main window starts hidden (visible: false in tauri.conf.json).
+ * If an error occurs before the frontend calls show_main_window or
+ * enter_onboarding_mode, the error page renders inside an invisible window.
+ * We force-show the window here so the user can actually see the error.
  */
 export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const [copied, setCopied] = useState(false);
+
+  // Force-show the window so the error is visible to the user.
+  // Without this, errors during boot leave the window hidden forever.
+  useEffect(() => {
+    if (isTauriEnv) {
+      invoke("show_main_window").catch(console.error);
+    }
+  }, []);
   const normalizedError = normalizeError(error);
   const componentStack =
     typeof window !== "undefined"

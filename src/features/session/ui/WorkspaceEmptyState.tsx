@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { match } from "ts-pattern";
+import { OpenDevsEmptyState } from "./OpenDevsEmptyState";
 
 interface WorkspaceEmptyStateProps {
   repoName?: string | null;
@@ -54,6 +55,17 @@ export function WorkspaceEmptyState({
           What would you like to work on?
         </p>
       </div>
+    );
+  }
+
+  // OpenDevs repo: the user is working on the IDE itself — show a special state
+  const cleanRepoName = repoName?.split("/").pop() ?? repoName;
+  if (cleanRepoName === "opendevs") {
+    return (
+      <OpenDevsEmptyState
+        parentBranch={parentBranch}
+        className={className}
+      />
     );
   }
 
