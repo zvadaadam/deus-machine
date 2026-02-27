@@ -1,4 +1,4 @@
-import { PenTool, ExternalLink, Loader2 } from "lucide-react";
+import { PenTool, ArrowUpRight, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
@@ -97,7 +97,7 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
             className="bg-foreground text-background hover:bg-foreground/90 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-colors duration-200 ease-out"
           >
             Get started with Pencil
-            <ExternalLink className="h-3 w-3" />
+            <ArrowUpRight className="h-3 w-3" />
           </a>
           <p className="text-muted-foreground/70 text-xs">Claude Code for Design</p>
         </div>

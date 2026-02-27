@@ -41,7 +41,7 @@ const contentTabItems: Array<{
   { id: "config", label: "Config", icon: Settings2 },
   { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "notebook", label: "Notebook", icon: BookOpen, visibilityKey: "experimental_notebooks" },
-  { id: "design", label: "Design", icon: PenTool },
+  { id: "design", label: "Design", icon: PenTool, visibilityKey: "experimental_design" },
   { id: "browser", label: "Browser", icon: Globe, visibilityKey: "experimental_browser" },
   {
     id: "simulator",
@@ -51,11 +51,11 @@ const contentTabItems: Array<{
   },
 ];
 
-/** Check if a tab should be visible given current settings. undefined = visible. */
+/** Check if a tab should be visible given current settings. undefined = hidden (opt-in). */
 export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
   const item = contentTabItems.find((i) => i.id === tab);
   if (!item?.visibilityKey) return true;
-  return settings?.[item.visibilityKey] !== false;
+  return settings?.[item.visibilityKey] === true;
 }
 
 /**

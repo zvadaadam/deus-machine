@@ -16,7 +16,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
           Welcome to
         </p>
         <h1
-          className="text-[42px] tracking-[0.02em] text-white"
+          className="text-[42px] font-bold tracking-[0.02em] text-white"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           OpenDevs

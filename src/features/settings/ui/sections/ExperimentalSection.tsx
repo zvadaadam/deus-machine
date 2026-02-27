@@ -25,7 +25,7 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
         </div>
         <Switch
           id="experimental-simulator"
-          checked={settings.experimental_simulator !== false}
+          checked={settings.experimental_simulator === true}
           onCheckedChange={(checked) => saveSetting("experimental_simulator", checked)}
         />
       </div>
@@ -44,7 +44,7 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
         </div>
         <Switch
           id="experimental-browser"
-          checked={settings.experimental_browser !== false}
+          checked={settings.experimental_browser === true}
           onCheckedChange={(checked) => saveSetting("experimental_browser", checked)}
         />
       </div>
@@ -63,8 +63,27 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
         </div>
         <Switch
           id="experimental-notebooks"
-          checked={settings.experimental_notebooks !== false}
+          checked={settings.experimental_notebooks === true}
           onCheckedChange={(checked) => saveSetting("experimental_notebooks", checked)}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Design */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label htmlFor="experimental-design" className="text-sm">
+            Design
+          </Label>
+          <p className="text-muted-foreground text-base">
+            Let the AI agent create and edit visual designs directly in the workspace.
+          </p>
+        </div>
+        <Switch
+          id="experimental-design"
+          checked={settings.experimental_design === true}
+          onCheckedChange={(checked) => saveSetting("experimental_design", checked)}
         />
       </div>
     </div>
