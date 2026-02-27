@@ -58,6 +58,22 @@ import type {
   BrowserScreenshotResponse,
   BrowserScrollRequest,
   BrowserScrollResponse,
+  SimScreenshotRequest,
+  SimScreenshotResponse,
+  SimTapRequest,
+  SimTapResponse,
+  SimSwipeRequest,
+  SimSwipeResponse,
+  SimTypeTextRequest,
+  SimTypeTextResponse,
+  SimPressKeyRequest,
+  SimPressKeyResponse,
+  SimBuildAndRunRequest,
+  SimBuildAndRunResponse,
+  SimListDevicesRequest,
+  SimListDevicesResponse,
+  SimStartRequest,
+  SimStartResponse,
 } from "./protocol";
 
 // ============================================================================
@@ -157,6 +173,22 @@ const BROWSER_SCREENSHOT_TIMEOUT_MS = 15_000;
 /** Timeout for browser interactions (click, type, hover, etc.) that include
  *  visual effects + eval. Visual cursor animation up to 3s + eval up to 8s. */
 const BROWSER_INTERACTION_TIMEOUT_MS = 15_000;
+
+/** Timeout for simulator screenshot — Rust ObjC bridge capture + JPEG
+ *  encoding + base64 transfer. Typically <2s but allow headroom. */
+const SIMULATOR_SCREENSHOT_TIMEOUT_MS = 10_000;
+
+/** Timeout for simulator interactions (tap, swipe, type, key press) — HID
+ *  injection through the ObjC bridge is fast but include IPC buffer. */
+const SIMULATOR_INTERACTION_TIMEOUT_MS = 10_000;
+
+/** Timeout for simulator boot — booting a simulator and starting the MJPEG
+ *  stream + ObjC bridge can take 15-20s on cold boot. */
+const SIMULATOR_BOOT_TIMEOUT_MS = 30_000;
+
+/** Timeout for build-and-run — xcodebuild can take minutes for large projects.
+ *  10 minutes matches the existing builder.ts timeout. */
+const SIMULATOR_BUILD_TIMEOUT_MS = 600_000;
 
 // ============================================================================
 // FrontendClient class
@@ -443,6 +475,98 @@ class FrontendClientClass {
       ) as Promise<BrowserScrollResponse>,
       BROWSER_INTERACTION_TIMEOUT_MS,
       "requestBrowserScroll"
+    );
+  }
+
+  // ==========================================================================
+  // SIMULATOR AUTOMATION REQUESTS (sidecar -> frontend, with timeout)
+  // ==========================================================================
+
+  async requestSimScreenshot(request: SimScreenshotRequest): Promise<SimScreenshotResponse> {
+    return this.withTimeout<SimScreenshotResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_SCREENSHOT,
+        request
+      ) as Promise<SimScreenshotResponse>,
+      SIMULATOR_SCREENSHOT_TIMEOUT_MS,
+      "requestSimScreenshot"
+    );
+  }
+
+  async requestSimTap(request: SimTapRequest): Promise<SimTapResponse> {
+    return this.withTimeout<SimTapResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_TAP,
+        request
+      ) as Promise<SimTapResponse>,
+      SIMULATOR_INTERACTION_TIMEOUT_MS,
+      "requestSimTap"
+    );
+  }
+
+  async requestSimSwipe(request: SimSwipeRequest): Promise<SimSwipeResponse> {
+    return this.withTimeout<SimSwipeResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_SWIPE,
+        request
+      ) as Promise<SimSwipeResponse>,
+      SIMULATOR_INTERACTION_TIMEOUT_MS,
+      "requestSimSwipe"
+    );
+  }
+
+  async requestSimTypeText(request: SimTypeTextRequest): Promise<SimTypeTextResponse> {
+    return this.withTimeout<SimTypeTextResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_TYPE_TEXT,
+        request
+      ) as Promise<SimTypeTextResponse>,
+      SIMULATOR_INTERACTION_TIMEOUT_MS,
+      "requestSimTypeText"
+    );
+  }
+
+  async requestSimPressKey(request: SimPressKeyRequest): Promise<SimPressKeyResponse> {
+    return this.withTimeout<SimPressKeyResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_PRESS_KEY,
+        request
+      ) as Promise<SimPressKeyResponse>,
+      SIMULATOR_INTERACTION_TIMEOUT_MS,
+      "requestSimPressKey"
+    );
+  }
+
+  async requestSimBuildAndRun(request: SimBuildAndRunRequest): Promise<SimBuildAndRunResponse> {
+    return this.withTimeout<SimBuildAndRunResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN,
+        request
+      ) as Promise<SimBuildAndRunResponse>,
+      SIMULATOR_BUILD_TIMEOUT_MS,
+      "requestSimBuildAndRun"
+    );
+  }
+
+  async requestSimListDevices(request: SimListDevicesRequest): Promise<SimListDevicesResponse> {
+    return this.withTimeout<SimListDevicesResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_LIST_DEVICES,
+        request
+      ) as Promise<SimListDevicesResponse>,
+      DATA_QUERY_TIMEOUT_MS,
+      "requestSimListDevices"
+    );
+  }
+
+  async requestSimStart(request: SimStartRequest): Promise<SimStartResponse> {
+    return this.withTimeout<SimStartResponse>(
+      this.requireTunnel().request(
+        FRONTEND_RPC_METHODS.SIM_START,
+        request
+      ) as Promise<SimStartResponse>,
+      SIMULATOR_BOOT_TIMEOUT_MS,
+      "requestSimStart"
     );
   }
 

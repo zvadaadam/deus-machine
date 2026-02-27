@@ -22,12 +22,14 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
+import { useSimulatorStatusStore } from "@/features/simulator/store";
 import type { RightSideTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 
 interface ContentTabBarProps {
   activeTab: RightSideTab;
   onTabChange: (tab: RightSideTab) => void;
+  workspaceId?: string | null;
 }
 
 const contentTabItems: Array<{
@@ -65,8 +67,14 @@ export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
  * Inactive tabs: icon-only buttons with tooltips.
  * No container/track background — tabs sit directly in the header.
  */
-export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
+export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTabBarProps) {
   const settings = useSettings().data;
+  const simPhase = useSimulatorStatusStore((s) =>
+    workspaceId ? s.phases[workspaceId] : undefined
+  );
+
+  // Show a dot when the simulator is doing something (not idle, not absent)
+  const simulatorActive = simPhase && simPhase !== "idle";
 
   const visibleItems = useMemo(
     () => contentTabItems.filter((item) => isTabVisible(item.id, settings)),
@@ -78,6 +86,7 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
       {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
+        const showDot = item.id === "simulator" && simulatorActive;
 
         return isActive ? (
           <button
@@ -89,13 +98,16 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
             onClick={() => onTabChange(item.id)}
             className={cn(
               "bg-bg-raised text-text-secondary",
-              "flex h-7 items-center gap-1.5 rounded-lg px-3",
+              "relative flex h-7 items-center gap-1.5 rounded-lg px-3",
               "text-sm font-medium",
               "transition-colors duration-150",
             )}
           >
             <Icon className="h-[13px] w-[13px]" />
             <span>{item.label}</span>
+            {showDot && (
+              <span className="bg-success absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
+            )}
           </button>
         ) : (
           <Tooltip key={item.id} delayDuration={300}>
@@ -108,11 +120,14 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
                 onClick={() => onTabChange(item.id)}
                 className={cn(
                   "text-text-muted hover:text-text-secondary hover:bg-bg-muted",
-                  "flex h-7 items-center justify-center rounded-lg px-2",
+                  "relative flex h-7 items-center justify-center rounded-lg px-2",
                   "transition-colors duration-150",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
+                {showDot && (
+                  <span className="bg-success absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full" />
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={8}>

@@ -11,19 +11,25 @@ use opendevs_sim_core::screen_capture::ScreenCapture;
 use opendevs_sim_core::types::{InstalledApp, SimulatorInfo, StreamInfo};
 
 #[tauri::command]
-pub fn list_simulators() -> Result<Vec<SimulatorInfo>, String> {
-    let output = Command::new("xcrun")
-        .args(["simctl", "list", "devices", "--json"])
-        .output()
-        .map_err(|e| format!("Failed to run xcrun simctl: {}", e))?;
+pub async fn list_simulators() -> Result<Vec<SimulatorInfo>, String> {
+    // Run on blocking thread pool — xcrun simctl list takes 1-3s and would
+    // freeze the macOS main thread (AppKit event loop) if run synchronously.
+    tokio::task::spawn_blocking(|| {
+        let output = Command::new("xcrun")
+            .args(["simctl", "list", "devices", "--json"])
+            .output()
+            .map_err(|e| format!("Failed to run xcrun simctl: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("simctl failed: {}", stderr));
-    }
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("simctl failed: {}", stderr));
+        }
 
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    parse_simctl_json(&json_str).map_err(|e| e.to_string())
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        parse_simctl_json(&json_str).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -32,26 +38,22 @@ pub async fn start_streaming(
     state: State<'_, Mutex<SimulatorState>>,
 ) -> Result<StreamInfo, String> {
     // Stop any existing session first — extract under lock, cleanup outside lock
-    let (prev_server, prev_capture, prev_udid) = {
+    let (prev_server, prev_capture) = {
         let mut sim_state = state.lock();
-        let prev_udid = sim_state.booted_udid.take();
-        (
-            sim_state.server.take(),
-            sim_state.capture.take(),
-            prev_udid,
-        )
+        // Keep booted_udid for logging; we no longer shut down the previous sim.
+        sim_state.booted_udid.take();
+        (sim_state.server.take(), sim_state.capture.take())
     };
     if let Some(mut server) = prev_server {
         server.stop();
     }
     drop(prev_capture);
-    if let Some(ref prev) = prev_udid {
-        if prev != &udid {
-            let _ = Command::new("xcrun")
-                .args(["simctl", "shutdown", prev])
-                .output();
-        }
-    }
+    // Intentionally NOT shutting down the previous simulator process here.
+    // When switching from sim A to sim B, we only tear down the capture/MJPEG
+    // pipeline — the sim itself stays "Booted". This lets auto-reconnect
+    // re-attach nearly instantly when the user switches back (no cold boot).
+    // Xcode itself follows the same pattern: sims stay booted across sessions.
+    // Explicit shutdown only happens via stop_streaming (user clicks "Stop").
 
     // Boot the simulator headlessly if not already running
     ensure_booted(&udid).await.map_err(|e| e.to_string())?;
@@ -88,7 +90,7 @@ pub async fn start_streaming(
 }
 
 #[tauri::command]
-pub fn stop_streaming(state: State<'_, Mutex<SimulatorState>>) -> Result<(), String> {
+pub async fn stop_streaming(state: State<'_, Mutex<SimulatorState>>) -> Result<(), String> {
     // Extract resources from state under the lock, then release the lock
     // BEFORE performing heavy cleanup (ObjC bridge destroy, simctl shutdown).
     let (server, capture, udid) = {
@@ -100,23 +102,30 @@ pub fn stop_streaming(state: State<'_, Mutex<SimulatorState>>) -> Result<(), Str
         )
     };
 
-    // Stop MJPEG server first (signals shutdown, closes listener)
-    if let Some(mut server) = server {
-        server.stop();
-    }
+    // Heavy cleanup on blocking thread pool — ObjC bridge destroy drains
+    // dispatch queues, and simctl shutdown can take seconds.
+    tokio::task::spawn_blocking(move || {
+        // Stop MJPEG server first (signals shutdown, closes listener)
+        if let Some(mut server) = server {
+            server.stop();
+        }
 
-    // Drop ScreenCapture — triggers sim_bridge_destroy which drains dispatch queues.
-    drop(capture);
+        // Drop ScreenCapture — triggers sim_bridge_destroy which drains dispatch queues.
+        drop(capture);
 
-    // Shut down the simulator (blocking command, can take seconds)
-    if let Some(ref udid) = udid {
-        println!("[TAURI] Shutting down simulator {}", udid);
-        let _ = Command::new("xcrun")
-            .args(["simctl", "shutdown", udid])
-            .output();
-    }
+        // Shut down the simulator (blocking command, can take seconds)
+        if let Some(ref udid) = udid {
+            println!("[TAURI] Shutting down simulator {}", udid);
+            let _ = Command::new("xcrun")
+                .args(["simctl", "shutdown", udid])
+                .output();
+        }
 
-    println!("[TAURI] Simulator streaming stopped");
+        println!("[TAURI] Simulator streaming stopped");
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
     Ok(())
 }
 
@@ -378,7 +387,10 @@ pub async fn sim_build_and_run(
 
 /// Fast probe: check if a workspace contains a buildable Xcode project.
 /// Pure filesystem scan — no subprocess, no xcodebuild, no state mutation.
+/// Async to avoid blocking the main thread during workspace switches.
 #[tauri::command]
-pub fn sim_has_xcode_project(workspace_path: String) -> bool {
-    app_manager::has_xcode_project(&workspace_path)
+pub async fn sim_has_xcode_project(workspace_path: String) -> bool {
+    tokio::task::spawn_blocking(move || app_manager::has_xcode_project(&workspace_path))
+        .await
+        .unwrap_or(false)
 }

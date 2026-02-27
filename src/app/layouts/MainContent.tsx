@@ -313,6 +313,7 @@ export function MainContent({
                       <ContentTabBar
                         activeTab={effectiveRightSideTab}
                         onTabChange={handleContentTabChange}
+                        workspaceId={selectedWorkspaceId}
                       />
                       <PRActions
                         prStatus={prStatus}
