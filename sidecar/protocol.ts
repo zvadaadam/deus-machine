@@ -53,6 +53,15 @@ export const FRONTEND_RPC_METHODS = {
   BROWSER_NETWORK_REQUESTS: "browserNetworkRequests",
   BROWSER_SCREENSHOT: "browserScreenshot",
   BROWSER_SCROLL: "browserScroll",
+  // Simulator automation — sidecar asks frontend to interact with the iOS simulator
+  SIM_SCREENSHOT: "simScreenshot",
+  SIM_TAP: "simTap",
+  SIM_SWIPE: "simSwipe",
+  SIM_TYPE_TEXT: "simTypeText",
+  SIM_PRESS_KEY: "simPressKey",
+  SIM_BUILD_AND_RUN: "simBuildAndRun",
+  SIM_LIST_DEVICES: "simListDevices",
+  SIM_START: "simStart",
 } as const;
 
 // ============================================================================
@@ -406,6 +415,108 @@ export const BrowserScreenshotResponseSchema = z.object({
 });
 
 // ============================================================================
+// Simulator Automation Schemas (sidecar → frontend requests)
+// ============================================================================
+
+export const SimScreenshotRequestSchema = z.object({
+  sessionId: z.string(),
+});
+
+export const SimScreenshotResponseSchema = z.object({
+  image: z.string().describe("Base64-encoded JPEG screenshot"),
+  error: z.string().optional(),
+});
+
+export const SimTapRequestSchema = z.object({
+  sessionId: z.string(),
+  x: z.number().describe("Normalized X coordinate (0.0–1.0)"),
+  y: z.number().describe("Normalized Y coordinate (0.0–1.0)"),
+});
+
+export const SimTapResponseSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export const SimSwipeRequestSchema = z.object({
+  sessionId: z.string(),
+  startX: z.number().describe("Normalized start X (0.0–1.0)"),
+  startY: z.number().describe("Normalized start Y (0.0–1.0)"),
+  endX: z.number().describe("Normalized end X (0.0–1.0)"),
+  endY: z.number().describe("Normalized end Y (0.0–1.0)"),
+  durationMs: z.number().optional().describe("Swipe duration in ms (default: 300)"),
+});
+
+export const SimSwipeResponseSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export const SimTypeTextRequestSchema = z.object({
+  sessionId: z.string(),
+  text: z.string().describe("Text to type"),
+});
+
+export const SimTypeTextResponseSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export const SimPressKeyRequestSchema = z.object({
+  sessionId: z.string(),
+  keycode: z.number().describe("USB HID usage code"),
+  direction: z.enum(["down", "up"]).optional().describe("Key direction (default: down+up)"),
+});
+
+export const SimPressKeyResponseSchema = z.object({
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export const SimBuildAndRunRequestSchema = z.object({
+  sessionId: z.string(),
+  workspacePath: z.string().describe("Path to the workspace containing the Xcode project"),
+});
+
+export const SimBuildAndRunResponseSchema = z.object({
+  success: z.boolean(),
+  bundleId: z.string().optional(),
+  appName: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export const SimListDevicesRequestSchema = z.object({
+  sessionId: z.string(),
+});
+
+export const SimListDevicesResponseSchema = z.object({
+  devices: z.array(
+    z.object({
+      name: z.string(),
+      udid: z.string(),
+      state: z.string().describe("Booted | Shutdown"),
+      runtime: z.string(),
+      deviceType: z.string(),
+      isAvailable: z.boolean(),
+    })
+  ),
+  error: z.string().optional(),
+});
+
+export const SimStartRequestSchema = z.object({
+  sessionId: z.string(),
+  udid: z.string().describe("UDID of the simulator to boot and start streaming"),
+});
+
+export const SimStartResponseSchema = z.object({
+  success: z.boolean(),
+  url: z.string().optional().describe("MJPEG stream URL"),
+  port: z.number().optional(),
+  hidAvailable: z.boolean().optional().describe("Whether HID touch/key injection is available"),
+  error: z.string().optional(),
+});
+
+// ============================================================================
 // Inferred Types
 // ============================================================================
 
@@ -452,6 +563,22 @@ export type BrowserScrollRequest = z.infer<typeof BrowserScrollRequestSchema>;
 export type BrowserScrollResponse = z.infer<typeof BrowserScrollResponseSchema>;
 export type BrowserScreenshotRequest = z.infer<typeof BrowserScreenshotRequestSchema>;
 export type BrowserScreenshotResponse = z.infer<typeof BrowserScreenshotResponseSchema>;
+export type SimScreenshotRequest = z.infer<typeof SimScreenshotRequestSchema>;
+export type SimScreenshotResponse = z.infer<typeof SimScreenshotResponseSchema>;
+export type SimTapRequest = z.infer<typeof SimTapRequestSchema>;
+export type SimTapResponse = z.infer<typeof SimTapResponseSchema>;
+export type SimSwipeRequest = z.infer<typeof SimSwipeRequestSchema>;
+export type SimSwipeResponse = z.infer<typeof SimSwipeResponseSchema>;
+export type SimTypeTextRequest = z.infer<typeof SimTypeTextRequestSchema>;
+export type SimTypeTextResponse = z.infer<typeof SimTypeTextResponseSchema>;
+export type SimPressKeyRequest = z.infer<typeof SimPressKeyRequestSchema>;
+export type SimPressKeyResponse = z.infer<typeof SimPressKeyResponseSchema>;
+export type SimBuildAndRunRequest = z.infer<typeof SimBuildAndRunRequestSchema>;
+export type SimBuildAndRunResponse = z.infer<typeof SimBuildAndRunResponseSchema>;
+export type SimListDevicesRequest = z.infer<typeof SimListDevicesRequestSchema>;
+export type SimListDevicesResponse = z.infer<typeof SimListDevicesResponseSchema>;
+export type SimStartRequest = z.infer<typeof SimStartRequestSchema>;
+export type SimStartResponse = z.infer<typeof SimStartResponseSchema>;
 
 // ============================================================================
 // Type Guard Functions

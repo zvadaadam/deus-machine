@@ -212,9 +212,16 @@ export function RightSidePanel({
 
       {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
 
-      {activeTab === "simulator" && (
+      {/* Simulator panel: always mounted so useSimulatorRpcHandler stays active
+          for agent-driven SimulatorStart/ListDevices calls (same pattern as BrowserPanel). */}
+      <div
+        className={cn(
+          "h-full w-full",
+          activeTab !== "simulator" && "pointer-events-none invisible absolute"
+        )}
+      >
         <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
-      )}
+      </div>
     </div>
   );
 }

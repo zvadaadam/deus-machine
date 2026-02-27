@@ -4,6 +4,7 @@
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
+import { createSimulatorTools } from "./simulator";
 
 /**
  * Creates and returns the OpenDevs MCP server for a given session.
@@ -19,6 +20,10 @@ export function createOpenDevsMCPServer(sessionId: string) {
   return createSdkMcpServer({
     name: "opendevs",
     version: "1.0.0",
-    tools: [...createWorkspaceTools(sessionId), ...createBrowserTools(sessionId)],
+    tools: [
+      ...createWorkspaceTools(sessionId),
+      ...createBrowserTools(sessionId),
+      ...createSimulatorTools(sessionId),
+    ],
   });
 }

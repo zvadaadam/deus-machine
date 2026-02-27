@@ -42,10 +42,10 @@ describe("createOpenDevsMCPServer", () => {
     expect(info.version).toBe("1.0.0");
   });
 
-  it("registers all workspace + browser tools", () => {
+  it("registers all workspace + browser + simulator tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(18);
+    expect(toolNames).toHaveLength(26);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -66,6 +66,15 @@ describe("createOpenDevsMCPServer", () => {
     expect(toolNames).toContain("BrowserScreenshot");
     expect(toolNames).toContain("BrowserNetworkRequests");
     expect(toolNames).toContain("BrowserScroll");
+    // iOS Simulator tools
+    expect(toolNames).toContain("iOSSimulatorListDevices");
+    expect(toolNames).toContain("iOSSimulatorStart");
+    expect(toolNames).toContain("iOSSimulatorScreenshot");
+    expect(toolNames).toContain("iOSSimulatorTap");
+    expect(toolNames).toContain("iOSSimulatorSwipe");
+    expect(toolNames).toContain("iOSSimulatorTypeText");
+    expect(toolNames).toContain("iOSSimulatorPressKey");
+    expect(toolNames).toContain("iOSSimulatorBuildAndRun");
   });
 
   // ==========================================================================

@@ -45,6 +45,9 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { listen } from "@/platform/tauri";
 import { simulatorService } from "../api/simulator.service";
+import { useSimulatorRpcHandler } from "../automation/useSimulatorRpcHandler";
+import { useSimulatorStatusStore } from "../store";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -69,74 +72,36 @@ interface SimulatorPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// macOS virtual keycodes — KeyboardEvent.code → CGKeyCode (u16)
-// Full ANSI layout: letters, digits, punctuation, modifiers, arrows.
+// USB HID usage codes — KeyboardEvent.code → HID keycode (u16)
+// IndigoHIDMessageForKeyboardArbitrary expects USB HID keycodes (Usage Page
+// 0x07), NOT macOS virtual keycodes. Full ANSI layout: letters, digits,
+// punctuation, modifiers, arrows.
 // Cmd/Ctrl combos are filtered out before lookup (stay with IDE).
 // ---------------------------------------------------------------------------
 
-const MAC_KEYCODES: Record<string, number> = {
-  KeyA: 0,
-  KeyS: 1,
-  KeyD: 2,
-  KeyF: 3,
-  KeyH: 4,
-  KeyG: 5,
-  KeyZ: 6,
-  KeyX: 7,
-  KeyC: 8,
-  KeyV: 9,
-  KeyB: 11,
-  KeyQ: 12,
-  KeyW: 13,
-  KeyE: 14,
-  KeyR: 15,
-  KeyY: 16,
-  KeyT: 17,
-  Digit1: 18,
-  Digit2: 19,
-  Digit3: 20,
-  Digit4: 21,
-  Digit6: 22,
-  Digit5: 23,
-  Equal: 24,
-  Digit9: 25,
-  Digit7: 26,
-  Minus: 27,
-  Digit8: 28,
-  Digit0: 29,
-  BracketRight: 30,
-  KeyO: 31,
-  KeyU: 32,
-  BracketLeft: 33,
-  KeyI: 34,
-  KeyP: 35,
-  Enter: 36,
-  KeyL: 37,
-  KeyJ: 38,
-  Quote: 39,
-  KeyK: 40,
-  Semicolon: 41,
-  Backslash: 42,
-  Comma: 43,
-  Slash: 44,
-  KeyN: 45,
-  KeyM: 46,
-  Period: 47,
-  Tab: 48,
-  Space: 49,
-  Backquote: 50,
-  Backspace: 51,
-  ShiftLeft: 56,
-  CapsLock: 57,
-  AltLeft: 58,
-  ControlLeft: 59,
-  ShiftRight: 60,
-  AltRight: 61,
-  ControlRight: 62,
-  ArrowLeft: 123,
-  ArrowRight: 124,
-  ArrowDown: 125,
-  ArrowUp: 126,
+const HID_KEYCODES: Record<string, number> = {
+  // Letters (0x04–0x1D)
+  KeyA: 0x04, KeyB: 0x05, KeyC: 0x06, KeyD: 0x07, KeyE: 0x08, KeyF: 0x09,
+  KeyG: 0x0a, KeyH: 0x0b, KeyI: 0x0c, KeyJ: 0x0d, KeyK: 0x0e, KeyL: 0x0f,
+  KeyM: 0x10, KeyN: 0x11, KeyO: 0x12, KeyP: 0x13, KeyQ: 0x14, KeyR: 0x15,
+  KeyS: 0x16, KeyT: 0x17, KeyU: 0x18, KeyV: 0x19, KeyW: 0x1a, KeyX: 0x1b,
+  KeyY: 0x1c, KeyZ: 0x1d,
+  // Digits (0x1E–0x27)
+  Digit1: 0x1e, Digit2: 0x1f, Digit3: 0x20, Digit4: 0x21, Digit5: 0x22,
+  Digit6: 0x23, Digit7: 0x24, Digit8: 0x25, Digit9: 0x26, Digit0: 0x27,
+  // Control keys
+  Enter: 0x28, Backspace: 0x2a, Tab: 0x2b, Space: 0x2c,
+  // Punctuation
+  Minus: 0x2d, Equal: 0x2e, BracketLeft: 0x2f, BracketRight: 0x30,
+  Backslash: 0x31, Semicolon: 0x33, Quote: 0x34, Backquote: 0x35,
+  Comma: 0x36, Period: 0x37, Slash: 0x38,
+  // Modifiers
+  CapsLock: 0x39,
+  ShiftLeft: 0xe1, ShiftRight: 0xe5,
+  ControlLeft: 0xe0, ControlRight: 0xe4,
+  AltLeft: 0xe2, AltRight: 0xe6,
+  // Arrow keys
+  ArrowRight: 0x4f, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
 };
 
 // ---------------------------------------------------------------------------
@@ -160,10 +125,19 @@ function scoreSimulator(sim: SimulatorInfo): number {
 }
 
 // ---------------------------------------------------------------------------
+// Active stream session — module-level singleton.
+// Rust has a single capture pipeline, so only one sim can stream at a time.
+// When switching workspaces back to the same sim, we reuse this to avoid
+// tearing down and recreating the capture pipeline unnecessarily.
+// ---------------------------------------------------------------------------
+
+let activeStreamSession: { udid: string; stream: StreamInfo } | null = null;
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: SimulatorPanelProps) {
+export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelProps) {
   const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
   const [state, setState] = useState<SimPhase>({ phase: "idle" });
@@ -171,6 +145,90 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   // Whether this workspace has a buildable Xcode project (null = still checking).
   // Gates the "Build & Run" button — simulator streaming works regardless.
   const [hasProject, setHasProject] = useState<boolean | null>(null);
+
+  // -------------------------------------------------------------------------
+  // Workspace switch — reset local state when the active workspace changes.
+  // The panel is always-mounted (same React instance, props change), so
+  // switching workspaces doesn't unmount/remount. We detect the change
+  // during render (not in useEffect) so state is reset BEFORE the browser
+  // paints — this eliminates the stale "booting" flash from the old workspace.
+  // React re-renders synchronously when setState is called during render.
+  // -------------------------------------------------------------------------
+  const hasAutoReconnectedRef = useRef(false);
+  // Monotonic generation counter — incremented on workspace switch so async
+  // callbacks that outlive a switch can detect staleness and bail out.
+  const workspaceGenerationRef = useRef(0);
+  const [prevWorkspaceId, setPrevWorkspaceId] = useState(workspaceId);
+  if (prevWorkspaceId !== workspaceId) {
+    setPrevWorkspaceId(workspaceId);
+    workspaceGenerationRef.current += 1;
+    // Restore persisted simulator UDID for this workspace so
+    // loadSimulators/auto-reconnect target the right device.
+    const layout = workspaceLayoutActions.getLayout(workspaceId);
+    // Keep `simulators` — the device list is system-wide and doesn't change
+    // per-workspace. Clearing it would force a re-fetch of `xcrun simctl list`
+    // (1-3s) on every switch. The useEffect on loadSimulators still refreshes
+    // the list in the background to pick up state changes (Booted/Shutdown).
+    setSelectedUdid(layout.simulatorUdid);
+    setState({ phase: "idle" });
+    setHasProject(null);
+    hasAutoReconnectedRef.current = false;
+  }
+
+  // Sync phase to global store so the tab bar can show a status dot
+  const setPhase = useSimulatorStatusStore((s) => s.setPhase);
+  useEffect(() => {
+    setPhase(workspaceId, state.phase);
+  }, [workspaceId, state.phase, setPhase]);
+
+  // -- Agent-driven boot callback (used by SimulatorStart RPC) --
+  // Extracted so the RPC handler can trigger panel state transitions
+  // when the agent calls SimulatorStart. Same flow as handleStart()
+  // but returns StreamInfo for the RPC response.
+  const handleBootSimulator = useCallback(
+    async (udid: string) => {
+      // Fast path: Rust is already streaming this sim — reuse the session
+      if (activeStreamSession?.udid === udid) {
+        setSelectedUdid(udid);
+        setState({ phase: "streaming", udid, stream: activeStreamSession.stream });
+        workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
+        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+        return activeStreamSession.stream;
+      }
+      const gen = workspaceGenerationRef.current;
+      setSelectedUdid(udid);
+      setState({ phase: "booting", udid });
+      // Auto-switch to simulator tab so the user sees the stream
+      // (same pattern as BrowserPanel's onAutoCreateTab)
+      workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
+      try {
+        const stream = await simulatorService.startStreaming(udid);
+        if (workspaceGenerationRef.current !== gen) return null; // Guard: workspace may have changed
+        if (!stream.hid_available) {
+          console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
+        }
+        activeStreamSession = { udid, stream };
+        setState({ phase: "streaming", udid, stream });
+        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+        return stream;
+      } catch (e) {
+        if (workspaceGenerationRef.current !== gen) return null; // Guard: workspace may have changed
+        setState({
+          phase: "error",
+          message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`,
+          canRetry: true,
+        });
+        return null;
+      }
+    },
+    [workspaceId]
+  );
+
+  // Listen for simulator RPC requests from the sidecar (agent tools)
+  useSimulatorRpcHandler({
+    onBootSimulator: handleBootSimulator,
+    getSimulators: useCallback(() => simulators, [simulators]),
+  });
 
   // Probe for Xcode project on mount and when workspace changes.
   // Fast filesystem scan via Rust — no xcodebuild, no side effects.
@@ -217,6 +275,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   useEffect(() => {
     return () => {
       if (isStreamingRef.current) {
+        activeStreamSession = null;
         simulatorService.stopStreaming().catch((err) => console.warn("[Simulator] cleanup failed:", err));
       }
     };
@@ -341,25 +400,35 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   // -------------------------------------------------------------------------
 
   const loadSimulators = useCallback(async () => {
+    const gen = workspaceGenerationRef.current;
     try {
       const sims = await simulatorService.listSimulators();
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setSimulators(sims);
       if (!selectedUdid && sims.length > 0) {
-        // Pick best default: booted iPhone > shutdown iPhone > booted iPad
-        const scored = [...sims]
-          .filter(
-            (s) =>
-              s.runtime.includes("iOS") ||
-              s.device_type.includes("iPhone") ||
-              s.device_type.includes("iPad")
-          )
-          .sort((a, b) => scoreSimulator(b) - scoreSimulator(a));
-        setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
+        // Check persisted UDID first — if it exists in the sim list, use it.
+        // Otherwise fall back to scoring (booted iPhone > shutdown iPhone > booted iPad).
+        const layout = workspaceLayoutActions.getLayout(workspaceId);
+        const persisted = layout.simulatorUdid;
+        if (persisted && sims.some((s) => s.udid === persisted)) {
+          setSelectedUdid(persisted);
+        } else {
+          const scored = [...sims]
+            .filter(
+              (s) =>
+                s.runtime.includes("iOS") ||
+                s.device_type.includes("iPhone") ||
+                s.device_type.includes("iPad")
+            )
+            .sort((a, b) => scoreSimulator(b) - scoreSimulator(a));
+          setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
+        }
       }
     } catch (e) {
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "error", message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`, canRetry: false });
     }
-  }, [selectedUdid]);
+  }, [selectedUdid, workspaceId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount
@@ -367,20 +436,86 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   }, [loadSimulators]);
 
   // -------------------------------------------------------------------------
+  // Auto-reconnect to an already-booted simulator on mount.
+  //
+  // When the panel mounts (workspace load or app restart), if the best-scored
+  // simulator is already "Booted", skip the idle state and start streaming
+  // immediately. This avoids showing the "Start Simulator" button when the
+  // sim is already running.
+  //
+  // Only runs once per workspace — if the user manually stops, we don't
+  // restart. Reset on workspace switch (see prevWorkspaceIdRef effect above).
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (hasAutoReconnectedRef.current) return;
+    if (state.phase !== "idle") return;
+    if (!selectedSim || selectedSim.state !== "Booted") return;
+
+    hasAutoReconnectedRef.current = true;
+    const udid = selectedSim.udid;
+
+    // Fast path: Rust is already streaming this sim (e.g., switching back
+    // to a workspace whose sim was started by another workspace). Reuse
+    // the existing MJPEG session — no capture pipeline teardown/rebuild.
+    if (activeStreamSession?.udid === udid) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect fast path
+      setState({ phase: "streaming", udid, stream: activeStreamSession.stream });
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+      return;
+    }
+
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect on mount
+    setState({ phase: "booting", udid });
+    simulatorService.startStreaming(udid).then(
+      (stream) => {
+        if (cancelled) return; // Guard: workspace may have changed
+        if (!stream.hid_available) {
+          console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
+        }
+        activeStreamSession = { udid, stream };
+        setState({ phase: "streaming", udid, stream });
+        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+      },
+      (e) => {
+        if (cancelled) return; // Guard: workspace may have changed
+        setState({
+          phase: "error",
+          message: `Failed to reconnect: ${e instanceof Error ? e.message : String(e)}`,
+          canRetry: true,
+        });
+      }
+    );
+    return () => { cancelled = true; };
+  }, [selectedSim, state.phase]);
+
+  // -------------------------------------------------------------------------
   // Start — boot simulator and begin streaming (no build)
   // -------------------------------------------------------------------------
 
   const handleStart = async () => {
     if (!selectedUdid) return;
+    // Fast path: Rust is already streaming this sim — reuse the session
+    if (activeStreamSession?.udid === selectedUdid) {
+      setState({ phase: "streaming", udid: selectedUdid, stream: activeStreamSession.stream });
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
+      return;
+    }
+    const gen = workspaceGenerationRef.current;
     touchWarnedRef.current = false; // Reset touch warning for new session
     setState({ phase: "booting", udid: selectedUdid });
     try {
       const stream = await simulatorService.startStreaming(selectedUdid);
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       if (!stream.hid_available) {
         console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
       }
+      activeStreamSession = { udid: selectedUdid, stream };
       setState({ phase: "streaming", udid: selectedUdid, stream });
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
     } catch (e) {
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "error", message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
     }
   };
@@ -389,17 +524,21 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleBuildAndRun = async () => {
     const s = state;
     if (s.phase !== "streaming" && s.phase !== "running") return;
+    const gen = workspaceGenerationRef.current;
     setState({ phase: "building", udid: s.udid, stream: s.stream, startedAt: Date.now() });
     try {
       const app = await simulatorService.buildAndRun(workspacePath);
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "running", udid: s.udid, stream: s.stream, app });
     } catch (e) {
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "error", message: `Build failed: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
     }
   };
 
   // Stop everything and return to idle
   const handleStop = async () => {
+    activeStreamSession = null;
     setState({ phase: "idle" });
     try {
       await simulatorService.stopStreaming();
@@ -445,8 +584,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleUninstall = async () => {
     if (state.phase !== "running") return;
     const { udid, stream } = state;
+    const gen = workspaceGenerationRef.current;
     try {
       await simulatorService.uninstallApp(state.app.bundle_id);
+      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "streaming", udid, stream });
     } catch (e) {
       console.error("Uninstall failed:", e);
@@ -568,7 +709,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   }, []);
 
   // -------------------------------------------------------------------------
-  // Keyboard input forwarding — maps KeyboardEvent.code to macOS keycodes.
+  // Keyboard input forwarding — maps KeyboardEvent.code to USB HID keycodes.
   // Cmd/Ctrl combos are NOT forwarded (stay with IDE). Escape blurs viewport.
   // -------------------------------------------------------------------------
 
@@ -588,7 +729,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
         (e.target as HTMLElement).blur();
         return;
       }
-      const keycode = MAC_KEYCODES[e.code];
+      const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
         simulatorService.sendKey(keycode, "down").catch(() => {});
@@ -600,7 +741,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
   const handleKeyUp = useCallback(
     (e: React.KeyboardEvent) => {
       if (!isLive || !hidAvailable) return;
-      const keycode = MAC_KEYCODES[e.code];
+      const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
         simulatorService.sendKey(keycode, "up").catch(() => {});
@@ -682,7 +823,10 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
               {iosSimulators.map((sim) => (
                 <DropdownMenuItem
                   key={sim.udid}
-                  onClick={() => setSelectedUdid(sim.udid)}
+                  onClick={() => {
+                    setSelectedUdid(sim.udid);
+                    workspaceLayoutActions.setSimulatorUdid(workspaceId, sim.udid);
+                  }}
                   className="gap-2 text-xs"
                 >
                   <Check
