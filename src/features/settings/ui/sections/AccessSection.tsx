@@ -13,7 +13,7 @@ import {
   Smartphone,
   Monitor,
   RefreshCw,
-  ExternalLink,
+  ArrowUpRight,
   ChevronRight,
   Send,
   MessageSquare,
@@ -126,7 +126,7 @@ function PortalCard({
           onClick={() => window.open(url, "_blank", "noopener")}
           title="Open in browser"
         >
-          <ExternalLink className="size-3.5" />
+          <ArrowUpRight className="size-3.5" />
         </Button>
       </div>
     </div>
