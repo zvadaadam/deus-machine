@@ -72,10 +72,17 @@ async function cloneAndRegisterInBackground() {
       const repo = await RepoService.add(target);
       repoId = repo.id;
     } catch (err) {
-      const apiErr = err as { status?: number; details?: { details?: { id: string } } };
+      // ApiError shape from client.ts: { status, message, details: <response body> }
+      // 409 response body: { error: "...", details: { id, name, ... } }
+      const apiErr = err as { status?: number; details?: { details?: unknown } };
       if (apiErr?.status === 409) {
-        // 409 Conflict = already registered, extract existing repo ID
-        repoId = apiErr.details?.details?.id ?? null;
+        const existing = apiErr.details?.details;
+        if (existing && typeof existing === "object" && "id" in existing) {
+          repoId = (existing as { id: string }).id;
+        }
+        if (!repoId) {
+          console.warn("[OpenDevs] 409 conflict but couldn't extract repo ID:", err);
+        }
       } else {
         console.error("[OpenDevs] Register failed:", err);
         toast.error(
