@@ -1,5 +1,7 @@
 export type RuntimeAgentType = "claude" | "codex" | "unknown";
 
+export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
+
 /**
  * Agent type lock constraint:
  * Once a session has messages (message_count > 0), its agent harness
@@ -13,6 +15,110 @@ export type RuntimeAgentType = "claude" | "codex" | "unknown";
  * when hasMessages is true. See MessageInput's model picker dropdown.
  */
 
+// ── Agent Model Option ───────────────────────────────────────────────
+
+interface AgentModelOption {
+  /** Model identifier sent to the sidecar */
+  model: string;
+  /** Human-readable label */
+  label: string;
+  /** Show "New" badge in picker */
+  isNew?: boolean;
+}
+
+// ── Agent Config ─────────────────────────────────────────────────────
+
+/**
+ * Per-agent configuration record.
+ *
+ * Every agent-specific behavior lives here. Adding a new agent means
+ * adding one entry to AGENT_CONFIGS — no UI files need conditionals.
+ *
+ * - thinkingLevels: ordered cycle array, walked by cycleThinkingLevel()
+ * - models: available models for the model picker dropdown
+ * - groupLabel: header text in the model picker ("Claude Code", "Codex")
+ */
+export interface AgentConfig {
+  /** DB-compatible agent_type string (matches sessions.agent_type) */
+  readonly id: RuntimeAgentType;
+  /** Human label for display (e.g. "Claude", "Codex") */
+  readonly label: string;
+  /** Group header label in model picker dropdown */
+  readonly groupLabel: string;
+  /** Ordered thinking levels the user cycles through on click */
+  readonly thinkingLevels: readonly ThinkingLevel[];
+  /** Available models, in display order */
+  readonly models: readonly AgentModelOption[];
+}
+
+const AGENT_CONFIGS = {
+  claude: {
+    id: "claude" as const,
+    label: "Claude",
+    groupLabel: "Claude Code",
+    thinkingLevels: ["LOW", "HIGH"] as const,
+    models: [
+      { model: "opus", label: "Opus 4.6" },
+      { model: "sonnet", label: "Sonnet 4.6", isNew: true },
+      { model: "haiku", label: "Haiku 4.5" },
+    ],
+  },
+  codex: {
+    id: "codex" as const,
+    label: "Codex",
+    groupLabel: "Codex",
+    thinkingLevels: ["LOW", "MEDIUM", "HIGH"] as const,
+    models: [
+      { model: "gpt-5.3-codex", label: "GPT-5.3 Codex", isNew: true },
+      { model: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+      { model: "gpt-5.3-codex-spark", label: "Codex Spark" },
+    ],
+  },
+  unknown: {
+    id: "unknown" as const,
+    label: "Agent",
+    groupLabel: "Agent",
+    thinkingLevels: ["LOW", "HIGH"] as const,
+    models: [] as AgentModelOption[],
+  },
+} satisfies Record<RuntimeAgentType, AgentConfig>;
+
+/** Get the config for an agent type. Falls back to "unknown" for unrecognized types. */
+export function getAgentConfig(agentType: string): AgentConfig {
+  const normalized = agentType.toLowerCase() as RuntimeAgentType;
+  return AGENT_CONFIGS[normalized] ?? AGENT_CONFIGS.unknown;
+}
+
+/** Agent types that appear in the model picker (excludes "unknown"). */
+export const MODEL_PICKER_GROUPS: readonly AgentConfig[] = [
+  AGENT_CONFIGS.claude,
+  AGENT_CONFIGS.codex,
+];
+
+// ── Thinking Level Cycling ───────────────────────────────────────────
+
+/**
+ * Computes the next thinking level on click.
+ *
+ * Walks the agent's thinkingLevels array, wrapping at the end.
+ * NONE is normalized to the first entry (thinking is always "on").
+ *
+ * Claude: ["LOW", "HIGH"] → LOW ↔ HIGH (binary toggle)
+ * Codex:  ["LOW", "MEDIUM", "HIGH"] → 3-step graduated reasoning
+ */
+export function cycleThinkingLevel(
+  current: ThinkingLevel,
+  agentType: RuntimeAgentType
+): ThinkingLevel {
+  const { thinkingLevels } = getAgentConfig(agentType);
+  const normalized = current === "NONE" ? thinkingLevels[0] : current;
+  const idx = thinkingLevels.indexOf(normalized);
+  const safeIdx = idx === -1 ? 0 : idx;
+  return thinkingLevels[(safeIdx + 1) % thinkingLevels.length];
+}
+
+// ── Runtime Model Options (derived from config) ──────────────────────
+
 export interface RuntimeModelOption {
   /** Unique picker value (harness:model) */
   value: string;
@@ -24,62 +130,25 @@ export interface RuntimeModelOption {
   isNew?: boolean;
 }
 
-export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = [
-  {
-    value: "claude:opus",
-    model: "opus",
-    label: "Opus 4.6",
-    agentType: "claude",
-    group: "claude",
-  },
-  {
-    value: "claude:sonnet",
-    model: "sonnet",
-    label: "Sonnet 4.6",
-    agentType: "claude",
-    group: "claude",
-    isNew: true,
-  },
-  {
-    value: "claude:haiku",
-    model: "haiku",
-    label: "Haiku 4.5",
-    agentType: "claude",
-    group: "claude",
-  },
-  {
-    value: "codex:gpt-5.3-codex",
-    model: "gpt-5.3-codex",
-    label: "GPT-5.3 Codex",
-    agentType: "codex",
-    group: "codex",
-    isNew: true,
-  },
-  {
-    value: "codex:gpt-5.2-codex",
-    model: "gpt-5.2-codex",
-    label: "GPT-5.2 Codex",
-    agentType: "codex",
-    group: "codex",
-  },
-  {
-    value: "codex:codex-spark",
-    model: "gpt-5.3-codex-spark",
-    label: "Codex Spark",
-    agentType: "codex",
-    group: "codex",
-  },
-];
+/** Flat model options array, derived from agent configs. */
+export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = MODEL_PICKER_GROUPS.flatMap(
+  (config) =>
+    config.models.map(
+      (m): RuntimeModelOption => ({
+        value: `${config.id}:${m.model}`,
+        model: m.model,
+        label: m.label,
+        agentType: config.id,
+        group: config.id as "claude" | "codex",
+        isNew: m.isNew,
+      })
+    )
+);
 
-const AGENT_LABELS: Record<RuntimeAgentType, string> = {
-  claude: "Claude",
-  codex: "Codex",
-  unknown: "Agent",
-};
+// ── Utility functions (unchanged signatures) ─────────────────────────
 
 export function getRuntimeAgentLabel(agentType: string): string {
-  const normalized = agentType.toLowerCase() as RuntimeAgentType;
-  return AGENT_LABELS[normalized] ?? AGENT_LABELS.unknown;
+  return getAgentConfig(agentType).label;
 }
 
 export function getRuntimeModelOption(model: string): RuntimeModelOption | undefined {

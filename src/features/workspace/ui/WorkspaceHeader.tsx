@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  ExternalLink,
+  ArrowUpRight,
   ChevronDown,
   PanelLeft,
   AlertTriangle,
@@ -268,7 +268,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
       onPointerEnter={apps.length > 0 ? handleOpen : undefined}
       onPointerLeave={apps.length > 0 ? handleClose : undefined}
     >
-      <ExternalLink className="h-[11px] w-[11px]" />
+      <ArrowUpRight className="h-[11px] w-[11px]" />
       <span className="text-sm font-medium">Open</span>
       <ChevronDown className="text-text-muted h-2 w-2" />
     </button>
