@@ -309,7 +309,7 @@ export function MainContent({
                 ) : (
                   <div className="flex h-full flex-col pr-2 pb-2">
                     {/* Tab header: content tabs (left) + PR actions (right) */}
-                    <div className="flex h-9 flex-shrink-0 items-center justify-between px-2.5">
+                    <div className="flex h-11 flex-shrink-0 items-center justify-between px-2.5">
                       <ContentTabBar
                         activeTab={effectiveRightSideTab}
                         onTabChange={handleContentTabChange}
