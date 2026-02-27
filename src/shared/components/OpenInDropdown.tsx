@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExternalLink, ChevronRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 
 interface InstalledApp {
@@ -98,7 +98,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
       onPointerEnter={handleOpen}
       onPointerLeave={handleClose}
     >
-      <ExternalLink className="h-4 w-4" />
+      <ArrowUpRight className="h-4 w-4" />
       {!iconOnly && (
         <>
           <span className="text-sm">Open in</span>

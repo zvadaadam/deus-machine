@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
-import { ExternalLink } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -106,7 +106,7 @@ function StatusPopover({ statuses }: { statuses: ProviderStatusEntry[] }) {
               className="text-text-muted hover:text-text-secondary flex shrink-0 items-center gap-1 text-xs transition-colors duration-150"
             >
               {s.isError ? "Unavailable" : visuals.label}
-              <ExternalLink className="h-3 w-3" />
+              <ArrowUpRight className="h-3 w-3" />
             </a>
           </div>
         );

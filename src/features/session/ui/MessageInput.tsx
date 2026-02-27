@@ -5,7 +5,6 @@ import {
   Minimize2,
   ArrowUp,
   Square,
-  Brain,
   Plus,
   Hammer,
   Globe,
@@ -44,8 +43,12 @@ import {
   getRuntimeModelLabel,
   getRuntimeModelOption,
   RUNTIME_MODEL_OPTIONS,
+  MODEL_PICKER_GROUPS,
+  cycleThinkingLevel,
   type RuntimeAgentType,
+  type ThinkingLevel,
 } from "../lib/agentRuntime";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 
 interface Attachment {
   id: string;
@@ -342,33 +345,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   // Agent group of the currently selected model (claude or codex)
   const currentGroup = selectedOption?.group ?? "claude";
 
-  // Thinking level - cycle through levels
-  const cycleThinkingLevel = () => {
-    const levels = ["NONE", "LOW", "MEDIUM", "HIGH"];
-    const currentIndex = levels.indexOf(thinkingLevel);
-    const nextLevel = levels[(currentIndex + 1) % levels.length];
-    onThinkingLevelChange?.(nextLevel);
-  };
+  /**
+   * Thinking cycle — delegates to ThinkingIndicator module which encodes
+   * the per-agent-type cycle rules:
+   *   Claude: binary NONE ↔ HIGH (extended thinking on/off)
+   *   Codex:  NONE → LOW → MEDIUM → HIGH → NONE (graduated reasoning effort)
+   */
+  const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
 
-  // Thinking dot indicators - always show 3 dots, fill based on level
-  const renderThinkingDots = () => {
-    if (thinkingLevel === "NONE") return null;
-
-    const filledCount = thinkingLevel === "HIGH" ? 3 : thinkingLevel === "MEDIUM" ? 2 : 1;
-
-    return (
-      <div className="ml-0.5 flex flex-col gap-0.5">
-        {[2, 1, 0].map((i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1 w-1 transition-[width,height,background-color,border-color] duration-200",
-              i < filledCount ? "bg-primary" : "border-primary/40 border"
-            )}
-          />
-        ))}
-      </div>
-    );
+  const handleCycleThinking = () => {
+    const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentType);
+    onThinkingLevelChange?.(next);
   };
 
   // MCP active count
@@ -387,13 +374,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const renderAgentIcon = (type: RuntimeAgentType) => {
+  const renderAgentIcon = (type: RuntimeAgentType, size: "sm" | "md" = "md") => {
     const LogoComponent = getAgentLogo(type);
+    const sizeClass = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
     if (!LogoComponent) {
-      return <span className="bg-muted-foreground/80 inline-flex h-3.5 w-3.5 rounded-full" />;
+      return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", sizeClass)} />;
     }
 
-    return <LogoComponent className="h-4 w-4 flex-shrink-0" />;
+    return <LogoComponent className={cn("flex-shrink-0", sizeClass)} />;
   };
 
   // Show "Set up your environment" nudge when no manifest and no messages yet
@@ -504,22 +492,22 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         {/* Bottom toolbar */}
         <InputGroupAddon
           align="block-end"
-          className="flex w-full items-center justify-between px-1.5"
+          className="flex w-full items-center justify-between px-2"
         >
           {/* Controls group (left) */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-0.5">
             {/* Add attachment button */}
             <InputGroupButton
               onClick={onAttachmentClick}
               variant="ghost"
               size="icon-sm"
               title="Add attachment"
-              className="rounded-md"
+              className="rounded-lg"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
             </InputGroupButton>
 
-            {/* Model picker dropdown */}
+            {/* Model picker dropdown — shows agent icon + model label */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -527,9 +515,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                   size="sm"
                   title="Select model"
                   aria-label={`Select model, currently ${modelLabel}`}
-                  className="group rounded-md focus-visible:ring-0"
+                  className="group gap-1.5 rounded-lg focus-visible:ring-0"
                 >
-                  <span className="text-text-muted text-xs font-normal">{modelLabel}</span>
+                  {renderAgentIcon(selectedOption?.agentType ?? "claude", "sm")}
+                  <span className="text-text-muted text-xs font-medium">{modelLabel}</span>
                   <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                 </Button>
               </DropdownMenuTrigger>
@@ -542,7 +531,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                   "shadow-[var(--shadow-elevated)]"
                 )}
               >
-                {(["claude", "codex"] as const).map((group, groupIdx) => {
+                {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => {
                   /**
                    * Agent type lock: once a session has messages, its agent harness
                    * (claude/codex) is fixed. The user can switch models within the
@@ -551,17 +540,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                    * first message and the sidecar binds to that harness for the
                    * session's lifetime.
                    */
-                  const isLockedGroup = hasMessages && group !== currentGroup;
+                  const isLockedGroup = hasMessages && agentConfig.id !== currentGroup;
 
                   return (
-                    <div key={group}>
+                    <div key={agentConfig.id}>
                       {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
                       <DropdownMenuLabel>
                         <span className="text-text-muted/90 px-1 text-2xs font-normal tracking-wide">
-                          {group === "claude" ? "Claude Code" : "Codex"}
+                          {agentConfig.groupLabel}
                         </span>
                       </DropdownMenuLabel>
-                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === group).map((option) => {
+                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map((option) => {
                         const isSelected = selectedOptionValue === option.value;
                         return (
                           <DropdownMenuItem
@@ -603,21 +592,15 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Thinking cycle button */}
-            <InputGroupButton
-              variant="ghost"
-              size="sm"
-              onClick={cycleThinkingLevel}
-              title={`Thinking: ${thinkingLevel}`}
-              aria-label={`Thinking level: ${thinkingLevel}`}
-              className={cn(
-                "rounded-full",
-                thinkingLevel !== "NONE" ? "text-primary" : "text-muted-foreground"
-              )}
-            >
-              <Brain className="h-3 w-3" />
-              {renderThinkingDots()}
-            </InputGroupButton>
+            {/* Chromatic thermometer — thinking effort indicator.
+                Brain icon + horizontal square pips shift hue green→amber→rose
+                as reasoning effort increases. Agent-adaptive:
+                  Claude: 2 states (NONE / HIGH) — binary extended thinking toggle.
+                  Codex:  4 states (NONE / LOW / MEDIUM / HIGH) — graduated effort. */}
+            <ThinkingIndicator
+              level={thinkingLevel as ThinkingLevel}
+              onClick={handleCycleThinking}
+            />
 
           </div>
 
@@ -631,19 +614,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
-                className="text-warning rounded-sm border"
+                className="text-warning rounded-lg border"
               >
-                <Minimize2 className="size-3" />
+                <Minimize2 className="size-3.5" />
                 <span className="text-xs font-normal">Compact</span>
               </Button>
             )}
 
             {/* Context window indicator - circular progress */}
             <div
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center"
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
               title={`Context: ${contextTokenCount.toLocaleString()} / ${MAX_TOKENS.toLocaleString()} tokens (${contextPercentage.toFixed(1)}%)`}
             >
-              <svg className="h-4 w-4 -rotate-90" viewBox="0 0 16 16">
+              <svg className="h-3.5 w-3.5 -rotate-90" viewBox="0 0 16 16">
                 {/* Background circle */}
                 <circle
                   cx="8"
@@ -684,9 +667,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               onClick={() => setBrowserEnabled(!browserEnabled)}
               title={browserEnabled ? "Browser enabled" : "Enable browser"}
               aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
-              className={browserEnabled ? "text-info" : "text-muted-foreground"}
+              className={cn("rounded-lg", browserEnabled ? "text-info" : "text-muted-foreground")}
             >
-              <Globe className="h-4 w-4" />
+              <Globe className="h-3.5 w-3.5" />
             </InputGroupButton>
 
             {/* MCP Server indicator */}
@@ -697,9 +680,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                   size="icon-sm"
                   title={`MCP Servers${activeMCPCount > 0 ? ` (${activeMCPCount} active)` : ""}`}
                   aria-label="MCP Servers"
-                  className={activeMCPCount > 0 ? "text-primary" : "text-muted-foreground"}
+                  className={cn("rounded-lg", activeMCPCount > 0 ? "text-primary" : "text-muted-foreground")}
                 >
-                  <Hammer className="h-4 w-4" />
+                  <Hammer className="h-3.5 w-3.5" />
                 </InputGroupButton>
               </PopoverTrigger>
               <PopoverContent className="w-64" align="end" side="top">
@@ -741,7 +724,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 title="Stop execution"
                 className="rounded-full"
               >
-                <Square className="h-5 w-5" />
+                <Square className="h-4 w-4" />
               </InputGroupButton>
             )}
 
@@ -755,7 +738,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               aria-label="Send message"
               className="rounded-full"
             >
-              <ArrowUp className="h-5 w-5" />
+              <ArrowUp className="h-4 w-4" />
             </InputGroupButton>
           </div>
         </InputGroupAddon>
