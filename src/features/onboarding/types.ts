@@ -1,4 +1,4 @@
-export type OnboardingStep = 0 | 1 | 2 | 3;
+export type OnboardingStep = 0 | 1 | 2 | 3 | 4;
 
 export interface CliCheckResult {
   installed: boolean;

@@ -673,8 +673,22 @@ pub fn exit_onboarding_mode(_app_handle: tauri::AppHandle) -> Result<(), String>
 }
 
 /// Show the main window normally (for returning users who skip onboarding).
+///
+/// No-op when onboarding mode is active — `enter_onboarding_mode` already showed
+/// the window with transparency and special levels. Calling `setHasShadow: true`
+/// mid-onboarding would break the transparent overlay effect.
 #[tauri::command]
 pub fn show_main_window(_app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // If onboarding mode is active (SAVED_FRAME is Some), skip — the onboarding
+        // overlay manages its own window visibility and transparency.
+        if SAVED_FRAME.lock().unwrap().is_some() {
+            println!("[ONBOARDING] show_main_window skipped — onboarding mode active");
+            return Ok(());
+        }
+    }
+
     println!("[ONBOARDING] show_main_window (no onboarding)");
 
     #[cfg(target_os = "macos")]

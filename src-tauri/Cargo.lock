@@ -1829,75 +1829,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "opendevs"
-version = "2.0.0"
-dependencies = [
- "aes",
- "anyhow",
- "base64 0.22.1",
- "block",
- "bytecount",
- "cbc",
- "chrono",
- "git2",
- "glob",
- "opendevs-sim-core",
- "hmac",
- "ignore",
- "lazy_static",
- "libc",
- "notify",
- "nucleo-matcher",
- "objc",
- "parking_lot",
- "pbkdf2",
- "portable-pty",
- "rusqlite",
- "serde",
- "serde_json",
- "sha1",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-http",
- "tauri-plugin-notification",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "tempfile",
- "thiserror 2.0.17",
- "time",
- "tokio",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "opendevs-sim-core"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "axum",
- "bytes",
- "opendevs-sim-sys",
- "log",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
-name = "opendevs-sim-sys"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3199,6 +3130,75 @@ dependencies = [
  "is-wsl",
  "libc",
  "pathdiff",
+]
+
+[[package]]
+name = "opendevs"
+version = "2.0.0"
+dependencies = [
+ "aes",
+ "anyhow",
+ "base64 0.22.1",
+ "block",
+ "bytecount",
+ "cbc",
+ "chrono",
+ "git2",
+ "glob",
+ "hmac",
+ "ignore",
+ "lazy_static",
+ "libc",
+ "notify",
+ "nucleo-matcher",
+ "objc",
+ "opendevs-sim-core",
+ "parking_lot",
+ "pbkdf2",
+ "portable-pty",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-http",
+ "tauri-plugin-notification",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "tempfile",
+ "thiserror 2.0.17",
+ "time",
+ "tokio",
+ "url",
+ "walkdir",
+]
+
+[[package]]
+name = "opendevs-sim-core"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "axum",
+ "bytes",
+ "log",
+ "opendevs-sim-sys",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
+name = "opendevs-sim-sys"
+version = "0.1.0"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

@@ -758,6 +758,16 @@
   }
 }
 
+/* Shimmer for indeterminate progress bar in onboarding clone step */
+@keyframes onboarding-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 /* Exit: card dissolves upward with blur */
 @keyframes onboarding-exit-card {
   0% {

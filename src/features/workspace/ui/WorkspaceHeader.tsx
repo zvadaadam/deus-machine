@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/shared/lib/utils";
 import { invoke } from "@/platform/tauri";
 import type { SetupStatus } from "@/shared/types";
 import type { NormalizedTask } from "../api/workspace.service";
@@ -73,7 +74,7 @@ export function WorkspaceHeader({
   return (
     <div
       data-slot="workspace-header"
-      className="flex h-9 flex-shrink-0 items-center justify-between px-4"
+      className="flex h-11 flex-shrink-0 items-center justify-between px-4"
     >
       {/* Left: sidebar toggle + title + repo/branch */}
       <div className="flex min-w-0 items-center gap-[5px]">
@@ -103,7 +104,10 @@ export function WorkspaceHeader({
 
         {subtitle && (
           <span
-            className="text-text-subtle max-w-[280px] truncate text-sm font-medium"
+            className={cn(
+              "max-w-[280px] truncate text-sm font-medium",
+              title ? "text-text-subtle" : "text-foreground"
+            )}
             title={subtitle}
           >
             {subtitle}
@@ -111,14 +115,14 @@ export function WorkspaceHeader({
         )}
 
         {setupStatus === "running" && (
-          <span className="text-text-muted flex items-center gap-1 text-xs">
+          <span className="text-text-muted flex items-center gap-1 text-sm">
             <Loader2 className="h-3 w-3 animate-spin" />
             <span>Installing...</span>
           </span>
         )}
         {setupStatus === "failed" && (
           <div className="flex items-center gap-1">
-            <span className="text-accent-red-muted flex items-center gap-1 text-xs font-medium">
+            <span className="text-accent-red-muted flex items-center gap-1 text-sm font-medium">
               <AlertTriangle className="h-3 w-3" />
               <span>Setup failed</span>
             </span>
@@ -260,12 +264,12 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const trigger = (
     <button
       type="button"
-      className="text-text-subtle border-border-strong hover:bg-bg-muted flex items-center gap-1 rounded-[5px] border px-2 py-1 transition-colors duration-200"
+      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-[5px] border px-2 transition-colors duration-200"
       onPointerEnter={apps.length > 0 ? handleOpen : undefined}
       onPointerLeave={apps.length > 0 ? handleClose : undefined}
     >
       <ExternalLink className="h-[11px] w-[11px]" />
-      <span className="text-2xs font-medium">Open</span>
+      <span className="text-sm font-medium">Open</span>
       <ChevronDown className="text-text-muted h-2 w-2" />
     </button>
   );

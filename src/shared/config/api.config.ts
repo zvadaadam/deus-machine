@@ -9,10 +9,18 @@
  * - Fallback: Port 3333 if neither is available
  */
 
-import { invoke } from "@/platform/tauri";
+import { invoke, isTauriEnv } from "@/platform/tauri";
 
 let cachedPort: number | null = null;
 let portPromise: Promise<number> | null = null;
+
+// Tauri IPC retry config for backend port resolution.
+// The backend may not have emitted its [BACKEND_PORT] marker yet during early
+// startup — Rust setup() blocks the main thread for up to 5s waiting for it,
+// and IPC calls from the webview are queued until setup completes.
+// 30 attempts × 200ms = 6s covers the 5s startup timeout with margin.
+const TAURI_PORT_MAX_RETRIES = 30;
+const TAURI_PORT_RETRY_DELAY_MS = 200;
 
 // Common ports to try during discovery (most recently used ports)
 // Backend uses PORT=0 for dynamic allocation, so we try a range of common ports
@@ -125,7 +133,12 @@ async function discoverBackendPort(): Promise<number | null> {
 }
 
 /**
- * Get the backend port (cached after first call)
+ * Get the backend port (cached after first call).
+ *
+ * In Tauri mode, retries the IPC call with backoff because the backend may
+ * still be starting when the webview first loads. Without retries, a single
+ * failed invoke permanently caches port 3333, causing all API requests to
+ * hit the wrong port and leaving the window hidden.
  */
 async function getBackendPort(): Promise<number> {
   if (cachedPort !== null) {
@@ -148,18 +161,40 @@ async function getBackendPort(): Promise<number> {
       }
     }
 
-    // 2. Try Tauri API (for Tauri app mode)
+    // 2. Try Tauri API (for Tauri app mode) — retry with backoff.
+    // The backend is managed by Rust and WILL start, but the port may not
+    // be available yet if we're called before setup() finishes.
+    if (isTauriEnv) {
+      for (let attempt = 0; attempt < TAURI_PORT_MAX_RETRIES; attempt++) {
+        try {
+          const port = await invoke<number>("get_backend_port");
+          if (import.meta.env.DEV) console.log(`[API] Using Tauri backend port: ${port} (attempt ${attempt + 1})`);
+          cachedPort = port;
+          return port;
+        } catch {
+          if (attempt < TAURI_PORT_MAX_RETRIES - 1) {
+            await new Promise((resolve) => setTimeout(resolve, TAURI_PORT_RETRY_DELAY_MS));
+          }
+        }
+      }
+      // All retries exhausted — don't cache a wrong port. Throw so TanStack Query
+      // retries the entire fetch later, giving the backend more time to start.
+      console.error("[API] get_backend_port failed after retries — backend may not have started");
+      throw new Error("Backend port not available after retries");
+    }
+
+    // 3. Non-Tauri: single invoke attempt (will fail fast if not in Tauri)
     try {
       const port = await invoke<number>("get_backend_port");
       if (import.meta.env.DEV) console.log(`[API] Using Tauri backend port: ${port}`);
       cachedPort = port;
       return port;
-    } catch (error) {
+    } catch {
       if (import.meta.env.DEV)
         console.log("[API] Tauri API not available, trying port discovery...");
     }
 
-    // 3. Try port discovery (for web browser accessing Vite dev server)
+    // 4. Try port discovery (for web browser accessing Vite dev server)
     const discoveredPort = await discoverBackendPort();
     if (discoveredPort) {
       if (import.meta.env.DEV)
@@ -168,13 +203,12 @@ async function getBackendPort(): Promise<number> {
       return discoveredPort;
     }
 
-    // 4. Fallback to hardcoded port
+    // 5. Fallback to hardcoded port — do NOT cache so next call retries
     console.warn("[API] Could not discover backend port, falling back to default port 3333");
-    cachedPort = 3333;
     return 3333;
   })();
 
-  // Clear promise when done
+  // Clear promise when done (success or failure)
   portPromise.finally(() => {
     portPromise = null;
   });
