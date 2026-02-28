@@ -17,7 +17,7 @@ function InputGroup({
       data-no-ring={noRing}
       role="group"
       className={cn(
-        "group/input-group border-input bg-input-tint relative flex w-full items-center rounded-md border shadow-xs transition-[color,box-shadow] outline-none",
+        "group/input-group border-input bg-input-tint relative flex w-full items-center rounded-lg border shadow-xs transition-[color,box-shadow] outline-none",
         "h-9 min-w-0 has-[>textarea]:h-auto",
 
         // Variants based on alignment.
@@ -41,7 +41,7 @@ function InputGroup({
 }
 
 const inputGroupAddonVariants = cva(
-  "text-muted-foreground flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium select-none [&>svg:not([class*='size-'])]:size-4 [&>kbd]:rounded-[calc(var(--radius)-5px)] group-data-[disabled=true]/input-group:opacity-50",
+  "text-muted-foreground flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium select-none [&>svg:not([class*='size-'])]:size-4 [&>kbd]:rounded-xs group-data-[disabled=true]/input-group:opacity-50",
   {
     variants: {
       align: {
@@ -84,9 +84,9 @@ function InputGroupAddon({
 const inputGroupButtonVariants = cva("text-sm shadow-none flex gap-2 items-center", {
   variants: {
     size: {
-      xs: "h-6 gap-1 px-2 rounded-[calc(var(--radius)-5px)] [&>svg:not([class*='size-'])]:size-3.5 has-[>svg]:px-2",
-      sm: "h-8 px-2.5 gap-1.5 rounded-md has-[>svg]:px-2.5",
-      "icon-xs": "size-6 rounded-[calc(var(--radius)-5px)] p-0 has-[>svg]:p-0",
+      xs: "h-6 gap-1 px-2 rounded-xs [&>svg:not([class*='size-'])]:size-3.5 has-[>svg]:px-2",
+      sm: "h-8 px-2.5 gap-1.5 rounded-lg has-[>svg]:px-2.5",
+      "icon-xs": "size-6 rounded-xs p-0 has-[>svg]:p-0",
       "icon-sm": "size-8 p-0 has-[>svg]:p-0",
     },
   },

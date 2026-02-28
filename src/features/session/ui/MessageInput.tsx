@@ -565,7 +565,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                             {renderAgentIcon(option.agentType)}
                             <span className="font-normal">{option.label}</span>
                             {option.isNew && (
-                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-[3px] border px-1 py-px text-2xs tracking-wide uppercase">
+                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-xs border px-1 py-px text-2xs tracking-wide uppercase">
                                 New
                               </span>
                             )}

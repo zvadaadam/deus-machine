@@ -327,7 +327,7 @@ export function MainContent({
                     </div>
 
                     {/* Content area — rounded corners, subtle border */}
-                    <div className="border-border-subtle bg-bg-raised flex min-h-0 flex-1 overflow-hidden rounded-[10px] border">
+                    <div className="border-border-subtle bg-bg-raised flex min-h-0 flex-1 overflow-hidden rounded-lg border">
                       <RightSidePanel
                         workspace={selectedWorkspace}
                         activeTab={effectiveRightSideTab}
