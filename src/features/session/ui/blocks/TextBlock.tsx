@@ -21,7 +21,7 @@
 
 import { useMemo } from "react";
 import type { TextBlock as TextBlockType, MessageRole } from "@/shared/types";
-import { chatTheme } from "../theme";
+
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
 import { parseInspectTags } from "../../lib/parseInspectTags";
@@ -58,13 +58,7 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
     // If <inspect> tags were found, render mixed text + pills
     if (inspectSegments.length > 0) {
       return (
-        <p
-          className={cn(
-            "whitespace-pre-wrap text-base",
-            chatTheme.message.user.text,
-            chatTheme.message.user.textColor
-          )}
-        >
+        <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
           {inspectSegments.map((segment, i) =>
             typeof segment === "string" ? (
               <span key={i}>{segment}</span>
@@ -78,13 +72,7 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
 
     // No <inspect> tags: plain text
     return (
-      <p
-        className={cn(
-          "whitespace-pre-wrap text-base",
-          chatTheme.message.user.text,
-          chatTheme.message.user.textColor
-        )}
-      >
+      <p className={cn("text-base whitespace-pre-wrap", "font-normal", "text-foreground")}>
         {text}
       </p>
     );
@@ -94,9 +82,7 @@ export function TextBlock({ block, role = "assistant", weight = "normal" }: Text
   // Wrap in div for weight control (opacity) since .markdown-content has explicit color
   return (
     <div className={weight === "muted" ? "opacity-60" : ""}>
-      <ChatMarkdown className={chatTheme.blocks.text.container}>
-        {text}
-      </ChatMarkdown>
+      <ChatMarkdown className="flex flex-col gap-1.5 px-2 py-1.5">{text}</ChatMarkdown>
     </div>
   );
 }

@@ -131,9 +131,11 @@
 
   /* Font families — System native for UI and code */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
   --font-mono:
-    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   --font-pixel: "Geist Pixel Square", monospace;
 
   /* Legacy aliases for backward compatibility */
@@ -270,56 +272,108 @@
 
 /* Overlay fade — used by Dialog, Sheet, AlertDialog overlays */
 @keyframes overlay-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes overlay-exit {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* Dialog center zoom — individual scale property avoids conflict with Tailwind translate */
 @keyframes dialog-enter {
-  from { opacity: 0; scale: 0.96; }
-  to { opacity: 1; scale: 1; }
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
 }
 @keyframes dialog-exit {
-  from { opacity: 1; scale: 1; }
-  to { opacity: 0; scale: 0.96; }
+  from {
+    opacity: 1;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 0.96;
+  }
 }
 
 /* Sheet slide — slides in from edge */
 @keyframes sheet-enter-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 @keyframes sheet-exit-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
 }
 @keyframes sheet-enter-left {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 @keyframes sheet-exit-left {
-  from { transform: translateX(0); }
-  to { transform: translateX(-100%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
 }
 @keyframes sheet-enter-top {
-  from { transform: translateY(-100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 @keyframes sheet-exit-top {
-  from { transform: translateY(0); }
-  to { transform: translateY(-100%); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
 }
 @keyframes sheet-enter-bottom {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 @keyframes sheet-exit-bottom {
-  from { transform: translateY(0); }
-  to { transform: translateY(100%); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
 }
 
 @keyframes fadeIn {
@@ -531,6 +585,18 @@
   animation: tool-shimmer 2s linear infinite;
 }
 
+/* Containment on inner wrapper of closed collapsibles.
+   The overflow:hidden child holds the actual content. When the grid row is 0fr,
+   the inner div is 0-height — contain: strict tells the browser to skip
+   layout/paint for the entire subtree. This is the DOM-weight reduction that
+   converts O(all_tools) layout to O(visible_tools) layout.
+   On open, contain reverts so content participates in normal flow. */
+.turn-collapsible[data-state="closed"] > *,
+.tool-group-collapsible[data-state="closed"] > *,
+.tool-expand-collapsible[data-state="closed"] > * {
+  contain: strict;
+}
+
 /* Turn collapse/expand — CSS grid rows trick for smooth height animation.
    Only animates grid-template-rows + opacity (no height/max-height). */
 .turn-collapsible {
@@ -548,6 +614,103 @@
 .turn-collapsible[data-state="closed"] {
   grid-template-rows: 0fr;
   opacity: 0;
+}
+
+/* Tool group collapse — staggered timing: content fades faster (120ms) than
+   grid rows compress (200ms), so tools disappear before height shrinks.
+   Expanding is asymmetric: grid opens first, then content fades in. */
+.tool-group-collapsible {
+  display: grid;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.tool-group-collapsible[data-state="open"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 200ms 80ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.tool-group-collapsible[data-state="closed"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* Tool expand/collapse — individual tool/thinking content area.
+   Staggered: close = opacity fades fast (120ms) then grid compresses (200ms).
+   Open = grid opens first (200ms), content fades in with 60ms delay.
+   Used by ThinkingBlock for smooth expand of reasoning content. */
+.tool-expand-collapsible {
+  display: grid;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
+    opacity 120ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.tool-expand-collapsible[data-state="open"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
+    opacity 160ms 60ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.tool-expand-collapsible[data-state="closed"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* One-shot entrance animations for chat items and tool blocks.
+   Replaces Framer Motion m.div wrappers — pure CSS, zero React overhead.
+   @keyframes + animation-fill-mode:both ensures the element starts hidden
+   and ends visible. No JS cleanup needed; the animation plays once on mount
+   then the element is a plain div with no ongoing cost.
+   Respects prefers-reduced-motion via the global media query. */
+@keyframes chatItemFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.chat-item-enter {
+  animation: chatItemFadeIn 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes toolUseFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tool-use-enter {
+  animation: toolUseFadeIn 150ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
+}
+
+/* Tool group header entrance — replaces Framer Motion m.div.
+   Matches the previous { opacity: 0, y: 6 } → { opacity: 1, y: 0 } animation.
+   Plays once on mount, then the element is a plain div. */
+@keyframes toolGroupHeaderFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tool-group-header-enter {
+  animation: toolGroupHeaderFadeIn 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Tiered thinking animations - organic breathing effect */
@@ -798,14 +961,14 @@
   /* Radius base values — source of truth for the two-layer system */
   --corner-radius-scale: 1;
   --radius-2xs-base: 0.125rem; /* 2px */
-  --radius-xs-base: 0.25rem;   /* 4px */
-  --radius-sm-base: 0.375rem;  /* 6px */
-  --radius-md-base: 0.5rem;    /* 8px */
-  --radius-lg-base: 0.625rem;  /* 10px */
-  --radius-xl-base: 0.75rem;   /* 12px */
-  --radius-2xl-base: 1rem;     /* 16px */
-  --radius-3xl-base: 1.25rem;  /* 20px */
-  --radius-4xl-base: 1.5rem;   /* 24px */
+  --radius-xs-base: 0.25rem; /* 4px */
+  --radius-sm-base: 0.375rem; /* 6px */
+  --radius-md-base: 0.5rem; /* 8px */
+  --radius-lg-base: 0.625rem; /* 10px */
+  --radius-xl-base: 0.75rem; /* 12px */
+  --radius-2xl-base: 1rem; /* 16px */
+  --radius-3xl-base: 1.25rem; /* 20px */
+  --radius-4xl-base: 1.5rem; /* 24px */
 
   /* --- Core surfaces (light mode — warm stone tones) --- */
   --background: #f5f5f4;
@@ -1162,7 +1325,10 @@ body {
   background: var(--background); /* Web: solid background */
   letter-spacing: -0.011em;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1,
+    "calt" 1;
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -1172,7 +1338,11 @@ body {
  * for SF Pro proportional text. Monospace fonts have uniform character widths
  * and must not inherit negative tracking from body or text-* scale tokens.
  * Override the CSS variables that Tailwind text-* utilities reference. */
-code, pre, kbd, samp, .font-mono {
+code,
+pre,
+kbd,
+samp,
+.font-mono {
   --text-2xs--letter-spacing: 0em;
   --text-xs--letter-spacing: 0em;
   --text-sm--letter-spacing: 0em;
@@ -1293,7 +1463,10 @@ code, pre, kbd, samp, .font-mono {
 }
 
 /* Edge-to-edge — sidebar collapsed: flatten card to seamless full-bleed */
-.tauri [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="main-content"] {
+.tauri
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="main-content"] {
   border-color: transparent !important;
 }
 
@@ -1355,10 +1528,16 @@ code, pre, kbd, samp, .font-mono {
  * toggle when sidebar is collapsed. Pushes content right of the stoplight dots
  * instead of down, preserving vertical space. Uses --traffic-light-clearance
  * token (defined in :root) and logical properties for RTL support. */
-.tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="workspace-header"] {
+.tauri:not(.fullscreen)
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="workspace-header"] {
   padding-inline-start: var(--traffic-light-clearance);
 }
-.tauri:not(.fullscreen) [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"] ~ [data-slot="sidebar-inset"] [data-slot="welcome-sidebar-toggle"] {
+.tauri:not(.fullscreen)
+  [data-slot="sidebar"][data-state="collapsed"][data-variant="inset"]
+  ~ [data-slot="sidebar-inset"]
+  [data-slot="welcome-sidebar-toggle"] {
   transform: translateX(calc(var(--traffic-light-clearance) - 0.75rem));
 }
 
@@ -1394,11 +1573,7 @@ code, pre, kbd, samp, .font-mono {
  * with wallpaper variation). Wash gets a whisper of primary chroma (hue 255) to
  * replace the warmth/color the wallpaper provided. Pattern: Arc Browser. */
 .tauri.fullscreen [data-slot="sidebar-wrapper"] {
-  background: color-mix(
-    in oklch,
-    var(--sidebar) 94%,
-    transparent
-  ) !important;
+  background: color-mix(in oklch, var(--sidebar) 94%, transparent) !important;
 }
 
 /* Wash: same structure, but shift to a chromed base (primary hue whisper).
@@ -1431,11 +1606,7 @@ code, pre, kbd, samp, .font-mono {
 
 /* Hover-reveal in fullscreen — still needs to feel elevated */
 .tauri.fullscreen [data-hover-reveal="true"] [data-slot="sidebar-container"] {
-  background: color-mix(
-    in oklch,
-    var(--sidebar) 97%,
-    transparent
-  ) !important;
+  background: color-mix(in oklch, var(--sidebar) 97%, transparent) !important;
 }
 
 /* Fullscreen + inactive: sidebar goes near-opaque (same dim pattern as windowed) */
@@ -1647,11 +1818,7 @@ select {
  * Override gradients to use the same translucent mix as main-content. */
 .tauri .chat-tabs-header,
 .tauri .bg-fade-overlay {
-  --content-bg: color-mix(
-    in oklch,
-    var(--background) var(--content-tint-opacity),
-    transparent
-  );
+  --content-bg: color-mix(in oklch, var(--background) var(--content-tint-opacity), transparent);
 }
 
 /* Diffs (Pierre) theme bridge */

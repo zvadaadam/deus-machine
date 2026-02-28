@@ -12,6 +12,7 @@
  * - Context-aware: Shows "Collapse" when expanded, metrics when collapsed
  */
 
+import { memo } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { TurnStats } from "./utils";
@@ -23,7 +24,8 @@ interface TurnStatsHeaderProps {
   hiddenMessageCount: number; // Number of messages hidden when collapsed
 }
 
-export function TurnStatsHeader({
+/** Memoized: stats/isExpanded/hiddenMessageCount are stable for sealed turns. */
+export const TurnStatsHeader = memo(function TurnStatsHeader({
   stats,
   isExpanded,
   onClick,
@@ -51,7 +53,7 @@ export function TurnStatsHeader({
         <div className="relative h-4 w-4 flex-shrink-0">
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute left-0 top-0 h-4 w-4 transition-transform duration-200",
+              "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-transform duration-200",
               isExpanded && "rotate-90"
             )}
             aria-hidden="true"
@@ -109,4 +111,4 @@ export function TurnStatsHeader({
       </div>
     </button>
   );
-}
+});

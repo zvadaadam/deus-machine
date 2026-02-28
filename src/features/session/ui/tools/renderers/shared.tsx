@@ -19,16 +19,16 @@ export function extractText(content: unknown): string {
   return JSON.stringify(content, null, 2);
 }
 
-/** Scrollable pre block for snapshot/log output */
-export function OutputBlock({ children, isError }: { children: React.ReactNode; isError?: boolean }) {
+/** Scrollable pre block for snapshot/log output.
+ * Error styling is handled by BaseToolRenderer (X icon swap) — OutputBlock
+ * uses uniform styling regardless of error state. */
+export function OutputBlock({ children }: { children: React.ReactNode; isError?: boolean }) {
   return (
     <pre
       className={cn(
         "overflow-x-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap",
         "max-h-96 overflow-y-auto border",
-        isError
-          ? "bg-destructive/15 text-destructive-foreground border-destructive/30"
-          : "bg-muted/50 text-foreground border-border/60"
+        "bg-muted/50 text-foreground border-border/60"
       )}
     >
       {children}

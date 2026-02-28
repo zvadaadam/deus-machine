@@ -9,6 +9,7 @@
  * they're only displayed as part of their tool_use block.
  */
 
+import { memo } from "react";
 import { match } from "ts-pattern";
 import type { ContentBlock, MessageRole } from "@/shared/types";
 import { cn } from "@/shared/lib/utils";
@@ -24,7 +25,16 @@ interface BlockRendererProps {
   isLastTextBlock?: boolean; // For text weight (muted vs normal)
 }
 
-export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRendererProps) {
+/**
+ * Memoized: block is a parsed JSON object (stable ref), index/role/isLastTextBlock
+ * are primitives. Prevents re-renders of sibling blocks when new content streams in.
+ */
+export const BlockRenderer = memo(function BlockRenderer({
+  block,
+  index,
+  role,
+  isLastTextBlock,
+}: BlockRendererProps) {
   const { toolResultMap } = useSession();
   // Handle null/undefined blocks gracefully
   if (!block) {
@@ -75,4 +85,4 @@ export function BlockRenderer({ block, index, role, isLastTextBlock }: BlockRend
       }
       return null;
     });
-}
+});

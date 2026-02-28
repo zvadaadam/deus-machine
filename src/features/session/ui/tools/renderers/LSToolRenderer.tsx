@@ -12,7 +12,7 @@ import { FolderOpen, File, Folder } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 
 export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { path } = toolUse.input ?? {};
@@ -47,11 +47,7 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
   return (
     <BaseToolRenderer
       toolName="LS"
-      icon={
-        <FolderOpen
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.LS)}
-        />
-      }
+      icon={<FolderOpen className={cn(TOOL_ICON_CLS, TOOL_COLORS.LS)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -59,13 +55,13 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {dirName}
           </span>
-          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+          <span className="text-muted-foreground text-sm font-normal">
             {" "}
             • {hasListings ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "empty"}
           </span>
