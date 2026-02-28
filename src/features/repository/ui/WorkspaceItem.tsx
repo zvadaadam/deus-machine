@@ -21,8 +21,8 @@ interface WorkspaceItemProps {
  *   [StatusIcon 14×14] [Name — Inter 13/500]     [+713 -2]
  *                       [Location · Status]
  *
- * Selected: bg-elevated, rounded-md
- * Hover: bg-surface, rounded-md
+ * Selected: bg-elevated, rounded-lg
+ * Hover: bg-surface, rounded-lg
  * Normal: transparent
  *
  * Status icons:
@@ -49,7 +49,7 @@ export function WorkspaceItem({ workspace, diffStats, isActive, onClick }: Works
         type="button"
         onClick={onClick}
         className={cn(
-          "flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150",
+          "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-150",
           isActive ? "bg-bg-selection" : "hover:bg-foreground/[0.04]"
         )}
       >
