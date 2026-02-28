@@ -117,7 +117,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
                 title={copied ? "Copied" : "Copy file content"}
                 aria-label="Copy file content"
               >
@@ -130,7 +130,7 @@ export function FileViewer({ filePath, onClose }: FileViewerProps) {
               <button
                 type="button"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
                 title="Close file preview"
                 aria-label="Close file preview"
               >

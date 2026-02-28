@@ -65,7 +65,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="New tab"
-          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
+          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded-lg border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
           onClick={onTabAdd}
           title="New tab"
         >
@@ -77,7 +77,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="Open browser in separate window"
-          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent transition-colors duration-200 ease-out before:absolute before:inset-[-10px] before:content-['']"
+          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors duration-200 ease-out before:absolute before:inset-[-10px] before:content-['']"
           onClick={onDetach}
           title="Open in separate window"
         >
