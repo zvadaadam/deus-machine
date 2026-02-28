@@ -8,34 +8,46 @@ export const simulatorService = {
 
   listSimulators: () => invoke<SimulatorInfo[]>("list_simulators"),
 
-  startStreaming: (udid: string) => invoke<StreamInfo>("start_streaming", { udid }),
+  /** Check if a streaming session is alive for this workspace. */
+  getStreamInfo: (workspaceId: string) =>
+    invoke<StreamInfo | null>("get_stream_info", { workspaceId }),
 
-  stopStreaming: () => invoke<void>("stop_streaming"),
+  startStreaming: (workspaceId: string, udid: string, skipBootCheck = false) =>
+    invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck }),
 
-  sendTouch: (x: number, y: number, touchType: string) =>
-    invoke<void>("sim_send_touch", { x, y, touchType }),
+  stopStreaming: (workspaceId: string) =>
+    invoke<void>("stop_streaming", { workspaceId }),
 
-  sendScroll: (x: number, y: number, dx: number, dy: number) =>
-    invoke<void>("sim_send_scroll", { x, y, dx, dy }),
+  sendTouch: (workspaceId: string, x: number, y: number, touchType: string) =>
+    invoke<void>("sim_send_touch", { workspaceId, x, y, touchType }),
 
-  sendKey: (keycode: number, direction: string) =>
-    invoke<void>("sim_send_key", { keycode, direction }),
+  sendScroll: (workspaceId: string, x: number, y: number, dx: number, dy: number) =>
+    invoke<void>("sim_send_scroll", { workspaceId, x, y, dx, dy }),
 
-  sendButton: (buttonType: string, direction: string) =>
-    invoke<void>("sim_send_button", { buttonType, direction }),
+  sendKey: (workspaceId: string, keycode: number, direction: string) =>
+    invoke<void>("sim_send_key", { workspaceId, keycode, direction }),
 
-  takeScreenshot: () => invoke<number[]>("sim_take_screenshot"),
+  sendButton: (workspaceId: string, buttonType: string, direction: string) =>
+    invoke<void>("sim_send_button", { workspaceId, buttonType, direction }),
 
-  pressHome: () => invoke<void>("sim_press_home"),
+  takeScreenshot: (workspaceId: string) =>
+    invoke<number[]>("sim_take_screenshot", { workspaceId }),
 
-  installApp: (appPath: string) => invoke<InstalledApp>("sim_install_app", { appPath }),
+  pressHome: (workspaceId: string) =>
+    invoke<void>("sim_press_home", { workspaceId }),
 
-  launchApp: (bundleId: string) => invoke<void>("sim_launch_app", { bundleId }),
+  installApp: (workspaceId: string, appPath: string) =>
+    invoke<InstalledApp>("sim_install_app", { workspaceId, appPath }),
 
-  terminateApp: (bundleId: string) => invoke<void>("sim_terminate_app", { bundleId }),
+  launchApp: (workspaceId: string, bundleId: string) =>
+    invoke<void>("sim_launch_app", { workspaceId, bundleId }),
 
-  uninstallApp: (bundleId: string) => invoke<void>("sim_uninstall_app", { bundleId }),
+  terminateApp: (workspaceId: string, bundleId: string) =>
+    invoke<void>("sim_terminate_app", { workspaceId, bundleId }),
 
-  buildAndRun: (workspacePath: string) =>
-    invoke<InstalledApp>("sim_build_and_run", { workspacePath }),
+  uninstallApp: (workspaceId: string, bundleId: string) =>
+    invoke<void>("sim_uninstall_app", { workspaceId, bundleId }),
+
+  buildAndRun: (workspaceId: string, workspacePath: string) =>
+    invoke<InstalledApp>("sim_build_and_run", { workspaceId, workspacePath }),
 };

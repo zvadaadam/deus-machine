@@ -166,6 +166,29 @@ export function MainContent({
     contentPanelRef,
   });
 
+  // --- Reset panel sizes on workspace switch ---
+  // ResizablePanelGroup has no key prop — it stays mounted across workspace
+  // switches so SimulatorPanel and BrowserPanel keep their Rust sessions alive.
+  // Without the key, react-resizable-panels won't re-apply defaultSize on
+  // re-render. We must imperatively collapse/expand panels to match the
+  // per-workspace Zustand state when the selected workspace changes.
+  useEffect(() => {
+    if (!selectedWorkspaceId) return;
+    if (chatPanelCollapsed) {
+      chatPanelRef.current?.collapse();
+    } else {
+      chatPanelRef.current?.expand();
+      chatPanelRef.current?.resize(sessionPanelDefaultSize);
+    }
+    if (rightPanelCollapsed) {
+      contentPanelRef.current?.collapse();
+    } else {
+      contentPanelRef.current?.expand();
+      contentPanelRef.current?.resize(contentPanelDefaultSize);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
+  }, [selectedWorkspaceId]);
+
   // --- Sync workspace changes to detached browser window ---
   const detachedWorkspaceContext = useMemo(
     () =>
@@ -234,7 +257,6 @@ export function MainContent({
           <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
             <ResizablePanelGroup
               direction="horizontal"
-              key={selectedWorkspaceId}
             >
               {/* ─── SESSION PANEL (left, collapsible) ─── */}
               <ResizablePanel
@@ -313,6 +335,7 @@ export function MainContent({
                       <ContentTabBar
                         activeTab={effectiveRightSideTab}
                         onTabChange={handleContentTabChange}
+                        workspaceId={selectedWorkspaceId}
                       />
                       <PRActions
                         prStatus={prStatus}

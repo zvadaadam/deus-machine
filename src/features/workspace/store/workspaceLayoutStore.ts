@@ -46,6 +46,7 @@ interface WorkspaceLayoutState {
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
   pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
+  simulatorUdid: string | null; // Last-used simulator UDID for this workspace
 }
 
 interface WorkspaceLayoutStore {
@@ -101,6 +102,11 @@ interface WorkspaceLayoutStore {
   setPendingTerminalCommand: (workspaceId: string, command: string | null) => void;
 
   /**
+   * Set the last-used simulator UDID for a workspace
+   */
+  setSimulatorUdid: (workspaceId: string, udid: string | null) => void;
+
+  /**
    * Persist chat tab order and active tab for a workspace
    */
   setChatTabState: (
@@ -133,6 +139,7 @@ export const defaultLayout: WorkspaceLayoutState = {
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
   pendingTerminalCommand: null,
+  simulatorUdid: null,
 };
 
 // Legacy fields that may exist in persisted data from older versions.
@@ -301,6 +308,21 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             "workspaceLayout/setPendingTerminalCommand"
           ),
 
+        setSimulatorUdid: (workspaceId, udid) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  simulatorUdid: udid,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setSimulatorUdid"
+          ),
+
         // Utilities
         clearWorkspaceLayout: (workspaceId) =>
           set(
@@ -316,7 +338,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 7,
+        version: 8,
         // Strip ephemeral one-shot signals that must not survive app restarts.
         // pendingTerminalCommand is a transient signal consumed by TerminalPanel;
         // if persisted and the app crashes before the effect clears it, the command
@@ -382,6 +404,11 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
                 nextLayout.rightPanelCollapsed = false;
               }
 
+              // v8: Add simulator UDID persistence
+              if (version < 8) {
+                (nextLayout as Record<string, unknown>).simulatorUdid = null;
+              }
+
               nextLayouts[key] = nextLayout;
             }
             return { ...state, layouts: nextLayouts } as WorkspaceLayoutStore;
@@ -421,6 +448,8 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
   setPendingTerminalCommand: (workspaceId: string, command: string | null) =>
     useWorkspaceLayoutStore.getState().setPendingTerminalCommand(workspaceId, command),
+  setSimulatorUdid: (workspaceId: string, udid: string | null) =>
+    useWorkspaceLayoutStore.getState().setSimulatorUdid(workspaceId, udid),
   clearWorkspaceLayout: (workspaceId: string) =>
     useWorkspaceLayoutStore.getState().clearWorkspaceLayout(workspaceId),
   resetAll: () => useWorkspaceLayoutStore.getState().resetAll(),

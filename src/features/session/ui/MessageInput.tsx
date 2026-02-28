@@ -575,7 +575,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                               ) : isLockedGroup ? (
                                 <ArrowUpRight
                                   className="text-text-muted/60 h-3 w-3"
-                                  title="Opens in new tab"
                                 />
                               ) : null}
                             </span>
@@ -711,12 +710,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
             {sessionStatus === "working" && (
               <InputGroupButton
                 onClick={onStop}
-                variant="destructive"
+                variant="default"
                 size="icon-sm"
                 title="Stop execution"
-                className="rounded-full"
+                className="rounded-full bg-foreground text-background hover:bg-foreground/90"
               >
-                <Square className="h-4 w-4" />
+                <Square className="h-3.5 w-3.5 fill-current" />
               </InputGroupButton>
             )}
 

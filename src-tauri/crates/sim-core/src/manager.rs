@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::process::Command;
 
 use crate::error::SimulatorError;
@@ -5,12 +6,19 @@ use crate::mjpeg_server::MjpegServer;
 use crate::screen_capture::ScreenCapture;
 use crate::types::{InstalledApp, SimulatorInfo};
 
-/// Managed state holding the active simulator session.
-pub struct SimulatorState {
+/// Per-workspace simulator session.
+/// Each workspace can independently stream from its own simulator device.
+pub struct SimSession {
+    pub udid: String,
     pub capture: Option<ScreenCapture>,
     pub server: Option<MjpegServer>,
-    pub booted_udid: Option<String>,
     pub installed_app: Option<InstalledApp>,
+}
+
+/// Managed state holding all active simulator sessions, keyed by workspace_id.
+/// Multiple workspaces can each have their own independent simulator stream.
+pub struct SimulatorSessions {
+    pub sessions: HashMap<String, SimSession>,
 }
 
 /// Boot a simulator if it's not already booted.
