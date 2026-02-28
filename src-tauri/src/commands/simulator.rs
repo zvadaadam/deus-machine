@@ -498,10 +498,16 @@ pub async fn sim_build_and_run(
 
     println!("[TAURI] Building & running from: {}", workspace_path);
 
-    // Stream build log lines to the frontend via Tauri events
+    // Stream build log lines to the frontend via Tauri events.
+    // Payload includes workspace_id so the frontend can filter per-workspace
+    // when multiple workspaces are building concurrently.
+    let ws_id = workspace_id.clone();
     let on_log: Option<opendevs_sim_core::app_manager::BuildLogCallback> = Some(
         std::sync::Arc::new(move |line: &str| {
-            let _ = app_handle.emit("sim:build-log", line.to_string());
+            let _ = app_handle.emit(
+                "sim:build-log",
+                serde_json::json!({ "workspaceId": ws_id, "line": line }),
+            );
         }),
     );
 
