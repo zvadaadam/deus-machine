@@ -247,3 +247,16 @@
 - Old `calc(var(--radius) ± Npx)` expressions fully removed from @theme — no orphans remain.
 - `border-radius 280ms` transition on `.tauri [data-slot="main-content"]` is a pre-existing violation
   of the "animate only transform/opacity" rule. Not introduced by the radius system changes.
+
+## Sidecar Resume / AgentSessionId Patterns (New)
+
+- `agent_session_id` column lives in `sessions` table (shared schema). Represents the Claude SDK's
+  internal conversation ID — not the app's own `sessions.id`. Required for `resume:` in SDK options.
+- `agentSessionIdCaptured` flag on `SessionState` is a one-shot per generator lifecycle — resets
+  automatically because a fresh `newSession` object never sets it (undefined = falsy).
+- `lookupAgentSessionId` returns null on DB error (graceful fallback to fresh session).
+- `reconcileStuckSessions` must be called AFTER DB init but BEFORE socket starts accepting connections.
+- `saveAgentSessionId` correctly does NOT call `notifyBackend` — internal bookkeeping only.
+- `options = { ...options, resume: ... }` spread in processWithGenerator creates a new object, safe.
+- Double `updated_at` write in `saveAgentSessionId`: explicit write is redundant because the
+  `update_sessions_updated_at` AFTER UPDATE trigger overwrites it anyway. Harmless.

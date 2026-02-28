@@ -183,3 +183,98 @@ export function sessionExists(sessionId: string): boolean {
   const result = db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
   return !!result;
 }
+
+// ── Agent Session ID (Resume Support) ────────────────────────────────
+
+/**
+ * Persist the Claude Agent SDK session ID so the sidecar can resume
+ * this conversation after a restart (sidecar crash, app relaunch).
+ *
+ * Called once per generator lifecycle — the first SDK message in the
+ * for-await loop carries session_id, which is captured via a one-shot
+ * boolean flag on SessionState.
+ */
+export function saveAgentSessionId(
+  sessionId: string,
+  agentSessionId: string | null
+): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `
+      UPDATE sessions SET agent_session_id = ?, updated_at = datetime('now') WHERE id = ?
+    `
+    ).run(agentSessionId, sessionId);
+
+    console.log(
+      `[SESSION-WRITER] Saved agent_session_id ${agentSessionId} for session ${sessionId}`
+    );
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to save agent_session_id:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Look up the Claude Agent SDK session ID for a given app session.
+ * Returns null if no agent_session_id has been captured yet (fresh session).
+ *
+ * Called by processWithGenerator before building SDK options to decide
+ * whether to pass `resume: agentSessionId` to the SDK.
+ */
+export function lookupAgentSessionId(sessionId: string): string | null {
+  const db = getDatabase();
+
+  try {
+    const row = db
+      .prepare("SELECT agent_session_id FROM sessions WHERE id = ?")
+      .get(sessionId) as { agent_session_id: string | null } | undefined;
+
+    return row?.agent_session_id ?? null;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to lookup agent_session_id:`, msg);
+    return null;
+  }
+}
+
+// ── Startup Reconciliation ───────────────────────────────────────────
+
+/**
+ * Reset sessions stuck in "working" status after a sidecar restart.
+ *
+ * When the sidecar dies (crash, app close), sessions remain in "working"
+ * status in the DB because the finally block in processWithGenerator never
+ * ran. This leaves them permanently stuck — the UI shows a spinner forever.
+ *
+ * Called once during sidecar startup, before accepting any connections.
+ */
+export function reconcileStuckSessions(): WriteResult<number> {
+  const db = getDatabase();
+
+  try {
+    const result = db
+      .prepare(
+        `
+        UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+        WHERE status = 'working'
+      `
+      )
+      .run();
+
+    const count = result.changes;
+    if (count > 0) {
+      console.log(
+        `[SESSION-WRITER] Reconciled ${count} stuck session(s) from 'working' to 'idle'`
+      );
+    }
+    return { ok: true, value: count };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to reconcile stuck sessions:`, msg);
+    return { ok: false, error: msg };
+  }
+}

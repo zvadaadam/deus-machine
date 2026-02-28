@@ -390,6 +390,59 @@ describe("claude-handler", () => {
       );
     });
 
+    it("does not send error when process exits after successful query (result/success received)", async () => {
+      let callCount = 0;
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            if (callCount === 0) {
+              callCount++;
+              return { value: { type: "result", subtype: "success" }, done: false };
+            }
+            throw new Error("Claude Code process terminated by signal SIGINT");
+          },
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.handleQuery("sess-sigint", "hello", { cwd: "/test", turnId: "turn-1" });
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
+    });
+
+    it("sends error when process exits before query succeeds (no result/success received)", async () => {
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            throw new Error("Claude Code process terminated by signal SIGINT");
+          },
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.handleQuery("sess-sigint-err", "hello", { cwd: "/test", turnId: "turn-1" });
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "sess-sigint-err",
+          type: "error",
+          error: "Claude Code process terminated by signal SIGINT",
+        })
+      );
+    });
+
     it("applies claudeEnvVars to SDK environment", async () => {
       const mockQuery = {
         [Symbol.asyncIterator]: () => ({
