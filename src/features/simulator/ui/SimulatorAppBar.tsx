@@ -37,7 +37,7 @@ export function SimulatorAppBar({ app, onRelaunch, onTerminate, onUninstall }: S
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" onClick={onRelaunch} className="h-6 w-6 p-0">
+            <Button variant="ghost" size="sm" onClick={onRelaunch} aria-label="Relaunch" className="h-6 w-6 p-0">
               <Rocket className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
@@ -46,7 +46,7 @@ export function SimulatorAppBar({ app, onRelaunch, onTerminate, onUninstall }: S
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+            <Button variant="ghost" size="sm" aria-label="More actions" className="h-6 w-6 p-0">
               <MoreHorizontal className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>

@@ -44,11 +44,17 @@ pub async fn start_streaming(
         sessions.sessions.remove(&workspace_id)
     };
     if let Some(mut session) = prev {
-        if let Some(mut server) = session.server.take() {
-            server.stop();
-        }
-        drop(session.capture);
-        // Don't shut down the simulator process — it may be used by another workspace
+        // Heavy cleanup on blocking thread pool — ObjC sim_bridge_destroy in
+        // ScreenCapture's Drop drains dispatch queues and must not run inline
+        // on the async command path. Consistent with stop_streaming's pattern.
+        tokio::task::spawn_blocking(move || {
+            if let Some(mut server) = session.server.take() {
+                server.stop();
+            }
+            drop(session.capture.take());
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
     }
 
     // Boot the simulator headlessly if not already running
@@ -79,17 +85,31 @@ pub async fn start_streaming(
         workspace_id, info.url, info.port, hid_available
     );
 
-    // Store in per-workspace session
-    let mut sessions = state.lock();
-    sessions.sessions.insert(
-        workspace_id,
-        SimSession {
-            udid,
-            capture: Some(capture),
-            server: Some(server),
-            installed_app: None,
-        },
-    );
+    // Store in per-workspace session. Check if a racing concurrent start_streaming
+    // call inserted a session between our two lock acquisitions — if so, clean it up
+    // to avoid leaking ObjC resources.
+    let evicted = {
+        let mut sessions = state.lock();
+        sessions.sessions.insert(
+            workspace_id,
+            SimSession {
+                udid,
+                capture: Some(capture),
+                server: Some(server),
+                installed_app: None,
+            },
+        )
+    };
+    if let Some(mut evicted_session) = evicted {
+        tokio::task::spawn_blocking(move || {
+            if let Some(mut server) = evicted_session.server.take() {
+                server.stop();
+            }
+            drop(evicted_session.capture.take());
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
+    }
 
     Ok(info)
 }

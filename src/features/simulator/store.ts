@@ -114,11 +114,22 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
     return true;
   },
 
-  setSession: (workspaceId, phase) =>
-    set((s) => ({
-      sessions: { ...s.sessions, [workspaceId]: phase },
-      phases: { ...s.phases, [workspaceId]: phase.phase },
-    })),
+  setSession: (workspaceId, phase) => {
+    // Respect the "idle keys are absent" invariant: when phase is idle,
+    // delete the key from both maps instead of writing it.
+    if (phase.phase === "idle") {
+      set((s) => {
+        const { [workspaceId]: _s, ...restSessions } = s.sessions;
+        const { [workspaceId]: _p, ...restPhases } = s.phases;
+        return { sessions: restSessions, phases: restPhases };
+      });
+    } else {
+      set((s) => ({
+        sessions: { ...s.sessions, [workspaceId]: phase },
+        phases: { ...s.phases, [workspaceId]: phase.phase },
+      }));
+    }
+  },
 
   clearWorkspaceSession: (workspaceId) =>
     set((s) => {

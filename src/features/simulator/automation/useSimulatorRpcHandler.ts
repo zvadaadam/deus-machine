@@ -85,9 +85,12 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimScreenshot = useCallback(
     async (id: unknown, _params: Record<string, unknown>) => {
+      // Pin workspaceId at handler entry to prevent cross-workspace leakage
+      // if the ref changes between awaits.
+      const workspaceId = workspaceIdRef.current;
       try {
         // sim_take_screenshot returns Vec<u8> (JPEG bytes as number[])
-        const bytes = await simulatorService.takeScreenshot(workspaceIdRef.current);
+        const bytes = await simulatorService.takeScreenshot(workspaceId);
         const uint8 = new Uint8Array(bytes);
 
         // Convert to base64 — chunk to avoid stack overflow on large arrays
@@ -113,13 +116,14 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimTap = useCallback(
     async (id: unknown, params: Record<string, unknown>) => {
+      const workspaceId = workspaceIdRef.current;
       try {
         const x = params.x as number;
         const y = params.y as number;
 
         // Simulate a full tap: began → ended
-        await simulatorService.sendTouch(workspaceIdRef.current, x, y, "began");
-        await simulatorService.sendTouch(workspaceIdRef.current, x, y, "ended");
+        await simulatorService.sendTouch(workspaceId, x, y, "began");
+        await simulatorService.sendTouch(workspaceId, x, y, "ended");
 
         await sendResponse(id, { success: true });
       } catch (err: any) {
@@ -133,6 +137,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimSwipe = useCallback(
     async (id: unknown, params: Record<string, unknown>) => {
+      const workspaceId = workspaceIdRef.current;
       try {
         const startX = params.startX as number;
         const startY = params.startY as number;
@@ -144,17 +149,17 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         const steps = Math.max(10, Math.floor(durationMs / 16)); // ~60fps
         const stepDelay = durationMs / steps;
 
-        await simulatorService.sendTouch(workspaceIdRef.current, startX, startY, "began");
+        await simulatorService.sendTouch(workspaceId, startX, startY, "began");
 
         for (let i = 1; i < steps; i++) {
           const t = i / steps;
           const x = startX + (endX - startX) * t;
           const y = startY + (endY - startY) * t;
-          await simulatorService.sendTouch(workspaceIdRef.current, x, y, "moved");
+          await simulatorService.sendTouch(workspaceId, x, y, "moved");
           await new Promise((r) => setTimeout(r, stepDelay));
         }
 
-        await simulatorService.sendTouch(workspaceIdRef.current, endX, endY, "ended");
+        await simulatorService.sendTouch(workspaceId, endX, endY, "ended");
 
         await sendResponse(id, { success: true });
       } catch (err: any) {
@@ -168,6 +173,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimTypeText = useCallback(
     async (id: unknown, params: Record<string, unknown>) => {
+      const workspaceId = workspaceIdRef.current;
       try {
         const text = params.text as string;
 
@@ -180,14 +186,14 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             const { code, shift } = keycode;
             // If shift is needed, press shift down first
             if (shift) {
-              await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "down");
+              await simulatorService.sendKey(workspaceId, HID_LEFT_SHIFT, "down");
             }
             try {
-              await simulatorService.sendKey(workspaceIdRef.current, code, "down");
-              await simulatorService.sendKey(workspaceIdRef.current, code, "up");
+              await simulatorService.sendKey(workspaceId, code, "down");
+              await simulatorService.sendKey(workspaceId, code, "up");
             } finally {
               if (shift) {
-                await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "up").catch(() => {});
+                await simulatorService.sendKey(workspaceId, HID_LEFT_SHIFT, "up").catch(() => {});
               }
             }
             // Small delay between characters for reliability
@@ -216,17 +222,18 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimPressKey = useCallback(
     async (id: unknown, params: Record<string, unknown>) => {
+      const workspaceId = workspaceIdRef.current;
       try {
         const keycode = params.keycode as number;
         const direction = params.direction as string | undefined;
 
         if (direction) {
           // Send only the specified direction
-          await simulatorService.sendKey(workspaceIdRef.current, keycode, direction);
+          await simulatorService.sendKey(workspaceId, keycode, direction);
         } else {
           // Full key press: down + up
-          await simulatorService.sendKey(workspaceIdRef.current, keycode, "down");
-          await simulatorService.sendKey(workspaceIdRef.current, keycode, "up");
+          await simulatorService.sendKey(workspaceId, keycode, "down");
+          await simulatorService.sendKey(workspaceId, keycode, "up");
         }
 
         await sendResponse(id, { success: true });
@@ -244,9 +251,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const handleSimBuildAndRun = useCallback(
     async (id: unknown, params: Record<string, unknown>) => {
+      const workspaceId = workspaceIdRef.current;
       try {
         const workspacePath = params.workspacePath as string;
-        const app = await simulatorService.buildAndRun(workspaceIdRef.current, workspacePath);
+        const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
 
         await sendResponse(id, {
           success: true,
@@ -363,7 +371,11 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         .with("simPressKey", () => handleSimPressKey(id, params))
         .with("simBuildAndRun", () => handleSimBuildAndRun(id, params))
         .otherwise(() => {
-          // Not a simulator method — ignore (other handlers may pick it up)
+          // Unknown "sim*" method → tell the sidecar it doesn't exist.
+          // Non-sim methods are silently ignored (other handlers pick them up).
+          if (method.startsWith("sim")) {
+            sendError(id, `Unknown simulator method: ${method}`);
+          }
         });
     });
 
@@ -379,6 +391,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
     handleSimTypeText,
     handleSimPressKey,
     handleSimBuildAndRun,
+    sendError,
   ]);
 }
 
