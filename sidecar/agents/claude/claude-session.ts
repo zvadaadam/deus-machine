@@ -44,6 +44,8 @@ export interface SessionState {
   currentMaxThinkingTokens?: number;
   turnId?: string;
   cwd?: string;
+  /** One-shot flag: true after the first SDK message's session_id has been persisted to DB */
+  agentSessionIdCaptured?: boolean;
 }
 
 // ============================================================================
