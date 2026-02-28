@@ -26,7 +26,7 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
         >
           {mcpServers.map((server) => (
             <ConfigItem key={server.name} title={server.name}>
-              <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded px-2 py-1 text-xs">
+              <code className="bg-muted/50 text-muted-foreground mt-1.5 block overflow-x-auto rounded-md px-2 py-1 text-xs">
                 {server.command}
               </code>
             </ConfigItem>

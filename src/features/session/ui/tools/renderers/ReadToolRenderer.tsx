@@ -53,7 +53,7 @@ export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
           <span
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.emphasis,
-              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+              "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {fileName}

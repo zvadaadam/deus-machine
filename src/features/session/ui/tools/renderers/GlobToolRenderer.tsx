@@ -54,7 +54,7 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
           <span
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.emphasis,
-              "bg-info/15 text-info rounded px-1.5 py-0.5 font-mono"
+              "bg-info/15 text-info rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {pattern}
@@ -81,7 +81,7 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
             {files.map((file, index) => (
               <div
                 key={index}
-                className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
+                className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors"
               >
                 <span className="text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100">
                   {index + 1}.

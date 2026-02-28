@@ -71,7 +71,7 @@ export function SystemPromptModal({
 
           <p className="text-muted-foreground text-sm">
             💡 Tip: Use Markdown formatting. Changes are saved to{" "}
-            <code className="bg-muted rounded px-1 py-0.5 text-xs">CLAUDE.md</code> in the workspace
+            <code className="bg-muted rounded-md px-1 py-0.5 text-xs">CLAUDE.md</code> in the workspace
             directory.
           </p>
         </div>
