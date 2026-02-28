@@ -373,8 +373,8 @@ export function DiffViewer({
               <div className="bg-muted/40 h-4 w-32 rounded-full" />
               {["w-4/5", "w-3/4", "w-5/6", "w-2/3", "w-4/6", "w-3/5"].map((width, index) => (
                 <div key={index} className="flex items-center gap-3">
-                  <div className="bg-muted/30 h-3 w-10 rounded" />
-                  <div className={`h-3 ${width} bg-muted/30 rounded`} />
+                  <div className="bg-muted/30 h-3 w-10 rounded-md" />
+                  <div className={`h-3 ${width} bg-muted/30 rounded-md`} />
                 </div>
               ))}
             </div>

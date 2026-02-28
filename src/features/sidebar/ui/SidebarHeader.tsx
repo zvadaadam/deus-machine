@@ -28,7 +28,7 @@ export function SidebarHeader({
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="hover:bg-bg-elevated -ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors duration-200"
+        className="hover:bg-bg-elevated -ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-0.5 transition-colors duration-200"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
           <AvatarFallback shape="square" className="rounded-md text-2xs font-semibold">

@@ -53,7 +53,7 @@ const DIFF_UNSAFE_CSS = `
     cursor: pointer;
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
   [data-line],
   [data-column-number],

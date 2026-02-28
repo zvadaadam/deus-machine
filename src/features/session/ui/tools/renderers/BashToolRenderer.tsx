@@ -51,7 +51,7 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
             <span
               className={cn(
                 chatTheme.blocks.tool.contentHierarchy.emphasis,
-                "bg-primary/15 text-primary rounded px-2 py-0.5 font-mono"
+                "bg-primary/15 text-primary rounded-md px-2 py-0.5 font-mono"
               )}
             >
               {commandPreview}

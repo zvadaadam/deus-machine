@@ -8,7 +8,7 @@ const avatarVariants = cva("relative flex size-8 shrink-0 overflow-hidden", {
   variants: {
     shape: {
       circle: "rounded-full",
-      square: "rounded-lg",
+      square: "rounded-xl",
     },
   },
   defaultVariants: {
@@ -44,7 +44,7 @@ const avatarFallbackVariants = cva("bg-muted flex size-full items-center justify
   variants: {
     shape: {
       circle: "rounded-full",
-      square: "rounded-lg",
+      square: "rounded-xl",
     },
   },
   defaultVariants: {

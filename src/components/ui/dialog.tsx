@@ -52,7 +52,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg will-change-[transform,opacity] sm:max-w-lg",
+          "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border p-6 shadow-lg will-change-[transform,opacity] sm:max-w-lg",
           "data-[state=open]:animate-[dialog-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
           "data-[state=closed]:animate-[dialog-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
           className

@@ -32,7 +32,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
   const IconComponent = TASK_ICON_MAP[task.icon];
 
   return (
-    <div className="border-border-subtle rounded-md border p-3">
+    <div className="border-border-subtle rounded-lg border p-3">
       {/* Summary row */}
       <div className="flex items-center gap-2">
         <button
@@ -157,7 +157,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 {task.depends.map((dep) => (
                   <span
                     key={dep}
-                    className="bg-bg-muted text-text-secondary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
+                    className="bg-bg-muted text-text-secondary inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs"
                   >
                     {dep}
                     <button

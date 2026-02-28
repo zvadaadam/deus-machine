@@ -36,7 +36,7 @@ export function SidebarRow({
   return (
     <Comp
       className={cn(
-        "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-md",
+        "group/sidebar-row relative flex w-full items-center justify-between gap-3 rounded-lg",
         "transition-colors duration-100 ease-out",
         rowVariants[variant],
         isActive ? "bg-bg-selection" : "hover:bg-foreground/[0.04]",

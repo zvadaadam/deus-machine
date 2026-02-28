@@ -94,7 +94,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
             <div
               key={index}
               className={cn(
-                "flex items-start gap-2 rounded p-2 transition-colors",
+                "flex items-start gap-2 rounded-md p-2 transition-colors",
                 todo.status === "in_progress" && "bg-info/5 border-info/20 border",
                 todo.status === "completed" && "opacity-60"
               )}

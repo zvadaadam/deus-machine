@@ -55,7 +55,7 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
           <span
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.emphasis,
-              "bg-info/15 text-info rounded px-2 py-0.5 font-mono"
+              "bg-info/15 text-info rounded-md px-2 py-0.5 font-mono"
             )}
           >
             {pattern}

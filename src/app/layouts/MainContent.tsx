@@ -223,7 +223,7 @@ export function MainContent({
             data-slot="welcome-sidebar-toggle"
             aria-label="Expand sidebar"
             onClick={toggleSidebar}
-            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-md transition-[transform,color,background-color] duration-200 ease-out"
+            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-lg transition-[transform,color,background-color] duration-200 ease-out"
           >
             <PanelLeft className="h-4 w-4" />
           </button>
@@ -327,7 +327,7 @@ export function MainContent({
                     </div>
 
                     {/* Content area — rounded corners, subtle border */}
-                    <div className="border-border-subtle bg-bg-raised flex min-h-0 flex-1 overflow-hidden rounded-[10px] border">
+                    <div className="border-border-subtle bg-bg-raised flex min-h-0 flex-1 overflow-hidden rounded-lg border">
                       <RightSidePanel
                         workspace={selectedWorkspace}
                         activeTab={effectiveRightSideTab}
