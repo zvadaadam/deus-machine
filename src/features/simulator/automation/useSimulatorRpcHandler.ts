@@ -182,10 +182,13 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             if (shift) {
               await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "down");
             }
-            await simulatorService.sendKey(workspaceIdRef.current, code, "down");
-            await simulatorService.sendKey(workspaceIdRef.current, code, "up");
-            if (shift) {
-              await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "up");
+            try {
+              await simulatorService.sendKey(workspaceIdRef.current, code, "down");
+              await simulatorService.sendKey(workspaceIdRef.current, code, "up");
+            } finally {
+              if (shift) {
+                await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "up").catch(() => {});
+              }
             }
             // Small delay between characters for reliability
             await new Promise((r) => setTimeout(r, 30));

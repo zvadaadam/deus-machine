@@ -99,9 +99,15 @@ pub async fn stop_streaming(
     workspace_id: String,
     state: State<'_, Mutex<SimulatorSessions>>,
 ) -> Result<(), String> {
-    let session = {
+    let (session, udid_still_in_use) = {
         let mut sessions = state.lock();
-        sessions.sessions.remove(&workspace_id)
+        let removed = sessions.sessions.remove(&workspace_id);
+        let still_in_use = if let Some(ref s) = removed {
+            sessions.sessions.values().any(|other| other.udid == s.udid)
+        } else {
+            false
+        };
+        (removed, still_in_use)
     };
 
     let Some(mut session) = session else {
@@ -122,11 +128,18 @@ pub async fn stop_streaming(
         // Drop ScreenCapture — triggers sim_bridge_destroy which drains dispatch queues.
         drop(session.capture.take());
 
-        // Shut down the simulator
-        println!("[TAURI] Shutting down simulator {}", udid);
-        let _ = Command::new("xcrun")
-            .args(["simctl", "shutdown", &udid])
-            .output();
+        // Only shut down the simulator if no other workspace is still using this UDID
+        if !udid_still_in_use {
+            println!("[TAURI] Shutting down simulator {}", udid);
+            let _ = Command::new("xcrun")
+                .args(["simctl", "shutdown", &udid])
+                .output();
+        } else {
+            println!(
+                "[TAURI] Skipping simulator shutdown — UDID {} still in use by another workspace",
+                udid
+            );
+        }
 
         println!(
             "[TAURI] Simulator streaming stopped for workspace {}",

@@ -15,6 +15,24 @@
  * WebKit's persistent loading indicator for never-completing HTTP connections.
  * The <canvas> uses max-h-full/max-w-full so getBoundingClientRect() returns
  * the rendered rect for correct touch coordinate normalization.
+ *
+ * SESSION LIFECYCLE:
+ * This component is always-mounted for the app's lifetime (CSS hide/show,
+ * same pattern as BrowserPanel). Workspace switches change `workspaceId` prop
+ * but do NOT unmount the component.
+ *
+ * The `state` (SimPhase) lives in the global Zustand store, keyed by
+ * workspaceId. This means:
+ * - Workspace A streams → switch to B → A's streaming state persists in store
+ * - Switch back to A → component reads store, sees "streaming" immediately
+ * - No Rust round-trip, no async probe, no idle flash on switch-back
+ *
+ * The Rust session (ScreenCapture + MjpegServer) is managed independently in
+ * SimulatorSessions (HashMap<workspace_id, SimSession>). Its lifetime is:
+ *   Created: user clicks Start (or agent calls SimulatorStart)
+ *   Destroyed: user clicks Stop (or app closes — handled in main.rs)
+ * It is NEVER destroyed on workspace switch. The component does not own
+ * the Rust session — it is a view onto it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,8 +45,6 @@ import {
   RotateCcw,
   Loader2,
   Rocket,
-  Trash2,
-  MoreHorizontal,
   AlertCircle,
   Camera,
   Check,
@@ -46,21 +62,13 @@ import { cn } from "@/shared/lib/utils";
 import { listen } from "@/platform/tauri";
 import { simulatorService } from "../api/simulator.service";
 import { useSimulatorRpcHandler } from "../automation/useSimulatorRpcHandler";
-import { useSimulatorStatusStore } from "../store";
+import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
+import { hasStream } from "../machine";
+import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
-
-// ---------------------------------------------------------------------------
-// State machine
-// ---------------------------------------------------------------------------
-
-type SimPhase =
-  | { phase: "idle" }
-  | { phase: "booting"; udid: string }
-  | { phase: "streaming"; udid: string; stream: StreamInfo }
-  | { phase: "building"; udid: string; stream: StreamInfo; startedAt: number }
-  | { phase: "running"; udid: string; stream: StreamInfo; app: InstalledApp }
-  | { phase: "error"; message: string; canRetry: boolean };
+import type { SimulatorInfo } from "../types";
+import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
+import { SimulatorAppBar } from "./SimulatorAppBar";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -71,38 +79,6 @@ interface SimulatorPanelProps {
   workspacePath: string;
 }
 
-// ---------------------------------------------------------------------------
-// USB HID usage codes — KeyboardEvent.code → HID keycode (u16)
-// IndigoHIDMessageForKeyboardArbitrary expects USB HID keycodes (Usage Page
-// 0x07), NOT macOS virtual keycodes. Full ANSI layout: letters, digits,
-// punctuation, modifiers, arrows.
-// Cmd/Ctrl combos are filtered out before lookup (stay with IDE).
-// ---------------------------------------------------------------------------
-
-const HID_KEYCODES: Record<string, number> = {
-  // Letters (0x04–0x1D)
-  KeyA: 0x04, KeyB: 0x05, KeyC: 0x06, KeyD: 0x07, KeyE: 0x08, KeyF: 0x09,
-  KeyG: 0x0a, KeyH: 0x0b, KeyI: 0x0c, KeyJ: 0x0d, KeyK: 0x0e, KeyL: 0x0f,
-  KeyM: 0x10, KeyN: 0x11, KeyO: 0x12, KeyP: 0x13, KeyQ: 0x14, KeyR: 0x15,
-  KeyS: 0x16, KeyT: 0x17, KeyU: 0x18, KeyV: 0x19, KeyW: 0x1a, KeyX: 0x1b,
-  KeyY: 0x1c, KeyZ: 0x1d,
-  // Digits (0x1E–0x27)
-  Digit1: 0x1e, Digit2: 0x1f, Digit3: 0x20, Digit4: 0x21, Digit5: 0x22,
-  Digit6: 0x23, Digit7: 0x24, Digit8: 0x25, Digit9: 0x26, Digit0: 0x27,
-  // Control keys
-  Enter: 0x28, Backspace: 0x2a, Tab: 0x2b, Space: 0x2c,
-  // Punctuation
-  Minus: 0x2d, Equal: 0x2e, BracketLeft: 0x2f, BracketRight: 0x30,
-  Backslash: 0x31, Semicolon: 0x33, Quote: 0x34, Backquote: 0x35,
-  Comma: 0x36, Period: 0x37, Slash: 0x38,
-  // Modifiers
-  CapsLock: 0x39,
-  ShiftLeft: 0xe1, ShiftRight: 0xe5,
-  ControlLeft: 0xe0, ControlRight: 0xe4,
-  AltLeft: 0xe2, AltRight: 0xe6,
-  // Arrow keys
-  ArrowRight: 0x4f, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
-};
 
 // ---------------------------------------------------------------------------
 // Build log ring buffer size — keeps memory bounded during long builds
@@ -124,6 +100,25 @@ function scoreSimulator(sim: SimulatorInfo): number {
   return score;
 }
 
+// Score by device type only — excludes Booted bonus. Used when a workspace has
+// no persisted UDID so we don't auto-select a sim booted by another workspace.
+function scoreSimulatorByType(sim: SimulatorInfo): number {
+  let score = 0;
+  if (sim.device_type.includes("iPhone")) score += 1000;
+  else if (sim.device_type.includes("iPad")) score += 100;
+  if (sim.name.toLowerCase().includes("pool") || sim.name.toLowerCase().includes("test"))
+    score -= 5000;
+  return score;
+}
+
+// Referentially stable idle sentinel — prevents spurious re-renders.
+// Zustand's selector compares previous and next values with Object.is().
+// `sessions[id] ?? { phase: "idle" }` creates a new object reference every
+// render when the workspace has no session entry, causing the selector to
+// always return "changed" and triggering unnecessary re-renders. By using a
+// module-level constant, absent entries always return the same reference.
+const IDLE_PHASE: SimPhase = { phase: "idle" };
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -131,57 +126,89 @@ function scoreSimulator(sim: SimulatorInfo): number {
 export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelProps) {
   const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
-  const [state, setState] = useState<SimPhase>({ phase: "idle" });
+
+  // ---------------------------------------------------------------------------
+  // DISPLAY PLANE — session phase from the global store, not local useState.
+  //
+  // SimulatorPanel is always-mounted (no `key` on the parent ResizablePanelGroup).
+  // On workspace switch, only the `workspaceId` prop changes — the component
+  // instance stays alive. The store is keyed by workspaceId and lives
+  // independently of React's prop changes.
+  //
+  // On workspace switch (prop change):
+  //   • Store has a live phase for new workspace → streamUrl is non-null →
+  //     MJPEG effect reconnects immediately with zero Rust IPC calls.
+  //   • Store has idle + Rust has a session → mount effect probes and upgrades.
+  //   • Store has idle + Rust has no session → user sees idle, clicks Start.
+  //
+  // The three planes are fully disentangled:
+  //   Component plane  — always-mounted, workspaceId prop changes on switch
+  //   Display plane    — this store, keyed by workspaceId, persists across switches
+  //   Session plane    — Rust HashMap, created by Start, destroyed by Stop only
+  // ---------------------------------------------------------------------------
+  const state: SimPhase = useSimulatorStatusStore(
+    (s) => s.sessions[workspaceId] ?? IDLE_PHASE
+  );
+
+  // Two write paths — dispatch() validates transitions via the state machine;
+  // setSession() bypasses validation for recovery paths (mount probes, agent-driven).
+  // User-driven actions always go through dispatch() to catch illegal transitions.
 
   // Whether this workspace has a buildable Xcode project (null = still checking).
   // Gates the "Build & Run" button — simulator streaming works regardless.
   const [hasProject, setHasProject] = useState<boolean | null>(null);
 
-  // -------------------------------------------------------------------------
-  // Workspace switch — reset local state when the active workspace changes.
-  // The panel is always-mounted (same React instance, props change), so
-  // switching workspaces doesn't unmount/remount. We detect the change
-  // during render (not in useEffect) so state is reset BEFORE the browser
-  // paints — this eliminates the stale "booting" flash from the old workspace.
-  // React re-renders synchronously when setState is called during render.
-  // -------------------------------------------------------------------------
-  const hasAutoReconnectedRef = useRef(false);
-  // Monotonic generation counter — incremented on workspace switch so async
-  // callbacks that outlive a switch can detect staleness and bail out.
+  // Monotonic generation counter — incremented each mount cycle so async
+  // callbacks can detect if this component unmounted before they resolved.
   const workspaceGenerationRef = useRef(0);
-  const [prevWorkspaceId, setPrevWorkspaceId] = useState(workspaceId);
-  if (prevWorkspaceId !== workspaceId) {
-    setPrevWorkspaceId(workspaceId);
+
+  // On mount: restore persisted UDID + probe Rust for app-restart recovery.
+  //
+  // App-restart scenario: Rust process was killed and restarted (no sessions),
+  // but the store still has { phase: "idle" } for this workspace. Meanwhile the
+  // simulator was left booted. We probe get_stream_info once (fast Mutex read,
+  // ~1ms) — if Rust already has a session we reconnect; if not, we stay idle
+  // and the auto-reconnect effect below will re-establish streaming if the
+  // selected sim is still "Booted".
+  //
+  // Normal workspace switch: the store already holds the correct phase from the
+  // previous visit.  The MJPEG effect reacts to the non-null streamUrl from the
+  // store and reconnects immediately.  This mount probe is then a no-op (the
+  // phase is not idle, so the getStreamInfo call is skipped).
+  useEffect(() => {
     workspaceGenerationRef.current += 1;
     const gen = workspaceGenerationRef.current;
-    // Restore persisted simulator UDID for this workspace so
-    // loadSimulators/auto-reconnect target the right device.
+
     const layout = workspaceLayoutActions.getLayout(workspaceId);
-    // Keep `simulators` — the device list is system-wide and doesn't change
-    // per-workspace. Clearing it would force a re-fetch of `xcrun simctl list`
-    // (1-3s) on every switch. The useEffect on loadSimulators still refreshes
-    // the list in the background to pick up state changes (Booted/Shutdown).
-    setSelectedUdid(layout.simulatorUdid);
-    setHasProject(null);
-    hasAutoReconnectedRef.current = false;
+    if (layout.simulatorUdid) {
+      setSelectedUdid(layout.simulatorUdid);
+    }
 
-    // Instant reconnect: check if Rust has an active session for this workspace.
-    // Set idle initially, then upgrade to streaming if session exists.
-    setState({ phase: "idle" });
-    simulatorService.getStreamInfo(workspaceId).then((stream) => {
-      if (workspaceGenerationRef.current !== gen) return; // stale
-      if (stream && layout.simulatorUdid) {
-        setState({ phase: "streaming", udid: layout.simulatorUdid, stream });
-        hasAutoReconnectedRef.current = true;
-      }
-    });
-  }
-
-  // Sync phase to global store so the tab bar can show a status dot
-  const setPhase = useSimulatorStatusStore((s) => s.setPhase);
-  useEffect(() => {
-    setPhase(workspaceId, state.phase);
-  }, [workspaceId, state.phase, setPhase]);
+    // Probe Rust if the display plane shows idle OR stuck at booting.
+    // Idle: normal first-mount or app-restart where Rust may already have a session.
+    // Booting: recovery for rare edge case where the async completion was lost
+    // (e.g. app crashed mid-boot). If Rust has a live stream, upgrade to streaming.
+    // If Rust has nothing, reset to idle so the user can retry.
+    const currentPhase = simulatorStoreActions.getSession(workspaceId).phase;
+    if ((currentPhase === "idle" || currentPhase === "booting") && layout.simulatorUdid) {
+      simulatorService.getStreamInfo(workspaceId).then((stream) => {
+        if (workspaceGenerationRef.current !== gen) return;
+        if (stream) {
+          simulatorStoreActions.setSession(workspaceId, {
+            phase: "streaming",
+            udid: layout.simulatorUdid!,
+            stream,
+          });
+          setSelectedUdid(layout.simulatorUdid!);
+        } else if (currentPhase === "booting") {
+          // Rust has no session but store says booting — stuck state, reset.
+          simulatorStoreActions.clearWorkspaceSession(workspaceId);
+        }
+      });
+    }
+  // Runs on every workspace switch (workspaceId prop changes — always-mounted component).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   // -- Agent-driven boot callback (used by SimulatorStart RPC) --
   // Extracted so the RPC handler can trigger panel state transitions
@@ -191,21 +218,23 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     async (udid: string) => {
       setSelectedUdid(udid);
       workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-      setState({ phase: "booting", udid });
-      useSimulatorStatusStore.getState().setPhase(workspaceId, "booting");
+      // Single write — setSession updates both the full session and the label.
+      simulatorStoreActions.setSession(workspaceId, { phase: "booting", udid });
       // Auto-switch to simulator tab so the user sees the stream
       // (same pattern as BrowserPanel's onAutoCreateTab)
       workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
 
       try {
         const stream = await simulatorService.startStreaming(workspaceId, udid);
-        setState({ phase: "streaming", udid, stream });
-        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
+        simulatorStoreActions.setSession(workspaceId, { phase: "streaming", udid, stream });
         return stream;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        setState({ phase: "error", message: `Failed to start: ${msg}`, canRetry: true });
-        useSimulatorStatusStore.getState().setPhase(workspaceId, "error");
+        simulatorStoreActions.setSession(workspaceId, {
+          phase: "error",
+          message: `Failed to start: ${msg}`,
+          canRetry: true,
+        });
         return null;
       }
     },
@@ -238,39 +267,9 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     };
   }, [workspacePath]);
 
-  // Canvas renders MJPEG frames — the img element is kept offscreen to avoid
-  // WebKit's page-level loading indicator (MJPEG connections never "complete").
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
   // Build log accumulator — stores last N lines for the build drawer
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildLogEndRef = useRef<HTMLDivElement>(null);
-
-  // Viewport focus
-  const viewportRef = useRef<HTMLDivElement>(null);
-
-  // Track whether streaming is active for unmount cleanup.
-  // Ref avoids stale closure — the cleanup effect reads current value on unmount.
-  const isStreamingRef = useRef(false);
-
-  // Keep streaming ref in sync for unmount cleanup
-  useEffect(() => {
-    isStreamingRef.current = state.phase !== "idle" && state.phase !== "error";
-  }, [state.phase]);
-
-  // Cleanup on unmount — stop the streaming pipeline (MJPEG server, ObjC bridge,
-  // dispatch queues, touch server subprocess) when the panel is destroyed.
-  // Without this, resources leak until the window closes.
-  // Captures workspaceId in a ref so the cleanup reads the current value on unmount.
-  const workspaceIdRef = useRef(workspaceId);
-  workspaceIdRef.current = workspaceId;
-  useEffect(() => {
-    return () => {
-      if (isStreamingRef.current) {
-        simulatorService.stopStreaming(workspaceIdRef.current).catch((err) => console.warn("[Simulator] cleanup failed:", err));
-      }
-    };
-  }, []);
 
   // Listen for build log events streamed from Rust during xcodebuild.
   // Accumulates lines into an array instead of replacing a single string.
@@ -321,70 +320,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Whether device select should be disabled (any active state)
   const selectDisabled = state.phase !== "idle";
 
-  // Stream URL from state (available in streaming, building, running)
-  const streamUrl = useMemo(
-    () =>
-      match(state)
-        .with({ phase: "streaming" }, (s) => s.stream.url)
-        .with({ phase: "building" }, (s) => s.stream.url)
-        .with({ phase: "running" }, (s) => s.stream.url)
-        .otherwise(() => null),
-    [state]
-  );
-
-  // Whether HID (touch injection) is available
-  const hidAvailable = match(state)
-    .with({ phase: "streaming" }, (s) => s.stream.hid_available)
-    .with({ phase: "building" }, (s) => s.stream.hid_available)
-    .with({ phase: "running" }, (s) => s.stream.hid_available)
-    .otherwise(() => true);
-
-  // Whether the MJPEG stream is active
+  // Stream URL and HID availability — derived from the state machine guard.
+  const streamUrl = hasStream(state) ? state.stream.url : null;
+  const hidAvailable = hasStream(state) ? state.stream.hid_available : true;
   const isLive = streamUrl !== null;
-
-  // Draw MJPEG frames from an offscreen <img> onto the visible <canvas>.
-  // The img is never added to the DOM, so WebKit won't show its loading
-  // indicator. The canvas paints frames via requestAnimationFrame.
-  useEffect(() => {
-    if (!streamUrl) return;
-
-    const img = new Image();
-    img.src = streamUrl;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animId: number;
-    let prevW = 0;
-    let prevH = 0;
-
-    const draw = () => {
-      const w = img.naturalWidth;
-      const h = img.naturalHeight;
-      if (w > 0 && h > 0) {
-        // Resize canvas buffer when the stream resolution changes
-        if (w !== prevW || h !== prevH) {
-          canvas.width = w;
-          canvas.height = h;
-          prevW = w;
-          prevH = h;
-        }
-        ctx.drawImage(img, 0, 0);
-      }
-      animId = requestAnimationFrame(draw);
-    };
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animId);
-      img.src = ""; // Disconnect the MJPEG stream
-    };
-  }, [streamUrl]);
-
-  // Track whether we've already warned about touch failure (avoid console spam)
-  const touchWarnedRef = useRef(false);
 
   // Ref to read selectedUdid inside loadSimulators without closing over it
   // (avoids recreating the callback — and retriggering the mount effect — on selection change)
@@ -407,7 +346,9 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const needsSelection = !currentUdid || !sims.some((s) => s.udid === currentUdid);
       if (needsSelection && sims.length > 0) {
         // Check persisted UDID first — if it exists in the sim list, use it.
-        // Otherwise fall back to scoring (booted iPhone > shutdown iPhone > booted iPad).
+        // Otherwise fall back to scoring by device type only (NOT boot state).
+        // We exclude the Booted bonus so a sim booted by another workspace
+        // doesn't get auto-selected and then trigger auto-reconnect here.
         const layout = workspaceLayoutActions.getLayout(workspaceId);
         const persisted = layout.simulatorUdid;
         if (persisted && sims.some((s) => s.udid === persisted)) {
@@ -420,13 +361,20 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
                 s.device_type.includes("iPhone") ||
                 s.device_type.includes("iPad")
             )
-            .sort((a, b) => scoreSimulator(b) - scoreSimulator(a));
+            .sort((a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a));
           setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
         }
       }
     } catch (e) {
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
-      setState({ phase: "error", message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`, canRetry: false });
+      // setSession (not dispatch) — the machine rejects ERROR from idle, but
+      // discovery failures can happen during initial load when the phase is idle.
+      // This is orthogonal to the session lifecycle.
+      simulatorStoreActions.setSession(workspaceId, {
+        phase: "error",
+        message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`,
+        canRetry: false,
+      });
     }
   }, [workspaceId]);
 
@@ -436,56 +384,55 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   }, [loadSimulators]);
 
   // -------------------------------------------------------------------------
-  // Auto-reconnect to an already-booted simulator on mount.
+  // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
-  // When the panel mounts (workspace load or app restart), if the best-scored
-  // simulator is already "Booted", skip the idle state and start streaming
-  // immediately. This avoids showing the "Start Simulator" button when the
-  // sim is already running.
+  // The mount effect above handles the fast path: if Rust already has a session
+  // in memory (normal run), it reconnects immediately via getStreamInfo.
   //
-  // Only runs once per workspace — if the user manually stops, we don't
-  // restart. Reset on workspace switch (see prevWorkspaceIdRef effect above).
+  // This effect handles the slower path: Rust was restarted (no sessions in
+  // memory), but simctl still shows the simulator as "Booted". We re-establish
+  // the MJPEG capture by calling startStreaming.
+  //
+  // Fires only when:
+  //   - Phase is idle (mount effect found no Rust session, or user never started)
+  //   - The selected simulator is actually booted
+  //   - This workspace previously claimed this simulator (ownership guard)
+  //
+  // The store-based display plane means this effect fires at most once per mount
+  // cycle: once it transitions to "booting" or "streaming", state.phase is no
+  // longer "idle", so the effect will not re-run.
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (hasAutoReconnectedRef.current) return;
     if (state.phase !== "idle") return;
     if (!selectedSim || selectedSim.state !== "Booted") return;
 
-    hasAutoReconnectedRef.current = true;
+    // OWNERSHIP GUARD: Only auto-reconnect if this workspace previously claimed
+    // this simulator. layout.simulatorUdid is written ONLY by explicit user/agent
+    // start actions. A workspace that never started a sim has no persisted UDID,
+    // so an ambient booted sim from another workspace won't trigger auto-connect.
+    const layout = workspaceLayoutActions.getLayout(workspaceId);
+    if (layout.simulatorUdid !== selectedSim.udid) return;
+
     const gen = workspaceGenerationRef.current;
     const udid = selectedSim.udid;
 
-    // Check if Rust already has an active session for this workspace
-    simulatorService.getStreamInfo(workspaceId).then(async (existingStream) => {
-      if (workspaceGenerationRef.current !== gen) return;
-
-      if (existingStream) {
-        // Session already alive — just reconnect
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect fast path
-        setState({ phase: "streaming", udid, stream: existingStream });
-        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
-        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-        return;
-      }
-
-      // No existing session — start fresh
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect on mount
-      setState({ phase: "booting", udid });
-      useSimulatorStatusStore.getState().setPhase(workspaceId, "booting");
-      try {
-        const stream = await simulatorService.startStreaming(workspaceId, udid);
+    // Re-establish streaming for an orphaned booted simulator (app-restart case).
+    // setSession (not dispatch) — this is a recovery path, not a user action.
+    // Transitions to "booting" immediately so this effect won't fire again.
+    simulatorStoreActions.setSession(workspaceId, { phase: "booting", udid });
+    simulatorService.startStreaming(workspaceId, udid).then(
+      (stream) => {
         if (workspaceGenerationRef.current !== gen) return;
-        setState({ phase: "streaming", udid, stream });
-        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
-        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-      } catch (e) {
+        simulatorStoreActions.setSession(workspaceId, { phase: "streaming", udid, stream });
+      },
+      () => {
         if (workspaceGenerationRef.current !== gen) return;
-        // Silently fall back to idle
-        setState({ phase: "idle" });
-        useSimulatorStatusStore.getState().clearPhase(workspaceId);
+        // Silently fall back to idle — don't surface error for auto-reconnect.
+        // The user can manually start if they want to use the simulator.
+        simulatorStoreActions.clearWorkspaceSession(workspaceId);
       }
-    });
+    );
   }, [selectedSim, workspaceId, state.phase]);
 
   // -------------------------------------------------------------------------
@@ -494,42 +441,51 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleStart = async () => {
     if (!selectedUdid) return;
-    const gen = workspaceGenerationRef.current;
-    touchWarnedRef.current = false; // Reset touch warning for new session
-    setState({ phase: "booting", udid: selectedUdid });
+    // dispatch validates: BOOT is only legal from idle or error (retry).
+    if (!simulatorStoreActions.dispatch(workspaceId, { type: "BOOT", udid: selectedUdid })) return;
     try {
       const stream = await simulatorService.startStreaming(workspaceId, selectedUdid);
-      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       if (!stream.hid_available) {
         console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
       }
-      setState({ phase: "streaming", udid: selectedUdid, stream });
+      // No gen guard: dispatch targets the originating workspace by workspaceId,
+      // so the write is correct even if the user switched away mid-boot.
+      simulatorStoreActions.dispatch(workspaceId, { type: "STREAM_READY", udid: selectedUdid, stream });
       workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
     } catch (e) {
-      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
-      setState({ phase: "error", message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
+      simulatorStoreActions.dispatch(workspaceId, {
+        type: "ERROR",
+        message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`,
+        canRetry: true,
+      });
     }
   };
 
-  // Build & Run — build project and launch on already-streaming simulator
+  // Build & Run — build project and launch on already-streaming simulator.
+  // dispatch validates: BUILD_START is only legal from streaming or running.
   const handleBuildAndRun = async () => {
-    const s = state;
-    if (s.phase !== "streaming" && s.phase !== "running") return;
-    const gen = workspaceGenerationRef.current;
-    setState({ phase: "building", udid: s.udid, stream: s.stream, startedAt: Date.now() });
+    if (!simulatorStoreActions.dispatch(workspaceId, { type: "BUILD_START", startedAt: Date.now() })) return;
     try {
       const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
-      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
-      setState({ phase: "running", udid: s.udid, stream: s.stream, app });
+      // No gen guard: dispatch targets the originating workspace by workspaceId.
+      simulatorStoreActions.dispatch(workspaceId, { type: "BUILD_SUCCESS", app });
     } catch (e) {
-      if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
-      setState({ phase: "error", message: `Build failed: ${e instanceof Error ? e.message : String(e)}`, canRetry: true });
+      simulatorStoreActions.dispatch(workspaceId, {
+        type: "ERROR",
+        message: `Build failed: ${e instanceof Error ? e.message : String(e)}`,
+        canRetry: true,
+      });
     }
   };
 
-  // Stop everything and return to idle
+  // Stop everything — destroys the Rust session and returns display plane to idle.
+  //
+  // This is the ONLY place in the frontend that should destroy a Rust session
+  // (besides app close, handled in main.rs).  Component unmount does NOT call
+  // stopStreaming — that would destroy live sessions on workspace switch.
   const handleStop = async () => {
-    setState({ phase: "idle" });
+    // dispatch STOP transitions any active state → idle (auto-deleted from map).
+    simulatorStoreActions.dispatch(workspaceId, { type: "STOP" });
     try {
       await simulatorService.stopStreaming(workspaceId);
     } catch (e) {
@@ -537,9 +493,9 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     }
   };
 
-  // Retry from error state — restarts the boot flow
+  // Retry from error state — CLEAR force-resets to idle, then starts fresh.
   const handleRetry = () => {
-    setState({ phase: "idle" });
+    simulatorStoreActions.dispatch(workspaceId, { type: "CLEAR" });
     handleStart();
   };
 
@@ -573,107 +529,16 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleUninstall = async () => {
     if (state.phase !== "running") return;
-    const { udid, stream } = state;
     const gen = workspaceGenerationRef.current;
     try {
       await simulatorService.uninstallApp(workspaceId, state.app.bundle_id);
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
-      setState({ phase: "streaming", udid, stream });
+      // dispatch validates: APP_UNINSTALLED is only legal from running → streaming.
+      simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
     } catch (e) {
       console.error("Uninstall failed:", e);
     }
   };
-
-  // -------------------------------------------------------------------------
-  // Touch / scroll input forwarding
-  //
-  // The <canvas> uses max-h-full/max-w-full, so its element shrinks to the
-  // stream's natural aspect ratio. getBoundingClientRect() returns the
-  // actual rendered rect — no letterboxing mismatch.
-  // -------------------------------------------------------------------------
-
-  const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
-
-  const getNormalizedCoords = useCallback(
-    (e: React.MouseEvent | React.WheelEvent | MouseEvent, updateLast = true): { x: number; y: number } | null => {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return null;
-      const coords = {
-        x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
-        y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
-      };
-      if (updateLast) lastCoordsRef.current = coords;
-      return coords;
-    },
-    []
-  );
-
-  // Log touch failure once, then suppress subsequent warnings
-  const warnTouchFailed = useCallback((err: unknown) => {
-    if (!touchWarnedRef.current) {
-      touchWarnedRef.current = true;
-      console.warn("[Simulator] Touch injection failed:", err);
-    }
-  }, []);
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isLive) return;
-      // Focus viewport for keyboard capture on click
-      viewportRef.current?.focus();
-      const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
-    },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isLive || e.buttons !== 1) return;
-      const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
-    },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
-  );
-
-  const handleMouseUp = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isLive) return;
-      const coords = getNormalizedCoords(e);
-      if (coords) {
-        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "ended").catch(warnTouchFailed);
-        lastCoordsRef.current = null; // Prevent window handler from sending duplicate "ended"
-      }
-    },
-    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
-  );
-
-  // Window-level mouseup — catches drag-release outside the image
-  useEffect(() => {
-    const onWindowMouseUp = () => {
-      if (!isLive) return;
-      const coords = lastCoordsRef.current;
-      if (coords) {
-        simulatorService.sendTouch(workspaceIdRef.current, coords.x, coords.y, "ended").catch(warnTouchFailed);
-        lastCoordsRef.current = null;
-      }
-    };
-    window.addEventListener("mouseup", onWindowMouseUp);
-    return () => window.removeEventListener("mouseup", onWindowMouseUp);
-  }, [isLive, warnTouchFailed]);
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (!isLive) return;
-      const coords = getNormalizedCoords(e, false);
-      if (!coords) return;
-      e.preventDefault();
-      simulatorService.sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
-    },
-    [isLive, workspaceId, getNormalizedCoords]
-  );
 
   // -------------------------------------------------------------------------
   // Screenshot — capture PNG, copy to clipboard (download as fallback)
@@ -697,48 +562,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       console.error("Screenshot failed:", e);
     }
   }, [workspaceId]);
-
-  // -------------------------------------------------------------------------
-  // Keyboard input forwarding — maps KeyboardEvent.code to USB HID keycodes.
-  // Cmd/Ctrl combos are NOT forwarded (stay with IDE). Escape blurs viewport.
-  // -------------------------------------------------------------------------
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!isLive || !hidAvailable) return;
-      // Cmd/Ctrl combos stay with the IDE — only intercept Cmd+Shift+S for screenshot
-      if (e.metaKey || e.ctrlKey) {
-        if (e.shiftKey && e.code === "KeyS") {
-          e.preventDefault();
-          handleScreenshot();
-        }
-        return;
-      }
-      // Escape releases keyboard focus back to the IDE
-      if (e.code === "Escape") {
-        (e.target as HTMLElement).blur();
-        return;
-      }
-      const keycode = HID_KEYCODES[e.code];
-      if (keycode !== undefined) {
-        e.preventDefault();
-        simulatorService.sendKey(workspaceId, keycode, "down").catch(() => {});
-      }
-    },
-    [isLive, workspaceId, hidAvailable, handleScreenshot]
-  );
-
-  const handleKeyUp = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!isLive || !hidAvailable) return;
-      const keycode = HID_KEYCODES[e.code];
-      if (keycode !== undefined) {
-        e.preventDefault();
-        simulatorService.sendKey(workspaceId, keycode, "up").catch(() => {});
-      }
-    },
-    [isLive, workspaceId, hidAvailable]
-  );
 
   // -------------------------------------------------------------------------
   // Empty state — no simulators installed
@@ -976,33 +799,14 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         </TooltipProvider>
       </div>
 
-      {/* ── Viewport ────────────────────────────────────────────── */}
-      <div
-        ref={viewportRef}
-        tabIndex={isLive ? 0 : -1}
-        className={cn(
-          "bg-bg-base relative flex flex-1 cursor-default items-center justify-center overflow-hidden outline-none select-none",
-          isLive && "focus-visible:ring-primary/30 focus-visible:ring-1 focus-visible:ring-inset"
-        )}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        onKeyDown={handleKeyDown}
-        onKeyUp={handleKeyUp}
+      {/* ── Viewport — MJPEG stream + overlay states ───────────── */}
+      <SimulatorStreamViewer
+        workspaceId={workspaceId}
+        streamUrl={streamUrl}
+        isLive={isLive}
+        hidAvailable={hidAvailable}
+        onScreenshot={handleScreenshot}
       >
-        {/* Live MJPEG stream rendered on <canvas> — the actual MJPEG <img>
-         * is offscreen (never in the DOM) to avoid WebKit's persistent loading
-         * indicator. Canvas uses max-h/max-w so getBoundingClientRect() returns
-         * the rendered rect for correct touch coordinate normalization. */}
-        {streamUrl && (
-          <canvas
-            ref={canvasRef}
-            className="pointer-events-none max-h-full max-w-full select-none"
-          />
-        )}
-
         {/* Overlay states on top of (or instead of) the stream */}
         {match(state)
           .with({ phase: "idle" }, () => (
@@ -1092,7 +896,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
             </div>
           ))
           .otherwise(() => null)}
-      </div>
+      </SimulatorStreamViewer>
 
       {/* ── Build drawer — collapsible bar below the stream ────────── */}
       {isBuilding && (
@@ -1105,48 +909,12 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
       {/* ── App bar — bottom strip when app is running ──────────── */}
       {state.phase === "running" && (
-        <div className="border-border-subtle flex h-8 shrink-0 items-center gap-2 border-t px-3">
-          <span className="bg-success h-1.5 w-1.5 shrink-0 rounded-full" />
-          <span
-            className="text-text-secondary min-w-0 flex-1 truncate text-xs"
-            title={state.app.bundle_id}
-          >
-            {state.app.name}
-          </span>
-
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={handleRelaunch} className="h-6 w-6 p-0">
-                  <Rocket className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Relaunch</TooltipContent>
-            </Tooltip>
-
-            {/* Overflow menu for destructive actions */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                  <MoreHorizontal className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[140px]">
-                <DropdownMenuItem onClick={handleTerminate}>
-                  <Square className="mr-2 h-3.5 w-3.5" />
-                  Terminate
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleUninstall}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Uninstall
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </TooltipProvider>
-        </div>
+        <SimulatorAppBar
+          app={state.app}
+          onRelaunch={handleRelaunch}
+          onTerminate={handleTerminate}
+          onUninstall={handleUninstall}
+        />
       )}
     </div>
   );
