@@ -129,6 +129,9 @@ export function SimulatorStreamViewer({
     return () => {
       cancelAnimationFrame(animId);
       img.src = ""; // Disconnect the MJPEG stream
+      // Clear canvas so workspace-switch doesn't flash the old stream's last frame
+      const c = canvasRef.current;
+      if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
     };
   }, [streamUrl]);
 

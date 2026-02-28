@@ -156,4 +156,15 @@ export const simulatorStoreActions = {
 
   getSession: (workspaceId: string): SimPhase =>
     useSimulatorStatusStore.getState().sessions[workspaceId] ?? { phase: "idle" },
+
+  /** UDIDs currently claimed by active sessions (excluding a given workspace). */
+  getInUseUdids: (excludeWorkspaceId?: string): Set<string> => {
+    const sessions = useSimulatorStatusStore.getState().sessions;
+    const set = new Set<string>();
+    for (const [wsId, phase] of Object.entries(sessions)) {
+      if (wsId === excludeWorkspaceId) continue;
+      if ("udid" in phase && phase.udid) set.add(phase.udid);
+    }
+    return set;
+  },
 };

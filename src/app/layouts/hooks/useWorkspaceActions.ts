@@ -18,6 +18,8 @@ import {
 } from "@/features/workspace/api/workspace.queries";
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
+import { simulatorStoreActions } from "@/features/simulator/store";
+import { simulatorService } from "@/features/simulator/api/simulator.service";
 import type { RightSideTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
@@ -79,6 +81,13 @@ export function useWorkspaceActions({
   const { mutate: archiveWorkspace } = useArchiveWorkspace();
   const handleArchive = useCallback(() => {
     if (!selectedWorkspace) return;
+    // Release simulator resources before archiving — the Rust session would
+    // otherwise leak in the HashMap until app close (no lifecycle hook exists).
+    const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
+    if (simSession.phase !== "idle") {
+      simulatorService.stopStreaming(selectedWorkspace.id).catch(() => {});
+      simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);
+    }
     archiveWorkspace(selectedWorkspace.id);
   }, [selectedWorkspace, archiveWorkspace]);
 

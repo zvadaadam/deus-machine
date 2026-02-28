@@ -354,14 +354,18 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         if (persisted && sims.some((s) => s.udid === persisted)) {
           setSelectedUdid(persisted);
         } else {
-          const scored = [...sims]
-            .filter(
-              (s) =>
-                s.runtime.includes("iOS") ||
-                s.device_type.includes("iPhone") ||
-                s.device_type.includes("iPad")
-            )
-            .sort((a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a));
+          const iosSims = sims.filter(
+            (s) =>
+              s.runtime.includes("iOS") ||
+              s.device_type.includes("iPhone") ||
+              s.device_type.includes("iPad")
+          );
+          // Prefer devices not claimed by other workspaces so each workspace
+          // auto-selects a different simulator (avoids "same stream" confusion).
+          const inUse = simulatorStoreActions.getInUseUdids(workspaceId);
+          const available = iosSims.filter((s) => !inUse.has(s.udid));
+          const pool = available.length > 0 ? available : iosSims;
+          const scored = [...pool].sort((a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a));
           setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
         }
       }
