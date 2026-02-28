@@ -39,7 +39,9 @@ Example output:
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Failed to list devices: ${response.error}` }],
+              content: [
+                { type: "text" as const, text: `Failed to list devices: ${response.error}` },
+              ],
             };
           }
 
@@ -55,7 +57,8 @@ Example output:
           }
 
           const lines = response.devices.map(
-            (d) => `- ${d.name} (${d.udid}) — ${d.state} — ${d.runtime}${d.deviceType ? ` — ${d.deviceType}` : ""}`
+            (d) =>
+              `- ${d.name} (${d.udid}) — ${d.state} — ${d.runtime}${d.deviceType ? ` — ${d.deviceType}` : ""}`
           );
 
           return {
@@ -87,7 +90,9 @@ Use iOSSimulatorListDevices first to find available simulators and their UDIDs.
 
 After starting, the simulator stream will appear in the app's Simulator panel. Use iOSSimulatorScreenshot to see the screen and interact with it.`,
       {
-        udid: z.string().describe("UDID of the simulator to boot (get from iOSSimulatorListDevices)"),
+        udid: z
+          .string()
+          .describe("UDID of the simulator to boot (get from iOSSimulatorListDevices)"),
       },
       async (args) => {
         console.log(
@@ -102,7 +107,9 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Failed to start simulator: ${response.error}` }],
+              content: [
+                { type: "text" as const, text: `Failed to start simulator: ${response.error}` },
+              ],
             };
           }
 
@@ -312,17 +319,23 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
             text: args.text,
           });
 
-          if (response.error) {
+          if (!response.success) {
             return {
-              content: [{ type: "text" as const, text: `Type failed: ${response.error}` }],
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Type failed: ${response.error ?? "Unknown error"}`,
+                },
+              ],
             };
           }
 
+          const warning = response.error ? `\nWarning: ${response.error}` : "";
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Typed "${args.text.length > 50 ? args.text.slice(0, 50) + "..." : args.text}". Use iOSSimulatorScreenshot to see the result.`,
+                text: `Typed "${args.text.length > 50 ? args.text.slice(0, 50) + "..." : args.text}".${warning} Use iOSSimulatorScreenshot to see the result.`,
               },
             ],
           };
@@ -424,9 +437,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
 
           if (response.error) {
             return {
-              content: [
-                { type: "text" as const, text: `Build & run failed: ${response.error}` },
-              ],
+              content: [{ type: "text" as const, text: `Build & run failed: ${response.error}` }],
             };
           }
 
