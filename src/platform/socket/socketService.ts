@@ -118,6 +118,7 @@ class UnixSocketService {
       await invoke("send_sidecar_message", { message: messageStr });
     } catch (error) {
       console.error("[SOCKET] ❌ Notification failed:", error);
+      this.connected = false;
       throw error;
     }
   }
@@ -142,23 +143,29 @@ class UnixSocketService {
       id,
     };
 
+    let response: Record<string, unknown>;
     try {
       const messageStr = JSON.stringify(request);
       await invoke("send_sidecar_message", { message: messageStr });
 
       // Wait for response
       const responseStr = await invoke<string>("receive_sidecar_message");
-      const response = JSON.parse(responseStr);
-
-      if (response.error) {
-        throw new Error(response.error.message || "RPC error");
-      }
-
-      return response.result as T;
+      response = JSON.parse(responseStr);
     } catch (error) {
+      // Transport-level failure (socket disconnected, Rust IPC error, timeout)
       console.error("[SOCKET] ❌ Request failed:", error);
+      this.connected = false;
       throw error;
     }
+
+    // Application-level JSON-RPC error — transport is healthy, sidecar
+    // processed the request but returned an error response.
+    if (response.error) {
+      const rpcError = response.error as { message?: string };
+      throw new Error(rpcError.message || "RPC error");
+    }
+
+    return response.result as T;
   }
 
   /**
