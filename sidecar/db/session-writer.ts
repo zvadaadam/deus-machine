@@ -196,7 +196,7 @@ export function sessionExists(sessionId: string): boolean {
  */
 export function saveAgentSessionId(
   sessionId: string,
-  agentSessionId: string
+  agentSessionId: string | null
 ): WriteResult<void> {
   const db = getDatabase();
 
