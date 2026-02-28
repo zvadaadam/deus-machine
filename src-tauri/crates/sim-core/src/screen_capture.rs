@@ -40,8 +40,9 @@ impl TouchServer {
 
         log::info!("[TouchServer] simulator-server started with PID: {}", process.id());
 
-        // Give it time to initialize
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // Brief pause for the subprocess to bind its stdin listener.
+        // 100ms is sufficient — the process is local and lightweight.
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         Ok(Self { process })
     }
