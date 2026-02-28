@@ -18,6 +18,9 @@ import {
   saveToolResultMessage,
   updateSessionStatus,
   updateLastUserMessageAt,
+  saveAgentSessionId,
+  lookupAgentSessionId,
+  reconcileStuckSessions,
   type WriteResult,
 } from "../db/session-writer";
 
@@ -152,6 +155,105 @@ describe("session-writer WriteResult", () => {
         throw new Error("SQLITE_ERROR");
       });
       const result = updateLastUserMessageAt("session-1");
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  // ── saveAgentSessionId ─────────────────────────────────────────────
+
+  describe("saveAgentSessionId", () => {
+    it("returns ok:true on success", () => {
+      const result = saveAgentSessionId("session-1", "sdk-abc-123");
+      expect(result.ok).toBe(true);
+    });
+
+    it("passes correct SQL params", () => {
+      saveAgentSessionId("session-1", "sdk-abc-123");
+      expect(mockDbPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE sessions SET agent_session_id")
+      );
+      expect(mockDbRun).toHaveBeenCalledWith("sdk-abc-123", "session-1");
+    });
+
+    it("returns ok:false when DB throws", () => {
+      mockDbRun.mockImplementationOnce(() => {
+        throw new Error("SQLITE_ERROR");
+      });
+      const result = saveAgentSessionId("session-1", "sdk-abc-123");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("SQLITE_ERROR");
+      }
+    });
+  });
+
+  // ── lookupAgentSessionId ───────────────────────────────────────────
+
+  describe("lookupAgentSessionId", () => {
+    it("returns agent_session_id when present", () => {
+      mockDbGet.mockReturnValueOnce({ agent_session_id: "sdk-abc-123" });
+      const result = lookupAgentSessionId("session-1");
+      expect(result).toBe("sdk-abc-123");
+    });
+
+    it("returns null when no agent_session_id is set", () => {
+      mockDbGet.mockReturnValueOnce({ agent_session_id: null });
+      const result = lookupAgentSessionId("session-1");
+      expect(result).toBeNull();
+    });
+
+    it("returns null when session does not exist", () => {
+      mockDbGet.mockReturnValueOnce(undefined);
+      const result = lookupAgentSessionId("session-1");
+      expect(result).toBeNull();
+    });
+
+    it("returns null on DB error", () => {
+      mockDbGet.mockImplementationOnce(() => {
+        throw new Error("SQLITE_ERROR");
+      });
+      const result = lookupAgentSessionId("session-1");
+      expect(result).toBeNull();
+    });
+  });
+
+  // ── reconcileStuckSessions ─────────────────────────────────────────
+
+  describe("reconcileStuckSessions", () => {
+    it("returns ok:true with count of affected rows", () => {
+      mockDbRun.mockReturnValueOnce({ changes: 3 });
+      const result = reconcileStuckSessions();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(3);
+      }
+    });
+
+    it("executes UPDATE on sessions with status working", () => {
+      mockDbRun.mockReturnValueOnce({ changes: 0 });
+      reconcileStuckSessions();
+      expect(mockDbPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("UPDATE sessions SET status = 'idle'")
+      );
+      expect(mockDbPrepare).toHaveBeenCalledWith(
+        expect.stringContaining("WHERE status = 'working'")
+      );
+    });
+
+    it("returns ok:true with 0 when no sessions are stuck", () => {
+      mockDbRun.mockReturnValueOnce({ changes: 0 });
+      const result = reconcileStuckSessions();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe(0);
+      }
+    });
+
+    it("returns ok:false when DB throws", () => {
+      mockDbRun.mockImplementationOnce(() => {
+        throw new Error("SQLITE_BUSY");
+      });
+      const result = reconcileStuckSessions();
       expect(result.ok).toBe(false);
     });
   });

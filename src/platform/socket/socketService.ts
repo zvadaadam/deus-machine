@@ -118,6 +118,7 @@ class UnixSocketService {
       await invoke("send_sidecar_message", { message: messageStr });
     } catch (error) {
       console.error("[SOCKET] ❌ Notification failed:", error);
+      this.connected = false;
       throw error;
     }
   }
@@ -157,6 +158,7 @@ class UnixSocketService {
       return response.result as T;
     } catch (error) {
       console.error("[SOCKET] ❌ Request failed:", error);
+      this.connected = false;
       throw error;
     }
   }
