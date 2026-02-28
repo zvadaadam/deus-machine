@@ -32,7 +32,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
   const IconComponent = TASK_ICON_MAP[task.icon];
 
   return (
-    <div className="border-border-subtle rounded-md border p-3">
+    <div className="border-border-subtle rounded-lg border p-3">
       {/* Summary row */}
       <div className="flex items-center gap-2">
         <button

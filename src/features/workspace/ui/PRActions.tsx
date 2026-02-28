@@ -184,7 +184,7 @@ function PRLink({ state }: { state: PRActionState }) {
           target="_blank"
           rel="noopener noreferrer"
           className={cn(
-            "flex items-center gap-1 rounded-md px-1.5 py-1 text-sm font-semibold transition-colors duration-200 ease",
+            "flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold transition-colors duration-200 ease",
             PR_LINK_COLORS[state.type] ?? "text-text-secondary hover:text-text-primary",
           )}
         >
@@ -210,7 +210,7 @@ function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }
         <button
           type="button"
           aria-label="PR actions unavailable"
-          className="flex items-center gap-1 rounded-md bg-warning/10 px-2 py-1 text-warning"
+          className="flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-1 text-warning"
         >
           <AlertTriangle className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -238,7 +238,7 @@ function ErrorWarning({ reason }: { reason: "timeout" | "network" }) {
         <button
           type="button"
           aria-label="GitHub unreachable"
-          className="flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-destructive"
+          className="flex items-center gap-1 rounded-lg bg-destructive/10 px-2 py-1 text-destructive"
         >
           <WifiOff className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -277,7 +277,7 @@ function StatusText({
   return (
     <span
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium",
+        "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium",
         STATUS_VARIANT_CLASSES[variant],
       )}
     >
@@ -329,7 +329,7 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-semibold transition-colors duration-200",
+        "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold transition-colors duration-200",
         VARIANT_CLASSES[variant],
         disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90",
       )}
@@ -356,13 +356,13 @@ function CreatePRButton({
   onCreatePR?: () => void;
 }) {
   return (
-    <div className="flex h-7 overflow-hidden rounded-md">
+    <div className="flex h-7 overflow-hidden rounded-lg">
       <button
         type="button"
         onClick={onCreatePR}
         disabled={!onCreatePR}
         className={cn(
-          "bg-primary flex items-center gap-1.5 rounded-l-md px-2.5 text-sm font-semibold transition-colors duration-200",
+          "bg-primary flex items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-semibold transition-colors duration-200",
           !onCreatePR
             ? "text-primary-foreground cursor-not-allowed opacity-50"
             : "text-primary-foreground hover:opacity-90",
@@ -379,7 +379,7 @@ function CreatePRButton({
       >
         <button
           type="button"
-          className="bg-accent-blue-surface border-primary text-primary flex items-center gap-1 rounded-r-md border-l px-2 text-sm font-medium transition-colors duration-200 hover:opacity-90"
+          className="bg-accent-blue-surface border-primary text-primary flex items-center gap-1 rounded-r-lg border-l px-2 text-sm font-medium transition-colors duration-200 hover:opacity-90"
         >
           <span>{targetBranch}</span>
           <ChevronDown className="h-2 w-2" />

@@ -667,7 +667,7 @@ export function SimulatorPanel({ workspaceId: _workspaceId, workspacePath }: Sim
                 disabled={selectDisabled}
                 aria-label="Select simulator device"
                 aria-haspopup="listbox"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease] disabled:pointer-events-none disabled:opacity-50"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-xs transition-colors duration-200 ease-[ease] disabled:pointer-events-none disabled:opacity-50"
               >
                 <Smartphone className="h-[11px] w-[11px] shrink-0" />
                 <span className="truncate">

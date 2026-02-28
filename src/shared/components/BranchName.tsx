@@ -50,7 +50,7 @@ export function BranchName({ branch, compact = false }: BranchNameProps) {
               onClick={handleCopy}
               onPointerEnter={() => !copied && setTooltipOpen(true)}
               onPointerLeave={() => !copied && setTooltipOpen(false)}
-              className={`group hover:bg-accent hover:text-accent-foreground flex items-center rounded-md transition-colors duration-200 ${
+              className={`group hover:bg-accent hover:text-accent-foreground flex items-center rounded-lg transition-colors duration-200 ${
                 compact ? "gap-1.5 px-2 py-1" : "-ml-2 gap-2 px-2 py-1"
               }`}
             >
@@ -78,7 +78,7 @@ export function BranchName({ branch, compact = false }: BranchNameProps) {
         {!compact && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-muted-foreground bg-muted inline-flex cursor-default items-center rounded-md px-2 py-1 text-xs font-medium">
+              <span className="text-muted-foreground bg-muted inline-flex cursor-default items-center rounded-lg px-2 py-1 text-xs font-medium">
                 Isolated
               </span>
             </TooltipTrigger>

@@ -21,7 +21,7 @@ interface RepoGroupProps {
  *   [Badge 20×20] [RepoName — text-secondary 14/500]  ...  [+] [⋯]
  *     └── WorkspaceItem[]
  *
- * Badge: first letter of repo name, bg-muted rounded-md
+ * Badge: first letter of repo name, bg-muted rounded-lg
  * Minimal chrome. The repo header earns attention through
  * contrast, not decoration.
  */
@@ -46,7 +46,7 @@ export function RepoGroup({
     <div className="flex w-full flex-col px-1.5 py-1">
       <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
         {/* Repo header row */}
-        <div className="group/repo flex w-full items-center gap-2 rounded-md px-3 py-2">
+        <div className="group/repo flex w-full items-center gap-2 rounded-lg px-3 py-2">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2">
             {/* Repo badge */}
             <div className="bg-bg-muted flex h-5 w-5 shrink-0 items-center justify-center rounded-md">

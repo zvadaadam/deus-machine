@@ -145,7 +145,7 @@ export function CodePanelContent({
         {filterMode === "changes" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors duration-200 ease">
+              <button type="button" className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition-colors duration-200 ease">
                 <SlidersHorizontal className="h-[11px] w-[11px]" />
                 <span>{activeFilterLabel}</span>
                 <ChevronDown className="h-[10px] w-[10px]" />
