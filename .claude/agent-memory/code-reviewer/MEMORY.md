@@ -89,6 +89,39 @@
 - `hasProject === null` during loading: `null` is falsy in JS, so `hasProject ? <Button> : null`
   hides the button while the probe is in flight. Correct UX, no flash of invalid state.
 
+## Simulator State Machine Patterns (Confirmed)
+
+- Three-plane architecture: Component plane (React mount), Display plane (Zustand store keyed by
+  workspaceId), Session plane (Rust HashMap). `clearWorkspaceSession` ONLY on explicit Stop — never
+  on component unmount or workspace switch.
+- `dispatch()` = validated transition (state machine enforces legal paths); `setSession()` = recovery
+  bypass for external-state reconciliation (mount probes, auto-reconnect). Clear rule: user actions
+  → dispatch, external observation → setSession.
+- `handleRetry()` = `dispatch(CLEAR)` then `handleStart()`. CLEAR is synchronous (Zustand), so
+  BOOT in handleStart sees idle state immediately. This is safe.
+- `handleStop()` dispatches STOP first (immediate store update, disables UI), then awaits
+  stopStreaming IPC. The optimistic-update pattern is intentional — avoids UI stuck in "active" if
+  the IPC call hangs.
+- `onMouseLeave={handleMouseUp}` in SimulatorStreamViewer: fires "ended" at the leave coordinates,
+  then `lastCoordsRef` is cleared. Window mouseup listener then skips (coords null). No double-fire.
+  BUT: if the user moves out while holding and releases outside, both mouseLeave AND window-mouseup
+  fire. mouseLeave fires first (clears lastCoordsRef), then window-mouseup skips (coords null) —
+  one "ended" event sent, correct behavior.
+- `sim-idle-breathe` and `build-shimmer` keyframes live in global.css — multi-component reuse
+  justifies global placement (both used by SimulatorPanel components).
+- `STREAM_READY` transition requires `current.udid === event.udid` — prevents a race where user
+  clicks Stop during boot then clicks Start again: the first STREAM_READY is rejected because state
+  is now idle (STOP → idle deletes entry), not booting. The second start cycle works normally.
+- `setSession(workspaceId, { phase: "idle" })` does NOT delete the map entry (unlike dispatch(STOP)
+  or clearWorkspaceSession). If called by accident it would leave a stale idle entry — currently not
+  used this way but worth knowing.
+- ResizablePanelGroup key removal + imperative resize effect: the effect fires on every
+  selectedWorkspaceId change. `chatPanelRef.current?.resize()` has a guard — it's a no-op if the
+  panel is at the same size. Safe to call redundantly.
+- `workspaceGenerationRef` pattern: monotonic counter incremented in the workspace-switch effect.
+  Async callbacks compare captured gen against current ref. Prevents stale writes after rapid
+  workspace switching.
+
 ## Icon Component Patterns (New)
 
 - `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function
