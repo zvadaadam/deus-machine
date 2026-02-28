@@ -8,7 +8,7 @@
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { BlockRenderer } from "./blocks";
-import { chatTheme } from "./theme";
+
 import { cn } from "@/shared/lib/utils";
 import { Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { ActionButton } from "./ActionButton";
@@ -18,6 +18,8 @@ import { useMemo, memo, useState, useRef, useEffect } from "react";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
+
+const COLLAPSE_MAX_HEIGHT = 144;
 
 type ParsedContent = (ContentBlock | string)[] | string | null;
 
@@ -34,7 +36,7 @@ export const MessageItem = memo(function MessageItem({
   isLastInTurn = false,
   isWorking = false,
 }: MessageItemProps) {
-  const { parseContent, toolResultMap } = useSession();
+  const { parseContent } = useSession();
   const { copy, copied } = useCopyToClipboard();
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldCollapse, setShouldCollapse] = useState(false);
@@ -72,7 +74,7 @@ export const MessageItem = memo(function MessageItem({
   useEffect(() => {
     if (message.role === "user" && contentRef.current) {
       const actualHeight = contentRef.current.scrollHeight;
-      setShouldCollapse(actualHeight > chatTheme.collapse.maxHeight);
+      setShouldCollapse(actualHeight > COLLAPSE_MAX_HEIGHT);
     }
   }, [message.role, contentBlocks]);
 
@@ -93,11 +95,6 @@ export const MessageItem = memo(function MessageItem({
 
   const handleCopy = () => {
     copy(extractTextContent());
-  };
-
-  const handleRevert = () => {
-    // TODO: Implement revert functionality
-    if (import.meta.env.DEV) console.log("Revert to message:", message.id);
   };
 
   // Helper: Render content blocks with proper keys (DRY - used for both user/assistant)
@@ -160,23 +157,32 @@ export const MessageItem = memo(function MessageItem({
    */
 
   // Determine role-based styling
-  const roleStyles = message.role === "user" ? chatTheme.message.user : chatTheme.message.assistant;
+  const roleStyles =
+    message.role === "user"
+      ? {
+          container:
+            "ml-auto w-fit bg-accent hover:bg-accent/80 backdrop-blur-sm transition-colors duration-200 ease-out motion-reduce:transition-none",
+          text: "font-normal",
+          textColor: "text-foreground",
+          maxWidth: "max-w-[85%]",
+          shape: "rounded-xl",
+          padding: "px-3 py-2",
+        }
+      : { container: "mr-auto", maxWidth: "max-w-full" };
 
-  // Find last text block index for weight (assistant messages only)
-  const findLastTextBlockIndex = (blocks: (ContentBlock | string)[]) => {
+  // Find last text block index for weight (assistant messages only).
+  // Memoized to avoid scanning the blocks array on every re-render.
+  let lastTextBlockIndex = -1;
+  if (Array.isArray(contentBlocks) && message.role === "assistant") {
+    const blocks = contentBlocks as (ContentBlock | string)[];
     for (let i = blocks.length - 1; i >= 0; i--) {
       const block = blocks[i];
       if (typeof block === "string" || (typeof block === "object" && block?.type === "text")) {
-        return i;
+        lastTextBlockIndex = i;
+        break;
       }
     }
-    return -1;
-  };
-
-  const lastTextBlockIndex =
-    Array.isArray(contentBlocks) && message.role === "assistant"
-      ? findLastTextBlockIndex(contentBlocks as (ContentBlock | string)[])
-      : -1;
+  }
 
   // Assistant messages - use BlockRenderer with weight
   if (message.role === "assistant") {
@@ -188,7 +194,7 @@ export const MessageItem = memo(function MessageItem({
           roleStyles.maxWidth,
           roleStyles.container,
           "flex min-w-0 flex-col gap-2 overflow-x-hidden",
-          chatTheme.common.transition
+          "transition-colors duration-100 ease-in motion-reduce:transition-none"
         )}
       >
         {Array.isArray(contentBlocks) ? (
@@ -219,8 +225,8 @@ export const MessageItem = memo(function MessageItem({
         className={cn(
           roleStyles.maxWidth,
           roleStyles.container,
-          chatTheme.message.user.shape,
-          chatTheme.message.user.padding,
+          "rounded-xl",
+          "px-3 py-2",
           "min-w-0"
         )}
       >
@@ -270,19 +276,19 @@ export const MessageItem = memo(function MessageItem({
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className={chatTheme.expandToggle.button}
+            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors duration-200"
             aria-expanded={isExpanded}
             aria-controls={`message-content-${message.id}`}
           >
             {isExpanded ? (
               <>
                 Show less
-                <ChevronUp className={chatTheme.expandToggle.icon} />
+                <ChevronUp className="h-3 w-3" />
               </>
             ) : (
               <>
                 Show more
-                <ChevronDown className={chatTheme.expandToggle.icon} />
+                <ChevronDown className="h-3 w-3" />
               </>
             )}
           </button>
@@ -290,7 +296,7 @@ export const MessageItem = memo(function MessageItem({
       </div>
 
       {/* Action buttons - below the card */}
-      <div className={chatTheme.userActions.container}>
+      <div className="absolute right-0 -bottom-8 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <ActionButton
           icon={Copy}
           label={copied ? "Copied" : "Copy"}

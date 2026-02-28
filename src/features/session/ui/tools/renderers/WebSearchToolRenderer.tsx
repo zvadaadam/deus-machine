@@ -11,7 +11,7 @@
 import { Search } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
@@ -37,20 +37,12 @@ export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   return (
     <BaseToolRenderer
       toolName="Web Search"
-      icon={
-        <Search
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            chatTheme.tools.WebSearch
-          )}
-        />
-      }
+      icon={<Search className={cn(TOOL_ICON_CLS, TOOL_COLORS.WebSearch)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
       renderSummary={() => (
-        <span className={chatTheme.blocks.tool.contentHierarchy.summary}>
+        <span className="text-muted-foreground truncate text-sm">
           "{query}"{filterText}
         </span>
       )}
@@ -67,7 +59,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
           <div className="px-2 pb-2">
             <div
               className={cn(
-                chatTheme.blocks.tool.contentHierarchy.mono,
+                "text-foreground font-mono text-sm leading-5",
                 "overflow-x-auto rounded-md px-3 py-2",
                 "bg-muted/50 border-border border",
                 "max-h-96 overflow-y-auto"

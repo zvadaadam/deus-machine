@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, TerminalSquare, RefreshCw, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { chatTheme } from "./theme";
+
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { useSession } from "../context";
@@ -16,9 +16,8 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
-// Pull spacing from theme for consistency
-const USER_MARGIN_CLASS = chatTheme.spacing.userMessageMargin;
-const TIGHT_MARGIN_CLASS = chatTheme.spacing.assistantTightMargin;
+const USER_MARGIN_CLASS = "mb-8";
+const TIGHT_MARGIN_CLASS = "mb-1";
 
 /**
  * Turn Types
@@ -387,7 +386,7 @@ export function Chat({
         id="chat-messages"
         role="log"
         aria-live="polite"
-        className="absolute inset-0 overflow-x-hidden overflow-y-auto scroll-smooth px-6 pt-6 motion-reduce:scroll-auto"
+        className="absolute inset-0 overflow-x-hidden overflow-y-auto px-6 pt-6"
         ref={messagesContainerRef}
       >
         {loading ? (
@@ -434,18 +433,21 @@ export function Chat({
                 const isLastRendered = turnIndex === turns.length - 1;
 
                 if (turn.type === "user") {
-                  // Determine if this is a NEW message that should animate in
+                  // Determine if this is a NEW message that should animate in.
+                  // CSS animation replaces Framer Motion m.div: plays once on mount
+                  // then the element is a plain div with zero ongoing React overhead.
                   const isNew = !seenMessageIds.current.has(turn.message.id);
                   if (isNew) seenMessageIds.current.add(turn.message.id);
 
                   return (
-                    <m.div
+                    <div
                       key={turn.message.id}
                       ref={isLastRendered ? lastMessageRef : undefined}
-                      className={cn(spacingClass, "min-w-0")}
-                      initial={isNew ? { opacity: 0, x: 4 } : false}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                      className={cn(
+                        spacingClass,
+                        "chat-turn-wrapper min-w-0",
+                        isNew && "chat-item-enter"
+                      )}
                     >
                       <MessageItem
                         message={turn.message}
@@ -453,7 +455,7 @@ export function Chat({
                         isLastInTurn={true}
                         isWorking={sessionStatus === "working"}
                       />
-                    </m.div>
+                    </div>
                   );
                 }
 
@@ -465,23 +467,24 @@ export function Chat({
                 const isTurnNew = !seenMessageIds.current.has(turnKey);
                 if (isTurnNew) seenMessageIds.current.add(turnKey);
                 // Still mark all individual message IDs for future reference
-                turn.messages.forEach((m) => seenMessageIds.current.add(m.id));
+                turn.messages.forEach((msg) => seenMessageIds.current.add(msg.id));
 
                 return (
-                  <m.div
+                  <div
                     key={turn.messages[0].id}
                     ref={isLastRendered ? lastMessageRef : undefined}
-                    className={cn(spacingClass, "min-w-0")}
-                    initial={isTurnNew ? { opacity: 0 } : false}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className={cn(
+                      spacingClass,
+                      "chat-turn-wrapper min-w-0",
+                      isTurnNew && "chat-item-enter"
+                    )}
                   >
                     <AssistantTurn
                       messages={turn.messages}
                       isLatest={turn.isLatest}
                       isWorking={sessionStatus === "working"}
                     />
-                  </m.div>
+                  </div>
                 );
               })}
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
@@ -493,13 +496,13 @@ export function Chat({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className={cn(chatTheme.message.assistant.container, "mt-1 w-fit max-w-[60%]")}
+                    className={cn("mr-auto", "mt-1 w-fit max-w-[60%]")}
                     role="alert"
                     aria-live="assertive"
                   >
-                    <div className="flex items-center gap-4 rounded-lg border border-destructive/20 border-l-2 border-l-destructive bg-destructive/5 px-3 py-2.5">
+                    <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex items-center gap-4 rounded-lg border border-l-2 px-3 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-destructive/80">
+                        <p className="text-destructive/80 text-xs font-medium">
                           {match(errorCategory)
                             .with("auth", () => "Authentication Error")
                             .with("rate_limit", () => "Rate Limited")
@@ -512,7 +515,9 @@ export function Chat({
                                 : "Error"
                             )}
                         </p>
-                        <p className="mt-0.5 text-sm text-foreground/80 break-words">{errorMessage}</p>
+                        <p className="text-foreground/80 mt-0.5 text-sm break-words">
+                          {errorMessage}
+                        </p>
                         {/* Retry hint for auto-retryable errors */}
                         {errorWillRetry && errorRetryAfterMs && (
                           <RetryCountdown durationMs={errorRetryAfterMs} />
@@ -522,7 +527,12 @@ export function Chat({
                         {match(errorCategory)
                           .with("auth", () =>
                             onOpenLoginTerminal ? (
-                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onOpenLoginTerminal}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onOpenLoginTerminal}
+                              >
                                 <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
                                 Log in
                               </Button>
@@ -530,7 +540,12 @@ export function Chat({
                           )
                           .with("context_limit", () =>
                             onRetryInNewChat ? (
-                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onRetryInNewChat}
+                              >
                                 <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
                                 New session
                               </Button>
@@ -539,12 +554,17 @@ export function Chat({
                           .with("rate_limit", () => (
                             <div className="flex items-center gap-2">
                               {errorWillRetry && (
-                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                                   <RefreshCw className="h-3 w-3 animate-spin" />
                                 </span>
                               )}
                               {onRetryInNewChat && (
-                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={onRetryInNewChat}
+                                >
                                   Retry in new chat
                                 </Button>
                               )}
@@ -553,12 +573,17 @@ export function Chat({
                           .with("network", () => (
                             <div className="flex items-center gap-2">
                               {errorWillRetry && (
-                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                                   <RefreshCw className="h-3 w-3 animate-spin" />
                                 </span>
                               )}
                               {onRetryInNewChat && (
-                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={onRetryInNewChat}
+                                >
                                   Retry in new chat
                                 </Button>
                               )}
@@ -566,7 +591,12 @@ export function Chat({
                           ))
                           .otherwise(() =>
                             onRetryInNewChat ? (
-                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onRetryInNewChat}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onRetryInNewChat}
+                              >
                                 Retry in new chat
                               </Button>
                             ) : null
@@ -641,10 +671,9 @@ export function Chat({
 
 /** Animated countdown that ticks down from durationMs to 0. */
 function RetryCountdown({ durationMs }: { durationMs: number }) {
-  const [remaining, setRemaining] = useState(Math.ceil(durationMs / 1000));
+  const [remaining, setRemaining] = useState(() => Math.ceil(durationMs / 1000));
 
   useEffect(() => {
-    setRemaining(Math.ceil(durationMs / 1000));
     const interval = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
@@ -659,9 +688,5 @@ function RetryCountdown({ durationMs }: { durationMs: number }) {
 
   if (remaining <= 0) return null;
 
-  return (
-    <p className="mt-1 text-xs text-muted-foreground">
-      Retrying in {remaining}s...
-    </p>
-  );
+  return <p className="text-muted-foreground mt-1 text-xs">Retrying in {remaining}s...</p>;
 }

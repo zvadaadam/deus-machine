@@ -11,7 +11,7 @@
 import { FileSearch } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 
 export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
@@ -41,11 +41,7 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Glob"
-      icon={
-        <FileSearch
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Glob)}
-        />
-      }
+      icon={<FileSearch className={cn(TOOL_ICON_CLS, TOOL_COLORS.Glob)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -53,13 +49,13 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-info/15 text-info rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {pattern}
           </span>
-          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+          <span className="text-muted-foreground text-sm font-normal">
             {path && ` in ${path}`} •{" "}
             {hasResults ? `${resultCount} file${resultCount !== 1 ? "s" : ""}` : "no files"}
           </span>

@@ -8,7 +8,7 @@ import { PastedImageCard } from "./PastedImageCard";
 import { TextBlock } from "./blocks/TextBlock";
 import { ThinkingBlock } from "./blocks/ThinkingBlock";
 import { Button } from "@/components/ui/button";
-import { chatTheme } from "./theme";
+
 import { cn } from "@/shared/lib/utils";
 
 // MessageInput
@@ -447,22 +447,32 @@ function ErrorMessage({
     : "Error";
 
   return (
-    <div className={cn(chatTheme.message.assistant.container, "w-fit max-w-[60%]")}>
-      <div className="flex items-center gap-4 rounded-lg border border-destructive/20 border-l-2 border-l-destructive bg-destructive/5 px-3 py-2.5">
+    <div className={cn("mr-auto", "w-fit max-w-[60%]")}>
+      <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex items-center gap-4 rounded-lg border border-l-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-destructive/80">{label}</p>
-          <p className="mt-0.5 text-sm text-foreground/80 break-words">{message}</p>
+          <p className="text-destructive/80 text-xs font-medium">{label}</p>
+          <p className="text-foreground/80 mt-0.5 text-sm break-words">{message}</p>
         </div>
         {(showLoginButton || showRetryButton) && (
           <div className="flex shrink-0 items-center gap-2">
             {showLoginButton && (
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => console.log("open login terminal")}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => console.log("open login terminal")}
+              >
                 <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
                 Log in
               </Button>
             )}
             {showRetryButton && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => console.log("retry in new chat")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => console.log("retry in new chat")}
+              >
                 Retry in new chat
               </Button>
             )}

@@ -12,7 +12,7 @@ import { Activity } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 
 export function BashOutputToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { bash_id, filter } = toolUse.input ?? {};
@@ -32,20 +32,13 @@ export function BashOutputToolRenderer({ toolUse, toolResult, isLoading }: ToolR
   return (
     <BaseToolRenderer
       toolName="Process"
-      icon={
-        <Activity
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            chatTheme.tools.BashOutput
-          )}
-        />
-      }
+      icon={<Activity className={cn(TOOL_ICON_CLS, TOOL_COLORS.BashOutput)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
+      showContentOnError
       renderSummary={() => (
-        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
+        <span className={cn("text-muted-foreground truncate text-sm", "font-mono")}>
           {bash_id?.substring(0, 6) ?? "..."}
           {filter ? ` • filtered` : ""} •{" "}
           {hasOutput ? `${lineCount} line${lineCount !== 1 ? "s" : ""}` : "no output"}
@@ -65,7 +58,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult, isLoading }: ToolR
         return (
           <div
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.mono,
+              "text-foreground font-mono text-sm leading-5",
               "overflow-x-auto rounded-md px-3 py-2",
               "bg-muted/50 border-border border",
               "max-h-96 overflow-y-auto"
