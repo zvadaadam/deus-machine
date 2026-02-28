@@ -21,7 +21,7 @@ interface RepoGroupProps {
  *   [Badge 20×20] [RepoName — text-secondary 14/500]  ...  [+] [⋯]
  *     └── WorkspaceItem[]
  *
- * Badge: first letter of repo name, bg-muted rounded-lg
+ * Badge: first letter of repo name, bg-muted rounded-md
  * Minimal chrome. The repo header earns attention through
  * contrast, not decoration.
  */

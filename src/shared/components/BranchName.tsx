@@ -78,7 +78,7 @@ export function BranchName({ branch, compact = false }: BranchNameProps) {
         {!compact && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-muted-foreground bg-muted inline-flex cursor-default items-center rounded-lg px-2 py-1 text-xs font-medium">
+              <span className="text-muted-foreground bg-muted inline-flex cursor-default items-center rounded-md px-2 py-1 text-xs font-medium">
                 Isolated
               </span>
             </TooltipTrigger>
