@@ -14,7 +14,7 @@
  * Both functions output tool blocks compatible with ToolGroupBlock.
  */
 
-import type { ContentBlock, Message, ToolUseBlock } from "@shared/types";
+import type { ContentBlock, Message, ToolUseBlock } from "@/shared/types";
 
 export interface SingleBlock {
   kind: "single";

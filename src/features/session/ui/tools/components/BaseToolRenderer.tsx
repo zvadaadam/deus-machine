@@ -90,7 +90,7 @@ export function BaseToolRenderer({
                 isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
-              {isError ? <X className="text-destructive/60 h-4 w-4" aria-label="Error" /> : icon}
+              {isError ? <X className="text-destructive/60 h-4 w-4" aria-hidden="true" /> : icon}
             </div>
 
             {/* Chevron - shows on hover or when expanded (Cursor: 0.1s ease-in) */}
