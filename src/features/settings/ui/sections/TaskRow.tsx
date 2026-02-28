@@ -157,7 +157,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 {task.depends.map((dep) => (
                   <span
                     key={dep}
-                    className="bg-bg-muted text-text-secondary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
+                    className="bg-bg-muted text-text-secondary inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs"
                   >
                     {dep}
                     <button

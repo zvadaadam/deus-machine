@@ -221,7 +221,7 @@ export function BrowserPressKeyToolRenderer({ toolUse, toolResult }: ToolRendere
       toolResult={toolResult}
       renderSummary={() =>
         combo ? (
-          <span className="bg-muted/60 text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs">
+          <span className="bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5 font-mono text-xs">
             {combo}
           </span>
         ) : null

@@ -24,7 +24,7 @@ export function PastedTextCard({ content, onRemove }: PastedTextCardProps) {
       <div className="mt-1">
         <Badge
           variant="secondary"
-          className="text-2xs rounded px-1.5 py-0 font-semibold tracking-wider uppercase"
+          className="text-2xs rounded-md px-1.5 py-0 font-semibold tracking-wider uppercase"
         >
           Pasted
         </Badge>

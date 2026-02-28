@@ -110,7 +110,7 @@ class ToolRendererRegistry {
 
     // Return a minimal fallback to prevent crashes
     return () => (
-      <div className="bg-muted/50 text-muted-foreground rounded p-2 text-sm">
+      <div className="bg-muted/50 text-muted-foreground rounded-md p-2 text-sm">
         <strong>⚠️ No renderer available for tool: {toolName}</strong>
       </div>
     );

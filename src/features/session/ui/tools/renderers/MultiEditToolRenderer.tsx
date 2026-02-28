@@ -62,7 +62,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
           <span
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.emphasis,
-              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+              "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {fileName}
@@ -92,7 +92,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
               <div key={index} className="space-y-1">
                 {editCount > 1 && (
                   <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
-                    <span className="bg-muted rounded px-1.5 py-0.5">
+                    <span className="bg-muted rounded-md px-1.5 py-0.5">
                       Edit {index + 1}/{editCount}
                     </span>
                   </div>

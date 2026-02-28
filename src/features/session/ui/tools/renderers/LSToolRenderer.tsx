@@ -60,7 +60,7 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
           <span
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.emphasis,
-              "bg-muted/60 rounded px-1.5 py-0.5 font-mono"
+              "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {dirName}
@@ -89,7 +89,7 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
               return (
                 <div
                   key={index}
-                  className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded px-2 py-1 font-mono text-xs transition-colors"
+                  className="bg-muted/50 hover:bg-muted group flex items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors"
                 >
                   {isDir ? (
                     <Folder className="text-info h-3 w-3 flex-shrink-0" aria-hidden="true" />

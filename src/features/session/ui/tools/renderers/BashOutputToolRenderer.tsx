@@ -66,7 +66,7 @@ export function BashOutputToolRenderer({ toolUse, toolResult, isLoading }: ToolR
           <div
             className={cn(
               chatTheme.blocks.tool.contentHierarchy.mono,
-              "overflow-x-auto rounded px-3 py-2",
+              "overflow-x-auto rounded-md px-3 py-2",
               "bg-muted/50 border-border border",
               "max-h-96 overflow-y-auto"
             )}
