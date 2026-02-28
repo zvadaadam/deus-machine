@@ -166,7 +166,9 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
       try {
         const text = params.text as string;
 
-        // Map characters to USB HID usage codes and send them
+        // Map characters to USB HID usage codes and send them.
+        // Collect unsupported chars so the agent knows what was dropped.
+        const unsupported: string[] = [];
         for (const char of text) {
           const keycode = charToKeycode(char);
           if (keycode !== null) {
@@ -182,10 +184,19 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             }
             // Small delay between characters for reliability
             await new Promise((r) => setTimeout(r, 30));
+          } else {
+            unsupported.push(char);
           }
         }
 
-        await sendResponse(id, { success: true });
+        if (unsupported.length > 0) {
+          await sendResponse(id, {
+            success: true,
+            error: `Unsupported characters skipped: ${[...new Set(unsupported)].join("")}`,
+          });
+        } else {
+          await sendResponse(id, { success: true });
+        }
       } catch (err: any) {
         await sendResponse(id, { success: false, error: err.message || "Type failed" });
       }
