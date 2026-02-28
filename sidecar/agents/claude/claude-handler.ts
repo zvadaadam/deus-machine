@@ -10,6 +10,8 @@ import {
   saveAssistantMessage,
   saveToolResultMessage,
   updateSessionStatus,
+  saveAgentSessionId,
+  lookupAgentSessionId,
 } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
@@ -443,6 +445,21 @@ export class ClaudeAgentHandler implements AgentHandler {
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });
 
+      // Auto-inject resume for session continuity after sidecar restart.
+      // If no explicit resume was provided and a previous agent_session_id
+      // exists in the DB, inject it so the SDK resumes the conversation
+      // with full context (message history, tool state).
+      // Skip when shouldResetGenerator is true — the user explicitly wants a clean start.
+      if (!options.resume && !options.shouldResetGenerator) {
+        const savedAgentSessionId = lookupAgentSessionId(sessionId);
+        if (savedAgentSessionId) {
+          console.log(
+            `[${generatorId}] Auto-resuming session with agent_session_id ${savedAgentSessionId}`
+          );
+          options = { ...options, resume: savedAgentSessionId };
+        }
+      }
+
       // Build SDK options using the dedicated builder
       const sdkOptions = buildSdkOptions(sessionId, envForClaude, options);
 
@@ -490,7 +507,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       setQuery(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
 
-      // Stream messages back to the frontend and persist to DB
+      // Stream messages back to the frontend and persist to DB.
+      // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
+      // are in the DB when the frontend receives the event and fetches them.
       for await (const message of queryResult) {
         if (message) {
           let cleanMessage: Record<string, unknown>;
@@ -505,25 +524,35 @@ export class ClaudeAgentHandler implements AgentHandler {
             continue;
           }
 
-          // Send to frontend via JSON-RPC notification
-          FrontendClient.sendMessage({
-            id: sessionId,
-            type: "message",
-            agentType: "claude",
-            data: cleanMessage,
-          });
+          // One-shot: capture SDK session_id on the first message.
+          // Every SDK message carries session_id. We persist it once so
+          // the sidecar can resume this conversation after a restart.
+          if (!session.agentSessionIdCaptured && cleanMessage.session_id) {
+            session.agentSessionIdCaptured = true;
+            const agentSessionId = String(cleanMessage.session_id);
+            const saveResult = saveAgentSessionId(sessionId, agentSessionId);
+            if (saveResult.ok) {
+              console.log(
+                `[${generatorId}] Captured agent_session_id: ${agentSessionId}`
+              );
+            }
+          }
 
-          // Persist assistant messages to database
-          if (cleanMessage.type === "assistant" && cleanMessage.message) {
+          // Extract common fields from the deserialized SDK message.
+          // cleanMessage is Record<string, unknown> (JSON.parse output), so
+          // we narrow once here instead of scattering `as` casts at each call site.
+          const msg = cleanMessage.message as
+            | { id?: string; role?: string; content?: unknown; stop_reason?: string }
+            | undefined;
+          const parentToolUseId =
+            typeof cleanMessage.parent_tool_use_id === "string"
+              ? cleanMessage.parent_tool_use_id
+              : null;
+
+          // Persist assistant messages to database (before frontend notification)
+          if (cleanMessage.type === "assistant" && msg) {
             const model = options?.model || "opus";
-            const writeResult = saveAssistantMessage(
-              sessionId,
-              cleanMessage.message as { id?: string; role?: string; content?: unknown },
-              model,
-              typeof cleanMessage.parent_tool_use_id === "string"
-                ? cleanMessage.parent_tool_use_id
-                : null
-            );
+            const writeResult = saveAssistantMessage(sessionId, msg, model, parentToolUseId);
             if (!writeResult.ok) {
               console.error(`[${generatorId}] DB write failed for assistant message: ${writeResult.error}`);
             }
@@ -531,24 +560,25 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           // Persist user messages with tool_result blocks so the frontend
           // can link tool_use → tool_result via the toolResultMap
-          if (cleanMessage.type === "user" && cleanMessage.message) {
-            const msg = cleanMessage.message as { content?: unknown };
+          if (cleanMessage.type === "user" && msg) {
             const content = msg.content;
             const hasToolResult =
               Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
             if (hasToolResult) {
-              const writeResult = saveToolResultMessage(
-                sessionId,
-                cleanMessage.message as { id?: string; role?: string; content?: unknown },
-                typeof cleanMessage.parent_tool_use_id === "string"
-                  ? cleanMessage.parent_tool_use_id
-                  : null
-              );
+              const writeResult = saveToolResultMessage(sessionId, msg, parentToolUseId);
               if (!writeResult.ok) {
                 console.error(`[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`);
               }
             }
           }
+
+          // Send to frontend via JSON-RPC notification (after DB write)
+          FrontendClient.sendMessage({
+            id: sessionId,
+            type: "message",
+            agentType: "claude",
+            data: cleanMessage,
+          });
 
           // Update session status when query completes successfully
           if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
