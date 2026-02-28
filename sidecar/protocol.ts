@@ -427,10 +427,12 @@ export const SimScreenshotResponseSchema = z.object({
   error: z.string().optional(),
 });
 
+const NormalizedCoord = z.number().min(0).max(1);
+
 export const SimTapRequestSchema = z.object({
   sessionId: z.string(),
-  x: z.number().describe("Normalized X coordinate (0.0–1.0)"),
-  y: z.number().describe("Normalized Y coordinate (0.0–1.0)"),
+  x: NormalizedCoord.describe("Normalized X coordinate (0.0–1.0)"),
+  y: NormalizedCoord.describe("Normalized Y coordinate (0.0–1.0)"),
 });
 
 export const SimTapResponseSchema = z.object({
@@ -440,11 +442,11 @@ export const SimTapResponseSchema = z.object({
 
 export const SimSwipeRequestSchema = z.object({
   sessionId: z.string(),
-  startX: z.number().describe("Normalized start X (0.0–1.0)"),
-  startY: z.number().describe("Normalized start Y (0.0–1.0)"),
-  endX: z.number().describe("Normalized end X (0.0–1.0)"),
-  endY: z.number().describe("Normalized end Y (0.0–1.0)"),
-  durationMs: z.number().optional().describe("Swipe duration in ms (default: 300)"),
+  startX: NormalizedCoord.describe("Normalized start X (0.0–1.0)"),
+  startY: NormalizedCoord.describe("Normalized start Y (0.0–1.0)"),
+  endX: NormalizedCoord.describe("Normalized end X (0.0–1.0)"),
+  endY: NormalizedCoord.describe("Normalized end Y (0.0–1.0)"),
+  durationMs: z.number().int().positive().max(30_000).optional().describe("Swipe duration in ms (default: 300)"),
 });
 
 export const SimSwipeResponseSchema = z.object({
@@ -464,7 +466,7 @@ export const SimTypeTextResponseSchema = z.object({
 
 export const SimPressKeyRequestSchema = z.object({
   sessionId: z.string(),
-  keycode: z.number().describe("USB HID usage code"),
+  keycode: z.number().int().min(0).max(0xffff).describe("USB HID usage code"),
   direction: z.enum(["down", "up"]).optional().describe("Key direction (default: down+up)"),
 });
 

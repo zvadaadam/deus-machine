@@ -395,6 +395,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Track whether we've already warned about touch failure (avoid console spam)
   const touchWarnedRef = useRef(false);
 
+  // Ref to read selectedUdid inside loadSimulators without closing over it
+  // (avoids recreating the callback — and retriggering the mount effect — on selection change)
+  const selectedUdidRef = useRef(selectedUdid);
+  selectedUdidRef.current = selectedUdid;
+
   // -------------------------------------------------------------------------
   // Load simulators on mount
   // -------------------------------------------------------------------------
@@ -405,7 +410,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const sims = await simulatorService.listSimulators();
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setSimulators(sims);
-      if (!selectedUdid && sims.length > 0) {
+
+      const currentUdid = selectedUdidRef.current;
+      // Pick a UDID when: nothing selected, OR current selection is stale (not in list)
+      const needsSelection = !currentUdid || !sims.some((s) => s.udid === currentUdid);
+      if (needsSelection && sims.length > 0) {
         // Check persisted UDID first — if it exists in the sim list, use it.
         // Otherwise fall back to scoring (booted iPhone > shutdown iPhone > booted iPad).
         const layout = workspaceLayoutActions.getLayout(workspaceId);
@@ -428,7 +437,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "error", message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`, canRetry: false });
     }
-  }, [selectedUdid, workspaceId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount

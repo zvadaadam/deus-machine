@@ -392,5 +392,8 @@ pub async fn sim_build_and_run(
 pub async fn sim_has_xcode_project(workspace_path: String) -> bool {
     tokio::task::spawn_blocking(move || app_manager::has_xcode_project(&workspace_path))
         .await
-        .unwrap_or(false)
+        .unwrap_or_else(|e| {
+            eprintln!("[TAURI] sim_has_xcode_project join error: {}", e);
+            false
+        })
 }

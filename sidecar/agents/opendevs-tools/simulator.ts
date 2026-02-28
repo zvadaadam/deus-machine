@@ -301,8 +301,9 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
         text: z.string().describe("The text to type into the focused field"),
       },
       async (args) => {
+        const preview = args.text.length > 30 ? `${args.text.slice(0, 30)}...` : args.text;
         console.log(
-          `[opendevsMCPServer] iOSSimulatorTypeText invoked for session ${sessionId}: "${args.text.slice(0, 30)}..."`
+          `[opendevsMCPServer] iOSSimulatorTypeText invoked for session ${sessionId}: "${preview}"`
         );
 
         try {
