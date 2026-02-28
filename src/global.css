@@ -2158,9 +2158,12 @@ diffs-container.diffs-theme-compact {
 
 /* Squircle progressive enhancement — Apple-style continuous-curvature corners.
  * superellipse(1.5) produces iOS/macOS squircle shape.
- * Scale bumps to 1.25 because squircle corners look visually tighter
- * than standard border-radius at the same pixel value. Only md→4xl
- * are scaled; small radii (2xs,xs,sm) are imperceptible and full is a pill. */
+ * --corner-radius-scale bumps ALL --radius-* tokens to 1.25× because squircle
+ * corners look visually tighter than standard border-radius at the same pixel
+ * value. corner-shape is applied to sm→4xl Tailwind classes; 2xs/xs are too
+ * small to benefit and full is a pill. Elements consuming var(--radius-*)
+ * directly in CSS (scrollbars, diff components, markdown) get the inflated
+ * radius without squircle — the 1-2px delta is imperceptible. */
 @supports (corner-shape: superellipse(1.5)) {
   :root {
     --corner-radius-scale: 1.25;

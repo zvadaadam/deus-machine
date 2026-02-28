@@ -200,17 +200,15 @@
 
 - Token scale: 2xs(2px) → xs(4px) → sm(6px) → md(8px) → lg(10px) → xl(12px) → 2xl(16px) → 3xl(20px) → 4xl(24px) → full(9999px)
 - Two-layer: @theme defines `--radius-*: calc(var(--radius-*-base) * var(--corner-radius-scale))`. Base values + scale live in :root.
-- Squircle @supports block sets `--corner-radius-scale: 1.25` globally (ALL tokens scale, not just md→4xl).
-  This is intentional: sm(6px→7.5px), xs(4px→5px), 2xs(2px→2.5px) scale is imperceptible per the comment.
-- `corner-shape: superellipse(1.5)` only applied to .rounded-md through .rounded-4xl in the @supports block.
-  rounded-sm is NOT in the squircle list — it gets 7.5px sharp corners in squircle-capable browsers.
-- Legacy `--radius: 0.5rem` kept in :root for backward compat. `sonner.tsx` uses it for toast border-radius
-  (toast won't get squircle or scale with the new system — acceptable known gap).
-- Outstanding rounded-md usages NOT migrated: `button-group.tsx` (line 52, group label + line 8 rounded-r-md),
-  `field.tsx` (line 108, has-[] container), `navigation-menu.tsx` (lines 59, 91, 108),
-  `item.tsx` (line 31), `skeleton.tsx` (line 7, intentional per spec).
-  These all use rounded-md now mapped to the new 8px token — functionally correct, but review intended
-  skeleton.tsx as the ONLY allowed rounded-md; the others were missed in the migration pass.
+- Squircle @supports block sets `--corner-radius-scale: 1.25` globally (ALL tokens scale).
+  The 1-2px inflation on small radii is imperceptible.
+- `corner-shape: superellipse(1.5)` applied to .rounded-sm through .rounded-4xl in the @supports block.
+  2xs/xs are too small to benefit; full is a pill.
+- Elements consuming `var(--radius-*)` directly in CSS (scrollbars, diff components, markdown, sonner toast)
+  get the inflated radius without squircle — accepted as imperceptible (1-2.5px delta).
+  `corner-shape` cannot apply to `::-webkit-scrollbar-thumb` pseudo-elements anyway.
+- Legacy `--radius: 0.5rem` kept in :root for backward compat. `sonner.tsx` migrated to `--radius-md`.
+- All UI components fully migrated from `rounded-md` to semantic tokens (rounded-lg/xl/2xl etc.).
 - `scroll-area.tsx`: `rounded-[inherit]` is the only remaining arbitrary rounded value — correct and intentional.
 - `border-radius: 0` in global.css is the only non-token border-radius — correct and intentional.
 - Old `calc(var(--radius) ± Npx)` expressions fully removed from @theme — no orphans remain.
