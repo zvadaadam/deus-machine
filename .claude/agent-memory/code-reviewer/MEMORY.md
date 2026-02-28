@@ -195,3 +195,22 @@
 - `review_required` and `approved` review statuses are not mapped to PRActionState variants. They both
   fall through to `awaiting_review`. This is intentional (safest default) but `review_required` could
   deserve its own state in a future iteration.
+
+## Border Radius System (10-Token Scale, Confirmed)
+
+- Token scale: 2xs(2px) → xs(4px) → sm(6px) → md(8px) → lg(10px) → xl(12px) → 2xl(16px) → 3xl(20px) → 4xl(24px) → full(9999px)
+- Two-layer: @theme defines `--radius-*: calc(var(--radius-*-base) * var(--corner-radius-scale))`. Base values + scale live in :root.
+- Squircle @supports block sets `--corner-radius-scale: 1.25` globally (ALL tokens scale).
+  The 1-2px inflation on small radii is imperceptible.
+- `corner-shape: superellipse(1.5)` applied to .rounded-sm through .rounded-4xl in the @supports block.
+  2xs/xs are too small to benefit; full is a pill.
+- Elements consuming `var(--radius-*)` directly in CSS (scrollbars, diff components, markdown, sonner toast)
+  get the inflated radius without squircle — accepted as imperceptible (1-2.5px delta).
+  `corner-shape` cannot apply to `::-webkit-scrollbar-thumb` pseudo-elements anyway.
+- Legacy `--radius: 0.5rem` kept in :root for backward compat. `sonner.tsx` migrated to `--radius-md`.
+- All UI components fully migrated from `rounded-md` to semantic tokens (rounded-lg/xl/2xl etc.).
+- `scroll-area.tsx`: `rounded-[inherit]` is the only remaining arbitrary rounded value — correct and intentional.
+- `border-radius: 0` in global.css is the only non-token border-radius — correct and intentional.
+- Old `calc(var(--radius) ± Npx)` expressions fully removed from @theme — no orphans remain.
+- `border-radius 280ms` transition on `.tauri [data-slot="main-content"]` is a pre-existing violation
+  of the "animate only transform/opacity" rule. Not introduced by the radius system changes.

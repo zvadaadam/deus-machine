@@ -133,7 +133,7 @@ function DisplayDataOutput({ output }: { output: NotebookCellOutput }) {
         <img
           src={`data:image/png;base64,${imagePng.trim()}`}
           alt="Cell output"
-          className="max-w-full rounded"
+          className="max-w-full rounded-md"
         />
       </div>
     );

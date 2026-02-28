@@ -119,7 +119,7 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
             </div>
           ))}
           <button
-            className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
+            className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded-lg border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
             onClick={addTerminal}
             title="New terminal"
           >

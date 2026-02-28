@@ -48,14 +48,14 @@ export function TaskToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         <div className="space-y-2 px-2 pb-2">
           {/* Agent prompt */}
           {prompt && (
-            <div className="bg-muted/50 border-border max-h-60 overflow-y-auto rounded border p-2 text-xs">
+            <div className="bg-muted/50 border-border max-h-60 overflow-y-auto rounded-md border p-2 text-xs">
               <pre className="m-0 font-mono break-words whitespace-pre-wrap">{prompt}</pre>
             </div>
           )}
 
           {/* Agent result */}
           {hasResult && (
-            <div className="bg-muted/50 border-border mt-2 max-h-60 overflow-y-auto rounded border p-2 text-xs">
+            <div className="bg-muted/50 border-border mt-2 max-h-60 overflow-y-auto rounded-md border p-2 text-xs">
               <pre className="m-0 font-mono break-words whitespace-pre-wrap">{result}</pre>
             </div>
           )}

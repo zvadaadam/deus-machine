@@ -39,7 +39,7 @@ export function TaskButton({
           disabled={disabled || isRunning}
           aria-label={`Run task: ${name}`}
           className={cn(
-            "text-text-muted hover:text-text-secondary hover:bg-bg-muted relative flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']",
+            "text-text-muted hover:text-text-secondary hover:bg-bg-muted relative flex h-6 w-6 items-center justify-center rounded-lg transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']",
             (disabled || isRunning) && "cursor-not-allowed opacity-50"
           )}
         >

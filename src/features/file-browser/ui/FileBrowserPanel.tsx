@@ -347,7 +347,7 @@ export function FileBrowserPanel({
             <button
               onClick={() => setFilterMode("changes")}
               className={cn(
-                "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                "rounded-lg px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
                 filterMode === "changes"
                   ? "bg-muted text-secondary-foreground font-medium"
                   : "text-muted-foreground hover:text-foreground"
@@ -358,7 +358,7 @@ export function FileBrowserPanel({
             <button
               onClick={() => setFilterMode("all")}
               className={cn(
-                "rounded-md px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
+                "rounded-lg px-2 py-1 text-xs transition-colors duration-200 ease-[ease]",
                 filterMode === "all"
                   ? "bg-muted text-secondary-foreground font-medium"
                   : "text-muted-foreground hover:text-foreground"
@@ -373,7 +373,7 @@ export function FileBrowserPanel({
             <div className="flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md py-1 text-xs transition-colors duration-200 ease-[ease]">
+                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-xs transition-colors duration-200 ease-[ease]">
                   <SlidersHorizontal className="h-[11px] w-[11px]" />
                   <span>{changesFilterLabel(changesFilter)}</span>
                   <ChevronDown className="h-[10px] w-[10px]" />

@@ -271,7 +271,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             aria-label={`Archive workspace ${workspace.git_branch}`}
             title="Archive workspace"
             className={cn(
-              "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-md",
+              "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
               "absolute top-2 right-1 opacity-0 transition-opacity",
               "group-hover/sidebar-row:opacity-100"
             )}

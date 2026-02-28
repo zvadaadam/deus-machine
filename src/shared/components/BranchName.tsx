@@ -50,7 +50,7 @@ export function BranchName({ branch, compact = false }: BranchNameProps) {
               onClick={handleCopy}
               onPointerEnter={() => !copied && setTooltipOpen(true)}
               onPointerLeave={() => !copied && setTooltipOpen(false)}
-              className={`group hover:bg-accent hover:text-accent-foreground flex items-center rounded-md transition-colors duration-200 ${
+              className={`group hover:bg-accent hover:text-accent-foreground flex items-center rounded-lg transition-colors duration-200 ${
                 compact ? "gap-1.5 px-2 py-1" : "-ml-2 gap-2 px-2 py-1"
               }`}
             >

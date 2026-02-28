@@ -85,7 +85,7 @@ export function WorkspaceHeader({
                 type="button"
                 aria-label="Expand sidebar"
                 onClick={toggleSidebar}
-                className="text-text-muted hover:text-text-secondary hover:bg-bg-muted mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200"
+                className="text-text-muted hover:text-text-secondary hover:bg-bg-muted mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
               >
                 <PanelLeft className="h-3.5 w-3.5" />
               </button>
@@ -132,7 +132,7 @@ export function WorkspaceHeader({
                   <button
                     type="button"
                     onClick={onViewSetupLogs}
-                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
                   >
                     <ScrollText className="h-3 w-3" />
                   </button>
@@ -150,7 +150,7 @@ export function WorkspaceHeader({
                     onClick={() =>
                       onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))
                     }
-                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
                   >
                     <Sparkles className="h-3 w-3" />
                   </button>
@@ -166,7 +166,7 @@ export function WorkspaceHeader({
                   <button
                     type="button"
                     onClick={onRetrySetup}
-                    className="text-text-muted hover:text-text-secondary rounded-md px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
                   >
                     <RotateCw className="h-3 w-3" />
                   </button>
@@ -264,7 +264,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const trigger = (
     <button
       type="button"
-      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-[5px] border px-2 transition-colors duration-200"
+      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-lg border px-2 transition-colors duration-200"
       onPointerEnter={apps.length > 0 ? handleOpen : undefined}
       onPointerLeave={apps.length > 0 ? handleClose : undefined}
     >
@@ -310,7 +310,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
                   <img
                     src={app.icon}
                     alt=""
-                    className="h-5 w-5 flex-shrink-0 rounded-[3px]"
+                    className="h-5 w-5 flex-shrink-0 rounded-xs"
                     draggable={false}
                   />
                 ) : (

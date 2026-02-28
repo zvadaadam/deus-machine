@@ -48,7 +48,7 @@ export function WorkspaceStatusDashboard({ repoId }: WorkspaceStatusDashboardPro
           const isRunning = ws.setup_status === "running";
 
           return (
-            <div key={ws.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm">
+            <div key={ws.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm">
               {isRunning ? (
                 <Loader2 className="text-warning size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
               ) : (

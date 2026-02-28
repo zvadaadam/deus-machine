@@ -130,7 +130,7 @@ export function DiffFilesTree({
           <button
             type="button"
             onClick={onReview}
-            className="bg-primary/8 hover:bg-primary/14 text-primary flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors duration-200 ease"
+            className="bg-primary/8 hover:bg-primary/14 text-primary flex h-7 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ease"
           >
             <ScanText className="h-3 w-3" />
             <span>Review Changes</span>

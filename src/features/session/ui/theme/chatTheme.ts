@@ -151,7 +151,7 @@ export const chatTheme = {
   input: {
     container: "flex-shrink-0 m-0 px-6 pb-4 z-10",
     chatBox: {
-      base: "relative flex items-center gap-3 px-5 py-4 bg-muted/30 backdrop-blur-xl border border-border/50 rounded-[24px] shadow-lg transition-[border-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+      base: "relative flex items-center gap-3 px-5 py-4 bg-muted/30 backdrop-blur-xl border border-border/50 rounded-4xl shadow-lg transition-[border-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
       focused: "border-primary/50 shadow-xl",
       hover: "hover:border-border",
     },

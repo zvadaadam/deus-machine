@@ -46,7 +46,7 @@ export function AIStatusIndicator() {
               <button
                 type="button"
                 aria-label={`AI provider status: ${visuals.label}`}
-                className="flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors duration-150 hover:bg-bg-muted"
+                className="flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors duration-150 hover:bg-bg-muted"
               >
                 <StatusPulse dotClass={visuals.dotClass} pulse={worst.indicator === "critical"} />
                 <span className="text-text-muted text-xs">{visuals.label}</span>

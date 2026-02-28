@@ -140,7 +140,7 @@ function AllDiffFileSectionInner({
           <button
             type="button"
             onClick={() => onOpenFile(filePath)}
-            className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded transition-colors duration-200 ease"
+            className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200 ease"
             title="Open in editor"
           >
             <FileCode className="h-3 w-3" />

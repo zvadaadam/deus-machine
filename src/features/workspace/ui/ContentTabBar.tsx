@@ -61,7 +61,7 @@ export function isTabVisible(tab: RightSideTab, settings?: Settings): boolean {
 /**
  * ContentTabBar -- horizontal tab bar for the right content panel header.
  *
- * Active tab: filled pill with icon + label (h-7, rounded-md).
+ * Active tab: filled pill with icon + label (h-7, rounded-lg).
  * Inactive tabs: icon-only buttons with tooltips.
  * No container/track background — tabs sit directly in the header.
  */
@@ -89,7 +89,7 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
             onClick={() => onTabChange(item.id)}
             className={cn(
               "bg-bg-raised text-text-secondary",
-              "flex h-7 items-center gap-1.5 rounded-md px-3",
+              "flex h-7 items-center gap-1.5 rounded-lg px-3",
               "text-sm font-medium",
               "transition-colors duration-150",
             )}
@@ -108,7 +108,7 @@ export function ContentTabBar({ activeTab, onTabChange }: ContentTabBarProps) {
                 onClick={() => onTabChange(item.id)}
                 className={cn(
                   "text-text-muted hover:text-text-secondary hover:bg-bg-muted",
-                  "flex h-7 items-center justify-center rounded-md px-2",
+                  "flex h-7 items-center justify-center rounded-lg px-2",
                   "transition-colors duration-150",
                 )}
               >

@@ -164,7 +164,7 @@ export function MainContentTabBar({
                     }}
                     className={cn(
                       "group relative flex items-center gap-1.5 overflow-hidden",
-                      "h-7 max-w-[200px] min-w-[80px] rounded-md px-2",
+                      "h-7 max-w-[200px] min-w-[80px] rounded-lg px-2",
                       "cursor-pointer text-base font-normal",
                       "transition-colors duration-150",
                       isActive
@@ -223,7 +223,7 @@ export function MainContentTabBar({
                 onClick={() => onTabAdd?.()}
                 className={cn(
                   "flex items-center justify-center",
-                  "h-7 flex-shrink-0 rounded-md px-1.5",
+                  "h-7 flex-shrink-0 rounded-lg px-1.5",
                   "text-text-disabled hover:text-text-muted",
                   "transition-colors duration-150"
                 )}
@@ -252,7 +252,7 @@ export function MainContentTabBar({
                   aria-label="Restore closed session"
                   className={cn(
                     "flex items-center justify-center",
-                    "h-7 flex-shrink-0 rounded-md px-1.5",
+                    "h-7 flex-shrink-0 rounded-lg px-1.5",
                     "text-text-disabled hover:text-text-muted",
                     "transition-colors duration-150"
                   )}
@@ -302,7 +302,7 @@ export function MainContentTabBar({
               type="button"
               aria-label="Collapse chat panel"
               onClick={onCollapseChatPanel}
-              className="text-text-disabled hover:text-text-secondary hover:bg-bg-overlay ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200 ease-out"
+              className="text-text-disabled hover:text-text-secondary hover:bg-bg-overlay ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-out"
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>

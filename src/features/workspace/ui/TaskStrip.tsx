@@ -35,7 +35,7 @@ export function TaskStrip({ tasks, hasManifest, disabled, onRunTask, onSetupEnvi
           type="button"
           onClick={onSetupEnvironment}
           aria-label="Set up your environment"
-          className="text-text-disabled hover:text-text-muted flex h-6 items-center gap-1 rounded-md px-1.5 text-sm transition-colors duration-200"
+          className="text-text-disabled hover:text-text-muted flex h-6 items-center gap-1 rounded-lg px-1.5 text-sm transition-colors duration-200"
         >
           <Wrench className="h-3 w-3 shrink-0" />
           <span>Set up environment</span>
@@ -59,7 +59,7 @@ export function TaskStrip({ tasks, hasManifest, disabled, onRunTask, onSetupEnvi
           type="button"
           onClick={handleOpenSettings}
           aria-label="Open environment settings"
-          className="text-text-muted hover:text-text-secondary hover:bg-bg-muted relative flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']"
+          className="text-text-muted hover:text-text-secondary hover:bg-bg-muted relative flex h-6 w-6 items-center justify-center rounded-lg transition-colors duration-200 before:absolute before:inset-[-10px] before:content-['']"
         >
           <Settings className="h-3 w-3" />
         </button>
