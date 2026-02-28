@@ -11,7 +11,7 @@
 import { Globe } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function WebFetchToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
@@ -42,20 +42,12 @@ export function WebFetchToolRenderer({ toolUse, toolResult, isLoading }: ToolRen
   return (
     <BaseToolRenderer
       toolName="Web Fetch"
-      icon={
-        <Globe
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            chatTheme.tools.WebFetch
-          )}
-        />
-      }
+      icon={<Globe className={cn(TOOL_ICON_CLS, TOOL_COLORS.WebFetch)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
       renderSummary={() => (
-        <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
+        <span className={cn("text-muted-foreground truncate text-sm", "font-mono")}>
           {getDomain()}
         </span>
       )}
@@ -73,7 +65,7 @@ export function WebFetchToolRenderer({ toolUse, toolResult, isLoading }: ToolRen
         return (
           <div
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.mono,
+              "text-foreground font-mono text-sm leading-5",
               "overflow-x-auto rounded-md px-3 py-2",
               "bg-muted/50 border-border border",
               "max-h-96 overflow-y-auto"

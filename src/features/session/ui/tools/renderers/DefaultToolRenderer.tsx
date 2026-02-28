@@ -11,7 +11,7 @@
 import { match } from "ts-pattern";
 import { Wrench } from "lucide-react";
 import { BaseToolRenderer } from "../components";
-import { chatTheme } from "../../theme";
+import { TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
@@ -51,9 +51,7 @@ function isContentBlockArray(content: any): content is ContentBlock[] {
 function ContentBlockRenderer({ block }: { block: ContentBlock }) {
   return match(block)
     .with({ type: "text" }, (b) => (
-      <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
-        {b.text}
-      </div>
+      <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{b.text}</div>
     ))
     .with({ type: "image" }, (b) => (
       <img
@@ -79,21 +77,14 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
   return (
     <BaseToolRenderer
       toolName={toolUse.name || "Unknown Tool"}
-      icon={
-        <Wrench
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            "text-muted-foreground"
-          )}
-        />
-      }
+      icon={<Wrench className={cn(TOOL_ICON_CLS, "text-muted-foreground")} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
+      showContentOnError
       renderSummary={() =>
         firstInputValue ? (
-          <span className={cn(chatTheme.blocks.tool.contentHierarchy.summary, "font-mono")}>
+          <span className={cn("text-muted-foreground truncate text-sm", "font-mono")}>
             {firstInputValue}
           </span>
         ) : undefined

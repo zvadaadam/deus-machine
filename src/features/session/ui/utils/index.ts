@@ -6,3 +6,5 @@
 
 export { calculateTurnStats } from "./calculateTurnStats";
 export type { TurnStats } from "./calculateTurnStats";
+export { groupToolStreaks, groupMessageToolStreaks } from "./groupTools";
+export type { GroupedItem, GroupedMessage } from "./groupTools";

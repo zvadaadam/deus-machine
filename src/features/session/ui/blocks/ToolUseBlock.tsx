@@ -11,8 +11,8 @@
  * This enables renderers to show execution status (✓ Applied / ✗ Failed).
  */
 
+import { memo } from "react";
 import type { ToolUseBlock as ToolUseBlockType, ToolResultBlock } from "@/shared/types";
-import { m, useReducedMotion } from "framer-motion";
 import { toolRegistry } from "../tools/ToolRegistry";
 import { SubagentGroupBlock } from "./SubagentGroupBlock";
 import { useSession } from "../../context";
@@ -41,8 +41,13 @@ function ToolRendererWrapper({
   return <Renderer toolUse={block} toolResult={toolResult} isLoading={isLoading} />;
 }
 
-export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
-  const reduceMotion = useReducedMotion();
+/**
+ * Memoized: block and toolResult are the only props, and both are stable references.
+ * block is a parsed JSON object that doesn't change after creation.
+ * toolResult transitions from undefined → ToolResultBlock once (then stays stable).
+ * This prevents re-renders when sibling tools in the same group update.
+ */
+export const ToolUseBlock = memo(function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   const { subagentMessages } = useSession();
 
   if (!block || !block.name) {
@@ -52,9 +57,11 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
     return null;
   }
 
-  // Route Task blocks with child messages to SubagentGroupBlock
+  // Route Task/Agent blocks with child messages to SubagentGroupBlock.
+  // SDK uses "Task" (older) or "Agent" (newer) for the same tool.
   // Falls back to TaskToolRenderer for Tasks without children (old data)
-  if (block.name === "Task" && subagentMessages.has(block.id)) {
+  const isAgentTool = block.name === "Task" || block.name === "Agent";
+  if (isAgentTool && subagentMessages.has(block.id)) {
     return (
       <div className="my-1">
         <SubagentGroupBlock
@@ -77,14 +84,8 @@ export function ToolUseBlock({ block, toolResult }: ToolUseBlockProps) {
   const isLoading = !toolResult;
 
   return (
-    <m.div
-      className="my-1"
-      style={{ contain: "paint" }}
-      initial={reduceMotion ? false : { opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-    >
+    <div className="tool-use-enter my-1" style={{ contain: "layout style paint" }}>
       <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />
-    </m.div>
+    </div>
   );
-}
+});

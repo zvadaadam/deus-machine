@@ -11,7 +11,7 @@ import { FileText } from "lucide-react";
 import { BaseToolRenderer, CodeBlock, FilePathDisplay } from "../components";
 import type { ToolRendererProps } from "../../chat-types";
 import { detectLanguageFromPath } from "../utils/detectLanguage";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 
 export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
@@ -39,11 +39,7 @@ export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Read"
-      icon={
-        <FileText
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Read)}
-        />
-      }
+      icon={<FileText className={cn(TOOL_ICON_CLS, TOOL_COLORS.Read)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -52,17 +48,14 @@ export function ReadToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {fileName}
           </span>
           {lineCount && (
-            <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
-              {" "}
-              • {lineCount} lines
-            </span>
+            <span className="text-muted-foreground text-sm font-normal"> • {lineCount} lines</span>
           )}
         </>
       )}

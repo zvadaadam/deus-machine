@@ -13,7 +13,7 @@ import { ListChecks, Circle, Loader2, CheckCircle2 } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 
 interface Todo {
   content: string;
@@ -73,20 +73,12 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   return (
     <BaseToolRenderer
       toolName="Todo"
-      icon={
-        <ListChecks
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            chatTheme.tools.TodoWrite
-          )}
-        />
-      }
+      icon={<ListChecks className={cn(TOOL_ICON_CLS, TOOL_COLORS.TodoWrite)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
       renderSummary={() => (
-        <span className={chatTheme.blocks.tool.contentHierarchy.summary}>{currentTaskText}</span>
+        <span className="text-muted-foreground truncate text-sm">{currentTaskText}</span>
       )}
       renderContent={() => (
         <div className="space-y-1 px-2 pb-2">
@@ -123,7 +115,7 @@ export function TodoWriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
               {/* Status badge */}
               <div
                 className={cn(
-                  "flex-shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium tracking-wide uppercase",
+                  "text-2xs flex-shrink-0 rounded-full px-1.5 py-0.5 font-medium tracking-wide uppercase",
                   todo.status === "completed" && "bg-success/10 text-success",
                   todo.status === "in_progress" && "bg-info/10 text-info",
                   todo.status === "pending" && "bg-muted text-muted-foreground"

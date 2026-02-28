@@ -19,15 +19,15 @@
  * └─ Summary message (always visible - last message in turn)
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import type { Message } from "@/shared/types";
 import { MessageItem } from "./MessageItem";
+import { ToolGroupBlock } from "./blocks";
 import { TurnStatsHeader } from "./TurnStatsHeader";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useSession } from "../context";
-import { calculateTurnStats } from "./utils";
+import { calculateTurnStats, groupMessageToolStreaks } from "./utils";
+import { match } from "ts-pattern";
 import { Square } from "lucide-react";
-import { chatTheme } from "./theme";
 import { cn } from "@/shared/lib/utils";
 
 interface AssistantTurnProps {
@@ -36,7 +36,16 @@ interface AssistantTurnProps {
   isWorking: boolean; // Whether AI is currently working
 }
 
-export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnProps) {
+/**
+ * Memoized: Previous turns (isLatest=false, isWorking=false) never change after
+ * they're sealed. Only the latest turn re-renders as new messages stream in.
+ * This prevents O(N) re-renders across all historical turns on every new message.
+ */
+export const AssistantTurn = memo(function AssistantTurn({
+  messages,
+  isLatest,
+  isWorking,
+}: AssistantTurnProps) {
   const { parseContent, toolResultMap } = useSession();
 
   // User can manually toggle, but defaults to isLatest
@@ -58,6 +67,14 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
   const summaryMessage = messages[messages.length - 1];
   const hiddenMessages = messages.slice(0, -1);
 
+  // Group consecutive tool-only hidden messages into streaks.
+  // The sidecar stores each tool call as a separate message row. Without this,
+  // loading from DB shows tools individually instead of grouped.
+  const groupedHidden = useMemo(
+    () => groupMessageToolStreaks(hiddenMessages, parseContent),
+    [hiddenMessages, parseContent]
+  );
+
   // Detect if the last message is a cancellation marker (stop_reason: "cancelled")
   const isCancelled = useMemo(() => {
     try {
@@ -72,7 +89,7 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
   const isLastInTurn = true;
 
   return (
-    <div className="assistant-turn flex min-w-0 flex-col">
+    <div className="assistant-turn flex min-w-0 flex-col" style={{ contain: "layout style" }}>
       {/* Stats header - always visible for multi-message turns */}
       {hiddenMessages.length > 0 && (
         <TurnStatsHeader
@@ -83,35 +100,44 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
         />
       )}
 
-      {/* Collapsible section - intermediate messages and tool calls.
-          forceMount keeps children in the DOM when collapsed so SubagentGroupBlock
-          retains its internal expand/collapse state across turn toggles.
-          Uses CSS grid rows trick for smooth height animation (see global.css). */}
+      {/* Collapsible section — intermediate messages and tool calls.
+          Plain div with data-state replaces Radix Collapsible because Radix's
+          useLayoutEffect kills CSS grid transitions (sets transition-duration:0s for measurement).
+          Content stays in DOM so SubagentGroupBlock retains expand/collapse state. */}
       {hiddenMessages.length > 0 && (
-        <Collapsible open={isExpanded}>
-          <CollapsibleContent forceMount className="turn-collapsible">
-            <div className="min-h-0 overflow-hidden">
-              <div className="flex min-w-0 flex-col gap-1">
-                {hiddenMessages.map((message) => (
-                  <MessageItem
-                    key={message.id}
-                    message={message}
-                    isLatestAssistant={false}
-                    isLastInTurn={false}
-                    isWorking={false}
-                  />
-                ))}
-              </div>
+        <div data-state={isExpanded ? "open" : "closed"} className="turn-collapsible">
+          <div className="min-h-0 overflow-hidden">
+            <div className="flex min-w-0 flex-col gap-1">
+              {groupedHidden.map((item) =>
+                match(item)
+                  .with({ kind: "message" }, ({ message }) => (
+                    <MessageItem
+                      key={message.id}
+                      message={message}
+                      isLatestAssistant={false}
+                      isLastInTurn={false}
+                      isWorking={false}
+                    />
+                  ))
+                  .with({ kind: "message-tool-streak" }, ({ toolBlocks, firstToolId }) => (
+                    <ToolGroupBlock
+                      key={`msg-streak:${firstToolId}`}
+                      blocks={toolBlocks}
+                      isSealed={!(isLatest && isWorking)}
+                    />
+                  ))
+                  .exhaustive()
+              )}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </div>
+        </div>
       )}
 
       {/* Summary message - always visible */}
       {isCancelled ? (
-        <div className={cn(chatTheme.message.assistant.container, "flex items-center gap-1.5 py-1")}>
-          <Square className="h-3 w-3 fill-current text-muted-foreground/40" />
-          <span className="text-xs text-muted-foreground/60">Turn interrupted</span>
+        <div className={cn("mr-auto", "flex items-center gap-1.5 py-1")}>
+          <Square className="text-muted-foreground/40 h-3 w-3 fill-current" />
+          <span className="text-muted-foreground/60 text-xs">Turn interrupted</span>
         </div>
       ) : (
         <MessageItem
@@ -123,4 +149,4 @@ export function AssistantTurn({ messages, isLatest, isWorking }: AssistantTurnPr
       )}
     </div>
   );
-}
+});

@@ -1,12 +1,13 @@
 /**
- * Tool Result Block
+ * Tool Result Block (Legacy)
  *
- * Renders tool execution results.
- * Shows success/error state with appropriate styling.
+ * Renders standalone tool execution results.
+ * Uniform styling for success and error — the error signal lives
+ * on the collapsed tool row (X icon), not in the result content.
  */
 
 import type { ToolResultBlock as ToolResultBlockType } from "@/shared/types";
-import { chatTheme } from "../theme";
+
 import { cn } from "@/shared/lib/utils";
 
 interface ToolResultBlockProps {
@@ -34,19 +35,14 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
   return (
     <div
       className={cn(
-        chatTheme.blocks.tool.container,
+        "border-border/40 rounded-md border bg-transparent backdrop-blur-sm",
         "mt-1 text-sm",
-        isError ? chatTheme.blocks.tool.borderLeft.error : chatTheme.blocks.tool.borderLeft.success
+        "border-l-border border-l-2"
       )}
     >
       {/* Header */}
-      <div className={chatTheme.blocks.tool.header}>
-        <strong
-          className={cn(
-            "text-xs font-medium",
-            isError ? "text-destructive/70" : "text-foreground/70"
-          )}
-        >
+      <div className="text-foreground flex items-center gap-1.5 text-sm font-semibold">
+        <strong className="text-foreground/70 text-xs font-medium">
           {isError ? "Error" : "Result"}
         </strong>
       </div>
@@ -56,9 +52,9 @@ export function ToolResultBlock({ block }: ToolResultBlockProps) {
         role="region"
         aria-label={isError ? "Tool error" : "Tool result"}
         className={cn(
-          chatTheme.blocks.tool.content,
+          "overflow-x-auto rounded p-2 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap",
           "scrollbar-vibrancy max-h-[150px] overflow-y-auto",
-          isError ? "bg-destructive/5 text-foreground/70" : "bg-sidebar-accent/40 text-foreground"
+          "bg-muted/40 text-foreground"
         )}
       >
         {content}

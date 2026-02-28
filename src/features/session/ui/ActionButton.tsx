@@ -7,7 +7,6 @@
 
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { chatTheme } from "./theme";
 
 interface ActionButtonProps {
   icon: LucideIcon;
@@ -31,14 +30,14 @@ export function ActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        chatTheme.userActions.button,
-        active && chatTheme.userActions.buttonActive,
+        "hover:bg-muted/40 text-muted-foreground hover:text-foreground ease flex h-6 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-200",
+        active && "text-success hover:bg-success/10",
         className
       )}
       aria-label={label}
       aria-pressed={active}
     >
-      <Icon className={chatTheme.userActions.icon} />
+      <Icon className="h-3 w-3" />
       {showLabel && <span>{label}</span>}
     </button>
   );

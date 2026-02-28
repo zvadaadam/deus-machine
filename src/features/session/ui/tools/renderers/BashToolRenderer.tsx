@@ -11,12 +11,11 @@ import { Terminal } from "lucide-react";
 import { BaseToolRenderer } from "../components";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 
 export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { command, description } = toolUse.input ?? {};
   const commandText = typeof command === "string" ? command : "";
-  const isError = toolResult?.is_error;
 
   // Truncate command more aggressively when description exists (command is secondary)
   const commandPreview = (() => {
@@ -27,21 +26,20 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Bash"
-      icon={
-        <Terminal
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Bash)}
-        />
-      }
+      icon={<Terminal className={cn(TOOL_ICON_CLS, TOOL_COLORS.Bash)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
+      showContentOnError
       renderSummary={() => (
         <>
           {description ? (
             // Description exists: Description is hero, command is metadata
             <>
-              <span className={chatTheme.blocks.tool.contentHierarchy.emphasis}>{description}</span>
-              <span className={cn(chatTheme.blocks.tool.contentHierarchy.metadata, "font-mono")}>
+              <span className="text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal">
+                {description}
+              </span>
+              <span className={cn("text-muted-foreground text-sm font-normal", "font-mono")}>
                 {" → "}
                 {commandPreview}
               </span>
@@ -50,7 +48,7 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
             // No description: Command is hero
             <span
               className={cn(
-                chatTheme.blocks.tool.contentHierarchy.emphasis,
+                "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
                 "bg-primary/15 text-primary rounded-md px-2 py-0.5 font-mono"
               )}
             >
@@ -71,12 +69,10 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         return (
           <pre
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.mono,
+              "text-foreground font-mono text-sm leading-5",
               "overflow-x-auto rounded-lg px-3 py-2 whitespace-pre-wrap",
               "max-h-[400px] overflow-y-auto border",
-              isError
-                ? "bg-destructive/5 text-foreground/70 border-destructive/15"
-                : "bg-muted/80 text-foreground border-border/60"
+              "bg-muted/80 text-foreground border-border/60"
             )}
           >
             <code>
