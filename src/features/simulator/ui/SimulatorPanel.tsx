@@ -125,15 +125,6 @@ function scoreSimulator(sim: SimulatorInfo): number {
 }
 
 // ---------------------------------------------------------------------------
-// Active stream session — module-level singleton.
-// Rust has a single capture pipeline, so only one sim can stream at a time.
-// When switching workspaces back to the same sim, we reuse this to avoid
-// tearing down and recreating the capture pipeline unnecessarily.
-// ---------------------------------------------------------------------------
-
-let activeStreamSession: { udid: string; stream: StreamInfo } | null = null;
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -162,6 +153,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   if (prevWorkspaceId !== workspaceId) {
     setPrevWorkspaceId(workspaceId);
     workspaceGenerationRef.current += 1;
+    const gen = workspaceGenerationRef.current;
     // Restore persisted simulator UDID for this workspace so
     // loadSimulators/auto-reconnect target the right device.
     const layout = workspaceLayoutActions.getLayout(workspaceId);
@@ -170,9 +162,19 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     // (1-3s) on every switch. The useEffect on loadSimulators still refreshes
     // the list in the background to pick up state changes (Booted/Shutdown).
     setSelectedUdid(layout.simulatorUdid);
-    setState({ phase: "idle" });
     setHasProject(null);
     hasAutoReconnectedRef.current = false;
+
+    // Instant reconnect: check if Rust has an active session for this workspace.
+    // Set idle initially, then upgrade to streaming if session exists.
+    setState({ phase: "idle" });
+    simulatorService.getStreamInfo(workspaceId).then((stream) => {
+      if (workspaceGenerationRef.current !== gen) return; // stale
+      if (stream && layout.simulatorUdid) {
+        setState({ phase: "streaming", udid: layout.simulatorUdid, stream });
+        hasAutoReconnectedRef.current = true;
+      }
+    });
   }
 
   // Sync phase to global store so the tab bar can show a status dot
@@ -187,37 +189,23 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // but returns StreamInfo for the RPC response.
   const handleBootSimulator = useCallback(
     async (udid: string) => {
-      // Fast path: Rust is already streaming this sim — reuse the session
-      if (activeStreamSession?.udid === udid) {
-        setSelectedUdid(udid);
-        setState({ phase: "streaming", udid, stream: activeStreamSession.stream });
-        workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
-        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-        return activeStreamSession.stream;
-      }
-      const gen = workspaceGenerationRef.current;
       setSelectedUdid(udid);
+      workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
       setState({ phase: "booting", udid });
+      useSimulatorStatusStore.getState().setPhase(workspaceId, "booting");
       // Auto-switch to simulator tab so the user sees the stream
       // (same pattern as BrowserPanel's onAutoCreateTab)
       workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
+
       try {
-        const stream = await simulatorService.startStreaming(udid);
-        if (workspaceGenerationRef.current !== gen) return null; // Guard: workspace may have changed
-        if (!stream.hid_available) {
-          console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
-        }
-        activeStreamSession = { udid, stream };
+        const stream = await simulatorService.startStreaming(workspaceId, udid);
         setState({ phase: "streaming", udid, stream });
-        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
         return stream;
       } catch (e) {
-        if (workspaceGenerationRef.current !== gen) return null; // Guard: workspace may have changed
-        setState({
-          phase: "error",
-          message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`,
-          canRetry: true,
-        });
+        const msg = e instanceof Error ? e.message : String(e);
+        setState({ phase: "error", message: `Failed to start: ${msg}`, canRetry: true });
+        useSimulatorStatusStore.getState().setPhase(workspaceId, "error");
         return null;
       }
     },
@@ -226,6 +214,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   // Listen for simulator RPC requests from the sidecar (agent tools)
   useSimulatorRpcHandler({
+    workspaceId,
     onBootSimulator: handleBootSimulator,
     getSimulators: useCallback(() => simulators, [simulators]),
   });
@@ -272,11 +261,13 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Cleanup on unmount — stop the streaming pipeline (MJPEG server, ObjC bridge,
   // dispatch queues, touch server subprocess) when the panel is destroyed.
   // Without this, resources leak until the window closes.
+  // Captures workspaceId in a ref so the cleanup reads the current value on unmount.
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
   useEffect(() => {
     return () => {
       if (isStreamingRef.current) {
-        activeStreamSession = null;
-        simulatorService.stopStreaming().catch((err) => console.warn("[Simulator] cleanup failed:", err));
+        simulatorService.stopStreaming(workspaceIdRef.current).catch((err) => console.warn("[Simulator] cleanup failed:", err));
       }
     };
   }, []);
@@ -462,42 +453,40 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     if (!selectedSim || selectedSim.state !== "Booted") return;
 
     hasAutoReconnectedRef.current = true;
+    const gen = workspaceGenerationRef.current;
     const udid = selectedSim.udid;
 
-    // Fast path: Rust is already streaming this sim (e.g., switching back
-    // to a workspace whose sim was started by another workspace). Reuse
-    // the existing MJPEG session — no capture pipeline teardown/rebuild.
-    if (activeStreamSession?.udid === udid) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect fast path
-      setState({ phase: "streaming", udid, stream: activeStreamSession.stream });
-      workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-      return;
-    }
+    // Check if Rust already has an active session for this workspace
+    simulatorService.getStreamInfo(workspaceId).then(async (existingStream) => {
+      if (workspaceGenerationRef.current !== gen) return;
 
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect on mount
-    setState({ phase: "booting", udid });
-    simulatorService.startStreaming(udid).then(
-      (stream) => {
-        if (cancelled) return; // Guard: workspace may have changed
-        if (!stream.hid_available) {
-          console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
-        }
-        activeStreamSession = { udid, stream };
-        setState({ phase: "streaming", udid, stream });
+      if (existingStream) {
+        // Session already alive — just reconnect
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect fast path
+        setState({ phase: "streaming", udid, stream: existingStream });
+        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
         workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
-      },
-      (e) => {
-        if (cancelled) return; // Guard: workspace may have changed
-        setState({
-          phase: "error",
-          message: `Failed to reconnect: ${e instanceof Error ? e.message : String(e)}`,
-          canRetry: true,
-        });
+        return;
       }
-    );
-    return () => { cancelled = true; };
-  }, [selectedSim, state.phase]);
+
+      // No existing session — start fresh
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-reconnect on mount
+      setState({ phase: "booting", udid });
+      useSimulatorStatusStore.getState().setPhase(workspaceId, "booting");
+      try {
+        const stream = await simulatorService.startStreaming(workspaceId, udid);
+        if (workspaceGenerationRef.current !== gen) return;
+        setState({ phase: "streaming", udid, stream });
+        useSimulatorStatusStore.getState().setPhase(workspaceId, "streaming");
+        workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
+      } catch (e) {
+        if (workspaceGenerationRef.current !== gen) return;
+        // Silently fall back to idle
+        setState({ phase: "idle" });
+        useSimulatorStatusStore.getState().clearPhase(workspaceId);
+      }
+    });
+  }, [selectedSim, workspaceId, state.phase]);
 
   // -------------------------------------------------------------------------
   // Start — boot simulator and begin streaming (no build)
@@ -505,22 +494,15 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleStart = async () => {
     if (!selectedUdid) return;
-    // Fast path: Rust is already streaming this sim — reuse the session
-    if (activeStreamSession?.udid === selectedUdid) {
-      setState({ phase: "streaming", udid: selectedUdid, stream: activeStreamSession.stream });
-      workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
-      return;
-    }
     const gen = workspaceGenerationRef.current;
     touchWarnedRef.current = false; // Reset touch warning for new session
     setState({ phase: "booting", udid: selectedUdid });
     try {
-      const stream = await simulatorService.startStreaming(selectedUdid);
+      const stream = await simulatorService.startStreaming(workspaceId, selectedUdid);
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       if (!stream.hid_available) {
         console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
       }
-      activeStreamSession = { udid: selectedUdid, stream };
       setState({ phase: "streaming", udid: selectedUdid, stream });
       workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
     } catch (e) {
@@ -536,7 +518,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     const gen = workspaceGenerationRef.current;
     setState({ phase: "building", udid: s.udid, stream: s.stream, startedAt: Date.now() });
     try {
-      const app = await simulatorService.buildAndRun(workspacePath);
+      const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "running", udid: s.udid, stream: s.stream, app });
     } catch (e) {
@@ -547,10 +529,9 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   // Stop everything and return to idle
   const handleStop = async () => {
-    activeStreamSession = null;
     setState({ phase: "idle" });
     try {
-      await simulatorService.stopStreaming();
+      await simulatorService.stopStreaming(workspaceId);
     } catch (e) {
       console.error("Stop failed:", e);
     }
@@ -565,7 +546,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Home button
   const handleHome = async () => {
     try {
-      await simulatorService.pressHome();
+      await simulatorService.pressHome(workspaceId);
     } catch (e) {
       console.error("Home button failed:", e);
     }
@@ -575,7 +556,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const handleRelaunch = async () => {
     if (state.phase !== "running") return;
     try {
-      await simulatorService.launchApp(state.app.bundle_id);
+      await simulatorService.launchApp(workspaceId, state.app.bundle_id);
     } catch (e) {
       console.error("Relaunch failed:", e);
     }
@@ -584,7 +565,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const handleTerminate = async () => {
     if (state.phase !== "running") return;
     try {
-      await simulatorService.terminateApp(state.app.bundle_id);
+      await simulatorService.terminateApp(workspaceId, state.app.bundle_id);
     } catch (e) {
       console.error("Terminate failed:", e);
     }
@@ -595,7 +576,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     const { udid, stream } = state;
     const gen = workspaceGenerationRef.current;
     try {
-      await simulatorService.uninstallApp(state.app.bundle_id);
+      await simulatorService.uninstallApp(workspaceId, state.app.bundle_id);
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       setState({ phase: "streaming", udid, stream });
     } catch (e) {
@@ -643,18 +624,18 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       // Focus viewport for keyboard capture on click
       viewportRef.current?.focus();
       const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(coords.x, coords.y, "began").catch(warnTouchFailed);
+      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
     },
-    [isLive, getNormalizedCoords, warnTouchFailed]
+    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(coords.x, coords.y, "moved").catch(warnTouchFailed);
+      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
     },
-    [isLive, getNormalizedCoords, warnTouchFailed]
+    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
   );
 
   const handleMouseUp = useCallback(
@@ -662,11 +643,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       if (!isLive) return;
       const coords = getNormalizedCoords(e);
       if (coords) {
-        simulatorService.sendTouch(coords.x, coords.y, "ended").catch(warnTouchFailed);
+        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "ended").catch(warnTouchFailed);
         lastCoordsRef.current = null; // Prevent window handler from sending duplicate "ended"
       }
     },
-    [isLive, getNormalizedCoords, warnTouchFailed]
+    [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
   );
 
   // Window-level mouseup — catches drag-release outside the image
@@ -675,7 +656,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       if (!isLive) return;
       const coords = lastCoordsRef.current;
       if (coords) {
-        simulatorService.sendTouch(coords.x, coords.y, "ended").catch(warnTouchFailed);
+        simulatorService.sendTouch(workspaceIdRef.current, coords.x, coords.y, "ended").catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     };
@@ -689,9 +670,9 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const coords = getNormalizedCoords(e, false);
       if (!coords) return;
       e.preventDefault();
-      simulatorService.sendScroll(coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
+      simulatorService.sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
     },
-    [isLive, getNormalizedCoords]
+    [isLive, workspaceId, getNormalizedCoords]
   );
 
   // -------------------------------------------------------------------------
@@ -700,7 +681,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleScreenshot = useCallback(async () => {
     try {
-      const bytes = await simulatorService.takeScreenshot();
+      const bytes = await simulatorService.takeScreenshot(workspaceId);
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
       if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
@@ -715,7 +696,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     } catch (e) {
       console.error("Screenshot failed:", e);
     }
-  }, []);
+  }, [workspaceId]);
 
   // -------------------------------------------------------------------------
   // Keyboard input forwarding — maps KeyboardEvent.code to USB HID keycodes.
@@ -741,10 +722,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
-        simulatorService.sendKey(keycode, "down").catch(() => {});
+        simulatorService.sendKey(workspaceId, keycode, "down").catch(() => {});
       }
     },
-    [isLive, hidAvailable, handleScreenshot]
+    [isLive, workspaceId, hidAvailable, handleScreenshot]
   );
 
   const handleKeyUp = useCallback(
@@ -753,10 +734,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
-        simulatorService.sendKey(keycode, "up").catch(() => {});
+        simulatorService.sendKey(workspaceId, keycode, "up").catch(() => {});
       }
     },
-    [isLive, hidAvailable]
+    [isLive, workspaceId, hidAvailable]
   );
 
   // -------------------------------------------------------------------------
