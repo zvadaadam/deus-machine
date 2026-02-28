@@ -36,7 +36,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.31",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-python": "^6.1.6",
     "@codemirror/state": "^6.4.1",
