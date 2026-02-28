@@ -288,16 +288,18 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const buildLogEndRef = useRef<HTMLDivElement>(null);
 
   // Listen for build log events streamed from Rust during xcodebuild.
-  // Accumulates lines into an array instead of replacing a single string.
+  // Payload is { workspaceId, line } — filter to only this workspace so
+  // concurrent builds in different workspaces don't interleave logs.
   useEffect(() => {
     if (state.phase !== "building") {
       setBuildLogs([]);
       return;
     }
     let unlisten: (() => void) | null = null;
-    listen<string>("sim:build-log", (event) => {
+    listen<{ workspaceId: string; line: string }>("sim:build-log", (event) => {
+      if (event.payload.workspaceId !== workspaceId) return;
       setBuildLogs((prev) => {
-        const next = [...prev, event.payload];
+        const next = [...prev, event.payload.line];
         return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
       });
     }).then((fn) => {
@@ -306,7 +308,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     return () => {
       unlisten?.();
     };
-  }, [state.phase]);
+  }, [state.phase, workspaceId]);
 
   // Auto-scroll build log to bottom when new lines arrive
   useEffect(() => {
@@ -555,8 +557,12 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleTerminate = async () => {
     if (state.phase !== "running") return;
+    const gen = workspaceGenerationRef.current;
     try {
       await simulatorService.terminateApp(workspaceId, state.app.bundle_id);
+      if (workspaceGenerationRef.current !== gen) return;
+      // App process killed but still installed — drop back to streaming.
+      simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
     } catch (e) {
       console.error("Terminate failed:", e);
     }
