@@ -167,4 +167,14 @@ export const simulatorStoreActions = {
     }
     return set;
   },
+
+  /** Find the workspace that owns a given UDID (excluding a workspace). */
+  getWorkspaceByUdid: (udid: string, excludeWorkspaceId?: string): string | null => {
+    const sessions = useSimulatorStatusStore.getState().sessions;
+    for (const [wsId, phase] of Object.entries(sessions)) {
+      if (wsId === excludeWorkspaceId) continue;
+      if ("udid" in phase && phase.udid === udid) return wsId;
+    }
+    return null;
+  },
 };

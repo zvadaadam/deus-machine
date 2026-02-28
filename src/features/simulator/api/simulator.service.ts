@@ -12,8 +12,8 @@ export const simulatorService = {
   getStreamInfo: (workspaceId: string) =>
     invoke<StreamInfo | null>("get_stream_info", { workspaceId }),
 
-  startStreaming: (workspaceId: string, udid: string) =>
-    invoke<StreamInfo>("start_streaming", { workspaceId, udid }),
+  startStreaming: (workspaceId: string, udid: string, skipBootCheck = false) =>
+    invoke<StreamInfo>("start_streaming", { workspaceId, udid, skipBootCheck }),
 
   stopStreaming: (workspaceId: string) =>
     invoke<void>("stop_streaming", { workspaceId }),

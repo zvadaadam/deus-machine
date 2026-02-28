@@ -36,6 +36,7 @@ pub async fn list_simulators() -> Result<Vec<SimulatorInfo>, String> {
 pub async fn start_streaming(
     workspace_id: String,
     udid: String,
+    skip_boot_check: Option<bool>,
     state: State<'_, Mutex<SimulatorSessions>>,
 ) -> Result<StreamInfo, String> {
     // Only stop THIS workspace's previous session (other workspaces are untouched)
@@ -57,8 +58,12 @@ pub async fn start_streaming(
         .map_err(|e| format!("Task join error: {}", e))?;
     }
 
-    // Boot the simulator headlessly if not already running
-    ensure_booted(&udid).await.map_err(|e| e.to_string())?;
+    // Boot the simulator headlessly if not already running.
+    // Frontend can skip this when it already knows the device is booted
+    // (saves 1-10s of `simctl list --json` parsing).
+    if !skip_boot_check.unwrap_or(false) {
+        ensure_booted(&udid).await.map_err(|e| e.to_string())?;
+    }
 
     // Create new screen capture (wraps blocking ObjC init with 500ms sleep)
     let capture_udid = udid.clone();
