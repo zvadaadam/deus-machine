@@ -14,6 +14,7 @@ import { StringDecoder } from "string_decoder";
 import { RpcConnection } from "./rpc-connection";
 import { FrontendClient } from "./frontend-client";
 import { closeDatabase } from "./db/index";
+import { reconcileStuckSessions } from "./db/session-writer";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
@@ -304,6 +305,14 @@ class UnifiedSidecar {
       } else {
         console.log(`${agentType} handler initialized successfully`);
       }
+    }
+
+    // Reset sessions stuck in "working" status from a previous sidecar lifecycle.
+    // Must run after DB is initialized (getDatabase auto-inits) but before
+    // accepting connections, so no race with incoming queries.
+    const reconcileResult = reconcileStuckSessions();
+    if (!reconcileResult.ok) {
+      console.error(`Failed to reconcile stuck sessions: ${reconcileResult.error}`);
     }
 
     return new Promise((resolve, reject) => {
