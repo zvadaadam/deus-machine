@@ -58,7 +58,7 @@ export function DiffTabContent({
               onClick={onPrevFile}
               disabled={!onPrevFile}
               className={cn(
-                "flex h-5 w-5 items-center justify-center rounded transition-colors",
+                "flex h-5 w-5 items-center justify-center rounded-md transition-colors",
                 onPrevFile
                   ? "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   : "text-muted-foreground/30 cursor-not-allowed"
@@ -72,7 +72,7 @@ export function DiffTabContent({
               onClick={onNextFile}
               disabled={!onNextFile}
               className={cn(
-                "flex h-5 w-5 items-center justify-center rounded transition-colors",
+                "flex h-5 w-5 items-center justify-center rounded-md transition-colors",
                 onNextFile
                   ? "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   : "text-muted-foreground/30 cursor-not-allowed"

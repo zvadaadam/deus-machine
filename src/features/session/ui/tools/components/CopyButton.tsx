@@ -58,7 +58,7 @@ export function CopyButton({ text, label = "Copy", className, size = "sm" }: Cop
       type="button"
       onClick={handleCopy}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded transition-colors duration-200",
+        "inline-flex items-center gap-1.5 rounded-lg transition-colors duration-200",
         "hover:bg-muted/50 bg-transparent",
         "text-muted-foreground hover:text-foreground",
         "border-border/40 hover:border-border border",
