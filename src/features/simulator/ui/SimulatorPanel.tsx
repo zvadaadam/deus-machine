@@ -216,6 +216,12 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // but returns StreamInfo for the RPC response.
   const handleBootSimulator = useCallback(
     async (udid: string) => {
+      // Reassign: release device from any other workspace first.
+      const ownerWsId = simulatorStoreActions.getWorkspaceByUdid(udid, workspaceId);
+      if (ownerWsId) {
+        simulatorService.stopStreaming(ownerWsId).catch(() => {});
+        simulatorStoreActions.clearWorkspaceSession(ownerWsId);
+      }
       setSelectedUdid(udid);
       workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
       // Single write — setSession updates both the full session and the label.
@@ -225,7 +231,8 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       workspaceLayoutActions.setActiveRightSideTab(workspaceId, "simulator");
 
       try {
-        const stream = await simulatorService.startStreaming(workspaceId, udid);
+        // Skip boot check — agent-driven boot has already verified the UDID.
+        const stream = await simulatorService.startStreaming(workspaceId, udid, true);
         simulatorStoreActions.setSession(workspaceId, { phase: "streaming", udid, stream });
         return stream;
       } catch (e) {
@@ -360,11 +367,13 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
               s.device_type.includes("iPhone") ||
               s.device_type.includes("iPad")
           );
-          // Prefer devices not claimed by other workspaces so each workspace
-          // auto-selects a different simulator (avoids "same stream" confusion).
+          // Progressive fallback: prefer idle devices, then non-store-claimed,
+          // then anything. Avoids auto-selecting a booted sim from another
+          // workspace (or from Xcode) which causes "same stream" confusion.
           const inUse = simulatorStoreActions.getInUseUdids(workspaceId);
-          const available = iosSims.filter((s) => !inUse.has(s.udid));
-          const pool = available.length > 0 ? available : iosSims;
+          const idle = iosSims.filter((s) => s.state !== "Booted" && !inUse.has(s.udid));
+          const notClaimed = iosSims.filter((s) => !inUse.has(s.udid));
+          const pool = idle.length > 0 ? idle : notClaimed.length > 0 ? notClaimed : iosSims;
           const scored = [...pool].sort((a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a));
           setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
         }
@@ -445,10 +454,21 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
 
   const handleStart = async () => {
     if (!selectedUdid) return;
+    // If another workspace owns this device, release it first (reassignment).
+    // The user chose this device explicitly or it was auto-selected — either way,
+    // one device = one workspace at a time.
+    const ownerWsId = simulatorStoreActions.getWorkspaceByUdid(selectedUdid, workspaceId);
+    if (ownerWsId) {
+      simulatorService.stopStreaming(ownerWsId).catch(() => {});
+      simulatorStoreActions.clearWorkspaceSession(ownerWsId);
+    }
     // dispatch validates: BOOT is only legal from idle or error (retry).
     if (!simulatorStoreActions.dispatch(workspaceId, { type: "BOOT", udid: selectedUdid })) return;
+    // Skip the simctl boot check if the frontend already knows the device is booted
+    // (saves 1-10s of `simctl list --json` parsing).
+    const isBooted = selectedSim?.state === "Booted";
     try {
-      const stream = await simulatorService.startStreaming(workspaceId, selectedUdid);
+      const stream = await simulatorService.startStreaming(workspaceId, selectedUdid, isBooted);
       if (!stream.hid_available) {
         console.warn("[Simulator] HID client not available — touch/scroll/key injection disabled");
       }
@@ -545,23 +565,17 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   };
 
   // -------------------------------------------------------------------------
-  // Screenshot — capture PNG, copy to clipboard (download as fallback)
+  // Screenshot — capture PNG and insert into chat input
   // -------------------------------------------------------------------------
 
   const handleScreenshot = useCallback(async () => {
     try {
       const bytes = await simulatorService.takeScreenshot(workspaceId);
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
-      if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `simulator-${Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, { type: "image/png" });
+      window.dispatchEvent(
+        new CustomEvent("insert-to-chat", { detail: { files: [file] } })
+      );
     } catch (e) {
       console.error("Screenshot failed:", e);
     }
