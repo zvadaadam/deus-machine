@@ -264,7 +264,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
   const trigger = (
     <button
       type="button"
-      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-sm border px-2 transition-colors duration-200"
+      className="text-text-subtle border-border-strong hover:bg-bg-muted flex h-7 items-center gap-1 rounded-lg border px-2 transition-colors duration-200"
       onPointerEnter={apps.length > 0 ? handleOpen : undefined}
       onPointerLeave={apps.length > 0 ? handleClose : undefined}
     >
