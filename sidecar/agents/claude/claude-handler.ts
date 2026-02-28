@@ -117,9 +117,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
 
     const canReuse =
-      isSessionActive(session) &&
-      options.shouldResetGenerator !== true &&
-      !settingsChangedFlag;
+      isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
 
     if (canReuse) {
       console.log(`Reusing existing generator for session ${sessionId}`);
@@ -436,6 +434,13 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
     };
 
+    // Track whether the current query completed successfully (received result/success).
+    // The SDK subprocess may exit with a signal (e.g. SIGINT) after finishing — the
+    // CLI binary's normal shutdown mechanism. The SDK reports ANY signal-based exit as
+    // an error, even when the query already succeeded. This flag lets the catch block
+    // distinguish "process cleanup after success" from genuine mid-query failures.
+    let querySucceeded = false;
+
     try {
       // Build environment using shared env-builder
       const envForClaude = buildAgentEnvironment({
@@ -532,9 +537,7 @@ export class ClaudeAgentHandler implements AgentHandler {
             const saveResult = saveAgentSessionId(sessionId, agentSessionId);
             if (saveResult.ok) {
               session.agentSessionIdCaptured = true;
-              console.log(
-                `[${generatorId}] Captured agent_session_id: ${agentSessionId}`
-              );
+              console.log(`[${generatorId}] Captured agent_session_id: ${agentSessionId}`);
             } else {
               console.error(
                 `[${generatorId}] Failed to persist agent_session_id: ${saveResult.error}`
@@ -558,7 +561,9 @@ export class ClaudeAgentHandler implements AgentHandler {
             const model = options?.model || "opus";
             const writeResult = saveAssistantMessage(sessionId, msg, model, parentToolUseId);
             if (!writeResult.ok) {
-              console.error(`[${generatorId}] DB write failed for assistant message: ${writeResult.error}`);
+              console.error(
+                `[${generatorId}] DB write failed for assistant message: ${writeResult.error}`
+              );
             }
           }
 
@@ -571,7 +576,9 @@ export class ClaudeAgentHandler implements AgentHandler {
             if (hasToolResult) {
               const writeResult = saveToolResultMessage(sessionId, msg, parentToolUseId);
               if (!writeResult.ok) {
-                console.error(`[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`);
+                console.error(
+                  `[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`
+                );
               }
             }
           }
@@ -586,6 +593,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           // Update session status when query completes successfully
           if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
+            querySucceeded = true;
             updateSessionStatus(sessionId, "idle");
           }
         }
@@ -596,8 +604,22 @@ export class ClaudeAgentHandler implements AgentHandler {
       updateSessionStatus(sessionId, "idle");
       console.log(`[${generatorId}] Session completed: ${sessionId}`);
     } catch (error) {
+      // The SDK subprocess may exit with a signal (e.g. SIGINT) after the query
+      // already completed successfully. This happens because the CLI binary shuts
+      // down its process between turns, and the SDK reports any signal-based exit
+      // as an error via inputStream.error(). If result/success was already received,
+      // this is expected process cleanup — not a real error.
+      if (querySucceeded) {
+        updateSessionStatus(sessionId, "idle");
+        console.log(`[${generatorId}] Process exited after successful query (expected cleanup)`);
+        return;
+      }
+
       const classified = classifyError(error);
-      console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
+      console.error(
+        `[${generatorId}] Error in Claude query [${classified.category}]:`,
+        classified.message
+      );
 
       // If this query used a resume parameter and the error is NOT a user
       // cancellation, the agent_session_id may be stale or expired. Clear it
@@ -611,11 +633,14 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (options.resume && classified.category !== "abort") {
         const clearResult = saveAgentSessionId(sessionId, null);
         if (!clearResult.ok) {
-          console.error(`[${generatorId}] Failed to clear stale agent_session_id: ${clearResult.error}`);
+          console.error(
+            `[${generatorId}] Failed to clear stale agent_session_id: ${clearResult.error}`
+          );
         }
         console.log(`[${generatorId}] Cleared stale agent_session_id after resume failure`);
 
-        const resumeError = "Session could not be restored — conversation history is no longer available. Please start a new session.";
+        const resumeError =
+          "Session could not be restored — conversation history is no longer available. Please start a new session.";
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
@@ -648,11 +673,15 @@ export class ClaudeAgentHandler implements AgentHandler {
       // and the model has context on resume ("previous turn was interrupted").
       if (isAbort) {
         const model = options?.model || "opus";
-        saveAssistantMessage(sessionId, {
-          role: "assistant",
-          content: [{ type: "text", text: "" }],
-          stop_reason: "cancelled",
-        }, model);
+        saveAssistantMessage(
+          sessionId,
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "" }],
+            stop_reason: "cancelled",
+          },
+          model
+        );
       }
 
       const statusResult = updateSessionStatus(
