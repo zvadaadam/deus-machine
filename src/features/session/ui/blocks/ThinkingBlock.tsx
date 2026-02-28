@@ -5,11 +5,13 @@
  * Collapsed by default to reduce clutter.
  * Shows encrypted signature status when present.
  * Expanded content is rendered as markdown for better readability.
+ *
+ * Uses the same CSS grid data-state pattern as tool collapsibles
+ * for smooth height animation without Framer Motion overhead.
  */
 
 import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
-import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Brain, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { ChatMarkdown } from "@/components/markdown";
@@ -21,7 +23,6 @@ interface ThinkingBlockProps {
 }
 
 export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps) {
-  const reduceMotion = useReducedMotion();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Width-based preview: 90 chars (balanced - not too short, not too long)
@@ -85,21 +86,18 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         )}
       </button>
 
-      {/* Expanded: show FULL thinking text as markdown */}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <m.div
-            key="thinking-content"
-            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
-            animate={{ opacity: 0.7, height: "auto" }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
-            className="text-muted-foreground mt-0.5 ml-6 overflow-hidden text-sm"
-          >
+      {/* Expanded content — CSS grid height animation, same pattern as tool collapsibles.
+          Replaces AnimatePresence + height:"auto" (Framer Motion tracks children, clones
+          on exit, manages lifecycle — significant overhead across 50+ thinking blocks).
+          CSS grid-template-rows: 0fr->1fr handles the "animate to auto height" natively.
+          Content stays in DOM so markdown doesn't re-parse on every toggle. */}
+      <div data-state={isExpanded ? "open" : "closed"} className="tool-expand-collapsible">
+        <div className="min-h-0 overflow-hidden">
+          <div className="text-muted-foreground mt-0.5 ml-6 text-sm opacity-70">
             <ChatMarkdown>{block.thinking}</ChatMarkdown>
-          </m.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

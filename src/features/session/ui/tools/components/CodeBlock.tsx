@@ -6,7 +6,7 @@
 
 import { CopyButton } from "./CopyButton";
 import { SyntaxHighlighter } from "./SyntaxHighlighter";
-import { chatTheme } from "../../theme";
+
 import { cn } from "@/shared/lib/utils";
 
 interface CodeBlockProps {
@@ -25,14 +25,22 @@ export function CodeBlock({
   className,
 }: CodeBlockProps) {
   return (
-    <div className={cn(chatTheme.blocks.code.container, className)}>
+    <div
+      className={cn("group border-border/60 relative overflow-hidden rounded-lg border", className)}
+    >
       {/* Copy button (appears on hover) */}
-      <div className={chatTheme.blocks.code.copyButton}>
+      <div className="absolute top-2 right-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <CopyButton text={code} label="Copy" />
       </div>
 
       {/* Code content with syntax highlighting */}
-      <div className={cn(chatTheme.blocks.code.pre, "scrollbar-vibrancy")} style={{ maxHeight }}>
+      <div
+        className={cn(
+          "bg-muted/70 m-0 overflow-x-auto rounded-lg p-4 font-mono text-sm",
+          "scrollbar-vibrancy"
+        )}
+        style={{ maxHeight }}
+      >
         <SyntaxHighlighter code={code} language={language} showLineNumbers={showLineNumbers} />
       </div>
     </div>

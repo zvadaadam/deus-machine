@@ -14,7 +14,7 @@
  */
 
 import { useState, ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 import { ToolError } from "./ToolError";
@@ -31,6 +31,7 @@ export interface BaseToolRendererProps {
   // Behavior
   defaultExpanded?: boolean;
   isLoading?: boolean; // True when tool result is pending (shimmer effect)
+  showContentOnError?: boolean; // True for tools whose renderContent already displays error output (e.g. Bash)
 
   // Content rendering (choose one)
   children?: ReactNode; // NEW API: Single children slot
@@ -49,23 +50,17 @@ export function BaseToolRenderer({
   toolResult,
   defaultExpanded = false, // Collapsed by default (explicit is better than implicit)
   isLoading = false,
+  showContentOnError = false,
   children,
   renderContent,
   renderSummary,
 }: BaseToolRendererProps) {
   const isError = toolResult?.is_error;
 
-  // Manual override: null = derive from data, boolean = user clicked.
-  // Auto-expands on error without useEffect (derived state pattern).
+  // Errors never auto-expand — agents self-correct and errors are transient.
+  // The X icon swap on the collapsed row is the error signal; users expand when they want details.
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
-  const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded || !!isError;
-
-  // Error-only status — subtle, not alarming. Agents encounter errors frequently
-  // (build failures, missing files, retries) and continue working. Cursor uses
-  // a muted red label inline with the tool name, not a badge or banner.
-  const status = isError
-    ? { text: "Error", className: "text-destructive/70 text-xs font-normal" }
-    : null;
+  const isExpanded = manualExpanded !== null ? manualExpanded : defaultExpanded;
 
   return (
     <div className="flex flex-col gap-1">
@@ -85,16 +80,17 @@ export function BaseToolRenderer({
         aria-label={`${isExpanded ? "Collapse" : "Expand"} ${toolName} tool details`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {/* Icon container - fixed width to prevent layout shift */}
+          {/* Icon container - fixed width to prevent layout shift.
+              On error: X icon replaces tool icon (instant scan signal). */}
           <div className="relative h-4 w-4 flex-shrink-0">
-            {/* Tool icon - default state (hides on hover or when expanded) */}
+            {/* Tool icon or error X — default state (hides on hover or when expanded) */}
             <div
               className={cn(
                 "absolute top-0 left-0 transition-opacity duration-100 ease-in",
                 isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
-              {icon}
+              {isError ? <X className="text-destructive/60 h-4 w-4" aria-label="Error" /> : icon}
             </div>
 
             {/* Chevron - shows on hover or when expanded (Cursor: 0.1s ease-in) */}
@@ -119,9 +115,6 @@ export function BaseToolRenderer({
             {toolName}
           </span>
 
-          {/* Status indicator (error only) */}
-          {status && <span className={status.className}>{status.text}</span>}
-
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
             <span className="text-muted-foreground truncate text-xs">
@@ -131,18 +124,20 @@ export function BaseToolRenderer({
         </div>
       </button>
 
-      {/* Expanded content — error lives inside the collapsible body.
-          The header "Error" label is the always-visible cue; details are behind the click. */}
+      {/* Expanded content:
+          - Error + showContentOnError (Bash): renderer handles error display, skip ToolError
+          - Error + !showContentOnError (Edit): show ToolError only, skip renderer content
+          - No error: show renderer content normally */}
       {isExpanded && (
         <div className="mt-0.5 ml-6">
-          {/* Error display — inside collapse, not always-visible */}
-          {isError && toolResult && <ToolError content={toolResult.content} />}
-
-          {/* NEW API: children */}
-          {children}
-
-          {/* OLD API: renderContent */}
-          {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
+          {isError && toolResult && !showContentOnError ? (
+            <ToolError content={toolResult.content} />
+          ) : (
+            <>
+              {children}
+              {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
+            </>
+          )}
         </div>
       )}
     </div>

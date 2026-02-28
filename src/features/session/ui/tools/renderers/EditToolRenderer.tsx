@@ -10,7 +10,7 @@
 
 import { FileEdit } from "lucide-react";
 import { BaseToolRenderer, UnifiedDiff } from "../components";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 import { computeDiffStats } from "../utils/computeDiffStats";
@@ -29,11 +29,7 @@ export function EditToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Edit"
-      icon={
-        <FileEdit
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Edit)}
-        />
-      }
+      icon={<FileEdit className={cn(TOOL_ICON_CLS, TOOL_COLORS.Edit)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -41,7 +37,7 @@ export function EditToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >

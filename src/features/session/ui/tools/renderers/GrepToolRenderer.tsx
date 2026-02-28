@@ -9,13 +9,12 @@
 
 import { SearchCode } from "lucide-react";
 import { BaseToolRenderer } from "../components";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
   const { pattern, path, output_mode, glob, type: fileType } = toolUse.input ?? {};
-  const isError = toolResult?.is_error;
 
   // Count matches from result
   const getMatchCount = () => {
@@ -42,11 +41,7 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
   return (
     <BaseToolRenderer
       toolName="Grep"
-      icon={
-        <SearchCode
-          className={cn(chatTheme.tools.iconSize, chatTheme.tools.iconBase, chatTheme.tools.Grep)}
-        />
-      }
+      icon={<SearchCode className={cn(TOOL_ICON_CLS, TOOL_COLORS.Grep)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -54,13 +49,13 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-info/15 text-info rounded-md px-2 py-0.5 font-mono"
             )}
           >
             {pattern}
           </span>
-          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+          <span className="text-muted-foreground text-sm font-normal">
             {" "}
             in {glob || fileType || pathPreview}
             {matchCount !== null && ` • ${matchCount} match${matchCount !== 1 ? "es" : ""}`}
@@ -77,11 +72,9 @@ export function GrepToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
           <div className="px-2 pb-2">
             <pre
               className={cn(
-                chatTheme.blocks.tool.content,
+                "overflow-x-auto rounded p-2 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap",
                 "scrollbar-vibrancy max-h-[300px] overflow-y-auto",
-                isError
-                  ? "bg-destructive/5 text-foreground/70 border-destructive/15 border"
-                  : "bg-muted/50 text-foreground border-border border"
+                "bg-muted/50 text-foreground border-border border"
               )}
             >
               {typeof toolResult.content === "object"

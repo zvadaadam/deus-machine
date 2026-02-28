@@ -10,7 +10,7 @@ import { BaseToolRenderer } from "../components";
 import { UnifiedDiff } from "../components/UnifiedDiff";
 import { cn } from "@/shared/lib/utils";
 import type { ToolRendererProps } from "../../chat-types";
-import { chatTheme } from "../../theme";
+import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import { computeDiffStats } from "../utils/computeDiffStats";
 
 interface Edit {
@@ -45,15 +45,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
   return (
     <BaseToolRenderer
       toolName="MultiEdit"
-      icon={
-        <FilePenLine
-          className={cn(
-            chatTheme.tools.iconSize,
-            chatTheme.tools.iconBase,
-            chatTheme.tools.MultiEdit
-          )}
-        />
-      }
+      icon={<FilePenLine className={cn(TOOL_ICON_CLS, TOOL_COLORS.MultiEdit)} />}
       toolUse={toolUse}
       toolResult={toolResult}
       isLoading={isLoading}
@@ -61,13 +53,13 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
         <>
           <span
             className={cn(
-              chatTheme.blocks.tool.contentHierarchy.emphasis,
+              "text-foreground/80 rounded-sm px-1.5 py-0.5 font-mono text-sm font-normal",
               "bg-muted/60 rounded-md px-1.5 py-0.5 font-mono"
             )}
           >
             {fileName}
           </span>
-          <span className={chatTheme.blocks.tool.contentHierarchy.metadata}>
+          <span className="text-muted-foreground text-sm font-normal">
             {" "}
             • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>

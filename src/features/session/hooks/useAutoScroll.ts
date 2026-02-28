@@ -95,11 +95,24 @@ export function useAutoScroll({
   // Track previous message count to detect new messages vs. content reflows.
   const prevMessageCountRef = useRef(messages.length);
 
+  // Track the last message ID to distinguish appends (new messages at end)
+  // from prepends (older messages loaded at front via load-older).
+  // Prepends increase messages.length but don't change the last message.
+  const prevLastMessageIdRef = useRef<string | null>(
+    messages.length > 0 ? messages[messages.length - 1].id : null
+  );
+
   // Resize-vs-scroll race condition guard (ported from use-stick-to-bottom).
   // When content resizes, the browser may fire a scroll event before/after the
   // ResizeObserver callback. Without this guard, the scroll handler sees
   // scrollTop change and misinterprets it as a user scroll-up.
   const resizeDifferenceRef = useRef(0);
+
+  // CSS transition guard: counts active grid-template-rows transitions inside
+  // the scroll container. During expand/collapse animations, ResizeObserver fires
+  // on every interpolated frame, each writing to scrollTop and causing jitter.
+  // When activeTransitions > 0, ResizeObserver skips the scrollTop write.
+  const activeTransitionsRef = useRef(0);
 
   // --- Helpers ---
 
@@ -208,6 +221,52 @@ export function useAutoScroll({
     return () => observer.disconnect();
   }, [messagesContainerRef, messagesEndRef, transitionTo]);
 
+  // --- CSS transition guard: pause auto-scroll during expand/collapse ---
+  // CSS grid transitions on collapsible elements cause ResizeObserver to fire
+  // on every interpolated frame (~12 times per 200ms transition). Each write
+  // to scrollTop during the transition fights the animation and causes jitter.
+  // We listen for transitionstart/transitionend on grid-template-rows and
+  // suppress auto-scroll writes while any transition is active.
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const onTransitionStart = (e: TransitionEvent) => {
+      if (e.propertyName === "grid-template-rows") {
+        activeTransitionsRef.current++;
+      }
+    };
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.propertyName === "grid-template-rows") {
+        activeTransitionsRef.current = Math.max(0, activeTransitionsRef.current - 1);
+        // After the transition completes, do one final scroll-to-bottom if needed.
+        // This catches the case where content expanded while at bottom — the user
+        // expects to stay at bottom but we suppressed the intermediate writes.
+        if (activeTransitionsRef.current === 0 && scrollStateRef.current !== "READING_HISTORY") {
+          container.scrollTop = container.scrollHeight;
+        }
+      }
+    };
+
+    // transitioncancel fires if a transition is interrupted (e.g., rapid toggle).
+    // Without this, the counter leaks and auto-scroll stays suppressed forever.
+    const onTransitionCancel = (e: TransitionEvent) => {
+      if (e.propertyName === "grid-template-rows") {
+        activeTransitionsRef.current = Math.max(0, activeTransitionsRef.current - 1);
+      }
+    };
+
+    container.addEventListener("transitionstart", onTransitionStart);
+    container.addEventListener("transitionend", onTransitionEnd);
+    container.addEventListener("transitioncancel", onTransitionCancel);
+    return () => {
+      container.removeEventListener("transitionstart", onTransitionStart);
+      container.removeEventListener("transitionend", onTransitionEnd);
+      container.removeEventListener("transitioncancel", onTransitionCancel);
+    };
+  }, [messagesContainerRef]);
+
   // --- ResizeObserver: auto-scroll on content height changes ---
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -252,8 +311,13 @@ export function useAutoScroll({
       // Width-only changes (from panel resize) fire ResizeObserver but don't
       // need scroll adjustment — the unnecessary scrollTop write caused visible
       // scrollbar flash during sidecar tab switching.
+      //
+      // Skip during CSS grid transitions (expand/collapse) — the transition
+      // guard handles the final scroll-to-bottom after the animation completes.
       const shouldScroll =
-        scrollStateRef.current !== "READING_HISTORY" && difference > 0;
+        scrollStateRef.current !== "READING_HISTORY" &&
+        difference > 0 &&
+        activeTransitionsRef.current === 0;
 
       rafId = requestAnimationFrame(() => {
         rafId = null;
@@ -358,9 +422,19 @@ export function useAutoScroll({
   useEffect(() => {
     const count = messages.length;
     const prevCount = prevMessageCountRef.current;
+    const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const prevLastId = prevLastMessageIdRef.current;
+
+    // Update refs before any early returns.
     prevMessageCountRef.current = count;
+    prevLastMessageIdRef.current = lastMessageId;
 
     if (count <= prevCount) return;
+
+    // Prepend detection: count grew but the last message is the same.
+    // Older messages were loaded at the front (load-older) — don't auto-scroll.
+    // The scroll position is preserved by Chat.tsx's useLayoutEffect instead.
+    if (lastMessageId === prevLastId) return;
 
     // Always scroll to bottom when the USER sends a message, even if
     // they were reading history. They expect to see their own message.

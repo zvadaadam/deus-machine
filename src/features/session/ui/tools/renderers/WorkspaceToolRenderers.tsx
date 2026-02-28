@@ -24,11 +24,12 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
   const isCancelled = output.includes("cancelled");
 
   // Build preview from first question
-  const firstQuestion = Array.isArray(questions) && questions.length > 0
-    ? questions[0].question
-    : "";
+  const firstQuestion =
+    Array.isArray(questions) && questions.length > 0 ? questions[0].question : "";
   const preview = firstQuestion
-    ? firstQuestion.length > 50 ? firstQuestion.slice(0, 50) + "..." : firstQuestion
+    ? firstQuestion.length > 50
+      ? firstQuestion.slice(0, 50) + "..."
+      : firstQuestion
     : "";
 
   return (
@@ -38,39 +39,40 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        preview ? (
-          <span className="text-muted-foreground truncate text-xs">{preview}</span>
-        ) : null
+        preview ? <span className="text-muted-foreground truncate text-xs">{preview}</span> : null
       }
       renderContent={() => (
         <div className="space-y-2 px-2 pb-2">
           {/* Questions */}
-          {Array.isArray(questions) && questions.map((q: any, i: number) => (
-            <div key={i} className="space-y-1">
-              <div className="text-foreground text-sm">{q.question}</div>
-              {Array.isArray(q.options) && q.options.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {q.options.map((opt: string, j: number) => (
-                    <span
-                      key={j}
-                      className="bg-muted/60 text-muted-foreground rounded-md px-2 py-0.5 text-xs"
-                    >
-                      {opt}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {Array.isArray(questions) &&
+            questions.map((q: any, i: number) => (
+              <div key={i} className="space-y-1">
+                <div className="text-foreground text-sm">{q.question}</div>
+                {Array.isArray(q.options) && q.options.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {q.options.map((opt: string, j: number) => (
+                      <span
+                        key={j}
+                        className="bg-muted/60 text-muted-foreground rounded-md px-2 py-0.5 text-xs"
+                      >
+                        {opt}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
 
           {/* Response */}
           {output && (
-            <div className={cn(
-              "rounded-md px-3 py-2 text-sm",
-              isCancelled
-                ? "bg-muted/30 text-muted-foreground italic"
-                : "bg-primary/10 text-foreground"
-            )}>
+            <div
+              className={cn(
+                "rounded-md px-3 py-2 text-sm",
+                isCancelled
+                  ? "bg-muted/30 text-muted-foreground italic"
+                  : "bg-primary/10 text-foreground"
+              )}
+            >
               {output}
             </div>
           )}
@@ -87,14 +89,9 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
 export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { file, stat } = toolUse.input ?? {};
   const output = toolResult ? extractText(toolResult.content) : "";
-  const isError = toolResult?.is_error;
 
   // Build preview
-  const preview = file
-    ? file.split("/").pop() || file
-    : stat
-      ? "stat"
-      : "all changes";
+  const preview = file ? file.split("/").pop() || file : stat ? "stat" : "all changes";
 
   return (
     <BaseToolRenderer
@@ -107,7 +104,7 @@ export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRender
       )}
       renderContent={() =>
         output ? (
-          <OutputBlock isError={isError}>{output}</OutputBlock>
+          <OutputBlock>{output}</OutputBlock>
         ) : (
           <div className="text-muted-foreground px-2 pb-2 text-xs italic">No changes found</div>
         )
@@ -141,19 +138,18 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
       renderContent={() => (
         <div className="space-y-2 px-2 pb-2">
           {/* Comment list */}
-          {Array.isArray(comments) && comments.map((c: any, i: number) => (
-            <div key={i} className="bg-muted/30 rounded-md px-3 py-2 text-xs">
-              <span className="text-muted-foreground font-mono">
-                {c.file}:{c.lineNumber}
-              </span>
-              <div className="text-foreground mt-1">{c.body}</div>
-            </div>
-          ))}
+          {Array.isArray(comments) &&
+            comments.map((c: any, i: number) => (
+              <div key={i} className="bg-muted/30 rounded-md px-3 py-2 text-xs">
+                <span className="text-muted-foreground font-mono">
+                  {c.file}:{c.lineNumber}
+                </span>
+                <div className="text-foreground mt-1">{c.body}</div>
+              </div>
+            ))}
 
           {/* Result */}
-          {output && (
-            <div className="text-muted-foreground text-xs">{output}</div>
-          )}
+          {output && <div className="text-muted-foreground text-xs">{output}</div>}
         </div>
       )}
     />
@@ -167,7 +163,6 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
 export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRendererProps) {
   const { source } = toolUse.input ?? {};
   const output = toolResult ? extractText(toolResult.content) : "";
-  const isError = toolResult?.is_error;
 
   // Extract source label from output header (format: "[Terminal - running]")
   const headerMatch = output.match(/^\[(.+?)\]/);
@@ -179,12 +174,10 @@ export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRende
       icon={<Terminal className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => (
-        <span className="text-muted-foreground text-xs">{sourceLabel}</span>
-      )}
+      renderSummary={() => <span className="text-muted-foreground text-xs">{sourceLabel}</span>}
       renderContent={() =>
         output ? (
-          <OutputBlock isError={isError}>{output}</OutputBlock>
+          <OutputBlock>{output}</OutputBlock>
         ) : (
           <div className="text-muted-foreground px-2 pb-2 text-xs italic">
             No terminal output available
