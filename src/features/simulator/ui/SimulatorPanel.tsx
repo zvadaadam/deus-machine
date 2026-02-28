@@ -79,7 +79,6 @@ interface SimulatorPanelProps {
   workspacePath: string;
 }
 
-
 // ---------------------------------------------------------------------------
 // Build log ring buffer size — keeps memory bounded during long builds
 // ---------------------------------------------------------------------------
@@ -127,6 +126,15 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
 
+  // Ref mirror of selectedUdid for reading inside async callbacks without
+  // closing over the state value (avoids recreating useCallback dependencies).
+  // Updated atomically via updateSelectedUdid — never written during render.
+  const selectedUdidRef = useRef(selectedUdid);
+  const updateSelectedUdid = useCallback((udid: string | null) => {
+    selectedUdidRef.current = udid;
+    setSelectedUdid(udid);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // DISPLAY PLANE — session phase from the global store, not local useState.
   //
@@ -146,9 +154,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   //   Display plane    — this store, keyed by workspaceId, persists across switches
   //   Session plane    — Rust HashMap, created by Start, destroyed by Stop only
   // ---------------------------------------------------------------------------
-  const state: SimPhase = useSimulatorStatusStore(
-    (s) => s.sessions[workspaceId] ?? IDLE_PHASE
-  );
+  const state: SimPhase = useSimulatorStatusStore((s) => s.sessions[workspaceId] ?? IDLE_PHASE);
 
   // Two write paths — dispatch() validates transitions via the state machine;
   // setSession() bypasses validation for recovery paths (mount probes, agent-driven).
@@ -180,9 +186,12 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     const gen = workspaceGenerationRef.current;
 
     const layout = workspaceLayoutActions.getLayout(workspaceId);
-    if (layout.simulatorUdid) {
-      setSelectedUdid(layout.simulatorUdid);
-    }
+    // Always reset selectedUdid on workspace switch — either to this workspace's
+    // persisted UDID or null. Without this, the always-mounted component retains
+    // the previous workspace's UDID, causing loadSimulators to skip re-selection
+    // and default to a sim that's already in use by another workspace.
+    const persistedUdid = layout.simulatorUdid ?? null;
+    updateSelectedUdid(persistedUdid);
 
     // Probe Rust if the display plane shows idle OR stuck at booting.
     // Idle: normal first-mount or app-restart where Rust may already have a session.
@@ -199,15 +208,15 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
             udid: layout.simulatorUdid!,
             stream,
           });
-          setSelectedUdid(layout.simulatorUdid!);
+          updateSelectedUdid(layout.simulatorUdid!);
         } else if (currentPhase === "booting") {
           // Rust has no session but store says booting — stuck state, reset.
           simulatorStoreActions.clearWorkspaceSession(workspaceId);
         }
       });
     }
-  // Runs on every workspace switch (workspaceId prop changes — always-mounted component).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Runs on every workspace switch (workspaceId prop changes — always-mounted component).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
   // -- Agent-driven boot callback (used by SimulatorStart RPC) --
@@ -222,7 +231,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         simulatorService.stopStreaming(ownerWsId).catch(() => {});
         simulatorStoreActions.clearWorkspaceSession(ownerWsId);
       }
-      setSelectedUdid(udid);
+      updateSelectedUdid(udid);
       workspaceLayoutActions.setSimulatorUdid(workspaceId, udid);
       // Single write — setSession updates both the full session and the label.
       simulatorStoreActions.setSession(workspaceId, { phase: "booting", udid });
@@ -259,7 +268,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Fast filesystem scan via Rust — no xcodebuild, no side effects.
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset probe state before async fetch
+
     setHasProject(null);
     simulatorService.hasXcodeProject(workspacePath).then(
       (result) => {
@@ -282,7 +291,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Accumulates lines into an array instead of replacing a single string.
   useEffect(() => {
     if (state.phase !== "building") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBuildLogs([]);
       return;
     }
@@ -332,11 +340,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const hidAvailable = hasStream(state) ? state.stream.hid_available : true;
   const isLive = streamUrl !== null;
 
-  // Ref to read selectedUdid inside loadSimulators without closing over it
-  // (avoids recreating the callback — and retriggering the mount effect — on selection change)
-  const selectedUdidRef = useRef(selectedUdid);
-  selectedUdidRef.current = selectedUdid;
-
   // -------------------------------------------------------------------------
   // Load simulators on mount
   // -------------------------------------------------------------------------
@@ -359,7 +362,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         const layout = workspaceLayoutActions.getLayout(workspaceId);
         const persisted = layout.simulatorUdid;
         if (persisted && sims.some((s) => s.udid === persisted)) {
-          setSelectedUdid(persisted);
+          updateSelectedUdid(persisted);
         } else {
           const iosSims = sims.filter(
             (s) =>
@@ -374,8 +377,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
           const idle = iosSims.filter((s) => s.state !== "Booted" && !inUse.has(s.udid));
           const notClaimed = iosSims.filter((s) => !inUse.has(s.udid));
           const pool = idle.length > 0 ? idle : notClaimed.length > 0 ? notClaimed : iosSims;
-          const scored = [...pool].sort((a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a));
-          setSelectedUdid(scored[0]?.udid ?? sims[0].udid);
+          const scored = [...pool].sort(
+            (a, b) => scoreSimulatorByType(b) - scoreSimulatorByType(a)
+          );
+          updateSelectedUdid(scored[0]?.udid ?? sims[0].udid);
         }
       }
     } catch (e) {
@@ -392,7 +397,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   }, [workspaceId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount
     loadSimulators();
   }, [loadSimulators]);
 
@@ -474,7 +478,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       }
       // No gen guard: dispatch targets the originating workspace by workspaceId,
       // so the write is correct even if the user switched away mid-boot.
-      simulatorStoreActions.dispatch(workspaceId, { type: "STREAM_READY", udid: selectedUdid, stream });
+      simulatorStoreActions.dispatch(workspaceId, {
+        type: "STREAM_READY",
+        udid: selectedUdid,
+        stream,
+      });
       workspaceLayoutActions.setSimulatorUdid(workspaceId, selectedUdid);
     } catch (e) {
       simulatorStoreActions.dispatch(workspaceId, {
@@ -488,7 +496,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // Build & Run — build project and launch on already-streaming simulator.
   // dispatch validates: BUILD_START is only legal from streaming or running.
   const handleBuildAndRun = async () => {
-    if (!simulatorStoreActions.dispatch(workspaceId, { type: "BUILD_START", startedAt: Date.now() })) return;
+    if (
+      !simulatorStoreActions.dispatch(workspaceId, { type: "BUILD_START", startedAt: Date.now() })
+    )
+      return;
     try {
       const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
       // No gen guard: dispatch targets the originating workspace by workspaceId.
@@ -572,10 +583,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     try {
       const bytes = await simulatorService.takeScreenshot(workspaceId);
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
-      const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, { type: "image/png" });
-      window.dispatchEvent(
-        new CustomEvent("insert-to-chat", { detail: { files: [file] } })
-      );
+      const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
+        type: "image/png",
+      });
+      window.dispatchEvent(new CustomEvent("insert-to-chat", { detail: { files: [file] } }));
     } catch (e) {
       console.error("Screenshot failed:", e);
     }
@@ -655,7 +666,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
                 <DropdownMenuItem
                   key={sim.udid}
                   onClick={() => {
-                    setSelectedUdid(sim.udid);
+                    updateSelectedUdid(sim.udid);
                     workspaceLayoutActions.setSimulatorUdid(workspaceId, sim.udid);
                   }}
                   className="gap-2 text-xs"
