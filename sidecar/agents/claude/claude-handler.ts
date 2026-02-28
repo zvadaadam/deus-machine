@@ -595,6 +595,29 @@ export class ClaudeAgentHandler implements AgentHandler {
       const classified = classifyError(error);
       console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
 
+      // If this query used a resume parameter, the agent_session_id may be
+      // stale or expired. Clear it so the next query starts a fresh session
+      // instead of retrying with the same invalid ID in an infinite loop.
+      // Use "context_limit" category so the UI shows "New session" button,
+      // making it clear the user should start fresh (not retry in this chat
+      // where the agent has no memory of the previous conversation).
+      if (options.resume) {
+        saveAgentSessionId(sessionId, null);
+        console.log(`[${generatorId}] Cleared stale agent_session_id after resume failure`);
+
+        const resumeError = "Session could not be restored — conversation history is no longer available. Please start a new session.";
+        FrontendClient.sendError({
+          id: sessionId,
+          type: "error",
+          error: resumeError,
+          agentType: "claude",
+          category: "context_limit",
+          willRetry: false,
+        });
+        updateSessionStatus(sessionId, "error", resumeError, "context_limit");
+        return;
+      }
+
       if (classified.category !== "abort") {
         FrontendClient.sendError({
           id: sessionId,

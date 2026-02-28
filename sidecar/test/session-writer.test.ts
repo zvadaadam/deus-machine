@@ -185,6 +185,12 @@ describe("session-writer WriteResult", () => {
         expect(result.error).toContain("SQLITE_ERROR");
       }
     });
+
+    it("accepts null to clear a stale agent_session_id", () => {
+      const result = saveAgentSessionId("session-1", null);
+      expect(result.ok).toBe(true);
+      expect(mockDbRun).toHaveBeenCalledWith(null, "session-1");
+    });
   });
 
   // ── lookupAgentSessionId ───────────────────────────────────────────
