@@ -26,6 +26,8 @@ interface SidecarRpcRequest {
  * Follows the same pattern as useBrowserRpcHandler's getActiveTab/onAutoCreateTab.
  */
 export interface SimulatorRpcCallbacks {
+  /** Workspace ID for routing commands to the correct Rust session. */
+  workspaceId: string;
   /** Boot a simulator by UDID and start streaming. Returns StreamInfo on success. */
   onBootSimulator: (udid: string) => Promise<StreamInfo | null>;
   /** Get the cached list of available simulators (null if not yet loaded). */
@@ -39,6 +41,9 @@ export interface SimulatorRpcCallbacks {
  */
 export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // Store callbacks in refs for stable closures in the event listener
+  const workspaceIdRef = useRef(callbacks.workspaceId);
+  workspaceIdRef.current = callbacks.workspaceId;
+
   const onBootSimulatorRef = useRef(callbacks.onBootSimulator);
   onBootSimulatorRef.current = callbacks.onBootSimulator;
 
@@ -82,7 +87,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
     async (id: unknown, _params: Record<string, unknown>) => {
       try {
         // sim_take_screenshot returns Vec<u8> (JPEG bytes as number[])
-        const bytes = await simulatorService.takeScreenshot();
+        const bytes = await simulatorService.takeScreenshot(workspaceIdRef.current);
         const uint8 = new Uint8Array(bytes);
 
         // Convert to base64 — chunk to avoid stack overflow on large arrays
@@ -113,8 +118,8 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         const y = params.y as number;
 
         // Simulate a full tap: began → ended
-        await simulatorService.sendTouch(x, y, "began");
-        await simulatorService.sendTouch(x, y, "ended");
+        await simulatorService.sendTouch(workspaceIdRef.current, x, y, "began");
+        await simulatorService.sendTouch(workspaceIdRef.current, x, y, "ended");
 
         await sendResponse(id, { success: true });
       } catch (err: any) {
@@ -139,17 +144,17 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         const steps = Math.max(10, Math.floor(durationMs / 16)); // ~60fps
         const stepDelay = durationMs / steps;
 
-        await simulatorService.sendTouch(startX, startY, "began");
+        await simulatorService.sendTouch(workspaceIdRef.current, startX, startY, "began");
 
         for (let i = 1; i < steps; i++) {
           const t = i / steps;
           const x = startX + (endX - startX) * t;
           const y = startY + (endY - startY) * t;
-          await simulatorService.sendTouch(x, y, "moved");
+          await simulatorService.sendTouch(workspaceIdRef.current, x, y, "moved");
           await new Promise((r) => setTimeout(r, stepDelay));
         }
 
-        await simulatorService.sendTouch(endX, endY, "ended");
+        await simulatorService.sendTouch(workspaceIdRef.current, endX, endY, "ended");
 
         await sendResponse(id, { success: true });
       } catch (err: any) {
@@ -175,12 +180,12 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             const { code, shift } = keycode;
             // If shift is needed, press shift down first
             if (shift) {
-              await simulatorService.sendKey(HID_LEFT_SHIFT, "down");
+              await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "down");
             }
-            await simulatorService.sendKey(code, "down");
-            await simulatorService.sendKey(code, "up");
+            await simulatorService.sendKey(workspaceIdRef.current, code, "down");
+            await simulatorService.sendKey(workspaceIdRef.current, code, "up");
             if (shift) {
-              await simulatorService.sendKey(HID_LEFT_SHIFT, "up");
+              await simulatorService.sendKey(workspaceIdRef.current, HID_LEFT_SHIFT, "up");
             }
             // Small delay between characters for reliability
             await new Promise((r) => setTimeout(r, 30));
@@ -214,11 +219,11 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
         if (direction) {
           // Send only the specified direction
-          await simulatorService.sendKey(keycode, direction);
+          await simulatorService.sendKey(workspaceIdRef.current, keycode, direction);
         } else {
           // Full key press: down + up
-          await simulatorService.sendKey(keycode, "down");
-          await simulatorService.sendKey(keycode, "up");
+          await simulatorService.sendKey(workspaceIdRef.current, keycode, "down");
+          await simulatorService.sendKey(workspaceIdRef.current, keycode, "up");
         }
 
         await sendResponse(id, { success: true });
@@ -238,7 +243,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
     async (id: unknown, params: Record<string, unknown>) => {
       try {
         const workspacePath = params.workspacePath as string;
-        const app = await simulatorService.buildAndRun(workspacePath);
+        const app = await simulatorService.buildAndRun(workspaceIdRef.current, workspacePath);
 
         await sendResponse(id, {
           success: true,

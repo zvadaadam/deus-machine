@@ -15,7 +15,7 @@ use opendevs_lib::{
     watcher::WatcherManager,
 };
 #[cfg(target_os = "macos")]
-use opendevs_sim_core::manager::SimulatorState;
+use opendevs_sim_core::manager::SimulatorSessions;
 
 fn main() {
     let builder = tauri::Builder::default()
@@ -48,11 +48,8 @@ fn main() {
         .manage(WatcherManager::new());
 
     #[cfg(target_os = "macos")]
-    let builder = builder.manage(parking_lot::Mutex::new(SimulatorState {
-        capture: None,
-        server: None,
-        booted_udid: None,
-        installed_app: None,
+    let builder = builder.manage(parking_lot::Mutex::new(SimulatorSessions {
+        sessions: std::collections::HashMap::new(),
     }));
 
     builder
@@ -286,19 +283,20 @@ fn main() {
                     let watcher_manager: tauri::State<WatcherManager> = window.state();
                     watcher_manager.unwatch_all();
 
-                    // Stop simulator streaming and shut down simulator
+                    // Stop all simulator streaming sessions and shut down simulators
                     #[cfg(target_os = "macos")]
                     {
-                        let sim_state: tauri::State<parking_lot::Mutex<SimulatorState>> = window.state();
-                        let (server, capture, udid) = {
-                            let mut s = sim_state.lock();
-                            (s.server.take(), s.capture.take(), s.booted_udid.take())
+                        let sim_sessions: tauri::State<parking_lot::Mutex<SimulatorSessions>> = window.state();
+                        let drained: Vec<_> = {
+                            let mut s = sim_sessions.lock();
+                            s.sessions.drain().collect()
                         };
-                        if let Some(mut server) = server {
-                            server.stop();
-                        }
-                        drop(capture);
-                        if let Some(udid) = udid {
+                        for (_workspace_id, mut session) in drained {
+                            if let Some(mut server) = session.server.take() {
+                                server.stop();
+                            }
+                            drop(session.capture.take());
+                            let udid = session.udid;
                             std::thread::spawn(move || {
                                 let _ = std::process::Command::new("xcrun")
                                     .args(["simctl", "shutdown", &udid])
@@ -390,6 +388,7 @@ fn main() {
                     list_simulators,
                     start_streaming,
                     stop_streaming,
+                    get_stream_info,
                     sim_send_touch,
                     sim_send_scroll,
                     sim_send_key,
