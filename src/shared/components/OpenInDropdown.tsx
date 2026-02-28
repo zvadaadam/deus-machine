@@ -135,7 +135,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
                 <img
                   src={app.icon}
                   alt=""
-                  className="h-5 w-5 flex-shrink-0 rounded-[3px]"
+                  className="h-5 w-5 flex-shrink-0 rounded-xs"
                   draggable={false}
                 />
               ) : (

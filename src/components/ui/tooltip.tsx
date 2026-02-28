@@ -47,7 +47,7 @@ function TooltipContent({
           // Surface
           "bg-popover text-popover-foreground border-border border shadow-md",
           // Layout + origin-aware scaling (Radix provides transform origin)
-          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md px-2.5 py-1 text-xs text-balance will-change-transform",
+          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-lg px-2.5 py-1 text-xs text-balance will-change-transform",
           // Enter: 200ms with Emil Kowalski's custom ease-out curve
           "data-[state=delayed-open]:animate-[tooltip-enter_200ms_cubic-bezier(.215,.61,.355,1)]",
           "data-[state=instant-open]:animate-[tooltip-enter_150ms_cubic-bezier(.215,.61,.355,1)]",
@@ -64,7 +64,7 @@ function TooltipContent({
       >
         {children}
         {showArrow && (
-          <TooltipPrimitive.Arrow className="bg-popover fill-popover z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+          <TooltipPrimitive.Arrow className="bg-popover fill-popover z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-2xs" />
         )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>

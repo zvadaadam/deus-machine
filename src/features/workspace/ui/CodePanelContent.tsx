@@ -119,7 +119,7 @@ export function CodePanelContent({
             type="button"
             onClick={() => onFilterModeChange?.("changes")}
             className={cn(
-              "h-7 rounded-[5px] px-3 text-sm transition-colors duration-200 ease",
+              "h-7 rounded-sm px-3 text-sm transition-colors duration-200 ease",
               filterMode === "changes"
                 ? "bg-bg-elevated text-text-primary font-medium"
                 : "text-text-muted hover:text-text-secondary"
@@ -131,7 +131,7 @@ export function CodePanelContent({
             type="button"
             onClick={() => onFilterModeChange?.("all")}
             className={cn(
-              "h-7 rounded-[5px] px-3 text-sm transition-colors duration-200 ease",
+              "h-7 rounded-sm px-3 text-sm transition-colors duration-200 ease",
               filterMode === "all"
                 ? "bg-bg-elevated text-text-primary font-medium"
                 : "text-text-muted hover:text-text-secondary"
