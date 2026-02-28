@@ -528,12 +528,16 @@ export class ClaudeAgentHandler implements AgentHandler {
           // Every SDK message carries session_id. We persist it once so
           // the sidecar can resume this conversation after a restart.
           if (!session.agentSessionIdCaptured && cleanMessage.session_id) {
-            session.agentSessionIdCaptured = true;
             const agentSessionId = String(cleanMessage.session_id);
             const saveResult = saveAgentSessionId(sessionId, agentSessionId);
             if (saveResult.ok) {
+              session.agentSessionIdCaptured = true;
               console.log(
                 `[${generatorId}] Captured agent_session_id: ${agentSessionId}`
+              );
+            } else {
+              console.error(
+                `[${generatorId}] Failed to persist agent_session_id: ${saveResult.error}`
               );
             }
           }
@@ -595,14 +599,20 @@ export class ClaudeAgentHandler implements AgentHandler {
       const classified = classifyError(error);
       console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
 
-      // If this query used a resume parameter, the agent_session_id may be
-      // stale or expired. Clear it so the next query starts a fresh session
-      // instead of retrying with the same invalid ID in an infinite loop.
+      // If this query used a resume parameter and the error is NOT a user
+      // cancellation, the agent_session_id may be stale or expired. Clear it
+      // so the next query starts a fresh session instead of retrying with the
+      // same invalid ID in an infinite loop.
       // Use "context_limit" category so the UI shows "New session" button,
       // making it clear the user should start fresh (not retry in this chat
       // where the agent has no memory of the previous conversation).
-      if (options.resume) {
-        saveAgentSessionId(sessionId, null);
+      // Skip for aborts — cancelling a resumed session should follow normal
+      // abort flow (set idle, preserve agent_session_id for next resume).
+      if (options.resume && classified.category !== "abort") {
+        const clearResult = saveAgentSessionId(sessionId, null);
+        if (!clearResult.ok) {
+          console.error(`[${generatorId}] Failed to clear stale agent_session_id: ${clearResult.error}`);
+        }
         console.log(`[${generatorId}] Cleared stale agent_session_id after resume failure`);
 
         const resumeError = "Session could not be restored — conversation history is no longer available. Please start a new session.";
