@@ -13,12 +13,12 @@
  * - Backward compatible with existing tool renderers
  */
 
-import { useState, ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import { notifyUserExpand } from "@/features/session/hooks/useAutoScroll";
-import { anchorAndCorrect, findScrollContainer } from "@/features/session/hooks/useScrollAnchor";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
 import { ToolError } from "./ToolError";
 
 export interface BaseToolRendererProps {
@@ -45,6 +45,8 @@ export interface BaseToolRendererProps {
   renderSummary?: (props: { toolUse: ToolUseBlock }) => ReactNode; // Preview when collapsed
 }
 
+const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
+
 export function BaseToolRenderer({
   toolName,
   icon,
@@ -70,16 +72,14 @@ export function BaseToolRenderer({
           Uses CSS group hover for icon swap (no re-renders on mouse enter/leave). */}
       <button
         type="button"
-        onClick={(e) => {
-          notifyUserExpand();
-          const container = findScrollContainer();
-          if (container) anchorAndCorrect(e.currentTarget, container);
+        onClick={() => {
+          if (!isExpanded) suppressAutoScrollOnExpand();
           setManualExpanded(!isExpanded);
         }}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
-          "transition-opacity duration-100 ease-in",
+          "transition-opacity duration-150 ease-out",
           "opacity-80 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
@@ -89,21 +89,25 @@ export function BaseToolRenderer({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* Icon container - fixed width to prevent layout shift.
               On error: X icon replaces tool icon (instant scan signal). */}
-          <div className="relative h-4 w-4 flex-shrink-0">
+          <div className="relative h-3.5 w-3.5 flex-shrink-0">
             {/* Tool icon or error X — default state (hides on hover or when expanded) */}
             <div
               className={cn(
-                "absolute top-0 left-0 transition-opacity duration-100 ease-in",
+                "absolute top-0 left-0 transition-opacity duration-150 ease-out",
                 isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
               )}
             >
-              {isError ? <X className="text-destructive/60 h-4 w-4" aria-hidden="true" /> : icon}
+              {isError ? (
+                <X className="text-destructive/70 h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                icon
+              )}
             </div>
 
-            {/* Chevron - shows on hover or when expanded (Cursor: 0.1s ease-in) */}
+            {/* Chevron - shows on hover or when expanded */}
             <ChevronRight
               className={cn(
-                "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-100 ease-in",
+                "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
                 isExpanded && "rotate-90",
                 isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
@@ -111,12 +115,11 @@ export function BaseToolRenderer({
             />
           </div>
 
-          {/* Tool name — shimmer when loading (Cursor "make-shine" pattern).
-              Cursor uses --cursor-text-secondary for tool names, 12px/400. */}
+          {/* Tool name — shimmer when loading (Cursor "make-shine" pattern). */}
           <span
             className={cn(
-              "text-muted-foreground flex-shrink-0 font-normal",
-              isLoading ? "tool-loading-shimmer" : "text-foreground/70"
+              "flex-shrink-0 font-medium",
+              isLoading ? "text-muted-foreground tool-loading-shimmer" : "text-foreground/70"
             )}
           >
             {toolName}
@@ -124,29 +127,32 @@ export function BaseToolRenderer({
 
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="text-muted-foreground truncate">
-              {renderSummary({ toolUse })}
-            </span>
+            <span className="text-muted-foreground/50 truncate">{renderSummary({ toolUse })}</span>
           )}
         </div>
       </button>
 
-      {/* Expanded content:
-          - Error + showContentOnError (Bash): renderer handles error display, skip ToolError
-          - Error + !showContentOnError (Edit): show ToolError only, skip renderer content
-          - No error: show renderer content normally */}
-      {isExpanded && (
-        <div className="mt-0.5 ml-6">
-          {isError && toolResult && !showContentOnError ? (
-            <ToolError content={toolResult.content} />
-          ) : (
-            <>
-              {children}
-              {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
-            </>
-          )}
-        </div>
-      )}
+      {/* Expanded content — AnimatePresence for enter/exit opacity fade. */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={expandTransition}
+            className="mt-0.5 ml-6"
+          >
+            {isError && toolResult && !showContentOnError ? (
+              <ToolError content={toolResult.content} />
+            ) : (
+              <>
+                {children}
+                {!children && renderContent && renderContent({ toolUse, toolResult, isExpanded })}
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

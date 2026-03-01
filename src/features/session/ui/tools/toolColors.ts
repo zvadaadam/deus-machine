@@ -57,4 +57,4 @@ export const TOOL_COLORS: Record<string, string> = {
 } as const;
 
 /** Standard icon sizing for tool headers */
-export const TOOL_ICON_CLS = "h-4 w-4 flex-shrink-0";
+export const TOOL_ICON_CLS = "h-3.5 w-3.5 flex-shrink-0";

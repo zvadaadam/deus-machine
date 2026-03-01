@@ -4,9 +4,9 @@
  * Displays aggregated statistics for a collapsed assistant turn.
  * Matches the exact visual alignment of BaseToolRenderer for consistency.
  *
- * Design principles (Johnny Ive):
+ * Design:
  * - Perfect alignment with tool calls below (same padding, same icon size)
- * - Chevron in 16x16px container on the left (matches tool icons)
+ * - Chevron in 14x14px container on the left (matches tool icons)
  * - Minimal, intentional - every pixel matters
  * - Visual continuity - feels part of the same system
  * - Context-aware: Shows "Collapse" when expanded, metrics when collapsed
@@ -41,19 +41,19 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
         // Match BaseToolRenderer exactly: px-2 py-1.5 text-sm
         "flex items-center gap-2 px-2 py-1.5 text-sm",
         "w-full cursor-pointer text-left",
-        "transition-opacity duration-200 ease-out",
-        "hover:opacity-70",
+        "transition-opacity duration-150 ease-out",
+        "opacity-80 hover:opacity-100",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
       )}
       aria-expanded={isExpanded}
       aria-label={`${isExpanded ? "Collapse" : "Expand"} assistant turn with ${toolCount} tool calls`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {/* Chevron container - same size as tool icons (16x16px) for perfect alignment */}
-        <div className="relative h-4 w-4 flex-shrink-0">
+        {/* Chevron container - same size as tool icons (14x14px) for perfect alignment */}
+        <div className="relative h-3.5 w-3.5 flex-shrink-0">
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-transform duration-200",
+              "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
               isExpanded && "rotate-90"
             )}
             aria-hidden="true"
@@ -62,19 +62,19 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
 
         {isExpanded ? (
           // Expanded state: Show clear action
-          <span className="text-muted-foreground truncate font-normal">Collapse</span>
+          <span className="text-muted-foreground truncate">Collapse</span>
         ) : (
           // Collapsed state: Show metrics breakdown
           <>
             {/* Primary metric: Message count (always shown) */}
-            <span className="text-muted-foreground truncate font-normal tabular-nums">
+            <span className="text-muted-foreground truncate tabular-nums">
               {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
             </span>
 
             {/* Subagent count (only if > 0) */}
             {subagentCount > 0 && (
               <>
-                <span className="text-muted-foreground/40" aria-hidden="true">
+                <span className="text-muted-foreground/30" aria-hidden="true">
                   •
                 </span>
                 <span className="text-muted-foreground truncate tabular-nums">
@@ -86,7 +86,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
             {/* Secondary metric: Tool calls (only if > 0) */}
             {toolCount > 0 && (
               <>
-                <span className="text-muted-foreground/40" aria-hidden="true">
+                <span className="text-muted-foreground/30" aria-hidden="true">
                   •
                 </span>
                 <span className="text-muted-foreground truncate tabular-nums">
@@ -98,7 +98,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
             {/* Tertiary metric: Files changed (only if > 0) */}
             {filesChanged > 0 && (
               <>
-                <span className="text-muted-foreground/40" aria-hidden="true">
+                <span className="text-muted-foreground/30" aria-hidden="true">
                   •
                 </span>
                 <span className="text-muted-foreground truncate tabular-nums">

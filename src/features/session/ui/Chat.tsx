@@ -11,14 +11,14 @@ import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
-import { notifyPrependStart, notifyPrependEnd } from "../hooks/useAutoScroll";
 import { useSession } from "../context";
-import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
-const USER_MARGIN_CLASS = "mb-8";
-const TIGHT_MARGIN_CLASS = "mb-1";
+const USER_PADDING_CLASS = "pb-8";
+const TIGHT_PADDING_CLASS = "pb-1";
 
 /**
  * Turn Types
@@ -43,15 +43,19 @@ type AssistantTurnData = {
 type Turn = UserTurn | AssistantTurnData;
 
 /**
- * Calculate spacing classes for turns (replaces message-level spacing)
+ * Calculate spacing classes for turns using PADDING (not margin).
  *
- * A turn = consecutive messages with the same role
+ * Padding is used instead of margin because virtual items are absolutely
+ * positioned — margins don't affect layout. Padding is included in
+ * getBoundingClientRect().height, so the virtualizer's measureElement
+ * captures spacing correctly.
+ *
  * Spacing logic:
- * - First turn: Minimal top margin
- * - User turn after assistant: Generous top margin (mt-8)
- * - User turn after user: No extra margin (consecutive user messages)
- * - Assistant turn: Tight margin (mt-1)
- * - Bottom margin: User turns add mb-8, assistant turns add minimal margin
+ * - First turn: Top padding (pt-8 for user, pt-1 for assistant)
+ * - User turn after assistant: Generous top padding (pt-8)
+ * - User turn after user: No extra padding
+ * - Assistant turn: No top padding
+ * - Bottom padding: User turns add pb-8, assistant turns add minimal padding
  */
 function getTurnSpacingClasses(
   turn: Turn,
@@ -63,31 +67,31 @@ function getTurnSpacingClasses(
 
   const topClass = (() => {
     if (isUser) {
-      if (isFirst) return "mt-8";
-      if (prevTurn?.type === "user") return "mt-0";
-      return "mt-8";
+      if (isFirst) return "pt-8";
+      if (prevTurn?.type === "user") return "pt-0";
+      return "pt-8";
     }
 
     // Assistant turn
-    if (isFirst) return "mt-1";
-    return "mt-0";
+    if (isFirst) return "pt-1";
+    return "pt-0";
   })();
 
   const bottomClass = (() => {
     if (isUser) {
-      return USER_MARGIN_CLASS;
+      return USER_PADDING_CLASS;
     }
 
     // Assistant turn
     if (nextTurn?.type === "user") {
-      return "mb-0";
+      return "pb-0";
     }
 
     if (nextTurn) {
-      return TIGHT_MARGIN_CLASS;
+      return TIGHT_PADDING_CLASS;
     }
 
-    return "mb-0";
+    return "pb-0";
   })();
 
   return cn(topClass, bottomClass);
@@ -136,135 +140,66 @@ export function Chat({
 
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
 
-  const { showScrollButton, hasNewMessages, handleScrollToBottomClick } = useAutoScroll({
-    messages,
-    messagesContainerRef,
-    messagesEndRef,
-  });
+  const { showScrollButton, hasNewMessages, handleScrollToBottomClick, syncGeometry } =
+    useAutoScroll({
+      messages,
+      messagesContainerRef,
+    });
 
   // --- Message entrance animation tracking ---
-  // seenMessageIds: Prevents re-animation when React Query refetches or
-  // the user scrolls. Only messages NOT in this set get entrance animation.
-  const seenMessageIds = useRef(new Set<string>());
-  // initialLoadDone: The very first batch of messages should appear instantly
-  // (no stagger). We mark all initial messages as "seen" on first render.
-  const initialLoadDone = useRef(false);
+  // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
+  // entrance animation. Simpler than a Set, immune to unbounded growth,
+  // and prepended messages automatically skip animation (their indices
+  // are below the counter). Inspired by Cursor's maxAnimatedPairIndex.
+  const maxAnimatedTurnIndex = useRef(-1);
+  // Pre-seed on first render with turns so initial load doesn't animate.
+  // Without this, the last historical turn always plays the entrance animation.
+  const isFirstTurnsRender = useRef(true);
 
-  // Load-older sentinel ref (placed at top of message list)
-  const loadOlderSentinelRef = useRef<HTMLDivElement>(null);
+  // ── Load-older cooldown ─────────────────────────────────────────────────
+  // Ref-based guard prevents rapid re-triggering when collapsed content
+  // produces too little visual height to push the scroll position away
+  // from the trigger zone. Cleared via rAF after prepend scroll restoration.
+  const loadOlderCooldownRef = useRef(false);
 
-  // ── Scroll-position preservation for prepend (load-older) ──────────────
+  // ── Prepend scroll restoration (offset-delta approach) ──────────────────
   //
-  // Anchor-based with continuous geometry capture — zero pre-fetch dependency.
-  //
-  // The key insight: capturing geometry before an async fetch is inherently
-  // fragile. The fetch may take hundreds of milliseconds during which streaming
-  // content changes scrollHeight, or the user scrolls, making captured values
-  // stale. Any approach that depends on pre-fetch geometry will produce wrong
-  // deltas under concurrent activity.
-  //
-  // This approach eliminates the problem entirely:
-  //
-  //   1. prevFirstSeqRef / prevFirstIdRef: identity of the first message.
-  //      When the first seq decreases, a prepend occurred.
-  //
-  //   2. anchorVisualOffsetRef: the first turn element's pixel offset from
-  //      the container viewport top. Captured in useLayoutEffect after EVERY
-  //      committed render — always exactly one render old, never stale.
-  //
-  //   3. On prepend: find the element that WAS first (by data-message-id),
-  //      read its new offsetTop, set scrollTop = newOffsetTop - savedOffset.
-  //      All geometry reads happen in a single synchronous useLayoutEffect.
-  //
-  //   4. notifyPrependStart/End suppress useAutoScroll's ResizeObserver and
-  //      scroll handler during the correction (module-level flags).
+  // With virtualization, items are absolutely positioned so DOM queries
+  // (offsetTop) don't work. Instead, track the virtualizer's getTotalSize()
+  // before and after prepend. The delta = height added by prepended items.
+  // scrollTop += delta keeps the visual position stable.
   const prevFirstSeqRef = useRef<number | null>(null);
-  const prevFirstIdRef = useRef<string | null>(null);
-  const anchorVisualOffsetRef = useRef<number>(0);
+  const prevTotalSizeRef = useRef<number | undefined>(undefined);
 
+  // ── Scroll-position-based load-older (replaces IntersectionObserver) ────
+  // Cursor-aligned: scroll-position math instead of a sentinel div.
+  // Fires when scrollTop < TRIGGER_DISTANCE and no cooldown/loading active.
+  // The cooldown ref prevents the infinite loop where collapsed tool groups
+  // produce too little visual height to push scrollTop above the trigger zone.
   useEffect(() => {
-    if (!initialLoadDone.current && messages.length > 0) {
-      // Mark all existing messages as seen so they don't animate
-      messages.forEach((m) => seenMessageIds.current.add(m.id));
-      initialLoadDone.current = true;
-    }
-  }, [messages]);
-
-  useLayoutEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container || !messages.length) return;
+    if (!container || !hasOlder || !onLoadOlder) return;
 
-    const currentFirstSeq = messages[0].seq;
-    const currentFirstId = messages[0].id;
-    const prevFirstSeq = prevFirstSeqRef.current;
-    const prevFirstId = prevFirstIdRef.current;
+    const TRIGGER_DISTANCE = 200; // px from top
+    let ticking = false;
 
-    // ── Detect prepend: first message's seq decreased ──
-    if (prevFirstSeq !== null && currentFirstSeq < prevFirstSeq && prevFirstId) {
-      const anchor = container.querySelector(
-        `[data-message-id="${CSS.escape(prevFirstId)}"]`
-      ) as HTMLElement | null;
-
-      if (anchor) {
-        // anchor.offsetTop = position in the NEW layout (pushed down by prepended content).
-        // anchorVisualOffsetRef = its visual offset captured on the PREVIOUS render —
-        // always fresh because useLayoutEffect updates it on every committed render.
-        notifyPrependStart();
-        container.scrollTop = anchor.offsetTop - anchorVisualOffsetRef.current;
-        // Re-enable auto-scroll after the browser processes the scroll write.
-        requestAnimationFrame(() => {
-          notifyPrependEnd();
-        });
-      }
-
-      // Mark prepended messages as "seen" so they skip entrance animation
-      for (const m of messages) {
-        if (m.seq < prevFirstSeq) {
-          seenMessageIds.current.add(m.id);
-        }
-      }
-    }
-
-    // ── Capture anchor geometry for the NEXT render ──
-    // Runs synchronously after every committed render. The value is consumed
-    // only on the next render that detects a prepend — exactly one render old.
-    const firstEl = container.querySelector(
-      `[data-message-id="${CSS.escape(currentFirstId)}"]`
-    ) as HTMLElement | null;
-    if (firstEl) {
-      anchorVisualOffsetRef.current = firstEl.offsetTop - container.scrollTop;
-    }
-
-    prevFirstSeqRef.current = currentFirstSeq;
-    prevFirstIdRef.current = currentFirstId;
-  }, [messages]);
-
-  // IntersectionObserver for load-older sentinel (triggers when scrolling near top).
-  // No geometry capture needed — the anchor approach handles restoration entirely
-  // within useLayoutEffect using continuously-captured offsets.
-  useEffect(() => {
-    const sentinel = loadOlderSentinelRef.current;
-    const container = messagesContainerRef.current;
-    if (!sentinel || !container || !hasOlder || !onLoadOlder) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !loadingOlder) {
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        if (loadingOlder || loadOlderCooldownRef.current) return;
+        if (container.scrollTop < TRIGGER_DISTANCE) {
+          // Set cooldown synchronously — prevents re-entry before React re-renders.
+          loadOlderCooldownRef.current = true;
           onLoadOlder();
         }
-      },
-      {
-        root: container,
-        rootMargin: "200px 0px 0px 0px", // Trigger 200px before reaching top
-        threshold: 0,
-      }
-    );
+      });
+    };
 
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
   }, [messagesContainerRef, hasOlder, loadingOlder, onLoadOlder]);
 
   // Track working duration
@@ -396,6 +331,85 @@ export function Chat({
     return turnList;
   }, [renderableMessages]);
 
+  // Pre-seed maxAnimatedTurnIndex to cover all initial turns.
+  // Without this, the last turn always plays the entrance animation on load.
+  if (isFirstTurnsRender.current && turns.length > 0) {
+    isFirstTurnsRender.current = false;
+    maxAnimatedTurnIndex.current = turns.length - 1;
+  }
+
+  // Pre-compute spacing for each turn (needed because virtualizer skips
+  // off-screen items — can't compute spacing from DOM neighbors).
+  const turnSpacings = useMemo(() => {
+    return turns.map((turn, i) =>
+      getTurnSpacingClasses(
+        turn,
+        i > 0 ? turns[i - 1] : null,
+        i < turns.length - 1 ? turns[i + 1] : null,
+        i === 0
+      )
+    );
+  }, [turns]);
+
+  // ── Virtualizer ──────────────────────────────────────────────────────────
+  // Only renders visible turns + overscan buffer. TanStack Virtual v3 uses
+  // an internal ResizeObserver on each measureElement ref to auto-detect
+  // height changes from expand/collapse — no manual remeasurement needed.
+  const estimateSize = useCallback(
+    (index: number) => {
+      const turn = turns[index];
+      return turn?.type === "user" ? 60 : 200;
+    },
+    [turns]
+  );
+
+  const getItemKey = useCallback(
+    (index: number) => {
+      const turn = turns[index];
+      if (!turn) return index;
+      return turn.type === "user" ? turn.message.id : turn.messages[0].id;
+    },
+    [turns]
+  );
+
+  const virtualizer = useVirtualizer({
+    count: turns.length,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize,
+    overscan: 5,
+    getItemKey,
+  });
+
+  // ── Prepend scroll restoration (offset-delta) ──────────────────────────
+  // When older messages are prepended, the virtualizer's total size grows
+  // by the estimated height of the new items. Adding that delta to scrollTop
+  // keeps the viewport position stable. No DOM queries needed.
+  useLayoutEffect(() => {
+    if (!messages.length) return;
+
+    const currentFirstSeq = messages[0].seq;
+    const prevFirstSeq = prevFirstSeqRef.current;
+
+    if (prevFirstSeq !== null && currentFirstSeq < prevFirstSeq) {
+      const newTotalSize = virtualizer.getTotalSize();
+      const prevTotalSize = prevTotalSizeRef.current;
+      if (prevTotalSize !== undefined) {
+        const delta = newTotalSize - prevTotalSize;
+        const container = messagesContainerRef.current;
+        if (container && delta > 0) {
+          container.scrollTop += delta;
+          syncGeometry();
+          requestAnimationFrame(() => {
+            loadOlderCooldownRef.current = false;
+          });
+        }
+      }
+    }
+
+    prevFirstSeqRef.current = currentFirstSeq;
+    prevTotalSizeRef.current = virtualizer.getTotalSize();
+  }, [messages, virtualizer, syncGeometry]);
+
   // Calculate indicator margin based on last message role
   const indicatorMarginClass = useMemo(() => {
     const lastRenderableRole = renderableMessages.length
@@ -430,90 +444,87 @@ export function Chat({
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">
-              {/* Load-older sentinel — triggers IntersectionObserver when near top */}
-              {hasOlder && (
-                <div ref={loadOlderSentinelRef} className="flex justify-center py-3">
-                  {loadingOlder && (
-                    <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5">
-                      <div className="border-foreground/20 border-t-foreground/60 h-3.5 w-3.5 animate-spin rounded-full border-2" />
-                      <span className="text-muted-foreground text-xs">
-                        Loading earlier messages
-                      </span>
-                    </div>
-                  )}
+              {/* Load-older spinner — outside virtualizer, at physical top */}
+              {hasOlder && loadingOlder && (
+                <div className="flex h-10 items-center justify-center">
+                  <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5">
+                    <div className="border-foreground/20 border-t-foreground/60 h-3.5 w-3.5 animate-spin rounded-full border-2" />
+                    <span className="text-muted-foreground text-xs">Loading earlier messages</span>
+                  </div>
                 </div>
               )}
-              {/* eslint-disable-next-line react-hooks/refs */}
-              {turns.map((turn, turnIndex) => {
-                const prevTurn = turnIndex > 0 ? turns[turnIndex - 1] : null;
-                const nextTurn = turnIndex < turns.length - 1 ? turns[turnIndex + 1] : null;
-                const spacingClass = getTurnSpacingClasses(
-                  turn,
-                  prevTurn,
-                  nextTurn,
-                  turnIndex === 0
-                );
+              {/* Virtual container — only visible turns + overscan are in the DOM.
+                  Position: relative creates the containing block for absolute children.
+                  Height = getTotalSize() so the scroll container's scrollHeight is correct. */}
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  width: "100%",
+                  position: "relative",
+                }}
+              >
+                {virtualizer.getVirtualItems().map((virtualItem) => {
+                  const turnIndex = virtualItem.index;
+                  const turn = turns[turnIndex];
+                  if (!turn) return null;
 
-                // Attach lastMessageRef to the LAST RENDERED turn
-                const isLastRendered = turnIndex === turns.length - 1;
+                  const spacingClass = turnSpacings[turnIndex];
 
-                if (turn.type === "user") {
-                  // Determine if this is a NEW message that should animate in.
-                  // CSS animation replaces Framer Motion m.div: plays once on mount
-                  // then the element is a plain div with zero ongoing React overhead.
-                  const isNew = !seenMessageIds.current.has(turn.message.id);
-                  if (isNew) seenMessageIds.current.add(turn.message.id);
+                  // Counter-based entrance animation: only the LAST turn whose
+                  // index exceeds maxAnimatedTurnIndex gets the CSS animation.
+                  // Initial load: counter starts at -1, first render advances it
+                  // to turns.length - 1, so ALL initial turns are "seen" (no animation).
+                  // Prepended turns: indices shift up but the counter already covers them.
+                  const shouldAnimate =
+                    turnIndex === turns.length - 1 && turnIndex > maxAnimatedTurnIndex.current;
+
+                  // Advance the counter so subsequent renders don't re-animate.
+                  if (turnIndex >= maxAnimatedTurnIndex.current) {
+                    maxAnimatedTurnIndex.current = turnIndex;
+                  }
+
+                  const messageId = turn.type === "user" ? turn.message.id : turn.messages[0].id;
 
                   return (
                     <div
-                      key={turn.message.id}
-                      data-message-id={turn.message.id}
-                      ref={isLastRendered ? lastMessageRef : undefined}
-                      className={cn(
-                        spacingClass,
-                        "chat-turn-wrapper min-w-0",
-                        isNew && "chat-item-enter"
-                      )}
+                      key={virtualItem.key}
+                      ref={virtualizer.measureElement}
+                      data-index={virtualItem.index}
+                      data-message-id={messageId}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
                     >
-                      <MessageItem
-                        message={turn.message}
-                        isLatestAssistant={false}
-                        isLastInTurn={true}
-                        isWorking={sessionStatus === "working"}
-                      />
+                      <div
+                        className={cn(
+                          spacingClass,
+                          "chat-turn-wrapper min-w-0",
+                          shouldAnimate && "chat-item-enter"
+                        )}
+                      >
+                        {turn.type === "user" ? (
+                          <MessageItem
+                            message={turn.message}
+                            isLatestAssistant={false}
+                            isLastInTurn={true}
+                            isWorking={sessionStatus === "working"}
+                          />
+                        ) : (
+                          <AssistantTurn
+                            messages={turn.messages}
+                            isLatest={turn.isLatest}
+                            isWorking={sessionStatus === "working"}
+                          />
+                        )}
+                      </div>
                     </div>
                   );
-                }
-
-                // Assistant turn — animate only when the turn FIRST appears.
-                // Use the first message's ID as the turn key. When new messages
-                // are appended to an existing turn (tool calls, streaming), the
-                // turn key is already seen so no re-animation (no blink).
-                const turnKey = turn.messages[0].id;
-                const isTurnNew = !seenMessageIds.current.has(turnKey);
-                if (isTurnNew) seenMessageIds.current.add(turnKey);
-                // Still mark all individual message IDs for future reference
-                turn.messages.forEach((msg) => seenMessageIds.current.add(msg.id));
-
-                return (
-                  <div
-                    key={turn.messages[0].id}
-                    data-message-id={turn.messages[0].id}
-                    ref={isLastRendered ? lastMessageRef : undefined}
-                    className={cn(
-                      spacingClass,
-                      "chat-turn-wrapper min-w-0",
-                      isTurnNew && "chat-item-enter"
-                    )}
-                  >
-                    <AssistantTurn
-                      messages={turn.messages}
-                      isLatest={turn.isLatest}
-                      isWorking={sessionStatus === "working"}
-                    />
-                  </div>
-                );
-              })}
+                })}
+              </div>
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
                 {sessionStatus === "error" && errorMessage && (
@@ -643,12 +654,6 @@ export function Chat({
                   </m.div>
                 )}
               </AnimatePresence>
-              {/* Sentinel for auto-scroll IntersectionObserver.
-                  MUST be inside the content wrapper (before pb-32 padding) so it's
-                  adjacent to the last message. If placed outside, the 128px padding
-                  creates a dead zone where the user sees all content but the sentinel
-                  is invisible — breaking auto-scroll re-engagement. */}
-              <div ref={messagesEndRef} />
             </div>
           </>
         )}
@@ -680,4 +685,3 @@ export function Chat({
     </div>
   );
 }
-

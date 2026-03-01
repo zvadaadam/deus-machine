@@ -7,7 +7,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SessionService, type PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { MESSAGE_PAGE_SIZE, mergeNewerMessages, getLastRealSeq } from "../lib/messageCache";
+import {
+  MESSAGE_PAGE_SIZE,
+  INITIAL_MESSAGE_PAGE_SIZE,
+  mergeNewerMessages,
+  getLastRealSeq,
+} from "../lib/messageCache";
 import type {
   ContentBlock,
   Message,
@@ -67,7 +72,7 @@ export function useSession(sessionId: string | null) {
 export function useMessages(sessionId: string | null) {
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
-    queryFn: () => SessionService.fetchMessages(sessionId!, { limit: MESSAGE_PAGE_SIZE }),
+    queryFn: () => SessionService.fetchMessages(sessionId!, { limit: INITIAL_MESSAGE_PAGE_SIZE }),
     enabled: !!sessionId,
     // No select — expose full PaginatedMessages for has_older/has_newer.
     // All updates are manual: Tauri events do incremental fetch, web mode uses polling hook.
