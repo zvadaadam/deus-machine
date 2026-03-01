@@ -314,13 +314,17 @@ uint64_t sim_bridge_screenshot(SimBridgeHandle handle,
             return 0;
         }
 
-        NSData *jpegData = [NSData dataWithContentsOfFile:tmpPath];
+        NSData *rawJpeg = [NSData dataWithContentsOfFile:tmpPath];
         [[NSFileManager defaultManager] removeItemAtPath:tmpPath error:nil];
 
-        if (!jpegData || jpegData.length == 0) {
+        if (!rawJpeg || rawJpeg.length == 0) {
             NSLog(@"[SimBridge] Screenshot: No data");
             return 0;
         }
+
+        // Resize for AI consumption — 1024px on the long side.
+        // MJPEG stream is unaffected (separate IOSurface path).
+        NSData *jpegData = resize_jpeg_for_ai(rawJpeg, 1024);
 
         if (!out_buffer) {
             return (uint64_t)jpegData.length;
