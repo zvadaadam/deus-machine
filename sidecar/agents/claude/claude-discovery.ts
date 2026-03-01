@@ -127,7 +127,6 @@ export function blockIfNotInitialized(sessionId: string): boolean {
       error: `Cannot process request: ${initializationResult?.error || "Initialization failed"}`,
       agentType: "claude",
       category: "internal",
-      willRetry: false,
     });
     console.log("Blocked request due to initialization failure");
     return true;

@@ -54,7 +54,7 @@ describe("session-writer WriteResult", () => {
       }
     });
 
-    it("wraps content in envelope when stop_reason is present", () => {
+    it("wraps content in envelope when stop_reason is cancelled", () => {
       const result = saveAssistantMessage("session-1", {
         role: "assistant",
         content: [{ type: "text", text: "" }],
@@ -62,7 +62,8 @@ describe("session-writer WriteResult", () => {
       });
       expect(result.ok).toBe(true);
 
-      // Verify the serialized content includes the envelope with stop_reason
+      // Cancelled messages keep the envelope so the frontend can detect
+      // cancellation from DB content (the "Turn interrupted" label).
       const storedContent = mockDbRun.mock.calls[0][2]; // 3rd arg = content
       const parsed = JSON.parse(storedContent);
       expect(parsed.message.stop_reason).toBe("cancelled");

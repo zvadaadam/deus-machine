@@ -174,8 +174,6 @@ export const ErrorResponseSchema = z.object({
   error: z.string(),
   agentType: AgentTypeSchema,
   category: ErrorCategorySchema.optional(),
-  willRetry: z.boolean().optional(),
-  retryAfterMs: z.number().optional(),
 });
 
 export const EnterPlanModeNotificationSchema = z.object({

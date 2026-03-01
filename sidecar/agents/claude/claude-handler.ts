@@ -4,7 +4,7 @@
 
 import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
-import { classifyError } from "../error-classifier";
+import { classifyError, classifyStopReason } from "../error-classifier";
 import { createCheckpoint } from "./checkpoint";
 import {
   saveAssistantMessage,
@@ -591,6 +591,23 @@ export class ClaudeAgentHandler implements AgentHandler {
             data: cleanMessage,
           });
 
+          // Check if stop_reason indicates an error condition (e.g. max_tokens).
+          // Fires AFTER sendMessage so the truncated content lands in the
+          // frontend cache before the error banner appears.
+          if (cleanMessage.type === "assistant" && msg) {
+            const stopError = classifyStopReason(msg.stop_reason);
+            if (stopError) {
+              FrontendClient.sendError({
+                id: sessionId,
+                type: "error",
+                error: stopError.message,
+                agentType: "claude",
+                category: stopError.category,
+              });
+              updateSessionStatus(sessionId, "error", stopError.message, stopError.category);
+            }
+          }
+
           // Update session status when query completes successfully
           if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
             querySucceeded = true;
@@ -627,15 +644,21 @@ export class ClaudeAgentHandler implements AgentHandler {
       // auth, rate_limit, context_limit, etc.) flows through to the
       // frontend which already renders the correct UI for each category.
 
-      if (classified.category !== "abort") {
+      if (classified.category === "abort") {
+        // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
+        FrontendClient.sendMessage({
+          id: sessionId,
+          type: "message",
+          agentType: "claude",
+          data: { type: "cancelled" },
+        });
+      } else {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
           error: classified.message,
           agentType: "claude",
           category: classified.category,
-          willRetry: classified.willRetry,
-          retryAfterMs: classified.retryAfterMs,
         });
       }
 
@@ -672,7 +695,6 @@ export class ClaudeAgentHandler implements AgentHandler {
           error: `Session status update failed: ${statusResult.error}`,
           agentType: "claude",
           category: "db_write",
-          willRetry: false,
         });
       }
     } finally {
