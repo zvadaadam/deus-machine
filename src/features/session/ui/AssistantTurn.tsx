@@ -25,6 +25,8 @@ import { MessageItem } from "./MessageItem";
 import { ToolGroupBlock } from "./blocks";
 import { TurnStatsHeader } from "./TurnStatsHeader";
 import { useSession } from "../context";
+import { notifyUserExpand } from "../hooks/useAutoScroll";
+import { anchorAndCorrect, findScrollContainer } from "../hooks/useScrollAnchor";
 import { calculateTurnStats, groupMessageToolStreaks } from "./utils";
 import { match } from "ts-pattern";
 import { Square } from "lucide-react";
@@ -95,7 +97,12 @@ export const AssistantTurn = memo(function AssistantTurn({
         <TurnStatsHeader
           stats={stats}
           isExpanded={isExpanded}
-          onClick={() => setIsManuallyExpanded(!isExpanded)}
+          onClick={(e) => {
+            notifyUserExpand();
+            const container = findScrollContainer(e.currentTarget);
+            if (container) anchorAndCorrect(e.currentTarget, container);
+            setIsManuallyExpanded(!isExpanded);
+          }}
           hiddenMessageCount={hiddenMessages.length}
         />
       )}
