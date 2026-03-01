@@ -125,6 +125,7 @@ bool load_frameworks(char* error_buf, int error_buf_len);
 NSData* iosurface_to_jpeg(IOSurfaceRef surface, float quality);
 NSData* bridge_encode_jpeg(SimBridge *bridge, IOSurfaceRef surface, float quality);
 NSData* capture_simctl_screenshot(NSString *udid);
+NSData* resize_jpeg_for_ai(NSData *jpegData, size_t maxLongSide);
 
 // sim_screen.m
 void start_frame_polling(SimBridge *bridge);
