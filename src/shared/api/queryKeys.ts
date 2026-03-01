@@ -65,4 +65,11 @@ export const queryKeys = {
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
   },
+
+  // Agent Config (scope-aware config management)
+  agentConfig: {
+    all: ["agent-config"] as const,
+    category: (cat: string, scope: string, repoPath?: string) =>
+      ["agent-config", cat, scope, repoPath] as const,
+  },
 } as const;

@@ -13,6 +13,7 @@ import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { getSession } from "./claude-session";
 import type { QueryOptions } from "../agent-handler";
+import { buildWorkspaceContext } from "../workspace-context";
 
 // ============================================================================
 // Constants
@@ -26,18 +27,23 @@ export const DEFAULT_PROMPT = {
 export const DEFAULT_SETTING_SOURCES = ["user", "project", "local"];
 
 /**
- * Appended to the Claude Code system prompt. Provides workspace context
- * and teaches the agent about the persistent notebook REPL.
+ * Builds the append system prompt with dynamic workspace context.
+ * Tells the agent what project it's in and where the worktree lives
+ * so it doesn't confuse the workspace name with the project name.
  */
-export const APPEND_SYSTEM_PROMPT = `
-# OpenDevs IDE
+export function buildAppendSystemPrompt(cwd?: string): string {
+  const workspaceContext =
+    buildWorkspaceContext(cwd) ||
+    "You are working inside OpenDevs, a desktop app that orchestrates multiple AI coding agents in parallel.";
 
-You are running inside OpenDevs, an IDE that orchestrates multiple AI coding agents in parallel. Each workspace is an isolated git worktree branched from the main repo — your working directory is that worktree. You can only edit files within it. The user sees your progress in real-time: chat, file changes, terminal output, and notebook cells.
+  return `
+${workspaceContext}
 
 # Persistent Notebook REPL
 
 You have a stateful JavaScript notebook (notebook_execute, notebook_inspect, notebook_list_cells, notebook_read, notebook_reset). Variables, imports, and functions persist across calls and survive context window compressions. Use it instead of Bash when experimenting, exploring data, or iterating — fix one cell without re-running everything. Use notebook_list_cells after context compression to recover your state. Cells are auto-saved to .context/notebook.ipynb and visible to the user. Use Bash for CLI tools, shell scripts, and test suites.
 `.trim();
+}
 
 // ============================================================================
 // canUseTool callback
@@ -227,8 +233,11 @@ export function buildSdkOptions(
     maxThinkingTokens: options?.maxThinkingTokens,
     cwd: workingDirectory,
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
-    systemPrompt: DEFAULT_PROMPT,
-    appendSystemPrompt: APPEND_SYSTEM_PROMPT,
+    systemPrompt: {
+      type: "preset" as const,
+      preset: "claude_code",
+      append: buildAppendSystemPrompt(workingDirectory),
+    },
     settingSources: DEFAULT_SETTING_SOURCES,
     canUseTool: createCanUseTool(sessionId, workingDirectory),
     additionalDirectories: options?.additionalDirectories ?? [],
