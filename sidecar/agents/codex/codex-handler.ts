@@ -352,7 +352,10 @@ export class CodexAgentHandler implements AgentHandler {
 
       // Record cancellation if the loop exited via abort signal (break path).
       // The catch block handles the throw path — this covers the break path.
-      if (abortController.signal.aborted) {
+      // Guard with ownership check: a rapid re-query can replace the session
+      // before we reach this point, and writing a stale "cancelled" message
+      // would pollute the new run's history.
+      if (abortController.signal.aborted && currentSession === session) {
         const model = resolveCodexModel(options?.model);
         saveAssistantMessage(
           sessionId,
