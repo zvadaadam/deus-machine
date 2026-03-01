@@ -72,6 +72,7 @@ export function registerAllTools() {
   toolRegistry.register("WebSearch", WebSearchToolRenderer);
   toolRegistry.register("KillShell", KillShellToolRenderer);
   toolRegistry.register("Task", TaskToolRenderer);
+  toolRegistry.register("Agent", TaskToolRenderer); // Claude SDK "Agent" = same as "Task"
   toolRegistry.register("LS", LSToolRenderer);
 
   // OpenDevs MCP — Browser automation tools

@@ -164,40 +164,36 @@ const markdownComponents = {
   pre: MarkdownPre,
 };
 
+// Stable plugin arrays — module-level so ReactMarkdown never sees a new reference.
+// Same pattern as markdownComponents above: avoids re-processing the pipeline on every render.
+const REMARK_PLUGINS = [remarkGfm];
+const REHYPE_PLUGINS_PLAIN: any[] = [];
+const REHYPE_PLUGINS_HTML: any[] = [
+  rehypeRaw,
+  [
+    rehypeSanitize,
+    {
+      ...defaultSchema,
+      attributes: {
+        ...defaultSchema.attributes,
+        pre: [["className"]],
+        code: [["className"]],
+      },
+    },
+  ],
+];
+
 export function MarkdownRenderer({
   children,
   className = "",
   allowHtml = false,
   proseClassName,
 }: MarkdownRendererProps) {
-  // Build rehype pipeline - NO ASYNC PLUGINS for performance
-  const rehypePlugins: any[] = [];
-
-  // Security: Only allow raw HTML if explicitly enabled, and sanitize it
-  if (allowHtml) {
-    rehypePlugins.push(rehypeRaw);
-    rehypePlugins.push([
-      rehypeSanitize,
-      {
-        ...defaultSchema,
-        // Allow basic code styling
-        attributes: {
-          ...defaultSchema.attributes,
-          pre: [["className"]],
-          code: [["className"]],
-        },
-      },
-    ]);
-  }
-
-
-
-  // Use synchronous Markdown - INSTANT rendering (no async delay)
   return (
     <article className={cn(proseClassName, className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={rehypePlugins}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={allowHtml ? REHYPE_PLUGINS_HTML : REHYPE_PLUGINS_PLAIN}
         components={markdownComponents}
       >
         {children}

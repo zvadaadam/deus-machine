@@ -64,7 +64,7 @@ export function MultiEditToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
             • {editCount} edit{editCount !== 1 ? "s" : ""}
           </span>
           {(totalStats.added > 0 || totalStats.removed > 0) && (
-            <span className="ml-1.5 inline-flex items-center gap-1 text-xs tabular-nums">
+            <span className="ml-1.5 inline-flex items-center gap-1 tabular-nums">
               <span className="text-success">+{totalStats.added}</span>
               <span className="text-destructive">-{totalStats.removed}</span>
             </span>

@@ -39,7 +39,7 @@ export function AskUserQuestionToolRenderer({ toolUse, toolResult }: ToolRendere
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        preview ? <span className="text-muted-foreground truncate text-xs">{preview}</span> : null
+        preview ? <span className="text-muted-foreground truncate">{preview}</span> : null
       }
       renderContent={() => (
         <div className="space-y-2 px-2 pb-2">
@@ -100,7 +100,7 @@ export function GetWorkspaceDiffToolRenderer({ toolUse, toolResult }: ToolRender
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate font-mono text-xs">{preview}</span>
+        <span className="text-muted-foreground truncate font-mono">{preview}</span>
       )}
       renderContent={() =>
         output ? (
@@ -130,7 +130,7 @@ export function DiffCommentToolRenderer({ toolUse, toolResult }: ToolRendererPro
       toolResult={toolResult}
       renderSummary={() =>
         count > 0 ? (
-          <span className="text-muted-foreground text-xs">
+          <span className="text-muted-foreground">
             {count} comment{count !== 1 ? "s" : ""}
           </span>
         ) : null
@@ -174,7 +174,7 @@ export function GetTerminalOutputToolRenderer({ toolUse, toolResult }: ToolRende
       icon={<Terminal className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => <span className="text-muted-foreground text-xs">{sourceLabel}</span>}
+      renderSummary={() => <span className="text-muted-foreground">{sourceLabel}</span>}
       renderContent={() =>
         output ? (
           <OutputBlock>{output}</OutputBlock>
