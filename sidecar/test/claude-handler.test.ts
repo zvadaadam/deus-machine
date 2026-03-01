@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // vi.hoisted() ensures variables are available when vi.mock factories run.
 // ============================================================================
 
-const { mockClaudeSDK, mockFrontendAPI, mockExecSync } = vi.hoisted(() => ({
+const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockSessionWriter } = vi.hoisted(() => ({
   mockClaudeSDK: vi.fn(),
   mockFrontendAPI: {
     sendMessage: vi.fn(),
@@ -16,6 +16,16 @@ const { mockClaudeSDK, mockFrontendAPI, mockExecSync } = vi.hoisted(() => ({
     detachTunnel: vi.fn(),
   },
   mockExecSync: vi.fn(),
+  mockSessionWriter: {
+    saveAssistantMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
+    saveToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
+    saveAgentSessionId: vi.fn(() => ({ ok: true, value: "sess-id" })),
+    lookupAgentSessionId: vi.fn(() => null),
+    updateSessionStatus: vi.fn(() => ({ ok: true, value: "sess-id" })),
+    updateLastUserMessageAt: vi.fn(() => ({ ok: true, value: undefined })),
+    sessionExists: vi.fn(() => false),
+    reconcileStuckSessions: vi.fn(() => ({ ok: true, value: 0 })),
+  },
 }));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
@@ -37,6 +47,8 @@ vi.mock("../agents/shell-env", () => ({
 vi.mock("../agents/claude/checkpoint", () => ({
   createCheckpoint: vi.fn(),
 }));
+
+vi.mock("../db/session-writer", () => mockSessionWriter);
 
 vi.mock("../agents/opendevs-tools", () => ({
   createOpenDevsMCPServer: vi.fn(() => ({ type: "sdk", name: "opendevs" })),
@@ -490,6 +502,69 @@ describe("claude-handler", () => {
 
       const sdkCall = mockClaudeSDK.mock.calls[0][0];
       expect(sdkCall.options.env.GH_TOKEN).toBe("my-gh-token");
+    });
+
+    it("preserves error status when stop_reason is max_tokens (does not overwrite with idle)", async () => {
+      // Simulate SDK yielding: assistant msg with max_tokens → result/success
+      const mockMessages = [
+        {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Truncated response..." }],
+            stop_reason: "max_tokens",
+          },
+        },
+        { type: "result", subtype: "success" },
+      ];
+      let idx = 0;
+      const mockQuery = {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            if (idx < mockMessages.length) {
+              return { value: mockMessages[idx++], done: false };
+            }
+            return { value: undefined, done: true };
+          },
+        }),
+        interrupt: vi.fn().mockResolvedValue(undefined),
+        setPermissionMode: vi.fn().mockResolvedValue(undefined),
+        setModel: vi.fn().mockResolvedValue(undefined),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockClaudeSDK.mockReturnValue(mockQuery);
+
+      await handler.handleQuery("sess-max-tokens", "hello", {
+        cwd: "/test",
+        turnId: "turn-1",
+      });
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Should have sent an error event for max_tokens
+      expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "sess-max-tokens",
+          type: "error",
+          category: "context_limit",
+        })
+      );
+
+      // updateSessionStatus should have been called with "error" for max_tokens
+      expect(mockSessionWriter.updateSessionStatus).toHaveBeenCalledWith(
+        "sess-max-tokens",
+        "error",
+        expect.stringContaining("output token limit"),
+        "context_limit"
+      );
+
+      // Crucially: updateSessionStatus should NOT have been called with "idle"
+      // after being called with "error" — the stopReasonError flag must prevent it
+      const statusCalls = mockSessionWriter.updateSessionStatus.mock.calls.filter(
+        (call: unknown[]) => call[0] === "sess-max-tokens"
+      );
+      const lastStatusCall = statusCalls[statusCalls.length - 1];
+      expect(lastStatusCall[1]).toBe("error");
     });
   });
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Upload, TerminalSquare } from "lucide-react";
+import { Upload, TerminalSquare, MessageSquarePlus } from "lucide-react";
+import { match } from "ts-pattern";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
 import { PastedTextCard } from "./PastedTextCard";
@@ -425,37 +426,53 @@ export const DragAndDrop: StoryObj<typeof MessageInput> = {
   },
 };
 
-// ── Session Error Message (inline in chat flow) ─────────────────────────
+// ── Session Error Banner (inline in chat flow) ──────────────────────────
+
+type ErrorCategory = "auth" | "rate_limit" | "context_limit" | "network" | "db_write" | "invalid_request" | "internal";
 
 /**
- * Mirrors the inline error JSX from Chat.tsx.
- * Shows how SDK errors (rate limits, API failures) appear in the conversation.
+ * Exact replica of the inline error banner from Chat.tsx.
+ * Uses the same ts-pattern matching and button logic so Storybook
+ * renders what users actually see in the app.
  */
-function ErrorMessage({
-  message,
-  provider,
-  showLoginButton,
-  showRetryButton,
+function ErrorBanner({
+  errorMessage,
+  errorCategory,
+  agentType,
 }: {
-  message: string;
-  provider?: string;
-  showLoginButton?: boolean;
-  showRetryButton?: boolean;
+  errorMessage: string;
+  errorCategory?: ErrorCategory;
+  agentType?: string;
 }) {
-  const label = provider
-    ? `${provider.charAt(0).toUpperCase() + provider.slice(1)} Error`
-    : "Error";
-
   return (
     <div className={cn("mr-auto", "w-fit max-w-[60%]")}>
       <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex items-center gap-4 rounded-lg border border-l-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-destructive/80 text-xs font-medium">{label}</p>
-          <p className="text-foreground/80 mt-0.5 text-sm break-words">{message}</p>
+          <p className="text-destructive/80 text-xs font-medium">
+            {match(errorCategory)
+              .with("auth", () => "Authentication Error")
+              .with("rate_limit", () => "Rate Limited")
+              .with("context_limit", () => "Limit Reached")
+              .with("network", () => "Connection Error")
+              .with("db_write", () => "Database Error")
+              .otherwise(() =>
+                agentType
+                  ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
+                  : "Error"
+              )}
+          </p>
+          <p className="text-foreground/80 mt-0.5 text-sm break-words">
+            {errorMessage}
+          </p>
+          {errorCategory === "rate_limit" && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              You can retry by sending another message.
+            </p>
+          )}
         </div>
-        {(showLoginButton || showRetryButton) && (
-          <div className="flex shrink-0 items-center gap-2">
-            {showLoginButton && (
+        <div className="flex shrink-0 items-center gap-2">
+          {match(errorCategory)
+            .with("auth", () => (
               <Button
                 variant="outline"
                 size="sm"
@@ -465,8 +482,19 @@ function ErrorMessage({
                 <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
                 Log in
               </Button>
-            )}
-            {showRetryButton && (
+            ))
+            .with("context_limit", () => (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => console.log("new session")}
+              >
+                <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
+                New session
+              </Button>
+            ))
+            .with("rate_limit", () => (
               <Button
                 variant="ghost"
                 size="sm"
@@ -475,71 +503,157 @@ function ErrorMessage({
               >
                 Retry in new chat
               </Button>
-            )}
-          </div>
-        )}
+            ))
+            .with("network", () => (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => console.log("retry in new chat")}
+              >
+                Retry in new chat
+              </Button>
+            ))
+            .otherwise(() => (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => console.log("retry in new chat")}
+              >
+                Retry in new chat
+              </Button>
+            ))}
+        </div>
       </div>
     </div>
   );
 }
 
-export const SessionErrorRateLimit: StoryObj = {
+// ── Error category stories (one per category) ───────────────────────────
+
+export const ErrorAuth: StoryObj = {
+  name: "Error / Auth",
   render: () => (
-    <ErrorMessage
-      message="You've hit your rate limit. Resets at 7:00 PM (Europe/Prague)."
-      provider="claude"
-      showRetryButton
+    <ErrorBanner
+      errorCategory="auth"
+      errorMessage="Not logged in. Please run /login to authenticate with Claude."
+      agentType="claude"
     />
   ),
 };
 
-export const SessionErrorAPIFailure: StoryObj = {
+export const ErrorRateLimit: StoryObj = {
+  name: "Error / Rate Limit",
   render: () => (
-    <ErrorMessage
-      message="API error: 529 Overloaded. The server is temporarily unable to handle the request."
-      provider="codex"
-      showRetryButton
+    <ErrorBanner
+      errorCategory="rate_limit"
+      errorMessage="You've hit your rate limit. Resets at 7:00 PM (Europe/Prague)."
+      agentType="claude"
     />
   ),
 };
 
-export const SessionErrorLong: StoryObj = {
+export const ErrorContextLimit: StoryObj = {
+  name: "Error / Context Limit (max_tokens)",
   render: () => (
-    <ErrorMessage
-      message="Connection failed after 3 retries. The Claude API returned HTTP 503 Service Unavailable. This usually indicates a temporary server issue. Your message has been saved and will be retried automatically when the service recovers."
-      provider="claude"
-      showRetryButton
+    <ErrorBanner
+      errorCategory="context_limit"
+      errorMessage="Response truncated — output token limit reached."
+      agentType="claude"
     />
   ),
 };
 
-export const SessionErrorAuth: StoryObj = {
+export const ErrorNetwork: StoryObj = {
+  name: "Error / Network",
   render: () => (
-    <ErrorMessage
-      message="Not logged in. Please run /login to authenticate with Claude."
-      provider="claude"
-      showLoginButton
-      showRetryButton
+    <ErrorBanner
+      errorCategory="network"
+      errorMessage="HTTP 503 Service Unavailable. The server is temporarily unable to handle the request."
+      agentType="claude"
     />
   ),
 };
 
-export const SessionErrorCodexApiKey: StoryObj = {
+export const ErrorDbWrite: StoryObj = {
+  name: "Error / Database",
   render: () => (
-    <ErrorMessage
-      message="OPENAI_API_KEY or CODEX_API_KEY not found in environment. Set it in Settings → Environment Variables."
-      provider="codex"
-      showRetryButton
+    <ErrorBanner
+      errorCategory="db_write"
+      errorMessage="Session status update failed: SQLITE_BUSY: database is locked"
+      agentType="claude"
     />
   ),
 };
 
-export const SessionErrorCodexRateLimit: StoryObj = {
+export const ErrorInvalidRequest: StoryObj = {
+  name: "Error / Invalid Request",
   render: () => (
-    <ErrorMessage
-      message="429 Too Many Requests — Rate limit exceeded. Please try again in 30 seconds."
-      provider="codex"
-      showRetryButton
+    <ErrorBanner
+      errorCategory="invalid_request"
+      errorMessage="Invalid request parameters: model 'gpt-5' is not supported."
+      agentType="claude"
     />
+  ),
+};
+
+export const ErrorInternal: StoryObj = {
+  name: "Error / Internal (fallback)",
+  render: () => (
+    <ErrorBanner
+      errorCategory="internal"
+      errorMessage="An unexpected error occurred while processing your request."
+      agentType="claude"
+    />
+  ),
+};
+
+export const ErrorCodexApiKey: StoryObj = {
+  name: "Error / Codex API Key",
+  render: () => (
+    <ErrorBanner
+      errorCategory="auth"
+      errorMessage="OPENAI_API_KEY or CODEX_API_KEY not found in environment. Set it in Settings → Environment Variables."
+      agentType="codex"
+    />
+  ),
+};
+
+export const ErrorCodexRateLimit: StoryObj = {
+  name: "Error / Codex Rate Limit",
+  render: () => (
+    <ErrorBanner
+      errorCategory="rate_limit"
+      errorMessage="429 Too Many Requests — Rate limit exceeded. Please try again in 30 seconds."
+      agentType="codex"
+    />
+  ),
+};
+
+export const ErrorLongMessage: StoryObj = {
+  name: "Error / Long Message",
+  render: () => (
+    <ErrorBanner
+      errorCategory="network"
+      errorMessage="Connection failed after 3 retries. The Claude API returned HTTP 503 Service Unavailable. This usually indicates a temporary server issue. Your message has been saved and will be retried automatically when the service recovers."
+      agentType="claude"
+    />
+  ),
+};
+
+/** All error categories rendered together for visual comparison */
+export const ErrorAllCategories: StoryObj = {
+  name: "Error / All Categories",
+  render: () => (
+    <div className="flex flex-col gap-4 p-4">
+      <ErrorBanner errorCategory="auth" errorMessage="HTTP 401 Unauthorized" agentType="claude" />
+      <ErrorBanner errorCategory="rate_limit" errorMessage="You've hit your rate limit. Resets at 7:00 PM." agentType="claude" />
+      <ErrorBanner errorCategory="context_limit" errorMessage="Response truncated — output token limit reached." agentType="claude" />
+      <ErrorBanner errorCategory="network" errorMessage="HTTP 503 Service Unavailable" agentType="claude" />
+      <ErrorBanner errorCategory="db_write" errorMessage="SQLITE_BUSY: database is locked" agentType="claude" />
+      <ErrorBanner errorCategory="invalid_request" errorMessage="Invalid request parameters" agentType="claude" />
+      <ErrorBanner errorCategory="internal" errorMessage="An unexpected error occurred." agentType="claude" />
+    </div>
   ),
 };
