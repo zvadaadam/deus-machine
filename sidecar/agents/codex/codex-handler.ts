@@ -14,6 +14,7 @@ import { classifyError } from "../error-classifier";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
+import { buildWorkspaceContext } from "../workspace-context";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { resolveCodexModel } from "./codex-models";
 import {
@@ -203,11 +204,14 @@ export class CodexAgentHandler implements AgentHandler {
       // Dynamic import — @openai/codex-sdk is ESM-only, can't be require()'d from CJS
       const { Codex } = await import("@openai/codex-sdk");
 
-      // Create Codex instance
+      // Inject workspace context via config.developer_instructions
+      // so it lands in the system prompt, not the user message.
+      const workspaceContext = buildWorkspaceContext(options?.cwd);
       const codex = new Codex({
         apiKey,
         codexPathOverride: codexPath || undefined,
         env,
+        ...(workspaceContext ? { config: { developer_instructions: workspaceContext } } : {}),
       });
 
       // Configure thread options
@@ -277,7 +281,9 @@ export class CodexAgentHandler implements AgentHandler {
                 model
               );
               if (!writeResult.ok) {
-                console.error(`[${queryId}] DB write failed for assistant message: ${writeResult.error}`);
+                console.error(
+                  `[${queryId}] DB write failed for assistant message: ${writeResult.error}`
+                );
               }
             }
           })
@@ -314,7 +320,10 @@ export class CodexAgentHandler implements AgentHandler {
           })
           .with({ type: "error" }, (e) => {
             const classified = classifyError(e);
-            console.error(`[${queryId}] Stream error [${classified.category}]:`, classified.message);
+            console.error(
+              `[${queryId}] Stream error [${classified.category}]:`,
+              classified.message
+            );
             FrontendClient.sendError({
               id: sessionId,
               type: "error",
@@ -345,11 +354,15 @@ export class CodexAgentHandler implements AgentHandler {
       // The catch block handles the throw path — this covers the break path.
       if (abortController.signal.aborted) {
         const model = resolveCodexModel(options?.model);
-        saveAssistantMessage(sessionId, {
-          role: "assistant",
-          content: [{ type: "text", text: "" }],
-          stop_reason: "cancelled",
-        }, model);
+        saveAssistantMessage(
+          sessionId,
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "" }],
+            stop_reason: "cancelled",
+          },
+          model
+        );
       }
 
       console.log(`[${queryId}] Codex session completed: ${sessionId}`);
@@ -361,7 +374,10 @@ export class CodexAgentHandler implements AgentHandler {
         raw.category !== "abort" && abortController.signal.aborted
           ? { ...raw, category: "abort" as const }
           : raw;
-      console.error(`[${queryId}] Error in Codex query [${classified.category}]:`, classified.message);
+      console.error(
+        `[${queryId}] Error in Codex query [${classified.category}]:`,
+        classified.message
+      );
 
       // Only update status if this processQuery still owns the session.
       const ownsSession = getCodexSession(sessionId) === session;
@@ -391,14 +407,23 @@ export class CodexAgentHandler implements AgentHandler {
         // Record cancellation in message history so the chat shows what happened
         if (isAbort) {
           const model = resolveCodexModel(options?.model);
-          saveAssistantMessage(sessionId, {
-            role: "assistant",
-            content: [{ type: "text", text: "" }],
-            stop_reason: "cancelled",
-          }, model);
+          saveAssistantMessage(
+            sessionId,
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "" }],
+              stop_reason: "cancelled",
+            },
+            model
+          );
         }
 
-        updateSessionStatus(sessionId, isAbort ? "idle" : "error", isAbort ? null : classified.message, isAbort ? null : classified.category);
+        updateSessionStatus(
+          sessionId,
+          isAbort ? "idle" : "error",
+          isAbort ? null : classified.message,
+          isAbort ? null : classified.category
+        );
       }
     } finally {
       // Only clean up if this processQuery still owns the session.

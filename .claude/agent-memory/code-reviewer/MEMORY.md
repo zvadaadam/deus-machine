@@ -101,8 +101,23 @@
 
 ## Framer Motion Patterns (Confirmed)
 
-- `AnimatePresence` exit bug: component must NOT return null before AnimatePresence renders.
-  `<AnimatePresence>{condition && <m.div exit={...}>}</AnimatePresence>` is correct.
+- `LazyMotion` with `domAnimation` wraps the whole app in `ThemeProvider.tsx` — always use `m`
+  (compact alias) instead of `motion`. Using `motion` bypasses lazy loading and pulls in the full
+  bundle. Files `AgentQuestionOverlay.tsx` and `PlanApprovalOverlay.tsx` currently use `motion`
+  (not `m`) — this is a pre-existing violation, not introduced by new code.
+- `useReducedMotion()` is the established pattern for honoring prefers-reduced-motion. Used in
+  `RepositoryItem`, `ToolUseBlock`, `ThinkingBlock`, `PastedImageCard`, `PastedTextCard`,
+  `CloneRepositoryModal`. New animated components should follow the same pattern.
+- `AnimatePresence` exit animation bug: if a component conditionally returns `null` before
+  `AnimatePresence` renders, the exit animation never fires. Pattern must be:
+  `<AnimatePresence>{condition && <m.div exit={...}>...</m.div>}</AnimatePresence>` — NOT
+  `{condition ? <AnimatePresence><m.div>...</m.div></AnimatePresence> : null}`.
+- `AnimatePresence` inside `.map()` anti-pattern: placing `<AnimatePresence>` as the return value
+  of a `.map()` call (one per item) means the entire boundary is recreated when the item's key
+  changes. When the condition flips (e.g., `isEditing` changes from item A to item B), the boundary
+  for A is torn down in the same commit as its child — `AnimatePresence` never sees the child
+  transition and the exit animation does not fire. Fix: single `<AnimatePresence>` outside the
+  `.map()`, with stable keys on each animated child element.
 
 ## Global queryClient Defaults (Confirmed)
 
