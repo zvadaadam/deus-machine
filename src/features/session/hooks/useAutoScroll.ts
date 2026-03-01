@@ -190,9 +190,13 @@ export function useAutoScroll({ messages, messagesContainerRef }: UseAutoScrollO
     if (!container) return false;
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return false;
+    if (selection.isCollapsed) return false;
     const range = selection.getRangeAt(0);
-    const ancestor = range.commonAncestorContainer;
-    return ancestor.contains(container) || container.contains(ancestor);
+    try {
+      return range.intersectsNode(container);
+    } catch {
+      return false;
+    }
   }, [messagesContainerRef]);
 
   // ── Scroll to bottom ──────────────────────────────────────────────────
