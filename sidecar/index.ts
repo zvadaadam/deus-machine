@@ -358,12 +358,13 @@ process.on("uncaughtException", (error: any) => {
 });
 
 process.on("unhandledRejection", (reason, _promise) => {
+  // Sentry's built-in onUnhandledRejectionIntegration captures and normalizes
+  // rejection reasons automatically. We only log here for local visibility.
   if (reason instanceof Error) {
     console.error("Unhandled Rejection:", reason.message);
     if (reason.stack) console.error("Stack:", reason.stack);
   }
   console.error("Unhandled Rejection Reason:", JSON.stringify(reason, null, 2));
-  Sentry.captureException(reason);
 });
 
 // ============================================================================

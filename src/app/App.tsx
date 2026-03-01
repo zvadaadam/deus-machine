@@ -133,12 +133,17 @@ function AppContent({ reset }: { reset: () => void }) {
               <ConditionalErrorBoundary
                 fallback={DashboardError}
                 onReset={reset}
-                onError={(error, info) =>
+                onError={(error, info) => {
                   reportError(error, {
                     source: "react.error-boundary.root",
                     extra: { componentStack: info.componentStack ?? undefined },
-                  })
-                }
+                  });
+                  if (typeof window !== "undefined") {
+                    (
+                      window as { __APP_LAST_COMPONENT_STACK__?: string }
+                    ).__APP_LAST_COMPONENT_STACK__ = info.componentStack ?? undefined;
+                  }
+                }}
               >
                 <MainLayout />
               </ConditionalErrorBoundary>

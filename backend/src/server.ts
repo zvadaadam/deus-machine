@@ -89,8 +89,9 @@ process.on('uncaughtException', (error, origin) => {
 });
 
 process.on('unhandledRejection', (reason) => {
+  // Sentry's built-in onUnhandledRejectionIntegration captures and normalizes
+  // rejection reasons automatically. We only log here for local visibility.
   console.error('[FATAL] Unhandled Promise Rejection:', reason);
-  Sentry.captureException(reason);
 });
 
 // Graceful shutdown
