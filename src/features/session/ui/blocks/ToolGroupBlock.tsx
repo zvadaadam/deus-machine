@@ -6,11 +6,11 @@
  * tools fully visible). When the streak is "sealed" (text follows or turn
  * completes) and contains 2+ tools, a header appears and tools collapse.
  *
- * Why tools never remount:
- * The parent chain (ToolGroupBlock > Collapsible > CollapsibleContent > tools)
- * is identical at every timestep. Only the `open` prop and CSS classes change.
- * forceMount keeps collapsed tools in the DOM, preserving BaseToolRenderer's
- * manualExpanded state and preventing Framer Motion animation replay.
+ * Collapse behavior:
+ * Tools fully unmount when collapsed (AnimatePresence + conditional render).
+ * This is intentional — zero DOM weight when collapsed, consistent with
+ * ThinkingBlock and SubagentGroupBlock. Per-tool expand state resets on
+ * reopen, which is acceptable since tool groups are bounded (2-15 items).
  */
 
 import { useState, useMemo, memo } from "react";
