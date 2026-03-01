@@ -153,6 +153,29 @@ pub fn db_get_workspaces_by_repo(
             }
         }
 
+        // Backfill repos that have no matching workspaces (e.g. all archived)
+        // so they still appear in the sidebar.
+        let mut repo_stmt =
+            conn.prepare("SELECT id, name, sort_order FROM repositories ORDER BY sort_order, name")?;
+        let all_repos = repo_stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        })?;
+        for repo in all_repos {
+            let (id, name, sort_order) = repo?;
+            if !repo_positions.contains_key(&id) {
+                result.push(RepoGroup {
+                    repo_id: id,
+                    repo_name: name,
+                    sort_order: sort_order.unwrap_or(999),
+                    workspaces: vec![],
+                });
+            }
+        }
+
         // SQL already sorts by sort_order, but sort again to be safe
         result.sort_by_key(|g| g.sort_order);
         Ok(result)
