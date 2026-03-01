@@ -621,37 +621,11 @@ export class ClaudeAgentHandler implements AgentHandler {
         classified.message
       );
 
-      // If this query used a resume parameter and the error is NOT a user
-      // cancellation, the agent_session_id may be stale or expired. Clear it
-      // so the next query starts a fresh session instead of retrying with the
-      // same invalid ID in an infinite loop.
-      // Use "context_limit" category so the UI shows "New session" button,
-      // making it clear the user should start fresh (not retry in this chat
-      // where the agent has no memory of the previous conversation).
-      // Skip for aborts — cancelling a resumed session should follow normal
-      // abort flow (set idle, preserve agent_session_id for next resume).
-      if (options.resume && classified.category !== "abort") {
-        const clearResult = saveAgentSessionId(sessionId, null);
-        if (!clearResult.ok) {
-          console.error(
-            `[${generatorId}] Failed to clear stale agent_session_id: ${clearResult.error}`
-          );
-        }
-        console.log(`[${generatorId}] Cleared stale agent_session_id after resume failure`);
-
-        const resumeError =
-          "Session could not be restored — conversation history is no longer available. Please start a new session.";
-        FrontendClient.sendError({
-          id: sessionId,
-          type: "error",
-          error: resumeError,
-          agentType: "claude",
-          category: "context_limit",
-          willRetry: false,
-        });
-        updateSessionStatus(sessionId, "error", resumeError, "context_limit");
-        return;
-      }
+      // Resume failures are handled by the normal error path below.
+      // The agent_session_id is preserved in the DB so the next retry
+      // re-attempts the same session. The classified error (network,
+      // auth, rate_limit, context_limit, etc.) flows through to the
+      // frontend which already renders the correct UI for each category.
 
       if (classified.category !== "abort") {
         FrontendClient.sendError({
