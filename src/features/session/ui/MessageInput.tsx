@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Square,
   Plus,
-  Hammer,
   Globe,
   ChevronDown,
   Check,
@@ -30,8 +29,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
@@ -62,12 +59,6 @@ interface PastedText {
   content: string;
 }
 
-interface MCPServer {
-  name: string;
-  active: boolean;
-  command: string;
-}
-
 export interface MessageInputRef {
   addFiles: (files: File[]) => Promise<void>;
   clearPastedContent: () => void;
@@ -77,8 +68,6 @@ export interface MessageInputRef {
 // Anthropic API only supports these image formats for vision
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-const EMPTY_MCP_SERVERS: readonly MCPServer[] = [];
-
 interface MessageInputProps {
   messageInput: string;
   sending: boolean;
@@ -87,7 +76,6 @@ interface MessageInputProps {
   model?: string;
   thinkingLevel?: string;
   showCompactButton?: boolean;
-  mcpServers?: MCPServer[];
   contextTokenCount?: number;
   /** Workspace path for @ file mention search */
   workspacePath?: string | null;
@@ -122,7 +110,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     model = "opus",
     thinkingLevel = "NONE",
     showCompactButton = false,
-    mcpServers = EMPTY_MCP_SERVERS,
     contextTokenCount = 0,
     workspacePath = null,
     hasMessages = false,
@@ -189,10 +176,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         setInspectedElements([]);
       },
       addInspectedElement: (element: Omit<InspectedElement, "id">) => {
-        setInspectedElements((prev) => [
-          ...prev,
-          { ...element, id: crypto.randomUUID() },
-        ]);
+        setInspectedElements((prev) => [...prev, { ...element, id: crypto.randomUUID() }]);
       },
     }),
     [processFiles]
@@ -256,7 +240,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
   };
 
   const hasContent =
-    messageInput.trim().length > 0 || pastedTexts.length > 0 || attachments.length > 0 || inspectedElements.length > 0;
+    messageInput.trim().length > 0 ||
+    pastedTexts.length > 0 ||
+    attachments.length > 0 ||
+    inspectedElements.length > 0;
 
   // Send with combined content (pasted texts + typed input + images)
   // Pasted content is NOT cleared here — it's cleared by the parent via
@@ -286,7 +273,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
       return;
     }
 
-    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.nativeEvent.isComposing
+    ) {
       e.preventDefault();
       handleSend();
     }
@@ -353,9 +346,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentType);
     onThinkingLevelChange?.(next);
   };
-
-  // MCP active count
-  const activeMCPCount = mcpServers.filter((s) => s.active).length;
 
   // Context window calculation (200k token limit for Sonnet 3.5)
   const MAX_TOKENS = 200000;
@@ -542,45 +532,45 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                     <div key={agentConfig.id}>
                       {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
                       <DropdownMenuLabel>
-                        <span className="text-text-muted/90 px-1 text-2xs font-normal tracking-wide">
+                        <span className="text-text-muted/90 text-2xs px-1 font-normal tracking-wide">
                           {agentConfig.groupLabel}
                         </span>
                       </DropdownMenuLabel>
-                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map((option) => {
-                        const isSelected = selectedOptionValue === option.value;
-                        return (
-                          <DropdownMenuItem
-                            key={option.value}
-                            onClick={() =>
-                              isLockedGroup
-                                ? onOpenNewTab?.(option.value)
-                                : onModelChange?.(option.value)
-                            }
-                            className={cn(
-                              "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
-                              "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
-                              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
-                            )}
-                          >
-                            {renderAgentIcon(option.agentType)}
-                            <span className="font-normal">{option.label}</span>
-                            {option.isNew && (
-                              <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted rounded-xs border px-1 py-px text-2xs tracking-wide uppercase">
-                                New
+                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
+                        (option) => {
+                          const isSelected = selectedOptionValue === option.value;
+                          return (
+                            <DropdownMenuItem
+                              key={option.value}
+                              onClick={() =>
+                                isLockedGroup
+                                  ? onOpenNewTab?.(option.value)
+                                  : onModelChange?.(option.value)
+                              }
+                              className={cn(
+                                "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
+                                "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
+                                "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
+                              )}
+                            >
+                              {renderAgentIcon(option.agentType)}
+                              <span className="font-normal">{option.label}</span>
+                              {option.isNew && (
+                                <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                                  New
+                                </span>
+                              )}
+                              <span className="ml-auto flex items-center">
+                                {isSelected ? (
+                                  <Check className="text-text-primary h-3 w-3" />
+                                ) : isLockedGroup ? (
+                                  <ArrowUpRight className="text-text-muted/60 h-3 w-3" />
+                                ) : null}
                               </span>
-                            )}
-                            <span className="ml-auto flex items-center">
-                              {isSelected ? (
-                                <Check className="text-text-primary h-3 w-3" />
-                              ) : isLockedGroup ? (
-                                <ArrowUpRight
-                                  className="text-text-muted/60 h-3 w-3"
-                                />
-                              ) : null}
-                            </span>
-                          </DropdownMenuItem>
-                        );
-                      })}
+                            </DropdownMenuItem>
+                          );
+                        }
+                      )}
                     </div>
                   );
                 })}
@@ -592,7 +582,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               level={thinkingLevel as ThinkingLevel}
               onClick={handleCycleThinking}
             />
-
           </div>
 
           {/* Actions group (right) */}
@@ -663,49 +652,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               <Globe className="h-3.5 w-3.5" />
             </InputGroupButton>
 
-            {/* MCP Server indicator */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <InputGroupButton
-                  variant="ghost"
-                  size="icon-sm"
-                  title={`MCP Servers${activeMCPCount > 0 ? ` (${activeMCPCount} active)` : ""}`}
-                  aria-label="MCP Servers"
-                  className={cn("rounded-lg", activeMCPCount > 0 ? "text-primary" : "text-muted-foreground")}
-                >
-                  <Hammer className="h-3.5 w-3.5" />
-                </InputGroupButton>
-              </PopoverTrigger>
-              <PopoverContent className="w-64" align="end" side="top">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">MCP Servers</p>
-                    <Badge variant="secondary" className="text-xs">
-                      {activeMCPCount}/{mcpServers.length}
-                    </Badge>
-                  </div>
-
-                  {mcpServers.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No servers configured</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {mcpServers.map((server) => (
-                        <div key={server.name} className="flex items-center justify-between py-1">
-                          <span className="flex-1 truncate text-sm">{server.name}</span>
-                          <Badge
-                            variant={server.active ? "default" : "secondary"}
-                            className="ml-2 text-xs"
-                          >
-                            {server.active ? "Active" : "Inactive"}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-
             {/* Stop button - shows when session is working */}
             {sessionStatus === "working" && (
               <InputGroupButton
@@ -713,7 +659,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
                 variant="default"
                 size="icon-sm"
                 title="Stop execution"
-                className="rounded-full bg-foreground text-background hover:bg-foreground/90"
+                className="bg-foreground text-background hover:bg-foreground/90 rounded-full"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </InputGroupButton>

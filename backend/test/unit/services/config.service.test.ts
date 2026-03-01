@@ -93,9 +93,8 @@ describe('saveMcpServers', () => {
     const servers = [
       { name: 'my-server', command: 'node', args: ['index.js'], env: { PORT: '3000' } },
     ];
-    const result = saveMcpServers(servers);
+    saveMcpServers(servers);
 
-    expect(result).toBe(true);
     expect(mockFs.writeFileSync).toHaveBeenCalledTimes(1);
     const [, content] = mockFs.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(content as string);
@@ -138,8 +137,7 @@ describe('getCommands', () => {
 
 describe('saveCommand', () => {
   it('calls writeFileSync with correct path', () => {
-    const result = saveCommand('build', '# Build\nbun run build');
-    expect(result).toBe(true);
+    saveCommand('build', '# Build\nbun run build');
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       path.join(COMMANDS_DIR, 'build.md'),
       '# Build\nbun run build',
@@ -195,8 +193,7 @@ describe('getAgents', () => {
 
 describe('saveAgent', () => {
   it('calls writeFileSync with correct path and stringified data', () => {
-    const result = saveAgent('agent-1', { name: 'Coder', tools: ['edit'] });
-    expect(result).toBe(true);
+    saveAgent('agent-1', { name: 'Coder', tools: ['edit'] });
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       path.join(AGENTS_DIR, 'agent-1.json'),
       JSON.stringify({ name: 'Coder', tools: ['edit'] }, null, 2),
@@ -249,8 +246,7 @@ describe('saveHooks', () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: 'dark' }));
 
-    const result = saveHooks({ preCommit: 'lint' });
-    expect(result).toBe(true);
+    saveHooks({ preCommit: 'lint' });
 
     const [, content] = mockFs.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(content as string);
@@ -261,8 +257,7 @@ describe('saveHooks', () => {
   it('creates new settings file when none exists', () => {
     mockFs.existsSync.mockReturnValue(false);
 
-    const result = saveHooks({ prePush: 'test' });
-    expect(result).toBe(true);
+    saveHooks({ prePush: 'test' });
 
     const [, content] = mockFs.writeFileSync.mock.calls[0];
     const parsed = JSON.parse(content as string);

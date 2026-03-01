@@ -10,15 +10,7 @@
  */
 
 import { useMemo } from "react";
-import {
-  GitBranch,
-  Settings2,
-  Terminal,
-  BookOpen,
-  PenTool,
-  Globe,
-  Smartphone,
-} from "lucide-react";
+import { GitBranch, Bot, Terminal, BookOpen, PenTool, Globe, Smartphone } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
@@ -40,7 +32,6 @@ const contentTabItems: Array<{
   visibilityKey?: keyof Settings;
 }> = [
   { id: "code", label: "Code", icon: GitBranch },
-  { id: "config", label: "Config", icon: Settings2 },
   { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "notebook", label: "Notebook", icon: BookOpen, visibilityKey: "experimental_notebooks" },
   { id: "design", label: "Design", icon: PenTool, visibilityKey: "experimental_design" },
@@ -51,6 +42,7 @@ const contentTabItems: Array<{
     icon: Smartphone,
     visibilityKey: "experimental_simulator",
   },
+  { id: "config", label: "Agent", icon: Bot },
 ];
 
 /** Check if a tab should be visible given current settings. undefined = hidden (opt-in). */
@@ -82,7 +74,12 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
   );
 
   return (
-    <div data-slot="content-tab-bar" className="flex items-center gap-1" role="tablist" aria-label="Content panel">
+    <div
+      data-slot="content-tab-bar"
+      className="flex items-center gap-1"
+      role="tablist"
+      aria-label="Content panel"
+    >
       {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
@@ -100,7 +97,7 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
               "bg-bg-raised text-text-secondary",
               "relative flex h-7 items-center gap-1.5 rounded-lg px-3",
               "text-sm font-medium",
-              "transition-colors duration-150",
+              "transition-colors duration-150"
             )}
           >
             <Icon className="h-[13px] w-[13px]" />
@@ -121,7 +118,7 @@ export function ContentTabBar({ activeTab, onTabChange, workspaceId }: ContentTa
                 className={cn(
                   "text-text-muted hover:text-text-secondary hover:bg-bg-muted",
                   "relative flex h-7 items-center justify-center rounded-lg px-2",
-                  "transition-colors duration-150",
+                  "transition-colors duration-150"
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
