@@ -250,14 +250,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
               <NumberFlow
                 value={additions}
                 prefix="+"
-                className={isActive ? "text-accent-green" : "text-accent-green-muted"}
+                className={isActive ? "text-accent-green" : "text-text-muted"}
               />
             )}
             {deletions > 0 && (
               <NumberFlow
                 value={deletions}
                 prefix="-"
-                className={isActive ? "text-accent-red" : "text-accent-red-muted"}
+                className={isActive ? "text-accent-red" : "text-text-muted"}
               />
             )}
           </div>
@@ -272,7 +272,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             title="Archive workspace"
             className={cn(
               "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
-              "absolute top-2 right-1 opacity-0 transition-opacity",
+              "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity",
               "group-hover/sidebar-row:opacity-100"
             )}
           >

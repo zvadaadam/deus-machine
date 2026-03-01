@@ -1139,8 +1139,8 @@
    *
    * Background hierarchy (6 tiers):
    *   base → surface → elevated → raised → overlay → muted
-   *   Each step adds ~+3-5 lightness. The eye reads depth without
-   *   needing borders or shadows.
+   *   Each step adds ~+6-7 lightness. Perceptible depth layers
+   *   that the eye reads without needing borders.
    *
    * Text hierarchy (5 levels):
    *   primary → secondary → tertiary → muted → disabled
@@ -1152,30 +1152,30 @@
 
   /* --- Core surfaces --- */
   --background: #0b0b0b; /* bg-base: the canvas */
-  --foreground: oklch(0.91 0 0); /* text-primary — brighter for readability */
-  --card: #141414; /* bg-elevated */
-  --card-foreground: oklch(0.91 0 0);
-  --popover: #1e1e1e; /* bg-overlay */
-  --popover-foreground: oklch(0.91 0 0);
+  --foreground: oklch(0.86 0 0); /* text-primary — softer for sustained reading */
+  --card: #1a1a1a; /* bg-elevated */
+  --card-foreground: oklch(0.86 0 0);
+  --popover: #242424; /* bg-overlay */
+  --popover-foreground: oklch(0.86 0 0);
 
   /* --- Interactive accent (cool rose — pastel, warm, human) --- */
   --primary: oklch(0.78 0.09 345);
   --primary-foreground: #0b0b0b;
 
   /* --- Secondary / structural --- */
-  --secondary: #1a1a1a; /* bg-raised */
+  --secondary: #212121; /* bg-raised */
   --secondary-foreground: oklch(0.75 0 0);
   --muted: #2a2a2a; /* bg-muted */
   --muted-foreground: oklch(0.58 0 0); /* text-tertiary */
-  --accent: #141414; /* bg-elevated */
-  --accent-foreground: oklch(0.91 0 0);
+  --accent: #1a1a1a; /* bg-elevated */
+  --accent-foreground: oklch(0.86 0 0);
 
-  /* --- Semantic signals (equiluminant OKLCH — all L=0.72 for equal visual weight) --- */
-  --destructive: oklch(0.68 0.18 20);
-  --destructive-foreground: oklch(0.91 0 0);
-  --success: oklch(0.72 0.17 150);
+  /* --- Semantic signals (equiluminant OKLCH — all L≈0.65-0.68, desaturated for comfort) --- */
+  --destructive: oklch(0.65 0.13 20);
+  --destructive-foreground: oklch(0.86 0 0);
+  --success: oklch(0.68 0.12 150);
   --success-foreground: #0b0b0b;
-  --warning: oklch(0.72 0.14 75);
+  --warning: oklch(0.68 0.13 75);
   --warning-foreground: #0b0b0b;
   --info: var(--primary);
   --info-foreground: var(--primary-foreground);
@@ -1198,9 +1198,9 @@
   --file-image: var(--warning);
 
   /* --- Borders (semi-transparent — adapt to any surface) --- */
-  --border: color-mix(in oklch, var(--foreground) 8%, transparent);
-  --input: color-mix(in oklch, var(--foreground) 8%, transparent);
-  --input-surface: #141414;
+  --border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --input: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --input-surface: #1a1a1a;
   --input-tint: color-mix(in oklch, var(--foreground) 4%, transparent);
   --ring: color-mix(in oklch, var(--primary) 40%, transparent);
   --destructive-ring: color-mix(in oklch, var(--destructive) 40%, transparent);
@@ -1210,35 +1210,35 @@
   --sidebar-foreground: oklch(0.75 0 0);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: #141414;
-  --sidebar-accent-foreground: oklch(0.91 0 0);
-  --sidebar-border: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: oklch(0.86 0 0);
+  --sidebar-border: color-mix(in oklch, var(--foreground) 3%, transparent);
   --sidebar-ring: var(--ring);
 
-  /* --- Extended background tiers --- */
+  /* --- Extended background tiers (wider steps for perceptible depth) --- */
   --bg-base: #0b0b0b;
-  --bg-surface: #121212;
-  --bg-elevated: #141414;
-  --bg-raised: #1a1a1a;
-  --bg-overlay: #1e1e1e;
+  --bg-surface: #141414;
+  --bg-elevated: #1a1a1a;
+  --bg-raised: #212121;
+  --bg-overlay: #242424;
   --bg-muted: #2a2a2a;
 
   /* --- Specialized backgrounds --- */
   --bg-sidebar: #0b0b0b;
-  --bg-selection: #1a1a1a;
-  --bg-code: #171717;
+  --bg-selection: #212121;
+  --bg-code: #181818;
 
   /* --- Extended border tiers (semi-transparent) --- */
-  --border-subtle: color-mix(in oklch, var(--foreground) 6%, transparent);
-  --border-default: color-mix(in oklch, var(--foreground) 8%, transparent);
-  --border-strong: color-mix(in oklch, var(--foreground) 14%, transparent);
+  --border-subtle: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --border-default: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --border-strong: color-mix(in oklch, var(--foreground) 8%, transparent);
 
   /* --- Extended text hierarchy (OKLCH — wider gaps for readability) --- */
-  --text-primary: oklch(0.91 0 0);
+  --text-primary: oklch(0.86 0 0);
   --text-secondary: oklch(0.75 0 0);
   --text-tertiary: oklch(0.58 0 0);
-  --text-subtle: oklch(0.49 0 0);
-  --text-muted: oklch(0.42 0 0);
+  --text-subtle: oklch(0.54 0 0);
+  --text-muted: oklch(0.50 0 0);
   --text-disabled: oklch(0.32 0 0);
 
   /* --- Component surface tokens (dark mode) --- */
@@ -1268,7 +1268,7 @@
   --neutral-600: #555555;
   --neutral-700: #404040;
   --neutral-800: #2a2a2a;
-  --neutral-900: #141414;
+  --neutral-900: #1a1a1a;
 
   /* --- Vibrancy tint system --- */
   --sidebar-tint-opacity: 70%;
@@ -1277,7 +1277,7 @@
   --sidebar-wash: #0f0f0f;
 
   /* --- Content area border/shadow --- */
-  --content-border-opacity: 8%;
+  --content-border-opacity: 5%;
   --content-shadow-opacity: 4%;
 
   /* --- Elevated shadow (dropdowns, popovers, overlays) --- */
@@ -1295,7 +1295,7 @@
   --diff-deletion-text: #f97583;
 
   --diff-line-number: #404040;
-  --diff-line-number-bg: #121212;
+  --diff-line-number-bg: #141414;
 }
 
 /* Apply semantic border color to all elements with border utilities */
