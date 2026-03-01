@@ -7,11 +7,11 @@ import * as path from "path";
 
 /**
  * Derives the project (repo) name from a worktree path.
- * Worktrees live at `/path/to/repo/.conductor/{workspace-name}`.
+ * Worktrees live at `/path/to/repo/.opendevs/{workspace-name}`.
  * Returns the repo directory name, or falls back to the leaf directory.
  */
 export function getProjectName(cwd: string): string {
-  const marker = "/.conductor/";
+  const marker = "/.opendevs/";
   const idx = cwd.indexOf(marker);
   if (idx === -1) return path.basename(cwd);
   return path.basename(cwd.substring(0, idx));
