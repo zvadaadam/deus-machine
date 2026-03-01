@@ -18,7 +18,7 @@
  * - Prevents orphaned listeners on fast navigation between sessions
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -36,10 +36,8 @@ interface SidecarMessageEvent {
   agentType: "claude" | "codex";
   data?: unknown; // Claude SDK message data (for streaming rendering)
   error?: string;
-  /** Structured error fields from classifyError (optional, backward-compat) */
+  /** Structured error category from classifyError */
   category?: string;
-  willRetry?: boolean;
-  retryAfterMs?: number;
 }
 
 /**
@@ -53,28 +51,14 @@ interface SidecarMessageEvent {
  * 5. Invalidates React Query cache
  * 6. UI updates instantly
  */
-/** Error metadata captured from the most recent session:error event */
-export interface SessionErrorMeta {
-  category?: string;
-  willRetry?: boolean;
-  retryAfterMs?: number;
-}
-
 export function useSessionEvents(sessionId: string | null, workspaceId?: string | null) {
   const queryClient = useQueryClient();
-  // Transient error metadata from the latest session:error event.
-  // Not persisted to DB — only lives as long as the session is active.
-  // Cleared when the session changes (new sessionId resets state).
-  const [errorMeta, setErrorMeta] = useState<SessionErrorMeta | null>(null);
 
   useEffect(() => {
     // Only work in Tauri mode (desktop app)
     if (!isTauriEnv || !sessionId) {
       return;
     }
-
-    // Reset error metadata when session changes
-    setErrorMeta(null);
 
     // Listen for message events from sidecar-v2
     const unlistenMessagePromise = listen<SidecarMessageEvent>("session:message", (event) => {
@@ -136,17 +120,13 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
 
     // Listen for error events from sidecar-v2
     const unlistenErrorPromise = listen<SidecarMessageEvent>("session:error", (event) => {
-      const { id, error, category, willRetry, retryAfterMs } = event.payload;
+      const { id, error, category } = event.payload;
 
       if (id === sessionId) {
         console.error("[Events] ❌ Session error:", error, category ? `[${category}]` : "");
 
-        // Capture structured error metadata so the chat UI can render
-        // category-aware actions (e.g. "Log in" for auth, "Retry" for rate_limit)
-        // without re-parsing the error string with regex.
-        setErrorMeta({ category, willRetry, retryAfterMs });
-
-        // Invalidate session to update status
+        // Invalidate session to update status — error_category and error_message
+        // are persisted in the DB by the sidecar, so the cache refresh picks them up.
         queryClient.invalidateQueries({
           queryKey: queryKeys.sessions.detail(sessionId),
         });
@@ -168,5 +148,5 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     };
   }, [sessionId, workspaceId, queryClient]);
 
-  return { errorMeta };
 }
+

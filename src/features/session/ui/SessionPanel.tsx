@@ -91,7 +91,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
     // Real-time message updates: Tauri events (desktop) + incremental polling (web)
     // workspaceId enables PR status invalidation when agent creates/updates PRs
-    const { errorMeta } = useSessionEvents(sessionId, workspaceId);
+    useSessionEvents(sessionId, workspaceId);
 
     // Agent RPC handler — listens for sidecar:request events and manages pending UI state.
     // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can
@@ -414,9 +414,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               loading={loading}
               sessionStatus={sessionStatus}
               errorMessage={session?.error_message}
-              errorCategory={errorMeta?.category ?? session?.error_category ?? undefined}
-              errorWillRetry={errorMeta?.willRetry}
-              errorRetryAfterMs={errorMeta?.retryAfterMs}
+              errorCategory={session?.error_category ?? undefined}
               agentType={session?.agent_type}
               latestMessageSentAt={latestMessageSentAt}
               hasOlder={hasOlder}
@@ -522,9 +520,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     loading={loading}
                     sessionStatus={sessionStatus}
                     errorMessage={session?.error_message}
-                    errorCategory={errorMeta?.category ?? session?.error_category ?? undefined}
-                    errorWillRetry={errorMeta?.willRetry}
-                    errorRetryAfterMs={errorMeta?.retryAfterMs}
+                    errorCategory={session?.error_category ?? undefined}
                     agentType={session?.agent_type}
                     latestMessageSentAt={latestMessageSentAt}
                     hasOlder={hasOlder}

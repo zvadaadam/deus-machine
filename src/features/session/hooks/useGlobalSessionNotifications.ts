@@ -31,8 +31,6 @@ interface SidecarEvent {
   agentType: string;
   error?: string;
   category?: string;
-  willRetry?: boolean;
-  retryAfterMs?: number;
 }
 
 /**

@@ -33,13 +33,14 @@ export function saveAssistantMessage(
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
 
-  // Store content blocks directly (flattened — no envelope wrapper).
-  // When stop_reason is present (e.g., "cancelled"), wrap in an envelope so
-  // the frontend can detect the message state via parsed.message?.stop_reason.
-  // Normal messages: [block1, block2, ...]
-  // Cancelled messages: { message: { stop_reason }, blocks: [...] }
-  const contentPayload = message.stop_reason
-    ? { message: { stop_reason: message.stop_reason }, blocks: message.content ?? [] }
+  // Store flat content array for normal messages. For "cancelled" messages,
+  // write envelope so the frontend can detect cancellation from DB content
+  // (the "Turn interrupted" label in AssistantTurn needs this to survive page reload).
+  // Other stop_reasons (e.g. max_tokens) are communicated via session error events.
+  // Old DB rows may have envelope for any stop_reason — the frontend read shim
+  // in normalizeContentBlocks handles backward compat.
+  const contentPayload = message.stop_reason === "cancelled"
+    ? { message: { stop_reason: "cancelled" }, blocks: message.content ?? [] }
     : message.content ?? [];
   const content = JSON.stringify(contentPayload);
 

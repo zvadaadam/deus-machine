@@ -135,6 +135,16 @@ const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | st
   }
 
   if (typeof blocks === "object") {
+    // Detect envelope format: { message: { stop_reason }, blocks: [...] }
+    // The sidecar wraps messages with stop_reason in this envelope so the
+    // frontend can detect cancellation/limits. Unwrap and normalize the blocks.
+    if (
+      "message" in blocks &&
+      "blocks" in blocks &&
+      Array.isArray((blocks as { blocks?: unknown }).blocks)
+    ) {
+      return normalizeContentBlocks((blocks as { blocks: unknown[] }).blocks);
+    }
     if ("type" in blocks && typeof (blocks as { type?: unknown }).type === "string") {
       return normalizeContentBlocks([blocks as ContentBlock]);
     }

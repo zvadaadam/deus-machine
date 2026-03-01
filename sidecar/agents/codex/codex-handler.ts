@@ -309,8 +309,6 @@ export class CodexAgentHandler implements AgentHandler {
               error: classified.message,
               agentType: "codex",
               category: classified.category,
-              willRetry: classified.willRetry,
-              retryAfterMs: classified.retryAfterMs,
             });
             updateSessionStatus(sessionId, "error", classified.message, classified.category);
           })
@@ -323,8 +321,6 @@ export class CodexAgentHandler implements AgentHandler {
               error: classified.message,
               agentType: "codex",
               category: classified.category,
-              willRetry: classified.willRetry,
-              retryAfterMs: classified.retryAfterMs,
             });
             updateSessionStatus(sessionId, "error", classified.message, classified.category);
           })
@@ -363,7 +359,7 @@ export class CodexAgentHandler implements AgentHandler {
       // the error itself might not say "abort" but the signal was triggered)
       const classified =
         raw.category !== "abort" && abortController.signal.aborted
-          ? { ...raw, category: "abort" as const, willRetry: false }
+          ? { ...raw, category: "abort" as const }
           : raw;
       console.error(`[${queryId}] Error in Codex query [${classified.category}]:`, classified.message);
 
@@ -371,16 +367,24 @@ export class CodexAgentHandler implements AgentHandler {
       const ownsSession = getCodexSession(sessionId) === session;
       const isAbort = classified.category === "abort";
 
-      if (!isAbort && ownsSession) {
-        FrontendClient.sendError({
-          id: sessionId,
-          type: "error",
-          error: classified.message,
-          agentType: "codex",
-          category: classified.category,
-          willRetry: classified.willRetry,
-          retryAfterMs: classified.retryAfterMs,
-        });
+      if (ownsSession) {
+        if (isAbort) {
+          // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
+          FrontendClient.sendMessage({
+            id: sessionId,
+            type: "message",
+            agentType: "codex",
+            data: { type: "cancelled" },
+          });
+        } else {
+          FrontendClient.sendError({
+            id: sessionId,
+            type: "error",
+            error: classified.message,
+            agentType: "codex",
+            category: classified.category,
+          });
+        }
       }
 
       if (ownsSession) {
