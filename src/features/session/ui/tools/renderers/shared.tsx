@@ -36,4 +36,4 @@ export function OutputBlock({ children }: { children: React.ReactNode; isError?:
   );
 }
 
-export const ICON_CLS = "text-muted-foreground/70 h-4 w-4";
+export const ICON_CLS = "text-muted-foreground/70 h-3.5 w-3.5";

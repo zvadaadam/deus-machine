@@ -62,13 +62,13 @@ export function SyntaxHighlighter({
     if (showLineNumbers) {
       return (
         <div
-          className={cn("font-mono text-sm", className)}
+          className={cn("font-mono", className)}
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       );
     }
     return (
-      <div className={cn("font-mono text-sm", className)}>
+      <div className={cn("font-mono", className)}>
         <code
           className="block whitespace-pre"
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
@@ -81,7 +81,7 @@ export function SyntaxHighlighter({
   const lines = code.split("\n");
 
   return (
-    <div className={cn("font-mono text-sm", className)}>
+    <div className={cn("font-mono", className)}>
       {showLineNumbers ? (
         <table className="border-collapse">
           <tbody>

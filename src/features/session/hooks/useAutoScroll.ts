@@ -1,105 +1,64 @@
 /**
- * useAutoScroll Hook - State Machine + Observer-Based Auto-Scroll
+ * useAutoScroll -- Scroll-position-math approach to chat auto-scroll.
  *
- * Manages chat auto-scroll using a 3-state machine and browser observers
- * instead of brittle scroll-position math:
+ * One boolean (isPaused) replaces the 3-state machine. The browser already
+ * knows the scroll position -- we just read it:
  *
- * STATE MACHINE:
- *   AT_BOTTOM          -- User is at the bottom. Auto-scroll on new content.
- *   READING_HISTORY    -- User scrolled up intentionally. No auto-scroll.
- *   SCROLLING_TO_BOTTOM -- Programmatic scroll in progress. Ignore scroll events
- *                          to prevent button flicker.
+ *   scrollTop + clientHeight >= scrollHeight - THRESHOLD  =>  at bottom.
  *
- * OBSERVERS:
- *   IntersectionObserver -- Watches the sentinel div (messagesEndRef) to know
- *                           if the user is truly "at bottom" without scroll math.
- *   ResizeObserver       -- Watches the messages container for height changes
- *                           (markdown rendering, tool results expanding, code
- *                           blocks appearing). Triggers auto-scroll when content
- *                           grows while user is at bottom.
+ * ESCAPE (→ paused):
+ *   Wheel-up on the main container (not nested scrollables like code blocks).
+ *   The DOM walk finds the nearest scrollable ancestor — only escapes if it's
+ *   OUR scroll container.
  *
- * PROTECTIONS (ported from use-stick-to-bottom):
- *   Text selection   -- Pauses auto-scroll while user is dragging to select text
- *                       inside the chat, preventing the scroll from fighting the
- *                       selection during streaming.
- *   Wheel escape     -- Uses wheel events (not scroll direction) to detect user
- *                       intent to scroll up. Walks the DOM to distinguish scrolling
- *                       inside nested scrollables (code blocks) from the main chat.
- *   Resize guard     -- Tracks content height deltas to prevent resize-triggered
- *                       scroll events from being misinterpreted as user scroll-ups.
- *   User-expand guard -- Synchronous flag set by expand/collapse clicks. Prevents
- *                        ResizeObserver from auto-scrolling during user-initiated
- *                        content size changes (CSS grid transitions + conditional mounts).
+ * RE-ENGAGE (→ unpaused):
+ *   User scrolls back to bottom, clicks the button, sends a message,
+ *   or the 10s auto-resume timeout fires.
+ *
+ * CONTENT GROWTH:
+ *   ResizeObserver on the content wrapper. When height grows and !isPaused
+ *   and !isSelecting, write scrollTop = scrollHeight. No race condition
+ *   guards needed — the scroll listener only checks isAtBottom for
+ *   re-engagement (never disengages on scroll events).
+ *
+ * TEXT SELECTION:
+ *   Checks mouseDown + window.getSelection() overlap with the container.
+ *   Skips auto-scroll to avoid fighting the selection during streaming.
+ *
+ * PREPEND (load-older):
+ *   Chat.tsx calls syncGeometry() after correcting scrollTop in its
+ *   useLayoutEffect. This updates internal refs so the scroll/resize
+ *   handlers don't misinterpret the correction as user scroll or content growth.
+ *
+ * EXPAND/COLLAPSE:
+ *   Cursor-aligned: expand/collapse uses conditional render + opacity fade
+ *   (no CSS grid height transitions). Expand handlers call the module-level
+ *   suppressAutoScrollOnExpand() BEFORE toggling state so the ResizeObserver
+ *   doesn't snap to bottom — the clicked element stays in place while content
+ *   expands below. Collapse needs no suppression (height shrinks, not grows).
+ *
+ * Inspired by Cursor IDE's ScrollArea implementation:
+ *   - 5px threshold constant
+ *   - isPaused flag with 10s auto-resume timeout
+ *   - ResizeObserver on both viewport and content
+ *   - No IntersectionObserver, no sentinel div
  */
 
-import { useState, useEffect, useCallback, useRef, RefObject } from "react";
+import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
 import type { Message } from "@/shared/types";
 
-// ---------------------------------------------------------------------------
-// User-expand guard (module-level singleton)
-//
-// Core insight: ResizeObserver can't distinguish "content grew from streaming"
-// vs "content grew from user expand/collapse". Instead of guessing via timing
-// (MutationObserver, transitionstart, rAF deferral), the expand/collapse click
-// handler calls notifyUserExpand() SYNCHRONOUSLY before React re-renders.
-// The ResizeObserver reads userExpandCount and skips auto-scroll when > 0.
-//
-// Counter (not boolean) handles rapid toggles and nested collapsibles.
-// Cleared after a generous timeout that covers both CSS grid transitions
-// (200ms) and conditional mount layouts (~1 frame).
-// ---------------------------------------------------------------------------
-let userExpandCount = 0;
-let userExpandTimer: ReturnType<typeof setTimeout> | null = null;
+// ── Constants ────────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Prepend guard (module-level singleton)
-//
-// During load-older prepend, the container's scrollHeight jumps because older
-// messages are inserted above the viewport. The ResizeObserver sees
-// difference > 0 and would write scrollTop = scrollHeight, fighting the
-// scroll correction in Chat.tsx's useLayoutEffect.
-//
-// Set synchronously by Chat.captureAnchor() before triggering the fetch.
-// Cleared by Chat's useLayoutEffect after restoration completes.
-// ---------------------------------------------------------------------------
-let prependInProgress = false;
+/** Pixels from bottom to consider "at bottom". Matches Cursor's 5px. */
+const BOTTOM_THRESHOLD = 5;
 
-/**
- * Call before triggering a load-older fetch. Tells the ResizeObserver
- * to skip auto-scroll until the prepend scroll correction completes.
- */
-export function notifyPrependStart(): void {
-  prependInProgress = true;
-}
+/** Auto-resume after this many ms when paused (Cursor: 10s). */
+const AUTO_RESUME_MS = 10_000;
 
-/**
- * Call after the prepend scroll correction in useLayoutEffect.
- * Re-enables ResizeObserver auto-scroll.
- */
-export function notifyPrependEnd(): void {
-  prependInProgress = false;
-}
+// ── Text selection guard (module-level, shared across instances) ─────────
+// Tracks mouseDown globally so the hook can skip auto-scroll while the
+// user is dragging to select text. Ported from use-stick-to-bottom.
 
-/**
- * Call this from any expand/collapse click handler BEFORE calling setState.
- * Sets a synchronous flag that the ResizeObserver reads to skip auto-scroll.
- * The flag auto-clears after 350ms (covers 200ms CSS transition + safety margin).
- */
-export function notifyUserExpand(): void {
-  userExpandCount++;
-  // Reset the shared timer — the last expand/collapse wins the timeout.
-  if (userExpandTimer !== null) clearTimeout(userExpandTimer);
-  userExpandTimer = setTimeout(() => {
-    userExpandCount = 0;
-    userExpandTimer = null;
-  }, 350);
-}
-
-// ---------------------------------------------------------------------------
-// Text selection protection (module-level singleton, shared across instances)
-// Ported from use-stick-to-bottom: tracks mousedown globally so the hook can
-// skip auto-scroll while the user is dragging to select text.
-// ---------------------------------------------------------------------------
 let mouseDown = false;
 
 if (typeof document !== "undefined") {
@@ -116,117 +75,139 @@ if (typeof document !== "undefined") {
   });
 }
 
+// ── Expand/collapse suppress (module-level, shared across instances) ─────
+// When a user clicks to expand a collapsible block, the content mounts and
+// grows the container. Without suppression, the ResizeObserver snaps
+// scrollTop to scrollHeight, yanking the clicked element out of view.
+// The expand handler calls suppressAutoScrollOnExpand() before toggling
+// state, and the ResizeObserver skips the resulting growth events.
+
+let _suppressExpandCount = 0;
+
 /**
- * Scroll state machine states.
+ * Suppress the next several auto-scroll-on-growth events.
+ * Call from expand/collapse click handlers BEFORE toggling state,
+ * so the ResizeObserver doesn't misinterpret the height change as
+ * streaming content and snap to the bottom.
  *
- * AT_BOTTOM: Sentinel is visible. Auto-scroll on content changes.
- * READING_HISTORY: User scrolled up. Show scroll-to-bottom button.
- * SCROLLING_TO_BOTTOM: Programmatic scroll in flight. Suppress scroll events.
+ * Counter (not boolean) absorbs the burst of resize events from
+ * content mounting (virtualizer remeasure + content wrapper resize).
  */
-type ScrollState = "AT_BOTTOM" | "READING_HISTORY" | "SCROLLING_TO_BOTTOM";
+export function suppressAutoScrollOnExpand() {
+  _suppressExpandCount += 3;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function isAtBottom(el: HTMLElement): boolean {
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD;
+}
+
+/**
+ * Walk up from the wheel event target to find the nearest scrollable ancestor.
+ * Returns true only if that scrollable is the given container (meaning the
+ * user is scrolling the main chat, not a nested code block or terminal).
+ */
+function isWheelOnMainContainer(target: EventTarget | null, container: HTMLElement): boolean {
+  let el = target as HTMLElement | null;
+  while (el) {
+    const overflow = getComputedStyle(el).overflowY;
+    const isScrollable =
+      (overflow === "scroll" || overflow === "auto") && el.scrollHeight > el.clientHeight;
+    if (isScrollable) {
+      return el === container;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────
 
 interface UseAutoScrollOptions {
   messages: Message[];
   messagesContainerRef: RefObject<HTMLDivElement>;
-  messagesEndRef: RefObject<HTMLDivElement>;
-  scrollThreshold?: number; // Kept for API compat, unused internally
 }
 
-/** Duration to suppress scroll events after a smooth scroll (ms). */
-const SMOOTH_SCROLL_SETTLE_MS = 300;
-/** Duration to suppress scroll events after an instant scroll (ms). */
-const INSTANT_SCROLL_SETTLE_MS = 50;
-
-export function useAutoScroll({
-  messages,
-  messagesContainerRef,
-  messagesEndRef,
-}: UseAutoScrollOptions) {
-  // --- Core state ---
+export function useAutoScroll({ messages, messagesContainerRef }: UseAutoScrollOptions) {
+  // --- Public state ---
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false);
 
-  // Refs for values that observers/timers need without triggering re-renders.
-  const scrollStateRef = useRef<ScrollState>("AT_BOTTOM");
-  const sentinelVisibleRef = useRef(true);
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // --- Core scroll state: a single boolean ---
+  const isPausedRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Track scroll direction to detect intentional upward scrolls.
-  // Any upward scroll = user intent to read history, regardless of sentinel visibility.
-  const lastScrollTopRef = useRef(0);
+  // --- Geometry refs ---
+  // When Chat.tsx corrects scrollTop after a prepend, the ResizeObserver
+  // fires multiple times as the new content renders (one per element in the
+  // prepended batch). A boolean only suppresses one callback. A counter
+  // (incremented by 3 per syncGeometry call) absorbs the burst.
+  const skipGrowthCountRef = useRef(0);
 
-  // Track previous message count to detect new messages vs. content reflows.
+  // --- Message tracking (append vs prepend detection) ---
   const prevMessageCountRef = useRef(messages.length);
-
-  // Track the last message ID to distinguish appends (new messages at end)
-  // from prepends (older messages loaded at front via load-older).
-  // Prepends increase messages.length but don't change the last message.
   const prevLastMessageIdRef = useRef<string | null>(
     messages.length > 0 ? messages[messages.length - 1].id : null
   );
 
-  // Resize-vs-scroll race condition guard (ported from use-stick-to-bottom).
-  // When content resizes, the browser may fire a scroll event before/after the
-  // ResizeObserver callback. Without this guard, the scroll handler sees
-  // scrollTop change and misinterprets it as a user scroll-up.
-  const resizeDifferenceRef = useRef(0);
+  // ── Pause / Resume ────────────────────────────────────────────────────
 
-  // --- Helpers ---
+  const pause = useCallback(() => {
+    if (isPausedRef.current) return;
+    isPausedRef.current = true;
+    setShowScrollButton(true);
 
-  /**
-   * Check if the user is actively selecting text inside the scroll container.
-   * Ported from use-stick-to-bottom: prevents auto-scroll from fighting text
-   * selection during streaming. Requires both mouseDown AND an active selection
-   * range that overlaps with the scroll container.
-   */
+    // Auto-resume after timeout (Cursor pattern: user scrolls up, forgets,
+    // chat gently re-engages after 10s). Only unpauses — does NOT snap to
+    // bottom. If the session is streaming, the next ResizeObserver growth
+    // event will scroll naturally. If idle, the user stays where they are.
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      resumeTimerRef.current = null;
+      isPausedRef.current = false;
+      setShowScrollButton(false);
+      setHasNewMessages(false);
+    }, AUTO_RESUME_MS);
+  }, []);
+
+  const resume = useCallback(() => {
+    if (!isPausedRef.current) return;
+    isPausedRef.current = false;
+    setShowScrollButton(false);
+    setHasNewMessages(false);
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+  }, []);
+
+  // ── Text selection check ──────────────────────────────────────────────
+
   const isSelecting = useCallback(() => {
     if (!mouseDown) return false;
     const container = messagesContainerRef.current;
     if (!container) return false;
-
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return false;
-
+    if (selection.isCollapsed) return false;
     const range = selection.getRangeAt(0);
-    const ancestor = range.commonAncestorContainer;
-    return ancestor.contains(container) || container.contains(ancestor);
+    try {
+      return range.intersectsNode(container);
+    } catch {
+      return false;
+    }
   }, [messagesContainerRef]);
 
-  /** Transition the scroll state and sync the button visibility. */
-  const transitionTo = useCallback((next: ScrollState) => {
-    scrollStateRef.current = next;
-    setShowScrollButton(next === "READING_HISTORY");
-    // Clear "new messages" indicator when user returns to bottom
-    if (next === "AT_BOTTOM") setHasNewMessages(false);
-  }, []);
+  // ── Scroll to bottom ──────────────────────────────────────────────────
 
-  /** Check prefers-reduced-motion once per call (cheap matchMedia check). */
-  const prefersReducedMotion = useCallback(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    []
-  );
-
-  /**
-   * Scroll the container to its absolute bottom.
-   * Uses scrollTop/scrollTo instead of scrollIntoView because the sentinel
-   * sits inside a pb-32 wrapper — scrollIntoView stops at the sentinel,
-   * leaving 128px of padding unscrolled.
-   */
   const scrollToBottom = useCallback(
     (smooth = false) => {
       const container = messagesContainerRef.current;
       if (!container) return;
-
-      // Clear any pending settle timer from a previous scroll call.
-      if (settleTimerRef.current !== null) {
-        clearTimeout(settleTimerRef.current);
-        settleTimerRef.current = null;
-      }
-
-      const useSmooth = smooth && !prefersReducedMotion();
-      transitionTo("SCROLLING_TO_BOTTOM");
-
-      if (useSmooth) {
+      resume();
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (smooth && !reducedMotion) {
         container.scrollTo({
           top: container.scrollHeight,
           behavior: "smooth",
@@ -234,300 +215,171 @@ export function useAutoScroll({
       } else {
         container.scrollTop = container.scrollHeight;
       }
-
-      // After the scroll animation settles, read the observer to pick next state.
-      const delay = useSmooth ? SMOOTH_SCROLL_SETTLE_MS : INSTANT_SCROLL_SETTLE_MS;
-      settleTimerRef.current = setTimeout(() => {
-        settleTimerRef.current = null;
-        transitionTo(sentinelVisibleRef.current ? "AT_BOTTOM" : "READING_HISTORY");
-      }, delay);
     },
-    [messagesContainerRef, transitionTo, prefersReducedMotion]
+    [messagesContainerRef, resume]
   );
 
-  // --- IntersectionObserver: sentinel visibility ---
-  useEffect(() => {
-    const sentinel = messagesEndRef.current;
-    const container = messagesContainerRef.current;
-    if (!sentinel || !container) return;
+  /**
+   * Suppress the next several ResizeObserver growth callbacks.
+   * Call this after any programmatic scrollTop correction (e.g., prepend
+   * anchor restore in Chat.tsx useLayoutEffect) so the ResizeObserver
+   * doesn't misinterpret the height change as streaming content and
+   * stomp the restored scroll position.
+   *
+   * Increments by 3 to absorb the burst of resize events from prepended
+   * content rendering (typically 1-3 elements in a single batch).
+   */
+  const syncGeometry = useCallback(() => {
+    skipGrowthCountRef.current += 3;
+  }, []);
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const isVisible = entry.isIntersecting && entry.intersectionRatio > 0.1;
-        sentinelVisibleRef.current = isVisible;
-
-        // Only RE-ENGAGE (→ AT_BOTTOM) from the IO, never disengage (→ READING_HISTORY).
-        // Content growth pushes the sentinel out of view — the IO sees "not visible"
-        // but that's NOT the user scrolling up. Disengagement is handled exclusively
-        // by the wheel listener detecting actual upward wheel events.
-        //
-        // During user expand/collapse (userExpandCount > 0), skip re-engagement.
-        // A CSS grid transition can momentarily shift content so the sentinel
-        // flickers into view, falsely re-engaging AT_BOTTOM. This caused Bug 2:
-        // user at top → expand something → IO sees sentinel → AT_BOTTOM → next
-        // streaming resize auto-scrolls them to bottom.
-        if (
-          isVisible &&
-          scrollStateRef.current !== "SCROLLING_TO_BOTTOM" &&
-          userExpandCount === 0
-        ) {
-          transitionTo("AT_BOTTOM");
-        }
-      },
-      {
-        root: container,
-        // Tight margin — only consider sentinel visible when truly near the bottom.
-        // A generous margin (e.g. 40px) caused auto-scroll to stay engaged even
-        // when the user scrolled up slightly, making it feel too "sticky".
-        rootMargin: "0px 0px 8px 0px",
-        threshold: [0, 0.1, 1],
-      }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [messagesContainerRef, messagesEndRef, transitionTo]);
-
-  // --- ResizeObserver: auto-scroll on content height changes ---
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    let rafId: number | null = null;
-    let previousHeight: number | undefined;
-
-    const observer = new ResizeObserver((entries) => {
-      // Batch with rAF to avoid layout thrashing when multiple children resize
-      // in the same frame (e.g., several markdown blocks rendering at once).
-      if (rafId !== null) return;
-
-      // Track height delta for the resize-vs-scroll race condition guard.
-      let difference = 0;
-      const entry = entries[0];
-      if (entry) {
-        const currentHeight = entry.contentRect.height;
-        difference = currentHeight - (previousHeight ?? currentHeight);
-        previousHeight = currentHeight;
-        resizeDifferenceRef.current = difference;
-
-        // Reset the guard after the scroll event has had a chance to fire.
-        // rAF + setTimeout(1) ensures we clear AFTER both the scroll event
-        // and any microtasks from the resize (see WICG/resize-observer#25).
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            if (resizeDifferenceRef.current === difference) {
-              resizeDifferenceRef.current = 0;
-            }
-          }, 1);
-        });
-      }
-
-      // Capture scroll state NOW, before the IO can react to the layout change.
-      // Per spec, ResizeObserver fires before IntersectionObserver in the same
-      // frame. If we read scrollStateRef inside the rAF callback, the IO may
-      // have already transitioned to READING_HISTORY (sentinel pushed out of
-      // view by content growth), causing a false skip.
-      //
-      // Only auto-scroll when content height actually grew (difference > 0).
-      // Width-only changes (from panel resize) fire ResizeObserver but don't
-      // need scroll adjustment — the unnecessary scrollTop write caused visible
-      // scrollbar flash during sidecar tab switching.
-      const shouldScrollByState =
-        scrollStateRef.current !== "READING_HISTORY" &&
-        difference > 0;
-
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        // Check userExpandCount INSIDE the rAF, not at ResizeObserver time.
-        //
-        // Critical timing fix: A rAF queued by a previous frame's ResizeObserver
-        // fires at the START of the next frame — before the browser processes
-        // input events from between frames. If we captured userExpandCount at
-        // ResizeObserver time (outside rAF), it would be 0. Then the user clicks
-        // expand between frames, notifyUserExpand() sets count=1, but the stale
-        // captured 0 lets the rAF write scrollTop, causing jitter.
-        //
-        // Inside the rAF, the click handler has already run (input events are
-        // processed before rAF in the event loop), so we read the fresh value.
-        if (shouldScrollByState && userExpandCount === 0 && !prependInProgress && !isSelecting()) {
-          container.scrollTop = container.scrollHeight;
-        }
-      });
-    });
-
-    // Observe the first child (the actual content wrapper) rather than the
-    // scroll container itself. This fires on content growth, not on scroll.
-    // The Chat component wraps messages in a flex-col div with pb-32.
-    const contentWrapper = container.firstElementChild;
-    if (contentWrapper) {
-      observer.observe(contentWrapper);
-    }
-
-    return () => {
-      observer.disconnect();
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [messagesContainerRef, isSelecting]);
-
-  // --- Wheel event listener: escape detection (ported from use-stick-to-bottom) ---
-  // Uses wheel events instead of scroll-direction math. This correctly handles
-  // nested scrollable elements (code blocks, terminal output): the DOM walk
-  // finds the nearest scrollable ancestor of the event target and only escapes
-  // if it's OUR scroll container. Scroll events can't distinguish this.
+  // ── Wheel listener: escape detection ──────────────────────────────────
+  // Uses wheel events (not scroll direction) to detect user intent to scroll
+  // up. Walks the DOM to distinguish scrolling inside nested scrollables
+  // (code blocks, terminal output) from the main chat container.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (scrollStateRef.current === "SCROLLING_TO_BOTTOM") return;
       if (e.deltaY >= 0) return; // Only care about scroll-UP (deltaY < 0)
-
-      // Walk up from the event target to find the nearest scrollable ancestor.
-      // If it's not our container, the user is scrolling inside a nested
-      // scrollable (code block, terminal, etc.) — don't escape.
-      let el = e.target as HTMLElement | null;
-      while (el) {
-        const overflow = getComputedStyle(el).overflowY;
-        const isScrollable =
-          (overflow === "scroll" || overflow === "auto") && el.scrollHeight > el.clientHeight;
-        if (isScrollable) {
-          // Found the nearest scrollable ancestor
-          if (el === container) {
-            // User is scrolling up in OUR container → escape from auto-scroll
-            if (scrollStateRef.current === "AT_BOTTOM") {
-              transitionTo("READING_HISTORY");
-            }
-          }
-          // Either way, stop walking — we found the relevant scrollable
-          return;
-        }
-        el = el.parentElement;
+      if (isPausedRef.current) return; // Already paused
+      if (isWheelOnMainContainer(e.target, container)) {
+        pause();
       }
     };
 
     container.addEventListener("wheel", handleWheel, { passive: true });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, [messagesContainerRef, transitionTo]);
+  }, [messagesContainerRef, pause]);
 
-  // --- Scroll event listener: detect re-engagement (scrolling back to bottom) ---
+  // ── Scroll listener: re-engagement only ───────────────────────────────
+  // When the user scrolls back to within THRESHOLD of the bottom while
+  // paused, resume auto-scroll. This is the only job of the scroll handler.
+  // Disengagement is handled exclusively by the wheel listener (more
+  // reliable for nested scrollables).
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      // Suppress scroll events during programmatic scrolls to prevent
-      // the scroll-to-bottom button from flickering on/off.
-      if (scrollStateRef.current === "SCROLLING_TO_BOTTOM") return;
-
-      // If there's a pending resize difference, this scroll event was triggered
-      // by a content resize (not by the user). Ignore it to prevent false
-      // disengagement. (Ported from use-stick-to-bottom.)
-      if (resizeDifferenceRef.current !== 0) return;
-
-      // During prepend scroll correction, useLayoutEffect writes scrollTop
-      // to keep the anchor element in place. This fires a scroll event that
-      // must not be interpreted as user intent.
-      if (prependInProgress) return;
-
-      // During user expand/collapse, anchorAndCorrect() adjusts scrollTop
-      // per-frame to keep the toggle button visually stationary. These
-      // scrollTop writes fire scroll events that must not be interpreted
-      // as user intent (would cause false re-engagement or disengagement).
-      if (userExpandCount > 0) return;
-
-      const currentTop = container.scrollTop;
-      const scrolledDown = currentTop > lastScrollTopRef.current;
-      lastScrollTopRef.current = currentTop;
-
-      // RE-ENGAGEMENT: user scrolled back to bottom.
-      // Math-based check as a fast path.
-      // The IO will also fire but is async; this gives immediate re-engagement.
-      // Note: Disengagement is now handled by the wheel listener (more reliable
-      // than scroll-direction for distinguishing nested scrollables).
-      if (scrolledDown && scrollStateRef.current === "READING_HISTORY") {
-        const atBottom =
-          container.scrollTop + container.clientHeight >= container.scrollHeight - 16;
-        if (atBottom) {
-          transitionTo("AT_BOTTOM");
-        }
+      if (isPausedRef.current && isAtBottom(container)) {
+        resume();
       }
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [messagesContainerRef, transitionTo]);
+  }, [messagesContainerRef, resume]);
 
-  // --- Auto-scroll on new messages ---
+  // ── ResizeObserver: auto-scroll on content growth ─────────────────────
+  // Watches the content wrapper (first child of the scroll container).
+  // When content height grows and we're not paused, push scrollTop to
+  // scrollHeight. Simple and direct — no race condition guards needed
+  // because the scroll listener never disengages (only re-engages).
+  //
+  // `contentReady` re-runs this effect when transitioning from the loading
+  // skeleton to the real content wrapper. Without it, the observer would
+  // stay attached to the detached skeleton div and never fire again.
+  const contentReady = messages.length > 0;
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !contentReady) return;
+
+    let prevHeight: number | undefined;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const h = entry.contentRect.height;
+      const grew = prevHeight !== undefined && h > prevHeight;
+      prevHeight = h;
+
+      if (!grew) return;
+      if (skipGrowthCountRef.current > 0) {
+        skipGrowthCountRef.current--;
+        return;
+      }
+      if (_suppressExpandCount > 0) {
+        _suppressExpandCount--;
+        return;
+      }
+      if (isPausedRef.current) return;
+      if (isSelecting()) return;
+
+      // Defer scroll to next frame so the chatItemEnter CSS animation
+      // paints its first keyframe before we move scrollTop. Without rAF
+      // the scroll write happens mid-ResizeObserver callback, before the
+      // browser paints the new content, causing a visual jump.
+      requestAnimationFrame(() => {
+        const c = messagesContainerRef.current;
+        if (c && !isPausedRef.current && !isSelecting()) {
+          c.scrollTop = c.scrollHeight;
+        }
+      });
+    });
+
+    const contentWrapper = container.firstElementChild;
+    if (contentWrapper) observer.observe(contentWrapper);
+    return () => observer.disconnect();
+  }, [messagesContainerRef, isSelecting, contentReady]);
+
+  // ── Auto-scroll on new messages ───────────────────────────────────────
   useEffect(() => {
     const count = messages.length;
     const prevCount = prevMessageCountRef.current;
-    const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const lastId = count > 0 ? messages[count - 1].id : null;
     const prevLastId = prevLastMessageIdRef.current;
 
-    // Update refs before any early returns.
     prevMessageCountRef.current = count;
-    prevLastMessageIdRef.current = lastMessageId;
+    prevLastMessageIdRef.current = lastId;
 
     if (count <= prevCount) return;
 
-    // Prepend detection: count grew but the last message is the same.
-    // Older messages were loaded at the front (load-older) — don't auto-scroll.
-    // The scroll position is preserved by Chat.tsx's useLayoutEffect instead.
-    if (lastMessageId === prevLastId) return;
+    // Prepend: count grew but last message unchanged — don't auto-scroll.
+    // Chat.tsx's useLayoutEffect handles scroll position preservation.
+    if (lastId === prevLastId) return;
 
-    // Always scroll to bottom when the USER sends a message, even if
-    // they were reading history. They expect to see their own message.
-    const latestMessage = messages[messages.length - 1];
-    const isUserMessage = latestMessage?.role === "user";
+    const latest = messages[count - 1];
+    const isUserMessage = latest?.role === "user";
 
     if (isUserMessage) {
-      // Set ref synchronously so ResizeObserver reads the correct state before
-      // any observers fire. The setState via transitionTo goes in the rAF to
-      // satisfy the lint rule (no setState in effect body).
-      scrollStateRef.current = "AT_BOTTOM";
+      // User sent a message — always scroll to bottom, even if paused.
+      resume();
       requestAnimationFrame(() => {
-        transitionTo("AT_BOTTOM");
-        const container = messagesContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
+        const c = messagesContainerRef.current;
+        if (c) c.scrollTop = c.scrollHeight;
       });
       return;
     }
 
-    // For assistant messages, only auto-scroll if user is at bottom.
-    if (scrollStateRef.current === "READING_HISTORY") {
-      // User is scrolled up — flag new messages for the pill indicator
-      requestAnimationFrame(() => {
-        setHasNewMessages(true);
-      });
-    } else {
-      requestAnimationFrame(() => {
-        const container = messagesContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
-      });
+    // Assistant message while paused — show "new messages" indicator.
+    if (isPausedRef.current) {
+      setHasNewMessages(true);
     }
-  }, [messages, messagesContainerRef, transitionTo]);
+    // If not paused, ResizeObserver handles the scroll automatically
+    // when the new message content renders and grows the container.
+  }, [messages, messagesContainerRef, resume]);
 
-  // --- Cleanup settle timer on unmount ---
+  // ── Cleanup ───────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (settleTimerRef.current !== null) {
-        clearTimeout(settleTimerRef.current);
-      }
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
   }, []);
 
-  // --- Public API (unchanged from previous hook) ---
+  // ── Public API ────────────────────────────────────────────────────────
 
-  /** Manual "scroll to bottom" button click. Always scrolls, resets state. */
   const handleScrollToBottomClick = useCallback(() => {
-    const smooth = !prefersReducedMotion();
-    scrollToBottom(smooth);
-  }, [scrollToBottom, prefersReducedMotion]);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollToBottom(!reducedMotion);
+  }, [scrollToBottom]);
 
   return {
     showScrollButton,
     hasNewMessages,
     scrollToBottom,
     handleScrollToBottomClick,
+    syncGeometry,
   };
 }
