@@ -19,6 +19,8 @@ import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock as ToolUseBlockType } from "@/shared/types";
 import { ToolUseBlock } from "./ToolUseBlock";
 import { useSession } from "../../context";
+import { notifyUserExpand } from "../../hooks/useAutoScroll";
+import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
 
 interface ToolGroupBlockProps {
   blocks: ToolUseBlockType[];
@@ -65,7 +67,12 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
         <div className="tool-group-header-enter">
           <button
             type="button"
-            onClick={() => setManualExpanded(!isExpanded)}
+            onClick={(e) => {
+              notifyUserExpand();
+              const container = findScrollContainer();
+              if (container) anchorAndCorrect(e.currentTarget, container);
+              setManualExpanded(!isExpanded);
+            }}
             className={cn(
               "group flex items-center gap-2 px-2 py-1.5 text-sm",
               "w-full cursor-pointer text-left",
@@ -113,7 +120,7 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
                   <span className="text-muted-foreground/40" aria-hidden="true">
                     ·
                   </span>
-                  <span className="text-muted-foreground/60 truncate text-xs">{toolSummary}</span>
+                  <span className="text-muted-foreground/60 truncate">{toolSummary}</span>
                 </>
               )}
             </div>

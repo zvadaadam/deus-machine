@@ -20,7 +20,7 @@ import type { TurnStats } from "./utils";
 interface TurnStatsHeaderProps {
   stats: TurnStats;
   isExpanded: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   hiddenMessageCount: number; // Number of messages hidden when collapsed
 }
 

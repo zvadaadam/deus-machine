@@ -14,6 +14,8 @@ import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
 import { Brain, ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { notifyUserExpand } from "../../hooks/useAutoScroll";
+import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
 import { ChatMarkdown } from "@/components/markdown";
 
 interface ThinkingBlockProps {
@@ -37,11 +39,16 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
       {/* Header - Minimal, clean */}
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={(e) => {
+          notifyUserExpand();
+          const container = findScrollContainer();
+          if (container) anchorAndCorrect(e.currentTarget, container);
+          setIsExpanded(!isExpanded);
+        }}
         aria-expanded={isExpanded}
         aria-label="Toggle thinking details"
         className={cn(
-          "group flex items-center gap-2 px-2 py-1.5 text-xs",
+          "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
           "opacity-80 transition-opacity duration-100 ease-out hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
@@ -69,7 +76,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         </div>
 
         {/* Label - consistent weight with tool names */}
-        <span className="text-muted-foreground text-foreground/70 truncate font-normal">
+        <span className="text-foreground/70 flex-shrink-0 font-normal">
           Thinking
         </span>
 
@@ -77,7 +84,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         {!isExpanded && (
           <span
             className={cn(
-              "text-muted-foreground truncate text-xs italic",
+              "text-muted-foreground truncate italic",
               isStreaming && "tool-loading-shimmer"
             )}
           >
