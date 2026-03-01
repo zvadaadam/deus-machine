@@ -6,14 +6,14 @@ import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, RefreshCw, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, TerminalSquare, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
 import { notifyPrependStart, notifyPrependEnd } from "../hooks/useAutoScroll";
 import { useSession } from "../context";
-import { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { PixelGrid, type PixelGridVariant } from "./PixelGrid";
 
@@ -100,10 +100,6 @@ interface ChatProps {
   errorMessage?: string | null;
   /** Structured error category from classifyError (e.g. "auth", "rate_limit") */
   errorCategory?: string;
-  /** Whether the sidecar will automatically retry this error */
-  errorWillRetry?: boolean;
-  /** Milliseconds until the sidecar retries (for rate_limit countdown) */
-  errorRetryAfterMs?: number;
   agentType?: string | null;
   latestMessageSentAt?: string | null;
   onStop?: () => void; // Callback to stop/cancel the session
@@ -124,8 +120,6 @@ export function Chat({
   sessionStatus,
   errorMessage,
   errorCategory,
-  errorWillRetry,
-  errorRetryAfterMs,
   agentType,
   latestMessageSentAt,
   onOpenLoginTerminal,
@@ -551,9 +545,10 @@ export function Chat({
                         <p className="text-foreground/80 mt-0.5 text-sm break-words">
                           {errorMessage}
                         </p>
-                        {/* Retry hint for auto-retryable errors */}
-                        {errorWillRetry && errorRetryAfterMs && (
-                          <RetryCountdown durationMs={errorRetryAfterMs} />
+                        {errorCategory === "rate_limit" && (
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            You can retry by sending another message.
+                          </p>
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
@@ -584,44 +579,30 @@ export function Chat({
                               </Button>
                             ) : null
                           )
-                          .with("rate_limit", () => (
-                            <div className="flex items-center gap-2">
-                              {errorWillRetry && (
-                                <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                                  <RefreshCw className="h-3 w-3 animate-spin" />
-                                </span>
-                              )}
-                              {onRetryInNewChat && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={onRetryInNewChat}
-                                >
-                                  Retry in new chat
-                                </Button>
-                              )}
-                            </div>
-                          ))
-                          .with("network", () => (
-                            <div className="flex items-center gap-2">
-                              {errorWillRetry && (
-                                <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                                  <RefreshCw className="h-3 w-3 animate-spin" />
-                                </span>
-                              )}
-                              {onRetryInNewChat && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={onRetryInNewChat}
-                                >
-                                  Retry in new chat
-                                </Button>
-                              )}
-                            </div>
-                          ))
+                          .with("rate_limit", () =>
+                            onRetryInNewChat ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onRetryInNewChat}
+                              >
+                                Retry in new chat
+                              </Button>
+                            ) : null
+                          )
+                          .with("network", () =>
+                            onRetryInNewChat ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onRetryInNewChat}
+                              >
+                                Retry in new chat
+                              </Button>
+                            ) : null
+                          )
                           .otherwise(() =>
                             onRetryInNewChat ? (
                               <Button
@@ -700,26 +681,3 @@ export function Chat({
   );
 }
 
-// ── Retry Countdown ──────────────────────────────────────────────────────
-
-/** Animated countdown that ticks down from durationMs to 0. */
-function RetryCountdown({ durationMs }: { durationMs: number }) {
-  const [remaining, setRemaining] = useState(() => Math.ceil(durationMs / 1000));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [durationMs]);
-
-  if (remaining <= 0) return null;
-
-  return <p className="text-muted-foreground mt-1 text-xs">Retrying in {remaining}s...</p>;
-}

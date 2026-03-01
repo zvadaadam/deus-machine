@@ -77,15 +77,17 @@ export const AssistantTurn = memo(function AssistantTurn({
     [hiddenMessages, parseContent]
   );
 
-  // Detect if the last message is a cancellation marker (stop_reason: "cancelled")
-  const isCancelled = useMemo(() => {
+  // Detect stop_reason from the envelope format: { message: { stop_reason }, blocks: [...] }
+  const stopReason = useMemo(() => {
     try {
       const parsed = JSON.parse(summaryMessage.content);
-      return parsed.message?.stop_reason === "cancelled";
+      return (parsed.message?.stop_reason as string) ?? null;
     } catch {
-      return false;
+      return null;
     }
   }, [summaryMessage.content]);
+
+  const isCancelled = stopReason === "cancelled";
 
   // Check if this is the last message in the turn (always true for summary message)
   const isLastInTurn = true;

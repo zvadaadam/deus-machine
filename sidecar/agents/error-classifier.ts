@@ -1,19 +1,17 @@
 // sidecar/agents/error-classifier.ts
-// Pure error classification function inspired by Codex App Server's
-// CodexErrorInfo enum + will_retry pattern. Converts opaque error objects
-// into machine-readable categories with retry hints.
+// Pure error classification function. Converts opaque error objects
+// into machine-readable categories so the frontend can render
+// category-specific UI (auth → "Log in", rate_limit → "Retry", etc.).
 
 import { type ErrorCategory } from "../protocol";
 
 export interface ClassifiedError {
   category: ErrorCategory;
   message: string;
-  willRetry: boolean;
-  retryAfterMs?: number;
 }
 
 /**
- * Classifies an error into a machine-readable category with retry metadata.
+ * Classifies an error into a machine-readable category.
  *
  * Priority order matters — earlier checks win when multiple keywords match.
  * e.g. "AbortError" always wins over a message that also mentions "network".
@@ -31,7 +29,7 @@ export function classifyError(error: unknown): ClassifiedError {
     ) {
       return classifyError(new Error((error as { message: string }).message));
     }
-    return { category: "internal", message: String(error), willRetry: false };
+    return { category: "internal", message: String(error) };
   }
 
   const msg = error.message.toLowerCase();
@@ -39,7 +37,7 @@ export function classifyError(error: unknown): ClassifiedError {
 
   // Abort — user cancelled (highest priority, never retry)
   if (name === "AbortError" || msg.includes("aborted")) {
-    return { category: "abort", message: error.message, willRetry: false };
+    return { category: "abort", message: error.message };
   }
 
   // Auth / billing errors — non-retryable, user action required
@@ -55,18 +53,12 @@ export function classifyError(error: unknown): ClassifiedError {
     msg.includes("out of credits") ||
     msg.includes("payment")
   ) {
-    return { category: "auth", message: error.message, willRetry: false };
+    return { category: "auth", message: error.message };
   }
 
-  // Rate limits — retryable with backoff
+  // Rate limits — user can retry by sending another message
   if (msg.includes("429") || msg.includes("rate limit") || msg.includes("overloaded")) {
-    const retryMatch = error.message.match(/retry.after.?(\d+)/i);
-    return {
-      category: "rate_limit",
-      message: error.message,
-      willRetry: true,
-      retryAfterMs: retryMatch ? parseInt(retryMatch[1]) * 1000 : 5000,
-    };
+    return { category: "rate_limit", message: error.message };
   }
 
   // Context / size / turn limits — non-retryable, conversation can't continue as-is
@@ -81,7 +73,7 @@ export function classifyError(error: unknown): ClassifiedError {
     msg.includes("output token limit") ||
     (msg.includes("budget") && (msg.includes("exceed") || msg.includes("limit")))
   ) {
-    return { category: "context_limit", message: error.message, willRetry: false };
+    return { category: "context_limit", message: error.message };
   }
 
   // Server errors (5xx) — retryable, transient infrastructure issues
@@ -93,7 +85,7 @@ export function classifyError(error: unknown): ClassifiedError {
     msg.includes("service unavailable") ||
     msg.includes("gateway timeout")
   ) {
-    return { category: "network", message: error.message, willRetry: true, retryAfterMs: 5000 };
+    return { category: "network", message: error.message };
   }
 
   // Network errors — retryable
@@ -104,7 +96,7 @@ export function classifyError(error: unknown): ClassifiedError {
     msg.includes("enetunreach") ||
     msg.includes("dns")
   ) {
-    return { category: "network", message: error.message, willRetry: true, retryAfterMs: 3000 };
+    return { category: "network", message: error.message };
   }
 
   // DB write errors (SQLite) — retryable short-term
@@ -115,14 +107,39 @@ export function classifyError(error: unknown): ClassifiedError {
     msg.includes("readonly") ||
     (msg.includes("busy") && msg.includes("database"))
   ) {
-    return { category: "db_write", message: error.message, willRetry: true, retryAfterMs: 500 };
+    return { category: "db_write", message: error.message };
   }
 
   // Invalid request — non-retryable
   if (msg.includes("invalid") && (msg.includes("request") || msg.includes("param"))) {
-    return { category: "invalid_request", message: error.message, willRetry: false };
+    return { category: "invalid_request", message: error.message };
   }
 
   // Fallback — unknown internal error
-  return { category: "internal", message: error.message, willRetry: false };
+  return { category: "internal", message: error.message };
+}
+
+/**
+ * Maps SDK stop_reason to an error category (or null if not an error).
+ * "end_turn" and "stop_sequence" are normal completions.
+ * "max_tokens" is a context_limit error — user needs a new session.
+ * "cancelled" is handled separately in the abort path.
+ */
+export function classifyStopReason(
+  stopReason: string | undefined
+): ClassifiedError | null {
+  if (!stopReason) return null;
+
+  switch (stopReason) {
+    case "end_turn":
+    case "stop_sequence":
+      return null; // Normal completion, not an error
+    case "max_tokens":
+      return {
+        category: "context_limit",
+        message: "Response truncated — output token limit reached.",
+      };
+    default:
+      return null; // Unknown stop_reason — treat as normal
+  }
 }

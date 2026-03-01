@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyError, type ClassifiedError } from "../agents/error-classifier";
+import { classifyError, classifyStopReason, type ClassifiedError } from "../agents/error-classifier";
 
 describe("classifyError", () => {
   // ── Abort ──────────────────────────────────────────────────────────────
@@ -9,14 +9,12 @@ describe("classifyError", () => {
       const err = new DOMException("The operation was aborted", "AbortError");
       const result = classifyError(err);
       expect(result.category).toBe("abort");
-      expect(result.willRetry).toBe(false);
     });
 
     it("classifies error with 'aborted' in message", () => {
       const err = new Error("Request aborted by user");
       const result = classifyError(err);
       expect(result.category).toBe("abort");
-      expect(result.willRetry).toBe(false);
     });
   });
 
@@ -26,13 +24,11 @@ describe("classifyError", () => {
     it("classifies 401 errors", () => {
       const result = classifyError(new Error("HTTP 401 Unauthorized"));
       expect(result.category).toBe("auth");
-      expect(result.willRetry).toBe(false);
     });
 
     it("classifies 403 errors", () => {
       const result = classifyError(new Error("HTTP 403 Forbidden"));
       expect(result.category).toBe("auth");
-      expect(result.willRetry).toBe(false);
     });
 
     it("classifies invalid API key", () => {
@@ -57,26 +53,16 @@ describe("classifyError", () => {
     it("classifies 429 errors", () => {
       const result = classifyError(new Error("HTTP 429 Too Many Requests"));
       expect(result.category).toBe("rate_limit");
-      expect(result.willRetry).toBe(true);
-      expect(result.retryAfterMs).toBe(5000); // default
     });
 
     it("classifies rate limit messages", () => {
       const result = classifyError(new Error("Rate limit exceeded"));
       expect(result.category).toBe("rate_limit");
-      expect(result.willRetry).toBe(true);
     });
 
     it("classifies overloaded errors", () => {
       const result = classifyError(new Error("Server overloaded, please try again"));
       expect(result.category).toBe("rate_limit");
-      expect(result.willRetry).toBe(true);
-    });
-
-    it("extracts retry-after value", () => {
-      const result = classifyError(new Error("Rate limit exceeded. Retry after 30 seconds"));
-      expect(result.category).toBe("rate_limit");
-      expect(result.retryAfterMs).toBe(30000);
     });
   });
 
@@ -86,7 +72,6 @@ describe("classifyError", () => {
     it("classifies context length exceeded", () => {
       const result = classifyError(new Error("Context length exceeded"));
       expect(result.category).toBe("context_limit");
-      expect(result.willRetry).toBe(false);
     });
 
     it("classifies context limit errors", () => {
@@ -101,8 +86,6 @@ describe("classifyError", () => {
     it("classifies ECONNREFUSED", () => {
       const result = classifyError(new Error("connect ECONNREFUSED 127.0.0.1:443"));
       expect(result.category).toBe("network");
-      expect(result.willRetry).toBe(true);
-      expect(result.retryAfterMs).toBe(3000);
     });
 
     it("classifies ETIMEDOUT", () => {
@@ -128,8 +111,6 @@ describe("classifyError", () => {
     it("classifies database locked", () => {
       const result = classifyError(new Error("SQLITE_BUSY: database is locked"));
       expect(result.category).toBe("db_write");
-      expect(result.willRetry).toBe(true);
-      expect(result.retryAfterMs).toBe(500);
     });
 
     it("classifies readonly database", () => {
@@ -140,7 +121,6 @@ describe("classifyError", () => {
     it("classifies 'database is busy' as db_write", () => {
       const result = classifyError(new Error("database is busy"));
       expect(result.category).toBe("db_write");
-      expect(result.willRetry).toBe(true);
     });
 
     it("does NOT classify API 'Server is busy' as db_write", () => {
@@ -155,7 +135,6 @@ describe("classifyError", () => {
     it("classifies invalid request errors", () => {
       const result = classifyError(new Error("Invalid request parameters"));
       expect(result.category).toBe("invalid_request");
-      expect(result.willRetry).toBe(false);
     });
   });
 
@@ -165,14 +144,12 @@ describe("classifyError", () => {
     it("classifies unknown errors as internal", () => {
       const result = classifyError(new Error("Something went wrong"));
       expect(result.category).toBe("internal");
-      expect(result.willRetry).toBe(false);
     });
 
     it("handles non-Error inputs", () => {
       const result = classifyError("string error");
       expect(result.category).toBe("internal");
       expect(result.message).toBe("string error");
-      expect(result.willRetry).toBe(false);
     });
 
     it("handles undefined input", () => {
@@ -196,13 +173,11 @@ describe("classifyError", () => {
       const result = classifyError({ message: "HTTP 401 Unauthorized" });
       expect(result.category).toBe("auth");
       expect(result.message).toBe("HTTP 401 Unauthorized");
-      expect(result.willRetry).toBe(false);
     });
 
     it("classifies plain object with rate_limit message", () => {
       const result = classifyError({ message: "429 Too Many Requests" });
       expect(result.category).toBe("rate_limit");
-      expect(result.willRetry).toBe(true);
     });
 
     it("classifies plain object with extra properties", () => {
@@ -210,7 +185,6 @@ describe("classifyError", () => {
       const result = classifyError({ type: "error", message: "connect ECONNREFUSED" });
       expect(result.category).toBe("network");
       expect(result.message).toBe("connect ECONNREFUSED");
-      expect(result.willRetry).toBe(true);
     });
 
     it("classifies plain object with generic message as internal", () => {
@@ -240,5 +214,30 @@ describe("classifyError", () => {
       const result = classifyError(new Error(originalMsg));
       expect(result.message).toBe(originalMsg);
     });
+  });
+});
+
+describe("classifyStopReason", () => {
+  it("returns null for undefined", () => {
+    expect(classifyStopReason(undefined)).toBeNull();
+  });
+
+  it("returns null for end_turn (normal completion)", () => {
+    expect(classifyStopReason("end_turn")).toBeNull();
+  });
+
+  it("returns null for stop_sequence (normal completion)", () => {
+    expect(classifyStopReason("stop_sequence")).toBeNull();
+  });
+
+  it("returns context_limit for max_tokens", () => {
+    const result = classifyStopReason("max_tokens");
+    expect(result).not.toBeNull();
+    expect(result!.category).toBe("context_limit");
+    expect(result!.message).toContain("output token limit");
+  });
+
+  it("returns null for unknown stop_reason", () => {
+    expect(classifyStopReason("some_future_reason")).toBeNull();
   });
 });
