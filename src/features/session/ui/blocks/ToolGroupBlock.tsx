@@ -69,7 +69,7 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
             type="button"
             onClick={(e) => {
               notifyUserExpand();
-              const container = findScrollContainer(e.currentTarget);
+              const container = findScrollContainer();
               if (container) anchorAndCorrect(e.currentTarget, container);
               setManualExpanded(!isExpanded);
             }}

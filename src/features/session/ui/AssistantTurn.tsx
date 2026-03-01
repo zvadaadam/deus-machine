@@ -99,7 +99,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           isExpanded={isExpanded}
           onClick={(e) => {
             notifyUserExpand();
-            const container = findScrollContainer(e.currentTarget);
+            const container = findScrollContainer();
             if (container) anchorAndCorrect(e.currentTarget, container);
             setIsManuallyExpanded(!isExpanded);
           }}
