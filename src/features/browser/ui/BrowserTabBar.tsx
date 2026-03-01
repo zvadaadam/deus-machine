@@ -27,35 +27,35 @@ export function BrowserTabBar({
   onDetach,
 }: BrowserTabBarProps) {
   return (
-    <div className="vibrancy-panel border-border/40 flex h-9 flex-shrink-0 items-center border-b">
+    <div className="border-border-subtle flex h-9 flex-shrink-0 items-center border-b bg-transparent">
       <div
-        className="flex flex-1 items-center gap-0.5 overflow-x-auto px-2"
+        className="flex flex-1 items-center gap-1 overflow-x-auto px-2"
         role="tablist"
         aria-label="Browser tabs"
       >
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`flex items-center gap-1 rounded-t pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none ${
+            className={`flex items-center gap-1 rounded-md pr-1 text-xs whitespace-nowrap transition-colors duration-200 ease select-none ${
               activeTabId === tab.id
-                ? "bg-background text-foreground font-medium"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-bg-raised text-text-secondary font-medium"
+                : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary"
             }`}
           >
             <button
               type="button"
               role="tab"
               aria-selected={activeTabId === tab.id}
-              className="flex min-w-0 cursor-pointer items-center gap-1.5 border-none bg-transparent px-2 py-1"
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 border-none bg-transparent px-2.5 py-1.5"
               onClick={() => onTabSelect(tab.id)}
             >
-              <Globe className="h-3.5 w-3.5 flex-shrink-0" />
+              <Globe className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
               <span className="max-w-[150px] truncate">{tab.title}</span>
             </button>
             <button
               type="button"
               aria-label={`Close ${tab.title}`}
-              className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative flex h-3 w-3 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-sm leading-none transition-colors duration-200 ease-out before:absolute before:inset-[-16px] before:content-['']"
+              className="text-text-disabled hover:bg-foreground/8 hover:text-text-tertiary relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-xs leading-none transition-colors duration-200 ease before:absolute before:inset-[-12px] before:content-['']"
               onClick={() => onTabClose(tab.id)}
             >
               ×
@@ -65,7 +65,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="New tab"
-          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground cursor-pointer rounded-lg border-none bg-transparent px-1.5 py-0.5 text-sm transition-colors duration-200 ease-out"
+          className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary cursor-pointer rounded-md border-none bg-transparent px-2 py-1 text-sm transition-colors duration-200 ease"
           onClick={onTabAdd}
           title="New tab"
         >
@@ -77,7 +77,7 @@ export function BrowserTabBar({
         <button
           type="button"
           aria-label="Open browser in separate window"
-          className="text-muted-foreground hover:bg-muted/80 hover:text-foreground relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors duration-200 ease-out before:absolute before:inset-[-10px] before:content-['']"
+          className="text-text-disabled hover:bg-foreground/5 hover:text-text-tertiary relative mr-2 flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-colors duration-200 ease before:absolute before:inset-[-10px] before:content-['']"
           onClick={onDetach}
           title="Open in separate window"
         >
