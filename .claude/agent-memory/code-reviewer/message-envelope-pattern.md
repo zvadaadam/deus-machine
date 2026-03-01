@@ -3,29 +3,24 @@
 ## What It Is
 
 `saveAssistantMessage` in `sidecar/db/session-writer.ts` wraps message content in an
-envelope object whenever `message.stop_reason` is truthy:
+envelope object only when `message.stop_reason === "cancelled"`:
 
 ```
-Normal (no stop_reason):  content = JSON.stringify([block1, block2, ...])
-With stop_reason:         content = JSON.stringify({ message: { stop_reason }, blocks: [...] })
+Normal (no stop_reason or non-cancelled):  content = JSON.stringify([block1, block2, ...])
+Cancelled (stop_reason === "cancelled"):   content = JSON.stringify({ message: { stop_reason: "cancelled" }, blocks: [...] })
 ```
 
-## Important: ALL end_turn Messages Are Wrapped
-
-The comment in `session-writer.ts` says only "cancelled" messages use the envelope —
-this is misleading. The condition is `message.stop_reason ? envelope : flat`, and the
-Claude SDK's normal completion stop_reason IS `"end_turn"` (truthy). So every normal
-Claude response from the SDK is stored in envelope format too.
-
-The comment should read: "any message with a stop_reason (including end_turn) uses the
-envelope; messages where stop_reason is absent/undefined use the flat array format."
+This preserves cancellation detection in the frontend after page reload. Non-cancelled
+stop reasons (e.g. `end_turn`, `max_tokens`) are stored as flat arrays — errors like
+`max_tokens` are communicated via the session error event + DB `error_category` column,
+not via envelope content.
 
 ## Frontend Unwrapping
 
-`normalizeContentBlocks` in `session.queries.ts` (the `typeof blocks === "object"` branch):
+`normalizeContentBlocks` in `session.queries.ts` detects the envelope format and unwraps it:
 ```ts
-if ("blocks" in blocks && Array.isArray((blocks as { blocks?: unknown }).blocks)) {
-  return normalizeContentBlocks((blocks as { blocks: unknown[] }).blocks);
+if ("message" in blocks && "blocks" in blocks && Array.isArray(blocks.blocks)) {
+  return normalizeContentBlocks(blocks.blocks);
 }
 ```
 This runs before the `parseContent` result is used anywhere in the UI. All consumers
@@ -40,28 +35,22 @@ discards the envelope, so you need to parse it separately to get the stop_reason
 
 Rendering branches:
 - `stopReason === "cancelled"` → "Turn interrupted" pill (Square icon)
-- `stopReason && stopReason !== "end_turn"` → AlertCircle error border wrapping a `MessageItem`
-- Otherwise (null, "end_turn", or no envelope) → normal `MessageItem`
+- Otherwise (null or no envelope) → normal `MessageItem`
+
+Non-cancelled errors (max_tokens, rate_limit, etc.) are rendered from `session.error_category`
+in `Chat.tsx` via the ErrorBanner, not from the message envelope.
 
 ## False-Positive Risk
 
-The envelope detection (`"blocks" in blocks && Array.isArray(blocks.blocks)`) could
-false-positive if a real content block ever has a `blocks` field. Standard Claude SDK
-types (text, image, tool_use, tool_result, thinking) do NOT have a `blocks` field.
-MCP tool output that stores its result as `{ blocks: [...] }` would be misidentified.
-This is a low-likelihood edge case, but worth keeping in mind if MCP tool results start
-displaying incorrectly.
-
-A more robust guard would also require `"message" in blocks`, since the envelope always
-has both fields: `{ message: { stop_reason }, blocks: [...] }`.
+The envelope detection (`"message" in blocks && "blocks" in blocks && Array.isArray(blocks.blocks)`)
+could false-positive if a real content block ever has both `message` and `blocks` fields.
+Standard Claude SDK types (text, image, tool_use, tool_result, thinking) do NOT have these fields.
+This is a low-likelihood edge case.
 
 ## stop_reason Values from Claude SDK
 
-Known values that pass through:
-- `"end_turn"` — normal completion (excluded from error branch)
-- `"cancelled"` — user interrupted (synthetic, injected by sidecar, not SDK)
-- `"max_tokens"` — context limit hit (shows AlertCircle)
-- `"stop_sequence"` — custom stop sequence (shows AlertCircle — may be benign, not an error)
-
-`"stop_sequence"` triggering the error branch is potentially misleading UX (it's not always
-an error), but since the sidecar rarely produces it in practice this is low priority.
+Known values:
+- `"end_turn"` — normal completion (stored as flat array, no special UI)
+- `"cancelled"` — user interrupted (synthetic, injected by sidecar; stored in envelope)
+- `"max_tokens"` — context limit hit (stored as flat array; error shown via session error_category)
+- `"stop_sequence"` — custom stop sequence (stored as flat array; no special UI)

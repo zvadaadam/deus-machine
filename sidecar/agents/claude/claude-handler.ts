@@ -441,6 +441,12 @@ export class ClaudeAgentHandler implements AgentHandler {
     // distinguish "process cleanup after success" from genuine mid-query failures.
     let querySucceeded = false;
 
+    // Track whether classifyStopReason detected an error (e.g. max_tokens).
+    // When set, prevents the result/success and post-loop idle writes from
+    // overwriting the error status — the SDK always emits result/success even
+    // after max_tokens, so without this guard the error would be clobbered.
+    let stopReasonError = false;
+
     try {
       // Build environment using shared env-builder
       const envForClaude = buildAgentEnvironment({
@@ -605,20 +611,28 @@ export class ClaudeAgentHandler implements AgentHandler {
                 category: stopError.category,
               });
               updateSessionStatus(sessionId, "error", stopError.message, stopError.category);
+              stopReasonError = true;
             }
           }
 
-          // Update session status when query completes successfully
+          // Update session status when query completes successfully.
+          // Skip if a stop-reason error was already recorded (e.g. max_tokens) —
+          // the SDK emits result/success even after truncation.
           if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
             querySucceeded = true;
-            updateSessionStatus(sessionId, "idle");
+            if (!stopReasonError) {
+              updateSessionStatus(sessionId, "idle");
+            }
           }
         }
       }
 
       // Normal completion — ensure session is marked idle
-      // (covers the case where SDK ends without a "result/success" message)
-      updateSessionStatus(sessionId, "idle");
+      // (covers the case where SDK ends without a "result/success" message).
+      // Skip if a stop-reason error was already recorded — preserve error state.
+      if (!stopReasonError) {
+        updateSessionStatus(sessionId, "idle");
+      }
       console.log(`[${generatorId}] Session completed: ${sessionId}`);
     } catch (error) {
       // The SDK subprocess may exit with a signal (e.g. SIGINT) after the query
@@ -627,7 +641,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       // as an error via inputStream.error(). If result/success was already received,
       // this is expected process cleanup — not a real error.
       if (querySucceeded) {
-        updateSessionStatus(sessionId, "idle");
+        if (!stopReasonError) {
+          updateSessionStatus(sessionId, "idle");
+        }
         console.log(`[${generatorId}] Process exited after successful query (expected cleanup)`);
         return;
       }
