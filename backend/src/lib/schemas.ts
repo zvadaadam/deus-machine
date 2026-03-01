@@ -10,7 +10,7 @@ export const McpServerSchema = z.object({
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean().optional(),
-}).passthrough();
+});
 
 export const SaveMcpServersBody = z.object({
   servers: z.array(McpServerSchema),
@@ -23,10 +23,29 @@ export const SaveCommandBody = z.object({
 
 export const SaveAgentBody = z.object({
   id: z.string().min(1, 'id is required'),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+});
+
+const HookCommand = z.object({
+  type: z.string().optional(),
+  command: z.string(),
+  timeout: z.number().optional(),
+}).passthrough();
+
+const HookMatcherGroup = z.object({
+  matcher: z.string().optional(),
+  hooks: z.array(HookCommand).optional(),
 }).passthrough();
 
 export const SaveHooksBody = z.object({
-  hooks: z.record(z.string(), z.unknown()),
+  hooks: z.record(z.string(), z.array(HookMatcherGroup)),
+});
+
+export const SaveSkillBody = z.object({
+  name: z.string().min(1, 'name is required'),
+  content: z.string().min(1, 'content is required'),
 });
 
 // ============================================================================

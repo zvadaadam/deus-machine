@@ -77,22 +77,6 @@ export const WithContext: StoryObj<typeof MessageInput> = {
   },
 };
 
-export const WithMCPServers: StoryObj<typeof MessageInput> = {
-  args: {
-    messageInput: "",
-    sending: false,
-    model: "sonnet",
-    thinkingLevel: "NONE",
-    mcpServers: [
-      { name: "filesystem", active: true, command: "bunx @anthropic/mcp-filesystem" },
-      { name: "github", active: true, command: "bunx @anthropic/mcp-github" },
-      { name: "postgres", active: false, command: "bunx @anthropic/mcp-postgres" },
-    ],
-    onMessageChange: () => {},
-    onSend: () => {},
-  },
-};
-
 export const WithCompactButton: StoryObj<typeof MessageInput> = {
   args: {
     messageInput: "",
@@ -428,7 +412,14 @@ export const DragAndDrop: StoryObj<typeof MessageInput> = {
 
 // ── Session Error Banner (inline in chat flow) ──────────────────────────
 
-type ErrorCategory = "auth" | "rate_limit" | "context_limit" | "network" | "db_write" | "invalid_request" | "internal";
+type ErrorCategory =
+  | "auth"
+  | "rate_limit"
+  | "context_limit"
+  | "network"
+  | "db_write"
+  | "invalid_request"
+  | "internal";
 
 /**
  * Exact replica of the inline error banner from Chat.tsx.
@@ -461,9 +452,7 @@ function ErrorBanner({
                   : "Error"
               )}
           </p>
-          <p className="text-foreground/80 mt-0.5 text-sm break-words">
-            {errorMessage}
-          </p>
+          <p className="text-foreground/80 mt-0.5 text-sm break-words">{errorMessage}</p>
           {errorCategory === "rate_limit" && (
             <p className="text-muted-foreground mt-1 text-xs">
               You can retry by sending another message.
@@ -648,12 +637,36 @@ export const ErrorAllCategories: StoryObj = {
   render: () => (
     <div className="flex flex-col gap-4 p-4">
       <ErrorBanner errorCategory="auth" errorMessage="HTTP 401 Unauthorized" agentType="claude" />
-      <ErrorBanner errorCategory="rate_limit" errorMessage="You've hit your rate limit. Resets at 7:00 PM." agentType="claude" />
-      <ErrorBanner errorCategory="context_limit" errorMessage="Response truncated — output token limit reached." agentType="claude" />
-      <ErrorBanner errorCategory="network" errorMessage="HTTP 503 Service Unavailable" agentType="claude" />
-      <ErrorBanner errorCategory="db_write" errorMessage="SQLITE_BUSY: database is locked" agentType="claude" />
-      <ErrorBanner errorCategory="invalid_request" errorMessage="Invalid request parameters" agentType="claude" />
-      <ErrorBanner errorCategory="internal" errorMessage="An unexpected error occurred." agentType="claude" />
+      <ErrorBanner
+        errorCategory="rate_limit"
+        errorMessage="You've hit your rate limit. Resets at 7:00 PM."
+        agentType="claude"
+      />
+      <ErrorBanner
+        errorCategory="context_limit"
+        errorMessage="Response truncated — output token limit reached."
+        agentType="claude"
+      />
+      <ErrorBanner
+        errorCategory="network"
+        errorMessage="HTTP 503 Service Unavailable"
+        agentType="claude"
+      />
+      <ErrorBanner
+        errorCategory="db_write"
+        errorMessage="SQLITE_BUSY: database is locked"
+        agentType="claude"
+      />
+      <ErrorBanner
+        errorCategory="invalid_request"
+        errorMessage="Invalid request parameters"
+        agentType="claude"
+      />
+      <ErrorBanner
+        errorCategory="internal"
+        errorMessage="An unexpected error occurred."
+        agentType="claude"
+      />
     </div>
   ),
 };

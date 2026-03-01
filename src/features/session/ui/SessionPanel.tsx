@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { Chat, MessageInput } from ".";
 import type { MessageInputRef } from ".";
 import { useSocket } from "@/shared/hooks";
@@ -21,8 +29,6 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
-
-const EMPTY_MCP_SERVERS: { name: string; active: boolean; command: string }[] = [];
 
 // Tauri native drag-drop: only accept formats the Anthropic vision API supports
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
@@ -97,7 +103,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can
     // auto-respond without round-tripping through Node.js.
     const agentRpcContext = useMemo(() => {
-      const map = new Map<string, { workspacePath: string; parentBranch: string; defaultBranch: string }>();
+      const map = new Map<
+        string,
+        { workspacePath: string; parentBranch: string; defaultBranch: string }
+      >();
       // workspacePath is the minimum requirement — parentBranch and defaultBranch
       // fall back to "main" when not provided so getDiff always has a usable context.
       if (workspacePath) {
@@ -110,7 +119,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       return { sessionWorkspaces: map };
     }, [sessionId, workspacePath, workspaceParentBranch, workspaceDefaultBranch]);
 
-    const { pendingRequests, resolvePlanMode, resolveQuestion } = useAgentRpcHandler(agentRpcContext);
+    const { pendingRequests, resolvePlanMode, resolveQuestion } =
+      useAgentRpcHandler(agentRpcContext);
 
     // TanStack Query hooks
     const {
@@ -277,9 +287,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Default to true while loading to prevent the setup nudge from flashing briefly
     const { data: manifestData } = useManifestTasks(workspaceId ?? null);
     const hasManifest = manifestData === undefined ? true : manifestData?.manifest != null;
-
-    // TODO: Fetch MCP servers from settings/API
-    const mcpServers = EMPTY_MCP_SERVERS;
 
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
@@ -454,7 +461,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               embedded={true}
               model={model}
               thinkingLevel={thinkingLevel}
-              mcpServers={mcpServers}
               contextTokenCount={contextTokenCount}
               workspacePath={workspacePath}
               hasMessages={messages.length > 0}
@@ -560,11 +566,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     model={model}
                     thinkingLevel={thinkingLevel}
                     showCompactButton={showCompactButton}
-                    mcpServers={mcpServers}
                     contextTokenCount={contextTokenCount}
                     workspacePath={workspacePath}
                     hasMessages={messages.length > 0}
-              hasManifest={hasManifest}
+                    hasManifest={hasManifest}
                     onMessageChange={setMessageInput}
                     onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}
