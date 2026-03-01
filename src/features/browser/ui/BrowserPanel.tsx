@@ -722,7 +722,7 @@ export function BrowserPanel({
       />
 
       {/* Navigation Bar — h-9 to align with chat tabs row */}
-      <div className="border-border flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
+      <div className="border-border-subtle flex h-9 flex-shrink-0 items-center gap-2 border-b px-2">
         <Button
           variant="ghost"
           size="icon"
