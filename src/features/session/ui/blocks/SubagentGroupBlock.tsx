@@ -20,6 +20,8 @@ import type { ToolUseBlock, ToolResultBlock, Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession } from "../../context";
+import { notifyUserExpand } from "../../hooks/useAutoScroll";
+import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
 
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
@@ -63,7 +65,12 @@ export function SubagentGroupBlock({
           Uses CSS group hover instead of React state for icon swap (no re-renders). */}
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={(e) => {
+          notifyUserExpand();
+          const container = findScrollContainer();
+          if (container) anchorAndCorrect(e.currentTarget, container);
+          setIsExpanded(!isExpanded);
+        }}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
@@ -124,7 +131,7 @@ export function SubagentGroupBlock({
               <span className="text-muted-foreground/40" aria-hidden="true">
                 ·
               </span>
-              <span className="text-muted-foreground/60 truncate text-xs">
+              <span className="text-muted-foreground/60 truncate">
                 <NumberFlow
                   value={toolCount}
                   suffix={toolCount !== 1 ? " tool calls" : " tool call"}
@@ -134,7 +141,7 @@ export function SubagentGroupBlock({
           )}
 
           {/* Error status */}
-          {isError && <span className="text-destructive/70 text-xs font-normal">Error</span>}
+          {isError && <span className="text-destructive/70 font-normal">Error</span>}
         </div>
       </button>
 

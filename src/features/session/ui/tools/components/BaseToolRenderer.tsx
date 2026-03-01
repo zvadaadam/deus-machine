@@ -16,6 +16,8 @@
 import { useState, ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { notifyUserExpand } from "@/features/session/hooks/useAutoScroll";
+import { anchorAndCorrect, findScrollContainer } from "@/features/session/hooks/useScrollAnchor";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
 import { ToolError } from "./ToolError";
 
@@ -68,9 +70,14 @@ export function BaseToolRenderer({
           Uses CSS group hover for icon swap (no re-renders on mouse enter/leave). */}
       <button
         type="button"
-        onClick={() => setManualExpanded(!isExpanded)}
+        onClick={(e) => {
+          notifyUserExpand();
+          const container = findScrollContainer();
+          if (container) anchorAndCorrect(e.currentTarget, container);
+          setManualExpanded(!isExpanded);
+        }}
         className={cn(
-          "group flex items-center gap-2 px-2 py-1.5 text-xs",
+          "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
           "transition-opacity duration-100 ease-in",
           "opacity-80 hover:opacity-100",
@@ -108,7 +115,7 @@ export function BaseToolRenderer({
               Cursor uses --cursor-text-secondary for tool names, 12px/400. */}
           <span
             className={cn(
-              "text-muted-foreground truncate font-normal",
+              "text-muted-foreground flex-shrink-0 font-normal",
               isLoading ? "tool-loading-shimmer" : "text-foreground/70"
             )}
           >
@@ -117,7 +124,7 @@ export function BaseToolRenderer({
 
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="text-muted-foreground truncate text-xs">
+            <span className="text-muted-foreground truncate">
               {renderSummary({ toolUse })}
             </span>
           )}

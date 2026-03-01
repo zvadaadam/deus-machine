@@ -27,10 +27,73 @@
  *                       inside nested scrollables (code blocks) from the main chat.
  *   Resize guard     -- Tracks content height deltas to prevent resize-triggered
  *                       scroll events from being misinterpreted as user scroll-ups.
+ *   User-expand guard -- Synchronous flag set by expand/collapse clicks. Prevents
+ *                        ResizeObserver from auto-scrolling during user-initiated
+ *                        content size changes (CSS grid transitions + conditional mounts).
  */
 
 import { useState, useEffect, useCallback, useRef, RefObject } from "react";
 import type { Message } from "@/shared/types";
+
+// ---------------------------------------------------------------------------
+// User-expand guard (module-level singleton)
+//
+// Core insight: ResizeObserver can't distinguish "content grew from streaming"
+// vs "content grew from user expand/collapse". Instead of guessing via timing
+// (MutationObserver, transitionstart, rAF deferral), the expand/collapse click
+// handler calls notifyUserExpand() SYNCHRONOUSLY before React re-renders.
+// The ResizeObserver reads userExpandCount and skips auto-scroll when > 0.
+//
+// Counter (not boolean) handles rapid toggles and nested collapsibles.
+// Cleared after a generous timeout that covers both CSS grid transitions
+// (200ms) and conditional mount layouts (~1 frame).
+// ---------------------------------------------------------------------------
+let userExpandCount = 0;
+let userExpandTimer: ReturnType<typeof setTimeout> | null = null;
+
+// ---------------------------------------------------------------------------
+// Prepend guard (module-level singleton)
+//
+// During load-older prepend, the container's scrollHeight jumps because older
+// messages are inserted above the viewport. The ResizeObserver sees
+// difference > 0 and would write scrollTop = scrollHeight, fighting the
+// scroll correction in Chat.tsx's useLayoutEffect.
+//
+// Set synchronously by Chat.captureAnchor() before triggering the fetch.
+// Cleared by Chat's useLayoutEffect after restoration completes.
+// ---------------------------------------------------------------------------
+let prependInProgress = false;
+
+/**
+ * Call before triggering a load-older fetch. Tells the ResizeObserver
+ * to skip auto-scroll until the prepend scroll correction completes.
+ */
+export function notifyPrependStart(): void {
+  prependInProgress = true;
+}
+
+/**
+ * Call after the prepend scroll correction in useLayoutEffect.
+ * Re-enables ResizeObserver auto-scroll.
+ */
+export function notifyPrependEnd(): void {
+  prependInProgress = false;
+}
+
+/**
+ * Call this from any expand/collapse click handler BEFORE calling setState.
+ * Sets a synchronous flag that the ResizeObserver reads to skip auto-scroll.
+ * The flag auto-clears after 350ms (covers 200ms CSS transition + safety margin).
+ */
+export function notifyUserExpand(): void {
+  userExpandCount++;
+  // Reset the shared timer — the last expand/collapse wins the timeout.
+  if (userExpandTimer !== null) clearTimeout(userExpandTimer);
+  userExpandTimer = setTimeout(() => {
+    userExpandCount = 0;
+    userExpandTimer = null;
+  }, 350);
+}
 
 // ---------------------------------------------------------------------------
 // Text selection protection (module-level singleton, shared across instances)
@@ -107,12 +170,6 @@ export function useAutoScroll({
   // ResizeObserver callback. Without this guard, the scroll handler sees
   // scrollTop change and misinterprets it as a user scroll-up.
   const resizeDifferenceRef = useRef(0);
-
-  // CSS transition guard: counts active grid-template-rows transitions inside
-  // the scroll container. During expand/collapse animations, ResizeObserver fires
-  // on every interpolated frame, each writing to scrollTop and causing jitter.
-  // When activeTransitions > 0, ResizeObserver skips the scrollTop write.
-  const activeTransitionsRef = useRef(0);
 
   // --- Helpers ---
 
@@ -203,7 +260,17 @@ export function useAutoScroll({
         // Content growth pushes the sentinel out of view — the IO sees "not visible"
         // but that's NOT the user scrolling up. Disengagement is handled exclusively
         // by the wheel listener detecting actual upward wheel events.
-        if (isVisible && scrollStateRef.current !== "SCROLLING_TO_BOTTOM") {
+        //
+        // During user expand/collapse (userExpandCount > 0), skip re-engagement.
+        // A CSS grid transition can momentarily shift content so the sentinel
+        // flickers into view, falsely re-engaging AT_BOTTOM. This caused Bug 2:
+        // user at top → expand something → IO sees sentinel → AT_BOTTOM → next
+        // streaming resize auto-scrolls them to bottom.
+        if (
+          isVisible &&
+          scrollStateRef.current !== "SCROLLING_TO_BOTTOM" &&
+          userExpandCount === 0
+        ) {
           transitionTo("AT_BOTTOM");
         }
       },
@@ -220,52 +287,6 @@ export function useAutoScroll({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [messagesContainerRef, messagesEndRef, transitionTo]);
-
-  // --- CSS transition guard: pause auto-scroll during expand/collapse ---
-  // CSS grid transitions on collapsible elements cause ResizeObserver to fire
-  // on every interpolated frame (~12 times per 200ms transition). Each write
-  // to scrollTop during the transition fights the animation and causes jitter.
-  // We listen for transitionstart/transitionend on grid-template-rows and
-  // suppress auto-scroll writes while any transition is active.
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const onTransitionStart = (e: TransitionEvent) => {
-      if (e.propertyName === "grid-template-rows") {
-        activeTransitionsRef.current++;
-      }
-    };
-
-    const onTransitionEnd = (e: TransitionEvent) => {
-      if (e.propertyName === "grid-template-rows") {
-        activeTransitionsRef.current = Math.max(0, activeTransitionsRef.current - 1);
-        // After the transition completes, do one final scroll-to-bottom if needed.
-        // This catches the case where content expanded while at bottom — the user
-        // expects to stay at bottom but we suppressed the intermediate writes.
-        if (activeTransitionsRef.current === 0 && scrollStateRef.current !== "READING_HISTORY") {
-          container.scrollTop = container.scrollHeight;
-        }
-      }
-    };
-
-    // transitioncancel fires if a transition is interrupted (e.g., rapid toggle).
-    // Without this, the counter leaks and auto-scroll stays suppressed forever.
-    const onTransitionCancel = (e: TransitionEvent) => {
-      if (e.propertyName === "grid-template-rows") {
-        activeTransitionsRef.current = Math.max(0, activeTransitionsRef.current - 1);
-      }
-    };
-
-    container.addEventListener("transitionstart", onTransitionStart);
-    container.addEventListener("transitionend", onTransitionEnd);
-    container.addEventListener("transitioncancel", onTransitionCancel);
-    return () => {
-      container.removeEventListener("transitionstart", onTransitionStart);
-      container.removeEventListener("transitionend", onTransitionEnd);
-      container.removeEventListener("transitioncancel", onTransitionCancel);
-    };
-  }, [messagesContainerRef]);
 
   // --- ResizeObserver: auto-scroll on content height changes ---
   useEffect(() => {
@@ -301,27 +322,34 @@ export function useAutoScroll({
         });
       }
 
-      // Capture scroll intent NOW, before the IO can react to the layout change.
+      // Capture scroll state NOW, before the IO can react to the layout change.
       // Per spec, ResizeObserver fires before IntersectionObserver in the same
-      // frame. If we read the state inside the rAF callback, the IO may have
-      // already transitioned to READING_HISTORY (sentinel pushed out of view
-      // by content growth), causing a false skip.
+      // frame. If we read scrollStateRef inside the rAF callback, the IO may
+      // have already transitioned to READING_HISTORY (sentinel pushed out of
+      // view by content growth), causing a false skip.
       //
       // Only auto-scroll when content height actually grew (difference > 0).
       // Width-only changes (from panel resize) fire ResizeObserver but don't
       // need scroll adjustment — the unnecessary scrollTop write caused visible
       // scrollbar flash during sidecar tab switching.
-      //
-      // Skip during CSS grid transitions (expand/collapse) — the transition
-      // guard handles the final scroll-to-bottom after the animation completes.
-      const shouldScroll =
+      const shouldScrollByState =
         scrollStateRef.current !== "READING_HISTORY" &&
-        difference > 0 &&
-        activeTransitionsRef.current === 0;
+        difference > 0;
 
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (shouldScroll && !isSelecting()) {
+        // Check userExpandCount INSIDE the rAF, not at ResizeObserver time.
+        //
+        // Critical timing fix: A rAF queued by a previous frame's ResizeObserver
+        // fires at the START of the next frame — before the browser processes
+        // input events from between frames. If we captured userExpandCount at
+        // ResizeObserver time (outside rAF), it would be 0. Then the user clicks
+        // expand between frames, notifyUserExpand() sets count=1, but the stale
+        // captured 0 lets the rAF write scrollTop, causing jitter.
+        //
+        // Inside the rAF, the click handler has already run (input events are
+        // processed before rAF in the event loop), so we read the fresh value.
+        if (shouldScrollByState && userExpandCount === 0 && !prependInProgress && !isSelecting()) {
           container.scrollTop = container.scrollHeight;
         }
       });
@@ -395,6 +423,17 @@ export function useAutoScroll({
       // by a content resize (not by the user). Ignore it to prevent false
       // disengagement. (Ported from use-stick-to-bottom.)
       if (resizeDifferenceRef.current !== 0) return;
+
+      // During prepend scroll correction, useLayoutEffect writes scrollTop
+      // to keep the anchor element in place. This fires a scroll event that
+      // must not be interpreted as user intent.
+      if (prependInProgress) return;
+
+      // During user expand/collapse, anchorAndCorrect() adjusts scrollTop
+      // per-frame to keep the toggle button visually stationary. These
+      // scrollTop writes fire scroll events that must not be interpreted
+      // as user intent (would cause false re-engagement or disengagement).
+      if (userExpandCount > 0) return;
 
       const currentTop = container.scrollTop;
       const scrolledDown = currentTop > lastScrollTopRef.current;

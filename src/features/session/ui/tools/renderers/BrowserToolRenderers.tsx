@@ -83,7 +83,7 @@ export function BrowserSnapshotToolRenderer({ toolUse, toolResult }: ToolRendere
       toolResult={toolResult}
       renderSummary={() =>
         url ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">{getDomain(url)}</span>
+          <span className="text-muted-foreground truncate font-mono">{getDomain(url)}</span>
         ) : null
       }
       renderContent={() =>
@@ -113,7 +113,7 @@ export function BrowserNavigateToolRenderer({ toolUse, toolResult }: ToolRendere
       toolResult={toolResult}
       renderSummary={() =>
         url ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">{getDomain(url)}</span>
+          <span className="text-muted-foreground truncate font-mono">{getDomain(url)}</span>
         ) : null
       }
       renderContent={() =>
@@ -140,7 +140,7 @@ export function BrowserNavigateBackToolRenderer({ toolUse, toolResult }: ToolRen
       icon={<ArrowLeft className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => <span className="text-muted-foreground text-xs">Go back</span>}
+      renderSummary={() => <span className="text-muted-foreground">Go back</span>}
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );
@@ -161,7 +161,7 @@ export function BrowserClickToolRenderer({ toolUse, toolResult }: ToolRendererPr
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        ref ? <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span> : null
+        ref ? <span className="text-muted-foreground truncate font-mono">{ref}</span> : null
       }
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
@@ -189,9 +189,9 @@ export function BrowserTypeToolRenderer({ toolUse, toolResult }: ToolRendererPro
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          {ref && <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span>}
+          {ref && <span className="text-muted-foreground truncate font-mono">{ref}</span>}
           {preview && (
-            <span className="text-muted-foreground truncate text-xs">
+            <span className="text-muted-foreground truncate">
               {submit ? `${preview} ⏎` : preview}
             </span>
           )}
@@ -221,7 +221,7 @@ export function BrowserPressKeyToolRenderer({ toolUse, toolResult }: ToolRendere
       toolResult={toolResult}
       renderSummary={() =>
         combo ? (
-          <span className="bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5 font-mono text-xs">
+          <span className="bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5 font-mono">
             {combo}
           </span>
         ) : null
@@ -246,9 +246,9 @@ export function BrowserHoverToolRenderer({ toolUse, toolResult }: ToolRendererPr
       toolResult={toolResult}
       renderSummary={() =>
         element ? (
-          <span className="text-muted-foreground truncate text-xs">{element}</span>
+          <span className="text-muted-foreground truncate">{element}</span>
         ) : ref ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">{ref}</span>
+          <span className="text-muted-foreground truncate font-mono">{ref}</span>
         ) : null
       }
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
@@ -273,9 +273,9 @@ export function BrowserSelectOptionToolRenderer({ toolUse, toolResult }: ToolRen
       toolResult={toolResult}
       renderSummary={() => (
         <>
-          {element && <span className="text-muted-foreground truncate text-xs">{element}</span>}
+          {element && <span className="text-muted-foreground truncate">{element}</span>}
           {valuesPreview && (
-            <span className="text-muted-foreground truncate font-mono text-xs">
+            <span className="text-muted-foreground truncate font-mono">
               → {valuesPreview}
             </span>
           )}
@@ -308,7 +308,7 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate text-xs">{condition}</span>
+        <span className="text-muted-foreground truncate">{condition}</span>
       )}
       renderContent={() => (output ? <OutputBlock>{output}</OutputBlock> : null)}
     />
@@ -333,7 +333,7 @@ export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendere
       toolResult={toolResult}
       renderSummary={() =>
         codePreview ? (
-          <span className="text-muted-foreground truncate font-mono text-xs">{codePreview}</span>
+          <span className="text-muted-foreground truncate font-mono">{codePreview}</span>
         ) : null
       }
       renderContent={() => (
@@ -372,7 +372,7 @@ export function BrowserConsoleMessagesToolRenderer({ toolUse, toolResult }: Tool
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        count ? <span className="text-muted-foreground text-xs">{count} messages</span> : null
+        count ? <span className="text-muted-foreground">{count} messages</span> : null
       }
       renderContent={() =>
         text ? (
@@ -402,7 +402,7 @@ export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRende
       defaultExpanded={!!image}
       renderSummary={() =>
         text ? (
-          <span className="text-muted-foreground truncate text-xs">{text.slice(0, 60)}</span>
+          <span className="text-muted-foreground truncate">{text.slice(0, 60)}</span>
         ) : null
       }
       renderContent={() => (
@@ -439,7 +439,7 @@ export function BrowserNetworkRequestsToolRenderer({ toolUse, toolResult }: Tool
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() =>
-        count ? <span className="text-muted-foreground text-xs">{count} requests</span> : null
+        count ? <span className="text-muted-foreground">{count} requests</span> : null
       }
       renderContent={() =>
         text ? (
@@ -468,7 +468,7 @@ export function BrowserScrollToolRenderer({ toolUse, toolResult }: ToolRendererP
       toolUse={toolUse}
       toolResult={toolResult}
       renderSummary={() => (
-        <span className="text-muted-foreground truncate text-xs">{summary}</span>
+        <span className="text-muted-foreground truncate">{summary}</span>
       )}
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />

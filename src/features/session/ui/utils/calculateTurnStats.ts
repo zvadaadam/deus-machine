@@ -67,8 +67,8 @@ export function calculateTurnStats(
         const toolUse = block as ToolUseBlock;
         stats.toolCount++;
 
-        // Count subagents (Task tool_use blocks)
-        if (toolUse.name === "Task") {
+        // Count subagents (Task/Agent tool_use blocks)
+        if (toolUse.name === "Task" || toolUse.name === "Agent") {
           stats.subagentCount++;
         }
 

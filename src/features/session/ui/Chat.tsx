@@ -11,6 +11,7 @@ import { cn } from "@/shared/lib/utils";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
+import { notifyPrependStart, notifyPrependEnd } from "../hooks/useAutoScroll";
 import { useSession } from "../context";
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
@@ -161,10 +162,34 @@ export function Chat({
   // Load-older sentinel ref (placed at top of message list)
   const loadOlderSentinelRef = useRef<HTMLDivElement>(null);
 
-  // Scroll position preservation for prepend (load-older).
-  // Track the first message seq so we can detect prepends and restore scroll position.
+  // ── Scroll-position preservation for prepend (load-older) ──────────────
+  //
+  // Anchor-based with continuous geometry capture — zero pre-fetch dependency.
+  //
+  // The key insight: capturing geometry before an async fetch is inherently
+  // fragile. The fetch may take hundreds of milliseconds during which streaming
+  // content changes scrollHeight, or the user scrolls, making captured values
+  // stale. Any approach that depends on pre-fetch geometry will produce wrong
+  // deltas under concurrent activity.
+  //
+  // This approach eliminates the problem entirely:
+  //
+  //   1. prevFirstSeqRef / prevFirstIdRef: identity of the first message.
+  //      When the first seq decreases, a prepend occurred.
+  //
+  //   2. anchorVisualOffsetRef: the first turn element's pixel offset from
+  //      the container viewport top. Captured in useLayoutEffect after EVERY
+  //      committed render — always exactly one render old, never stale.
+  //
+  //   3. On prepend: find the element that WAS first (by data-message-id),
+  //      read its new offsetTop, set scrollTop = newOffsetTop - savedOffset.
+  //      All geometry reads happen in a single synchronous useLayoutEffect.
+  //
+  //   4. notifyPrependStart/End suppress useAutoScroll's ResizeObserver and
+  //      scroll handler during the correction (module-level flags).
   const prevFirstSeqRef = useRef<number | null>(null);
-  const prevScrollGeometryRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const prevFirstIdRef = useRef<string | null>(null);
+  const anchorVisualOffsetRef = useRef<number>(0);
 
   useEffect(() => {
     if (!initialLoadDone.current && messages.length > 0) {
@@ -174,47 +199,58 @@ export function Chat({
     }
   }, [messages]);
 
-  // Capture scroll geometry BEFORE React commits new DOM (for prepend preservation).
-  // This runs synchronously before paint via useLayoutEffect.
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container || !messages.length) return;
 
-    const firstSeq = messages[0]?.seq;
+    const currentFirstSeq = messages[0].seq;
+    const currentFirstId = messages[0].id;
     const prevFirstSeq = prevFirstSeqRef.current;
+    const prevFirstId = prevFirstIdRef.current;
 
-    // Detect prepend: first message's seq decreased (older messages were added at the front)
-    if (prevFirstSeq !== null && firstSeq < prevFirstSeq) {
-      const prev = prevScrollGeometryRef.current;
-      if (prev) {
-        // Restore scroll position: offset by the height delta from prepended content
-        const heightDelta = container.scrollHeight - prev.scrollHeight;
-        container.scrollTop = prev.scrollTop + heightDelta;
+    // ── Detect prepend: first message's seq decreased ──
+    if (prevFirstSeq !== null && currentFirstSeq < prevFirstSeq && prevFirstId) {
+      const anchor = container.querySelector(
+        `[data-message-id="${CSS.escape(prevFirstId)}"]`
+      ) as HTMLElement | null;
+
+      if (anchor) {
+        // anchor.offsetTop = position in the NEW layout (pushed down by prepended content).
+        // anchorVisualOffsetRef = its visual offset captured on the PREVIOUS render —
+        // always fresh because useLayoutEffect updates it on every committed render.
+        notifyPrependStart();
+        container.scrollTop = anchor.offsetTop - anchorVisualOffsetRef.current;
+        // Re-enable auto-scroll after the browser processes the scroll write.
+        requestAnimationFrame(() => {
+          notifyPrependEnd();
+        });
       }
 
-      // Mark all prepended messages as "seen" so they don't get entrance animation
-      messages.forEach((m) => {
+      // Mark prepended messages as "seen" so they skip entrance animation
+      for (const m of messages) {
         if (m.seq < prevFirstSeq) {
           seenMessageIds.current.add(m.id);
         }
-      });
+      }
     }
 
-    prevFirstSeqRef.current = firstSeq;
-  }, [messages, messagesContainerRef]);
-
-  // Capture scroll geometry after every render for the next prepend comparison
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (container) {
-      prevScrollGeometryRef.current = {
-        scrollHeight: container.scrollHeight,
-        scrollTop: container.scrollTop,
-      };
+    // ── Capture anchor geometry for the NEXT render ──
+    // Runs synchronously after every committed render. The value is consumed
+    // only on the next render that detects a prepend — exactly one render old.
+    const firstEl = container.querySelector(
+      `[data-message-id="${CSS.escape(currentFirstId)}"]`
+    ) as HTMLElement | null;
+    if (firstEl) {
+      anchorVisualOffsetRef.current = firstEl.offsetTop - container.scrollTop;
     }
-  });
 
-  // IntersectionObserver for load-older sentinel (triggers when scrolling near top)
+    prevFirstSeqRef.current = currentFirstSeq;
+    prevFirstIdRef.current = currentFirstId;
+  }, [messages]);
+
+  // IntersectionObserver for load-older sentinel (triggers when scrolling near top).
+  // No geometry capture needed — the anchor approach handles restoration entirely
+  // within useLayoutEffect using continuously-captured offsets.
   useEffect(() => {
     const sentinel = loadOlderSentinelRef.current;
     const container = messagesContainerRef.current;
@@ -223,11 +259,6 @@ export function Chat({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !loadingOlder) {
-          // Capture scroll geometry right before triggering load
-          prevScrollGeometryRef.current = {
-            scrollHeight: container.scrollHeight,
-            scrollTop: container.scrollTop,
-          };
           onLoadOlder();
         }
       },
@@ -442,6 +473,7 @@ export function Chat({
                   return (
                     <div
                       key={turn.message.id}
+                      data-message-id={turn.message.id}
                       ref={isLastRendered ? lastMessageRef : undefined}
                       className={cn(
                         spacingClass,
@@ -472,6 +504,7 @@ export function Chat({
                 return (
                   <div
                     key={turn.messages[0].id}
+                    data-message-id={turn.messages[0].id}
                     ref={isLastRendered ? lastMessageRef : undefined}
                     className={cn(
                       spacingClass,
