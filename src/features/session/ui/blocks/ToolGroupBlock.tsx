@@ -6,26 +6,28 @@
  * tools fully visible). When the streak is "sealed" (text follows or turn
  * completes) and contains 2+ tools, a header appears and tools collapse.
  *
- * Why tools never remount:
- * The parent chain (ToolGroupBlock > Collapsible > CollapsibleContent > tools)
- * is identical at every timestep. Only the `open` prop and CSS classes change.
- * forceMount keeps collapsed tools in the DOM, preserving BaseToolRenderer's
- * manualExpanded state and preventing Framer Motion animation replay.
+ * Collapse behavior:
+ * Tools fully unmount when collapsed (AnimatePresence + conditional render).
+ * This is intentional — zero DOM weight when collapsed, consistent with
+ * ThinkingBlock and SubagentGroupBlock. Per-tool expand state resets on
+ * reopen, which is acceptable since tool groups are bounded (2-15 items).
  */
 
 import { useState, useMemo, memo } from "react";
 import { ChevronRight, Layers } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock as ToolUseBlockType } from "@/shared/types";
+import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
 import { ToolUseBlock } from "./ToolUseBlock";
 import { useSession } from "../../context";
-import { notifyUserExpand } from "../../hooks/useAutoScroll";
-import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
 
 interface ToolGroupBlockProps {
   blocks: ToolUseBlockType[];
   isSealed: boolean;
 }
+
+const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
 
 /**
  * Memoized: blocks is a stable array ref from groupToolStreaks (only changes
@@ -67,39 +69,37 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
         <div className="tool-group-header-enter">
           <button
             type="button"
-            onClick={(e) => {
-              notifyUserExpand();
-              const container = findScrollContainer();
-              if (container) anchorAndCorrect(e.currentTarget, container);
+            onClick={() => {
+              if (!isExpanded) suppressAutoScrollOnExpand();
               setManualExpanded(!isExpanded);
             }}
             className={cn(
               "group flex items-center gap-2 px-2 py-1.5 text-sm",
               "w-full cursor-pointer text-left",
-              "ease transition-opacity duration-200",
-              "hover:opacity-70",
+              "transition-opacity duration-150 ease-out",
+              "opacity-80 hover:opacity-100",
               "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
             )}
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${blocks.length} tool calls`}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {/* Icon container — 16x16px, icon/chevron swap on hover */}
-              <div className="relative h-4 w-4 flex-shrink-0">
+              {/* Icon container — 14x14px, icon/chevron swap on hover */}
+              <div className="relative h-3.5 w-3.5 flex-shrink-0">
                 {/* Layers icon — hides on hover or expanded */}
                 <div
                   className={cn(
-                    "absolute top-0 left-0 transition-opacity duration-100 ease-out",
+                    "absolute top-0 left-0 transition-opacity duration-150 ease-out",
                     isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
                   )}
                 >
-                  <Layers className="text-muted-foreground/70 h-4 w-4" />
+                  <Layers className="text-muted-foreground/70 h-3.5 w-3.5" />
                 </div>
 
                 {/* Chevron — shows on hover or expanded */}
                 <ChevronRight
                   className={cn(
-                    "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-100 ease-out",
+                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
                     isExpanded && "rotate-90",
                     isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
@@ -107,20 +107,18 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
                 />
               </div>
 
-              {/* Tool count — plain text, no NumberFlow. The count only changes
-                  when the streak seals (once), so animated digit transitions add
-                  IntersectionObserver + rAF overhead per group for zero visual benefit. */}
-              <span className="text-muted-foreground font-normal tabular-nums">
+              {/* Tool count */}
+              <span className="text-foreground/70 font-medium tabular-nums">
                 {blocks.length} tool call{blocks.length !== 1 ? "s" : ""}
               </span>
 
               {/* Tool names summary (collapsed only) */}
               {!isExpanded && (
                 <>
-                  <span className="text-muted-foreground/40" aria-hidden="true">
+                  <span className="text-muted-foreground/30" aria-hidden="true">
                     ·
                   </span>
-                  <span className="text-muted-foreground/60 truncate">{toolSummary}</span>
+                  <span className="text-muted-foreground truncate">{toolSummary}</span>
                 </>
               )}
             </div>
@@ -128,19 +126,24 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
         </div>
       )}
 
-      {/* Content — always in DOM, collapsed via CSS grid.
-          Plain div with data-state replaces Radix Collapsible because Radix's
-          useLayoutEffect kills CSS grid transitions (sets transition-duration:0s for measurement).
-          The parent chain of every ToolUseBlock never changes, preserving expand state. */}
-      <div data-state={isOpen ? "open" : "closed"} className="tool-group-collapsible">
-        <div className="min-h-0 overflow-hidden">
-          <div className="flex flex-col gap-0.5">
+      {/* Content — AnimatePresence for enter/exit opacity fade.
+          When collapsed, tool blocks unmount entirely — no DOM weight.
+          When expanded, they mount with a subtle opacity fade. */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={showHeader ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={expandTransition}
+            className="flex flex-col gap-0.5"
+          >
             {blocks.map((block) => (
               <ToolUseBlock key={block.id} block={block} toolResult={toolResultMap.get(block.id)} />
             ))}
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });

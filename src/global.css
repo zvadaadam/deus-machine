@@ -585,114 +585,55 @@
   animation: tool-shimmer 2s linear infinite;
 }
 
-/* Containment on inner wrapper of closed collapsibles.
-   The overflow:hidden child holds the actual content. When the grid row is 0fr,
-   the inner div is 0-height — contain: strict tells the browser to skip
-   layout/paint for the entire subtree. This is the DOM-weight reduction that
-   converts O(all_tools) layout to O(visible_tools) layout.
-   On open, contain reverts so content participates in normal flow. */
-.turn-collapsible[data-state="closed"] > *,
-.tool-group-collapsible[data-state="closed"] > *,
-.tool-expand-collapsible[data-state="closed"] > * {
-  contain: strict;
-}
-
-/* Turn collapse/expand — CSS grid rows trick for smooth height animation.
-   Only animates grid-template-rows + opacity (no height/max-height). */
-.turn-collapsible {
-  display: grid;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
-    opacity 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
-}
-
-.turn-collapsible[data-state="open"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-.turn-collapsible[data-state="closed"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-/* Tool group collapse — staggered timing: content fades faster (120ms) than
-   grid rows compress (200ms), so tools disappear before height shrinks.
-   Expanding is asymmetric: grid opens first, then content fades in. */
-.tool-group-collapsible {
-  display: grid;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 120ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.tool-group-collapsible[data-state="open"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 200ms 80ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.tool-group-collapsible[data-state="closed"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-/* Tool expand/collapse — individual tool/thinking content area.
-   Staggered: close = opacity fades fast (120ms) then grid compresses (200ms).
-   Open = grid opens first (200ms), content fades in with 60ms delay.
-   Used by ThinkingBlock for smooth expand of reasoning content. */
-.tool-expand-collapsible {
-  display: grid;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
-    opacity 120ms cubic-bezier(0.215, 0.61, 0.355, 1);
-}
-
-.tool-expand-collapsible[data-state="open"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1),
-    opacity 160ms 60ms cubic-bezier(0.215, 0.61, 0.355, 1);
-}
-
-.tool-expand-collapsible[data-state="closed"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
+/* Expand/collapse uses conditional render + inline animate-[fadeIn_150ms_ease-out]
+   (Cursor-aligned). No CSS grid height transitions needed — content mounts/
+   unmounts with a subtle opacity fade, removing DOM weight from collapsed
+   subtrees entirely. */
 
 /* One-shot entrance animations for chat items and tool blocks.
    Replaces Framer Motion m.div wrappers — pure CSS, zero React overhead.
    @keyframes + animation-fill-mode:both ensures the element starts hidden
    and ends visible. No JS cleanup needed; the animation plays once on mount
    then the element is a plain div with no ongoing cost.
-   Respects prefers-reduced-motion via the global media query. */
-@keyframes chatItemFadeIn {
-  from {
+   Respects prefers-reduced-motion via the global media query.
+
+   "Confident Arrival" — opacity front-loads (readable at 35%), transform
+   settles with ease-out-quint. Content appears fast, drifts into place.
+   Design consensus: Ive (timing) + Vignelli (split opacity). */
+@keyframes chatItemEnter {
+  0% {
     opacity: 0;
+    transform: translateY(6px);
   }
-  to {
+  35% {
     opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 .chat-item-enter {
-  animation: chatItemFadeIn 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: chatItemEnter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-@keyframes toolUseFadeIn {
-  from {
+@keyframes toolUseEnter {
+  0% {
     opacity: 0;
+    transform: translateY(3px);
   }
-  to {
+  40% {
     opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 .tool-use-enter {
-  animation: toolUseFadeIn 150ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
+  animation: toolUseEnter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* Tool group header entrance — replaces Framer Motion m.div.
@@ -1238,7 +1179,7 @@
   --text-secondary: oklch(0.75 0 0);
   --text-tertiary: oklch(0.58 0 0);
   --text-subtle: oklch(0.54 0 0);
-  --text-muted: oklch(0.50 0 0);
+  --text-muted: oklch(0.5 0 0);
   --text-disabled: oklch(0.32 0 0);
 
   /* --- Component surface tokens (dark mode) --- */
@@ -1317,6 +1258,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {

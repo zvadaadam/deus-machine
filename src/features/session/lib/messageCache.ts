@@ -9,7 +9,10 @@
 import type { PaginatedMessages } from "../api/session.service";
 import type { Message } from "../types";
 
-/** Page size for message fetches (initial load + load-older + incremental) */
+/** Initial load: larger page so tool-heavy turns (20-30 rows/turn) show enough context */
+export const INITIAL_MESSAGE_PAGE_SIZE = 100;
+
+/** Load-older and incremental fetches: smaller for snappy pagination */
 export const MESSAGE_PAGE_SIZE = 50;
 
 /**
