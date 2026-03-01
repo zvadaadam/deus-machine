@@ -241,3 +241,65 @@ NSData* capture_simctl_screenshot(NSString *udid) {
         return (jpegData && jpegData.length > 0) ? jpegData : nil;
     }
 }
+
+// ============================================================================
+// MARK: - JPEG resize for AI consumption
+// ============================================================================
+
+/// Resize a JPEG so the long side fits within maxLongSide pixels.
+/// Uses kCGImageDestinationImageMaxPixelSize for single-pass decode+scale+encode
+/// with no intermediate full-res bitmap (ImageIO tiles internally).
+/// Returns the original data unchanged if already small enough or on any error.
+NSData* resize_jpeg_for_ai(NSData *jpegData, size_t maxLongSide) {
+    if (!jpegData || jpegData.length == 0 || maxLongSide == 0) return jpegData;
+
+    // Peek at dimensions from JPEG header — no pixel decode
+    CGImageSourceRef source = CGImageSourceCreateWithData(
+        (__bridge CFDataRef)jpegData, NULL);
+    if (!source) return jpegData;
+
+    CFDictionaryRef props = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+    if (!props) {
+        CFRelease(source);
+        return jpegData;
+    }
+
+    CFNumberRef wRef = CFDictionaryGetValue(props, kCGImagePropertyPixelWidth);
+    CFNumberRef hRef = CFDictionaryGetValue(props, kCGImagePropertyPixelHeight);
+    size_t w = 0, h = 0;
+    if (wRef) CFNumberGetValue(wRef, kCFNumberSInt64Type, &w);
+    if (hRef) CFNumberGetValue(hRef, kCFNumberSInt64Type, &h);
+    CFRelease(props);
+
+    size_t longSide = (w >= h) ? w : h;
+    if (longSide <= maxLongSide) {
+        // Already within budget — skip encode
+        CFRelease(source);
+        return jpegData;
+    }
+
+    // Single-pass resize+encode via ImageIO
+    NSMutableData *output = [NSMutableData data];
+    CGImageDestinationRef dest = CGImageDestinationCreateWithData(
+        (__bridge CFMutableDataRef)output,
+        (__bridge CFStringRef)@"public.jpeg",
+        1, NULL);
+
+    if (!dest) {
+        CFRelease(source);
+        return jpegData;
+    }
+
+    NSDictionary *opts = @{
+        (id)kCGImageDestinationImageMaxPixelSize: @(maxLongSide),
+        (id)kCGImageDestinationLossyCompressionQuality: @(0.5f),
+    };
+    CGImageDestinationAddImageFromSource(dest, source, 0,
+        (__bridge CFDictionaryRef)opts);
+    bool ok = CGImageDestinationFinalize(dest);
+
+    CFRelease(dest);
+    CFRelease(source);
+
+    return (ok && output.length > 0) ? output : jpegData;
+}
