@@ -19,7 +19,7 @@ import {
 } from "@/features/workspace";
 import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
-import { ConfigPanel } from "@/features/workspace/ui/ConfigPanel";
+import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
@@ -82,7 +82,13 @@ export function RightSidePanel({
       git_target_branch: workspace.git_target_branch ?? undefined,
       git_default_branch: workspace.git_default_branch,
     }),
-    [workspace.root_path, workspace.slug, workspace.workspace_path, workspace.git_target_branch, workspace.git_default_branch]
+    [
+      workspace.root_path,
+      workspace.slug,
+      workspace.workspace_path,
+      workspace.git_target_branch,
+      workspace.git_default_branch,
+    ]
   );
 
   // Don't query diffs until the worktree checkout is complete — during "initializing"
@@ -177,9 +183,7 @@ export function RightSidePanel({
       {/* Browser panel section: when detached, show placeholder; otherwise
           keep BrowserPanel always mounted for the useBrowserRpcHandler listener. */}
       {isBrowserDetached ? (
-        <div
-          className={cn("h-full w-full", activeTab !== "browser" && "hidden")}
-        >
+        <div className={cn("h-full w-full", activeTab !== "browser" && "hidden")}>
           <BrowserDetachedPlaceholder onReattach={reattachBrowser} />
         </div>
       ) : (
@@ -208,7 +212,7 @@ export function RightSidePanel({
         />
       )}
 
-      {activeTab === "config" && <ConfigPanel />}
+      {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
 
       {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
 

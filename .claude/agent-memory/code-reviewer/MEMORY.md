@@ -168,6 +168,12 @@
   `AnimatePresence` renders, the exit animation never fires. Pattern must be:
   `<AnimatePresence>{condition && <m.div exit={...}>...</m.div>}</AnimatePresence>` — NOT
   `{condition ? <AnimatePresence><m.div>...</m.div></AnimatePresence> : null}`.
+- `AnimatePresence` inside `.map()` anti-pattern: placing `<AnimatePresence>` as the return value
+  of a `.map()` call (one per item) means the entire boundary is recreated when the item's key
+  changes. When the condition flips (e.g., `isEditing` changes from item A to item B), the boundary
+  for A is torn down in the same commit as its child — `AnimatePresence` never sees the child
+  transition and the exit animation does not fire. Fix: single `<AnimatePresence>` outside the
+  `.map()`, with stable keys on each animated child element.
 
 ## Global queryClient Defaults (Confirmed)
 
