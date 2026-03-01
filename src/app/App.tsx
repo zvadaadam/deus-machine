@@ -86,7 +86,14 @@ function AppContent({ reset }: { reset: () => void }) {
         showOnboarding,
       });
     }
-  }, [auth.isLoading, auth.isAuthenticated, settingsQuery.isLoading, settingsQuery.isError, settingsQuery.data, showOnboarding]);
+  }, [
+    auth.isLoading,
+    auth.isAuthenticated,
+    settingsQuery.isLoading,
+    settingsQuery.isError,
+    settingsQuery.data,
+    showOnboarding,
+  ]);
 
   // Show the main window whenever we transition OUT of onboarding.
   // Covers both first launch (window starts hidden via tauri.conf.json)
@@ -123,7 +130,16 @@ function AppContent({ reset }: { reset: () => void }) {
           <Route
             path="/"
             element={
-              <ConditionalErrorBoundary fallback={DashboardError} onReset={reset}>
+              <ConditionalErrorBoundary
+                fallback={DashboardError}
+                onReset={reset}
+                onError={(error, info) =>
+                  reportError(error, {
+                    source: "react.error-boundary.root",
+                    extra: { componentStack: info.componentStack ?? undefined },
+                  })
+                }
+              >
                 <MainLayout />
               </ConditionalErrorBoundary>
             }
