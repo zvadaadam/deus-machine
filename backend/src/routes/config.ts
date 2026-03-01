@@ -33,6 +33,9 @@ function extractProjectPath(c: Context): string | undefined {
     }
     return repoPath;
   }
+  if (scope !== 'global') {
+    throw new ValidationError(`Invalid scope '${scope}': must be 'global' or 'project'`);
+  }
   return undefined;
 }
 
