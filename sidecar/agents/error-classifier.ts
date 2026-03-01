@@ -42,14 +42,18 @@ export function classifyError(error: unknown): ClassifiedError {
     return { category: "abort", message: error.message, willRetry: false };
   }
 
-  // Auth errors — non-retryable, user action required
+  // Auth / billing errors — non-retryable, user action required
   if (
     msg.includes("401") ||
     msg.includes("403") ||
     msg.includes("unauthorized") ||
     msg.includes("authentication") ||
     msg.includes("invalid api key") ||
-    msg.includes("invalid x-api-key")
+    msg.includes("invalid x-api-key") ||
+    msg.includes("billing") ||
+    msg.includes("subscription") ||
+    msg.includes("out of credits") ||
+    msg.includes("payment")
   ) {
     return { category: "auth", message: error.message, willRetry: false };
   }
@@ -65,12 +69,31 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // Context limits — non-retryable, conversation too long
+  // Context / size / turn limits — non-retryable, conversation can't continue as-is
   if (
-    msg.includes("context") &&
-    (msg.includes("limit") || msg.includes("length") || msg.includes("exceeded"))
+    (msg.includes("context") &&
+      (msg.includes("limit") || msg.includes("length") || msg.includes("exceeded"))) ||
+    msg.includes("too large") ||
+    msg.includes("exceeds the dimension limit") ||
+    msg.includes("max turns") ||
+    msg.includes("turn limit") ||
+    msg.includes("max output token") ||
+    msg.includes("output token limit") ||
+    (msg.includes("budget") && (msg.includes("exceed") || msg.includes("limit")))
   ) {
     return { category: "context_limit", message: error.message, willRetry: false };
+  }
+
+  // Server errors (5xx) — retryable, transient infrastructure issues
+  if (
+    msg.includes("500") ||
+    msg.includes("502") ||
+    msg.includes("503") ||
+    msg.includes("internal server error") ||
+    msg.includes("service unavailable") ||
+    msg.includes("gateway timeout")
+  ) {
+    return { category: "network", message: error.message, willRetry: true, retryAfterMs: 5000 };
   }
 
   // Network errors — retryable
