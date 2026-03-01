@@ -283,6 +283,13 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
   `).all() as RepositoryWithCountsRow[];
 }
 
+/** Lightweight repo list for backfilling empty groups in by-repo queries. */
+export function getAllRepositorySummaries(db: Database.Database): { id: string; name: string; sort_order: number }[] {
+  return db.prepare(
+    'SELECT id, name, sort_order FROM repositories ORDER BY sort_order, name'
+  ).all() as { id: string; name: string; sort_order: number }[];
+}
+
 export function getRepositoryById(
   db: Database.Database,
   id: string

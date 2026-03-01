@@ -21,6 +21,7 @@ import {
   getWorkspaceRaw,
   getWorkspaceWithRepo,
   getRepositoryById,
+  getAllRepositorySummaries,
   getSessionRaw,
   getSessionsByWorkspaceId,
 } from '../db';
@@ -56,6 +57,20 @@ app.get('/workspaces/by-repo', (c) => {
     }
     grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
   });
+
+  // Backfill repos that have no matching workspaces (e.g. all archived)
+  // so they still appear in the sidebar.
+  const allRepos = getAllRepositorySummaries(db);
+  for (const repo of allRepos) {
+    if (!grouped[repo.id]) {
+      grouped[repo.id] = {
+        repo_id: repo.id,
+        repo_name: repo.name,
+        sort_order: repo.sort_order ?? 999,
+        workspaces: [],
+      };
+    }
+  }
 
   const result = Object.values(grouped).sort((a: any, b: any) => a.sort_order - b.sort_order);
   return c.json(result);
