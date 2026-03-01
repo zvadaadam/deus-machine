@@ -2,13 +2,35 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import svgr from "vite-plugin-svgr";
 import tailwindcss from "@tailwindcss/vite";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
+import { readFileSync } from "fs";
+
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf-8"));
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), svgr(), tailwindcss()],
+  plugins: [
+    react(),
+    svgr(),
+    tailwindcss(),
+    // Upload source maps to Sentry during production builds (requires SENTRY_AUTH_TOKEN)
+    ...(process.env.SENTRY_AUTH_TOKEN
+      ? [
+          sentryVitePlugin({
+            org: "deus-40",
+            project: "deus-desktop-frontend",
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+          }),
+        ]
+      : []),
+  ],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     chunkSizeWarningLimit: 2000,
+    sourcemap: "hidden",
   },
 
   // Path aliases - FSD-Lite Architecture

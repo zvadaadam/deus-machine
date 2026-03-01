@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/react";
+
 type ErrorContext = {
   source?: string;
   action?: string;
@@ -45,8 +47,10 @@ export function reportError(error: unknown, context: ErrorContext = {}): Error {
 
   console.error("[Error]", payload);
 
-  // TODO: Hook into a production error tracking service here.
-  // Example: Sentry.captureException(normalized, { extra: context });
+  Sentry.captureException(normalized, {
+    tags: context.tags,
+    extra: { ...context.extra, source: context.source, action: context.action },
+  });
 
   return normalized;
 }

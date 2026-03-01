@@ -52,6 +52,10 @@ impl SidecarManager {
         if let Some(url) = notify_url {
             cmd.env("BACKEND_NOTIFY_URL", url);
         }
+        // Forward Sentry DSN to Node.js sidecar (set at build time, not hardcoded)
+        if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
+            cmd.env("SENTRY_DSN", dsn);
+        }
         let mut child = cmd.spawn()
             .context(format!(
                 "Failed to spawn sidecar at {}. Ensure Node.js is installed and available in PATH.",
