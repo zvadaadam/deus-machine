@@ -131,7 +131,7 @@ export function SubagentGroupBlock({
               <span className="text-muted-foreground/30" aria-hidden="true">
                 ·
               </span>
-              <span className="text-muted-foreground/50 truncate">
+              <span className="text-muted-foreground truncate">
                 <NumberFlow
                   value={toolCount}
                   suffix={toolCount !== 1 ? " tool calls" : " tool call"}
