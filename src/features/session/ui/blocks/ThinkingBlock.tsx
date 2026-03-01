@@ -9,7 +9,7 @@
 
 import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
-import { MessageSquareDashed, ChevronRight } from "lucide-react";
+import { Brain, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
@@ -53,8 +53,8 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
       >
         {/* Icon container - fixed width to prevent layout shift */}
         <div className="relative h-3.5 w-3.5 flex-shrink-0">
-          {/* Dashed message — inner monologue / unfinished thought */}
-          <MessageSquareDashed
+          {/* Brain icon - default state (hides on hover or when expanded) */}
+          <Brain
             className={cn(
               "text-muted-foreground/70 absolute top-0 left-0 h-3.5 w-3.5 transition-opacity duration-150 ease-out",
               isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
@@ -79,7 +79,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         {!isExpanded && (
           <span
             className={cn(
-              "text-muted-foreground/50 truncate font-mono text-xs",
+              "text-muted-foreground/70 truncate font-mono text-xs",
               isStreaming && "tool-loading-shimmer"
             )}
           >

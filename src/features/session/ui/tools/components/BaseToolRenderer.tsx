@@ -127,7 +127,7 @@ export function BaseToolRenderer({
 
           {/* Preview when collapsed */}
           {!isExpanded && renderSummary && (
-            <span className="text-muted-foreground/50 truncate">{renderSummary({ toolUse })}</span>
+            <span className="text-muted-foreground truncate">{renderSummary({ toolUse })}</span>
           )}
         </div>
       </button>
