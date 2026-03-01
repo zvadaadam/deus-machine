@@ -1,4 +1,5 @@
 import type { ErrorHandler } from 'hono';
+import * as Sentry from '@sentry/node';
 import { AppError } from '../lib/errors';
 
 export const errorHandler: ErrorHandler = (err, c) => {
@@ -9,6 +10,7 @@ export const errorHandler: ErrorHandler = (err, c) => {
     );
   }
 
+  Sentry.captureException(err);
   console.error('Unhandled error:', err);
   return c.json({ error: 'Internal server error' }, 500);
 };

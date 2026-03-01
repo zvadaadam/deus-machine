@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
@@ -5,6 +6,17 @@ import { closeAll as closeAllWsConnections } from './services/ws.service';
 import { connectToRelay, disconnectFromRelay } from './services/relay.service';
 import { getRelayCredentials, generateRelayCredentials } from './services/auth.service';
 import { getSetting, saveSetting } from './services/settings.service';
+
+// Initialize Sentry before anything else.
+// DSN passed as env var from Rust process manager (not hardcoded — open source repo).
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    sendDefaultPii: true,
+    initialScope: { tags: { process: 'backend' } },
+  });
+}
 
 /**
  * OpenDevs Backend Server
@@ -69,16 +81,16 @@ if (remoteEnabled === true) {
 // Global error handlers
 process.on('uncaughtException', (error, origin) => {
   console.error('[FATAL] Uncaught Exception:', origin, error);
-  try {
-    closeDatabase();
-  } catch {
-    // Best-effort cleanup
-  }
-  process.exit(1);
+  Sentry.captureException(error);
+  Sentry.close(2000).finally(() => {
+    try { closeDatabase(); } catch {}
+    process.exit(1);
+  });
 });
 
 process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled Promise Rejection:', reason);
+  Sentry.captureException(reason);
 });
 
 // Graceful shutdown

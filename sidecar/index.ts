@@ -3,6 +3,19 @@
 // Creates a Unix domain socket server that the OpenDevs frontend connects to
 // via newline-delimited JSON-RPC 2.0.
 
+import * as Sentry from "@sentry/node";
+
+// Initialize Sentry before anything else.
+// DSN passed as env var from Rust process manager (not hardcoded — open source repo).
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV === "production" ? "production" : "development",
+    sendDefaultPii: true,
+    initialScope: { tags: { process: "sidecar" } },
+  });
+}
+
 import * as net from "net";
 import * as fs from "fs";
 import * as path from "path";
@@ -340,7 +353,8 @@ class UnifiedSidecar {
 process.on("uncaughtException", (error: any) => {
   console.error("Uncaught Exception:", error.message);
   if (error.stack) console.error("Stack:", error.stack);
-  process.exit(1);
+  Sentry.captureException(error);
+  Sentry.close(2000).finally(() => process.exit(1));
 });
 
 process.on("unhandledRejection", (reason, _promise) => {
@@ -349,6 +363,7 @@ process.on("unhandledRejection", (reason, _promise) => {
     if (reason.stack) console.error("Stack:", reason.stack);
   }
   console.error("Unhandled Rejection Reason:", JSON.stringify(reason, null, 2));
+  Sentry.captureException(reason);
 });
 
 // ============================================================================
