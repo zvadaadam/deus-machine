@@ -14,6 +14,7 @@ import { classifyError } from "../error-classifier";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
+import { buildWorkspaceContext } from "../workspace-context";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { resolveCodexModel } from "./codex-models";
 import {
@@ -203,11 +204,14 @@ export class CodexAgentHandler implements AgentHandler {
       // Dynamic import — @openai/codex-sdk is ESM-only, can't be require()'d from CJS
       const { Codex } = await import("@openai/codex-sdk");
 
-      // Create Codex instance
+      // Inject workspace context via config.developer_instructions
+      // so it lands in the system prompt, not the user message.
+      const workspaceContext = buildWorkspaceContext(options?.cwd);
       const codex = new Codex({
         apiKey,
         codexPathOverride: codexPath || undefined,
         env,
+        ...(workspaceContext ? { config: { developer_instructions: workspaceContext } } : {}),
       });
 
       // Configure thread options
