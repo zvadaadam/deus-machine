@@ -217,6 +217,48 @@
 - Tests for new patterns in `error-classifier.ts` are MISSING for billing, 5xx, too-large, and
   budget-exceeded cases (only `classifyStopReason` tests were added, not the new `classifyError` patterns).
 
+## Chat Auto-Scroll + Virtualization Architecture (Confirmed)
+
+- `useAutoScroll` uses a single `isPausedRef` bool + `ResizeObserver` on `container.firstElementChild`
+  (the content wrapper). Disengagement is wheel-only (never on scroll events), re-engagement is scroll-only.
+- `syncGeometry()` increments `skipGrowthCountRef.current += 3` to absorb the burst of ResizeObserver
+  callbacks after prepend scroll restoration. The counter is decremented per-callback. No other side effects.
+- **ResizeObserver firstElementChild bug (KNOWN)**: The ResizeObserver effect runs once on mount and
+  observes `container.firstElementChild` at that time. If `loading` starts as `true`, the firstElementChild
+  is the skeleton wrapper. When loading finishes and real content renders, the skeleton unmounts and the
+  content wrapper becomes the new firstElementChild — but the ResizeObserver is still observing the
+  now-unmounted skeleton. Auto-scroll via ResizeObserver does NOT work for the first streaming session
+  after a loading transition. The message-count-change effect (`messages` dep) still fires on arrival
+  of the first new message, but content growth within a streaming message is missed until the user
+  sends another message (causing re-render and scroll via other paths).
+- Counter-based animation (`maxAnimatedTurnIndex` ref): `shouldAnimate` requires BOTH conditions:
+  `turnIndex === turns.length - 1` AND `turnIndex > maxAnimatedTurnIndex.current`. Animation fires
+  ONLY for the absolute last turn.
+- **Initial load bug**: Counter starts at -1. During initial render the loop increments it item-by-item,
+  so by the time the last item is processed, `counter = turns.length - 2`, making `shouldAnimate = true`
+  for the last turn. The comment says all initial turns should skip animation, but the code causes the
+  last turn to animate on initial load. Cosmetic bug. Fix: pre-seed `maxAnimatedTurnIndex.current`
+  to `turns.length - 2` before the `getVirtualItems().map()` call when turns are being loaded for the
+  first time (not streaming new ones).
+- **Prepend re-animation bug**: After a prepend, all indices shift up. The last virtual item (now at a
+  higher index than the old counter) satisfies `shouldAnimate` and re-animates. Minor UX glitch.
+- The counter is a ref, mutated inside the `.map()` render callback. Intentional and safe (React allows
+  ref mutation during render), matching Cursor's maxAnimatedPairIndex pattern.
+- `onStop` prop is declared in `ChatProps` interface but is NOT destructured in `Chat`'s function
+  signature — dead prop. TypeScript does not error on unused props in a destructuring.
+- `chat-item-enter` class plays `chatItemEnter` (opacity 0→1, translateY 8px→0, 300ms ease-out-quart `both`).
+- Global `mouseDown` module-level variable in `useAutoScroll.ts` is shared across ALL hook instances.
+  Acceptable (one Chat visible at a time). Would be a bug if two simultaneous Chat instances competed.
+- Virtual items: absolutely positioned with `top:0, transform:translateY(virtualItem.start)`.
+  Height set to `virtualizer.getTotalSize()`. measureElement ref + `data-index` enables auto-measurement.
+  All correct per TanStack Virtual v3 spec.
+- Spacing uses padding classes (not margin) because absolutely positioned items don't affect layout
+  with margins — padding IS included in getBoundingClientRect().height for measurement. Correct.
+- Error/working indicators rendered BELOW the virtual container in normal flow (inside the `pb-32`
+  content wrapper). They are measured by ResizeObserver as part of the wrapper height. Correct.
+- `RetryCountdown`: `useState` initializer only runs on mount. If `durationMs` prop changes after
+  mount, `remaining` is NOT reset — latent bug if durationMs is unstable.
+
 ## PRStatus / GhCliStatus Patterns (Confirmed)
 
 - `PRStatus.pr_url` is optional (`pr_url?: string`). Falling back to `""` on undefined produces

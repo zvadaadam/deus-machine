@@ -15,19 +15,21 @@
 import { useState, useMemo } from "react";
 import { ChevronRight, Cpu, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock, Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
+import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession } from "../../context";
-import { notifyUserExpand } from "../../hooks/useAutoScroll";
-import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
 
 interface SubagentGroupBlockProps {
   toolUse: ToolUseBlock;
   toolResult?: ToolResultBlock;
   childMessages: Message[];
 }
+
+const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
 
 export function SubagentGroupBlock({
   toolUse,
@@ -65,45 +67,43 @@ export function SubagentGroupBlock({
           Uses CSS group hover instead of React state for icon swap (no re-renders). */}
       <button
         type="button"
-        onClick={(e) => {
-          notifyUserExpand();
-          const container = findScrollContainer();
-          if (container) anchorAndCorrect(e.currentTarget, container);
+        onClick={() => {
+          if (!isExpanded) suppressAutoScrollOnExpand();
           setIsExpanded(!isExpanded);
         }}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
-          "transition-opacity duration-200 ease-out",
-          "hover:opacity-70",
+          "transition-opacity duration-150 ease-out",
+          "opacity-80 hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
         aria-expanded={isExpanded}
         aria-label={`${isExpanded ? "Collapse" : "Expand"} agent: ${description || "subagent"}`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {/* Icon container — 16x16px, same as BaseToolRenderer.
+          {/* Icon container — 14x14px.
               When running: spinner always visible (no chevron swap on hover).
               When idle: icon/chevron swap on hover like BaseToolRenderer. */}
-          <div className="relative h-4 w-4 flex-shrink-0">
+          <div className="relative h-3.5 w-3.5 flex-shrink-0">
             {isRunning ? (
-              <Loader2 className="text-muted-foreground/70 h-4 w-4 animate-spin" />
+              <Loader2 className="text-muted-foreground/70 h-3.5 w-3.5 animate-spin" />
             ) : (
               <>
                 {/* Cpu icon — hides on hover or expanded */}
                 <div
                   className={cn(
-                    "absolute top-0 left-0 transition-opacity duration-50",
+                    "absolute top-0 left-0 transition-opacity duration-150 ease-out",
                     isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
                   )}
                 >
-                  <Cpu className="text-muted-foreground/70 h-4 w-4" />
+                  <Cpu className="text-muted-foreground/70 h-3.5 w-3.5" />
                 </div>
 
                 {/* Chevron — shows on hover or expanded */}
                 <ChevronRight
                   className={cn(
-                    "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-50",
+                    "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
                     isExpanded && "rotate-90",
                     isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
@@ -114,13 +114,13 @@ export function SubagentGroupBlock({
           </div>
 
           {/* Description */}
-          <span className="text-muted-foreground truncate font-normal">
+          <span className="text-muted-foreground truncate font-medium">
             {description || "Agent"}
           </span>
 
           {/* Subagent type badge */}
           {subagent_type && (
-            <span className="bg-muted text-muted-foreground/70 flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-2xs leading-none">
+            <span className="bg-muted text-muted-foreground/70 text-2xs flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono leading-none">
               {subagent_type}
             </span>
           )}
@@ -128,10 +128,10 @@ export function SubagentGroupBlock({
           {/* Tool count summary (collapsed only) */}
           {!isExpanded && toolCount > 0 && (
             <>
-              <span className="text-muted-foreground/40" aria-hidden="true">
+              <span className="text-muted-foreground/30" aria-hidden="true">
                 ·
               </span>
-              <span className="text-muted-foreground/60 truncate">
+              <span className="text-muted-foreground/50 truncate">
                 <NumberFlow
                   value={toolCount}
                   suffix={toolCount !== 1 ? " tool calls" : " tool call"}
@@ -145,12 +145,22 @@ export function SubagentGroupBlock({
         </div>
       </button>
 
-      {/* Expanded content — child messages rendered compactly */}
-      {isExpanded && childMessages.length > 0 && (
-        <div className="mt-0.5 ml-5">
-          <SubagentMessageList messages={childMessages} />
-        </div>
-      )}
+      {/* Expanded content — AnimatePresence for enter/exit opacity fade.
+          SubagentMessageList mounts/unmounts on toggle. Eliminates DOM bloat
+          from always-mounted recursive message trees. */}
+      <AnimatePresence>
+        {isExpanded && childMessages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={expandTransition}
+            className="mt-0.5 ml-6"
+          >
+            <SubagentMessageList messages={childMessages} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

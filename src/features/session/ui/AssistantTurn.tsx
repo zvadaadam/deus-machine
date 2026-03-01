@@ -20,13 +20,13 @@
  */
 
 import { useMemo, useState, memo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Message } from "@/shared/types";
 import { MessageItem } from "./MessageItem";
 import { ToolGroupBlock } from "./blocks";
 import { TurnStatsHeader } from "./TurnStatsHeader";
+import { suppressAutoScrollOnExpand } from "../hooks";
 import { useSession } from "../context";
-import { notifyUserExpand } from "../hooks/useAutoScroll";
-import { anchorAndCorrect, findScrollContainer } from "../hooks/useScrollAnchor";
 import { calculateTurnStats, groupMessageToolStreaks } from "./utils";
 import { match } from "ts-pattern";
 import { Square } from "lucide-react";
@@ -99,54 +99,55 @@ export const AssistantTurn = memo(function AssistantTurn({
         <TurnStatsHeader
           stats={stats}
           isExpanded={isExpanded}
-          onClick={(e) => {
-            notifyUserExpand();
-            const container = findScrollContainer();
-            if (container) anchorAndCorrect(e.currentTarget, container);
+          onClick={() => {
+            if (!isExpanded) suppressAutoScrollOnExpand();
             setIsManuallyExpanded(!isExpanded);
           }}
           hiddenMessageCount={hiddenMessages.length}
         />
       )}
 
-      {/* Collapsible section — intermediate messages and tool calls.
-          Plain div with data-state replaces Radix Collapsible because Radix's
-          useLayoutEffect kills CSS grid transitions (sets transition-duration:0s for measurement).
-          Content stays in DOM so SubagentGroupBlock retains expand/collapse state. */}
-      {hiddenMessages.length > 0 && (
-        <div data-state={isExpanded ? "open" : "closed"} className="turn-collapsible">
-          <div className="min-h-0 overflow-hidden">
-            <div className="flex min-w-0 flex-col gap-1">
-              {groupedHidden.map((item) =>
-                match(item)
-                  .with({ kind: "message" }, ({ message }) => (
-                    <MessageItem
-                      key={message.id}
-                      message={message}
-                      isLatestAssistant={false}
-                      isLastInTurn={false}
-                      isWorking={false}
-                    />
-                  ))
-                  .with({ kind: "message-tool-streak" }, ({ toolBlocks, firstToolId }) => (
-                    <ToolGroupBlock
-                      key={`msg-streak:${firstToolId}`}
-                      blocks={toolBlocks}
-                      isSealed={!(isLatest && isWorking)}
-                    />
-                  ))
-                  .exhaustive()
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Collapsible section — AnimatePresence for enter/exit opacity fade.
+          When collapsed, intermediate messages unmount entirely — no DOM weight
+          from tool groups, subagent trees, or thinking blocks. */}
+      <AnimatePresence>
+        {isExpanded && hiddenMessages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const }}
+            className="flex min-w-0 flex-col gap-1"
+          >
+            {groupedHidden.map((item) =>
+              match(item)
+                .with({ kind: "message" }, ({ message }) => (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    isLatestAssistant={false}
+                    isLastInTurn={false}
+                    isWorking={false}
+                  />
+                ))
+                .with({ kind: "message-tool-streak" }, ({ toolBlocks, firstToolId }) => (
+                  <ToolGroupBlock
+                    key={`msg-streak:${firstToolId}`}
+                    blocks={toolBlocks}
+                    isSealed={!(isLatest && isWorking)}
+                  />
+                ))
+                .exhaustive()
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Summary message - always visible */}
       {isCancelled ? (
         <div className={cn("mr-auto", "flex items-center gap-1.5 py-1")}>
-          <Square className="text-muted-foreground/40 h-3 w-3 fill-current" />
-          <span className="text-muted-foreground/60 text-xs">Turn interrupted</span>
+          <Square className="text-muted-foreground/30 h-3 w-3 fill-current" />
+          <span className="text-muted-foreground/50 text-xs">Turn interrupted</span>
         </div>
       ) : (
         <MessageItem

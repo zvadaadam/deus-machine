@@ -5,17 +5,14 @@
  * Collapsed by default to reduce clutter.
  * Shows encrypted signature status when present.
  * Expanded content is rendered as markdown for better readability.
- *
- * Uses the same CSS grid data-state pattern as tool collapsibles
- * for smooth height animation without Framer Motion overhead.
  */
 
 import type { ThinkingBlock as ThinkingBlockType } from "@/shared/types";
 import { useState } from "react";
-import { Brain, ChevronRight } from "lucide-react";
+import { MessageSquareDashed, ChevronRight } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import { notifyUserExpand } from "../../hooks/useAutoScroll";
-import { anchorAndCorrect, findScrollContainer } from "../../hooks/useScrollAnchor";
+import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
 import { ChatMarkdown } from "@/components/markdown";
 
 interface ThinkingBlockProps {
@@ -23,6 +20,8 @@ interface ThinkingBlockProps {
   /** When true, shows a shimmer effect on the preview text to indicate active thinking. */
   isStreaming?: boolean;
 }
+
+const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
 
 export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -39,10 +38,8 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
       {/* Header - Minimal, clean */}
       <button
         type="button"
-        onClick={(e) => {
-          notifyUserExpand();
-          const container = findScrollContainer();
-          if (container) anchorAndCorrect(e.currentTarget, container);
+        onClick={() => {
+          if (!isExpanded) suppressAutoScrollOnExpand();
           setIsExpanded(!isExpanded);
         }}
         aria-expanded={isExpanded}
@@ -50,24 +47,24 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 text-sm",
           "w-full cursor-pointer text-left",
-          "opacity-80 transition-opacity duration-100 ease-out hover:opacity-100",
+          "opacity-80 transition-opacity duration-150 ease-out hover:opacity-100",
           "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         )}
       >
         {/* Icon container - fixed width to prevent layout shift */}
-        <div className="relative h-4 w-4 flex-shrink-0">
-          {/* Brain icon - default state (hides on hover or when expanded) */}
-          <Brain
+        <div className="relative h-3.5 w-3.5 flex-shrink-0">
+          {/* Dashed message — inner monologue / unfinished thought */}
+          <MessageSquareDashed
             className={cn(
-              "text-muted-foreground/70 absolute top-0 left-0 h-4 w-4 transition-opacity duration-100 ease-out",
+              "text-muted-foreground/70 absolute top-0 left-0 h-3.5 w-3.5 transition-opacity duration-150 ease-out",
               isExpanded ? "opacity-0" : "opacity-100 group-hover:opacity-0"
             )}
           />
 
-          {/* Chevron - shows on hover or when expanded (fast like table row hover) */}
+          {/* Chevron - shows on hover or when expanded */}
           <ChevronRight
             className={cn(
-              "text-muted-foreground/50 absolute top-0 left-0 h-4 w-4 transition-[transform,opacity] duration-100 ease-out",
+              "text-muted-foreground/50 absolute top-0 left-0 h-3.5 w-3.5 transition-[transform,opacity] duration-150 ease-out",
               isExpanded && "rotate-90",
               isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             )}
@@ -75,16 +72,14 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
           />
         </div>
 
-        {/* Label - consistent weight with tool names */}
-        <span className="text-foreground/70 flex-shrink-0 font-normal">
-          Thinking
-        </span>
+        {/* Label - font-medium for hierarchy */}
+        <span className="text-foreground/70 flex-shrink-0 font-medium">Thinking</span>
 
         {/* Preview when collapsed only */}
         {!isExpanded && (
           <span
             className={cn(
-              "text-muted-foreground truncate italic",
+              "text-muted-foreground/50 truncate font-mono text-xs",
               isStreaming && "tool-loading-shimmer"
             )}
           >
@@ -93,18 +88,20 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         )}
       </button>
 
-      {/* Expanded content — CSS grid height animation, same pattern as tool collapsibles.
-          Replaces AnimatePresence + height:"auto" (Framer Motion tracks children, clones
-          on exit, manages lifecycle — significant overhead across 50+ thinking blocks).
-          CSS grid-template-rows: 0fr->1fr handles the "animate to auto height" natively.
-          Content stays in DOM so markdown doesn't re-parse on every toggle. */}
-      <div data-state={isExpanded ? "open" : "closed"} className="tool-expand-collapsible">
-        <div className="min-h-0 overflow-hidden">
-          <div className="text-muted-foreground mt-0.5 ml-6 text-sm opacity-70">
+      {/* Expanded content — AnimatePresence for enter/exit opacity fade. */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.7 }}
+            exit={{ opacity: 0 }}
+            transition={expandTransition}
+            className="text-muted-foreground mt-0.5 ml-6 text-sm"
+          >
             <ChatMarkdown>{block.thinking}</ChatMarkdown>
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
