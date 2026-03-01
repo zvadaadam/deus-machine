@@ -284,7 +284,9 @@ export function HooksView({ repoPath, repoName }: HooksViewProps) {
     (originalItem: ConfigDisplayItem | null) => {
       if (!formEvent.trim()) return;
       const scope = originalItem?.scope ?? crud.addingInScope ?? "global";
-      const currentHooks = (scope === "project" ? projectQuery.data : globalQuery.data) ?? {};
+      const relevantQuery = scope === "project" ? projectQuery : globalQuery;
+      if (relevantQuery.status !== "success") return;
+      const currentHooks = relevantQuery.data ?? {};
 
       const parsedHandlers = formGroupsToHandlers(formGroups);
       const updatedHooks = { ...currentHooks, [formEvent.trim()]: parsedHandlers };

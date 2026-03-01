@@ -35,7 +35,7 @@ export const ConfigItemRow = memo(function ConfigItemRow({
       </div>
 
       {(onEdit || onDelete) && (
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
           {onEdit && (
             <Button
               variant="ghost"

@@ -37,6 +37,6 @@ export const AgentConfigService = {
     repoPath?: string
   ): Promise<{ success: boolean }> => {
     const qs = buildQueryString(scope, repoPath);
-    return apiClient.delete(`/config/${category}/${id}?${qs}`);
+    return apiClient.delete(`/config/${category}/${encodeURIComponent(id)}?${qs}`);
   },
 };

@@ -10,6 +10,7 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -107,6 +108,10 @@ export function McpView({ repoPath, repoName }: McpViewProps) {
       if (originalItem) {
         updatedList = currentList.map((s) => (s.name === originalItem.id ? newServer : s));
       } else {
+        if (currentList.some((s) => s.name === newServer.name)) {
+          toast.error(`MCP server "${newServer.name}" already exists`);
+          return;
+        }
         updatedList = [...currentList, newServer];
       }
 

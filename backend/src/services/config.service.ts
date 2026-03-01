@@ -48,7 +48,14 @@ export function getMcpServers(projectPath?: string): Array<{ name: string; comma
   const configPath = path.join(resolveClaudeDir(projectPath), 'plugins', 'config.json');
   if (!fs.existsSync(configPath)) return [];
 
-  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  let raw: unknown;
+  try {
+    raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch {
+    console.error('Failed to parse MCP config file as JSON');
+    return [];
+  }
+
   const parsed = McpConfigFile.safeParse(raw);
   if (!parsed.success) {
     console.error('Invalid MCP config file:', parsed.error.issues);
@@ -70,6 +77,20 @@ export function saveMcpServers(servers: Array<{ name: string; command: string; a
     fs.mkdirSync(configDir, { recursive: true });
   }
 
+  // Read existing config to preserve non-mcpServers keys
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        existing = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Corrupted config — start fresh
+      console.error('Failed to parse existing MCP config, starting fresh');
+    }
+  }
+
   const mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {};
   servers.forEach(server => {
     mcpServers[server.name] = {
@@ -79,7 +100,7 @@ export function saveMcpServers(servers: Array<{ name: string; command: string; a
     };
   });
 
-  fs.writeFileSync(configPath, JSON.stringify({ mcpServers }, null, 2));
+  fs.writeFileSync(configPath, JSON.stringify({ ...existing, mcpServers }, null, 2));
 }
 
 // ============================================================================
@@ -182,7 +203,15 @@ export function deleteAgent(id: string, projectPath?: string): boolean {
 export function getHooks(projectPath?: string): Record<string, unknown> {
   const settingsPath = path.join(resolveClaudeDir(projectPath), 'settings.json');
   if (!fs.existsSync(settingsPath)) return {};
-  const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch {
+    console.error('Failed to parse settings.json as JSON');
+    return {};
+  }
+
   const parsed = SettingsFile.safeParse(raw);
   if (!parsed.success) {
     console.error('Invalid settings file:', parsed.error.issues);
@@ -196,7 +225,13 @@ export function saveHooks(hooks: Record<string, unknown>, projectPath?: string):
   let settings: Record<string, unknown> = {};
   if (fs.existsSync(settingsPath)) {
     try {
-      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      // Only use parsed result if it's a plain object — arrays, strings, etc. are not valid settings
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        settings = parsed as Record<string, unknown>;
+      } else {
+        console.error('settings.json is not a valid object, starting with empty settings');
+      }
     } catch {
       // Corrupted settings.json — start fresh to avoid crashing the write
       console.error('Failed to parse settings.json, starting with empty settings');
