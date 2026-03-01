@@ -76,11 +76,9 @@ export function anchorAndCorrect(
 }
 
 /**
- * Finds the scroll container by walking up from a DOM element.
- * Looks for #chat-messages specifically (the chat scroll container).
- * Returns null if not found.
+ * Returns the chat scroll container (#chat-messages).
+ * Used by collapsible click handlers to pass the container to anchorAndCorrect().
  */
-export function findScrollContainer(element: Element): HTMLElement | null {
-  // Fast path: use the known ID
+export function findScrollContainer(): HTMLElement | null {
   return document.getElementById("chat-messages");
 }

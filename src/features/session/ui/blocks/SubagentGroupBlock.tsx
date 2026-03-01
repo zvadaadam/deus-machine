@@ -67,7 +67,7 @@ export function SubagentGroupBlock({
         type="button"
         onClick={(e) => {
           notifyUserExpand();
-          const container = findScrollContainer(e.currentTarget);
+          const container = findScrollContainer();
           if (container) anchorAndCorrect(e.currentTarget, container);
           setIsExpanded(!isExpanded);
         }}
