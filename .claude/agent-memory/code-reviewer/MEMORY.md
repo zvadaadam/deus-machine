@@ -202,16 +202,14 @@
 - `classifyStopReason` is called INSIDE the message loop (on `type === "assistant"` messages),
   NOT in the catch block. This is the correct placement — the SDK does not throw for max_tokens,
   it just sets stop_reason on the message.
-- `session-writer.ts` now stores FLAT content arrays — no more envelope format
-  `{ message: { stop_reason }, blocks: [...] }`. The `stop_reason` field on the `saveAssistantMessage`
-  parameter is accepted but silently discarded (not written to DB content column).
+- `session-writer.ts` stores flat content arrays for normal messages, but still writes
+  `{ message: { stop_reason: "cancelled" }, blocks: [...] }` for cancelled turns so the
+  frontend can detect cancellation from DB content after reload.
 - `normalizeContentBlocks` in `session.queries.ts` retains the envelope detection shim for backward
   compat with old DB rows. The shim key: `"message" in blocks && "blocks" in blocks`.
 - `AssistantTurn.tsx` reads `stop_reason` via `JSON.parse(summaryMessage.content).message?.stop_reason`.
-  For NEW rows (flat arrays), `parsed.message` is `undefined` → `stopReason` is `null` → `isCancelled`
-  is `false`. The "Turn interrupted" UI relies on the envelope shim reading OLD rows only.
-  NEW cancelled turns do NOT show "Turn interrupted" — they fall through to MessageItem which
-  renders an empty text block (invisible). This is a known behavioral gap post-refactor.
+  New cancelled turns carry the cancelled envelope, so "Turn interrupted" renders correctly.
+  For non-cancelled rows (flat arrays), `parsed.message` is `undefined` → `stopReason` is `null`.
 - `onStop` is declared in `ChatProps` but NOT destructured in `Chat.tsx` function body — dead prop.
   `onStop` is passed in by `SessionPanel` at call sites but never used inside Chat (only MessageInput uses it).
 - New error patterns added: billing/subscription → auth; 5xx → network (retryable, 5s); image dimension

@@ -547,7 +547,7 @@ export function Chat({
                         </p>
                         {errorCategory === "rate_limit" && (
                           <p className="text-muted-foreground mt-1 text-xs">
-                            You can retry by sending another message.
+                            Start a new chat to try again.
                           </p>
                         )}
                       </div>
