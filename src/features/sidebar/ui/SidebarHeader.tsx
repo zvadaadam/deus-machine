@@ -23,12 +23,12 @@ export function SidebarHeader({
   const toggleTitle = `${isExpanded ? "Collapse" : "Expand"} sidebar (${modKey}B)`;
 
   return (
-    <SidebarHeaderUI className="flex-row items-center justify-between px-3.5 py-3">
+    <SidebarHeaderUI className="flex-row items-center justify-between gap-1 px-1.5 py-1.5">
       <button
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="hover:bg-bg-elevated -ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-0.5 transition-colors duration-200"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-200 hover:bg-foreground/[0.04]"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
           <AvatarFallback shape="square" className="rounded-md text-2xs font-semibold">
@@ -46,7 +46,7 @@ export function SidebarHeader({
         aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
         title={!isMobile ? toggleTitle : undefined}
         className={cn(
-          "text-text-muted hover:text-text-tertiary flex h-[18px] w-[18px] shrink-0 items-center justify-center transition-colors duration-150",
+          "text-text-muted hover:text-text-tertiary flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150 hover:bg-foreground/[0.04]",
           !isExpanded && "opacity-60"
         )}
       >
