@@ -506,7 +506,7 @@ export function Chat({
                           {match(errorCategory)
                             .with("auth", () => "Authentication Error")
                             .with("rate_limit", () => "Rate Limited")
-                            .with("context_limit", () => "Context Limit Reached")
+                            .with("context_limit", () => "Limit Reached")
                             .with("network", () => "Connection Error")
                             .with("db_write", () => "Database Error")
                             .otherwise(() =>
