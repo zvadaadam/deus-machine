@@ -83,6 +83,7 @@ export class RpcConnection {
    * Returns true if the line was a valid JSON-RPC payload.
    */
   handleLine(line: string): boolean {
+    const t0 = Date.now();
     const payload = safeJsonParse(line);
     if (payload === undefined) {
       console.error("[RpcConnection] Failed to parse JSON:", line);
@@ -91,6 +92,11 @@ export class RpcConnection {
     if (!isJsonRpcPayload(payload)) {
       console.error("[RpcConnection] Received non-JSON-RPC payload:", payload);
       return false;
+    }
+
+    const method = (payload as any)?.method;
+    if (method) {
+      console.log(`[TIMING][RpcConnection] handleLine method=${method} parseTime=${Date.now() - t0}ms lineLen=${line.length}`);
     }
 
     void this.peer.receiveAndSend(payload, undefined, undefined).catch((e) => {

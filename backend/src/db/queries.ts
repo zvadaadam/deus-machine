@@ -257,17 +257,6 @@ export function getMessageById(
   return db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as MessageRow | undefined;
 }
 
-export function getLatestUserMessage(
-  db: Database.Database,
-  sessionId: string
-): MessageRow | undefined {
-  return db.prepare(`
-    SELECT * FROM messages
-    WHERE session_id = ? AND role = 'user' AND cancelled_at IS NULL
-    ORDER BY id DESC LIMIT 1
-  `).get(sessionId) as MessageRow | undefined;
-}
-
 // ─── Repository Queries ─────────────────────────────────────
 
 export function getAllRepositories(db: Database.Database): RepositoryWithCountsRow[] {

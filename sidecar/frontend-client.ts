@@ -660,6 +660,7 @@ class FrontendClientClass {
    * Dead tunnels (those that throw on notify) are automatically removed.
    */
   private broadcastNotification(method: string, params: unknown, label: string): void {
+    const t0 = Date.now();
     for (const tunnel of this.tunnels) {
       try {
         tunnel.notify(method, params);
@@ -667,6 +668,10 @@ class FrontendClientClass {
         console.error(`[FrontendClient] ${label} failed, removing dead tunnel:`, err);
         this.tunnels.delete(tunnel);
       }
+    }
+    const elapsed = Date.now() - t0;
+    if (elapsed > 5) {
+      console.log(`[TIMING][FrontendClient] ${label} broadcast took ${elapsed}ms (${this.tunnels.size} tunnels)`);
     }
   }
 

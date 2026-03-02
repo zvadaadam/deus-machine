@@ -40,6 +40,8 @@ build({
     //   to load it at runtime (CJS can dynamic-import ESM in modern Node.js).
     "@openai/codex",
     "@openai/codex-sdk",
+    // Sentry — optional dependency, loaded at runtime if DSN is configured
+    "@sentry/node",
   ],
   minify: false,
   sourcemap: false,
