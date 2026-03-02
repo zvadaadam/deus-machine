@@ -297,6 +297,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Session actions using custom hook
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
       sessionId,
+      workspaceId,
       workspacePath,
       messageInput,
       model: runtimeModelId,

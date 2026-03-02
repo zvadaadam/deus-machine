@@ -11,6 +11,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
+import { track } from "@/platform/analytics";
 
 interface InstalledApp {
   id: string;
@@ -56,6 +57,7 @@ export function OpenInDropdown({ workspacePath, iconOnly = false }: OpenInDropdo
 
   function handleOpenInApp(appId: string) {
     setOpen(false);
+    track("open_in_app", { app_id: appId });
     invoke("open_in_app", {
       appId,
       workspacePath,

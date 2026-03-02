@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { track } from "@/platform/analytics";
 import type { Settings, MCPServer, Command, Agent } from "../types";
 
 /**
@@ -81,6 +82,18 @@ export function useUpdateSettings() {
     onError: (_err, _newSettings, context) => {
       if (context?.previousSettings) {
         queryClient.setQueryData(queryKeys.settings.all, context.previousSettings);
+      }
+    },
+
+    onSuccess: (_data, newSettings) => {
+      // Track each changed key. Only include value for safe enum-type settings
+      // (theme, provider). Never log API keys or free-text inputs.
+      const SAFE_VALUE_KEYS = new Set(["theme", "claude_provider"]);
+      for (const key of Object.keys(newSettings)) {
+        const value = SAFE_VALUE_KEYS.has(key)
+          ? String((newSettings as Record<string, unknown>)[key])
+          : undefined;
+        track("setting_changed", { key, value });
       }
     },
 

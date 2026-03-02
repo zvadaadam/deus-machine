@@ -27,6 +27,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { match } from "ts-pattern";
+import { track } from "@/platform/analytics";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "./BranchSelector";
@@ -52,6 +53,7 @@ interface PRActionsProps {
   targetBranch: string;
   onTargetBranchChange: (branch: string) => void;
   workspacePath: string | null;
+  workspaceId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,7 @@ export function PRActions({
   targetBranch: targetBranchProp = "main",
   onTargetBranchChange,
   workspacePath,
+  workspaceId,
 }: PRActionsProps) {
   const [localTargetBranch, setLocalTargetBranch] = useState(targetBranchProp);
   useEffect(() => {
@@ -87,12 +90,8 @@ export function PRActions({
 
       {/* State-specific rendering: status text OR action button */}
       {match(state)
-        .with({ type: "gh_unavailable" }, (s) => (
-          <GhWarning reason={s.reason} />
-        ))
-        .with({ type: "error" }, (s) => (
-          <ErrorWarning reason={s.reason} />
-        ))
+        .with({ type: "gh_unavailable" }, (s) => <GhWarning reason={s.reason} />)
+        .with({ type: "error" }, (s) => <ErrorWarning reason={s.reason} />)
         .with({ type: "no_pr" }, () => (
           <CreatePRButton
             targetBranch={localTargetBranch}
@@ -150,7 +149,12 @@ export function PRActions({
             icon={<GitMerge className="h-2.5 w-2.5" />}
             label={`Merge into ${s.targetBranch}`}
             variant="success"
-            onClick={() => onSendAgentMessage?.(MERGE_PR)}
+            onClick={() => {
+              if (workspaceId) {
+                track("pr_merged", { workspace_id: workspaceId, pr_number: s.prNumber });
+              }
+              onSendAgentMessage?.(MERGE_PR);
+            }}
             disabled={!onSendAgentMessage}
           />
         ))
@@ -174,7 +178,8 @@ export function PRActions({
 // ---------------------------------------------------------------------------
 
 function PRLink({ state }: { state: PRActionState }) {
-  if (state.type === "gh_unavailable" || state.type === "no_pr" || state.type === "error") return null;
+  if (state.type === "gh_unavailable" || state.type === "no_pr" || state.type === "error")
+    return null;
 
   return (
     <Tooltip delayDuration={200}>
@@ -184,12 +189,11 @@ function PRLink({ state }: { state: PRActionState }) {
           target="_blank"
           rel="noopener noreferrer"
           className={cn(
-            "flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold transition-colors duration-200 ease",
-            PR_LINK_COLORS[state.type] ?? "text-text-secondary hover:text-text-primary",
+            "ease flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold transition-colors duration-200",
+            PR_LINK_COLORS[state.type] ?? "text-text-secondary hover:text-text-primary"
           )}
         >
-          <GitPullRequestCreate className="h-3 w-3" />
-          #{state.prNumber}
+          <GitPullRequestCreate className="h-3 w-3" />#{state.prNumber}
         </a>
       </TooltipTrigger>
       <TooltipContent side="bottom">
@@ -210,7 +214,7 @@ function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }
         <button
           type="button"
           aria-label="PR actions unavailable"
-          className="flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-1 text-warning"
+          className="bg-warning/10 text-warning flex items-center gap-1 rounded-lg px-2 py-1"
         >
           <AlertTriangle className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -238,7 +242,7 @@ function ErrorWarning({ reason }: { reason: "timeout" | "network" }) {
         <button
           type="button"
           aria-label="GitHub unreachable"
-          className="flex items-center gap-1 rounded-lg bg-destructive/10 px-2 py-1 text-destructive"
+          className="bg-destructive/10 text-destructive flex items-center gap-1 rounded-lg px-2 py-1"
         >
           <WifiOff className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -278,7 +282,7 @@ function StatusText({
     <span
       className={cn(
         "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium",
-        STATUS_VARIANT_CLASSES[variant],
+        STATUS_VARIANT_CLASSES[variant]
       )}
     >
       {icon}
@@ -331,7 +335,7 @@ function ActionButton({
       className={cn(
         "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold transition-colors duration-200",
         VARIANT_CLASSES[variant],
-        disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90",
+        disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
       )}
     >
       {icon}
@@ -365,7 +369,7 @@ function CreatePRButton({
           "bg-primary flex items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-semibold transition-colors duration-200",
           !onCreatePR
             ? "text-primary-foreground cursor-not-allowed opacity-50"
-            : "text-primary-foreground hover:opacity-90",
+            : "text-primary-foreground hover:opacity-90"
         )}
       >
         <GitPullRequestCreate className="h-2.5 w-2.5" />
