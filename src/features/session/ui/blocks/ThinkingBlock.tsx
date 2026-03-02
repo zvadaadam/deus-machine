@@ -92,7 +92,7 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 0.7 }}
+            animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
             style={{ overflow: "hidden" }}

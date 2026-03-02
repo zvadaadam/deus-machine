@@ -255,7 +255,7 @@ export const MessageItem = memo(function MessageItem({
         )}
       >
         {/* Copy button — top-right inside the bubble, icon-only */}
-        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity duration-200 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
           <ActionButton
             icon={Copy}
             label={copied ? "Copied" : "Copy"}
