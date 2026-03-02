@@ -46,6 +46,8 @@ export interface SessionState {
   cwd?: string;
   /** One-shot flag: true after the first SDK message's session_id has been persisted to DB */
   agentSessionIdCaptured?: boolean;
+  /** Set by handleCancel before close() — checked by post-loop path to persist cancellation */
+  cancelledByUser?: boolean;
 }
 
 // ============================================================================

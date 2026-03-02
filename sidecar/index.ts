@@ -152,6 +152,8 @@ class UnifiedSidecar {
     // Returns synchronous ACK/reject before async streaming begins.
     // handleQuery is NOT awaited — the ACK returns immediately after validation.
     FrontendClient.onQuery(async (request) => {
+      const tQueryReceived = Date.now();
+      console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} prompt=${request.prompt?.slice(0, 80)}...`);
       const agent = getAgent(request.agentType);
       if (!agent) {
         return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
@@ -159,6 +161,7 @@ class UnifiedSidecar {
       agent.handleQuery(request.id, request.prompt, request.options).catch((err) => {
         console.error(`[QUERY] Unhandled error in ${request.agentType} handleQuery:`, err);
       });
+      console.log(`[TIMING][QUERY] DISPATCHED session=${request.id} dispatchTime=${Date.now() - tQueryReceived}ms`);
       return { accepted: true };
     });
 
