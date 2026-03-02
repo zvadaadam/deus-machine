@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { PostHogProvider } from "posthog-js/react";
 import App from "./App";
 import "../global.css";
 import { reportError } from "@/shared/utils/errorReporting";
@@ -54,8 +55,21 @@ if (typeof window !== "undefined") {
   }
 }
 
+const posthogOptions = {
+  api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
+  defaults: "2026-01-30",
+  opt_out_capturing_by_default: false,
+  autocapture: false,
+  capture_pageview: false,
+  capture_pageleave: false,
+  disable_session_recording: true,
+  persistence: "localStorage" as const,
+} as const;
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <PostHogProvider apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY} options={posthogOptions}>
+      <App />
+    </PostHogProvider>
   </React.StrictMode>
 );

@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RepoService } from "./repository.service";
 import type { RepoManifestResponse } from "./repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { track } from "@/platform/analytics";
 import type { Repository } from "../types";
 
 /**
@@ -71,7 +72,8 @@ export function useAddRepo() {
 
   return useMutation({
     mutationFn: (rootPath: string) => RepoService.add(rootPath),
-    onSuccess: () => {
+    onSuccess: (_data, rootPath) => {
+      track("repo_added", { repo_name: rootPath.split("/").pop() });
       // Invalidate repos and workspaces (new repo means new potential workspaces)
       queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });

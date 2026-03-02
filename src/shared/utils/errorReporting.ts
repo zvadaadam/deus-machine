@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-
+import { track } from "@/platform/analytics";
 type ErrorContext = {
   source?: string;
   action?: string;
@@ -50,6 +50,12 @@ export function reportError(error: unknown, context: ErrorContext = {}): Error {
   Sentry.captureException(normalized, {
     tags: context.tags,
     extra: { ...context.extra, source: context.source, action: context.action },
+  });
+
+  // Track errors in PostHog for reliability monitoring
+  track("error_occurred", {
+    source: context.source ?? "unknown",
+    error_message: normalized.message.substring(0, 200),
   });
 
   return normalized;

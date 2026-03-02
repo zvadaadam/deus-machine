@@ -17,6 +17,7 @@ import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
+import { useAnalyticsConsent } from "@/platform/analytics";
 
 // Detect if this window instance is the detached browser popup.
 // The main window creates it with ?window=browser-detached in the URL.
@@ -64,6 +65,9 @@ function AppContent({ reset }: { reset: () => void }) {
 
   // Global listener: workspace init progress → invalidate queries on completion
   useWorkspaceInitEvents();
+
+  // Sync PostHog opt-in/out state with analytics_enabled setting
+  useAnalyticsConsent();
 
   // Auto-update: check on launch + every 5 min, show toast when ready
   const autoUpdate = useAutoUpdate();
