@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, type KeyboardEvent } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 import { useWorkspacesByRepo } from "@/features/workspace/api";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { track } from "@/platform/analytics";
 import {
   CommandDialog,
   CommandInput,
@@ -11,11 +12,7 @@ import {
   CommandItem,
   CommandShortcut,
 } from "@/components/ui/command";
-import {
-  staticCommands,
-  GROUP_LABELS,
-  type CommandGroup as CmdGroup,
-} from "../commands";
+import { staticCommands, GROUP_LABELS, type CommandGroup as CmdGroup } from "../commands";
 import type { Workspace, RepoGroup } from "@/shared/types";
 
 interface CommandPaletteProps {
@@ -29,6 +26,15 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState<"home" | "workspace">("home");
+  const prevOpen = useRef(false);
+
+  // Track command palette open (not close)
+  useEffect(() => {
+    if (open && !prevOpen.current) {
+      track("command_palette_opened");
+    }
+    prevOpen.current = open;
+  }, [open]);
 
   // Workspace data for the "Go to Workspace" search page
   const workspacesQuery = useWorkspacesByRepo();
@@ -104,11 +110,7 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
   return (
     <CommandDialog open={open} onOpenChange={handleOpenChange}>
       <CommandInput
-        placeholder={
-          page === "workspace"
-            ? "Search workspaces..."
-            : "Type a command or search..."
-        }
+        placeholder={page === "workspace" ? "Search workspaces..." : "Type a command or search..."}
         value={search}
         onValueChange={setSearch}
         onKeyDown={handleKeyDown}
@@ -150,9 +152,7 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
                     >
                       <cmd.icon className="mr-2 h-4 w-4 opacity-60" />
                       <span>{cmd.label}</span>
-                      {cmd.shortcut && (
-                        <CommandShortcut>{cmd.shortcut}</CommandShortcut>
-                      )}
+                      {cmd.shortcut && <CommandShortcut>{cmd.shortcut}</CommandShortcut>}
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -171,9 +171,7 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
                 onSelect={() => handleWorkspaceSelect(ws)}
               >
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">
-                    {ws.title || ws.slug}
-                  </span>
+                  <span className="text-sm">{ws.title || ws.slug}</span>
                   <span className="text-muted-foreground text-xs">
                     {ws.repoName}
                     {ws.git_branch ? ` \u00b7 ${ws.git_branch}` : ""}

@@ -134,6 +134,16 @@
 - `bg-accent-green`, `bg-accent-gold`, `bg-accent-red` ARE valid — defined in `@theme`.
 - `bg-warning`, `bg-success`, `text-warning` ARE valid — `--color-warning`/`--color-success` in `@theme`.
 
+## Analytics (PostHog) Patterns
+
+- Full details in `analytics-patterns.md`
+- Consent model: OPT-OUT (`analytics_enabled !== false` = default ON). Comment in `shared/types/settings.ts`
+  incorrectly says "opt-in" — it is opt-out by design.
+- `app_launched` fires in `useAnalyticsConsent` whenever `enabled` transitions null→true or false→true.
+  User who disables then re-enables analytics will trigger a second `app_launched`. Needs a one-shot guard.
+- `VITE_PUBLIC_POSTHOG_KEY` in `.env.example` is safe to commit — PostHog ingestion keys are write-only.
+- `posthog-js/react` is a subpath export of `posthog-js` — no separate dep needed.
+
 ## Content Panel Redesign Pattern (Confirmed)
 
 - `AllFilesDiffViewer`: `hideHeader?: boolean` prop (default false) for embedding in CodePanelContent.

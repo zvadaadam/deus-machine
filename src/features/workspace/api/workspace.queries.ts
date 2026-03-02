@@ -6,13 +6,18 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { produce } from "immer";
-import { WorkspaceService, type WorkspaceGitInfo, type ManifestResponse } from "./workspace.service";
+import {
+  WorkspaceService,
+  type WorkspaceGitInfo,
+  type ManifestResponse,
+} from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { API_CONFIG } from "@/shared/config/api.config";
 import type { Workspace, RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import { createOptimisticWorkspace } from "../lib/workspace.utils";
+import { track } from "@/platform/analytics";
 
 /**
  * Fetch workspaces grouped by repository with polling.
@@ -117,9 +122,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   // Stable, de-duplicated IDs for query key — only ready workspaces.
   const workspaceIds = useMemo(() => {
     const ids = repoGroups.flatMap((g) =>
-      g.workspaces
-        .filter((w) => w.state === "ready")
-        .map((w) => w.id)
+      g.workspaces.filter((w) => w.state === "ready").map((w) => w.id)
     );
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
@@ -372,6 +375,10 @@ export function useCreateWorkspace() {
       }
     },
 
+    onSuccess: (_data, repositoryId) => {
+      track("workspace_created", { repository_id: repositoryId });
+    },
+
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },
@@ -447,6 +454,10 @@ export function useArchiveWorkspace() {
       }
     },
 
+    onSuccess: (_data, workspaceId) => {
+      track("workspace_archived", { workspace_id: workspaceId });
+    },
+
     // Always refetch after error or success to ensure consistency
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
@@ -462,8 +473,10 @@ export function useUnarchiveWorkspace() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workspaceId: string) =>
-      WorkspaceService.update(workspaceId, { state: "ready" }),
+    mutationFn: (workspaceId: string) => WorkspaceService.update(workspaceId, { state: "ready" }),
+    onSuccess: (_data, workspaceId) => {
+      track("workspace_unarchived", { workspace_id: workspaceId });
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },

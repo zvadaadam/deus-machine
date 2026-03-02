@@ -16,11 +16,13 @@ import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
 import { socketService } from "@/platform/socket";
 import { isTauriEnv } from "@/platform/tauri";
+import { track } from "@/platform/analytics";
 import { getRuntimeAgentLabel, type RuntimeAgentType } from "../lib/agentRuntime";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 
 interface UseSessionActionsProps {
   sessionId: string;
+  workspaceId?: string;
   workspacePath: string;
   messageInput: string;
   model?: string;
@@ -42,6 +44,7 @@ interface UseSessionActionsReturn {
 
 export function useSessionActions({
   sessionId,
+  workspaceId,
   workspacePath,
   messageInput,
   model,
@@ -134,9 +137,16 @@ export function useSessionActions({
     }
   }, [stopSessionMutation, sessionId, agentType]);
 
-  const compactConversation = useCallback(() => sendMessage(COMPACT_CONVERSATION), [sendMessage]);
+  const compactConversation = useCallback(() => {
+    return sendMessage(COMPACT_CONVERSATION);
+  }, [sendMessage]);
 
-  const createPR = useCallback(() => sendMessage(createPRPrompt(targetBranch)), [sendMessage, targetBranch]);
+  const createPR = useCallback(() => {
+    if (workspaceId) {
+      track("pr_create_requested", { workspace_id: workspaceId, target_branch: targetBranch });
+    }
+    return sendMessage(createPRPrompt(targetBranch));
+  }, [sendMessage, workspaceId, targetBranch]);
 
   return {
     sendMessage,
