@@ -37,6 +37,7 @@ import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { emit } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
+import { track } from "@/platform/analytics";
 import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
@@ -133,8 +134,20 @@ export function MainContent({
   const handleContentTabChange = useCallback(
     (tab: RightSideTab) => {
       setRightSideTab(tab);
+      // Track feature surface adoption — fire on every user-initiated tab switch.
+      // We use a static map instead of ts-pattern here because these are all
+      // simple string→event mappings with no branching logic.
+      const tabEventMap: Partial<Record<RightSideTab, () => void>> = {
+        terminal: () =>
+          track("terminal_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
+        browser: () => track("browser_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
+        simulator: () =>
+          track("simulator_opened", { workspace_id: selectedWorkspaceId ?? undefined }),
+        code: () => track("diff_viewed", { workspace_id: selectedWorkspaceId ?? undefined }),
+      };
+      tabEventMap[tab]?.();
     },
-    [setRightSideTab]
+    [setRightSideTab, selectedWorkspaceId]
   );
 
   // --- Chat panel collapse/expand ---
@@ -186,7 +199,7 @@ export function MainContent({
       contentPanelRef.current?.expand();
       contentPanelRef.current?.resize(contentPanelDefaultSize);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
   }, [selectedWorkspaceId]);
 
   // --- Sync workspace changes to detached browser window ---
@@ -255,9 +268,7 @@ export function MainContent({
         {selectedWorkspace ? (
           /* Two-panel split — the top-level layout, no full-width header */
           <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
-            <ResizablePanelGroup
-              direction="horizontal"
-            >
+            <ResizablePanelGroup direction="horizontal">
               {/* ─── SESSION PANEL (left, collapsible) ─── */}
               <ResizablePanel
                 ref={chatPanelRef}
@@ -285,12 +296,16 @@ export function MainContent({
                       workspacePath={selectedWorkspace.workspace_path}
                       setupStatus={selectedWorkspace.setup_status}
                       setupError={selectedWorkspace.error_message}
-                      onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
+                      onSendAgentMessage={
+                        sendAgentMessageHandler ? handleSendAgentMessage : undefined
+                      }
                       onRetrySetup={
                         selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
                       }
                       onViewSetupLogs={
-                        selectedWorkspace.setup_status === "failed" ? handleViewSetupLogs : undefined
+                        selectedWorkspace.setup_status === "failed"
+                          ? handleViewSetupLogs
+                          : undefined
                       }
                       tasks={manifestTasks}
                       hasManifest={hasManifest}
@@ -325,9 +340,7 @@ export function MainContent({
                 order={2}
               >
                 {rightPanelCollapsed ? (
-                  <CollapsedContentStrip
-                    onExpand={() => contentPanelRef.current?.expand()}
-                  />
+                  <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
                 ) : (
                   <div className="flex h-full flex-col pr-2 pb-2">
                     {/* Tab header: content tabs (left) + PR actions (right) */}
@@ -341,11 +354,14 @@ export function MainContent({
                         prStatus={prStatus}
                         ghStatus={ghStatus}
                         onCreatePR={createPRHandler ? handleCreatePR : undefined}
-                        onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
+                        onSendAgentMessage={
+                          sendAgentMessageHandler ? handleSendAgentMessage : undefined
+                        }
                         onArchive={handleArchive}
                         targetBranch={selectedTargetBranch}
                         onTargetBranchChange={setSelectedTargetBranch}
                         workspacePath={selectedWorkspace.workspace_path}
+                        workspaceId={selectedWorkspaceId ?? undefined}
                       />
                     </div>
 

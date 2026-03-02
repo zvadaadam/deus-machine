@@ -9,8 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { RotateCcw } from "lucide-react";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { setAnalyticsEnabled } from "@/platform/analytics";
 import type { GeneralSectionProps } from "./types";
 
 export function GeneralSection({ settings, saveSetting, theme, setTheme }: GeneralSectionProps) {
@@ -103,6 +105,28 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           <RotateCcw className="mr-1.5 size-3.5" />
           Replay
         </Button>
+      </div>
+
+      <Separator />
+
+      {/* Analytics */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label htmlFor="analytics-toggle" className="text-sm">
+            Usage analytics
+          </Label>
+          <p className="text-muted-foreground text-base">
+            Help improve OpenDevs by sharing anonymous usage data.
+          </p>
+        </div>
+        <Switch
+          id="analytics-toggle"
+          checked={settings.analytics_enabled !== false}
+          onCheckedChange={(checked) => {
+            saveSetting("analytics_enabled", checked);
+            setAnalyticsEnabled(checked);
+          }}
+        />
       </div>
     </div>
   );

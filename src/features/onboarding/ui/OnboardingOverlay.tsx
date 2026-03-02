@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useSettings } from "@/features/settings";
 import { isTauriEnv, invoke } from "@/platform/tauri";
 import { cn } from "@/shared/lib/utils";
+import { track } from "@/platform/analytics";
 import { useOnboardingAudio } from "../hooks/useOnboardingAudio";
 import { StepIndicator } from "./components/StepIndicator";
 import { AgentDotsAnimation } from "./AgentDotsAnimation";
@@ -90,6 +91,14 @@ export function OnboardingOverlay() {
 
   const introCompletedRef = useRef(false);
   const exitHandledRef = useRef(false);
+  const onboardingStartRef = useRef(0);
+
+  // Initialize timestamp on first mount (pure — no impure function call during render)
+  useEffect(() => {
+    if (onboardingStartRef.current === 0) {
+      onboardingStartRef.current = Date.now();
+    }
+  }, []);
 
   // Idempotent — starts fade, then brings card in after a short delay.
   // The stagger lets the white circle dissolve before the card appears,
@@ -139,6 +148,11 @@ export function OnboardingOverlay() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- audio.stop() in cleanup is intentional; audio ref is stable
 
+  // ── Analytics: track onboarding start ────────────────────────────────
+  useEffect(() => {
+    track("onboarding_started");
+  }, []);
+
   // ── Phase sequencing ──────────────────────────────────────────────────
   useEffect(() => {
     const timers = [
@@ -178,11 +192,14 @@ export function OnboardingOverlay() {
       "animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
     );
     setTimeout(() => {
-      setCurrentStep((prev) => Math.min(prev + 1, 4) as OnboardingStep);
+      const STEP_NAMES = ["welcome", "github", "ai-tools", "project-selection", "finish"];
+      const nextStep = Math.min(currentStep + 1, 4) as OnboardingStep;
+      setCurrentStep(nextStep);
+      track("onboarding_step_viewed", { step: nextStep, step_name: STEP_NAMES[nextStep] });
       setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.215,.61,.355,1)]");
       setAnimating(false);
     }, 160);
-  }, [animating]);
+  }, [animating, currentStep]);
 
   const goBack = useCallback(() => {
     if (animating) return;
@@ -199,6 +216,7 @@ export function OnboardingOverlay() {
 
   const handleComplete = useCallback(() => {
     if (exiting) return;
+    track("onboarding_completed", { duration_ms: Date.now() - onboardingStartRef.current });
     audio.fadeOut();
     setExiting(true);
   }, [audio, exiting]);
@@ -295,12 +313,8 @@ export function OnboardingOverlay() {
                 {currentStep === 0 && <WelcomeStep onNext={goForward} />}
                 {currentStep === 1 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
                 {currentStep === 2 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
-                {currentStep === 3 && (
-                  <ProjectSelectionStep onBack={goBack} onNext={goForward} />
-                )}
-                {currentStep === 4 && (
-                  <OpenDevsStep onBack={goBack} onComplete={handleComplete} />
-                )}
+                {currentStep === 3 && <ProjectSelectionStep onBack={goBack} onNext={goForward} />}
+                {currentStep === 4 && <OpenDevsStep onBack={goBack} onComplete={handleComplete} />}
               </div>
             </div>
 

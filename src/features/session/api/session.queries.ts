@@ -22,6 +22,7 @@ import type {
   ToolUseBlock,
 } from "../types";
 import { useMemo, useCallback } from "react";
+import { track } from "@/platform/analytics";
 
 /**
  * Fetch all sessions for a workspace (used by chat tab reconstruction).
@@ -382,7 +383,32 @@ export function useSendMessage() {
       }
     },
 
-    onSettled: async (_, __, variables) => {
+    onSettled: async (_, error, variables) => {
+      if (!error) {
+        const hasImages = (() => {
+          try {
+            const parsed = JSON.parse(variables.content);
+            return (
+              Array.isArray(parsed) && parsed.some((b: { type?: string }) => b.type === "image")
+            );
+          } catch {
+            return false;
+          }
+        })();
+        // Enrich with session-level context from cache (already loaded, zero cost)
+        const session = queryClient.getQueryData<Session>(
+          queryKeys.sessions.detail(variables.sessionId)
+        );
+        track("session_message_sent", {
+          session_id: variables.sessionId,
+          has_images: hasImages,
+          model: variables.model,
+          agent_type: session?.agent_type,
+          message_count: session?.message_count,
+          context_used_percent: session?.context_used_percent,
+        });
+      }
+
       // Incremental fetch: only get messages newer than what we have,
       // then merge into cache (removing optimistic placeholders).
       // Falls back to full invalidation if no cache exists.
@@ -430,6 +456,11 @@ export function useStopSession() {
   return useMutation({
     mutationFn: (sessionId: string) => SessionService.stop(sessionId),
     onSuccess: (_, sessionId) => {
+      const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
+      track("session_stopped", {
+        session_id: sessionId,
+        agent_type: session?.agent_type,
+      });
       // Invalidate session to update status
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.detail(sessionId),
@@ -448,7 +479,12 @@ export function useCreateSession() {
 
   return useMutation({
     mutationFn: (workspaceId: string) => SessionService.createSession(workspaceId),
-    onSuccess: (_newSession, workspaceId) => {
+    onSuccess: (newSession, workspaceId) => {
+      track("session_created", {
+        workspace_id: workspaceId,
+        agent_type: newSession?.agent_type,
+        model: newSession?.model,
+      });
       // Invalidate workspace lists so sidebar picks up new current_session_id
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.byRepo(),

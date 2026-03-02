@@ -21,6 +21,7 @@ import { match } from "ts-pattern";
 import { isTauriEnv } from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
+import { track } from "@/platform/analytics";
 import type { Session, SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
@@ -84,9 +85,16 @@ export function useGlobalSessionNotifications() {
 
     // --- Error notifications (instant, category-aware) ---
     const unlistenError = listen<SidecarEvent>("session:error", (event) => {
+      const { id, error, category } = event.payload;
+
+      // Analytics fires regardless of window focus — we always want error data
+      track("session_error_displayed", {
+        session_id: id,
+        error_category: category,
+      });
+
       if (isWindowFocused()) return;
 
-      const { id, error, category } = event.payload;
       const title = match(category)
         .with("auth", () => "Authentication Error")
         .with("rate_limit", () => "Rate Limited")
@@ -135,9 +143,19 @@ export function useGlobalSessionNotifications() {
       // Skip non-transitions
       if (prevStatus === session.status) return;
 
+      // working → idle = agent finished — track regardless of window focus
+      if (prevStatus === "working" && session.status === "idle") {
+        track("ai_turn_completed", {
+          session_id: session.id,
+          agent_type: session.agent_type,
+          model: session.model,
+          context_used_percent: session.context_used_percent,
+        });
+      }
+
       if (isWindowFocused()) return;
 
-      // working → idle = agent finished
+      // working → idle = agent finished (notification only when backgrounded)
       if (prevStatus === "working" && session.status === "idle") {
         queueFinished(session.id);
       }
@@ -174,6 +192,17 @@ export function useGlobalSessionNotifications() {
 
           if (!prev) continue; // First observation
           if (prev === ws.setup_status) continue; // No transition
+
+          // running → failed/completed = setup finished — track analytics always
+          if (
+            prev === "running" &&
+            (ws.setup_status === "failed" || ws.setup_status === "completed")
+          ) {
+            track("workspace_setup_completed", {
+              workspace_id: ws.id,
+              setup_status: ws.setup_status,
+            });
+          }
 
           // running → failed = setup failed
           if (prev === "running" && ws.setup_status === "failed" && !isWindowFocused()) {

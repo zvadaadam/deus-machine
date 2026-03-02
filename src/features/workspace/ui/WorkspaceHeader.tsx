@@ -22,14 +22,12 @@ import {
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
 import { invoke } from "@/platform/tauri";
+import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { NormalizedTask } from "../api/workspace.service";
 import { TaskStrip } from "./TaskStrip";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
-import {
-  fixSetupErrorPrompt,
-  GENERATE_HIVE_JSON,
-} from "@/features/session/lib/sessionPrompts";
+import { fixSetupErrorPrompt, GENERATE_HIVE_JSON } from "@/features/session/lib/sessionPrompts";
 
 interface WorkspaceHeaderProps {
   title?: string;
@@ -147,9 +145,7 @@ export function WorkspaceHeader({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={() =>
-                      onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))
-                    }
+                    onClick={() => onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))}
                     className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
                   >
                     <Sparkles className="h-3 w-3" />
@@ -186,9 +182,7 @@ export function WorkspaceHeader({
             disabled={setupStatus === "running"}
             onRunTask={onRunTask}
             onSetupEnvironment={
-              onSendAgentMessage
-                ? () => onSendAgentMessage(GENERATE_HIVE_JSON)
-                : undefined
+              onSendAgentMessage ? () => onSendAgentMessage(GENERATE_HIVE_JSON) : undefined
             }
           />
         )}
@@ -228,6 +222,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
 
   function handleOpenInApp(appId: string) {
     setOpen(false);
+    track("open_in_app", { app_id: appId });
     invoke("open_in_app", { appId, workspacePath }).catch(() => {});
   }
 
