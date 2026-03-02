@@ -17,6 +17,7 @@ import { ActionButton } from "./ActionButton";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { useSession } from "../context";
 import { useMemo, memo, useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 
 // Import tool registry initialization (registers all tools)
 import "./tools/registerTools";
@@ -248,11 +249,22 @@ export const MessageItem = memo(function MessageItem({
         className={cn(
           roleStyles.maxWidth,
           roleStyles.container,
-          "rounded-xl",
+          "relative rounded-xl",
           "px-3 py-2",
           "min-w-0"
         )}
       >
+        {/* Copy button — top-right inside the bubble, icon-only */}
+        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+          <ActionButton
+            icon={Copy}
+            label={copied ? "Copied" : "Copy"}
+            onClick={handleCopy}
+            active={copied}
+            showLabel={false}
+            className="bg-accent/80 rounded-md backdrop-blur-sm"
+          />
+        </div>
         {/* Image thumbnails — always visible, not affected by collapse */}
         {imageBlocks.length > 0 && (
           <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
@@ -267,15 +279,19 @@ export const MessageItem = memo(function MessageItem({
           </div>
         )}
 
-        {/* Text content — collapsible for long messages */}
+        {/* Text content — collapsible for long messages with animated height */}
         {hasTextContent && (
-          <div
+          <motion.div
             ref={contentRef}
             id={`message-content-${message.id}`}
-            className={cn(
-              "min-w-0",
-              shouldCollapse && !isExpanded && "relative max-h-[144px] overflow-hidden"
-            )}
+            className="relative min-w-0 overflow-hidden"
+            animate={
+              shouldCollapse
+                ? { height: isExpanded ? "auto" : COLLAPSE_MAX_HEIGHT }
+                : { height: "auto" }
+            }
+            initial={false}
+            transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
           >
             {Array.isArray(otherBlocks) ? (
               renderContentBlocks(otherBlocks as (ContentBlock | string)[])
@@ -291,7 +307,7 @@ export const MessageItem = memo(function MessageItem({
             {shouldCollapse && !isExpanded && (
               <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* Show more/less button */}
@@ -316,22 +332,6 @@ export const MessageItem = memo(function MessageItem({
             )}
           </button>
         )}
-      </div>
-
-      {/* Action buttons - below the card */}
-      <div className="absolute right-0 -bottom-8 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <ActionButton
-          icon={Copy}
-          label={copied ? "Copied" : "Copy"}
-          onClick={handleCopy}
-          active={copied}
-        />
-        {/* TODO: Enable Revert button when functionality is implemented */}
-        {/* <ActionButton
-          icon={RotateCcw}
-          label="Revert"
-          onClick={handleRevert}
-        /> */}
       </div>
     </div>
   );

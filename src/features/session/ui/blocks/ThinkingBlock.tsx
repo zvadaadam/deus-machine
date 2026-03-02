@@ -87,14 +87,15 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
         )}
       </button>
 
-      {/* Expanded content — AnimatePresence for enter/exit opacity fade. */}
-      <AnimatePresence>
+      {/* Expanded content — AnimatePresence for smooth height + opacity transition. */}
+      <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.7 }}
-            exit={{ opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 0.7 }}
+            exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
+            style={{ overflow: "hidden" }}
             className="text-muted-foreground mt-0.5 ml-6 text-sm"
           >
             <ChatMarkdown>{block.thinking}</ChatMarkdown>
