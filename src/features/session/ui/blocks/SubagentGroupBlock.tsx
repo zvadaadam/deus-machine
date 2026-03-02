@@ -144,16 +144,17 @@ export function SubagentGroupBlock({
         </div>
       </button>
 
-      {/* Expanded content — AnimatePresence for enter/exit opacity fade.
+      {/* Expanded content — AnimatePresence for smooth height + opacity transition.
           SubagentMessageList mounts/unmounts on toggle. Eliminates DOM bloat
           from always-mounted recursive message trees. */}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isExpanded && childMessages.length > 0 && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
+            style={{ overflow: "hidden" }}
             className="mt-0.5 ml-6"
           >
             <SubagentMessageList messages={childMessages} />
