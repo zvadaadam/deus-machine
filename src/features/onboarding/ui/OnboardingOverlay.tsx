@@ -148,8 +148,11 @@ export function OnboardingOverlay() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- audio.stop() in cleanup is intentional; audio ref is stable
 
-  // ── Analytics: track onboarding start ────────────────────────────────
+  // ── Analytics: track onboarding start (StrictMode-safe) ──────────────
+  const onboardingTrackedRef = useRef(false);
   useEffect(() => {
+    if (onboardingTrackedRef.current) return;
+    onboardingTrackedRef.current = true;
     track("onboarding_started");
   }, []);
 

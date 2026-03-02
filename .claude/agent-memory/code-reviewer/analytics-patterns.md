@@ -14,15 +14,16 @@
 - `useAnalyticsConsent()` syncs PostHog opt-in/out state with the setting. Called once in `AppContent`.
 - `prevEnabled` ref prevents re-syncing on unrelated setting changes.
 - `setAnalyticsEnabled()` in `track.ts` sets a module-level `_enabled` bool + calls PostHog opt_in/out.
-- **Comment bug confirmed**: `// Analytics (opt-in, default false when absent)` in `shared/types/settings.ts`
-  is WRONG. Runtime behavior is opt-OUT (default ON via `!== false`). Comment should say "opt-out".
+- **Comment bug fixed**: `shared/types/settings.ts` comment now correctly says "opt-out, default true when absent".
+- `_enabled` in `track.ts` defaults to `false` (consent-first). Tracking starts disabled until
+  `useAnalyticsConsent` syncs.
 
-## Known Bugs
+## Known Bugs (Fixed)
 
-- **app_launched multi-fire**: `useAnalyticsConsent` fires `app_launched` whenever `enabled` transitions
-  to `true`. First boot (null → true) fires once. But if user disables then re-enables (false → true),
-  it fires again. Fix: add a module-level `let _appLaunchedFired = false` guard in `track.ts` or
-  `useAnalyticsConsent.ts`, or move `app_launched` to a separate one-shot `useEffect([])` in `AppContent`.
+- **app_launched multi-fire** — FIXED: `appLaunchTracked` ref guard in `useAnalyticsConsent.ts`
+  ensures `app_launched` fires at most once per app lifecycle.
+- **onboarding_started StrictMode double-fire** — FIXED: `onboardingTrackedRef` guard in
+  `OnboardingOverlay.tsx` prevents React 18 StrictMode remount from double-counting.
 
 - **onboarding_step_viewed never fires for step 0 (Welcome)**: `goForward` tracks the _destination_ step,
   so the welcome screen (step 0) is never tracked. Only steps 1–4 are captured. Acceptable as-is since

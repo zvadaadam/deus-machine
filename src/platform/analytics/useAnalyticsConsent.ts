@@ -12,6 +12,7 @@ import { isTauriEnv } from "@/platform/tauri";
 export function useAnalyticsConsent(): void {
   const { data: settings } = useSettings();
   const prevEnabled = useRef<boolean | null>(null);
+  const appLaunchTracked = useRef(false);
 
   useEffect(() => {
     const enabled = settings?.analytics_enabled !== false;
@@ -28,8 +29,10 @@ export function useAnalyticsConsent(): void {
         claude_provider: settings?.claude_provider,
       });
 
-      // Track app launch once on first consent sync
-      if (isTauriEnv) {
+      // Track app launch once per app lifecycle (guard prevents re-fire
+      // if user toggles analytics off then back on)
+      if (!appLaunchTracked.current && isTauriEnv) {
+        appLaunchTracked.current = true;
         import("@tauri-apps/api/app")
           .then(({ getVersion }) => getVersion())
           .then((version) => track("app_launched", { version }))

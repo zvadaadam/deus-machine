@@ -8,9 +8,12 @@
 import posthog from "posthog-js";
 import type { AnalyticsEventMap, AnalyticsEvent } from "./events";
 
-let _enabled = true;
+let _enabled = false;
 
-/** Sync consent state. Called by useAnalyticsConsent and the settings toggle. */
+/**
+ * Sync consent state. Called by useAnalyticsConsent and the settings toggle.
+ * Tracking starts disabled and is enabled on first consent sync.
+ */
 export function setAnalyticsEnabled(enabled: boolean): void {
   _enabled = enabled;
   try {

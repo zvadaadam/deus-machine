@@ -122,9 +122,10 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
         <Switch
           id="analytics-toggle"
           checked={settings.analytics_enabled !== false}
-          onCheckedChange={(checked) => {
-            saveSetting("analytics_enabled", checked);
+          onCheckedChange={async (checked) => {
             setAnalyticsEnabled(checked);
+            const ok = await saveSetting("analytics_enabled", checked);
+            if (!ok) setAnalyticsEnabled(!checked);
           }}
         />
       </div>
