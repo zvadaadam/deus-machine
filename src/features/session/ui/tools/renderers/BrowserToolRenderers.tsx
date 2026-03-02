@@ -275,9 +275,7 @@ export function BrowserSelectOptionToolRenderer({ toolUse, toolResult }: ToolRen
         <>
           {element && <span className="text-muted-foreground truncate">{element}</span>}
           {valuesPreview && (
-            <span className="text-muted-foreground truncate font-mono">
-              → {valuesPreview}
-            </span>
+            <span className="text-muted-foreground truncate font-mono">→ {valuesPreview}</span>
           )}
         </>
       )}
@@ -307,9 +305,7 @@ export function BrowserWaitForToolRenderer({ toolUse, toolResult }: ToolRenderer
       icon={<Clock className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => (
-        <span className="text-muted-foreground truncate">{condition}</span>
-      )}
+      renderSummary={() => <span className="text-muted-foreground truncate">{condition}</span>}
       renderContent={() => (output ? <OutputBlock>{output}</OutputBlock> : null)}
     />
   );
@@ -342,7 +338,7 @@ export function BrowserEvaluateToolRenderer({ toolUse, toolResult }: ToolRendere
             <pre
               className={cn(
                 "overflow-x-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap",
-                "max-h-[200px] overflow-y-auto border",
+                "chat-scroll-contain max-h-[200px] overflow-y-auto border",
                 "bg-muted/50 text-foreground border-border/60"
               )}
             >
@@ -401,9 +397,7 @@ export function BrowserScreenshotToolRenderer({ toolUse, toolResult }: ToolRende
       toolResult={toolResult}
       defaultExpanded={!!image}
       renderSummary={() =>
-        text ? (
-          <span className="text-muted-foreground truncate">{text.slice(0, 60)}</span>
-        ) : null
+        text ? <span className="text-muted-foreground truncate">{text.slice(0, 60)}</span> : null
       }
       renderContent={() => (
         <div className="space-y-2">
@@ -467,9 +461,7 @@ export function BrowserScrollToolRenderer({ toolUse, toolResult }: ToolRendererP
       icon={<ArrowDownUp className={ICON_CLS} />}
       toolUse={toolUse}
       toolResult={toolResult}
-      renderSummary={() => (
-        <span className="text-muted-foreground truncate">{summary}</span>
-      )}
+      renderSummary={() => <span className="text-muted-foreground truncate">{summary}</span>}
       renderContent={() => (text ? <OutputBlock>{text}</OutputBlock> : null)}
     />
   );

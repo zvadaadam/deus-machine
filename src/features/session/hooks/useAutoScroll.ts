@@ -1,47 +1,17 @@
 /**
- * useAutoScroll -- Scroll-position-math approach to chat auto-scroll.
+ * useAutoScroll — rAF chase loop for smooth chat auto-scroll.
  *
- * One boolean (isPaused) replaces the 3-state machine. The browser already
- * knows the scroll position -- we just read it:
+ * CHASE LOOP: Runs at 60fps when !isPaused.
+ *   scrollTop += (target - scrollTop) * CHASE_FACTOR each frame.
  *
- *   scrollTop + clientHeight >= scrollHeight - THRESHOLD  =>  at bottom.
+ * PAUSE: Detected inside the chase loop itself.
+ *   If scrollTop decreased since our last write AND not near bottom → pause.
+ *   Works for ALL input methods (wheel, scrollbar, keyboard, touch).
  *
- * ESCAPE (→ paused):
- *   Wheel-up on the main container (not nested scrollables like code blocks).
- *   The DOM walk finds the nearest scrollable ancestor — only escapes if it's
- *   OUR scroll container.
- *
- * RE-ENGAGE (→ unpaused):
- *   User scrolls back to bottom, clicks the button, sends a message,
- *   or the 10s auto-resume timeout fires.
- *
- * CONTENT GROWTH:
- *   ResizeObserver on the content wrapper. When height grows and !isPaused
- *   and !isSelecting, write scrollTop = scrollHeight. No race condition
- *   guards needed — the scroll listener only checks isAtBottom for
- *   re-engagement (never disengages on scroll events).
- *
- * TEXT SELECTION:
- *   Checks mouseDown + window.getSelection() overlap with the container.
- *   Skips auto-scroll to avoid fighting the selection during streaming.
- *
- * PREPEND (load-older):
- *   Chat.tsx calls syncGeometry() after correcting scrollTop in its
- *   useLayoutEffect. This updates internal refs so the scroll/resize
- *   handlers don't misinterpret the correction as user scroll or content growth.
- *
- * EXPAND/COLLAPSE:
- *   Cursor-aligned: expand/collapse uses conditional render + opacity fade
- *   (no CSS grid height transitions). Expand handlers call the module-level
- *   suppressAutoScrollOnExpand() BEFORE toggling state so the ResizeObserver
- *   doesn't snap to bottom — the clicked element stays in place while content
- *   expands below. Collapse needs no suppression (height shrinks, not grows).
- *
- * Inspired by Cursor IDE's ScrollArea implementation:
- *   - 5px threshold constant
- *   - isPaused flag with 10s auto-resume timeout
- *   - ResizeObserver on both viewport and content
- *   - No IntersectionObserver, no sentinel div
+ * RESUME:
+ *   - User scrolls back to bottom (scroll event, after cooldown)
+ *   - User sends a new message
+ *   - User clicks "scroll to bottom" button
  */
 
 import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
@@ -49,77 +19,24 @@ import type { Message } from "@/shared/types";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Pixels from bottom to consider "at bottom". Matches Cursor's 5px. */
-const BOTTOM_THRESHOLD = 5;
+const BOTTOM_THRESHOLD = 24;
+const PAUSE_COOLDOWN_MS = 500;
+const CHASE_FACTOR = 0.25;
+const GRACE_FRAMES = 15; // ~250ms — absorbs trackpad inertia after resume
 
-/** Auto-resume after this many ms when paused (Cursor: 10s). */
-const AUTO_RESUME_MS = 10_000;
-
-// ── Text selection guard (module-level, shared across instances) ─────────
-// Tracks mouseDown globally so the hook can skip auto-scroll while the
-// user is dragging to select text. Ported from use-stick-to-bottom.
-
-let mouseDown = false;
-
-if (typeof document !== "undefined") {
-  document.addEventListener("mousedown", () => {
-    mouseDown = true;
-  });
-  document.addEventListener("mouseup", () => {
-    mouseDown = false;
-  });
-  // Safety net: click fires after mouseup, catches edge cases where mouseup
-  // was missed (e.g., mouseup outside the window).
-  document.addEventListener("click", () => {
-    mouseDown = false;
-  });
-}
-
-// ── Expand/collapse suppress (module-level, shared across instances) ─────
-// When a user clicks to expand a collapsible block, the content mounts and
-// grows the container. Without suppression, the ResizeObserver snaps
-// scrollTop to scrollHeight, yanking the clicked element out of view.
-// The expand handler calls suppressAutoScrollOnExpand() before toggling
-// state, and the ResizeObserver skips the resulting growth events.
-
-let _suppressExpandCount = 0;
-
-/**
- * Suppress the next several auto-scroll-on-growth events.
- * Call from expand/collapse click handlers BEFORE toggling state,
- * so the ResizeObserver doesn't misinterpret the height change as
- * streaming content and snap to the bottom.
- *
- * Counter (not boolean) absorbs the burst of resize events from
- * content mounting (virtualizer remeasure + content wrapper resize).
- */
-export function suppressAutoScrollOnExpand() {
-  _suppressExpandCount += 3;
-}
+// ── Debug logging ────────────────────────────────────────────────────────
+const DEBUG = false;
+const log = (...args: unknown[]) => {
+  if (DEBUG) console.log("[autoscroll]", ...args);
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+const reducedMotionQuery =
+  typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
 function isAtBottom(el: HTMLElement): boolean {
   return el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD;
-}
-
-/**
- * Walk up from the wheel event target to find the nearest scrollable ancestor.
- * Returns true only if that scrollable is the given container (meaning the
- * user is scrolling the main chat, not a nested code block or terminal).
- */
-function isWheelOnMainContainer(target: EventTarget | null, container: HTMLElement): boolean {
-  let el = target as HTMLElement | null;
-  while (el) {
-    const overflow = getComputedStyle(el).overflowY;
-    const isScrollable =
-      (overflow === "scroll" || overflow === "auto") && el.scrollHeight > el.clientHeight;
-    if (isScrollable) {
-      return el === container;
-    }
-    el = el.parentElement;
-  }
-  return false;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────
@@ -127,143 +44,201 @@ function isWheelOnMainContainer(target: EventTarget | null, container: HTMLEleme
 interface UseAutoScrollOptions {
   messages: Message[];
   messagesContainerRef: RefObject<HTMLDivElement>;
+  /** Incremented by the UI when the human clicks Send. Triggers resume + jump to bottom. */
+  userSendCount: number;
 }
 
-export function useAutoScroll({ messages, messagesContainerRef }: UseAutoScrollOptions) {
-  // --- Public state ---
+export function useAutoScroll({
+  messages,
+  messagesContainerRef,
+  userSendCount,
+}: UseAutoScrollOptions) {
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const [hasNewMessages, setHasNewMessages] = useState(false);
 
-  // --- Core scroll state: a single boolean ---
   const isPausedRef = useRef(false);
-  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedAtRef = useRef(0);
+  const chaseRafRef = useRef<number | null>(null);
 
-  // --- Geometry refs ---
-  // When Chat.tsx corrects scrollTop after a prepend, the ResizeObserver
-  // fires multiple times as the new content renders (one per element in the
-  // prepended batch). A boolean only suppresses one callback. A counter
-  // (incremented by 3 per syncGeometry call) absorbs the burst.
-  const skipGrowthCountRef = useRef(0);
-
-  // --- Message tracking (append vs prepend detection) ---
   const prevMessageCountRef = useRef(messages.length);
   const prevLastMessageIdRef = useRef<string | null>(
     messages.length > 0 ? messages[messages.length - 1].id : null
   );
 
-  // ── Pause / Resume ────────────────────────────────────────────────────
+  // ── Chase loop ──────────────────────────────────────────────────────
 
-  const pause = useCallback(() => {
-    if (isPausedRef.current) return;
+  const pauseFromLoop = useCallback(() => {
+    log("PAUSE (from loop) — user scroll detected");
     isPausedRef.current = true;
+    pausedAtRef.current = Date.now();
     setShowScrollButton(true);
-
-    // Auto-resume after timeout (Cursor pattern: user scrolls up, forgets,
-    // chat gently re-engages after 10s). Only unpauses — does NOT snap to
-    // bottom. If the session is streaming, the next ResizeObserver growth
-    // event will scroll naturally. If idle, the user stays where they are.
-    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-    resumeTimerRef.current = setTimeout(() => {
-      resumeTimerRef.current = null;
-      isPausedRef.current = false;
-      setShowScrollButton(false);
-      setHasNewMessages(false);
-    }, AUTO_RESUME_MS);
   }, []);
 
-  const resume = useCallback(() => {
-    if (!isPausedRef.current) return;
-    isPausedRef.current = false;
-    setShowScrollButton(false);
-    setHasNewMessages(false);
-    if (resumeTimerRef.current) {
-      clearTimeout(resumeTimerRef.current);
-      resumeTimerRef.current = null;
+  const startChase = useCallback(() => {
+    if (chaseRafRef.current !== null) {
+      log("startChase: already running, skip");
+      return;
     }
-  }, []);
 
-  // ── Text selection check ──────────────────────────────────────────────
+    log("startChase: starting new chase loop");
 
-  const isSelecting = useCallback(() => {
-    if (!mouseDown) return false;
-    const container = messagesContainerRef.current;
-    if (!container) return false;
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return false;
-    if (selection.isCollapsed) return false;
-    const range = selection.getRangeAt(0);
-    try {
-      return range.intersectsNode(container);
-    } catch {
-      return false;
-    }
-  }, [messagesContainerRef]);
+    let idleFrames = 0;
+    let lastWrittenScrollTop = -1;
+    let graceFrames = GRACE_FRAMES;
+    let tickCount = 0;
 
-  // ── Scroll to bottom ──────────────────────────────────────────────────
+    const tick = () => {
+      const el = messagesContainerRef.current;
+      if (!el || isPausedRef.current) {
+        log("tick: exit — el:", !!el, "isPaused:", isPausedRef.current);
+        chaseRafRef.current = null;
+        return;
+      }
 
-  const scrollToBottom = useCallback(
-    (smooth = false) => {
-      const container = messagesContainerRef.current;
-      if (!container) return;
-      resume();
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (smooth && !reducedMotion) {
-        container.scrollTo({
-          top: container.scrollHeight,
-          behavior: "smooth",
-        });
+      tickCount++;
+
+      const scrollTop = el.scrollTop;
+      const scrollHeight = el.scrollHeight;
+      const clientHeight = el.clientHeight;
+      const target = scrollHeight - clientHeight;
+      const distance = target - scrollTop;
+
+      // Log every 30th tick to avoid spam, but always log key events
+      const shouldLogTick = tickCount % 30 === 1;
+
+      // ── In-loop pause detection ──────────────────────────────────
+      if (graceFrames > 0) {
+        graceFrames--;
+        if (shouldLogTick) {
+          log(
+            `tick ${tickCount}: grace=${graceFrames}, scrollTop=${Math.round(scrollTop)}, lastWritten=${Math.round(lastWrittenScrollTop)}, distance=${Math.round(distance)}`
+          );
+        }
+      } else if (lastWrittenScrollTop >= 0) {
+        const wentBackward = scrollTop < lastWrittenScrollTop - 2;
+        const nearBottom = scrollTop + clientHeight >= scrollHeight - 5;
+
+        if (wentBackward) {
+          log(
+            `tick ${tickCount}: BACKWARD DETECTED — scrollTop=${Math.round(scrollTop)}, lastWritten=${Math.round(lastWrittenScrollTop)}, delta=${Math.round(scrollTop - lastWrittenScrollTop)}, nearBottom=${nearBottom}`
+          );
+          if (!nearBottom) {
+            log(`tick ${tickCount}: → PAUSING (not near bottom)`);
+            pauseFromLoop();
+            chaseRafRef.current = null;
+            return;
+          } else {
+            log(`tick ${tickCount}: → ignored (near bottom, likely content shrink)`);
+          }
+        } else if (shouldLogTick) {
+          log(
+            `tick ${tickCount}: scrollTop=${Math.round(scrollTop)}, lastWritten=${Math.round(lastWrittenScrollTop)}, distance=${Math.round(distance)}, target=${Math.round(target)}`
+          );
+        }
+      }
+
+      // ── Chase toward bottom ──────────────────────────────────────
+      // Snap when close enough or when the step is too small to move pixels
+      if (distance < 1) {
+        if (distance > 0) el.scrollTop = target;
+        if (++idleFrames >= 10) {
+          log(`tick ${tickCount}: idle self-stop (10 idle frames)`);
+          chaseRafRef.current = null;
+          return;
+        }
+        lastWrittenScrollTop = el.scrollTop;
+        chaseRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (reducedMotionQuery?.matches) {
+        el.scrollTop = target;
       } else {
-        container.scrollTop = container.scrollHeight;
+        const prev = el.scrollTop;
+        el.scrollTop += distance * CHASE_FACTOR;
+        // Browser rounds scrollTop — if the write didn't actually move, snap
+        if (el.scrollTop === prev) {
+          el.scrollTop = target;
+        }
       }
-    },
-    [messagesContainerRef, resume]
-  );
 
-  /**
-   * Suppress the next several ResizeObserver growth callbacks.
-   * Call this after any programmatic scrollTop correction (e.g., prepend
-   * anchor restore in Chat.tsx useLayoutEffect) so the ResizeObserver
-   * doesn't misinterpret the height change as streaming content and
-   * stomp the restored scroll position.
-   *
-   * Increments by 3 to absorb the burst of resize events from prepended
-   * content rendering (typically 1-3 elements in a single batch).
-   */
-  const syncGeometry = useCallback(() => {
-    skipGrowthCountRef.current += 3;
-  }, []);
-
-  // ── Wheel listener: escape detection ──────────────────────────────────
-  // Uses wheel events (not scroll direction) to detect user intent to scroll
-  // up. Walks the DOM to distinguish scrolling inside nested scrollables
-  // (code blocks, terminal output) from the main chat container.
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY >= 0) return; // Only care about scroll-UP (deltaY < 0)
-      if (isPausedRef.current) return; // Already paused
-      if (isWheelOnMainContainer(e.target, container)) {
-        pause();
+      // Count as idle if scroll position didn't change (already at target)
+      if (el.scrollTop === lastWrittenScrollTop) {
+        if (++idleFrames >= 10) {
+          log(`tick ${tickCount}: idle self-stop (stalled)`);
+          chaseRafRef.current = null;
+          return;
+        }
+      } else {
+        idleFrames = 0;
       }
+
+      lastWrittenScrollTop = el.scrollTop;
+      chaseRafRef.current = requestAnimationFrame(tick);
     };
 
-    container.addEventListener("wheel", handleWheel, { passive: true });
-    return () => container.removeEventListener("wheel", handleWheel);
-  }, [messagesContainerRef, pause]);
+    chaseRafRef.current = requestAnimationFrame(tick);
+  }, [messagesContainerRef, pauseFromLoop]);
 
-  // ── Scroll listener: re-engagement only ───────────────────────────────
-  // When the user scrolls back to within THRESHOLD of the bottom while
-  // paused, resume auto-scroll. This is the only job of the scroll handler.
-  // Disengagement is handled exclusively by the wheel listener (more
-  // reliable for nested scrollables).
+  const stopChase = useCallback(() => {
+    if (chaseRafRef.current !== null) {
+      log("stopChase: cancelling rAF");
+      cancelAnimationFrame(chaseRafRef.current);
+      chaseRafRef.current = null;
+    }
+  }, []);
+
+  // ── Resume ──────────────────────────────────────────────────────────
+
+  const resume = useCallback(() => {
+    log("RESUME — isPaused was:", isPausedRef.current);
+    isPausedRef.current = false;
+    setShowScrollButton(false);
+    stopChase();
+    startChase();
+  }, [startChase, stopChase]);
+
+  // ── Scroll to bottom ───────────────────────────────────────────────
+
+  const scrollToBottom = useCallback(() => {
+    log("scrollToBottom clicked");
+    resume();
+  }, [resume]);
+
+  const syncGeometry = useCallback(() => {
+    log("syncGeometry: pausing chase for 2 frames");
+    stopChase();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!isPausedRef.current) startChase();
+      });
+    });
+  }, [stopChase, startChase]);
+
+  // ── Scroll listener: pause detection + re-engagement ────────────────
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      if (isPausedRef.current && isAtBottom(container)) {
+      if (!isPausedRef.current) {
+        // Chase loop may have self-stopped (idle at bottom). If the user
+        // then scrolls away from bottom, we must pause NOW — otherwise
+        // the next message arrival will restart the chase and yank them
+        // back to the bottom. The in-loop backward detection only works
+        // while the loop is running; this covers the stopped-loop gap.
+        if (chaseRafRef.current === null && !isAtBottom(container)) {
+          log("scroll listener: chase idle + scrolled away → PAUSE");
+          isPausedRef.current = true;
+          pausedAtRef.current = Date.now();
+          setShowScrollButton(true);
+        }
+        return;
+      }
+
+      // Already paused — check for re-engagement (scroll back to bottom)
+      const elapsed = Date.now() - pausedAtRef.current;
+      if (elapsed >= PAUSE_COOLDOWN_MS && isAtBottom(container)) {
+        log(`scroll re-engagement: at bottom after ${elapsed}ms cooldown`);
         resume();
       }
     };
@@ -272,59 +247,36 @@ export function useAutoScroll({ messages, messagesContainerRef }: UseAutoScrollO
     return () => container.removeEventListener("scroll", handleScroll);
   }, [messagesContainerRef, resume]);
 
-  // ── ResizeObserver: auto-scroll on content growth ─────────────────────
-  // Watches the content wrapper (first child of the scroll container).
-  // When content height grows and we're not paused, push scrollTop to
-  // scrollHeight. Simple and direct — no race condition guards needed
-  // because the scroll listener never disengages (only re-engages).
-  //
-  // `contentReady` re-runs this effect when transitioning from the loading
-  // skeleton to the real content wrapper. Without it, the observer would
-  // stay attached to the detached skeleton div and never fire again.
+  // ── Start chase when content is present ─────────────────────────────
   const contentReady = messages.length > 0;
   useEffect(() => {
+    if (!contentReady || isPausedRef.current) return;
+    log("contentReady effect: starting chase");
+    startChase();
+    return () => stopChase();
+  }, [contentReady, startChase, stopChase]);
+
+  // ── Human send → resume ────────────────────────────────────────────
+  // Triggered by SessionPanel incrementing userSendCount when the human
+  // actually clicks Send. NOT triggered by sidecar tool_results (which
+  // also have role="user" in the Claude SDK format).
+  const prevSendCountRef = useRef(userSendCount);
+  useEffect(() => {
+    if (userSendCount === prevSendCountRef.current) return;
+    prevSendCountRef.current = userSendCount;
+
+    log("userSendCount changed — human sent a message");
     const container = messagesContainerRef.current;
-    if (!container || !contentReady) return;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+    resume();
+  }, [userSendCount, messagesContainerRef, resume]);
 
-    let prevHeight: number | undefined;
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const h = entry.contentRect.height;
-      const grew = prevHeight !== undefined && h > prevHeight;
-      prevHeight = h;
-
-      if (!grew) return;
-      if (skipGrowthCountRef.current > 0) {
-        skipGrowthCountRef.current--;
-        return;
-      }
-      if (_suppressExpandCount > 0) {
-        _suppressExpandCount--;
-        return;
-      }
-      if (isPausedRef.current) return;
-      if (isSelecting()) return;
-
-      // Defer scroll to next frame so the chatItemEnter CSS animation
-      // paints its first keyframe before we move scrollTop. Without rAF
-      // the scroll write happens mid-ResizeObserver callback, before the
-      // browser paints the new content, causing a visual jump.
-      requestAnimationFrame(() => {
-        const c = messagesContainerRef.current;
-        if (c && !isPausedRef.current && !isSelecting()) {
-          c.scrollTop = c.scrollHeight;
-        }
-      });
-    });
-
-    const contentWrapper = container.firstElementChild;
-    if (contentWrapper) observer.observe(contentWrapper);
-    return () => observer.disconnect();
-  }, [messagesContainerRef, isSelecting, contentReady]);
-
-  // ── Auto-scroll on new messages ───────────────────────────────────────
+  // ── New message handling ────────────────────────────────────────────
+  // Never resumes — only restarts chase when not paused.
+  // Resume is handled exclusively by: human send, scroll-to-bottom click,
+  // or scroll re-engagement (scrolling back to bottom).
   useEffect(() => {
     const count = messages.length;
     const prevCount = prevMessageCountRef.current;
@@ -335,51 +287,32 @@ export function useAutoScroll({ messages, messagesContainerRef }: UseAutoScrollO
     prevLastMessageIdRef.current = lastId;
 
     if (count <= prevCount) return;
-
-    // Prepend: count grew but last message unchanged — don't auto-scroll.
-    // Chat.tsx's useLayoutEffect handles scroll position preservation.
-    if (lastId === prevLastId) return;
-
-    const latest = messages[count - 1];
-    const isUserMessage = latest?.role === "user";
-
-    if (isUserMessage) {
-      // User sent a message — always scroll to bottom, even if paused.
-      resume();
-      requestAnimationFrame(() => {
-        const c = messagesContainerRef.current;
-        if (c) c.scrollTop = c.scrollHeight;
-      });
+    if (lastId === prevLastId) {
+      log("message effect: prepend detected, ignoring");
       return;
     }
 
-    // Assistant message while paused — show "new messages" indicator.
-    if (isPausedRef.current) {
-      setHasNewMessages(true);
+    const delta = count - prevCount;
+    log(
+      `message effect: count ${prevCount}→${count} (delta=${delta}), isPaused=${isPausedRef.current}`
+    );
+
+    if (!isPausedRef.current) {
+      log("message effect: restarting chase");
+      stopChase();
+      startChase();
+    } else {
+      log("message effect: paused — ignoring");
     }
-    // If not paused, ResizeObserver handles the scroll automatically
-    // when the new message content renders and grows the container.
-  }, [messages, messagesContainerRef, resume]);
+  }, [messages, startChase, stopChase]);
 
-  // ── Cleanup ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-    };
-  }, []);
-
-  // ── Public API ────────────────────────────────────────────────────────
-
-  const handleScrollToBottomClick = useCallback(() => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scrollToBottom(!reducedMotion);
-  }, [scrollToBottom]);
+  // ── Cleanup ─────────────────────────────────────────────────────────
+  useEffect(() => () => stopChase(), [stopChase]);
 
   return {
     showScrollButton,
-    hasNewMessages,
     scrollToBottom,
-    handleScrollToBottomClick,
+    handleScrollToBottomClick: scrollToBottom,
     syncGeometry,
   };
 }

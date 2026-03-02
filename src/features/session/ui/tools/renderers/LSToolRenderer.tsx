@@ -77,7 +77,7 @@ export function LSToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererP
 
         // Directory contents
         return (
-          <div className="max-h-60 space-y-0.5 overflow-y-auto">
+          <div className="chat-scroll-contain max-h-60 space-y-0.5 overflow-y-auto">
             {listings.map((item, index) => {
               const isDir = isDirectory(item);
               const cleanItem = item.replace(/\/$/, ""); // Remove trailing slash for display

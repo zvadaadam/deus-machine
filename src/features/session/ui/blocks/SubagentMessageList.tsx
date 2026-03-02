@@ -58,13 +58,7 @@ export const SubagentMessageList = memo(function SubagentMessageList({
   return (
     <div className="border-border/30 flex flex-col gap-0.5 border-l pl-3">
       {renderableBlocks.map(({ block, key }, index) => (
-        <BlockRenderer
-          key={key}
-          block={block}
-          index={index}
-          role="assistant"
-          isLastTextBlock={false}
-        />
+        <BlockRenderer key={key} block={block} index={index} role="assistant" isStreaming={false} />
       ))}
     </div>
   );

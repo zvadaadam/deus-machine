@@ -73,7 +73,7 @@ export function GlobToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
 
         // File list
         return (
-          <div className="max-h-60 space-y-0.5 overflow-y-auto">
+          <div className="chat-scroll-contain max-h-60 space-y-0.5 overflow-y-auto">
             {files.map((file, index) => (
               <div
                 key={index}

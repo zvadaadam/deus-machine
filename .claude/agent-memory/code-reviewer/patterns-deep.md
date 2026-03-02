@@ -28,9 +28,90 @@
   the ResizeObserver watches a detached element. Auto-scroll via ResizeObserver doesn't work for first session.
 - Counter-based animation (`maxAnimatedTurnIndex` ref): `shouldAnimate` requires BOTH: `turnIndex === turns.length - 1`
   AND `turnIndex > maxAnimatedTurnIndex.current`. Animation fires ONLY for the absolute last turn.
-- **Initial load bug**: Counter starts at -1, increments during render, making last turn animate on initial load.
-- **Prepend re-animation bug**: After prepend, all indices shift up; last item re-animates.
+- **StrictMode animation fix**: Counter is now advanced in `useEffect([turns.length])` (post-commit)
+  instead of render-time mutation. Render reads the ref as a pure read. This correctly fixes
+  the StrictMode double-render bug where the counter was advanced on pass 1, leaving pass 2 with no animation.
+- **animatedTurnsRef Set**: New `Set<number>` ref tracks turns mid-animation. CSS class persists across
+  streaming re-renders for the 150ms chatItemEnter duration. Cleaned up with `setTimeout(300ms)`.
+  `shouldAnimate` now also gates on `sessionStatus !== "working"` to prevent blink during virtualizer reflow.
+- **`shouldAnimate` gate during streaming**: `sessionStatus !== "working"` prevents the opacity animation
+  from firing while the virtualizer continuously repositions items via `transform: translateY()`.
+  translateY animations on children compose with parent reposition transforms, causing visible blinks.
+- **1-frame animation gap (confirmed)**: After a new turn is appended, `maxAnimatedTurnIndex.current`
+  is set to `turns.length - 1` in the useEffect, which fires AFTER the first paint. So on the first paint
+  the turn gets `chat-item-enter`, and on the second paint the counter catches up. This is the desired behavior.
+- **Single-block streak key**: `ToolGroupBlock` key = `s.blocks[0].id` — no guard for empty `blocks`
+  array, but `groupToolStreaks` always emits `streakBlocks.length > 0` before flushing, so safe.
+- **chatItemEnter duration change**: Changed from 220ms to 150ms. The cleanup setTimeout in Chat.tsx
+  is 300ms (150ms animation + 150ms buffer). Comments in Chat.tsx at lines 161/352/355 still say "220ms" — stale.
+- **ToolGroupBlock showHeader change**: Changed from `isSealed && blocks.length >= 2` to `blocks.length >= 2`.
+  Now shows header during streaming (when 2+ tools in streak), collapsed on seal. The `isExpanded` default
+  changed from `!showHeader` to `!isSealed` — correctly starts expanded during streaming, collapses on seal.
+- **AssistantTurn streaming/completed split**: Two render paths. Streaming: `groupedAll` = all messages
+  through `groupMessageToolStreaks`. Completed: `hiddenMessages` (all but last) + `summaryMessage` (last).
+  `groupedHidden` is computed unconditionally (even during streaming) — wasted O(n) work but memoized.
+- **TurnStatsHeader during streaming**: The header shows when `hiddenMessages.length > 0` regardless of
+  streaming state. During streaming it acts as a count indicator. Clicking the header during streaming
+  toggles `isManuallyExpanded` but has NO visible effect (streaming path ignores isExpanded).
+  This is intentional per the comment but creates confusing UX — the button appears interactive
+  but shows no visible change, and aria-expanded state is misleading.
+- `AUTO_RESUME_MS` (10s timer) removed — replaced with `PAUSE_COOLDOWN_MS` (500ms date comparison in handleScroll).
+  **Reinstated in rAF-chase rewrite** (zvadaadam/fix-chat-animations): `AUTO_RESUME_MS = 10_000` returned.
+  `PAUSE_COOLDOWN_MS = 500` still present for inertia absorption on scroll re-engagement.
 - `RetryCountdown`: `useState` initializer only runs on mount. If `durationMs` changes, `remaining` is NOT reset.
+- `groupToolStreaks` correctly handles empty input (returns []) and single-block case (one ToolStreak with isTrailing=true).
+- `lastTextBlockIndex` scan in `MessageItem` runs at render time (not memoized). Comment at line 176 incorrectly
+  says "Memoized" — it is not. Acceptable since it's O(n) over a small array, but comment is misleading.
+
+## rAF Chase Loop Pattern — Wheel-Based Pause (zvadaadam/fix-chat-animations, 2026-03, iteration 2)
+
+- **Architecture**: rAF chase loop (unchanged from iteration 1). Pause detection switched from scroll
+  event (Cursor) to wheel event (Codex). Wheel fires BEFORE scrollTop updates, so it cannot be
+  overpowered by the loop.
+- **`lastOwnScrollAtRef`**: Stamped by every chase-loop tick AND by `scrollToBottom` instant path.
+  Wheel handler ignores events within `OWN_SCROLL_WINDOW_MS` (80ms) of last stamp. Covers ~2 rAF
+  frames with safety headroom for slow frames.
+- **`OWN_SCROLL_WINDOW_MS = 80ms` analysis**: At 60fps one rAF frame = 16.7ms. Two frames = 33ms.
+  80ms covers ~5 frames, providing 2.5x headroom for 24fps slow devices. Appropriate.
+- **`WHEEL_UP_THRESHOLD = -4`**: Lower than Codex (-12) to match macOS trackpad which fires many
+  small deltas. Risk: very light resting-finger contact on trackpad fires deltaY < -4 and pauses.
+  Mitigated by `OWN_SCROLL_WINDOW_MS` guard preventing false triggers during chase motion.
+- **Nested scrollable handling (CONFIRMED CORRECT for majority case)**: The old Cursor approach
+  walked the DOM to find the nearest scrollable ancestor. The new Codex approach attaches the wheel
+  listener to `container` (the chat scroll element) directly — it only receives events that bubble
+  to it, meaning events inside nested scrollables with `overscroll-behavior: contain` AND
+  `overflow: auto/scroll` will still bubble the wheel event up to container. The `passive:true`
+  listener on container receives the wheel event regardless of whether a child consumed scroll.
+  **This is a known gap**: any nested scrollable that is itself at-top (cannot scroll up further)
+  will chain the wheel event to the container. The `overscroll-behavior: contain` CSS on nested
+  scrollables prevents actual scrollTop chaining, but does NOT stop wheel event bubbling. So if the
+  user wheel-ups inside a code block that is already scrolled to its top, the wheel event bubbles
+  to the chat container and pauses auto-scroll. This is acceptable UX (rare case, user can resume
+  by scrolling to bottom). The OLD DOM-walk approach was more precise but had the race condition.
+- **BOTTOM_THRESHOLD changed from 5px to 24px**: This widens the re-engagement zone. Users get
+  auto-resume 24px above true bottom. Tolerable for UX but increases false-resume risk for short
+  messages. Acceptable trade-off.
+- **`stopChase` missing from messages-effect dep array (BUG)**: At line 331, the messages effect
+  dep array is `[messages, resume, startChase]`. The effect calls `stopChase()` at lines 315 and 328. `stopChase` is a `useCallback` with stable identity (empty implicit deps from `[]`), but
+  React's exhaustive-deps rule considers this a violation. In practice harmless because `stopChase`
+  is referentially stable. Nevertheless it should be added.
+- **`syncGeometry` stop+2-frame-restart**: Cancels the rAF, waits 2 frames for layout, then
+  restarts only if not paused. Called from Chat.tsx prepend scroll restoration. Correct pattern.
+- **Idle self-stop + force-restart (CONFIRMED CORRECT)**: `chaseRafRef = null` + `isPausedRef =
+false` is the self-stopped state. Messages effect handles this via unconditional `stopChase() +
+startChase()` (not just `startChase()`, which guards against double-start). Force-restart pattern
+  correct.
+- **`scrollToBottom(smooth=true)` race**: Still present from iteration 1. `chaseFactorRef` reset
+  via `setTimeout(500ms)`. If chase completes before 500ms, reset fires late (harmless). Safe.
+- **`chat-scroll-contain` pattern**: `overscroll-behavior: contain` on nested scrollable tool
+  result areas prevents scroll chaining. Does NOT prevent wheel event bubbling to parent (see above).
+  Two remaining gaps from iteration 1 still present (UnifiedDiff inline style, CodeBlock horizontal).
+- **`motion` vs `m`**: Pre-existing violation, NOT introduced by this branch.
+- **`suppressAutoScrollOnExpand` removed (CONFIRMED COMPLETE)**: No call sites remain.
+- **`initialMessageCount` ref pattern (Chat.tsx)**: Unchanged. Still correct.
+- **Auto-resume timer removed**: `AUTO_RESUME_MS` / `resumeTimerRef` fully removed. Resume is now
+  explicit only (scroll-to-bottom, send-message, click button). No 10s silent resume. This is a
+  behavior change — the comment in the old MEMORY.md entry noting "reinstated" is now wrong again.
 
 ## PRStatus / GhCliStatus Patterns (Confirmed)
 

@@ -84,7 +84,7 @@ export const ToolUseBlock = memo(function ToolUseBlock({ block, toolResult }: To
   const isLoading = !toolResult;
 
   return (
-    <div className="tool-use-enter my-1" style={{ contain: "layout style paint" }}>
+    <div className="my-1" style={{ contain: "layout style paint" }}>
       <ToolRendererWrapper block={block} toolResult={toolResult} isLoading={isLoading} />
     </div>
   );
