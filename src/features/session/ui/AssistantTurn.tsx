@@ -65,7 +65,11 @@ export const AssistantTurn = memo(function AssistantTurn({
   const { parseContent, toolResultMap } = useSession();
 
   const [isManuallyExpanded, setIsManuallyExpanded] = useState<boolean | null>(null);
-  const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest && isWorking;
+  // Latest turn always starts expanded so users can see all content,
+  // especially when a session errors mid-stream (tool call as last message
+  // hides the earlier text explanation in the collapsed section).
+  // User can still manually collapse via TurnStatsHeader click.
+  const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest;
 
   const stats = useMemo(
     () => calculateTurnStats(messages, parseContent, toolResultMap),
@@ -170,13 +174,14 @@ export const AssistantTurn = memo(function AssistantTurn({
       ) : (
         /* ── COMPLETED: hidden/summary split for collapsible UI ── */
         <>
-          <AnimatePresence>
+          <AnimatePresence initial={false}>
             {isExpanded && hiddenMessages.length > 0 && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const }}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] as const }}
+                style={{ overflow: "hidden" }}
                 className="flex min-w-0 flex-col gap-1"
               >
                 {groupedHidden.map((item) =>
