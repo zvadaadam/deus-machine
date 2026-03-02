@@ -130,14 +130,15 @@ export function BaseToolRenderer({
         </div>
       </button>
 
-      {/* Expanded content — AnimatePresence for enter/exit opacity fade. */}
-      <AnimatePresence>
+      {/* Expanded content — AnimatePresence for smooth height + opacity transition. */}
+      <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
             transition={expandTransition}
+            style={{ overflow: "hidden" }}
             className="mt-0.5 ml-6"
           >
             {isError && toolResult && !showContentOnError ? (

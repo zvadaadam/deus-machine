@@ -39,7 +39,11 @@ export function WriteToolRenderer({ toolUse, toolResult, isLoading }: ToolRender
           >
             {fileName}
           </span>
-          <span className="text-muted-foreground text-sm font-normal"> • {lineCount} lines</span>
+          {lineCount > 0 && (
+            <span className="ml-1.5 inline-flex items-center gap-1 tabular-nums">
+              <span className="text-success">+{lineCount}</span>
+            </span>
+          )}
         </>
       )}
       renderContent={() => (

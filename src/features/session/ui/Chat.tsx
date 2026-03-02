@@ -391,7 +391,15 @@ export function Chat({
   const estimateSize = useCallback(
     (index: number) => {
       const turn = turns[index];
-      return turn?.type === "user" ? 60 : 200;
+      if (!turn) return 100;
+      if (turn.type === "user") return 60;
+      // Scale estimate with message count — collapsed turns with many hidden
+      // messages show a compact header + summary, while expanded turns (latest)
+      // need more space. Prevents positioning glitches during scroll.
+      const msgCount = turn.messages.length;
+      if (msgCount <= 1) return 120;
+      if (msgCount <= 3) return 200;
+      return 200 + (msgCount - 3) * 40;
     },
     [turns]
   );
@@ -409,7 +417,7 @@ export function Chat({
     count: turns.length,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize,
-    overscan: 5,
+    overscan: 8,
     getItemKey,
   });
 
