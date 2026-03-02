@@ -1,16 +1,16 @@
 /**
  * Text Block
  *
- * Renders text content blocks from messages with semantic weight.
+ * Renders text content blocks from messages.
  * - Assistant messages: Rendered as markdown (secure, CSS-highlighted for speed)
  * - User messages: Rendered as plain text with <inspect> pills (user input)
  *
- * Weight variants:
- * - 'muted': Transitional text between actions (60% opacity)
- * - 'normal': Final summary text (100% opacity - stands out)
+ * Weight variants (assistant messages only):
+ * - 'muted': Text currently being streamed (60% opacity — in-progress feel)
+ * - 'normal': Completed text (100% opacity — the default)
  *
- * Visual hierarchy: Only the last text block in completed assistant turns shows as white (normal).
- * All other text remains subtle (muted) to emphasize WHAT was done over HOW.
+ * Dimming rule: only the text block actively being generated is muted.
+ * All completed text — in every turn, every message — renders at full opacity.
  *
  * Uses ChatMarkdown component for secure, beautiful rendering with:
  * - CSS-based syntax highlighting (instant rendering)

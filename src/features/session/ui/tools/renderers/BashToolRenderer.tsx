@@ -71,7 +71,7 @@ export function BashToolRenderer({ toolUse, toolResult, isLoading }: ToolRendere
             className={cn(
               "text-foreground font-mono text-sm leading-5",
               "overflow-x-auto rounded-lg px-3 py-2 whitespace-pre-wrap",
-              "max-h-[400px] overflow-y-auto border",
+              "chat-scroll-contain max-h-[400px] overflow-y-auto border",
               "bg-muted/80 text-foreground border-border/60"
             )}
           >

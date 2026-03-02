@@ -115,6 +115,8 @@ interface ChatProps {
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   isFirstSession?: boolean;
+  /** Incremented by SessionPanel when the human clicks Send. */
+  userSendCount?: number;
   className?: string;
 }
 
@@ -134,6 +136,7 @@ export function Chat({
   workspaceRepoName,
   workspaceParentBranch,
   isFirstSession,
+  userSendCount = 0,
   className,
 }: ChatProps) {
   const { parseContent, toolResultMap, parentToolUseMap } = useSession();
@@ -141,11 +144,11 @@ export function Chat({
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const { showScrollButton, hasNewMessages, handleScrollToBottomClick, syncGeometry } =
-    useAutoScroll({
-      messages,
-      messagesContainerRef,
-    });
+  const { showScrollButton, handleScrollToBottomClick, syncGeometry } = useAutoScroll({
+    messages,
+    messagesContainerRef,
+    userSendCount,
+  });
 
   // --- Message entrance animation tracking ---
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
@@ -155,7 +158,14 @@ export function Chat({
   const maxAnimatedTurnIndex = useRef(-1);
   // Pre-seed on first render with turns so initial load doesn't animate.
   // Without this, the last historical turn always plays the entrance animation.
+  // Only seeds when conversation loaded with existing messages — new
+  // conversations (starting empty) should animate their first turn.
   const isFirstTurnsRender = useRef(true);
+  const initialMessageCount = useRef(messages.length);
+  // Tracks which turns have started their entrance animation. Keeps the CSS
+  // class applied across re-renders so streaming updates don't interrupt the
+  // 400ms chatItemEnter animation mid-play (which causes visible jumps).
+  const animatedTurnsRef = useRef(new Set<number>());
 
   // ── Load-older cooldown ─────────────────────────────────────────────────
   // Ref-based guard prevents rapid re-triggering when collapsed content
@@ -320,23 +330,46 @@ export function Chat({
       });
     }
 
-    // Mark the latest assistant turn
-    for (let i = turnList.length - 1; i >= 0; i--) {
-      if (turnList[i].type === "assistant") {
-        (turnList[i] as AssistantTurnData).isLatest = true;
-        break;
-      }
+    // Mark the latest assistant turn — but ONLY if it's the very last turn
+    // in the conversation (no user message after it). A turn followed by a
+    // user message is completed and must NOT enter streaming mode. Without
+    // this guard, the gap between "user sends message" and "first assistant
+    // response arrives" causes the previous completed turn to re-enter
+    // streaming mode (expanded, dimmed) because isLatest && isWorking = true.
+    const lastTurn = turnList[turnList.length - 1];
+    if (lastTurn?.type === "assistant") {
+      (lastTurn as AssistantTurnData).isLatest = true;
     }
 
     return turnList;
   }, [renderableMessages]);
 
-  // Pre-seed maxAnimatedTurnIndex to cover all initial turns.
-  // Without this, the last turn always plays the entrance animation on load.
-  if (isFirstTurnsRender.current && turns.length > 0) {
-    isFirstTurnsRender.current = false;
-    maxAnimatedTurnIndex.current = turns.length - 1;
-  }
+  // Advance maxAnimatedTurnIndex after commit (useEffect runs once per commit,
+  // not twice in StrictMode). During render, shouldAnimate reads the ref purely.
+  // Without this separation, StrictMode double-render advances the counter on the
+  // first invocation, so the second invocation (which produces DOM) never applies
+  // the chat-item-enter CSS class.
+  useEffect(() => {
+    if (isFirstTurnsRender.current && turns.length > 0) {
+      isFirstTurnsRender.current = false;
+      // Only suppress entrance animation for turns loaded from DB (existing
+      // conversation). New conversations (started empty) should animate their
+      // first turn — skipping the seed lets shouldAnimate fire naturally.
+      if (initialMessageCount.current > 0) {
+        maxAnimatedTurnIndex.current = turns.length - 1;
+      }
+      return;
+    }
+    const newMax = turns.length - 1;
+    if (newMax > maxAnimatedTurnIndex.current) {
+      // Mark this turn for animation. The Set ensures the CSS class persists
+      // across re-renders so the 400ms animation isn't interrupted.
+      animatedTurnsRef.current.add(newMax);
+      maxAnimatedTurnIndex.current = newMax;
+      // Clean up after animation completes (400ms duration + 100ms buffer).
+      setTimeout(() => animatedTurnsRef.current.delete(newMax), 500);
+    }
+  }, [turns.length]);
 
   // Pre-compute spacing for each turn (needed because virtualizer skips
   // off-screen items — can't compute spacing from DOM neighbors).
@@ -470,18 +503,15 @@ export function Chat({
 
                   const spacingClass = turnSpacings[turnIndex];
 
-                  // Counter-based entrance animation: only the LAST turn whose
-                  // index exceeds maxAnimatedTurnIndex gets the CSS animation.
-                  // Initial load: counter starts at -1, first render advances it
-                  // to turns.length - 1, so ALL initial turns are "seen" (no animation).
-                  // Prepended turns: indices shift up but the counter already covers them.
+                  // Animate new turns only. The counter comparison catches the first
+                  // render; the Set keeps the class applied for 300ms so the 200ms
+                  // CSS animation isn't interrupted by streaming re-renders.
+                  // Safe during streaming because animations fire per-TURN (not per-
+                  // message) — streaming adds messages to the existing turn without
+                  // changing turns.length, so no spurious re-animations.
                   const shouldAnimate =
-                    turnIndex === turns.length - 1 && turnIndex > maxAnimatedTurnIndex.current;
-
-                  // Advance the counter so subsequent renders don't re-animate.
-                  if (turnIndex >= maxAnimatedTurnIndex.current) {
-                    maxAnimatedTurnIndex.current = turnIndex;
-                  }
+                    (turnIndex === turns.length - 1 && turnIndex > maxAnimatedTurnIndex.current) ||
+                    animatedTurnsRef.current.has(turnIndex);
 
                   const messageId = turn.type === "user" ? turn.message.id : turn.messages[0].id;
 
@@ -670,16 +700,13 @@ export function Chat({
         <Button
           variant="secondary"
           size="icon"
-          className="relative rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
+          className="rounded-full shadow-lg transition-shadow duration-200 hover:shadow-xl motion-reduce:transition-none"
           onClick={handleScrollToBottomClick}
-          title={hasNewMessages ? "New messages below" : "Scroll to bottom"}
-          aria-label={hasNewMessages ? "New messages below" : "Scroll to bottom"}
+          title="Scroll to bottom"
+          aria-label="Scroll to bottom"
           aria-controls="chat-messages"
         >
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
-          {hasNewMessages && (
-            <span className="bg-primary absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full" />
-          )}
         </Button>
       </div>
     </div>

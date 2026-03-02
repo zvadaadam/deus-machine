@@ -27,7 +27,7 @@ export function OutputBlock({ children }: { children: React.ReactNode; isError?:
     <pre
       className={cn(
         "overflow-x-auto rounded-lg p-3 font-mono text-xs whitespace-pre-wrap",
-        "max-h-96 overflow-y-auto border",
+        "chat-scroll-contain max-h-96 overflow-y-auto border",
         "bg-muted/50 text-foreground border-border/60"
       )}
     >

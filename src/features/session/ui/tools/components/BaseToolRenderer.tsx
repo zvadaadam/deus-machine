@@ -18,7 +18,6 @@ import { ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock } from "@/shared/types";
-import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
 import { ToolError } from "./ToolError";
 
 export interface BaseToolRendererProps {
@@ -73,7 +72,6 @@ export function BaseToolRenderer({
       <button
         type="button"
         onClick={() => {
-          if (!isExpanded) suppressAutoScrollOnExpand();
           setManualExpanded(!isExpanded);
         }}
         className={cn(
