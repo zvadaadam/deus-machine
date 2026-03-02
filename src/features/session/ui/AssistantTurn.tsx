@@ -16,7 +16,14 @@
  * │  ├─ Tool call 1
  * │  ├─ Tool call 2
  * │  └─ Intermediate text
- * └─ Summary message (always visible - last message in turn)
+ * └─ Summary message (always visible - last REAL message in turn)
+ * └─ [optional] "Turn interrupted" annotation (when turn was cancelled)
+ *
+ * Cancellation design:
+ * The sidecar writes an empty placeholder message with stop_reason: "cancelled"
+ * on user cancel. That placeholder is a persistence mechanism — not content.
+ * We skip over it so the last real message is the summary, and render
+ * "Turn interrupted" as an annotation below the actual content.
  */
 
 import { useMemo, useState, memo } from "react";
@@ -30,7 +37,6 @@ import { useSession } from "../context";
 import { calculateTurnStats, groupMessageToolStreaks } from "./utils";
 import { match } from "ts-pattern";
 import { Square } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
 
 interface AssistantTurnProps {
   messages: Message[];
@@ -65,9 +71,33 @@ export const AssistantTurn = memo(function AssistantTurn({
     [messages, parseContent, toolResultMap]
   );
 
-  // Split messages: all except last = hidden, last = summary (always visible)
-  const summaryMessage = messages[messages.length - 1];
-  const hiddenMessages = messages.slice(0, -1);
+  // Detect if the last message is a cancellation sentinel.
+  // The sidecar writes an empty message with stop_reason: "cancelled" on user cancel.
+  // That message is metadata, not content — skip over it to find the real summary.
+  const isCancelled = useMemo(() => {
+    const last = messages[messages.length - 1];
+    try {
+      const parsed = JSON.parse(last.content);
+      return (parsed.message?.stop_reason as string) === "cancelled";
+    } catch {
+      return false;
+    }
+  }, [messages]);
+
+  // Split messages: all except the last are hidden (collapsible), last is the summary.
+  // When cancelled, the sentinel is excluded — all real messages go into hiddenMessages
+  // and the "Response stopped" badge replaces the summary slot entirely.
+  const { summaryMessage, hiddenMessages } = useMemo(() => {
+    if (isCancelled) {
+      // Strip the sentinel; everything else is collapsible content
+      const real = messages.length > 1 ? messages.slice(0, -1) : [];
+      return { summaryMessage: null, hiddenMessages: real };
+    }
+    return {
+      summaryMessage: messages[messages.length - 1],
+      hiddenMessages: messages.slice(0, -1),
+    };
+  }, [messages, isCancelled]);
 
   // Group consecutive tool-only hidden messages into streaks.
   // The sidecar stores each tool call as a separate message row. Without this,
@@ -76,21 +106,6 @@ export const AssistantTurn = memo(function AssistantTurn({
     () => groupMessageToolStreaks(hiddenMessages, parseContent),
     [hiddenMessages, parseContent]
   );
-
-  // Detect stop_reason from the envelope format: { message: { stop_reason }, blocks: [...] }
-  const stopReason = useMemo(() => {
-    try {
-      const parsed = JSON.parse(summaryMessage.content);
-      return (parsed.message?.stop_reason as string) ?? null;
-    } catch {
-      return null;
-    }
-  }, [summaryMessage.content]);
-
-  const isCancelled = stopReason === "cancelled";
-
-  // Check if this is the last message in the turn (always true for summary message)
-  const isLastInTurn = true;
 
   return (
     <div className="assistant-turn flex min-w-0 flex-col" style={{ contain: "layout style" }}>
@@ -143,18 +158,18 @@ export const AssistantTurn = memo(function AssistantTurn({
         )}
       </AnimatePresence>
 
-      {/* Summary message - always visible */}
+      {/* Summary slot: either the last real message or the cancelled badge */}
       {isCancelled ? (
-        <div className={cn("mr-auto", "flex items-center gap-1.5 py-1")}>
-          <Square className="text-muted-foreground/30 h-3 w-3 fill-current" />
-          <span className="text-muted-foreground/50 text-xs">Turn interrupted</span>
+        <div className="border-warning/20 border-l-warning bg-warning/5 mx-2 flex items-center gap-2.5 rounded-lg border border-l-2 px-3 py-2">
+          <Square className="text-warning/60 h-3.5 w-3.5 shrink-0 fill-current" />
+          <span className="text-warning text-sm font-medium">Response stopped</span>
         </div>
       ) : (
         <MessageItem
-          message={summaryMessage}
+          message={summaryMessage!}
           isLatestAssistant={isLatest}
-          isLastInTurn={isLastInTurn}
-          isWorking={isWorking && isLatest} // Only latest turn can be "working"
+          isLastInTurn={true}
+          isWorking={isWorking && isLatest}
         />
       )}
     </div>

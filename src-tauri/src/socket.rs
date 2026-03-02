@@ -274,7 +274,37 @@ impl SocketManager {
                                             }
                                         };
 
-                                        println!("[SOCKET] {} -> {}", method, event_name);
+                                        // Log session ID and data type for debugging message flow
+                                        let session_id = params.get("id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("?");
+                                        let short_id = &session_id[..session_id.len().min(8)];
+
+                                        let detail = match method {
+                                            "message" => {
+                                                // Extract data.type to show what kind of message is flowing through
+                                                let data_type = params.get("data")
+                                                    .and_then(|d| d.get("type"))
+                                                    .and_then(|t| t.as_str())
+                                                    .unwrap_or("?");
+                                                let agent = params.get("agentType")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("?");
+                                                format!("session={} agent={} data.type={}", short_id, agent, data_type)
+                                            }
+                                            "queryError" => {
+                                                let error = params.get("error")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("?");
+                                                let category = params.get("category")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("?");
+                                                format!("session={} category={} error={}", short_id, category, &error[..error.len().min(80)])
+                                            }
+                                            _ => format!("session={}", short_id),
+                                        };
+
+                                        println!("[SOCKET] {} -> {} [{}]", method, event_name, detail);
 
                                         // Emit to frontend via Tauri
                                         if let Some(handle) = app_handle.lock().unwrap().as_ref() {
