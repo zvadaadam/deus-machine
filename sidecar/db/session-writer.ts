@@ -29,6 +29,7 @@ export function saveAssistantMessage(
   model: string = "opus",
   parentToolUseId: string | null = null
 ): WriteResult {
+  const t0 = Date.now();
   const db = getDatabase();
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
@@ -45,15 +46,23 @@ export function saveAssistantMessage(
   const content = JSON.stringify(contentPayload);
 
   try {
+    const tInsert = Date.now();
     db.prepare(
       `
       INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
       VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)
     `
     ).run(messageId, sessionId, content, sentAt, model, message.id || null, parentToolUseId);
+    const insertMs = Date.now() - tInsert;
 
-    console.log(`[SESSION-WRITER] Saved assistant message ${messageId} for session ${sessionId}`);
+    const tNotify = Date.now();
     notifyBackend("session:message", sessionId);
+    const notifyMs = Date.now() - tNotify;
+
+    const totalMs = Date.now() - t0;
+    if (totalMs > 10) {
+      console.log(`[TIMING][SESSION-WRITER] saveAssistantMessage session=${sessionId} insert=${insertMs}ms notify=${notifyMs}ms total=${totalMs}ms`);
+    }
     return { ok: true, value: messageId };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -116,10 +125,12 @@ export function updateSessionStatus(
   errorMessage?: string | null,
   errorCategory?: string | null
 ): WriteResult<void> {
+  const t0 = Date.now();
   const db = getDatabase();
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const tUpdate = Date.now();
       db.prepare(
         `
         UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?
@@ -130,16 +141,21 @@ export function updateSessionStatus(
         status === "error" ? (errorCategory ?? null) : null,
         sessionId
       );
+      const updateMs = Date.now() - tUpdate;
 
-      console.log(
-        `[SESSION-WRITER] Updated session ${sessionId} status to '${status}'${errorMessage ? ` with error: ${errorMessage}` : ""}`
-      );
+      const tNotify = Date.now();
       notifyBackend("session:status", sessionId);
+      const notifyMs = Date.now() - tNotify;
+
+      const totalMs = Date.now() - t0;
+      console.log(
+        `[TIMING][SESSION-WRITER] updateSessionStatus session=${sessionId} status='${status}' update=${updateMs}ms notify=${notifyMs}ms total=${totalMs}ms${attempt > 0 ? ` retries=${attempt}` : ""}${errorMessage ? ` error: ${errorMessage}` : ""}`
+      );
       return { ok: true, value: undefined };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (attempt === 0 && (msg.includes("SQLITE_BUSY") || msg.includes("database is locked"))) {
-        console.log(`[SESSION-WRITER] SQLITE_BUSY on status update, retrying in 200ms...`);
+        console.log(`[TIMING][SESSION-WRITER] SQLITE_BUSY on status update, retrying in 200ms...`);
         // Synchronous wait — better-sqlite3 is sync anyway
         const start = Date.now();
         while (Date.now() - start < 200) {
@@ -257,6 +273,29 @@ export function reconcileStuckSessions(): WriteResult<number> {
   const db = getDatabase();
 
   try {
+    // Log the state of all sessions before reconciliation for debugging resume issues
+    const allSessions = db
+      .prepare(
+        `SELECT id, status, agent_session_id, error_message, error_category
+         FROM sessions ORDER BY updated_at DESC LIMIT 20`
+      )
+      .all() as Array<{
+      id: string;
+      status: string;
+      agent_session_id: string | null;
+      error_message: string | null;
+      error_category: string | null;
+    }>;
+
+    console.log(
+      `[SESSION-WRITER] Session state at startup (${allSessions.length} recent sessions):`
+    );
+    for (const s of allSessions) {
+      console.log(
+        `  [${s.id.substring(0, 8)}] status=${s.status} agent_session_id=${s.agent_session_id ?? "null"} error=${s.error_message ?? "none"} category=${s.error_category ?? "none"}`
+      );
+    }
+
     const result = db
       .prepare(
         `

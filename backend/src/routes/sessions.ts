@@ -12,7 +12,6 @@ import {
   hasOlderMessages,
   hasNewerMessages,
   getMessageById,
-  getLatestUserMessage,
 } from '../db';
 import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 
@@ -73,6 +72,7 @@ app.get('/sessions/:id/messages', (c) => {
  * Returns immediately after DB write.
  */
 app.post('/sessions/:id/messages', async (c) => {
+  const t0 = Date.now();
   const db = getDatabase();
   const sessionId = c.req.param('id');
   const { content, model } = parseBody(CreateMessageBody, await c.req.json());
@@ -84,6 +84,7 @@ app.post('/sessions/:id/messages', async (c) => {
   const sentAt = new Date().toISOString();
   const messageModel = model || 'opus';
 
+  const tDbStart = Date.now();
   const insertMessageAndUpdateSession = db.transaction(() => {
     db.prepare(`
       INSERT INTO messages (id, session_id, role, content, sent_at, model)
@@ -94,9 +95,12 @@ app.post('/sessions/:id/messages', async (c) => {
   });
 
   insertMessageAndUpdateSession();
+  const tDbEnd = Date.now();
+
   broadcastWorkspacesAndStats();
 
   const createdMessage = getMessageById(db, messageId);
+  console.log(`[TIMING][sessions POST] session=${sessionId} dbWrite=${tDbEnd - tDbStart}ms total=${Date.now() - t0}ms`);
   return c.json(createdMessage);
 });
 
@@ -113,20 +117,11 @@ app.post('/sessions/:id/stop', (c) => {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError('Session not found');
 
-  const latestUserMessage = getLatestUserMessage(db, sessionId);
-
-  if (latestUserMessage) {
-    db.prepare("UPDATE messages SET cancelled_at = datetime('now') WHERE id = ?").run(latestUserMessage.id);
-  }
-
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
   broadcastWorkspacesAndStats();
 
   const updatedSession = getSessionRaw(db, sessionId);
-  return c.json({
-    success: true, session: updatedSession,
-    message: latestUserMessage ? 'Session cancelled and message marked' : 'Session cancelled'
-  });
+  return c.json({ success: true, session: updatedSession });
 });
 
 export default app;

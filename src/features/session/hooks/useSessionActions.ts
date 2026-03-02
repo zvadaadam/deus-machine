@@ -17,7 +17,7 @@ import { useSendMessage, useStopSession } from "../api/session.queries";
 import { socketService } from "@/platform/socket";
 import { isTauriEnv } from "@/platform/tauri";
 import { track } from "@/platform/analytics";
-import { getRuntimeAgentLabel, type RuntimeAgentType } from "../lib/agentRuntime";
+import { type RuntimeAgentType } from "../lib/agentRuntime";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
 
 interface UseSessionActionsProps {
@@ -119,8 +119,6 @@ export function useSessionActions({
   );
 
   const stopSession = useCallback(async () => {
-    const agentLabel = getRuntimeAgentLabel(agentType);
-    if (!window.confirm(`Stop the current ${agentLabel} session?`)) return;
     try {
       // Cancel the sidecar agent first so it stops consuming API tokens
       if (isTauriEnv) {

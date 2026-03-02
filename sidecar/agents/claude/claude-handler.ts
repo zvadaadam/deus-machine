@@ -102,7 +102,8 @@ export class ClaudeAgentHandler implements AgentHandler {
   }
 
   async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
-    console.log("Handling Claude query request for session:", sessionId);
+    const tHandleQuery = Date.now();
+    console.log(`[TIMING][handleQuery] START session=${sessionId} promptLength=${prompt.length}`);
     if (blockIfNotInitialized(sessionId)) return;
 
     const session = getSession(sessionId);
@@ -120,7 +121,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
 
     if (canReuse) {
-      console.log(`Reusing existing generator for session ${sessionId}`);
+      console.log(`[TIMING][handleQuery] REUSE session=${sessionId} decisionTime=${Date.now() - tHandleQuery}ms`);
 
       // Hot-swap model if it changed
       if (modelChanged && session) {
@@ -178,7 +179,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           : options.shouldResetGenerator
             ? "should reset generator"
             : "settings changed";
-      console.log(`Creating new generator for session ${sessionId} for reason: "${reason}"`);
+      console.log(`[TIMING][handleQuery] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tHandleQuery}ms`);
 
       if (isSessionActive(session)) {
         terminateSession(sessionId);
@@ -210,20 +211,20 @@ export class ClaudeAgentHandler implements AgentHandler {
     const session = getSession(sessionId);
 
     if (isSessionActive(session) && query) {
-      console.log(`Interrupting query for session ${sessionId}`);
-      try {
-        await query.interrupt();
-        if (session.turnId && session.cwd) {
-          createCheckpoint(sessionId, session.turnId, "end", session.cwd, "claudeHandler");
-        }
-      } catch (error) {
-        console.error(
-          `[handleClaudeCancel] Error during cancel interrupt for session ${sessionId}:`,
-          error
-        );
+      console.log(`Force-closing query for session ${sessionId}`);
+
+      // 1. Flag cancellation so the post-loop path persists the cancelled message
+      session.cancelledByUser = true;
+
+      // 2. Create checkpoint before process dies
+      if (session.turnId && session.cwd) {
+        createCheckpoint(sessionId, session.turnId, "end", session.cwd, "claudeHandler");
       }
-      // Signal the generator to terminate — the finally block in processWithGenerator
-      // is the sole owner of cleanup (deleteQuery + deleteSession) to avoid races.
+
+      // 3. Force kill: close() terminates CLI subprocess + all children + MCP transports
+      query.close();
+
+      // 4. Signal prompt generator to stop — finally block owns cleanup
       terminateSession(sessionId);
     } else {
       console.log(`No active session found for ${sessionId} to cancel`);
@@ -402,12 +403,14 @@ export class ClaudeAgentHandler implements AgentHandler {
     initialPrompt: string,
     options: QueryOptions
   ): Promise<void> {
-    const generatorId = `${sessionId}/${Date.now()}`;
+    const tProcessStart = Date.now();
+    const generatorId = `${sessionId}/${tProcessStart}`;
     const session = getSession(sessionId);
     if (!session) {
       console.error(`[${generatorId}] Session ${sessionId} not found`);
       return;
     }
+    console.log(`[TIMING][${generatorId}] processWithGenerator START`);
 
     // --- Message queue for multi-turn conversations ---
     const messageQueue: string[] = [initialPrompt];
@@ -447,20 +450,26 @@ export class ClaudeAgentHandler implements AgentHandler {
     // after max_tokens, so without this guard the error would be clobbered.
     let stopReasonError = false;
 
+    // Declared outside try so the catch block can access it for error diagnostics.
+    let messageCount = 0;
+
     try {
       // Build environment using shared env-builder
+      const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
         claudeEnvVars: options?.claudeEnvVars,
         opendevsEnv: options?.opendevsEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });
+      console.log(`[TIMING][${generatorId}] buildAgentEnvironment took ${Date.now() - tEnvStart}ms`);
 
       // Auto-inject resume for session continuity after sidecar restart.
       // If no explicit resume was provided and a previous agent_session_id
       // exists in the DB, inject it so the SDK resumes the conversation
       // with full context (message history, tool state).
       // Skip when shouldResetGenerator is true — the user explicitly wants a clean start.
+      const tResumeStart = Date.now();
       if (!options.resume && !options.shouldResetGenerator) {
         const savedAgentSessionId = lookupAgentSessionId(sessionId);
         if (savedAgentSessionId) {
@@ -470,9 +479,15 @@ export class ClaudeAgentHandler implements AgentHandler {
           options = { ...options, resume: savedAgentSessionId };
         }
       }
+      console.log(`[TIMING][${generatorId}] resumeLookup took ${Date.now() - tResumeStart}ms resume=${!!options.resume} resumeId=${options.resume ?? "none"}`);
+      if (options.resume) {
+        console.log(`[RESUME-DEBUG][${generatorId}] Attempting resume with agent_session_id=${options.resume} for session=${sessionId}`);
+      }
 
       // Build SDK options using the dedicated builder
+      const tSdkOptsStart = Date.now();
       const sdkOptions = buildSdkOptions(sessionId, envForClaude, options);
+      console.log(`[TIMING][${generatorId}] buildSdkOptions took ${Date.now() - tSdkOptsStart}ms`);
 
       // Build the async-iterable prompt source
       const promptInput = (async function* () {
@@ -513,7 +528,11 @@ export class ClaudeAgentHandler implements AgentHandler {
       })();
 
       // Start the SDK query
+      console.log(`[TIMING][${generatorId}] SDK spawn starting (elapsed since processStart: ${Date.now() - tProcessStart}ms)`);
+      console.log(`[RESUME-DEBUG][${generatorId}] SDK options: resume=${sdkOptions.resume ?? "none"} cwd=${sdkOptions.cwd} model=${sdkOptions.model} permissionMode=${sdkOptions.permissionMode}`);
+      const tSdkSpawn = Date.now();
       const queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
+      console.log(`[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`);
 
       setQuery(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
@@ -521,7 +540,14 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Stream messages back to the frontend and persist to DB.
       // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
       // are in the DB when the frontend receives the event and fetches them.
+      let firstMessageTime: number | null = null;
+      const tStreamStart = Date.now();
       for await (const message of queryResult) {
+        messageCount++;
+        if (firstMessageTime === null) {
+          firstMessageTime = Date.now();
+          console.log(`[TIMING][${generatorId}] FIRST_MESSAGE received after ${firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`);
+        }
         if (message) {
           let cleanMessage: Record<string, unknown>;
           try {
@@ -565,11 +591,16 @@ export class ClaudeAgentHandler implements AgentHandler {
           // Persist assistant messages to database (before frontend notification)
           if (cleanMessage.type === "assistant" && msg) {
             const model = options?.model || "opus";
+            const tDbWrite = Date.now();
             const writeResult = saveAssistantMessage(sessionId, msg, model, parentToolUseId);
+            const dbWriteMs = Date.now() - tDbWrite;
             if (!writeResult.ok) {
               console.error(
                 `[${generatorId}] DB write failed for assistant message: ${writeResult.error}`
               );
+            }
+            if (dbWriteMs > 10) {
+              console.log(`[TIMING][${generatorId}] saveAssistantMessage took ${dbWriteMs}ms`);
             }
           }
 
@@ -580,22 +611,37 @@ export class ClaudeAgentHandler implements AgentHandler {
             const hasToolResult =
               Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
             if (hasToolResult) {
+              const tDbWrite = Date.now();
               const writeResult = saveToolResultMessage(sessionId, msg, parentToolUseId);
+              const dbWriteMs = Date.now() - tDbWrite;
               if (!writeResult.ok) {
                 console.error(
                   `[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`
                 );
               }
+              if (dbWriteMs > 10) {
+                console.log(`[TIMING][${generatorId}] saveToolResultMessage took ${dbWriteMs}ms`);
+              }
             }
           }
 
           // Send to frontend via JSON-RPC notification (after DB write)
+          const tSend = Date.now();
           FrontendClient.sendMessage({
             id: sessionId,
             type: "message",
             agentType: "claude",
             data: cleanMessage,
           });
+          const sendMs = Date.now() - tSend;
+          if (sendMs > 5) {
+            console.log(`[TIMING][${generatorId}] sendMessage took ${sendMs}ms`);
+          }
+
+          // Log per-message timing for first 5 messages, then every 10th
+          if (messageCount <= 5 || messageCount % 10 === 0) {
+            console.log(`[TIMING][${generatorId}] msg#${messageCount} type=${cleanMessage.type}${cleanMessage.type === "result" ? "/" + cleanMessage.subtype : ""} elapsed=${Date.now() - tStreamStart}ms`);
+          }
 
           // Check if stop_reason indicates an error condition (e.g. max_tokens).
           // Fires AFTER sendMessage so the truncated content lands in the
@@ -627,6 +673,34 @@ export class ClaudeAgentHandler implements AgentHandler {
         }
       }
 
+      console.log(`[TIMING][${generatorId}] STREAM_COMPLETE messages=${messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`);
+
+      // User-initiated cancellation: close() killed the process, for-await exited normally.
+      // Persist the cancelled message so AssistantTurn.tsx renders "Turn interrupted".
+      if (session.cancelledByUser) {
+        const model = options?.model || "opus";
+        saveAssistantMessage(
+          sessionId,
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "" }],
+            stop_reason: "cancelled",
+          },
+          model
+        );
+
+        FrontendClient.sendMessage({
+          id: sessionId,
+          type: "message",
+          agentType: "claude",
+          data: { type: "cancelled" },
+        });
+
+        updateSessionStatus(sessionId, "idle");
+        console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
+        return;
+      }
+
       // Normal completion — ensure session is marked idle
       // (covers the case where SDK ends without a "result/success" message).
       // Skip if a stop-reason error was already recorded — preserve error state.
@@ -635,6 +709,35 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
       console.log(`[${generatorId}] Session completed: ${sessionId}`);
     } catch (error) {
+      // User-initiated cancellation: close() killed the subprocess, which may cause
+      // the for-await to throw instead of exiting cleanly (SDK-dependent behavior).
+      // If we land here, the post-loop path (above) was never reached, so we must
+      // persist the cancelled message ourselves. If the post-loop path DID run and
+      // then close() threw asynchronously, we never reach this catch (return on line 653).
+      if (session.cancelledByUser) {
+        const model = options?.model || "opus";
+        saveAssistantMessage(
+          sessionId,
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "" }],
+            stop_reason: "cancelled",
+          },
+          model
+        );
+
+        FrontendClient.sendMessage({
+          id: sessionId,
+          type: "message",
+          agentType: "claude",
+          data: { type: "cancelled" },
+        });
+
+        updateSessionStatus(sessionId, "idle");
+        console.log(`[${generatorId}] Session cancelled by user (catch path): ${sessionId}`);
+        return;
+      }
+
       // The SDK subprocess may exit with a signal (e.g. SIGINT) after the query
       // already completed successfully. This happens because the CLI binary shuts
       // down its process between turns, and the SDK reports any signal-based exit
@@ -649,10 +752,30 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       const classified = classifyError(error);
+      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      const errorName = error instanceof Error ? error.name : "non-Error";
+      const errorStack = error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : "no stack";
+      // Extract any extra properties the SDK may attach (cause, code, exitCode, signal, etc.)
+      const extraProps = error instanceof Error
+        ? Object.getOwnPropertyNames(error)
+            .filter((k) => !["message", "stack", "name"].includes(k))
+            .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
+            .join(" ")
+        : "";
       console.error(
         `[${generatorId}] Error in Claude query [${classified.category}]:`,
         classified.message
       );
+      console.error(
+        `[${generatorId}] Error details:`,
+        `name=${errorName}`,
+        `wasResume=${!!options.resume}`,
+        `resumeId=${options.resume ?? "none"}`,
+        `querySucceeded=${querySucceeded}`,
+        `messageCount=${messageCount}`,
+        extraProps ? `extraProps={${extraProps}}` : "extraProps={}",
+      );
+      console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
 
       // Resume failures are handled by the normal error path below.
       // The agent_session_id is preserved in the DB so the next retry
@@ -665,17 +788,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // writing stale cancellation/error messages would pollute the new run.
       const ownsSession = !getSession(sessionId) || getSession(sessionId) === session;
 
-      if (classified.category === "abort") {
-        if (ownsSession) {
-          // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
-          FrontendClient.sendMessage({
-            id: sessionId,
-            type: "message",
-            agentType: "claude",
-            data: { type: "cancelled" },
-          });
-        }
-      } else if (ownsSession) {
+      if (ownsSession) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
@@ -683,33 +796,12 @@ export class ClaudeAgentHandler implements AgentHandler {
           agentType: "claude",
           category: classified.category,
         });
-      }
-
-      // Update DB status so session doesn't stay stuck as "working"
-      // Persist error message so frontend can display it in the chat
-      const isAbort = classified.category === "abort";
-
-      if (ownsSession) {
-        // Record cancellation in message history so the chat shows what happened
-        // and the model has context on resume ("previous turn was interrupted").
-        if (isAbort) {
-          const model = options?.model || "opus";
-          saveAssistantMessage(
-            sessionId,
-            {
-              role: "assistant",
-              content: [{ type: "text", text: "" }],
-              stop_reason: "cancelled",
-            },
-            model
-          );
-        }
 
         const statusResult = updateSessionStatus(
           sessionId,
-          isAbort ? "idle" : "error",
-          isAbort ? null : classified.message,
-          isAbort ? null : classified.category
+          "error",
+          classified.message,
+          classified.category
         );
         if (!statusResult.ok) {
           // Session is now stuck — notify frontend so it can attempt recovery
