@@ -13,25 +13,14 @@
 
 - `strip-breathe` + `strip-settle` keyframes live in `global.css` (multi-component reuse)
 - Single-component animations should use Framer Motion inline, NOT global.css keyframes
-- `[animation-fill-mode:backwards]` survives twMerge when animate-[] class is replaced — benign
-  but semantically imprecise on infinite animations
+- `LazyMotion` with `domAnimation` wraps the whole app in `ThemeProvider.tsx` — always use `m`
+  (compact alias) instead of `motion`. `AgentQuestionOverlay.tsx` + `PlanApprovalOverlay.tsx` use
+  `motion` (pre-existing violation).
 
 ## Dead Code Pattern (Confirmed)
 
-- When removing a prop from a call site, also check the destructuring site of the hook that
-  originally provided the handler. E.g., removing `onReviewPR={handleOpenPR}` from `<PRActions>`
-  leaves `handleOpenPR` destructured-but-unused in `MainContent.tsx` (from `useWorkspaceActions`).
-  TypeScript does not error on unused destructured variables — only ESLint's `no-unused-vars` rule
-  catches this. Always grep for all references after removing a prop.
-
-## Common Pitfalls Seen
-
-- `useLayoutEffect` SSR warning: hook uses `typeof window` guard for SSR safety in `useState`
-  initializer but `useLayoutEffect` itself has no SSR guard. Acceptable for Tauri desktop-only app.
-- `safeCollapsedSize = Math.min(collapsedSizePct, MIN_PANEL_SIZE - 0.1)` guard pattern — ensures
-  collapsedSize is always strictly less than minSize (react-resizable-panels requirement)
-- Initial estimate `window.innerWidth * 0.65` in useState initializer is a rough heuristic —
-  corrected synchronously by useLayoutEffect before paint
+- When removing a prop from a call site, also check the destructuring site of the hook.
+  TypeScript does not error on unused destructured variables — only ESLint's `no-unused-vars` catches this.
 
 ## CSS Architecture
 
@@ -42,118 +31,73 @@
 ## Cross-Component Event Bus Pattern
 
 - `window.dispatchEvent(new CustomEvent("insert-to-chat", { detail }))` is the established
-  pattern for browser panel → chat input communication (both text and element insertion).
-  The listener lives in `MainLayout.tsx` useEffect with no deps (stable ref via `workspaceChatPanelRef`).
-- Multi-tab (ChatArea with multiple SessionPanel tabs): only ONE SessionPanel tab is assigned the
-  ref at a time (last rendered wins via ref={workspaceChatPanelRef} directly on the component).
-  Element insertion always goes to the currently-active chat tab. Acceptable current limitation.
+  pattern for browser panel → chat input communication.
 
 ## XML Attribute Serialization Risk Pattern
 
-- `serializeInspectElement` in `parseInspectTags.ts` embeds user-controlled string values (innerText,
-  path, tagName, reactComponent) into XML attribute values using double-quote delimiters with NO
-  escaping. A `"` in any of these fields breaks `attrRegex = /(\w+)="([^"]*)"/g` parsing and
-  corrupts the tag. Real DOM innerText can contain `"` (button labels, link text, etc.).
-  Fix pattern: HTML-escape values before embedding in attributes.
+- `serializeInspectElement` in `parseInspectTags.ts` embeds user-controlled strings (innerText,
+  path, tagName, reactComponent) into XML attributes with NO escaping. A `"` breaks parsing.
+  Fix: HTML-escape values before embedding.
 
 ## Distribution / CI Patterns
 
-- `sed -i ''` is macOS/BSD syntax. On ubuntu-latest (GNU sed), use `sed -i "..."` (no empty-string arg). Scripts that use `sed -i ''` WILL fail in CI.
-- Tauri updater `pubkey` must be set to the minisign public key string — empty string `""` disables signature verification entirely (security regression, also may break tauri-plugin-updater at runtime).
-- `minimumSystemVersion` for arm64-only builds should be `"11.0"` — Apple Silicon Macs shipped with macOS 11.0; `"10.13"` is only valid for x86_64 Intel targets.
-- `tauri-action@v0` needs `includeUpdaterJson: true` (or it defaults true when updater is configured) — verify latest.json is uploaded as a release asset alongside the DMG.
-- `workflow_dispatch` without a branch filter can tag + push from any branch; restrict by adding `branches: [main]` under `on.workflow_dispatch` or add a guard step.
-- The app spawns system `node` binary (not bundled) — hardened runtime notarization may need `com.apple.security.cs.disable-library-validation` in Entitlements.plist if node's dylibs fail team-ID checks.
+- `sed -i ''` is macOS/BSD syntax — fails on ubuntu-latest (GNU sed needs `sed -i "..."`).
+- Tauri updater `pubkey` empty string `""` disables signature verification entirely (security regression).
+- `minimumSystemVersion` for arm64-only builds should be `"11.0"` (Apple Silicon ships with 11.0).
+- The app spawns system `node` binary — hardened runtime notarization may need
+  `com.apple.security.cs.disable-library-validation` in Entitlements.plist.
+
+## Sentry / Observability Patterns (Confirmed)
+
+- **DSN propagation**: Rust `option_env!("SENTRY_DSN_RUST")` bakes frontend DSN at compile time.
+  `option_env!("SENTRY_DSN_NODE")` is baked into the binary and forwarded as `SENTRY_DSN` env var
+  to child processes (backend + sidecar). Frontend uses `import.meta.env.VITE_SENTRY_DSN`.
+- **`option_env!` with empty string**: When `SENTRY_DSN_RUST` is unset, `option_env!` returns `None`,
+  and `.unwrap_or("")` passes `""` to `sentry::init`. The sentry-rust crate treats empty DSN as
+  disabled — no panic, no-op client. This pattern is correct and safe.
+- **Conditional init in Node.js**: `if (process.env.SENTRY_DSN) { Sentry.init(...) }` means when
+  DSN is absent, Sentry is never initialized. `Sentry.captureException()` and `Sentry.close()` called
+  on an uninitialized client are safe no-ops in `@sentry/node@10`. Correct pattern.
+- **Frontend `enabled: !import.meta.env.DEV`**: Sentry is initialized but disabled in dev mode.
+  `captureException()` calls in `errorReporting.ts` are no-ops in dev mode as a result. Good behavior.
+- **`sendDefaultPii: true`** is set on all layers — intentional (desktop app, known users).
+- **Sentry guard lifetime (Rust)**: `_sentry_guard` in `main()` lives until process exit. Dropping
+  it earlier would flush pending events prematurely. The single-underscore prefix suppresses the
+  unused-variable warning without dropping it.
+- **`Sentry.close(2000)` before `process.exit`**: The 2-second flush window is appropriate. Both
+  backend and sidecar implement this correctly in their `uncaughtException` handlers.
+- **Hardcoded Sentry org/project in vite.config.ts**: `org: "deus-40"` and
+  `project: "deus-desktop-frontend"` are hardcoded. These are metadata identifiers (not secrets).
+  Leaking them poses minimal risk but couples the open-source repo to internal Sentry project names.
+- **CI missing Sentry secrets**: `release.yml` does not pass `SENTRY_DSN_RUST`, `SENTRY_DSN_NODE`,
+  `VITE_SENTRY_DSN`, or `SENTRY_AUTH_TOKEN`. Production builds will have Sentry monitoring disabled
+  until these are wired into the workflow.
+- **Root ErrorBoundary not connected to Sentry**: The outer `<ConditionalErrorBoundary fallback={DashboardError}>`
+  at line 126 of App.tsx has NO `onError` prop. React crashes inside MainLayout that are caught by
+  that boundary go unreported to Sentry. Only the inner boundary (line 187) calls `reportError`.
+- **`@sentry/node` in production dependencies**: `@sentry/node` and `@sentry/vite-plugin` are in
+  `dependencies` (not `devDependencies`). `@sentry/vite-plugin` is build-only and should be in
+  `devDependencies`. `@sentry/node` is needed at runtime by backend/sidecar, correct in `dependencies`.
 
 ## Experimental Feature Toggle Pattern (Confirmed)
 
 - `experimental_*` fields are `boolean | undefined` on `Settings` — `undefined` means ON (backwards-compat)
-- Visibility gate: `settings?.[key] !== false` — explicit `false` hides tab, undefined/true shows it
-- `isTabVisible(tab, settings)` is now exported from `ContentTabBar.tsx` (moved from deleted `RightSidecar.tsx`)
-- `effectiveRightSideTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "code"` — store keeps original for re-enable restore
-- `saveSetting` in `SettingsPage.tsx` is typed as `(key: string, value: unknown)` but `SettingsSectionProps.saveSetting` requires `(key: keyof Settings, value: Settings[keyof Settings])`. TypeScript accepts this because `string` is wider than `keyof Settings` at the assignment site. Not a runtime bug, but a type-safety gap.
-- `useRightPanelSizing` and `RightSidecar.tsx` were deleted in content-panel-redesign branch. The panel is now a fixed 40/60 split (no per-tab resizing). The deleted CSS rule `[data-suppress-transition]` was owned by `useRightPanelSizing` — safe to remove alongside it.
+- `isTabVisible(tab, settings)` is exported from `ContentTabBar.tsx`
+- `effectiveRightSideTab` in `MainContent` = `isTabVisible(raw, settings) ? raw : "code"`
 
 ## Simulator / Rust Command Patterns (Confirmed)
 
 - `sim_has_xcode_project` is a `fn` (sync) Tauri command — safe ONLY because Pass 1 (filesystem
-  scan) dominates. Pass 2 (`xcodegen generate`) is a blocking subprocess; if triggered it will
-  block a Tokio thread. Probe commands must skip any subprocess paths; build commands can use them.
-- Pattern for "fast probe vs full build": split into `has_xcode_project_fast` (filesystem only)
-  and `find_xcode_project` (filesystem + xcodegen). Probe command uses the fast variant.
+  scan) dominates. Pattern: split fast probe (`has_xcode_project_fast`) from full build.
 - macOS-only Tauri commands: gated via `#[cfg(target_os = "macos")]` in both `commands/mod.rs`
-  and `main.rs` invoke_handler lists. Non-macOS rejection from `invoke()` sets probe to `false`
-  (button hidden) — this works but emits telemetry noise via `reportError` in `invoke.ts`.
-- Three-state probe pattern: `null | true | false` for async IPC probes. `null` = loading,
-  suppresses button flicker. `false` = either "not found" or "IPC error" — collapsed intentionally.
-- `hasProject === null` during loading: `null` is falsy in JS, so `hasProject ? <Button> : null`
-  hides the button while the probe is in flight. Correct UX, no flash of invalid state.
+  and `main.rs` invoke_handler lists.
+- Three-state probe pattern: `null | true | false`. `null` = loading, suppresses button flicker.
 
 ## Simulator State Machine Patterns (Confirmed)
 
-- Three-plane architecture: Component plane (React mount), Display plane (Zustand store keyed by
-  workspaceId), Session plane (Rust HashMap). `clearWorkspaceSession` ONLY on explicit Stop — never
-  on component unmount or workspace switch.
-- `dispatch()` = validated transition (state machine enforces legal paths); `setSession()` = recovery
-  bypass for external-state reconciliation (mount probes, auto-reconnect). Clear rule: user actions
-  → dispatch, external observation → setSession.
-- `handleRetry()` = `dispatch(CLEAR)` then `handleStart()`. CLEAR is synchronous (Zustand), so
-  BOOT in handleStart sees idle state immediately. This is safe.
-- `handleStop()` dispatches STOP first (immediate store update, disables UI), then awaits
-  stopStreaming IPC. The optimistic-update pattern is intentional — avoids UI stuck in "active" if
-  the IPC call hangs.
-- `onMouseLeave={handleMouseUp}` in SimulatorStreamViewer: fires "ended" at the leave coordinates,
-  then `lastCoordsRef` is cleared. Window mouseup listener then skips (coords null). No double-fire.
-  BUT: if the user moves out while holding and releases outside, both mouseLeave AND window-mouseup
-  fire. mouseLeave fires first (clears lastCoordsRef), then window-mouseup skips (coords null) —
-  one "ended" event sent, correct behavior.
-- `sim-idle-breathe` and `build-shimmer` keyframes live in global.css — multi-component reuse
-  justifies global placement (both used by SimulatorPanel components).
-- `STREAM_READY` transition requires `current.udid === event.udid` — prevents a race where user
-  clicks Stop during boot then clicks Start again: the first STREAM_READY is rejected because state
-  is now idle (STOP → idle deletes entry), not booting. The second start cycle works normally.
-- `setSession(workspaceId, { phase: "idle" })` does NOT delete the map entry (unlike dispatch(STOP)
-  or clearWorkspaceSession). If called by accident it would leave a stale idle entry — currently not
-  used this way but worth knowing.
-- ResizablePanelGroup key removal + imperative resize effect: the effect fires on every
-  selectedWorkspaceId change. `chatPanelRef.current?.resize()` has a guard — it's a no-op if the
-  panel is at the same size. Safe to call redundantly.
-- `workspaceGenerationRef` pattern: monotonic counter incremented in the workspace-switch effect.
-  Async callbacks compare captured gen against current ref. Prevents stale writes after rapid
-  workspace switching.
-
-## Icon Component Patterns (New)
-
-- `AppIcon` registry pattern: static `APP_ICON_MAP` record maps appId → icon component function
-- Category grouping uses `Set` for O(1) lookups in `getAppCategory()` and `groupAppsByCategory()`
-- JetBrains family uses shared diamond shape with brand color prop — DRY approach for similar products
-- SVG icons: 16x16 viewBox, use stroke + fill, no animations, all white inner shapes on colored rect backgrounds
-- Icon components are pure (no state/hooks) — candidates for React.memo if used in frequently-rendering lists
-
-## Content Panel Redesign Pattern (New)
-
-- **AllFilesDiffViewer redesign**: Added `hideHeader?: boolean` prop (defaults to false) to support
-  embedding within CodePanelContent which renders its own tab chrome. Header bar (file count,
-  collapse/expand, close buttons) is conditionally hidden with `{!hideHeader && (...)}`.
-- **onClose handler**: Changed from required `onClose: () => void` to optional `onClose?: () => void`.
-  When `hideHeader=true`, `onClose` is never called (button not rendered). Safe because parent
-  CodePanelContent manages close logic via tab switching, not via this callback.
-- **Changes view architecture**: Replaces single-file diff viewer (DiffTabContent) with infinite-scroll
-  AllFilesDiffViewer. Uses ref-based communication: `diffViewerRef.current?.scrollToFile(path)` to
-  scroll/sync when user clicks ChangedFilesTree. AllFilesDiffViewer's scroll-spy updates store's
-  selectedFile, keeping tree highlighting in sync bidirectionally.
-- **Files view architecture**: Mirrors Changes structure. FileViewer (left) shows text preview of
-  selected file, FileBrowserPanel (220px fixed width, right) shows file tree. Both tabs (Changes/Files)
-  now have identical split layout: content | 1px separator | tree (220px fixed).
-- **selectedFilePath coercion**: `selectedFilePath ?? null` used in both Changes (line 142) and Files
-  (line 176) views because hook returns `string | null` and both expect `string | null`. Coercion is
-  safe because selectedFilePath is already `string | null | undefined` (hook extracts with `?.path ?? null`),
-  and `undefined ?? null` evaluates to `null`. Improves code clarity over `selectedFilePath || null`.
-- **absoluteFilePath computation**: Uses `workspace.workspace_path` (base) + relative `selectedFilePath`
-  to build full path for FileViewer. Path normalization removes trailing/leading slashes to avoid
-  double-slashes. Computed unconditionally (cheap string op), only used when `filterMode === "all"`.
-- **cn() still needed**: Tab button styling uses `cn()` for conditional class merging (active vs inactive
-  state). Necessary for proper twMerge resolution of variants.
+- `dispatch()` = validated transition; `setSession()` = recovery bypass for external observation.
+- `handleStop()` dispatches STOP first (optimistic), then awaits IPC — avoids UI stuck in "active".
+- `STREAM_READY` requires `current.udid === event.udid` — prevents start/stop race.
 
 ## Framer Motion Patterns (Confirmed)
 
@@ -177,157 +121,25 @@
 
 ## Global queryClient Defaults (Confirmed)
 
-- `refetchOnWindowFocus: false` globally in `queryClient.ts` — explicitly documented as critical
-  to prevent typing lag. Overriding to `true` per-query is acceptable only for git diff queries
-  (workspace.queries.ts does this intentionally). External status poll queries (ai-status.queries.ts)
-  should NOT override to `true` — the Tauri WebView "window focus" fires on every popover open/close,
-  causing redundant network requests to external URLs.
+- `refetchOnWindowFocus: false` globally in `queryClient.ts` — critical to prevent typing lag.
+  `refetchOnWindowFocus: true` only acceptable for git diff queries (intentional).
 
 ## CORS / External Fetch Patterns
 
-- Tauri WebView uses WKWebView on macOS with a custom `tauri://localhost` origin.
-  Statuspage.io APIs (`status.claude.com`, `status.openai.com`) include permissive CORS headers
-  (`Access-Control-Allow-Origin: *`) so fetches work from the WebView in practice.
-  This is a third-party dependency — if those headers are removed, fetches silently fail in
-  production with a CORS error. The `retry: 1` + `"none"` fallback in the queries is appropriate
-  mitigation, but there is no way to distinguish CORS errors from genuine outages.
+- Statuspage.io APIs include `Access-Control-Allow-Origin: *` — works from WKWebView.
+  Third-party dependency: if headers are removed, fetches silently fail with CORS error.
 
 ## Design Token Completeness
 
-- `bg-accent-green`, `bg-accent-gold`, `bg-accent-red` ARE valid Tailwind tokens — defined in
-  `global.css` `@theme` block as `--color-accent-green`, `--color-accent-gold`, `--color-accent-red`.
-  Not hardcoded colors; they route through CSS variables to theme values.
-- `bg-warning`, `bg-success`, `text-warning` ARE valid — `--color-warning` and `--color-success`
-  defined in `@theme` block (lines 30, 32 of global.css). Safe to use in action button variants.
+- `bg-accent-green`, `bg-accent-gold`, `bg-accent-red` ARE valid — defined in `@theme`.
+- `bg-warning`, `bg-success`, `text-warning` ARE valid — `--color-warning`/`--color-success` in `@theme`.
 
-## Error Classification + Session Writer Patterns (Confirmed)
+## Content Panel Redesign Pattern (Confirmed)
 
-- `classifyStopReason` in `error-classifier.ts`: maps SDK `stop_reason` to `ClassifiedError | null`.
-  `"end_turn"` and `"stop_sequence"` return `null` (normal). `"max_tokens"` → `context_limit`.
-  Unknown stop reasons (future SDK variants) also return `null` (safe default).
-- `classifyStopReason` is called INSIDE the message loop (on `type === "assistant"` messages),
-  NOT in the catch block. This is the correct placement — the SDK does not throw for max_tokens,
-  it just sets stop_reason on the message.
-- `session-writer.ts` stores flat content arrays for normal messages, but still writes
-  `{ message: { stop_reason: "cancelled" }, blocks: [...] }` for cancelled turns so the
-  frontend can detect cancellation from DB content after reload.
-- `normalizeContentBlocks` in `session.queries.ts` retains the envelope detection shim for backward
-  compat with old DB rows. The shim key: `"message" in blocks && "blocks" in blocks`.
-- `AssistantTurn.tsx` reads `stop_reason` via `JSON.parse(summaryMessage.content).message?.stop_reason`.
-  New cancelled turns carry the cancelled envelope, so "Turn interrupted" renders correctly.
-  For non-cancelled rows (flat arrays), `parsed.message` is `undefined` → `stopReason` is `null`.
-- `onStop` is declared in `ChatProps` but NOT destructured in `Chat.tsx` function body — dead prop.
-  `onStop` is passed in by `SessionPanel` at call sites but never used inside Chat (only MessageInput uses it).
-- New error patterns added: billing/subscription → auth; 5xx → network (retryable, 5s); image dimension
-  limit, too large, max turns, output token limit, budget exceeded → context_limit.
-- Tests for new patterns in `error-classifier.ts` are MISSING for billing, 5xx, too-large, and
-  budget-exceeded cases (only `classifyStopReason` tests were added, not the new `classifyError` patterns).
+- `AllFilesDiffViewer`: `hideHeader?: boolean` prop (default false) for embedding in CodePanelContent.
+- Both Changes/Files tabs: content | 1px separator | tree (220px fixed) layout.
 
-## Chat Auto-Scroll + Virtualization Architecture (Confirmed)
+## See Also
 
-- `useAutoScroll` uses a single `isPausedRef` bool + `ResizeObserver` on `container.firstElementChild`
-  (the content wrapper). Disengagement is wheel-only (never on scroll events), re-engagement is scroll-only.
-- `syncGeometry()` increments `skipGrowthCountRef.current += 3` to absorb the burst of ResizeObserver
-  callbacks after prepend scroll restoration. The counter is decremented per-callback. No other side effects.
-- **ResizeObserver firstElementChild bug (KNOWN)**: The ResizeObserver effect runs once on mount and
-  observes `container.firstElementChild` at that time. If `loading` starts as `true`, the firstElementChild
-  is the skeleton wrapper. When loading finishes and real content renders, the skeleton unmounts and the
-  content wrapper becomes the new firstElementChild — but the ResizeObserver is still observing the
-  now-unmounted skeleton. Auto-scroll via ResizeObserver does NOT work for the first streaming session
-  after a loading transition. The message-count-change effect (`messages` dep) still fires on arrival
-  of the first new message, but content growth within a streaming message is missed until the user
-  sends another message (causing re-render and scroll via other paths).
-- Counter-based animation (`maxAnimatedTurnIndex` ref): `shouldAnimate` requires BOTH conditions:
-  `turnIndex === turns.length - 1` AND `turnIndex > maxAnimatedTurnIndex.current`. Animation fires
-  ONLY for the absolute last turn.
-- **Initial load bug**: Counter starts at -1. During initial render the loop increments it item-by-item,
-  so by the time the last item is processed, `counter = turns.length - 2`, making `shouldAnimate = true`
-  for the last turn. The comment says all initial turns should skip animation, but the code causes the
-  last turn to animate on initial load. Cosmetic bug. Fix: pre-seed `maxAnimatedTurnIndex.current`
-  to `turns.length - 2` before the `getVirtualItems().map()` call when turns are being loaded for the
-  first time (not streaming new ones).
-- **Prepend re-animation bug**: After a prepend, all indices shift up. The last virtual item (now at a
-  higher index than the old counter) satisfies `shouldAnimate` and re-animates. Minor UX glitch.
-- The counter is a ref, mutated inside the `.map()` render callback. Intentional and safe (React allows
-  ref mutation during render), matching Cursor's maxAnimatedPairIndex pattern.
-- `onStop` prop is declared in `ChatProps` interface but is NOT destructured in `Chat`'s function
-  signature — dead prop. TypeScript does not error on unused props in a destructuring.
-- `chat-item-enter` class plays `chatItemEnter` (opacity 0→1, translateY 8px→0, 300ms ease-out-quart `both`).
-- Global `mouseDown` module-level variable in `useAutoScroll.ts` is shared across ALL hook instances.
-  Acceptable (one Chat visible at a time). Would be a bug if two simultaneous Chat instances competed.
-- Virtual items: absolutely positioned with `top:0, transform:translateY(virtualItem.start)`.
-  Height set to `virtualizer.getTotalSize()`. measureElement ref + `data-index` enables auto-measurement.
-  All correct per TanStack Virtual v3 spec.
-- Spacing uses padding classes (not margin) because absolutely positioned items don't affect layout
-  with margins — padding IS included in getBoundingClientRect().height for measurement. Correct.
-- Error/working indicators rendered BELOW the virtual container in normal flow (inside the `pb-32`
-  content wrapper). They are measured by ResizeObserver as part of the wrapper height. Correct.
-- `RetryCountdown`: `useState` initializer only runs on mount. If `durationMs` prop changes after
-  mount, `remaining` is NOT reset — latent bug if durationMs is unstable.
-
-## PRStatus / GhCliStatus Patterns (Confirmed)
-
-- `PRStatus.pr_url` is optional (`pr_url?: string`). Falling back to `""` on undefined produces
-  `href=""` in a Tauri WebView which navigates to `tauri://localhost/` — silent app reload. Always
-  guard: use `pr_url ?? null` and skip rendering the anchor when null.
-- `PRStatus.pr_state` includes `"closed"` (abandoned PR, not merged). Failing to handle this case
-  causes the state machine to fall through to actionable states (Fix CI, Resolve Conflicts) on a
-  dead branch — prompting the agent to work on an already-closed PR.
-- `ghStatus` being `null`/`undefined` (TanStack Query loading) should be treated as "unknown, do
-  not surface action buttons" — not as "gh is available." The guard `if (ghStatus && ...)` silently
-  passes null/undefined through to PR state evaluation.
-- `derivePRActionState` in `src/features/workspace/lib/prState.ts` is the single source of truth
-  for PR state machine. Pure function, no tests exist yet — high-value test target.
-- `PRActionState` discriminated union: 11 variants (added `closed` and `error`). `match().exhaustive()`
-  used in PRActions.tsx main render. PRLink uses a non-exhaustive if-chain guard (early return for
-  `gh_unavailable`, `no_pr`, `error`) — this remains a type-safety gap when new variants are added.
-- `prUrl = prStatus.pr_url ?? ""` in `derivePRActionState` (line 75). The `""` fallback still produces
-  `href=""` → `tauri://localhost/` reload risk, BUT `PRLink` filters on `!= "gh_unavailable" | "no_pr" | "error"`
-  so the only states that render the anchor are states where `pr_url` is always set by the backend (has_pr=true path).
-  Risk is low in practice but the type system doesn't enforce it (string, not string & URL).
-- `FAILING_CONCLUSIONS` and `PENDING_STATES` sets are defined INSIDE the request handler function
-  (inside the `app.get(...)` callback), so they are re-created on every request. Move to module scope.
-- `lastError` logic: `runGh` returns only `'unknown'` for non-specific errors, so the check
-  `lastError === 'unknown' ? 'network' : null` always maps to `'network'` when set. Correct but
-  the conditional is redundant — could just be `lastError ? 'network' : null`.
-- CI `hasPending` check has a subtle issue: when `c.conclusion == null` AND `PENDING_STATES.has(c.state)`
-  are both truthy, the OR short-circuits at `c.conclusion == null`. This is correct for in-progress checks.
-  However, a check with `conclusion === null` and `state` NOT in PENDING_STATES (e.g. a weird state)
-  would still mark it pending — acceptable given the unknown = pending safety heuristic.
-- `query.state.data` in `usePRStatus` refetchInterval callback is cast to a loose object type instead
-  of `PRStatus | null`. Should use `import type { PRStatus }` and cast to `PRStatus | null | undefined`.
-- `review_required` and `approved` review statuses are not mapped to PRActionState variants. They both
-  fall through to `awaiting_review`. This is intentional (safest default) but `review_required` could
-  deserve its own state in a future iteration.
-
-## Border Radius System (10-Token Scale, Confirmed)
-
-- Token scale: 2xs(2px) → xs(4px) → sm(6px) → md(8px) → lg(10px) → xl(12px) → 2xl(16px) → 3xl(20px) → 4xl(24px) → full(9999px)
-- Two-layer: @theme defines `--radius-*: calc(var(--radius-*-base) * var(--corner-radius-scale))`. Base values + scale live in :root.
-- Squircle @supports block sets `--corner-radius-scale: 1.25` globally (ALL tokens scale).
-  The 1-2px inflation on small radii is imperceptible.
-- `corner-shape: superellipse(1.5)` applied to .rounded-sm through .rounded-4xl in the @supports block.
-  2xs/xs are too small to benefit; full is a pill.
-- Elements consuming `var(--radius-*)` directly in CSS (scrollbars, diff components, markdown, sonner toast)
-  get the inflated radius without squircle — accepted as imperceptible (1-2.5px delta).
-  `corner-shape` cannot apply to `::-webkit-scrollbar-thumb` pseudo-elements anyway.
-- Legacy `--radius: 0.5rem` kept in :root for backward compat. `sonner.tsx` migrated to `--radius-md`.
-- All UI components fully migrated from `rounded-md` to semantic tokens (rounded-lg/xl/2xl etc.).
-- `scroll-area.tsx`: `rounded-[inherit]` is the only remaining arbitrary rounded value — correct and intentional.
-- `border-radius: 0` in global.css is the only non-token border-radius — correct and intentional.
-- Old `calc(var(--radius) ± Npx)` expressions fully removed from @theme — no orphans remain.
-- `border-radius 280ms` transition on `.tauri [data-slot="main-content"]` is a pre-existing violation
-  of the "animate only transform/opacity" rule. Not introduced by the radius system changes.
-
-## Sidecar Resume / AgentSessionId Patterns (New)
-
-- `agent_session_id` column lives in `sessions` table (shared schema). Represents the Claude SDK's
-  internal conversation ID — not the app's own `sessions.id`. Required for `resume:` in SDK options.
-- `agentSessionIdCaptured` flag on `SessionState` is a one-shot per generator lifecycle — resets
-  automatically because a fresh `newSession` object never sets it (undefined = falsy).
-- `lookupAgentSessionId` returns null on DB error (graceful fallback to fresh session).
-- `reconcileStuckSessions` must be called AFTER DB init but BEFORE socket starts accepting connections.
-- `saveAgentSessionId` correctly does NOT call `notifyBackend` — internal bookkeeping only.
-- `options = { ...options, resume: ... }` spread in processWithGenerator creates a new object, safe.
-- Double `updated_at` write in `saveAgentSessionId`: explicit write is redundant because the
-  `update_sessions_updated_at` AFTER UPDATE trigger overwrites it anyway. Harmless.
+- `patterns-deep.md` — overflow notes: error classification, chat virtualization, PRStatus, border radius, sidecar resume
+- `message-envelope-pattern.md` — session message envelope/flat array patterns

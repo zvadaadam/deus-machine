@@ -157,6 +157,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Sentry DSNs — baked into binaries at compile/build time
+          SENTRY_DSN_RUST: ${{ secrets.SENTRY_DSN_RUST }}
+          SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
           tagName: ${{ needs.validate-and-bump.outputs.tag }}
           releaseName: ${{ needs.validate-and-bump.outputs.tag }}
@@ -176,6 +181,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Sentry DSNs — baked into binaries at compile/build time
+          SENTRY_DSN_RUST: ${{ secrets.SENTRY_DSN_RUST }}
+          SENTRY_DSN_NODE: ${{ secrets.SENTRY_DSN_NODE }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
           # tagName, releaseName, releaseBody deliberately omitted to skip release creation
           args: --target aarch64-apple-darwin

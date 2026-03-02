@@ -51,12 +51,16 @@ impl BackendManager {
         println!("[BACKEND] Starting Node.js backend at {}", backend_path.display());
 
         // Spawn backend with stdout captured to read the assigned port
-        let mut child = Command::new("node")
-            .arg(&backend_path)
+        let mut cmd = Command::new("node");
+        cmd.arg(&backend_path)
             .env("DATABASE_PATH", db_path)
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
+            .stderr(Stdio::inherit());
+        // Forward Sentry DSN to Node.js backend (set at build time, not hardcoded)
+        if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
+            cmd.env("SENTRY_DSN", dsn);
+        }
+        let mut child = cmd.spawn()
             .context(format!("Failed to start backend at {}", backend_path.display()))?;
 
         println!("[BACKEND] Backend started with PID: {}", child.id());
