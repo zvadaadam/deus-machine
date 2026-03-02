@@ -137,10 +137,11 @@
 ## Analytics (PostHog) Patterns
 
 - Full details in `analytics-patterns.md`
-- Consent model: OPT-OUT (`analytics_enabled !== false` = default ON). Comment in `shared/types/settings.ts`
-  incorrectly says "opt-in" — it is opt-out by design.
-- `app_launched` fires in `useAnalyticsConsent` whenever `enabled` transitions null→true or false→true.
-  User who disables then re-enables analytics will trigger a second `app_launched`. Needs a one-shot guard.
+- Consent model: OPT-OUT (`analytics_enabled !== false` = default ON). Comment in `settings.ts` fixed.
+- `_enabled` in `track.ts` defaults to `false` (consent-first). No pre-consent tracking window.
+- `app_launched` guarded by `appLaunchTracked` ref — fires once per app lifecycle.
+- `onboarding_started` guarded by `onboardingTrackedRef` — StrictMode-safe.
+- Analytics toggle in GeneralSection.tsx awaits `saveSetting` and reverts on failure.
 - `VITE_PUBLIC_POSTHOG_KEY` in `.env.example` is safe to commit — PostHog ingestion keys are write-only.
 - `posthog-js/react` is a subpath export of `posthog-js` — no separate dep needed.
 
