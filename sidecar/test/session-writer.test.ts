@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock setup ───────────────────────────────────────────────────────────
 
-const { mockDbRun, mockDbGet, mockDbPrepare } = vi.hoisted(() => {
+const { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare } = vi.hoisted(() => {
   const mockDbRun = vi.fn();
   const mockDbGet = vi.fn();
-  const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet }));
-  return { mockDbRun, mockDbGet, mockDbPrepare };
+  const mockDbAll = vi.fn().mockReturnValue([]);
+  const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet, all: mockDbAll }));
+  return { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare };
 });
 
 vi.mock("../db/index", () => ({
