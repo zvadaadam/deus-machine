@@ -597,52 +597,15 @@
    then the element is a plain div with no ongoing cost.
    Respects prefers-reduced-motion via the global media query.
 
-   "Confident Arrival" — opacity front-loads (readable at 35%), transform
-   settles with ease-out-quint. Content appears fast, drifts into place.
-   Design consensus: Ive (timing) + Vignelli (split opacity). */
+   Turn-level entrance: slide-up + fade. Inspired by Cursor's 8px/0.4s
+   entrance with elastic easing. Per-turn (not per-message) so it fires
+   once at conversation boundaries, not during mid-turn streaming.
+   Smooth auto-scroll runs concurrently — no conflict since the animation
+   is on the inner content div, not the virtualizer's positioning div. */
 @keyframes chatItemEnter {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  35% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.chat-item-enter {
-  animation: chatItemEnter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-@keyframes toolUseEnter {
-  0% {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  40% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tool-use-enter {
-  animation: toolUseEnter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-/* Tool group header entrance — replaces Framer Motion m.div.
-   Matches the previous { opacity: 0, y: 6 } → { opacity: 1, y: 0 } animation.
-   Plays once on mount, then the element is a plain div. */
-@keyframes toolGroupHeaderFadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -650,8 +613,29 @@
   }
 }
 
+.chat-item-enter {
+  animation: chatItemEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Per-tool entrance animation removed. Turn-level chatItemEnter covers
+   entrance. Per-tool translateY fired on every new tool mount during
+   streaming, compounding into visual noise. Class kept empty so existing
+   references don't error. */
+.tool-use-enter {
+}
+
+/* Tool group header entrance — opacity only, no translateY */
+@keyframes toolGroupHeaderFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .tool-group-header-enter {
-  animation: toolGroupHeaderFadeIn 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: toolGroupHeaderFadeIn 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Tiered thinking animations - organic breathing effect */
@@ -1259,6 +1243,14 @@ body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+/* Contain scroll events in nested scrollables within the chat.
+   Prevents wheel events at scroll boundary from chaining to the main
+   chat container and triggering false pause detection.
+   Replaces the shouldPauseOnWheel DOM walk in useAutoScroll. */
+.chat-scroll-contain {
+  overscroll-behavior: contain;
 }
 
 body {

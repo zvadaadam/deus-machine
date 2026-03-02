@@ -7,7 +7,9 @@
 
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
-import { BlockRenderer } from "./blocks";
+import { BlockRenderer, ToolGroupBlock } from "./blocks";
+import { groupToolStreaks, type GroupedItem } from "./utils/groupTools";
+import { match } from "ts-pattern";
 
 import { cn } from "@/shared/lib/utils";
 import { Copy, ChevronDown, ChevronUp } from "lucide-react";
@@ -28,6 +30,7 @@ interface MessageItemProps {
   isLatestAssistant?: boolean; // Whether this is the latest assistant message (for auto-expanding)
   isLastInTurn?: boolean; // Whether this is the last message in its assistant turn
   isWorking?: boolean; // Whether AI is currently working
+  isStreamingTurn?: boolean; // Whether this message belongs to the turn currently being generated
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -35,6 +38,7 @@ export const MessageItem = memo(function MessageItem({
   isLatestAssistant = false,
   isLastInTurn = false,
   isWorking = false,
+  isStreamingTurn = false,
 }: MessageItemProps) {
   const { parseContent } = useSession();
   const { copy, copied } = useCopyToClipboard();
@@ -106,20 +110,9 @@ export const MessageItem = memo(function MessageItem({
           ? block.id
           : `${message.id}:${index}`;
 
-      // Determine weight for text blocks (now considers TURNS, not just individual messages):
-      // A TURN = consecutive messages with the same role (e.g., multiple assistant messages)
-      //
-      // Rules:
-      // 1. If this message is NOT the last in its turn → all text blocks muted
-      // 2. If this message IS the last in its turn:
-      //    - Turn completed (old turn OR latest turn when not working) → last text block white
-      //    - Turn in progress (latest turn while working) → all text blocks muted
-      const isTurnCompleted = !isLatestAssistant || (isLatestAssistant && !isWorking);
-      const isLastTextBlock =
-        message.role === "assistant" &&
-        isLastInTurn && // Only last message in turn can have white text
-        isTurnCompleted &&
-        index === lastTextBlockIndex;
+      // A text block is "streaming" when it is the last text block in the last
+      // message of the actively-streaming turn. Everything else = full opacity.
+      const isBlockStreaming = isStreamingTurn && isLastInTurn && index === lastTextBlockIndex;
 
       return (
         <BlockRenderer
@@ -127,7 +120,7 @@ export const MessageItem = memo(function MessageItem({
           block={block}
           index={index}
           role={message.role}
-          isLastTextBlock={isLastTextBlock}
+          isStreaming={isBlockStreaming}
         />
       );
     });
@@ -170,8 +163,8 @@ export const MessageItem = memo(function MessageItem({
         }
       : { container: "mr-auto", maxWidth: "max-w-full" };
 
-  // Find last text block index for weight (assistant messages only).
-  // Memoized to avoid scanning the blocks array on every re-render.
+  // Find last text block index — used to identify which block is actively streaming.
+  // Only the last text block in the last message of the streaming turn gets dimmed.
   let lastTextBlockIndex = -1;
   if (Array.isArray(contentBlocks) && message.role === "assistant") {
     const blocks = contentBlocks as (ContentBlock | string)[];
@@ -184,7 +177,15 @@ export const MessageItem = memo(function MessageItem({
     }
   }
 
-  // Assistant messages - use BlockRenderer with weight
+  // Group consecutive read-only tool blocks for compact rendering.
+  // During streaming, trailing streaks render individually (isSealed=false).
+  // When text follows or the turn completes, they collapse into a header.
+  const groupedBlocks = useMemo(() => {
+    if (message.role !== "assistant" || !Array.isArray(contentBlocks)) return null;
+    return groupToolStreaks(contentBlocks as (ContentBlock | string)[]);
+  }, [message.role, contentBlocks]);
+
+  // Assistant messages - grouped tool streaks + individual blocks
   if (message.role === "assistant") {
     return (
       <div
@@ -197,8 +198,36 @@ export const MessageItem = memo(function MessageItem({
           "transition-colors duration-100 ease-in motion-reduce:transition-none"
         )}
       >
-        {Array.isArray(contentBlocks) ? (
-          renderContentBlocks(contentBlocks as (ContentBlock | string)[])
+        {groupedBlocks ? (
+          groupedBlocks.map((item: GroupedItem) =>
+            match(item)
+              .with({ kind: "single" }, (s) => {
+                const { block, originalIndex } = s;
+                const key =
+                  typeof block === "object" && block?.type === "tool_use"
+                    ? (block as ContentBlock & { id: string }).id
+                    : `${message.id}:${originalIndex}`;
+                const isBlockStreaming =
+                  isStreamingTurn && isLastInTurn && originalIndex === lastTextBlockIndex;
+                return (
+                  <BlockRenderer
+                    key={key}
+                    block={block}
+                    index={originalIndex}
+                    role="assistant"
+                    isStreaming={isBlockStreaming}
+                  />
+                );
+              })
+              .with({ kind: "streak" }, (s) => {
+                // Trailing streaks stay open during streaming, collapse when sealed
+                const isSealed = !s.isTrailing || !(isLatestAssistant && isWorking);
+                return (
+                  <ToolGroupBlock key={s.blocks[0].id} blocks={s.blocks} isSealed={isSealed} />
+                );
+              })
+              .exhaustive()
+          )
         ) : (
           // Fallback for non-array content
           <div className="text-base leading-relaxed">
@@ -213,13 +242,7 @@ export const MessageItem = memo(function MessageItem({
 
   // User messages - iMessage style bubble, aligned right
   return (
-    <div
-      key={message.id}
-      className={cn(
-        "group relative flex flex-col items-end transition-opacity duration-200",
-        isWorking && "opacity-60"
-      )}
-    >
+    <div key={message.id} className="group relative flex flex-col items-end">
       {/* Message card */}
       <div
         className={cn(

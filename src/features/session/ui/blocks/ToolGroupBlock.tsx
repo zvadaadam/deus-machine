@@ -15,10 +15,10 @@
 
 import { useState, useMemo, memo } from "react";
 import { ChevronRight, Layers } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock as ToolUseBlockType } from "@/shared/types";
-import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
+
 import { ToolUseBlock } from "./ToolUseBlock";
 import { useSession } from "../../context";
 
@@ -27,7 +27,7 @@ interface ToolGroupBlockProps {
   isSealed: boolean;
 }
 
-const expandTransition = { duration: 0.15, ease: [0.165, 0.84, 0.44, 1] as const };
+const expandTransition = { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] as const };
 
 /**
  * Memoized: blocks is a stable array ref from groupToolStreaks (only changes
@@ -41,13 +41,13 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
   const { toolResultMap } = useSession();
 
   // Show header only for sealed streaks with 2+ tools.
-  // Single-tool streaks render as if there's no wrapper (invisible).
+  // During streaming (unsealed), tools render individually — no header.
+  // When sealed (text follows or turn completes), header appears and tools collapse.
   const showHeader = isSealed && blocks.length >= 2;
 
   // Expand state: manual override (null = use default).
   // Default: collapsed when header shows, expanded when no header.
   // When user toggles, manualExpanded locks their preference.
-  // No setState in effects — auto-collapse happens naturally via derived state.
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const isExpanded = manualExpanded !== null ? manualExpanded : !showHeader;
 
@@ -70,7 +70,6 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
           <button
             type="button"
             onClick={() => {
-              if (!isExpanded) suppressAutoScrollOnExpand();
               setManualExpanded(!isExpanded);
             }}
             className={cn(
@@ -131,17 +130,17 @@ export const ToolGroupBlock = memo(function ToolGroupBlock({
           When expanded, they mount with a subtle opacity fade. */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            initial={showHeader ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <m.div
+            initial={showHeader ? { opacity: 0, height: 0 } : false}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
             transition={expandTransition}
-            className="flex flex-col gap-0.5"
+            className="flex flex-col gap-0.5 overflow-hidden"
           >
             {blocks.map((block) => (
               <ToolUseBlock key={block.id} block={block} toolResult={toolResultMap.get(block.id)} />
             ))}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

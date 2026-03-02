@@ -55,7 +55,7 @@ export function UnifiedDiff({
         newFile={newFile}
         options={diffOptions}
         className="diffs-theme"
-        style={{ maxHeight, overflow: "auto" }}
+        style={{ maxHeight, overflow: "auto", overscrollBehavior: "contain" }}
       />
     </div>
   );

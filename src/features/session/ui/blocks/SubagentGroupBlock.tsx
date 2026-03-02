@@ -19,7 +19,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
 import type { ToolUseBlock, ToolResultBlock, Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
-import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
+
 import { SubagentMessageList } from "./SubagentMessageList";
 import { useSession } from "../../context";
 
@@ -68,7 +68,6 @@ export function SubagentGroupBlock({
       <button
         type="button"
         onClick={() => {
-          if (!isExpanded) suppressAutoScrollOnExpand();
           setIsExpanded(!isExpanded);
         }}
         className={cn(

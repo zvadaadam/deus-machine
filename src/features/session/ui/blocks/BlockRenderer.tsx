@@ -22,18 +22,18 @@ interface BlockRendererProps {
   block: ContentBlock | string;
   index: number;
   role?: MessageRole;
-  isLastTextBlock?: boolean; // For text weight (muted vs normal)
+  isStreaming?: boolean; // true only for the text block currently being generated
 }
 
 /**
- * Memoized: block is a parsed JSON object (stable ref), index/role/isLastTextBlock
+ * Memoized: block is a parsed JSON object (stable ref), index/role/isStreaming
  * are primitives. Prevents re-renders of sibling blocks when new content streams in.
  */
 export const BlockRenderer = memo(function BlockRenderer({
   block,
   index,
   role,
-  isLastTextBlock,
+  isStreaming,
 }: BlockRendererProps) {
   const { toolResultMap } = useSession();
   // Handle null/undefined blocks gracefully
@@ -44,8 +44,8 @@ export const BlockRenderer = memo(function BlockRenderer({
     return null;
   }
 
-  // Determine text weight: last text block in completed turn is 'normal' (white), others are 'muted' (subtle)
-  const weight = isLastTextBlock ? "normal" : "muted";
+  // Streaming text = muted (60% opacity). Everything else = normal (full opacity).
+  const weight = isStreaming ? "muted" : "normal";
 
   // Handle string blocks (convert to text block)
   if (typeof block === "string") {
