@@ -299,7 +299,7 @@ impl SocketManager {
                                                 let category = params.get("category")
                                                     .and_then(|v| v.as_str())
                                                     .unwrap_or("?");
-                                                format!("session={} category={} error={}", short_id, category, &error[..error.len().min(80)])
+                                                format!("session={} category={} error={}", short_id, category, error.chars().take(80).collect::<String>())
                                             }
                                             _ => format!("session={}", short_id),
                                         };

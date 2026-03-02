@@ -103,7 +103,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
     const tHandleQuery = Date.now();
-    console.log(`[TIMING][handleQuery] START session=${sessionId} prompt=${prompt.slice(0, 80)}...`);
+    console.log(`[TIMING][handleQuery] START session=${sessionId} promptLength=${prompt.length}`);
     if (blockIfNotInitialized(sessionId)) return;
 
     const session = getSession(sessionId);
@@ -450,6 +450,9 @@ export class ClaudeAgentHandler implements AgentHandler {
     // after max_tokens, so without this guard the error would be clobbered.
     let stopReasonError = false;
 
+    // Declared outside try so the catch block can access it for error diagnostics.
+    let messageCount = 0;
+
     try {
       // Build environment using shared env-builder
       const tEnvStart = Date.now();
@@ -537,7 +540,6 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Stream messages back to the frontend and persist to DB.
       // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
       // are in the DB when the frontend receives the event and fetches them.
-      let messageCount = 0;
       let firstMessageTime: number | null = null;
       const tStreamStart = Date.now();
       for await (const message of queryResult) {
