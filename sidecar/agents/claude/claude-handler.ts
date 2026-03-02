@@ -660,15 +660,22 @@ export class ClaudeAgentHandler implements AgentHandler {
       // auth, rate_limit, context_limit, etc.) flows through to the
       // frontend which already renders the correct UI for each category.
 
+      // Only act on this error if this generator still owns the session.
+      // A rapid re-query can replace the session before the catch runs;
+      // writing stale cancellation/error messages would pollute the new run.
+      const ownsSession = !getSession(sessionId) || getSession(sessionId) === session;
+
       if (classified.category === "abort") {
-        // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
-        FrontendClient.sendMessage({
-          id: sessionId,
-          type: "message",
-          agentType: "claude",
-          data: { type: "cancelled" },
-        });
-      } else {
+        if (ownsSession) {
+          // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
+          FrontendClient.sendMessage({
+            id: sessionId,
+            type: "message",
+            agentType: "claude",
+            data: { type: "cancelled" },
+          });
+        }
+      } else if (ownsSession) {
         FrontendClient.sendError({
           id: sessionId,
           type: "error",
@@ -682,36 +689,38 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Persist error message so frontend can display it in the chat
       const isAbort = classified.category === "abort";
 
-      // Record cancellation in message history so the chat shows what happened
-      // and the model has context on resume ("previous turn was interrupted").
-      if (isAbort) {
-        const model = options?.model || "opus";
-        saveAssistantMessage(
-          sessionId,
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "" }],
-            stop_reason: "cancelled",
-          },
-          model
-        );
-      }
+      if (ownsSession) {
+        // Record cancellation in message history so the chat shows what happened
+        // and the model has context on resume ("previous turn was interrupted").
+        if (isAbort) {
+          const model = options?.model || "opus";
+          saveAssistantMessage(
+            sessionId,
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "" }],
+              stop_reason: "cancelled",
+            },
+            model
+          );
+        }
 
-      const statusResult = updateSessionStatus(
-        sessionId,
-        isAbort ? "idle" : "error",
-        isAbort ? null : classified.message,
-        isAbort ? null : classified.category
-      );
-      if (!statusResult.ok) {
-        // Session is now stuck — notify frontend so it can attempt recovery
-        FrontendClient.sendError({
-          id: sessionId,
-          type: "error",
-          error: `Session status update failed: ${statusResult.error}`,
-          agentType: "claude",
-          category: "db_write",
-        });
+        const statusResult = updateSessionStatus(
+          sessionId,
+          isAbort ? "idle" : "error",
+          isAbort ? null : classified.message,
+          isAbort ? null : classified.category
+        );
+        if (!statusResult.ok) {
+          // Session is now stuck — notify frontend so it can attempt recovery
+          FrontendClient.sendError({
+            id: sessionId,
+            type: "error",
+            error: `Session status update failed: ${statusResult.error}`,
+            agentType: "claude",
+            category: "db_write",
+          });
+        }
       }
     } finally {
       // Only clean up if this generator still owns the session.

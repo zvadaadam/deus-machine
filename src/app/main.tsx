@@ -1,8 +1,22 @@
+import * as Sentry from "@sentry/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "../global.css";
 import { reportError } from "@/shared/utils/errorReporting";
+
+// Initialize Sentry before anything else.
+// DSN is injected at build time via VITE_SENTRY_DSN env var (not hardcoded — open source repo).
+const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: import.meta.env.DEV ? "development" : "production",
+    release: `opendevs@${__APP_VERSION__}`,
+    sendDefaultPii: true,
+    enabled: !import.meta.env.DEV,
+  });
+}
 
 // Ensure Tauri class is applied (backup check - head script may run before __TAURI__ is available)
 if (

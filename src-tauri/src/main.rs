@@ -18,6 +18,22 @@ use opendevs_lib::{
 use opendevs_sim_core::manager::SimulatorSessions;
 
 fn main() {
+    // Initialize Sentry for panic capture and error monitoring.
+    // DSN read from SENTRY_DSN_RUST env var at compile time (not hardcoded — open source repo).
+    // Guard must live for the entire app lifetime — dropping it flushes pending events.
+    let _sentry_guard = sentry::init((
+        option_env!("SENTRY_DSN_RUST").unwrap_or(""),
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            // cfg!(dev) is set only by `tauri dev`, not by `tauri build --debug`
+            environment: Some(
+                if cfg!(dev) { "development" } else { "production" }.into(),
+            ),
+            send_default_pii: true,
+            ..Default::default()
+        },
+    ));
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
