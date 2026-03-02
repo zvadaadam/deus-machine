@@ -153,7 +153,7 @@ class UnifiedSidecar {
     // handleQuery is NOT awaited — the ACK returns immediately after validation.
     FrontendClient.onQuery(async (request) => {
       const tQueryReceived = Date.now();
-      console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} prompt=${request.prompt?.slice(0, 80)}...`);
+      console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`);
       const agent = getAgent(request.agentType);
       if (!agent) {
         return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
