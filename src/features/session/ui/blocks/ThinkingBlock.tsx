@@ -12,7 +12,7 @@ import { useState } from "react";
 import { Brain, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/shared/lib/utils";
-import { suppressAutoScrollOnExpand } from "@/features/session/hooks";
+
 import { ChatMarkdown } from "@/components/markdown";
 
 interface ThinkingBlockProps {
@@ -39,7 +39,6 @@ export function ThinkingBlock({ block, isStreaming = false }: ThinkingBlockProps
       <button
         type="button"
         onClick={() => {
-          if (!isExpanded) suppressAutoScrollOnExpand();
           setIsExpanded(!isExpanded);
         }}
         aria-expanded={isExpanded}

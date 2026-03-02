@@ -98,7 +98,7 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
             {/* Input */}
             <div>
               <div className="text-muted-foreground mb-1 text-xs font-semibold">Input:</div>
-              <pre className="bg-muted/60 border-border/60 max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
+              <pre className="bg-muted/60 border-border/60 chat-scroll-contain max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
                 {JSON.stringify(toolUse.input, null, 2)}
               </pre>
             </div>
@@ -117,7 +117,7 @@ export function DefaultToolRenderer({ toolUse, toolResult, isLoading }: ToolRend
                   </div>
                 ) : (
                   // Fallback: Show JSON for unknown structure
-                  <pre className="bg-muted/60 border-border/60 max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
+                  <pre className="bg-muted/60 border-border/60 chat-scroll-contain max-h-[200px] overflow-x-auto overflow-y-auto rounded-lg border p-3 font-mono text-xs">
                     {typeof toolResult.content === "object"
                       ? JSON.stringify(toolResult.content, null, 2)
                       : toolResult.content}

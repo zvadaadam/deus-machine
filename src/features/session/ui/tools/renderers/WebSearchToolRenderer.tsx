@@ -62,7 +62,7 @@ export function WebSearchToolRenderer({ toolUse, toolResult, isLoading }: ToolRe
                 "text-foreground font-mono text-sm leading-5",
                 "overflow-x-auto rounded-md px-3 py-2",
                 "bg-muted/50 border-border border",
-                "max-h-96 overflow-y-auto"
+                "chat-scroll-contain max-h-96 overflow-y-auto"
               )}
             >
               <pre className="m-0 break-words whitespace-pre-wrap">{result}</pre>

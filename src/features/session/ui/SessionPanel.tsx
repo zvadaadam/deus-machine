@@ -145,16 +145,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       loadOlderMutation.mutate({ sessionId, beforeSeq: firstSeq });
     }, [loadOlderMutation, messages, sessionId]);
 
-    // DEBUG: Log session data
-    if (import.meta.env.DEV) {
-      console.log("[SessionPanel] DEBUG:", {
-        sessionId,
-        messagesCount: messages.length,
-        loading,
-        sessionStatus,
-        firstMessage: messages[0]?.id,
-      });
-    }
+    // DEBUG: disabled — was flooding console, making [autoscroll] logs unreadable
+    // if (import.meta.env.DEV) {
+    //   console.log("[SessionPanel] DEBUG:", { sessionId, messagesCount: messages.length, loading, sessionStatus });
+    // }
 
     // Ref to MessageInput for adding files from panel-level drag & drop
     const messageInputRef = useRef<MessageInputRef>(null);
@@ -261,6 +255,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const [messageInput, setMessageInput] = useState("");
     const [thinkingLevel, setThinkingLevel] = useState("NONE");
     const [model, setModel] = useState(initialModel ?? "opus");
+    // Counter incremented when the human clicks Send — triggers auto-scroll resume
+    const [userSendCount, setUserSendCount] = useState(0);
     const runtimeModelId = getRuntimeModelId(model);
     const modelAgentType: RuntimeAgentType = getRuntimeAgentTypeForModel(model);
 
@@ -306,6 +302,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onMessageSent: () => {
         setMessageInput("");
         messageInputRef.current?.clearPastedContent();
+        setUserSendCount((c) => c + 1);
         onSessionStarted?.();
       },
     });
@@ -434,6 +431,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
+              userSendCount={userSendCount}
             />
 
             {/* Fade overlay: smoothly transitions chat scroll area into input */}
@@ -538,6 +536,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onRetryInNewChat={handleRetryInNewChat}
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
+                    userSendCount={userSendCount}
                   />
 
                   {/* Fade overlay: smoothly transitions chat scroll area into input */}
