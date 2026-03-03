@@ -107,6 +107,11 @@ export function TerminalPanel({
       if (next.size > MAX_CACHED_WORKSPACES) {
         for (const wsId of next.keys()) {
           if (wsId !== workspaceId) {
+            // Clean up initialCommands for evicted workspace's terminals
+            const evictedLayout = workspaceLayoutActions.getLayout(wsId);
+            for (const tab of evictedLayout.terminalTabs) {
+              initialCommandsRef.current.delete(tab.id);
+            }
             next.delete(wsId);
             break;
           }
