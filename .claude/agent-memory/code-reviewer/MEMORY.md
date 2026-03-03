@@ -177,7 +177,7 @@
 - `pendingTask` useEffect risk: if task queued just before workspace switch, the tab opens in the
   NEW workspace because `workspaceId` in deps reflects the current workspace at effect fire time.
 - Terminal.tsx `initialCommand` is in the main effect dep array but only consumed once at mount.
-  Safe in practice because `id` is globally unique (Date.now), so effect runs once per terminal.
+  Safe in practice because `id` is globally unique (`crypto.randomUUID()`), so effect runs once per terminal.
   Cleaner to exclude `initialCommand` from deps and snapshot it inside the effect.
 
 ## See Also
