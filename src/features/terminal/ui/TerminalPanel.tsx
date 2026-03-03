@@ -1,30 +1,163 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTerminalTaskStore, consumeTerminalTask } from "../store/terminalTaskStore";
-import { useWorkspaceLayoutStore, workspaceLayoutActions } from "@/features/workspace/store";
+import {
+  useWorkspaceLayoutStore,
+  workspaceLayoutActions,
+} from "@/features/workspace/store";
+import type { PersistedTerminalTab } from "@/features/workspace/store/workspaceLayoutStore";
 import { Terminal } from "./Terminal";
 
-interface TerminalTab {
-  id: string;
-  title: string;
-  initialCommand?: string;
-}
+// Cap the number of workspaces whose terminals stay alive simultaneously.
+// Beyond this, the oldest non-current workspace is evicted — its Terminal
+// components unmount, killing PTYs, disposing xterm, and tearing down
+// Tauri event listeners. Prevents O(N) pty-data fan-out at scale.
+const MAX_CACHED_WORKSPACES = 5;
 
 interface TerminalPanelProps {
   workspaceId: string;
   workspacePath: string;
+  /** Whether the terminal panel is the active (visible) right-side tab */
+  panelVisible?: boolean;
   onCollapse?: () => void;
 }
 
-export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: TerminalPanelProps) {
-  const [initialTab] = useState<TerminalTab>(() => ({
-    id: `terminal-${Date.now()}`,
-    title: "Terminal 1",
-  }));
-  const [tabs, setTabs] = useState<TerminalTab[]>(() => [initialTab]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(() => initialTab.id);
-  const [nextTerminalNum, setNextTerminalNum] = useState(2);
+/**
+ * Renders Terminal instances for a single workspace.
+ *
+ * Each workspace group uses its own Zustand selectors so it only re-renders
+ * when its workspace's terminal tabs change — not when other workspaces update.
+ * Non-current workspaces are CSS-hidden (visibility:hidden + absolute) to
+ * preserve xterm DOM and PTY processes across workspace switches.
+ */
+function WorkspaceTerminals({
+  workspaceId,
+  workspacePath,
+  isCurrent,
+  panelVisible,
+  initialCommandsRef,
+}: {
+  workspaceId: string;
+  workspacePath: string;
+  isCurrent: boolean;
+  panelVisible: boolean;
+  initialCommandsRef: React.MutableRefObject<Map<string, string>>;
+}) {
+  const tabs = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.terminalTabs ?? []
+  );
+  const activeTabId = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
+  );
+
+  return (
+    <>
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          className={
+            isCurrent && activeTabId === tab.id
+              ? "h-full w-full"
+              : "pointer-events-none invisible absolute h-full w-full"
+          }
+        >
+          <Terminal
+            id={tab.id}
+            workspacePath={workspacePath}
+            initialCommand={initialCommandsRef.current.get(tab.id)}
+            visible={panelVisible && isCurrent && activeTabId === tab.id}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+export function TerminalPanel({
+  workspaceId,
+  workspacePath,
+  panelVisible = true,
+  onCollapse,
+}: TerminalPanelProps) {
+  // Track all visited workspaces so their Terminal components stay mounted
+  // across workspace switches, preserving PTY processes and xterm history.
+  // Map<workspaceId, workspacePath> — entries accumulate as user visits workspaces.
+  const [visitedWorkspaces, setVisitedWorkspaces] = useState<Map<string, string>>(
+    () => new Map([[workspaceId, workspacePath]])
+  );
+
+  useEffect(() => {
+    setVisitedWorkspaces((prev) => {
+      const next = new Map(prev);
+
+      // Delete + re-insert to move revisited workspace to back (most recent)
+      if (next.has(workspaceId)) {
+        if (next.get(workspaceId) === workspacePath) {
+          // Already at correct path — just move to back for LRU ordering
+          next.delete(workspaceId);
+          next.set(workspaceId, workspacePath);
+          return next;
+        }
+        next.delete(workspaceId);
+      }
+      next.set(workspaceId, workspacePath);
+
+      // Evict oldest non-current workspace when over the cap
+      if (next.size > MAX_CACHED_WORKSPACES) {
+        for (const wsId of next.keys()) {
+          if (wsId !== workspaceId) {
+            next.delete(wsId);
+            break;
+          }
+        }
+      }
+
+      return next;
+    });
+  }, [workspaceId, workspacePath]);
+
+  // Read terminal tab state for the CURRENT workspace (tab bar rendering only)
+  const tabs = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.terminalTabs ?? []
+  );
+  const activeTabId = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.activeTerminalTabId ?? null
+  );
+  const nextTerminalNum = useWorkspaceLayoutStore(
+    (s) => s.layouts[workspaceId]?.nextTerminalNum ?? 1
+  );
+
+  // One-shot initial commands — keyed by globally-unique tab ID (UUID based).
+  // Not cleared on workspace switch since old workspace terminals stay mounted.
+  const initialCommandsRef = useRef<Map<string, string>>(new Map());
+
+  // Ensure at least one terminal tab exists for the current workspace
+  useEffect(() => {
+    if (tabs.length === 0) {
+      const id = `terminal-${crypto.randomUUID()}`;
+      workspaceLayoutActions.setTerminalTabState(
+        workspaceId,
+        [{ id, title: "Terminal 1" }],
+        id,
+        2
+      );
+    }
+  }, [workspaceId, tabs.length]);
+
+  // Helper to batch-update terminal state in the store
+  function updateTabs(
+    newTabs: PersistedTerminalTab[],
+    newActiveId: string | null,
+    newNextNum?: number
+  ) {
+    workspaceLayoutActions.setTerminalTabState(
+      workspaceId,
+      newTabs,
+      newActiveId,
+      newNextNum ?? nextTerminalNum
+    );
+  }
 
   // Watch for queued task commands from the task store (e.g. "bun run build" from header buttons)
   const pendingTask = useTerminalTaskStore((s) => s.pendingTask);
@@ -34,16 +167,18 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
     const task = consumeTerminalTask();
     if (!task) return;
 
-    const id = `task-${Date.now()}`;
-    const newTab: TerminalTab = {
+    // Read fresh state to avoid stale closure over render-time values
+    const { terminalTabs, nextTerminalNum: num } =
+      workspaceLayoutActions.getLayout(workspaceId);
+    const id = `task-${crypto.randomUUID()}`;
+    initialCommandsRef.current.set(id, task.command);
+    workspaceLayoutActions.setTerminalTabState(
+      workspaceId,
+      [...terminalTabs, { id, title: task.title }],
       id,
-      title: task.title,
-      initialCommand: task.command,
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(id);
-    setNextTerminalNum((n) => n + 1);
-  }, [pendingTask]);
+      num + 1
+    );
+  }, [pendingTask, workspaceId]);
 
   // Watch for pending terminal commands from the layout store (e.g. "claude login" from chat error)
   const pendingCommand = useWorkspaceLayoutStore(
@@ -57,43 +192,41 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
     const cmd = pendingCommand;
     workspaceLayoutActions.setPendingTerminalCommand(workspaceId, null);
 
-    const id = `terminal-${Date.now()}`;
-    const newTab: TerminalTab = {
+    // Read fresh state to avoid stale closure over render-time values
+    const { terminalTabs, nextTerminalNum: num } =
+      workspaceLayoutActions.getLayout(workspaceId);
+    const id = `terminal-${crypto.randomUUID()}`;
+    initialCommandsRef.current.set(id, cmd);
+    workspaceLayoutActions.setTerminalTabState(
+      workspaceId,
+      [...terminalTabs, { id, title: "Login" }],
       id,
-      title: "Login",
-      initialCommand: cmd,
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(id);
-    setNextTerminalNum((n) => n + 1);
+      num + 1
+    );
   }, [pendingCommand, workspaceId]);
 
   function addTerminal() {
-    const id = `terminal-${Date.now()}`;
-    const newTab: TerminalTab = {
+    const id = `terminal-${crypto.randomUUID()}`;
+    updateTabs(
+      [...tabs, { id, title: `Terminal ${nextTerminalNum}` }],
       id,
-      title: `Terminal ${nextTerminalNum}`,
-    };
-    setTabs([...tabs, newTab]);
-    setActiveTabId(id);
-    setNextTerminalNum(nextTerminalNum + 1);
+      nextTerminalNum + 1
+    );
   }
 
   function closeTab(tabId: string) {
     const newTabs = tabs.filter((t) => t.id !== tabId);
-    setTabs(newTabs);
-
+    let newActiveId = activeTabId;
     if (activeTabId === tabId) {
-      if (newTabs.length > 0) {
-        setActiveTabId(newTabs[newTabs.length - 1].id);
-      } else {
-        setActiveTabId(null);
-      }
+      newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
     }
+    initialCommandsRef.current.delete(tabId);
+    updateTabs(newTabs, newActiveId);
   }
 
   return (
     <div className="bg-background flex h-full flex-col">
+      {/* Tab bar — shows only the current workspace's tabs */}
       <div className="vibrancy-panel border-border/40 flex h-9 flex-shrink-0 items-center justify-between border-b">
         <div className="flex flex-1 items-center gap-0.5 overflow-x-auto px-2">
           {tabs.map((tab) => (
@@ -104,7 +237,7 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
                   ? "bg-background text-foreground font-medium"
                   : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => updateTabs(tabs, tab.id)}
             >
               <span>{tab.title}</span>
               <button
@@ -142,21 +275,25 @@ export function TerminalPanel({ workspaceId, workspacePath, onCollapse }: Termin
         )}
       </div>
 
+      {/* Terminal content — renders ALL visited workspaces' terminals,
+          CSS-hiding non-current ones to preserve PTY and xterm state.
+          Empty-state placeholder only shows for current workspace. */}
       <div className="relative flex-1 overflow-hidden">
-        {tabs.length === 0 ? (
+        {tabs.length === 0 && (
           <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
             Click + to open a terminal
           </div>
-        ) : (
-          tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`h-full w-full ${activeTabId === tab.id ? "block" : "hidden"}`}
-            >
-              <Terminal id={tab.id} workspacePath={workspacePath} initialCommand={tab.initialCommand} />
-            </div>
-          ))
         )}
+        {Array.from(visitedWorkspaces.entries()).map(([wsId, wsPath]) => (
+          <WorkspaceTerminals
+            key={wsId}
+            workspaceId={wsId}
+            workspacePath={wsPath}
+            isCurrent={wsId === workspaceId}
+            panelVisible={panelVisible}
+            initialCommandsRef={initialCommandsRef}
+          />
+        ))}
       </div>
     </div>
   );
