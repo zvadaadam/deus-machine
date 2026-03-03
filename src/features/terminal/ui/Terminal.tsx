@@ -12,6 +12,8 @@ interface TerminalProps {
   workspacePath: string;
   /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
+  /** Whether this terminal is visible (active tab AND panel visible). Used to refit on visibility change. */
+  visible?: boolean;
 }
 
 // ANSI color palettes tuned for light and dark backgrounds
@@ -86,7 +88,7 @@ function getTerminalTheme() {
   return base;
 }
 
-export function Terminal({ id, workspacePath, initialCommand }: TerminalProps) {
+export function Terminal({ id, workspacePath, initialCommand, visible = true }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -187,9 +189,11 @@ export function Terminal({ id, workspacePath, initialCommand }: TerminalProps) {
       }
     });
 
-    // Handle resize
+    // Handle resize — skip when container is CSS-hidden (reports 0 dimensions)
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
+      const el = terminalRef.current;
+      if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
       fitAddon.fit();
       if (ready) {
         ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
@@ -209,6 +213,16 @@ export function Terminal({ id, workspacePath, initialCommand }: TerminalProps) {
       xterm.dispose();
     };
   }, [id, workspacePath, initialCommand]);
+
+  // Refit terminal when becoming visible — container may have resized while hidden
+  useEffect(() => {
+    if (visible && fitAddonRef.current && xtermRef.current) {
+      const frame = requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [visible]);
 
   return (
     <div className="terminal-container">

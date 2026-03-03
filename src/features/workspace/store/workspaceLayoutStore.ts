@@ -34,6 +34,11 @@ export interface SelectedFile {
   source: "changes" | "files";
 }
 
+export interface PersistedTerminalTab {
+  id: string;
+  title: string;
+}
+
 interface WorkspaceLayoutState {
   activeRightTab: RightPanelTab;
   activeRightSideTab: RightSideTab;
@@ -47,6 +52,9 @@ interface WorkspaceLayoutState {
   activeChatTabSessionId: string | null; // Which chat tab is active
   pendingTerminalCommand: string | null; // Command to auto-run in a new terminal tab (e.g. "claude login")
   simulatorUdid: string | null; // Last-used simulator UDID for this workspace
+  terminalTabs: PersistedTerminalTab[]; // Per-workspace terminal tab metadata
+  activeTerminalTabId: string | null; // Which terminal tab is active
+  nextTerminalNum: number; // Counter for "Terminal N" naming
 }
 
 interface WorkspaceLayoutStore {
@@ -115,6 +123,16 @@ interface WorkspaceLayoutStore {
     activeSessionId: string | null
   ) => void;
 
+  /**
+   * Persist terminal tab order, active tab, and naming counter for a workspace
+   */
+  setTerminalTabState: (
+    workspaceId: string,
+    tabs: PersistedTerminalTab[],
+    activeTabId: string | null,
+    nextNum: number
+  ) => void;
+
   // Utilities
   /**
    * Clear layout state for a specific workspace
@@ -140,6 +158,9 @@ export const defaultLayout: WorkspaceLayoutState = {
   activeChatTabSessionId: null,
   pendingTerminalCommand: null,
   simulatorUdid: null,
+  terminalTabs: [],
+  activeTerminalTabId: null,
+  nextTerminalNum: 1,
 };
 
 // Legacy fields that may exist in persisted data from older versions.
@@ -293,6 +314,23 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             "workspaceLayout/setChatTabState"
           ),
 
+        setTerminalTabState: (workspaceId, tabs, activeTabId, nextNum) =>
+          set(
+            (state) => ({
+              layouts: {
+                ...state.layouts,
+                [workspaceId]: {
+                  ...(state.layouts[workspaceId] || defaultLayout),
+                  terminalTabs: tabs,
+                  activeTerminalTabId: activeTabId,
+                  nextTerminalNum: nextNum,
+                },
+              },
+            }),
+            false,
+            "workspaceLayout/setTerminalTabState"
+          ),
+
         setPendingTerminalCommand: (workspaceId, command) =>
           set(
             (state) => ({
@@ -338,17 +376,24 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store", // localStorage key
-        version: 8,
-        // Strip ephemeral one-shot signals that must not survive app restarts.
-        // pendingTerminalCommand is a transient signal consumed by TerminalPanel;
-        // if persisted and the app crashes before the effect clears it, the command
-        // would auto-execute on next launch.
+        version: 9,
+        // Strip ephemeral/runtime-only state that must not survive app restarts.
+        // pendingTerminalCommand: transient signal consumed by TerminalPanel.
+        // terminalTabs/activeTerminalTabId/nextTerminalNum: PTY processes don't
+        // survive app restarts, so persisting tab metadata would create zombie
+        // tabs with no backing shell process.
         partialize: (state) => ({
           ...state,
           layouts: Object.fromEntries(
             Object.entries(state.layouts).map(([id, layout]) => [
               id,
-              { ...layout, pendingTerminalCommand: null },
+              {
+                ...layout,
+                pendingTerminalCommand: null,
+                terminalTabs: [],
+                activeTerminalTabId: null,
+                nextTerminalNum: 1,
+              },
             ])
           ),
         }),
@@ -409,6 +454,13 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
                 (nextLayout as Record<string, unknown>).simulatorUdid = null;
               }
 
+              // v9: Add terminal tab state (runtime-only, stripped by partialize)
+              if (version < 9) {
+                (nextLayout as Record<string, unknown>).terminalTabs = [];
+                (nextLayout as Record<string, unknown>).activeTerminalTabId = null;
+                (nextLayout as Record<string, unknown>).nextTerminalNum = 1;
+              }
+
               nextLayouts[key] = nextLayout;
             }
             return { ...state, layouts: nextLayouts } as WorkspaceLayoutStore;
@@ -446,6 +498,12 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setRightPanelCollapsed(workspaceId, collapsed),
   setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) =>
     useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
+  setTerminalTabState: (
+    workspaceId: string,
+    tabs: PersistedTerminalTab[],
+    activeTabId: string | null,
+    nextNum: number
+  ) => useWorkspaceLayoutStore.getState().setTerminalTabState(workspaceId, tabs, activeTabId, nextNum),
   setPendingTerminalCommand: (workspaceId: string, command: string | null) =>
     useWorkspaceLayoutStore.getState().setPendingTerminalCommand(workspaceId, command),
   setSimulatorUdid: (workspaceId: string, udid: string | null) =>

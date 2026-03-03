@@ -4,7 +4,7 @@
 
 - `react-resizable-panels` uses percentage values for `collapsedSize`/`minSize` — pixel↔percent
   conversion via `panelGroupContainerRef` (excludes sidecar strip from container width math)
-- `workspaceLayoutStore` uses `version: 7` migrations — increment version when adding persisted fields
+- `workspaceLayoutStore` uses `version: 9` migrations (v9 added terminal tab state) — increment version when adding persisted fields
 - `cn()` uses `twMerge` internally — arbitrary `animate-[...]` classes conflict-resolve correctly
   (last wins), so conditional breathing override pattern with `cn()` works as intended
 - `data-slot="resizable-panel"` is the CSS hook for the flex-grow transition in global.css
@@ -149,6 +149,36 @@
 
 - `AllFilesDiffViewer`: `hideHeader?: boolean` prop (default false) for embedding in CodePanelContent.
 - Both Changes/Files tabs: content | 1px separator | tree (220px fixed) layout.
+
+## Always-Mount CSS Hide Pattern (Confirmed)
+
+- Browser, Terminal, and Simulator panels use `pointer-events-none invisible absolute` (not `hidden`)
+  when inactive — keeps DOM alive so PTY/WebSocket sessions survive tab switches.
+- Pattern: `<div className={cn("h-full w-full", activeTab !== "terminal" && "pointer-events-none invisible absolute")}>`
+- `offsetParent === null` check in ResizeObserver guards against `fitAddon.fit()` being called when
+  terminal container is CSS-hidden (`invisible` sets `visibility: hidden`, which makes `offsetParent` null for
+  absolutely-positioned elements but NOT for `invisible` alone — `invisible absolute` together does make
+  `offsetParent` null in most cases, but it is fragile; the `offsetWidth/offsetHeight === 0` check is more reliable).
+- `partialize` in the layout store strips terminal tab state (tabs/activeId/nextNum) — PTY processes
+  don't survive app restarts; zombie tab metadata would reference dead processes.
+- The `updateTabs` helper in TerminalPanel captures `nextTerminalNum` from the *render* snapshot —
+  stale-closure risk exists in the `pendingTask`/`pendingCommand` useEffect callbacks because
+  `tabs` and `nextTerminalNum` are excluded from their deps arrays (suppressed with eslint-disable).
+
+## Multi-Workspace Terminal Persistence Pattern (TerminalPanel.tsx)
+
+- `visitedWorkspaces: Map<workspaceId, workspacePath>` in TerminalPanel state keeps one
+  `WorkspaceTerminals` subtree mounted per visited workspace — PTYs survive workspace switches.
+- Non-current workspace terminals use same `pointer-events-none invisible absolute h-full w-full`
+  CSS-hide pattern inside a `relative` container.
+- `WorkspaceTerminals` sub-component uses per-workspace Zustand selectors for isolation.
+- Known leak: `visitedWorkspaces` has no eviction path when a workspace is deleted. PTYs for
+  deleted workspaces stay alive until TerminalPanel unmounts. Needs workspace deletion event hook.
+- `pendingTask` useEffect risk: if task queued just before workspace switch, the tab opens in the
+  NEW workspace because `workspaceId` in deps reflects the current workspace at effect fire time.
+- Terminal.tsx `initialCommand` is in the main effect dep array but only consumed once at mount.
+  Safe in practice because `id` is globally unique (`crypto.randomUUID()`), so effect runs once per terminal.
+  Cleaner to exclude `initialCommand` from deps and snapshot it inside the effect.
 
 ## See Also
 

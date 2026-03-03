@@ -201,9 +201,20 @@ export function RightSidePanel({
         </div>
       )}
 
-      {activeTab === "terminal" && (
-        <TerminalPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
-      )}
+      {/* Terminal panel: always mounted so PTY sessions and xterm.js DOM survive
+          tab switches (same pattern as BrowserPanel and SimulatorPanel). */}
+      <div
+        className={cn(
+          "h-full w-full",
+          activeTab !== "terminal" && "pointer-events-none invisible absolute"
+        )}
+      >
+        <TerminalPanel
+          workspaceId={workspace.id}
+          workspacePath={workspace.workspace_path}
+          panelVisible={activeTab === "terminal"}
+        />
+      </div>
 
       {activeTab === "notebook" && (
         <NotebookPanel
