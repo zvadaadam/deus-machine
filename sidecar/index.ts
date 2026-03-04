@@ -168,6 +168,15 @@ class UnifiedSidecar {
         request.options.model || "opus"
       );
       if (!writeResult.ok) {
+        // Emit queryError notification so callers that sent a JSON-RPC notification
+        // (no id → return value is silently dropped) still receive the error.
+        FrontendClient.sendError({
+          id: request.id,
+          type: "error",
+          error: writeResult.error,
+          agentType: request.agentType,
+          category: "internal",
+        });
         return { accepted: false, reason: `Failed to save message: ${writeResult.error}` };
       }
 
