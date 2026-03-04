@@ -72,13 +72,6 @@ export function initializeAllAgents(): Map<AgentType, { success: boolean; error?
 }
 
 /**
- * Returns all registered agent types.
- */
-export function getRegisteredAgentTypes(): AgentType[] {
-  return Array.from(registry.keys());
-}
-
-/**
  * Clears the registry. Used in tests to reset state between runs.
  */
 export function clearAgentRegistry(): void {

@@ -23,22 +23,8 @@ import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isTauriEnv } from "@/platform/tauri";
-import { SessionService, type PaginatedMessages } from "../api/session.service";
-import { MESSAGE_PAGE_SIZE, mergeNewerMessages, getLastRealSeq } from "../lib/messageCache";
-
-/**
- * Event payload from sidecar-v2 JSON-RPC notification
- * Sent via: FrontendAPI.sendMessage() → Rust socket.rs → Tauri event
- */
-interface SidecarMessageEvent {
-  id: string; // Session ID
-  type: "message" | "error";
-  agentType: "claude" | "codex";
-  data?: unknown; // Claude SDK message data (for streaming rendering)
-  error?: string;
-  /** Structured error category from classifyError */
-  category?: string;
-}
+import { incrementalFetchAndMerge } from "../lib/messageCache";
+import type { Session, SessionStatus, SessionMessageEvent, SessionStatusEvent } from "../types";
 
 /**
  * Listen for real-time session message events
@@ -60,91 +46,130 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
       return;
     }
 
-    // Listen for message events from sidecar-v2
-    const unlistenMessagePromise = listen<SidecarMessageEvent>("session:message", (event) => {
-      const { id, type, data } = event.payload;
-
-      // Only process events for this session
-      if (id === sessionId) {
-        if (import.meta.env.DEV) {
-          const dataType = (data as Record<string, unknown>)?.type;
-          console.log("[Events] 📨 Message received:", { type, dataType });
-        }
-
-        // Incremental fetch: only get messages newer than what we have
-        const cached = queryClient.getQueryData<PaginatedMessages>(
-          queryKeys.sessions.messages(sessionId)
-        );
-
-        if (cached) {
-          const lastSeq = getLastRealSeq(cached.messages);
-          SessionService.fetchMessages(sessionId, {
-            after: lastSeq || undefined,
-            limit: MESSAGE_PAGE_SIZE,
-          })
-            .then((newer) => {
-              if (newer.messages.length > 0) {
-                queryClient.setQueryData<PaginatedMessages>(
-                  queryKeys.sessions.messages(sessionId),
-                  (old) => mergeNewerMessages(old, newer)
-                );
-              }
-            })
-            .catch(() => {
-              // Incremental fetch failed — fall back to full invalidation
-              queryClient.invalidateQueries({
-                queryKey: queryKeys.sessions.messages(sessionId),
-              });
-            });
-        } else {
-          // No cache yet — do a full fetch
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.sessions.messages(sessionId),
-          });
-        }
-
-        // Always refresh session status (e.g., when result arrives)
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions.detail(sessionId),
-        });
-
-        // Invalidate PR status so we detect PRs created/updated by the agent.
-        // staleTime (10s) prevents excessive refetches from rapid events.
-        if (workspaceId) {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.workspaces.prStatus(workspaceId),
-          });
-        }
-      }
+    // Catch-up fetch: reconcile any messages missed while this hook was unmounted
+    // (navigation to another session, socket hiccup, app backgrounded, etc.).
+    // One cheap DB query on mount — handles ALL stale-cache scenarios.
+    incrementalFetchAndMerge(
+      queryClient,
+      sessionId,
+      queryKeys.sessions.messages(sessionId)
+    );
+    // Also refresh session detail to catch status changes (working→idle during navigation)
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.sessions.detail(sessionId),
     });
 
-    // Listen for error events from sidecar-v2
-    const unlistenErrorPromise = listen<SidecarMessageEvent>("session:error", (event) => {
-      const { id, error, category } = event.payload;
+    // Cancelled flag prevents race condition in React Strict Mode:
+    // mount → cleanup → mount happens rapidly. Without this flag, the first
+    // mount's async listen() promise resolves after cleanup and removes the
+    // second mount's listener.
+    let cancelled = false;
+    const unlistenFns: Array<() => void> = [];
 
-      if (id === sessionId) {
-        console.error("[Events] ❌ Session error:", error, category ? `[${category}]` : "");
-
-        // Invalidate session to update status — error_category and error_message
-        // are persisted in the DB by the sidecar, so the cache refresh picks them up.
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions.detail(sessionId),
-        });
-      }
-    });
-
-    // Log when listeners are ready (dev only)
-    if (import.meta.env.DEV) {
-      Promise.all([unlistenMessagePromise, unlistenErrorPromise]).then(() => {
-        console.log("[Events] 👂 Listening for session events:", sessionId.substring(0, 8));
+    function registerListener(promise: Promise<() => void>) {
+      promise.then((fn) => {
+        if (cancelled) { fn(); return; } // Cleanup already ran — detach immediately
+        unlistenFns.push(fn);
+      }).catch(() => {
+        // listen() can reject if Tauri runtime is torn down during navigation
       });
     }
 
-    // Cleanup: await promises to get unlisten functions
+    // Listen for message events from sidecar-v2
+    registerListener(
+      listen<SessionMessageEvent>("session:message", (event) => {
+        const { id, data } = event.payload;
+
+        // Only process events for this session
+        if (id === sessionId) {
+          if (import.meta.env.DEV) {
+            const dataType = (data as Record<string, unknown>)?.type;
+            console.log("[Events] Message received:", { dataType });
+          }
+
+          // Incremental fetch: only get messages newer than what we have.
+          // Session detail is NOT invalidated here — status changes arrive via
+          // the dedicated session:status-changed event listener below.
+          incrementalFetchAndMerge(
+            queryClient,
+            sessionId,
+            queryKeys.sessions.messages(sessionId)
+          );
+
+          // Invalidate PR status so we detect PRs created/updated by the agent.
+          // staleTime (10s) prevents excessive refetches from rapid events.
+          if (workspaceId) {
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.workspaces.prStatus(workspaceId),
+            });
+          }
+        }
+      })
+    );
+
+    // Listen for error events from sidecar-v2
+    // Uses setQueryData (direct cache write) instead of invalidateQueries
+    // because the error details are already in the event payload — no need
+    // for an HTTP round-trip. Same pattern as the status-changed handler.
+    registerListener(
+      listen<SessionMessageEvent>("session:error", (event) => {
+        const { id, error, category } = event.payload;
+
+        if (id === sessionId) {
+          console.error("[Events] Session error:", error, category ? `[${category}]` : "");
+
+          queryClient.setQueryData<Session>(
+            queryKeys.sessions.detail(sessionId),
+            (old) => {
+              if (!old) return old;
+              return {
+                ...old,
+                status: "error" as SessionStatus,
+                error_message: error ?? null,
+                error_category: category ?? null,
+              };
+            }
+          );
+        }
+      })
+    );
+
+    // Listen for status change events from sidecar-v2
+    // Replaces 5s polling for working→idle/error transitions.
+    // Sidecar emits this from updateSessionStatus() after DB write.
+    registerListener(
+      listen<SessionStatusEvent>("session:status-changed", (event) => {
+        const { id, status, errorMessage, errorCategory } = event.payload;
+
+        if (id === sessionId) {
+          if (import.meta.env.DEV) {
+            console.log("[Events] Status changed:", status);
+          }
+
+          // Direct cache write: we already have the exact new status from the event,
+          // so use setQueryData instead of invalidateQueries (avoids a refetch).
+          // Workspace list cache is updated by the global listener in
+          // useGlobalSessionNotifications (handles ALL sessions, not just active one).
+          queryClient.setQueryData<Session>(
+            queryKeys.sessions.detail(sessionId),
+            (old) => {
+              if (!old) return old;
+              return {
+                ...old,
+                status: status as SessionStatus,
+                error_message: status === "error" ? (errorMessage ?? null) : null,
+                error_category: status === "error" ? (errorCategory ?? null) : null,
+              };
+            }
+          );
+        }
+      })
+    );
+
+    // Cleanup: set cancelled flag so late-resolving promises don't leak listeners
     return () => {
-      unlistenMessagePromise.then((unlisten) => unlisten());
-      unlistenErrorPromise.then((unlisten) => unlisten());
-      if (import.meta.env.DEV) console.log("[Events] 🔇 Stopped listening for session events");
+      cancelled = true;
+      unlistenFns.forEach((fn) => fn());
     };
   }, [sessionId, workspaceId, queryClient]);
 

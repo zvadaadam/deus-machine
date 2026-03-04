@@ -115,6 +115,17 @@ export function classifyError(error: unknown): ClassifiedError {
     return { category: "invalid_request", message: error.message };
   }
 
+  // Process exit / signal termination — Claude Code subprocess crashed or was killed.
+  // These come from the SDK when the child process exits non-zero or is terminated by a signal.
+  if (
+    msg.includes("exited with code") ||
+    msg.includes("terminated by signal") ||
+    msg.includes("process exited") ||
+    msg.includes("killed by signal")
+  ) {
+    return { category: "process_exit", message: error.message };
+  }
+
   // Fallback — unknown internal error
   return { category: "internal", message: error.message };
 }

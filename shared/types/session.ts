@@ -94,6 +94,29 @@ export interface ThinkingBlock {
   signature?: string; // Encrypted signature from Claude
 }
 
+// -- Tauri event payloads (sidecar → Rust → frontend) --
+
+/** Payload for session:message and session:error Tauri events */
+export interface SessionMessageEvent {
+  id: string;
+  type: "message" | "error";
+  agentType: string;
+  data?: unknown;
+  error?: string;
+  category?: string;
+}
+
+/** Payload for session:status-changed Tauri event */
+export interface SessionStatusEvent {
+  id: string;
+  type: "status_changed";
+  agentType: string;
+  status: SessionStatus;
+  errorMessage?: string;
+  errorCategory?: string;
+  workspaceId?: string;
+}
+
 /**
  * Session information
  * Metadata about a Claude Code session

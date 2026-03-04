@@ -92,6 +92,18 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     // in memoized children with content-visibility: auto.
     const activeFileRef = useRef<string | null>(null);
 
+    // Shared helper — updates all active-file state + store in one place.
+    const setActiveFilePath = useCallback((path: string | null) => {
+      if (path === activeFileRef.current) return;
+      activeFileRef.current = path;
+      setActiveFile(path);
+      onActiveFileChangeRef.current?.(path);
+      workspaceLayoutActions.setSelectedFile(
+        workspaceIdRef.current,
+        path ? { path, source: "changes" } : null
+      );
+    }, []);
+
     useEffect(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
@@ -139,18 +151,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
           }
         }
 
-        if (best !== activeFileRef.current) {
-          activeFileRef.current = best;
-          setActiveFile(best);
-          onActiveFileChangeRef.current?.(best);
-          // Direct Zustand store write — bypasses prop-drilling chain for
-          // reliable file-tree highlighting. The store drives FileTree's
-          // selectedPath via useWorkspaceLayout.
-          workspaceLayoutActions.setSelectedFile(
-            workspaceIdRef.current,
-            best ? { path: best, source: "changes" } : null
-          );
-        }
+        setActiveFilePath(best);
       };
 
       const onScroll = () => {
@@ -173,14 +174,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     // One-shot scroll to initial target after sections mount and register refs
     useEffect(() => {
       if (!initialScrollTarget) return;
-      // Immediately set active file so tree highlights the target
-      setActiveFile(initialScrollTarget);
-      activeFileRef.current = initialScrollTarget;
-      onActiveFileChangeRef.current?.(initialScrollTarget);
-      workspaceLayoutActions.setSelectedFile(
-        workspaceId,
-        { path: initialScrollTarget, source: "changes" }
-      );
+      setActiveFilePath(initialScrollTarget);
       const raf = requestAnimationFrame(() => {
         resolveSection(initialScrollTarget)?.scrollIntoView({
           behavior: "auto",
@@ -194,13 +188,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     // so the tree highlight changes without waiting for the scroll event.
     useImperativeHandle(ref, () => ({
       scrollToFile(path: string) {
-        setActiveFile(path);
-        activeFileRef.current = path;
-        onActiveFileChangeRef.current?.(path);
-        workspaceLayoutActions.setSelectedFile(
-          workspaceId,
-          { path, source: "changes" }
-        );
+        setActiveFilePath(path);
         const el = resolveSection(path);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -264,7 +252,6 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
                 sectionRef={sectionRefCallback}
                 expandStateKey={expandStateKey}
                 onOpenFile={onOpenFile}
-                scrollRoot={scrollContainerRef}
               />
             );
           })}

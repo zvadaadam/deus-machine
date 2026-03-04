@@ -13,7 +13,6 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import type { RefObject } from "react";
 import { ChevronDown, ChevronRight, FileCode } from "lucide-react";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
@@ -30,8 +29,6 @@ interface AllDiffFileSectionProps {
   expandStateKey: number;
   /** Open file in text editor (file preview mode) */
   onOpenFile?: (filePath: string) => void;
-  /** Scroll container ref — kept for potential future use */
-  scrollRoot?: RefObject<HTMLDivElement | null>;
 }
 
 function AllDiffFileSectionInner({

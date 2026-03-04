@@ -3,7 +3,6 @@ import {
   registerAgent,
   getAgent,
   initializeAllAgents,
-  getRegisteredAgentTypes,
   clearAgentRegistry,
   type AgentHandler,
 } from "../agents/agent-handler";
@@ -119,25 +118,6 @@ describe("AgentRegistry", () => {
   });
 
   // ==========================================================================
-  // getRegisteredAgentTypes
-  // ==========================================================================
-
-  describe("getRegisteredAgentTypes", () => {
-    it("returns empty array when no agents registered", () => {
-      expect(getRegisteredAgentTypes()).toEqual([]);
-    });
-
-    it("returns all registered types", () => {
-      registerAgent(createMockHandler("claude"));
-      registerAgent(createMockHandler("codex"));
-      const types = getRegisteredAgentTypes();
-      expect(types).toContain("claude");
-      expect(types).toContain("codex");
-      expect(types).toHaveLength(2);
-    });
-  });
-
-  // ==========================================================================
   // clearAgentRegistry
   // ==========================================================================
 
@@ -148,7 +128,6 @@ describe("AgentRegistry", () => {
       clearAgentRegistry();
       expect(getAgent("claude")).toBeUndefined();
       expect(getAgent("codex")).toBeUndefined();
-      expect(getRegisteredAgentTypes()).toEqual([]);
     });
   });
 

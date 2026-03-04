@@ -22,17 +22,9 @@ import { isTauriEnv } from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
-import type { Session, SessionStatus } from "@shared/types/session";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { Session, SessionStatus, SessionMessageEvent, SessionStatusEvent } from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
-
-/** Event payload from sidecar — same shape as useSessionEvents */
-interface SidecarEvent {
-  id: string;
-  type: string;
-  agentType: string;
-  error?: string;
-  category?: string;
-}
 
 /**
  * Batches multiple notifications within a short window into a single one.
@@ -53,6 +45,22 @@ export function useGlobalSessionNotifications() {
 
   useEffect(() => {
     if (!isTauriEnv) return;
+
+    // Cancelled flag prevents race condition in React Strict Mode:
+    // mount → cleanup → mount happens rapidly. Without this flag, the first
+    // mount's async listen() promise resolves after cleanup and removes the
+    // second mount's listener.
+    let cancelled = false;
+    const unlistenFns: Array<() => void> = [];
+
+    function registerListener(promise: Promise<() => void>) {
+      promise.then((fn) => {
+        if (cancelled) { fn(); return; }
+        unlistenFns.push(fn);
+      }).catch(() => {
+        // listen() can reject if Tauri runtime is torn down during navigation
+      });
+    }
 
     function flushFinishedBatch() {
       const batch = finishedBatch.current;
@@ -84,42 +92,78 @@ export function useGlobalSessionNotifications() {
     }
 
     // --- Error notifications (instant, category-aware) ---
-    const unlistenError = listen<SidecarEvent>("session:error", (event) => {
-      const { id, error, category } = event.payload;
+    registerListener(
+      listen<SessionMessageEvent>("session:error", (event) => {
+        const { id, error, category } = event.payload;
 
-      // Analytics fires regardless of window focus — we always want error data
-      track("session_error_displayed", {
-        session_id: id,
-        error_category: category,
-      });
+        // Analytics fires regardless of window focus — we always want error data
+        track("session_error_displayed", {
+          session_id: id,
+          error_category: category,
+        });
 
-      if (isWindowFocused()) return;
+        if (isWindowFocused()) return;
 
-      const title = match(category)
-        .with("auth", () => "Authentication Error")
-        .with("rate_limit", () => "Rate Limited")
-        .with("context_limit", () => "Context Limit Reached")
-        .with("network", () => "Network Error")
-        .with("db_write", () => "Database Error")
-        .otherwise(() => "Agent Error");
-      sendNotification({
-        title,
-        body: error || `Session ${id.substring(0, 8)} encountered an error`,
-        sound: "Basso",
-      });
-    });
+        const title = match(category)
+          .with("auth", () => "Authentication Error")
+          .with("rate_limit", () => "Rate Limited")
+          .with("context_limit", () => "Context Limit Reached")
+          .with("network", () => "Network Error")
+          .with("db_write", () => "Database Error")
+          .with("process_exit", () => "Agent Process Crashed")
+          .otherwise(() => "Agent Error");
+        sendNotification({
+          title,
+          body: error || `Session ${id.substring(0, 8)} encountered an error`,
+          sound: "Basso",
+        });
+      })
+    );
 
     // --- Plan mode notifications (instant) ---
-    const unlistenPlan = listen<SidecarEvent>("session:enter-plan-mode", (event) => {
-      if (isWindowFocused()) return;
+    registerListener(
+      listen<SessionMessageEvent>("session:enter-plan-mode", (event) => {
+        if (isWindowFocused()) return;
 
-      const { id } = event.payload;
-      sendNotification({
-        title: "Plan ready for review",
-        body: `Session ${id.substring(0, 8)} has a plan waiting for approval`,
-        sound: "Ping",
-      });
-    });
+        const { id } = event.payload;
+        sendNotification({
+          title: "Plan ready for review",
+          body: `Session ${id.substring(0, 8)} has a plan waiting for approval`,
+          sound: "Ping",
+        });
+      })
+    );
+
+    // --- Global status change → update workspace list cache directly ---
+    // useSessionEvents only handles the *current* session. This global listener
+    // ensures sidebar status indicators update for ALL sessions instantly.
+    // Uses setQueriesData (direct cache write) instead of invalidateQueries
+    // (HTTP round-trip) for immediate sidebar feedback.
+    registerListener(
+      listen<SessionStatusEvent>(
+        "session:status-changed",
+        (event) => {
+          const { id: sessionId, status, workspaceId } = event.payload;
+
+          queryClient.setQueriesData<RepoGroup[]>(
+            { queryKey: ["workspaces", "by-repo"] },
+            (old) => {
+              if (!old) return old;
+              return old.map((group) => ({
+                ...group,
+                workspaces: group.workspaces.map((ws) =>
+                  // Primary: match by workspaceId from event payload (reliable)
+                  // Fallback: match by current_session_id (backward compat)
+                  (workspaceId && ws.id === workspaceId) || ws.current_session_id === sessionId
+                    ? { ...ws, session_status: status as SessionStatus }
+                    : ws
+                ),
+              }));
+            }
+          );
+        }
+      )
+    );
 
     // --- Status transition detection via session:message events ---
     // When we receive a message event, the session detail query will be
@@ -231,8 +275,8 @@ export function useGlobalSessionNotifications() {
     });
 
     return () => {
-      unlistenError.then((fn) => fn());
-      unlistenPlan.then((fn) => fn());
+      cancelled = true;
+      unlistenFns.forEach((fn) => fn());
       unsubscribe();
       unsubscribeWorkspaces();
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
