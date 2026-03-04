@@ -289,6 +289,39 @@ export function updateSessionStatus(
   return { ok: false, error: "unreachable" };
 }
 
+// ── Context Usage ─────────────────────────────────────────────────────
+
+/**
+ * Update session's context token count and usage percentage.
+ * Called after a turn completes when the SDK reports token usage.
+ * The frontend reads these via useSession() — notifyBackend triggers
+ * immediate React Query invalidation so the UI updates without polling.
+ */
+export function updateContextUsage(
+  sessionId: string,
+  tokenCount: number,
+  usedPercent: number
+): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    const result = db.prepare(
+      `
+      UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?
+    `
+    ).run(tokenCount, usedPercent, sessionId);
+    if (result.changes === 0) {
+      console.warn(`[SESSION-WRITER] updateContextUsage: no session found for ${sessionId}`);
+    }
+    notifyBackend("session:updated", sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to update context usage:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
 // ── Agent Session ID (Resume Support) ────────────────────────────────
 
 /**
