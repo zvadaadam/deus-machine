@@ -28,6 +28,17 @@ import type {
   MessageResponse,
   ErrorResponse,
   EnterPlanModeNotification,
+  StatusChangedNotification,
+  AskUserQuestionRequest,
+  AskUserQuestionResponse,
+  GetDiffRequest,
+  GetDiffResponse,
+  DiffCommentRequest,
+  DiffCommentResponse,
+  GetTerminalOutputRequest,
+  GetTerminalOutputResponse,
+  ExitPlanModeRequest,
+  ExitPlanModeResponse,
   BrowserSnapshotRequest,
   BrowserSnapshotResponse,
   BrowserClickRequest,
@@ -75,65 +86,6 @@ import type {
   SimStartRequest,
   SimStartResponse,
 } from "./protocol";
-
-// ============================================================================
-// Request/Response shapes for the MCP-facing RPC calls
-// ============================================================================
-
-export interface AskUserQuestionRequest {
-  sessionId: string;
-  questions: Array<{
-    question: string;
-    options: string[];
-    multiSelect?: boolean;
-  }>;
-}
-export interface AskUserQuestionResponse {
-  answers: Array<string | string[]>;
-}
-
-export interface GetDiffRequest {
-  sessionId: string;
-  file?: string;
-  stat?: boolean;
-}
-export interface GetDiffResponse {
-  diff?: string;
-  error?: string;
-}
-
-export interface DiffCommentRequest {
-  sessionId: string;
-  comments: Array<{
-    file: string;
-    lineNumber: number;
-    body: string;
-  }>;
-}
-export interface DiffCommentResponse {
-  success: boolean;
-}
-
-export interface GetTerminalOutputRequest {
-  sessionId: string;
-  source?: "spotlight" | "run_script" | "terminal" | "auto";
-  maxLines?: number;
-}
-export interface GetTerminalOutputResponse {
-  output?: string;
-  source: "spotlight" | "run_script" | "terminal" | "none";
-  isRunning?: boolean;
-  error?: string;
-}
-
-export interface ExitPlanModeRequest {
-  sessionId: string;
-  toolInput: unknown;
-}
-export interface ExitPlanModeResponse {
-  approved: boolean;
-  turnId?: string;
-}
 
 // ============================================================================
 // Timeout defaults (milliseconds)
@@ -235,6 +187,14 @@ class FrontendClientClass {
       FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE,
       response,
       "sendEnterPlanModeNotification"
+    );
+  }
+
+  sendStatusChanged(notification: StatusChangedNotification): void {
+    this.broadcastNotification(
+      FRONTEND_NOTIFICATIONS.STATUS_CHANGED,
+      notification,
+      "sendStatusChanged"
     );
   }
 

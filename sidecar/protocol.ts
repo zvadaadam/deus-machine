@@ -28,6 +28,7 @@ export const FRONTEND_NOTIFICATIONS = {
   MESSAGE: "message",
   QUERY_ERROR: "queryError",
   ENTER_PLAN_MODE: "enterPlanModeNotification",
+  STATUS_CHANGED: "statusChanged",
 } as const;
 
 /** RPC methods the sidecar can call on the frontend (request/response) */
@@ -79,6 +80,7 @@ export const ErrorCategorySchema = z.enum([
   "abort",
   "invalid_request",
   "db_write",
+  "process_exit",
   "internal",
 ]);
 
@@ -180,6 +182,84 @@ export const EnterPlanModeNotificationSchema = z.object({
   type: z.literal("enter_plan_mode_notification"),
   id: z.string(),
   agentType: AgentTypeSchema,
+});
+
+export const StatusChangedNotificationSchema = z.object({
+  type: z.literal("status_changed"),
+  id: z.string(),
+  agentType: AgentTypeSchema,
+  status: z.enum(["idle", "working", "error"]),
+  errorMessage: z.string().optional(),
+  errorCategory: ErrorCategorySchema.optional(),
+  workspaceId: z.string().optional(),
+});
+
+// ============================================================================
+// MCP-Facing RPC Schemas (sidecar → frontend requests/responses)
+// ============================================================================
+
+export const AskUserQuestionRequestSchema = z.object({
+  sessionId: z.string(),
+  questions: z.array(
+    z.object({
+      question: z.string(),
+      options: z.array(z.string()),
+      multiSelect: z.boolean().optional(),
+    })
+  ),
+});
+
+export const AskUserQuestionResponseSchema = z.object({
+  answers: z.array(z.union([z.string(), z.array(z.string())])),
+});
+
+export const GetDiffRequestSchema = z.object({
+  sessionId: z.string(),
+  file: z.string().optional(),
+  stat: z.boolean().optional(),
+});
+
+export const GetDiffResponseSchema = z.object({
+  diff: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export const DiffCommentRequestSchema = z.object({
+  sessionId: z.string(),
+  comments: z.array(
+    z.object({
+      file: z.string(),
+      lineNumber: z.number(),
+      body: z.string(),
+    })
+  ),
+});
+
+export const DiffCommentResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+export const GetTerminalOutputRequestSchema = z.object({
+  sessionId: z.string(),
+  source: z.enum(["spotlight", "run_script", "terminal", "auto"]).optional(),
+  maxLines: z.number().optional(),
+});
+
+export const GetTerminalOutputResponseSchema = z.object({
+  output: z.string().optional(),
+  source: z.enum(["spotlight", "run_script", "terminal", "none"]),
+  isRunning: z.boolean().optional(),
+  error: z.string().optional(),
+});
+
+export const ExitPlanModeRequestSchema = z.object({
+  sessionId: z.string(),
+  toolInput: z.unknown(),
+});
+
+export const ExitPlanModeResponseSchema = z.object({
+  approved: z.boolean(),
+  turnId: z.string().optional(),
 });
 
 // ============================================================================
@@ -533,6 +613,17 @@ export type ResetGeneratorRequest = z.infer<typeof ResetGeneratorRequestSchema>;
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export type EnterPlanModeNotification = z.infer<typeof EnterPlanModeNotificationSchema>;
+export type StatusChangedNotification = z.infer<typeof StatusChangedNotificationSchema>;
+export type AskUserQuestionRequest = z.infer<typeof AskUserQuestionRequestSchema>;
+export type AskUserQuestionResponse = z.infer<typeof AskUserQuestionResponseSchema>;
+export type GetDiffRequest = z.infer<typeof GetDiffRequestSchema>;
+export type GetDiffResponse = z.infer<typeof GetDiffResponseSchema>;
+export type DiffCommentRequest = z.infer<typeof DiffCommentRequestSchema>;
+export type DiffCommentResponse = z.infer<typeof DiffCommentResponseSchema>;
+export type GetTerminalOutputRequest = z.infer<typeof GetTerminalOutputRequestSchema>;
+export type GetTerminalOutputResponse = z.infer<typeof GetTerminalOutputResponseSchema>;
+export type ExitPlanModeRequest = z.infer<typeof ExitPlanModeRequestSchema>;
+export type ExitPlanModeResponse = z.infer<typeof ExitPlanModeResponseSchema>;
 export type BrowserSnapshotRequest = z.infer<typeof BrowserSnapshotRequestSchema>;
 export type BrowserSnapshotResponse = z.infer<typeof BrowserSnapshotResponseSchema>;
 export type BrowserClickRequest = z.infer<typeof BrowserClickRequestSchema>;

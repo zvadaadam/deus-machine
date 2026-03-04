@@ -268,6 +268,7 @@ impl SocketManager {
                                             "message" => "session:message",
                                             "queryError" => "session:error",
                                             "enterPlanModeNotification" => "session:enter-plan-mode",
+                                            "statusChanged" => "session:status-changed",
                                             _ => {
                                                 println!("[SOCKET] Unknown RPC notification: {}", method);
                                                 continue;
@@ -300,6 +301,12 @@ impl SocketManager {
                                                     .and_then(|v| v.as_str())
                                                     .unwrap_or("?");
                                                 format!("session={} category={} error={}", short_id, category, error.chars().take(80).collect::<String>())
+                                            }
+                                            "statusChanged" => {
+                                                let status = params.get("status")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("?");
+                                                format!("session={} status={}", short_id, status)
                                             }
                                             _ => format!("session={}", short_id),
                                         };

@@ -577,6 +577,7 @@ export function Chat({
                             .with("context_limit", () => "Limit Reached")
                             .with("network", () => "Connection Error")
                             .with("db_write", () => "Database Error")
+                            .with("process_exit", () => "Process Crashed")
                             .otherwise(() =>
                               agentType
                                 ? `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Error`
@@ -589,6 +590,11 @@ export function Chat({
                         {errorCategory === "rate_limit" && (
                           <p className="text-muted-foreground mt-1 text-xs">
                             Start a new chat to try again.
+                          </p>
+                        )}
+                        {errorCategory === "process_exit" && (
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            The agent process exited unexpectedly. Try sending your message again.
                           </p>
                         )}
                       </div>
@@ -633,6 +639,18 @@ export function Chat({
                             ) : null
                           )
                           .with("network", () =>
+                            onRetryInNewChat ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={onRetryInNewChat}
+                              >
+                                Retry in new chat
+                              </Button>
+                            ) : null
+                          )
+                          .with("process_exit", () =>
                             onRetryInNewChat ? (
                               <Button
                                 variant="ghost"

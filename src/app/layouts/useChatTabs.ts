@@ -4,8 +4,6 @@
  * Tab order and active tab are persisted in workspaceLayoutStore (localStorage).
  * Full tab metadata (agentType, hasStarted, label) is reconstructed from session
  * records fetched via useWorkspaceSessions.
- *
- * File tabs are NOT persisted — they're workspace-scoped and ephemeral.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -34,12 +32,10 @@ function sessionToTab(session: Session, sequence: number): Tab {
   return {
     id: `tab-${session.id}`,
     label: hasStarted ? buildStartedChatLabel(agentType, sequence) : NEW_CHAT_LABEL,
-    type: "chat",
     data: {
       sessionId: session.id,
       agentType,
       hasStarted,
-      agentSequence: hasStarted ? sequence : undefined,
     },
   };
 }
@@ -89,7 +85,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         {
           id: activeSessionId ? `tab-${activeSessionId}` : "tab-default",
           label: NEW_CHAT_LABEL,
-          type: "chat",
           data: {
             sessionId: activeSessionId ?? undefined,
             agentType: "claude",
@@ -103,7 +98,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     return persistedIds.map((sessionId) => ({
       id: `tab-${sessionId}`,
       label: NEW_CHAT_LABEL,
-      type: "chat" as const,
       data: {
         sessionId,
         agentType: "claude",
@@ -166,16 +160,13 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration sync from DB
     setMainTabs((prev) => {
-      const chatTabs = prev.filter((t) => t.type === "chat");
-      const fileTabs = prev.filter((t) => t.type !== "chat");
-
       // Filter out orphaned session IDs (deleted from DB)
-      const validChatTabs = chatTabs.filter((t) => {
+      const validTabs = prev.filter((t) => {
         const sid = t.data?.sessionId;
         return sid && sessionMap.has(sid);
       });
 
-      if (validChatTabs.length === 0) {
+      if (validTabs.length === 0) {
         // All persisted sessions are gone — fall back to active session
         const fallbackId = activeSessionId;
         const fallbackSession = fallbackId ? sessionMap.get(fallbackId) : undefined;
@@ -185,38 +176,35 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           : {
               id: fallbackId ? `tab-${fallbackId}` : "tab-default",
               label: NEW_CHAT_LABEL,
-              type: "chat" as const,
               data: { sessionId: fallbackId ?? undefined, agentType: "claude", hasStarted: false },
             };
         setActiveMainTabId(tab.id);
-        return [tab, ...fileTabs];
+        return [tab];
       }
 
       // Compute sequences across all valid sessions in tab order
-      const orderedSessions = validChatTabs
+      const orderedSessions = validTabs
         .map((t) => sessionMap.get(t.data!.sessionId!)!)
         .filter(Boolean);
       const sequences = computeSequences(orderedSessions);
 
       // Hydrate each placeholder with real session data
-      const hydratedTabs = validChatTabs.map((t) => {
+      const hydratedTabs = validTabs.map((t) => {
         const session = sessionMap.get(t.data!.sessionId!)!;
         return sessionToTab(session, sequences.get(session.id) ?? 1);
       });
 
       // Fix active tab if it was orphaned
-      const allTabs = [...hydratedTabs, ...fileTabs];
       setActiveMainTabId((prevActive) => {
-        if (allTabs.some((t) => t.id === prevActive)) return prevActive;
+        if (hydratedTabs.some((t) => t.id === prevActive)) return prevActive;
         return hydratedTabs[0]?.id ?? "tab-default";
       });
 
-      return allTabs;
+      return hydratedTabs;
     });
   }, [workspaceSessions, sessionMap, activeSessionId]);
 
   // --- Persist tab state to localStorage on every change ---
-  // Only persist chat tab session IDs (not file tabs).
   // Debounced to avoid writing on every intermediate state update.
 
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -224,12 +212,11 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     clearTimeout(persistTimeoutRef.current);
     persistTimeoutRef.current = setTimeout(() => {
       const chatSessionIds = mainTabs
-        .filter((t) => t.type === "chat" && t.data?.sessionId)
+        .filter((t) => t.data?.sessionId)
         .map((t) => t.data!.sessionId!);
 
       const activeTab = mainTabs.find((t) => t.id === activeMainTabId);
-      const activeSessionIdForPersist =
-        activeTab?.type === "chat" ? (activeTab.data?.sessionId ?? null) : null;
+      const activeSessionIdForPersist = activeTab?.data?.sessionId ?? null;
 
       workspaceLayoutActions.setChatTabState(
         workspaceId,
@@ -254,8 +241,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         const currentIndex = prev.findIndex((t) => t.id === tabId);
         const newTabs = prev.filter((t) => t.id !== tabId);
 
-        // Save closed chat tab for restore
-        if (closingTab?.type === "chat" && closingTab.data?.sessionId) {
+        // Save closed tab for restore
+        if (closingTab?.data?.sessionId) {
           setClosedTabs((prevClosed) => {
             const entry: ClosedTab = {
               label: closingTab.label,
@@ -288,7 +275,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         const newTab: Tab = {
           id: newId,
           label: NEW_CHAT_LABEL,
-          type: "chat",
           data: {
             sessionId: newSession.id,
             agentType,
@@ -312,7 +298,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     const restoredTab: Tab = {
       id: newId,
       label: closedTab.label,
-      type: "chat",
       data: {
         sessionId: closedTab.sessionId,
         agentType: closedTab.agentType,
@@ -337,31 +322,27 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (tabIndex === -1) return prevTabs;
 
       const tab = prevTabs[tabIndex];
-      if (tab.type !== "chat") return prevTabs;
       if (tab.data?.agentType === nextAgentType) return prevTabs;
 
       const hasStarted = Boolean(tab.data?.hasStarted);
 
       let nextLabel = hasStarted ? tab.label : NEW_CHAT_LABEL;
-      let nextSequence = tab.data?.agentSequence;
 
       if (hasStarted) {
         const taken = prevTabs.filter(
           (candidate) =>
             candidate.id !== tabId &&
-            candidate.type === "chat" &&
             candidate.data?.hasStarted &&
             candidate.data?.agentType === nextAgentType
         ).length;
-        nextSequence = taken + 1;
-        nextLabel = buildStartedChatLabel(nextAgentType, nextSequence);
+        nextLabel = buildStartedChatLabel(nextAgentType, taken + 1);
       }
 
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
         label: nextLabel,
-        data: { ...tab.data, agentType: nextAgentType, hasStarted, agentSequence: nextSequence },
+        data: { ...tab.data, agentType: nextAgentType, hasStarted },
       };
       return updatedTabs;
     });
@@ -373,13 +354,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (tabIndex === -1) return prevTabs;
 
       const tab = prevTabs[tabIndex];
-      if (tab.type !== "chat" || tab.data?.hasStarted) return prevTabs;
+      if (tab.data?.hasStarted) return prevTabs;
 
       const agentType = (tab.data?.agentType as RuntimeAgentType | undefined) ?? "claude";
       const taken = prevTabs.filter(
         (candidate) =>
           candidate.id !== tabId &&
-          candidate.type === "chat" &&
           candidate.data?.hasStarted &&
           candidate.data?.agentType === agentType
       ).length;
@@ -389,7 +369,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       updatedTabs[tabIndex] = {
         ...tab,
         label: buildStartedChatLabel(agentType, nextSequence),
-        data: { ...tab.data, agentType, hasStarted: true, agentSequence: nextSequence },
+        data: { ...tab.data, agentType, hasStarted: true },
       };
       return updatedTabs;
     });
@@ -397,26 +377,6 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const handleTabReorder = useCallback((reorderedTabs: Tab[]) => {
     setMainTabs(reorderedTabs);
-  }, []);
-
-  const openFileTab = useCallback((filePath: string) => {
-    const tabId = `file-${filePath}`;
-    setMainTabs((prev) => {
-      if (prev.some((t) => t.id === tabId)) {
-        setActiveMainTabId(tabId);
-        return prev;
-      }
-      const fileName = filePath.split("/").pop() || filePath;
-      const newTab: Tab = {
-        id: tabId,
-        label: fileName,
-        type: "file",
-        closeable: true,
-        data: { filePath },
-      };
-      setActiveMainTabId(tabId);
-      return [...prev, newTab];
-    });
   }, []);
 
   // --- Keyboard shortcuts ---
@@ -473,6 +433,5 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
     handleTabRestore,
     updateChatTabAgentType,
     markChatTabStarted,
-    openFileTab,
   };
 }
