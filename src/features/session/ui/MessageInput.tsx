@@ -1,17 +1,7 @@
 import type { SessionStatus } from "@/shared/types";
 import { useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Minimize2,
-  ArrowUp,
-  Square,
-  Plus,
-  Globe,
-  ChevronDown,
-  Check,
-  ArrowUpRight,
-  Wrench,
-} from "lucide-react";
+import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
@@ -21,31 +11,21 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { getAgentLogo } from "@/assets/agents";
 import { PastedTextCard } from "./PastedTextCard";
 import { PastedImageCard } from "./PastedImageCard";
 import { InspectedElementCard, type InspectedElement } from "./InspectedElementCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
-  getRuntimeModelLabel,
   getRuntimeModelOption,
-  RUNTIME_MODEL_OPTIONS,
-  MODEL_PICKER_GROUPS,
   cycleThinkingLevel,
   type RuntimeAgentType,
   type ThinkingLevel,
 } from "../lib/agentRuntime";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ModelPicker } from "./ModelPicker";
+import { ContextTokenIndicator } from "./ContextTokenIndicator";
 
 interface Attachment {
   id: string;
@@ -68,15 +48,18 @@ export interface MessageInputRef {
 // Anthropic API only supports these image formats for vision
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
+// Long pastes (20+ lines) are shown as collapsed cards instead of inline text
+const PASTE_LINE_THRESHOLD = 20;
+
 interface MessageInputProps {
   messageInput: string;
   sending: boolean;
   sessionStatus?: SessionStatus;
-  embedded?: boolean;
   model?: string;
   thinkingLevel?: string;
   showCompactButton?: boolean;
   contextTokenCount?: number;
+  contextUsedPercent?: number;
   /** Workspace path for @ file mention search */
   workspacePath?: string | null;
   /**
@@ -91,13 +74,11 @@ interface MessageInputProps {
   onMessageChange: (value: string) => void;
   onSend: (content?: string) => void;
   onCompact?: () => void;
-  onCreatePR?: () => void;
   onStop?: () => void;
   onModelChange?: (model: string) => void;
   /** Called when user picks a model from a locked agent group (opens new tab) */
   onOpenNewTab?: (initialModel?: string) => void;
   onThinkingLevelChange?: (level: string) => void;
-  onAttachmentClick?: () => void;
   className?: string;
 }
 
@@ -106,23 +87,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     messageInput,
     sending,
     sessionStatus,
-    embedded: _embedded = false,
     model = "opus",
     thinkingLevel = "NONE",
     showCompactButton = false,
     contextTokenCount = 0,
+    contextUsedPercent = 0,
     workspacePath = null,
     hasMessages = false,
     hasManifest = true,
     onMessageChange,
     onSend,
     onCompact,
-    onCreatePR: _onCreatePR,
     onStop,
     onModelChange,
     onOpenNewTab,
     onThinkingLevelChange,
-    onAttachmentClick,
     className,
   },
   ref
@@ -135,9 +114,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
   // Inspected elements from InSpec mode (shown as pill cards)
   const [inspectedElements, setInspectedElements] = useState<InspectedElement[]>([]);
-
-  // Browser MCP state (future integration)
-  const [browserEnabled, setBrowserEnabled] = useState(false);
 
   // Process image files into attachment previews (shared by paste + panel drop)
   const processFiles = useCallback(async (files: File[]) => {
@@ -285,9 +261,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     }
   };
 
-  // Intercept long pastes (20+ lines) → show as collapsed card
-  const PASTE_LINE_THRESHOLD = 20;
-
   const handlePaste = async (e: React.ClipboardEvent) => {
     // Check for pasted images — clipboardData.items is the reliable API
     // (clipboardData.files is often empty for clipboard screenshots)
@@ -332,42 +305,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
     setInspectedElements((prev) => prev.filter((el) => el.id !== id));
   };
 
-  const modelLabel = getRuntimeModelLabel(model);
-  const selectedOption = getRuntimeModelOption(model);
-  const selectedOptionValue = selectedOption?.value;
-  // Agent group of the currently selected model (claude or codex)
-  const currentGroup = selectedOption?.group ?? "claude";
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
 
-  /** Thinking cycle — per-agent levels defined in agentRuntime's AgentConfig.
-   *  Claude: LOW ↔ HIGH   Codex: LOW → MEDIUM → HIGH → LOW */
+  // Thinking cycle — derive agent type from selected model
+  const selectedOption = getRuntimeModelOption(model);
   const agentType: RuntimeAgentType = selectedOption?.agentType ?? "claude";
 
   const handleCycleThinking = () => {
     const next = cycleThinkingLevel(thinkingLevel as ThinkingLevel, agentType);
     onThinkingLevelChange?.(next);
-  };
-
-  // Context window calculation (200k token limit for Sonnet 3.5)
-  const MAX_TOKENS = 200000;
-  const contextPercentage = Math.min((contextTokenCount / MAX_TOKENS) * 100, 100);
-  // Use CSS variables instead of hardcoded hex values (CLAUDE.md compliance)
-  const contextFillColor =
-    contextPercentage > 80
-      ? "var(--primary)" // Copper/warning when > 80%
-      : "var(--muted-foreground)"; // Neutral gray normally
-
-  const removeAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  const renderAgentIcon = (type: RuntimeAgentType, size: "sm" | "md" = "md") => {
-    const LogoComponent = getAgentLogo(type);
-    const sizeClass = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
-    if (!LogoComponent) {
-      return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", sizeClass)} />;
-    }
-
-    return <LogoComponent className={cn("flex-shrink-0", sizeClass)} />;
   };
 
   // Show "Set up your environment" nudge when no manifest and no messages yet
@@ -469,6 +417,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
           onKeyDown={handleKeyDown}
           onSelect={fileMention.handleCursorChange}
           onClick={fileMention.handleCursorChange}
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           className={cn(
             "scrollbar-vibrancy placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
             className
@@ -482,100 +433,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
         >
           {/* Controls group (left) */}
           <div className="flex items-center gap-0.5">
-            {/* Add attachment button */}
-            <InputGroupButton
-              onClick={onAttachmentClick}
-              variant="ghost"
-              size="icon-sm"
-              title="Add attachment"
-              className="rounded-lg"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </InputGroupButton>
-
-            {/* Model picker dropdown — shows agent icon + model label */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  title="Select model"
-                  aria-label={`Select model, currently ${modelLabel}`}
-                  className="group gap-1.5 rounded-lg focus-visible:ring-0"
-                >
-                  {renderAgentIcon(selectedOption?.agentType ?? "claude", "sm")}
-                  <span className="text-text-muted text-xs font-medium">{modelLabel}</span>
-                  <ChevronDown className="text-text-disabled size-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                side="top"
-                className={cn(
-                  "border-border/55 w-60 rounded-xl border p-1.5",
-                  "from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                  "shadow-[var(--shadow-elevated)]"
-                )}
-              >
-                {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => {
-                  /**
-                   * Agent type lock: once a session has messages, its agent harness
-                   * (claude/codex) is fixed. The user can switch models within the
-                   * same harness, but switching harnesses requires a new chat tab.
-                   * This is a DB-level constraint: sessions.agent_type is set on
-                   * first message and the sidecar binds to that harness for the
-                   * session's lifetime.
-                   */
-                  const isLockedGroup = hasMessages && agentConfig.id !== currentGroup;
-
-                  return (
-                    <div key={agentConfig.id}>
-                      {groupIdx > 0 && <DropdownMenuSeparator className="bg-border/70 my-1.5" />}
-                      <DropdownMenuLabel>
-                        <span className="text-text-muted/90 text-2xs px-1 font-normal tracking-wide">
-                          {agentConfig.groupLabel}
-                        </span>
-                      </DropdownMenuLabel>
-                      {RUNTIME_MODEL_OPTIONS.filter((o) => o.group === agentConfig.id).map(
-                        (option) => {
-                          const isSelected = selectedOptionValue === option.value;
-                          return (
-                            <DropdownMenuItem
-                              key={option.value}
-                              onClick={() =>
-                                isLockedGroup
-                                  ? onOpenNewTab?.(option.value)
-                                  : onModelChange?.(option.value)
-                              }
-                              className={cn(
-                                "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",
-                                "data-[highlighted]:bg-bg-raised/45 data-[highlighted]:text-text-primary",
-                                "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
-                              )}
-                            >
-                              {renderAgentIcon(option.agentType)}
-                              <span className="font-normal">{option.label}</span>
-                              {option.isNew && (
-                                <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                  New
-                                </span>
-                              )}
-                              <span className="ml-auto flex items-center">
-                                {isSelected ? (
-                                  <Check className="text-text-primary h-3 w-3" />
-                                ) : isLockedGroup ? (
-                                  <ArrowUpRight className="text-text-muted/60 h-3 w-3" />
-                                ) : null}
-                              </span>
-                            </DropdownMenuItem>
-                          );
-                        }
-                      )}
-                    </div>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ModelPicker
+              model={model}
+              hasMessages={hasMessages}
+              onModelChange={onModelChange}
+              onOpenNewTab={onOpenNewTab}
+            />
 
             {/* Thinking effort — text label cycles through agent-specific levels */}
             <ThinkingIndicator
@@ -586,7 +449,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
 
           {/* Actions group (right) */}
           <div className="flex items-center gap-1">
-            {/* Compact button - leftmost position */}
+            {/* Compact button - shown when enough messages to benefit */}
             {showCompactButton && (
               <Button
                 onClick={onCompact}
@@ -601,56 +464,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(funct
               </Button>
             )}
 
-            {/* Context window indicator - circular progress */}
-            <div
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-              title={`Context: ${contextTokenCount.toLocaleString()} / ${MAX_TOKENS.toLocaleString()} tokens (${contextPercentage.toFixed(1)}%)`}
-            >
-              <svg className="h-3.5 w-3.5 -rotate-90" viewBox="0 0 16 16">
-                {/* Background circle */}
-                <circle
-                  cx="8"
-                  cy="8"
-                  r="6"
-                  fill="transparent"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="text-muted-foreground/30"
-                />
-                {/* Progress circle */}
-                <circle
-                  cx="8"
-                  cy="8"
-                  r="6"
-                  fill="transparent"
-                  stroke={contextFillColor}
-                  strokeWidth="2"
-                  strokeDasharray={`${(contextPercentage / 100) * 37.7} 37.7`}
-                  strokeLinecap="round"
-                  className="transition-[stroke-dasharray] duration-300"
-                />
-              </svg>
-              {/* Token count text - only show if > 0 */}
-              {contextTokenCount > 0 && (
-                <span className="text-2xs text-muted-foreground absolute font-medium">
-                  {contextTokenCount >= 1000
-                    ? `${(contextTokenCount / 1000).toFixed(0)}k`
-                    : contextTokenCount}
-                </span>
-              )}
-            </div>
-
-            {/* Browser MCP toggle */}
-            <InputGroupButton
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setBrowserEnabled(!browserEnabled)}
-              title={browserEnabled ? "Browser enabled" : "Enable browser"}
-              aria-label={browserEnabled ? "Browser enabled" : "Enable browser"}
-              className={cn("rounded-lg", browserEnabled ? "text-info" : "text-muted-foreground")}
-            >
-              <Globe className="h-3.5 w-3.5" />
-            </InputGroupButton>
+            {/* Context window indicator — also acts as compact button when > 80% */}
+            <ContextTokenIndicator
+              contextTokenCount={contextTokenCount}
+              contextUsedPercent={contextUsedPercent}
+              onCompact={onCompact}
+            />
 
             {/* Stop button - shows when session is working */}
             {sessionStatus === "working" && (

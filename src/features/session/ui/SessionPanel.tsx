@@ -276,9 +276,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       // TODO: Implement API call to update session thinking level
     };
 
-    const handleAttachmentClick = () => {
-      // TODO: Implement file picker dialog
-    };
 
     // Manifest status — cache-only read (staleTime: Infinity, already fetched by MainContent)
     // Default to true while loading to prevent the setup nudge from flashing briefly
@@ -288,8 +285,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
 
-    // Context token count placeholder — not tracked in DB, always 0 for now
-    const contextTokenCount = 0;
 
     // Session actions using custom hook
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
@@ -458,10 +453,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               messageInput={messageInput}
               sending={sending}
               sessionStatus={sessionStatus}
-              embedded={true}
               model={model}
               thinkingLevel={thinkingLevel}
-              contextTokenCount={contextTokenCount}
+              contextTokenCount={session?.context_token_count ?? 0}
+              contextUsedPercent={session?.context_used_percent ?? 0}
               workspacePath={workspacePath}
               hasMessages={messages.length > 0}
               hasManifest={hasManifest}
@@ -471,7 +466,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onModelChange={handleModelChange}
               onOpenNewTab={onOpenNewTab}
               onThinkingLevelChange={handleThinkingLevelChange}
-              onAttachmentClick={handleAttachmentClick}
             />
           </div>
         </SessionProvider>
@@ -563,23 +557,21 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     messageInput={messageInput}
                     sending={sending}
                     sessionStatus={sessionStatus}
-                    embedded={false}
                     model={model}
                     thinkingLevel={thinkingLevel}
                     showCompactButton={showCompactButton}
-                    contextTokenCount={contextTokenCount}
+                    contextTokenCount={session?.context_token_count ?? 0}
+                    contextUsedPercent={session?.context_used_percent ?? 0}
                     workspacePath={workspacePath}
                     hasMessages={messages.length > 0}
                     hasManifest={hasManifest}
                     onMessageChange={setMessageInput}
                     onSend={(content) => sendMessage(content)}
                     onCompact={compactConversation}
-                    onCreatePR={createPR}
                     onStop={stopSession}
                     onModelChange={handleModelChange}
                     onOpenNewTab={onOpenNewTab}
                     onThinkingLevelChange={handleThinkingLevelChange}
-                    onAttachmentClick={handleAttachmentClick}
                   />
                 </div>
               </SessionProvider>
