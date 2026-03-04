@@ -2,23 +2,33 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock setup ───────────────────────────────────────────────────────────
 
-const { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare } = vi.hoisted(() => {
+const { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare, mockTransaction, mockSendStatusChanged } = vi.hoisted(() => {
   const mockDbRun = vi.fn();
   const mockDbGet = vi.fn();
   const mockDbAll = vi.fn().mockReturnValue([]);
   const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet, all: mockDbAll }));
-  return { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare };
+  // db.transaction(fn) returns a wrapped function that executes fn inside a transaction
+  const mockTransaction = vi.fn((fn: () => void) => {
+    const wrapped = () => fn();
+    return wrapped;
+  });
+  const mockSendStatusChanged = vi.fn();
+  return { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare, mockTransaction, mockSendStatusChanged };
 });
 
 vi.mock("../db/index", () => ({
-  getDatabase: () => ({ prepare: mockDbPrepare }),
+  getDatabase: () => ({ prepare: mockDbPrepare, transaction: mockTransaction }),
+}));
+
+vi.mock("../frontend-client", () => ({
+  FrontendClient: { sendStatusChanged: mockSendStatusChanged },
 }));
 
 import {
   saveAssistantMessage,
   saveToolResultMessage,
+  saveUserMessage,
   updateSessionStatus,
-  updateLastUserMessageAt,
   saveAgentSessionId,
   lookupAgentSessionId,
   reconcileStuckSessions,
@@ -102,6 +112,102 @@ describe("session-writer WriteResult", () => {
     });
   });
 
+  // ── saveUserMessage ─────────────────────────────────────────────────
+
+  describe("saveUserMessage", () => {
+    it("returns ok:true with messageId on success", () => {
+      const result = saveUserMessage("session-1", "Fix the login bug");
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(typeof result.value).toBe("string");
+        expect(result.value.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("uses a transaction to wrap INSERT + UPDATE atomically", () => {
+      saveUserMessage("session-1", "Hello");
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTransaction).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it("inserts user message with correct role and columns", () => {
+      saveUserMessage("session-1", "Fix the bug", "sonnet");
+      // Transaction calls prepare twice inside the fn: INSERT then UPDATE
+      const prepareCalls = mockDbPrepare.mock.calls as string[][];
+      const insertCall = prepareCalls.find((args) => args[0]?.includes("INSERT INTO messages"));
+      expect(insertCall).toBeDefined();
+      expect(insertCall![0]).toContain("'user'");
+    });
+
+    it("updates session status to working and sets last_user_message_at", () => {
+      saveUserMessage("session-1", "Fix the bug");
+      const prepareCalls = mockDbPrepare.mock.calls as string[][];
+      const updateCall = prepareCalls.find((args) => args[0]?.includes("UPDATE sessions SET status"));
+      expect(updateCall).toBeDefined();
+      expect(updateCall![0]).toContain("'working'");
+      expect(updateCall![0]).toContain("last_user_message_at");
+    });
+
+    it("clears error_message and error_category in the session UPDATE", () => {
+      saveUserMessage("session-1", "Retry the task");
+      const prepareCalls = mockDbPrepare.mock.calls as string[][];
+      const updateCall = prepareCalls.find((args) => args[0]?.includes("UPDATE sessions SET status"));
+      expect(updateCall).toBeDefined();
+      expect(updateCall![0]).toContain("error_message = NULL");
+      expect(updateCall![0]).toContain("error_category = NULL");
+    });
+
+    it("uses default model 'opus' when no model provided", () => {
+      saveUserMessage("session-1", "Hello");
+      // Find the INSERT run call — it gets the model as 5th arg
+      const runCalls = mockDbRun.mock.calls as unknown[][];
+      // The INSERT run has 5 positional args: messageId, sessionId, content, sentAt, model
+      const insertRun = runCalls.find((args) => args.length === 5);
+      expect(insertRun).toBeDefined();
+      expect(insertRun![4]).toBe("opus");
+    });
+
+    it("returns ok:false when transaction throws", () => {
+      mockTransaction.mockImplementationOnce(() => {
+        return () => { throw new Error("SQLITE_BUSY: database is locked"); };
+      });
+      const result = saveUserMessage("session-1", "Hello");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("SQLITE_BUSY");
+      }
+    });
+
+    it("does not persist anything when transaction fails (atomicity)", () => {
+      mockTransaction.mockImplementationOnce(() => {
+        return () => { throw new Error("SQLITE_CONSTRAINT"); };
+      });
+      const result = saveUserMessage("session-1", "Hello");
+      expect(result.ok).toBe(false);
+      // Transaction wrapper throws before body executes — no DB writes should leak
+      expect(mockDbRun).not.toHaveBeenCalled();
+    });
+
+    it("emits sendStatusChanged with status='working' after transaction", () => {
+      saveUserMessage("session-1", "Fix the bug");
+      expect(mockSendStatusChanged).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "status_changed",
+          id: "session-1",
+          status: "working",
+        })
+      );
+    });
+
+    it("does not emit sendStatusChanged when transaction fails", () => {
+      mockTransaction.mockImplementationOnce(() => {
+        return () => { throw new Error("SQLITE_BUSY"); };
+      });
+      saveUserMessage("session-1", "Hello");
+      expect(mockSendStatusChanged).not.toHaveBeenCalled();
+    });
+  });
+
   // ── updateSessionStatus ──────────────────────────────────────────────
 
   describe("updateSessionStatus", () => {
@@ -142,22 +248,35 @@ describe("session-writer WriteResult", () => {
       updateSessionStatus("session-1", "idle");
       expect(mockDbRun).toHaveBeenCalledWith("idle", null, null, "session-1");
     });
-  });
 
-  // ── updateLastUserMessageAt ──────────────────────────────────────────
-
-  describe("updateLastUserMessageAt", () => {
-    it("returns ok:true on success", () => {
-      const result = updateLastUserMessageAt("session-1");
-      expect(result.ok).toBe(true);
+    it("calls sendStatusChanged with correct payload on success", () => {
+      updateSessionStatus("session-1", "idle");
+      expect(mockSendStatusChanged).toHaveBeenCalledWith({
+        type: "status_changed",
+        id: "session-1",
+        agentType: "claude",
+        status: "idle",
+      });
     });
 
-    it("returns ok:false on failure", () => {
-      mockDbRun.mockImplementationOnce(() => {
-        throw new Error("SQLITE_ERROR");
+    it("calls sendStatusChanged with error details when status is error", () => {
+      updateSessionStatus("session-1", "error", "API key invalid", "auth");
+      expect(mockSendStatusChanged).toHaveBeenCalledWith({
+        type: "status_changed",
+        id: "session-1",
+        agentType: "claude",
+        status: "error",
+        errorMessage: "API key invalid",
+        errorCategory: "auth",
       });
-      const result = updateLastUserMessageAt("session-1");
-      expect(result.ok).toBe(false);
+    });
+
+    it("does not break when sendStatusChanged throws", () => {
+      mockSendStatusChanged.mockImplementationOnce(() => {
+        throw new Error("No tunnel attached");
+      });
+      const result = updateSessionStatus("session-1", "idle");
+      expect(result.ok).toBe(true);
     });
   });
 

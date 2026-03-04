@@ -3,16 +3,11 @@
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
 import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
-import { FrontendClient } from "../../frontend-client";
-import { classifyError, classifyStopReason } from "../error-classifier";
 import { createCheckpoint } from "./checkpoint";
-import {
-  saveAssistantMessage,
-  saveToolResultMessage,
-  updateSessionStatus,
-  saveAgentSessionId,
-  lookupAgentSessionId,
-} from "../../db/session-writer";
+import { AsyncQueue } from "../async-queue";
+import { createStreamContext, resolveStreamOutcome, executeOutcome } from "./stream-context";
+import { deserializeMessage, processMessage, type ProcessMessageOptions } from "./message-processor";
+import { lookupAgentSessionId } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
@@ -34,34 +29,6 @@ import {
   isSessionActive,
   type SessionState,
 } from "./claude-session";
-
-// Re-export parseEnvString for backwards compatibility
-export { parseEnvString } from "../env-builder";
-
-// Re-export for index.ts backwards compatibility during transition
-export {
-  initializeClaude as initializeClaudeHandler,
-  blockIfNotInitialized,
-} from "./claude-discovery";
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function safeStringify(obj: unknown, indent?: number): string {
-  const seen = new WeakSet();
-  return JSON.stringify(
-    obj,
-    (_key, value) => {
-      if (typeof value === "object" && value !== null) {
-        if (seen.has(value)) return "[Circular]";
-        seen.add(value);
-      }
-      return value;
-    },
-    indent
-  );
-}
 
 // ============================================================================
 // RPC parameter types
@@ -88,6 +55,40 @@ interface WorkspaceInitOptions {
   cwd: string;
   ghToken?: string;
   claudeEnvVars?: string;
+}
+
+// ============================================================================
+// buildPromptIterable — parses queue messages into SDK-compatible user turns
+// ============================================================================
+
+/**
+ * Wraps an AsyncQueue of raw prompt strings into the async-iterable format
+ * expected by the Claude Agent SDK. Handles both plain text and JSON-encoded
+ * content blocks (when user attaches images).
+ */
+function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
+  return (async function* () {
+    for await (const message of queue) {
+      let content: string | unknown[] = message;
+      if (message && message.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(message);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
+            content = parsed;
+          }
+        } catch {
+          // Not valid JSON — keep as plain text string
+        }
+      }
+
+      yield {
+        type: "user" as const,
+        message: { role: "user" as const, content },
+        parent_tool_use_id: null,
+        session_id: sessionId,
+      };
+    }
+  })();
 }
 
 // ============================================================================
@@ -413,45 +414,21 @@ export class ClaudeAgentHandler implements AgentHandler {
     console.log(`[TIMING][${generatorId}] processWithGenerator START`);
 
     // --- Message queue for multi-turn conversations ---
-    const messageQueue: string[] = [initialPrompt];
-    let waitingForMessage: ((msg: string) => void) | null = null;
-    let asyncIterableTerminated = false;
+    const promptQueue = new AsyncQueue<string>([initialPrompt]);
 
     session.sendMessage = (message: string) => {
       console.log(`[${generatorId}] Pushing message to queue`);
-      messageQueue.push(message);
-      if (waitingForMessage) {
-        const resolver = waitingForMessage;
-        waitingForMessage = null;
-        resolver(messageQueue.shift()!);
-      }
+      promptQueue.push(message);
     };
 
     session.sendTerminate = () => {
       console.log(`[${generatorId}] Sending terminate signal`);
-      asyncIterableTerminated = true;
-      if (waitingForMessage) {
-        const resolver = waitingForMessage;
-        waitingForMessage = null;
-        resolver("");
-      }
+      promptQueue.close();
     };
 
-    // Track whether the current query completed successfully (received result/success).
-    // The SDK subprocess may exit with a signal (e.g. SIGINT) after finishing — the
-    // CLI binary's normal shutdown mechanism. The SDK reports ANY signal-based exit as
-    // an error, even when the query already succeeded. This flag lets the catch block
-    // distinguish "process cleanup after success" from genuine mid-query failures.
-    let querySucceeded = false;
-
-    // Track whether classifyStopReason detected an error (e.g. max_tokens).
-    // When set, prevents the result/success and post-loop idle writes from
-    // overwriting the error status — the SDK always emits result/success even
-    // after max_tokens, so without this guard the error would be clobbered.
-    let stopReasonError = false;
-
-    // Declared outside try so the catch block can access it for error diagnostics.
-    let messageCount = 0;
+    // Mutable context accumulated during the streaming loop.
+    // Replaces scattered boolean flags — see stream-context.ts for field docs.
+    const ctx = createStreamContext();
 
     try {
       // Build environment using shared env-builder
@@ -489,43 +466,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       const sdkOptions = buildSdkOptions(sessionId, envForClaude, options);
       console.log(`[TIMING][${generatorId}] buildSdkOptions took ${Date.now() - tSdkOptsStart}ms`);
 
-      // Build the async-iterable prompt source
-      const promptInput = (async function* () {
-        while (true) {
-          let message: string | undefined;
-          if (messageQueue.length > 0) {
-            message = messageQueue.shift();
-          } else {
-            message = await new Promise<string>((resolve) => {
-              waitingForMessage = resolve;
-            });
-          }
-
-          if (asyncIterableTerminated) break;
-
-          // Content can be plain text or a JSON-stringified content blocks array
-          // (when user attaches images). Parse to pass as MessageParam.content array
-          // so the SDK sends image blocks to Claude's vision API.
-          let content: string | unknown[] = message as string;
-          if (message && message.startsWith("[")) {
-            try {
-              const parsed = JSON.parse(message);
-              if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type) {
-                content = parsed;
-              }
-            } catch {
-              // Not valid JSON — keep as plain text string
-            }
-          }
-
-          yield {
-            type: "user" as const,
-            message: { role: "user" as const, content },
-            parent_tool_use_id: null,
-            session_id: sessionId,
-          };
-        }
-      })();
+      const promptInput = buildPromptIterable(promptQueue, sessionId);
 
       // Start the SDK query
       console.log(`[TIMING][${generatorId}] SDK spawn starting (elapsed since processStart: ${Date.now() - tProcessStart}ms)`);
@@ -537,283 +478,52 @@ export class ClaudeAgentHandler implements AgentHandler {
       setQuery(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
 
+      // Per-message options (constant for the lifetime of this generator)
+      const msgOpts: ProcessMessageOptions = {
+        sessionId,
+        generatorId,
+        model: options.model || "opus",
+        isResume: !!options.resume,
+      };
+
       // Stream messages back to the frontend and persist to DB.
       // IMPORTANT: Persist to DB BEFORE notifying frontend, so messages
       // are in the DB when the frontend receives the event and fetches them.
-      let firstMessageTime: number | null = null;
       const tStreamStart = Date.now();
       for await (const message of queryResult) {
-        messageCount++;
-        if (firstMessageTime === null) {
-          firstMessageTime = Date.now();
-          console.log(`[TIMING][${generatorId}] FIRST_MESSAGE received after ${firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`);
+        ctx.messageCount++;
+        if (ctx.firstMessageTime === null) {
+          ctx.firstMessageTime = Date.now();
+          console.log(`[TIMING][${generatorId}] FIRST_MESSAGE received after ${ctx.firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`);
         }
+        // Deserialize, persist, and forward to frontend.
+        // See message-processor.ts for the critical side-effect ordering.
         if (message) {
-          let cleanMessage: Record<string, unknown>;
-          try {
-            const messageStr = safeStringify(message);
-            cleanMessage = JSON.parse(messageStr);
-          } catch (parseError) {
-            console.error(
-              `[${generatorId}] Failed to serialize/parse SDK message, skipping:`,
-              parseError instanceof Error ? parseError.message : String(parseError)
-            );
-            continue;
-          }
+          const cleanMessage = deserializeMessage(message, generatorId);
+          if (!cleanMessage) continue;
 
-          // One-shot: capture SDK session_id on the first message.
-          // Every SDK message carries session_id. We persist it once so
-          // the sidecar can resume this conversation after a restart.
-          if (!session.agentSessionIdCaptured && cleanMessage.session_id) {
-            const agentSessionId = String(cleanMessage.session_id);
-            const saveResult = saveAgentSessionId(sessionId, agentSessionId);
-            if (saveResult.ok) {
-              session.agentSessionIdCaptured = true;
-              console.log(`[${generatorId}] Captured agent_session_id: ${agentSessionId}`);
-            } else {
-              console.error(
-                `[${generatorId}] Failed to persist agent_session_id: ${saveResult.error}`
-              );
-            }
-          }
-
-          // Extract common fields from the deserialized SDK message.
-          // cleanMessage is Record<string, unknown> (JSON.parse output), so
-          // we narrow once here instead of scattering `as` casts at each call site.
-          const msg = cleanMessage.message as
-            | { id?: string; role?: string; content?: unknown; stop_reason?: string }
-            | undefined;
-          const parentToolUseId =
-            typeof cleanMessage.parent_tool_use_id === "string"
-              ? cleanMessage.parent_tool_use_id
-              : null;
-
-          // Persist assistant messages to database (before frontend notification)
-          if (cleanMessage.type === "assistant" && msg) {
-            const model = options?.model || "opus";
-            const tDbWrite = Date.now();
-            const writeResult = saveAssistantMessage(sessionId, msg, model, parentToolUseId);
-            const dbWriteMs = Date.now() - tDbWrite;
-            if (!writeResult.ok) {
-              console.error(
-                `[${generatorId}] DB write failed for assistant message: ${writeResult.error}`
-              );
-            }
-            if (dbWriteMs > 10) {
-              console.log(`[TIMING][${generatorId}] saveAssistantMessage took ${dbWriteMs}ms`);
-            }
-          }
-
-          // Persist user messages with tool_result blocks so the frontend
-          // can link tool_use → tool_result via the toolResultMap
-          if (cleanMessage.type === "user" && msg) {
-            const content = msg.content;
-            const hasToolResult =
-              Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
-            if (hasToolResult) {
-              const tDbWrite = Date.now();
-              const writeResult = saveToolResultMessage(sessionId, msg, parentToolUseId);
-              const dbWriteMs = Date.now() - tDbWrite;
-              if (!writeResult.ok) {
-                console.error(
-                  `[${generatorId}] DB write failed for tool_result message: ${writeResult.error}`
-                );
-              }
-              if (dbWriteMs > 10) {
-                console.log(`[TIMING][${generatorId}] saveToolResultMessage took ${dbWriteMs}ms`);
-              }
-            }
-          }
-
-          // Send to frontend via JSON-RPC notification (after DB write)
-          const tSend = Date.now();
-          FrontendClient.sendMessage({
-            id: sessionId,
-            type: "message",
-            agentType: "claude",
-            data: cleanMessage,
-          });
-          const sendMs = Date.now() - tSend;
-          if (sendMs > 5) {
-            console.log(`[TIMING][${generatorId}] sendMessage took ${sendMs}ms`);
-          }
+          processMessage(cleanMessage, ctx, session, msgOpts);
 
           // Log per-message timing for first 5 messages, then every 10th
-          if (messageCount <= 5 || messageCount % 10 === 0) {
-            console.log(`[TIMING][${generatorId}] msg#${messageCount} type=${cleanMessage.type}${cleanMessage.type === "result" ? "/" + cleanMessage.subtype : ""} elapsed=${Date.now() - tStreamStart}ms`);
-          }
-
-          // Check if stop_reason indicates an error condition (e.g. max_tokens).
-          // Fires AFTER sendMessage so the truncated content lands in the
-          // frontend cache before the error banner appears.
-          if (cleanMessage.type === "assistant" && msg) {
-            const stopError = classifyStopReason(msg.stop_reason);
-            if (stopError) {
-              FrontendClient.sendError({
-                id: sessionId,
-                type: "error",
-                error: stopError.message,
-                agentType: "claude",
-                category: stopError.category,
-              });
-              updateSessionStatus(sessionId, "error", stopError.message, stopError.category);
-              stopReasonError = true;
-            }
-          }
-
-          // Update session status when query completes successfully.
-          // Skip if a stop-reason error was already recorded (e.g. max_tokens) —
-          // the SDK emits result/success even after truncation.
-          if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
-            querySucceeded = true;
-            if (!stopReasonError) {
-              updateSessionStatus(sessionId, "idle");
-            }
+          if (ctx.messageCount <= 5 || ctx.messageCount % 10 === 0) {
+            console.log(`[TIMING][${generatorId}] msg#${ctx.messageCount} type=${cleanMessage.type}${cleanMessage.type === "result" ? "/" + cleanMessage.subtype : ""} elapsed=${Date.now() - tStreamStart}ms`);
           }
         }
       }
 
-      console.log(`[TIMING][${generatorId}] STREAM_COMPLETE messages=${messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`);
+      console.log(`[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`);
 
-      // User-initiated cancellation: close() killed the process, for-await exited normally.
-      // Persist the cancelled message so AssistantTurn.tsx renders "Turn interrupted".
-      if (session.cancelledByUser) {
-        const model = options?.model || "opus";
-        saveAssistantMessage(
-          sessionId,
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "" }],
-            stop_reason: "cancelled",
-          },
-          model
-        );
-
-        FrontendClient.sendMessage({
-          id: sessionId,
-          type: "message",
-          agentType: "claude",
-          data: { type: "cancelled" },
-        });
-
-        updateSessionStatus(sessionId, "idle");
-        console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
-        return;
-      }
-
-      // Normal completion — ensure session is marked idle
-      // (covers the case where SDK ends without a "result/success" message).
-      // Skip if a stop-reason error was already recorded — preserve error state.
-      if (!stopReasonError) {
-        updateSessionStatus(sessionId, "idle");
-      }
-      console.log(`[${generatorId}] Session completed: ${sessionId}`);
+      // Resolve outcome and execute side effects (cancel, idle, error).
+      // See stream-context.ts for the classification logic.
+      const postLoopOutcome = resolveStreamOutcome(ctx, session, null, sessionId);
+      executeOutcome(postLoopOutcome, sessionId, ctx, options, generatorId);
+      if (postLoopOutcome.type === "cancelled") return;
     } catch (error) {
-      // User-initiated cancellation: close() killed the subprocess, which may cause
-      // the for-await to throw instead of exiting cleanly (SDK-dependent behavior).
-      // If we land here, the post-loop path (above) was never reached, so we must
-      // persist the cancelled message ourselves. If the post-loop path DID run and
-      // then close() threw asynchronously, we never reach this catch (return on line 653).
-      if (session.cancelledByUser) {
-        const model = options?.model || "opus";
-        saveAssistantMessage(
-          sessionId,
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "" }],
-            stop_reason: "cancelled",
-          },
-          model
-        );
-
-        FrontendClient.sendMessage({
-          id: sessionId,
-          type: "message",
-          agentType: "claude",
-          data: { type: "cancelled" },
-        });
-
-        updateSessionStatus(sessionId, "idle");
-        console.log(`[${generatorId}] Session cancelled by user (catch path): ${sessionId}`);
-        return;
-      }
-
-      // The SDK subprocess may exit with a signal (e.g. SIGINT) after the query
-      // already completed successfully. This happens because the CLI binary shuts
-      // down its process between turns, and the SDK reports any signal-based exit
-      // as an error via inputStream.error(). If result/success was already received,
-      // this is expected process cleanup — not a real error.
-      if (querySucceeded) {
-        if (!stopReasonError) {
-          updateSessionStatus(sessionId, "idle");
-        }
-        console.log(`[${generatorId}] Process exited after successful query (expected cleanup)`);
-        return;
-      }
-
-      const classified = classifyError(error);
-      const rawErrorMsg = error instanceof Error ? error.message : String(error);
-      const errorName = error instanceof Error ? error.name : "non-Error";
-      const errorStack = error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : "no stack";
-      // Extract any extra properties the SDK may attach (cause, code, exitCode, signal, etc.)
-      const extraProps = error instanceof Error
-        ? Object.getOwnPropertyNames(error)
-            .filter((k) => !["message", "stack", "name"].includes(k))
-            .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
-            .join(" ")
-        : "";
-      console.error(
-        `[${generatorId}] Error in Claude query [${classified.category}]:`,
-        classified.message
-      );
-      console.error(
-        `[${generatorId}] Error details:`,
-        `name=${errorName}`,
-        `wasResume=${!!options.resume}`,
-        `resumeId=${options.resume ?? "none"}`,
-        `querySucceeded=${querySucceeded}`,
-        `messageCount=${messageCount}`,
-        extraProps ? `extraProps={${extraProps}}` : "extraProps={}",
-      );
-      console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
-
-      // Resume failures are handled by the normal error path below.
-      // The agent_session_id is preserved in the DB so the next retry
-      // re-attempts the same session. The classified error (network,
-      // auth, rate_limit, context_limit, etc.) flows through to the
-      // frontend which already renders the correct UI for each category.
-
-      // Only act on this error if this generator still owns the session.
-      // A rapid re-query can replace the session before the catch runs;
-      // writing stale cancellation/error messages would pollute the new run.
-      const ownsSession = !getSession(sessionId) || getSession(sessionId) === session;
-
-      if (ownsSession) {
-        FrontendClient.sendError({
-          id: sessionId,
-          type: "error",
-          error: classified.message,
-          agentType: "claude",
-          category: classified.category,
-        });
-
-        const statusResult = updateSessionStatus(
-          sessionId,
-          "error",
-          classified.message,
-          classified.category
-        );
-        if (!statusResult.ok) {
-          // Session is now stuck — notify frontend so it can attempt recovery
-          FrontendClient.sendError({
-            id: sessionId,
-            type: "error",
-            error: `Session status update failed: ${statusResult.error}`,
-            agentType: "claude",
-            category: "db_write",
-          });
-        }
-      }
+      // Resolve outcome from the catch context — covers cancel-via-throw,
+      // post-success SIGINT, and genuine errors.
+      const catchOutcome = resolveStreamOutcome(ctx, session, error, sessionId);
+      executeOutcome(catchOutcome, sessionId, ctx, options, generatorId);
+      if (catchOutcome.type !== "genuine_error") return;
     } finally {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;

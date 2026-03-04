@@ -8,6 +8,7 @@
 import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
 import { notifyBackend } from "./backend-notifier";
+import { FrontendClient } from "../frontend-client";
 
 // ── WriteResult ──────────────────────────────────────────────────────────
 
@@ -108,6 +109,105 @@ export function saveToolResultMessage(
   }
 }
 
+// ── Save User Message (Atomic Send Path) ────────────────────────────────
+
+/**
+ * Save a user message and set session status to "working" in a single
+ * SQLite transaction. This is the sidecar-owns-send path: the frontend
+ * sends one socket call, and the sidecar atomically persists the message
+ * + activates the session before dispatching the agent.
+ *
+ * If the transaction fails, nothing is persisted — the frontend gets
+ * { accepted: false } and can show a clean error without cleanup.
+ */
+export function saveUserMessage(
+  sessionId: string,
+  content: string,
+  model: string = "opus"
+): WriteResult {
+  const db = getDatabase();
+  const messageId = uuidv7();
+  const sentAt = new Date().toISOString();
+
+  try {
+    const saveAndActivate = db.transaction(() => {
+      db.prepare(
+        `INSERT INTO messages (id, session_id, role, content, sent_at, model)
+         VALUES (?, ?, 'user', ?, ?, ?)`
+      ).run(messageId, sessionId, content, sentAt, model);
+
+      db.prepare(
+        `UPDATE sessions SET status = 'working', last_user_message_at = ?,
+         error_message = NULL, error_category = NULL,
+         updated_at = datetime('now') WHERE id = ?`
+      ).run(sentAt, sessionId);
+    });
+
+    saveAndActivate();
+    notifyBackend("session:message", sessionId);
+
+    // Emit statusChanged so the frontend receives a real Tauri event for
+    // the working transition — not just the optimistic onMutate update.
+    // If the socket ACK is lost and onError rolls back, this event re-corrects.
+    try {
+      const workspaceId = lookupWorkspaceId(sessionId);
+      const agentType = lookupAgentType(sessionId);
+      FrontendClient.sendStatusChanged({
+        type: "status_changed",
+        id: sessionId,
+        agentType,
+        status: "working",
+        ...(workspaceId ? { workspaceId } : {}),
+      });
+    } catch {
+      // No tunnel attached — frontend relies on optimistic update
+    }
+
+    return { ok: true, value: messageId };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[SESSION-WRITER] Failed to save user message:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+// ── Workspace Lookup ─────────────────────────────────────────────────────
+
+/**
+ * Look up the workspace_id for a given session.
+ * Used to include workspaceId in status events so the frontend can match
+ * by workspace ID directly (more reliable than current_session_id matching
+ * which breaks when a new session is created or on app startup).
+ */
+export function lookupWorkspaceId(sessionId: string): string | null {
+  const db = getDatabase();
+  try {
+    const row = db
+      .prepare("SELECT workspace_id FROM sessions WHERE id = ?")
+      .get(sessionId) as { workspace_id: string } | undefined;
+    return row?.workspace_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Look up the agent_type for a given session.
+ * Used to include the correct agentType in status events instead of
+ * hardcoding "claude" (which would be wrong for Codex sessions).
+ */
+export function lookupAgentType(sessionId: string): string {
+  const db = getDatabase();
+  try {
+    const row = db
+      .prepare("SELECT agent_type FROM sessions WHERE id = ?")
+      .get(sessionId) as { agent_type: string } | undefined;
+    return row?.agent_type ?? "claude";
+  } catch {
+    return "claude";
+  }
+}
+
 // ── Session Status ───────────────────────────────────────────────────────
 
 /**
@@ -147,6 +247,25 @@ export function updateSessionStatus(
       notifyBackend("session:status", sessionId);
       const notifyMs = Date.now() - tNotify;
 
+      // Emit to frontend via Tauri event (desktop path).
+      // Fire-and-forget: tunnel may not be attached during startup
+      // (reconcileStuckSessions) or after sidecar restart.
+      try {
+        const workspaceId = lookupWorkspaceId(sessionId);
+        const agentType = lookupAgentType(sessionId);
+        FrontendClient.sendStatusChanged({
+          type: "status_changed",
+          id: sessionId,
+          agentType,
+          status,
+          ...(status === "error" && errorMessage ? { errorMessage } : {}),
+          ...(status === "error" && errorCategory ? { errorCategory } : {}),
+          ...(workspaceId ? { workspaceId } : {}),
+        });
+      } catch {
+        // No tunnel attached — frontend will pick up via fallback poll
+      }
+
       const totalMs = Date.now() - t0;
       console.log(
         `[TIMING][SESSION-WRITER] updateSessionStatus session=${sessionId} status='${status}' update=${updateMs}ms notify=${notifyMs}ms total=${totalMs}ms${attempt > 0 ? ` retries=${attempt}` : ""}${errorMessage ? ` error: ${errorMessage}` : ""}`
@@ -168,37 +287,6 @@ export function updateSessionStatus(
     }
   }
   return { ok: false, error: "unreachable" };
-}
-
-/**
- * Update session's last_user_message_at timestamp.
- * Called when user sends a message (for optimized workspace list queries).
- */
-export function updateLastUserMessageAt(sessionId: string): WriteResult<void> {
-  const db = getDatabase();
-
-  try {
-    db.prepare(
-      `
-      UPDATE sessions SET last_user_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
-    `
-    ).run(sessionId);
-    notifyBackend("session:updated", sessionId);
-    return { ok: true, value: undefined };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[SESSION-WRITER] Failed to update last_user_message_at:`, msg);
-    return { ok: false, error: msg };
-  }
-}
-
-/**
- * Check if a session exists in the database.
- */
-export function sessionExists(sessionId: string): boolean {
-  const db = getDatabase();
-  const result = db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
-  return !!result;
 }
 
 // ── Agent Session ID (Resume Support) ────────────────────────────────

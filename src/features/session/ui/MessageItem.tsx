@@ -24,7 +24,7 @@ import "./tools/registerTools";
 
 const COLLAPSE_MAX_HEIGHT = 144;
 
-type ParsedContent = (ContentBlock | string)[] | string | null;
+type ParsedContent = (ContentBlock | string)[] | string;
 
 interface MessageItemProps {
   message: Message;

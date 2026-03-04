@@ -7,8 +7,9 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Chat, MessageInput } from ".";
-import type { MessageInputRef } from ".";
+import { Chat } from "./Chat";
+import { MessageInput } from "./MessageInput";
+import type { MessageInputRef } from "./MessageInput";
 import { useSocket } from "@/shared/hooks";
 import { useSessionActions, useSessionEvents } from "../hooks";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";

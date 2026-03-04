@@ -1,5 +1,24 @@
 # Deep Pattern Notes (overflow from MEMORY.md)
 
+## Status Event Pipeline (Confirmed, 2026-03-04)
+
+- **Bug 1 (workspace matching)**: `session:status-changed` carries `workspaceId` (from `lookupWorkspaceId()` in session-writer).
+  Frontend matching: `(workspaceId && ws.id === workspaceId) || ws.current_session_id === sessionId`.
+  Fallback is backward-compat for Codex sessions and older events without workspaceId.
+- **Hardcoded `agentType: "claude"`** in `session-writer.ts` `sendStatusChanged()` calls — correct for now
+  (session-writer is only called from Claude path), but breaks if Codex sessions ever route through it.
+- **Bug 2 (Tauri null deserialization)**: `dbGetMessages()` in `src/platform/tauri/db.ts` now builds payload
+  conditionally, omitting `null` fields. Rust's `Option<i64>` can't deserialize JSON null.
+- **Bug 3 (Strict Mode race)**: `registerListener(promise)` pattern with `cancelled` flag + `unlistenFns[]`
+  array. Both `useSessionEvents` and `useGlobalSessionNotifications` use this pattern.
+  WARNING: `registerListener` swallows `listen()` rejections silently — `.catch()` handler missing.
+  `listen()` can fail if Tauri is unavailable, but this is gated by `if (!isTauriEnv)` before the effect body.
+- **Optimistic workspace status**: `onMutate` sets `session_status: "working"` in `["workspaces", "by-repo"]` cache.
+  `onError` rolls it back to `"idle"`. Matches by `current_session_id` (not `workspaceId` — no workspaceId
+  available in onMutate context). This is intentionally less precise than the event-based path.
+- **reconcileStuckSessions**: Called at sidecar startup. Does NOT emit status-changed events for reconciled
+  sessions — frontend will pick up via the `invalidateQueries` on `useSessionEvents` mount.
+
 ## Error Classification + Session Writer Patterns (Confirmed)
 
 - `classifyStopReason` in `error-classifier.ts`: maps SDK `stop_reason` to `ClassifiedError | null`.
@@ -135,3 +154,25 @@ startChase()` (not just `startChase()`, which guards against double-start). Forc
 - `reconcileStuckSessions` must run AFTER DB init but BEFORE socket accepts connections.
 - `saveAgentSessionId` does NOT call `notifyBackend` — internal bookkeeping only.
 - Double `updated_at` write in `saveAgentSessionId` is redundant (AFTER UPDATE trigger fires anyway).
+
+## Sidecar-Owns-Send Pattern (zvadaadam/sidecar-error-logging, 2026-03)
+
+- `saveUserMessage()` in `session-writer.ts` uses `db.transaction()` for atomic INSERT message +
+  UPDATE session status='working'. This is the entry point for all user messages in the desktop path.
+- `onQuery` handler in `index.ts` calls `saveUserMessage` BEFORE dispatching the agent. If DB write
+  fails, returns `{ accepted: false }` — nothing persisted, clean rollback.
+- `sendQuery` changed from fire-and-forget notification to an RPC request that returns `QueryAckResponse`.
+  Frontend throws if `ack.accepted === false`, which triggers `onError` to roll back optimistic UI.
+- `onQuery` in `frontend-client.ts` uses `requireTunnel()` (first tunnel in Set) to register the handler.
+  When a second client connects, the method is registered ONLY on the first tunnel's RpcConnection —
+  the second client cannot send queries. This is a latent bug for multi-tunnel scenarios.
+- `updateSessionStatus` spin-waits 200ms on SQLITE_BUSY — blocks the event loop (better-sqlite3 is sync
+  but Node.js still has an event loop; 200ms is visible lag). Acceptable for rare retry case.
+- Atomicity test in session-writer.test.ts (`does not persist anything when transaction fails`) has NO
+  assertion on mockDbRun — it only checks result.ok. If the mock setup were wrong the test would still pass.
+- `saveUserMessage` does NOT call `notifyBackend("session:message", ...)` before notifying — but it
+  DOES call it (line 146 of session-writer.ts). Correct.
+- Flat content format: new user/assistant messages stored as JSON arrays directly (no envelope wrapper).
+  Old rows may have envelope — `normalizeContentBlocks` has backward-compat shim.
+- `parent_tool_use_id` promoted from JSON envelope to dedicated DB column — `msg.parent_tool_use_id`
+  now read directly instead of parsing JSON envelope.

@@ -18,7 +18,7 @@ import type { ContentBlock, Message, SessionStatus } from "../types";
 import type { ToolResultMap } from "../ui/chat-types";
 
 interface SessionContextValue {
-  parseContent: (content: string) => (ContentBlock | string)[] | string | null;
+  parseContent: (content: string) => (ContentBlock | string)[] | string;
   toolResultMap: ToolResultMap;
   parentToolUseMap: Map<string, string>;     // messageId → parentToolUseId
   subagentMessages: Map<string, Message[]>;  // toolUseId → child messages
@@ -28,7 +28,7 @@ interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 interface SessionProviderProps {
-  parseContent: (content: string) => (ContentBlock | string)[] | string | null;
+  parseContent: (content: string) => (ContentBlock | string)[] | string;
   toolResultMap: ToolResultMap;
   parentToolUseMap: Map<string, string>;
   subagentMessages: Map<string, Message[]>;

@@ -96,34 +96,6 @@ class UnixSocketService {
   }
 
   /**
-   * Send JSON-RPC notification (fire-and-forget)
-   */
-  async notify(method: string, params: Record<string, unknown>): Promise<void> {
-    if (!this.connected && isTauriEnv) {
-      await this.connect();
-    }
-
-    if (!this.connected) {
-      throw new Error("Not connected to sidecar socket");
-    }
-
-    const request: JsonRpcRequest = {
-      jsonrpc: "2.0",
-      method,
-      params,
-    };
-
-    try {
-      const messageStr = JSON.stringify(request);
-      await invoke("send_sidecar_message", { message: messageStr });
-    } catch (error) {
-      console.error("[SOCKET] ❌ Notification failed:", error);
-      this.connected = false;
-      throw error;
-    }
-  }
-
-  /**
    * Send JSON-RPC request (expects response)
    */
   async request<T>(method: string, params: Record<string, unknown>): Promise<T> {
@@ -211,92 +183,10 @@ class UnixSocketService {
   }
 
   /**
-   * Request Claude authentication info
-   */
-  async getClaudeAuth(sessionId: string, cwd: string): Promise<unknown> {
-    return this.request("claudeAuth", {
-      type: "claude_auth",
-      id: sessionId,
-      agentType: "claude",
-      options: { cwd },
-    });
-  }
-
-  /**
-   * Initialize workspace (get slash commands, MCP servers)
-   */
-  async workspaceInit(
-    sessionId: string,
-    cwd: string,
-    ghToken?: string,
-    claudeEnvVars?: string
-  ): Promise<unknown> {
-    return this.request("workspaceInit", {
-      type: "workspace_init",
-      id: sessionId,
-      agentType: "claude",
-      options: { cwd, ghToken, claudeEnvVars },
-    });
-  }
-
-  /**
-   * Update permission mode for a session
-   */
-  async updatePermissionMode(
-    sessionId: string,
-    permissionMode: string,
-    agentType: "claude" | "codex" | "unknown" = "claude"
-  ): Promise<void> {
-    await this.notify("updatePermissionMode", {
-      type: "update_permission_mode",
-      id: sessionId,
-      agentType,
-      permissionMode,
-    });
-  }
-
-  /**
-   * Reset generator for a session
-   */
-  async resetGenerator(
-    sessionId: string,
-    agentType: "claude" | "codex" | "unknown" = "claude"
-  ): Promise<void> {
-    await this.notify("resetGenerator", {
-      type: "reset_generator",
-      id: sessionId,
-      agentType,
-    });
-  }
-
-  /**
-   * Disconnect from socket
-   */
-  async disconnect(): Promise<void> {
-    if (this.connected) {
-      try {
-        await invoke("disconnect_from_sidecar");
-        this.connected = false;
-        this.socketPath = null;
-        if (import.meta.env.DEV) console.log("[SOCKET] 🔌 Disconnected");
-      } catch (error) {
-        console.error("[SOCKET] ❌ Disconnect failed:", error);
-      }
-    }
-  }
-
-  /**
    * Check if connected
    */
   isConnected(): boolean {
     return this.connected;
-  }
-
-  /**
-   * Get socket path
-   */
-  getSocketPath(): string | null {
-    return this.socketPath;
   }
 }
 

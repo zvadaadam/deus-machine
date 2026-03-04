@@ -67,9 +67,10 @@ app.get('/sessions/:id/messages', (c) => {
 /**
  * POST /sessions/:id/messages
  *
- * Saves user message to database and updates session status.
- * Agent query is initiated via Tauri IPC → sidecar-v2, not here.
- * Returns immediately after DB write.
+ * Gateway/web fallback for saving user messages. The primary desktop path
+ * now uses the sidecar socket (saveUserMessage in sidecar/db/session-writer.ts)
+ * which atomically persists the message + dispatches the agent in one call.
+ * This endpoint is kept for non-Tauri clients (cloud relay, web gateway).
  */
 app.post('/sessions/:id/messages', async (c) => {
   const t0 = Date.now();

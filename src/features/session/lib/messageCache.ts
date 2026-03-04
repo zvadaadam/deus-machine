@@ -6,7 +6,9 @@
  * and useSendMessage (onSettled → incremental fetch).
  */
 
+import type { QueryClient } from "@tanstack/react-query";
 import type { PaginatedMessages } from "../api/session.service";
+import { SessionService } from "../api/session.service";
 import type { Message } from "../types";
 
 /** Initial load: larger page so tool-heavy turns (20-30 rows/turn) show enough context */
@@ -52,4 +54,38 @@ export function getLastRealSeq(messages: Message[]): number {
     }
   }
   return 0;
+}
+
+/**
+ * Incremental fetch+merge: fetch only messages newer than what's cached,
+ * then merge into the React Query cache. Falls back to full invalidation
+ * if no cache exists or the incremental fetch fails.
+ *
+ * Used by: useSessionEvents (on mount + on message event) and
+ * useSendMessage (onSettled reconciliation).
+ */
+export async function incrementalFetchAndMerge(
+  queryClient: QueryClient,
+  sessionId: string,
+  queryKey: readonly unknown[]
+): Promise<void> {
+  const cached = queryClient.getQueryData<PaginatedMessages>(queryKey);
+  if (cached) {
+    try {
+      const lastSeq = getLastRealSeq(cached.messages);
+      const newer = await SessionService.fetchMessages(sessionId, {
+        after: lastSeq || undefined,
+        limit: MESSAGE_PAGE_SIZE,
+      });
+      // Always merge — even when zero new messages arrive, metadata like
+      // has_newer may have changed and needs to be reflected in the cache.
+      queryClient.setQueryData<PaginatedMessages>(queryKey, (old) =>
+        mergeNewerMessages(old, newer)
+      );
+    } catch {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  } else {
+    queryClient.invalidateQueries({ queryKey });
+  }
 }
