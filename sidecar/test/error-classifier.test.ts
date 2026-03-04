@@ -138,6 +138,36 @@ describe("classifyError", () => {
     });
   });
 
+  // ── Process Exit ──────────────────────────────────────────────────────
+
+  describe("process_exit", () => {
+    it("classifies 'exited with code' errors", () => {
+      const result = classifyError(new Error("Claude Code process exited with code 1"));
+      expect(result.category).toBe("process_exit");
+    });
+
+    it("classifies 'terminated by signal' errors", () => {
+      const result = classifyError(new Error("Claude Code process terminated by signal SIGKILL"));
+      expect(result.category).toBe("process_exit");
+    });
+
+    it("classifies 'process exited' errors", () => {
+      const result = classifyError(new Error("Child process exited unexpectedly"));
+      expect(result.category).toBe("process_exit");
+    });
+
+    it("classifies 'killed by signal' errors", () => {
+      const result = classifyError(new Error("Process killed by signal SIGTERM"));
+      expect(result.category).toBe("process_exit");
+    });
+
+    it("preserves original error message", () => {
+      const msg = "Claude Code process exited with code 1";
+      const result = classifyError(new Error(msg));
+      expect(result.message).toBe(msg);
+    });
+  });
+
   // ── Internal (fallback) ────────────────────────────────────────────────
 
   describe("internal", () => {
@@ -207,6 +237,16 @@ describe("classifyError", () => {
       // AbortError name takes priority even if message mentions network
       const err = new DOMException("Network request aborted", "AbortError");
       expect(classifyError(err).category).toBe("abort");
+    });
+
+    it("auth wins over process_exit when both keywords present", () => {
+      const err = new Error("HTTP 401 Unauthorized — process exited with code 1");
+      expect(classifyError(err).category).toBe("auth");
+    });
+
+    it("network wins over process_exit when both keywords present", () => {
+      const err = new Error("connect ECONNREFUSED — process exited with code 1");
+      expect(classifyError(err).category).toBe("network");
     });
 
     it("preserves original error message", () => {

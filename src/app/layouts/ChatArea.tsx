@@ -1,24 +1,19 @@
 /**
- * Chat Area — renders the active chat/file tab and wires up the tab bar.
+ * Chat Area — renders the active chat tab and wires up the tab bar.
  *
  * Tab lifecycle (create, close, restore, labels) is managed by useChatTabs.
- * This component focuses on rendering and exposing openFileTab via ref.
+ * This component focuses on layout and connecting tabs to SessionPanel.
  */
 
-import { forwardRef, useImperativeHandle } from "react";
+import { useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionPanel } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
+import { useWorkingSessionIds } from "@/features/session/api/session.queries";
 import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
 import { MainContentTabBar } from "@/features/workspace";
-import { FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "./useChatTabs";
-
-/** Imperative methods exposed to parent via ref */
-export interface ChatAreaRef {
-  openFileTab: (filePath: string) => void;
-}
 
 interface ChatAreaProps {
   workspace: Workspace;
@@ -30,16 +25,13 @@ interface ChatAreaProps {
   onCollapseChatPanel?: () => void;
 }
 
-export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea(
-  {
-    workspace,
-    workspaceChatPanelRef,
-    onCreatePRHandlerChange,
-    onSendAgentMessageHandlerChange,
-    onCollapseChatPanel,
-  },
-  ref
-) {
+export function ChatArea({
+  workspace,
+  workspaceChatPanelRef,
+  onCreatePRHandlerChange,
+  onSendAgentMessageHandlerChange,
+  onCollapseChatPanel,
+}: ChatAreaProps) {
   const {
     tabs,
     activeTabId,
@@ -52,23 +44,32 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
     handleTabRestore,
     updateChatTabAgentType,
     markChatTabStarted,
-    openFileTab,
   } = useChatTabs({
     workspaceId: workspace.id,
     activeSessionId: workspace.current_session_id,
   });
 
-  useImperativeHandle(ref, () => ({ openFileTab }), [openFileTab]);
-
   // Resolve sessionId: tab's own session, falling back to workspace's active session
-  const tabSessionId =
-    activeTab?.type === "chat" ? activeTab.data?.sessionId || workspace.current_session_id : null;
+  const tabSessionId = activeTab?.data?.sessionId || workspace.current_session_id;
+
+  // Per-tab working status: subscribes to each chat tab's session detail cache
+  // so each tab's spinner reflects its own session's status (not the workspace's
+  // single session_status which breaks with multiple tabs).
+  const chatSessionIds = useMemo(
+    () =>
+      tabs
+        .filter((t) => t.data?.sessionId)
+        .map((t) => t.data!.sessionId!),
+    [tabs]
+  );
+  const workingSessionIds = useWorkingSessionIds(chatSessionIds);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <MainContentTabBar
         tabs={tabs}
         activeTabId={activeTabId}
+        workingSessionIds={workingSessionIds}
         onTabChange={handleTabChange}
         onTabClose={handleTabClose}
         onTabAdd={handleTabAdd}
@@ -79,7 +80,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {activeTab?.type === "chat" && tabSessionId && (
+        {tabSessionId && (
           <SessionPanel
             key={tabSessionId}
             ref={workspaceChatPanelRef}
@@ -91,9 +92,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             workspaceDefaultBranch={workspace.git_default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
-            initialModel={activeTab.data?.initialModel}
-            onAgentTypeChange={(agentType) => updateChatTabAgentType(activeTab.id, agentType)}
-            onSessionStarted={() => markChatTabStarted(activeTab.id)}
+            initialModel={activeTab?.data?.initialModel}
+            onAgentTypeChange={(agentType) => activeTab && updateChatTabAgentType(activeTab.id, agentType)}
+            onSessionStarted={() => activeTab && markChatTabStarted(activeTab.id)}
             onOpenNewTab={handleTabAdd}
             onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
             onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
@@ -101,7 +102,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
         )}
 
         {/* Workspace still initializing — show the same empty state with init progress */}
-        {activeTab?.type === "chat" && !tabSessionId && (
+        {!tabSessionId && (
           <WorkspaceEmptyState
             repoName={workspace.repo_name}
             parentBranch={workspace.git_target_branch}
@@ -110,11 +111,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(function ChatArea
             initStep={workspace.init_stage}
           />
         )}
-
-        {activeTab?.type === "file" && activeTab.data?.filePath && (
-          <FileViewer filePath={activeTab.data.filePath} />
-        )}
       </div>
     </div>
   );
-});
+}

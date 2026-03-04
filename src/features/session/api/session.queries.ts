@@ -3,15 +3,15 @@
  * TanStack Query hooks for Claude Code session management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
-import { SessionService, type PaginatedMessages } from "./session.service";
+import { SessionService } from "./session.service";
+import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import {
   MESSAGE_PAGE_SIZE,
   INITIAL_MESSAGE_PAGE_SIZE,
-  mergeNewerMessages,
-  getLastRealSeq,
+  incrementalFetchAndMerge,
 } from "../lib/messageCache";
 import type {
   ContentBlock,
@@ -19,10 +19,13 @@ import type {
   Session,
   SessionStatus,
   ToolResultBlock,
-  ToolUseBlock,
 } from "../types";
+import type { RepoGroup } from "@shared/types/workspace";
 import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
+import { parseContentBlocks } from "../lib/contentParser";
+import { socketService } from "@/platform/socket";
+import type { RuntimeAgentType } from "../lib/agentRuntime";
 
 /**
  * Fetch all sessions for a workspace (used by chat tab reconstruction).
@@ -38,28 +41,58 @@ export function useWorkspaceSessions(workspaceId: string | null) {
 }
 
 /**
- * Fetch session details with dynamic polling based on status
+ * Fetch session details — fully event-driven, no polling.
  *
- * NOTE: Polling is kept even on desktop because:
- * - Only `session:message` events are implemented (not status changes)
- * - Session status updates (working → idle) still need polling
- * - Future: Implement session status events to eliminate polling on desktop
+ * Updates come from Tauri events handled by useSessionEvents:
+ * - session:status-changed → setQueryData (direct cache write)
+ * - session:error → setQueryData (direct cache write)
+ *
+ * On mount, useSessionEvents does a catch-up fetch + invalidateQueries
+ * to reconcile any changes missed while unmounted (navigation, app reopen).
  */
 export function useSession(sessionId: string | null) {
   return useQuery({
     queryKey: queryKeys.sessions.detail(sessionId || ""),
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
-    // useSessionEvents invalidates on session:message events, but status
-    // transitions (working → idle) can happen without a message event
-    // (e.g., Claude completes, process crashes). Keep a low-frequency fallback
-    // poll until session:status-changed events are implemented.
-    refetchInterval: (query) => {
-      const session = query.state.data as Session | undefined;
-      return session?.status === "working" ? 5000 : false;
-    },
-    staleTime: 10000, // 10 seconds (was 500ms)
+    staleTime: 10_000,
   });
+}
+
+/**
+ * Subscribe to per-session working status for multiple sessions at once.
+ * Used by the tab bar to show per-tab spinners correctly.
+ *
+ * The workspace's single `session_status` field breaks with multiple tabs —
+ * it gets overwritten by whichever session's event fires last. This hook
+ * subscribes to each session's detail cache reactively so tab spinners
+ * reflect each session's actual status.
+ *
+ * No extra HTTP fetches when data is already in cache (populated by
+ * useSessionEvents via setQueryData on status changes).
+ */
+export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
+  const queries = useQueries({
+    queries: sessionIds.map((id) => ({
+      queryKey: queryKeys.sessions.detail(id),
+      queryFn: () => SessionService.fetchById(id),
+      staleTime: 30_000,
+      select: (data: Session): SessionStatus => data.status,
+    })),
+  });
+
+  // Derive a stable string key from statuses to avoid creating a new Set
+  // on every render — only re-compute when a status actually changes.
+  const statusKey = queries.map((q) => q.data ?? "unknown").join(",");
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => {
+    const ids = new Set<string>();
+    sessionIds.forEach((id, i) => {
+      if (queries[i]?.data === "working") ids.add(id);
+    });
+    return ids;
+  }, [statusKey, sessionIds]);
 }
 
 /**
@@ -84,105 +117,24 @@ export function useMessages(sessionId: string | null) {
   return query;
 }
 
-const normalizeContentBlocks = (blocks: unknown): (ContentBlock | string)[] | string | null => {
-  if (Array.isArray(blocks)) {
-    let didChange = false;
-    const normalized = blocks.map((block) => {
-      if (block == null) {
-        didChange = true;
-        return "";
-      }
-
-      if (typeof block !== "object") {
-        if (typeof block === "string") {
-          return block;
-        }
-        didChange = true;
-        return String(block);
-      }
-
-      if (Array.isArray(block)) {
-        didChange = true;
-        return JSON.stringify(block);
-      }
-
-      const blockType = (block as { type?: unknown }).type;
-      if (typeof blockType !== "string") {
-        didChange = true;
-        return JSON.stringify(block);
-      }
-      if (blockType !== "tool_use") {
-        return block as ContentBlock;
-      }
-
-      const toolBlock = block as ToolUseBlock;
-      const input =
-        toolBlock.input && typeof toolBlock.input === "object" && !Array.isArray(toolBlock.input)
-          ? toolBlock.input
-          : {};
-
-      if (input === toolBlock.input) {
-        return toolBlock;
-      }
-
-      didChange = true;
-      return { ...toolBlock, input };
-    });
-
-    return didChange ? normalized : (blocks as (ContentBlock | string)[]);
-  }
-
-  if (blocks == null) {
-    return null;
-  }
-
-  if (typeof blocks === "string") {
-    return blocks;
-  }
-
-  if (typeof blocks === "object") {
-    // Detect envelope format: { message: { stop_reason }, blocks: [...] }
-    // The sidecar wraps messages with stop_reason in this envelope so the
-    // frontend can detect cancellation/limits. Unwrap and normalize the blocks.
-    if (
-      "message" in blocks &&
-      "blocks" in blocks &&
-      Array.isArray((blocks as { blocks?: unknown }).blocks)
-    ) {
-      return normalizeContentBlocks((blocks as { blocks: unknown[] }).blocks);
-    }
-    if ("type" in blocks && typeof (blocks as { type?: unknown }).type === "string") {
-      return normalizeContentBlocks([blocks as ContentBlock]);
-    }
-    return JSON.stringify(blocks);
-  }
-
-  return String(blocks);
-};
-
 /**
  * Combined hook for session + messages + status
  * Replaces the complex useMessages hook
  */
 export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const _sessionStatus = (sessionQuery.data?.status as SessionStatus) || "idle";
   const messagesQuery = useMessages(sessionId);
 
   // Unwrap messages from PaginatedMessages (select was removed to expose has_older)
   const messages = messagesQuery.data?.messages ?? [];
   const hasOlder = messagesQuery.data?.has_older ?? false;
 
-  // Parse content helper (from original useMessages)
+  // Parse content helper — delegates to pure function in lib/contentParser.ts
   // Memoized to prevent Context cascade re-renders
-  const parseContent = useCallback((content: string): string | (ContentBlock | string)[] | null => {
-    try {
-      const parsed = JSON.parse(content);
-      return normalizeContentBlocks(parsed);
-    } catch {
-      return [{ type: "text", text: content }];
-    }
-  }, []);
+  const parseContent = useCallback(
+    (content: string): (ContentBlock | string)[] | string => parseContentBlocks(content),
+    []
+  );
 
   // Build tool result map and parent_tool_use_id map in a single pass.
   const { toolResultMap, parentToolUseMap } = useMemo(() => {
@@ -292,26 +244,60 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       sessionId,
       content,
       model,
+      cwd,
+      agentType,
     }: {
       sessionId: string;
       content: string;
       model?: string;
-    }) => SessionService.sendMessage(sessionId, content, model),
+      cwd?: string;
+      agentType?: RuntimeAgentType;
+    }): Promise<Message | void> => {
+      // Desktop (Tauri): sidecar saves message + starts agent atomically.
+      // The sidecar's onQuery handler persists the user message and sets
+      // status='working' in a single SQLite transaction before dispatching
+      // the agent — no partial-commit failure mode.
+      if (cwd) {
+        const ack = await socketService.sendQuery(
+          sessionId,
+          content,
+          { cwd, model },
+          agentType || "claude"
+        );
+        if (!ack.accepted) {
+          throw new Error(ack.reason || "Agent rejected the query");
+        }
+        // No return value needed — onSettled ignores the mutationFn result.
+        // The real message is in the DB; incremental fetch in onSettled picks it up.
+        return;
+      }
+      // Gateway/web fallback: HTTP POST to backend
+      return SessionService.sendMessage(sessionId, content, model);
+    },
 
-    // Optimistic update: Add user message to chat immediately
-    // Note: Cache holds PaginatedMessages shape, not raw Message[]
+    // Optimistic update: show user message immediately.
+    // Status indicators (tab spinner, sidebar) are event-driven — the sidecar
+    // emits session:status-changed which arrives within ~50ms via Tauri events.
+    // Both useSessionEvents and useGlobalSessionNotifications write directly
+    // to their respective caches via setQueryData (no HTTP round-trip).
     onMutate: async ({ sessionId, content, model }) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
       });
 
-      const previousData = queryClient.getQueryData<PaginatedMessages>(
+      const previousMessages = queryClient.getQueryData<PaginatedMessages>(
         queryKeys.sessions.messages(sessionId)
       );
+
+      // Snapshot workspace-by-repo cache before optimistic update so we can
+      // restore the exact prior status on error (instead of hardcoding "idle").
+      const previousWorkspaceByRepo = queryClient.getQueriesData<RepoGroup[]>({
+        queryKey: ["workspaces", "by-repo"],
+      });
 
       // Create optimistic user message
       const optimisticId =
@@ -320,25 +306,22 @@ export function useSendMessage() {
           : `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       // Content may be plain text or a JSON-stringified content blocks array (when images attached).
-      // New flat format: store content blocks array directly (no envelope wrapper).
       let optimisticContentJson: string;
       try {
         const parsed = JSON.parse(content);
         if (Array.isArray(parsed)) {
-          // Already content blocks array — store directly
           optimisticContentJson = JSON.stringify(parsed);
         } else {
           optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
         }
       } catch {
-        // Plain text
         optimisticContentJson = JSON.stringify([{ type: "text", text: content }]);
       }
 
       const optimisticMessage: Message = {
         id: optimisticId,
         session_id: sessionId,
-        seq: Number.MAX_SAFE_INTEGER, // Placeholder — real seq assigned by DB trigger
+        seq: Number.MAX_SAFE_INTEGER,
         role: "user",
         content: optimisticContentJson,
         sent_at: new Date().toISOString(),
@@ -352,34 +335,47 @@ export function useSendMessage() {
         });
       });
 
-      // Also update session status to "working"
-      const previousSession = queryClient.getQueryData<Session>(
-        queryKeys.sessions.detail(sessionId)
+      // Optimistically set workspace status to "working" in sidebar cache.
+      // Handles the startup race where the first Tauri event arrives before
+      // the workspace list has loaded (cache empty → event matching fails).
+      queryClient.setQueriesData<RepoGroup[]>(
+        { queryKey: ["workspaces", "by-repo"] },
+        (old) => {
+          if (!old) return old;
+          return old.map((group) => ({
+            ...group,
+            workspaces: group.workspaces.map((ws) =>
+              ws.current_session_id === sessionId
+                ? { ...ws, session_status: "working" as SessionStatus }
+                : ws
+            ),
+          }));
+        }
       );
 
-      queryClient.setQueryData<Session>(queryKeys.sessions.detail(sessionId), (old) => {
-        if (!old) return old;
-        return produce(old, (draft) => {
-          draft.status = "working";
-          draft.error_message = null; // Clear error on retry
-        });
-      });
-
-      return { previousData, previousSession };
+      return { previousMessages, previousWorkspaceByRepo };
     },
 
     onError: (_err, variables, context) => {
-      if (context?.previousData) {
+      // Roll back optimistic message
+      if (context?.previousMessages) {
         queryClient.setQueryData(
           queryKeys.sessions.messages(variables.sessionId),
-          context.previousData
+          context.previousMessages
         );
+      } else {
+        // No snapshot (first send on empty cache) — invalidate to clear the ghost optimistic message
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.messages(variables.sessionId),
+        });
       }
-      if (context?.previousSession) {
-        queryClient.setQueryData(
-          queryKeys.sessions.detail(variables.sessionId),
-          context.previousSession
-        );
+      // Roll back optimistic workspace status from snapshot
+      if (context?.previousWorkspaceByRepo?.length) {
+        context.previousWorkspaceByRepo.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
       }
     },
 
@@ -395,7 +391,6 @@ export function useSendMessage() {
             return false;
           }
         })();
-        // Enrich with session-level context from cache (already loaded, zero cost)
         const session = queryClient.getQueryData<Session>(
           queryKeys.sessions.detail(variables.sessionId)
         );
@@ -409,40 +404,14 @@ export function useSendMessage() {
         });
       }
 
-      // Incremental fetch: only get messages newer than what we have,
-      // then merge into cache (removing optimistic placeholders).
-      // Falls back to full invalidation if no cache exists.
-      const cached = queryClient.getQueryData<PaginatedMessages>(
+      // Reconcile optimistic placeholder with real DB record.
+      // Session detail is NOT invalidated here — status updates arrive via
+      // session:status-changed Tauri events handled by useSessionEvents.
+      await incrementalFetchAndMerge(
+        queryClient,
+        variables.sessionId,
         queryKeys.sessions.messages(variables.sessionId)
       );
-
-      if (cached) {
-        try {
-          const lastSeq = getLastRealSeq(cached.messages);
-          const newer = await SessionService.fetchMessages(variables.sessionId, {
-            after: lastSeq || undefined,
-            limit: MESSAGE_PAGE_SIZE,
-          });
-          queryClient.setQueryData<PaginatedMessages>(
-            queryKeys.sessions.messages(variables.sessionId),
-            (old) => mergeNewerMessages(old, newer)
-          );
-        } catch {
-          // Incremental fetch failed — fall back to full invalidation
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.sessions.messages(variables.sessionId),
-          });
-        }
-      } else {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions.messages(variables.sessionId),
-        });
-      }
-
-      // Always refresh session status (working → idle transitions)
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions.detail(variables.sessionId),
-      });
     },
   });
 }

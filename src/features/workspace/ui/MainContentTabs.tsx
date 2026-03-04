@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { match } from "ts-pattern";
-import { X, Plus, FileCode, GitCompareArrows, History, PanelLeftClose } from "lucide-react";
+import { X, Plus, History, PanelLeftClose } from "lucide-react";
+import { PixelGrid } from "@/features/session/ui/PixelGrid";
 import {
   DndContext,
   closestCenter,
@@ -17,37 +17,15 @@ import { getAgentLogo } from "@/assets/agents";
 import { SortableTab } from "./SortableTab";
 
 /**
- * Tab data structure
- * Supports multiple content types: chat sessions, diffs, and full files
+ * Tab data structure — chat sessions only.
  */
 export interface Tab {
   id: string;
   label: string;
-  type: "chat" | "diff" | "file";
-  closeable?: boolean;
-
-  /**
-   * Type-specific data payload
-   * - For 'diff' tabs: file path, diff content, and change stats
-   * - For 'file' tabs: file content and language (future)
-   * - For 'chat' tabs: session ID and agent type (for logo)
-   */
   data?: {
-    // For 'diff' tabs
-    filePath?: string;
-    diff?: string;
-    additions?: number;
-    deletions?: number;
-
-    // For 'file' tabs (future feature)
-    fileContent?: string;
-    language?: string;
-
-    // For 'chat' tabs
     sessionId?: string;
     agentType?: string;
     hasStarted?: boolean;
-    agentSequence?: number;
     /** Pre-selected model when tab is created from locked-group picker */
     initialModel?: string;
   };
@@ -64,6 +42,8 @@ export interface ClosedTab {
 interface MainContentTabBarProps {
   tabs: Tab[];
   activeTabId: string;
+  /** Set of session IDs currently in "working" status — per-tab spinners */
+  workingSessionIds?: Set<string>;
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
   onTabAdd?: () => void;
@@ -73,33 +53,27 @@ interface MainContentTabBarProps {
   onCollapseChatPanel?: () => void;
 }
 
-const TAB_ICON_SIZE = "w-3.5 h-3.5";
-const AGENT_ICON_SIZE = "w-3.5 h-3.5";
+const ICON_SIZE = "w-3.5 h-3.5";
 const EMPTY_CLOSED_TABS: ClosedTab[] = [];
 
-function getTabIcon(tab: Tab) {
-  return match(tab)
-    .with({ type: "chat" }, (t) => {
-      const LogoComponent = getAgentLogo(t.data?.agentType || "claude");
-      if (LogoComponent) {
-        return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
-      }
-      return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
-    })
-    .with({ type: "diff" }, () => (
-      <GitCompareArrows className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
-    ))
-    .otherwise(() => (
-      <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />
-    ));
+/** Render tab icon — shows PixelGrid spinner when working, agent logo otherwise. */
+function getTabIcon(tab: Tab, isWorking: boolean) {
+  if (isWorking) {
+    return <PixelGrid variant="generating" size={14} className="flex-shrink-0" />;
+  }
+  const LogoComponent = getAgentLogo(tab.data?.agentType || "claude");
+  if (LogoComponent) {
+    return <LogoComponent className={cn(ICON_SIZE, "flex-shrink-0")} />;
+  }
+  return null;
 }
 
 function getClosedTabIcon(agentType?: string) {
   const LogoComponent = getAgentLogo(agentType || "claude");
   if (LogoComponent) {
-    return <LogoComponent className={cn(AGENT_ICON_SIZE, "flex-shrink-0")} />;
+    return <LogoComponent className={cn(ICON_SIZE, "flex-shrink-0")} />;
   }
-  return <FileCode className={cn(TAB_ICON_SIZE, "flex-shrink-0 opacity-60")} />;
+  return null;
 }
 
 /**
@@ -110,9 +84,12 @@ function getClosedTabIcon(agentType?: string) {
  * - Any tab can be closed as long as at least one tab remains
  * - The close button only appears on hover when there are 2+ tabs
  */
+const EMPTY_WORKING_SET = new Set<string>();
+
 export function MainContentTabBar({
   tabs,
   activeTabId,
+  workingSessionIds = EMPTY_WORKING_SET,
   onTabChange,
   onTabClose,
   onTabAdd,
@@ -148,6 +125,11 @@ export function MainContentTabBar({
           <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
+              // Per-tab working status: each tab checks its own session ID
+              // against the working set (populated by useWorkingSessionIds).
+              const isWorking =
+                !!tab.data?.sessionId &&
+                workingSessionIds.has(tab.data.sessionId);
 
               return (
                 <SortableTab key={tab.id} id={tab.id}>
@@ -172,14 +154,14 @@ export function MainContentTabBar({
                         : "text-text-muted hover:text-text-tertiary"
                     )}
                   >
-                    {getTabIcon(tab)}
+                    {getTabIcon(tab, isWorking)}
 
                     <div className="min-w-0 flex-1">
                       <span className="block truncate">{tab.label}</span>
                     </div>
 
                     {/* Close button — overlays right edge on hover, only when 2+ tabs */}
-                    {onTabClose && canCloseTabs && tab.closeable !== false && (
+                    {onTabClose && canCloseTabs && (
                       <div
                         className={cn(
                           "absolute inset-y-0 right-0 flex items-center pr-1.5 pl-4",

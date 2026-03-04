@@ -43,6 +43,7 @@ import { TurnStatsHeader } from "./TurnStatsHeader";
 
 import { useSession } from "../context";
 import { calculateTurnStats, groupMessageToolStreaks } from "./utils";
+import { isCancelledMessage } from "../lib/contentParser";
 import { match } from "ts-pattern";
 import { Square } from "lucide-react";
 
@@ -81,15 +82,10 @@ export const AssistantTurn = memo(function AssistantTurn({
   // Detect if the last message is a cancellation sentinel.
   // The sidecar writes an empty message with stop_reason: "cancelled" on user cancel.
   // That message is metadata, not content — skip over it to find the real summary.
-  const isCancelled = useMemo(() => {
-    const last = messages[messages.length - 1];
-    try {
-      const parsed = JSON.parse(last.content);
-      return (parsed.message?.stop_reason as string) === "cancelled";
-    } catch {
-      return false;
-    }
-  }, [messages]);
+  const isCancelled = useMemo(
+    () => isCancelledMessage(messages[messages.length - 1].content),
+    [messages]
+  );
 
   // Split messages: all except the last are hidden (collapsible), last is the summary.
   // When cancelled, the sentinel is excluded — all real messages go into hiddenMessages

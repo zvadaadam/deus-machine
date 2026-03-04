@@ -105,10 +105,12 @@ export function MainLayout() {
       .flatMap((g) => g.workspaces)
       .find((w) => w.id === selectedWorkspace.id);
     if (!fresh) return;
+    const statusChanged = fresh.session_status !== selectedWorkspace.session_status;
+
     if (
       fresh.current_session_id !== selectedWorkspace.current_session_id ||
       fresh.state !== selectedWorkspace.state ||
-      fresh.session_status !== selectedWorkspace.session_status ||
+      statusChanged ||
       fresh.init_stage !== selectedWorkspace.init_stage ||
       fresh.setup_status !== selectedWorkspace.setup_status
     ) {

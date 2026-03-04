@@ -30,10 +30,11 @@ export function dbGetMessages(
   sessionId: string,
   opts?: { limit?: number; before?: number; after?: number }
 ): Promise<PaginatedMessages> {
-  return invoke<PaginatedMessages>("db_get_messages", {
-    session_id: sessionId,
-    limit: opts?.limit ?? null,
-    before: opts?.before ?? null,
-    after: opts?.after ?? null,
-  });
+  // Build payload without null fields — Tauri's serde can't deserialize
+  // JSON null to Rust Option<i64>. Missing keys deserialize to None correctly.
+  const payload: Record<string, unknown> = { session_id: sessionId };
+  if (opts?.limit != null) payload.limit = opts.limit;
+  if (opts?.before != null) payload.before = opts.before;
+  if (opts?.after != null) payload.after = opts.after;
+  return invoke<PaginatedMessages>("db_get_messages", payload);
 }

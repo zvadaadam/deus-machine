@@ -11,6 +11,7 @@ import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
 import { FrontendClient } from "../../frontend-client";
 import { classifyError } from "../error-classifier";
+import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
@@ -234,8 +235,6 @@ export class CodexAgentHandler implements AgentHandler {
         signal: abortController.signal,
       });
 
-      // Accumulate content blocks for the current turn's message
-      let turnContentBlocks: unknown[] = [];
 
       for await (const event of events) {
         if (abortController.signal.aborted) break;
@@ -248,11 +247,6 @@ export class CodexAgentHandler implements AgentHandler {
           .with({ type: P.union("item.started", "item.updated", "item.completed") }, (e) => {
             const blocks = mapItemToContentBlocks(e.item);
             if (blocks.length === 0) return;
-
-            // For completed items, accumulate into the turn message
-            if (e.type === "item.completed") {
-              turnContentBlocks.push(...blocks);
-            }
 
             // Send real-time update to frontend (every event, not just completed)
             FrontendClient.sendMessage({
@@ -304,19 +298,11 @@ export class CodexAgentHandler implements AgentHandler {
             });
 
             updateSessionStatus(sessionId, "idle");
-            turnContentBlocks = [];
           })
           .with({ type: "turn.failed" }, (e) => {
             const classified = classifyError(e.error);
             console.error(`[${queryId}] Turn failed [${classified.category}]:`, classified.message);
-            FrontendClient.sendError({
-              id: sessionId,
-              type: "error",
-              error: classified.message,
-              agentType: "codex",
-              category: classified.category,
-            });
-            updateSessionStatus(sessionId, "error", classified.message, classified.category);
+            notifyAndRecordError(sessionId, "codex", classified);
           })
           .with({ type: "error" }, (e) => {
             const classified = classifyError(e);
@@ -324,14 +310,7 @@ export class CodexAgentHandler implements AgentHandler {
               `[${queryId}] Stream error [${classified.category}]:`,
               classified.message
             );
-            FrontendClient.sendError({
-              id: sessionId,
-              type: "error",
-              error: classified.message,
-              agentType: "codex",
-              category: classified.category,
-            });
-            updateSessionStatus(sessionId, "error", classified.message, classified.category);
+            notifyAndRecordError(sessionId, "codex", classified);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -342,30 +321,17 @@ export class CodexAgentHandler implements AgentHandler {
           });
       }
 
-      // Normal completion if turn.completed wasn't received.
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
       const currentSession = getCodexSession(sessionId);
-      if (currentSession === session && currentSession.isRunning) {
-        updateSessionStatus(sessionId, "idle");
-      }
-
-      // Record cancellation if the loop exited via abort signal (break path).
-      // The catch block handles the throw path — this covers the break path.
-      // Guard with ownership check: a rapid re-query can replace the session
-      // before we reach this point, and writing a stale "cancelled" message
-      // would pollute the new run's history.
-      if (abortController.signal.aborted && currentSession === session) {
-        const model = resolveCodexModel(options?.model);
-        saveAssistantMessage(
-          sessionId,
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "" }],
-            stop_reason: "cancelled",
-          },
-          model
-        );
+      if (currentSession === session) {
+        if (abortController.signal.aborted) {
+          // Abort break path: record cancellation + notify frontend + set idle
+          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
+        } else if (currentSession.isRunning) {
+          // Normal completion if turn.completed wasn't received
+          updateSessionStatus(sessionId, "idle");
+        }
       }
 
       console.log(`[${queryId}] Codex session completed: ${sessionId}`);
@@ -388,45 +354,10 @@ export class CodexAgentHandler implements AgentHandler {
 
       if (ownsSession) {
         if (isAbort) {
-          // Fire Tauri event so frontend picks up cancel instantly (not via 5s poll)
-          FrontendClient.sendMessage({
-            id: sessionId,
-            type: "message",
-            agentType: "codex",
-            data: { type: "cancelled" },
-          });
+          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
         } else {
-          FrontendClient.sendError({
-            id: sessionId,
-            type: "error",
-            error: classified.message,
-            agentType: "codex",
-            category: classified.category,
-          });
+          notifyAndRecordError(sessionId, "codex", classified);
         }
-      }
-
-      if (ownsSession) {
-        // Record cancellation in message history so the chat shows what happened
-        if (isAbort) {
-          const model = resolveCodexModel(options?.model);
-          saveAssistantMessage(
-            sessionId,
-            {
-              role: "assistant",
-              content: [{ type: "text", text: "" }],
-              stop_reason: "cancelled",
-            },
-            model
-          );
-        }
-
-        updateSessionStatus(
-          sessionId,
-          isAbort ? "idle" : "error",
-          isAbort ? null : classified.message,
-          isAbort ? null : classified.category
-        );
       }
     } finally {
       // Only clean up if this processQuery still owns the session.
