@@ -305,11 +305,14 @@ export function updateContextUsage(
   const db = getDatabase();
 
   try {
-    db.prepare(
+    const result = db.prepare(
       `
       UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?
     `
     ).run(tokenCount, usedPercent, sessionId);
+    if (result.changes === 0) {
+      console.warn(`[SESSION-WRITER] updateContextUsage: no session found for ${sessionId}`);
+    }
     notifyBackend("session:updated", sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
