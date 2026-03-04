@@ -363,6 +363,11 @@ export function useSendMessage() {
           queryKeys.sessions.messages(variables.sessionId),
           context.previousMessages
         );
+      } else {
+        // No snapshot (first send on empty cache) — invalidate to clear the ghost optimistic message
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.messages(variables.sessionId),
+        });
       }
       // Roll back optimistic workspace status from snapshot
       if (context?.previousWorkspaceByRepo?.length) {

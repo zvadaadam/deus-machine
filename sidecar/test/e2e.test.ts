@@ -307,8 +307,11 @@ function seedSession(dbPath: string, sessionId: string, agentType: string = "cla
       .run(sessionId, workspaceId, agentType, "idle");
   });
 
-  seed();
-  db.close();
+  try {
+    seed();
+  } finally {
+    db.close();
+  }
 }
 
 // ============================================================================
