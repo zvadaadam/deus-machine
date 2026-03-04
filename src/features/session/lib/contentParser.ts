@@ -64,6 +64,7 @@ export function isCancelledMessage(content: string): boolean {
       parsed !== null &&
       typeof parsed === "object" &&
       !Array.isArray(parsed) &&
+      Array.isArray(parsed.blocks) &&
       parsed.message?.stop_reason === "cancelled"
     );
   } catch {

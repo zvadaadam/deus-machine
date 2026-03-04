@@ -6,7 +6,7 @@
 
 import * as path from "path";
 import * as fs from "fs";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { FrontendClient } from "../frontend-client";
 import { updateSessionStatus } from "../db/session-writer";
 import type { AgentType } from "../protocol";
@@ -146,23 +146,15 @@ export function discoverExecutable(
 }
 
 function verifyCandidate(candidate: string, versionFlag: string): string {
-  const escaped = candidate.replaceAll('"', '\\"');
+  const opts = { encoding: "utf-8" as const, timeout: 5000, stdio: ["ignore", "pipe", "pipe"] as const };
 
   // JS entrypoint installed via a global package manager
   if (candidate.endsWith(".js")) {
-    return execSync(`node "${escaped}" ${versionFlag}`, {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    return execFileSync("node", [candidate, versionFlag], opts).trim();
   }
 
   // Native binary/symlink
-  return execSync(`"${escaped}" ${versionFlag}`, {
-    encoding: "utf-8",
-    timeout: 5000,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  return execFileSync(candidate, [versionFlag], opts).trim();
 }
 
 // ============================================================================
@@ -180,13 +172,17 @@ export function blockIfNotInitialized(
 ): boolean {
   if (!state.result?.success) {
     const errorMsg = `Cannot process request: ${state.result?.error || "Initialization failed"}`;
-    FrontendClient.sendError({
-      id: sessionId,
-      type: "error",
-      error: errorMsg,
-      agentType,
-      category: "internal",
-    });
+    try {
+      FrontendClient.sendError({
+        id: sessionId,
+        type: "error",
+        error: errorMsg,
+        agentType,
+        category: "internal",
+      });
+    } catch (error) {
+      console.warn(`[CLI-DISCOVERY] Failed to emit init error to frontend:`, error);
+    }
     // Update session status so it doesn't stay stuck in "working"
     // (saveUserMessage already set status='working' before handleQuery was called)
     updateSessionStatus(sessionId, "error", errorMsg, "internal");

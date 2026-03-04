@@ -69,13 +69,19 @@ export function useSessionActions({
           cwd: workspacePath,
           agentType,
         });
-        onMessageSent?.();
       } catch (error) {
         console.error("Failed to send message:", error);
         // onError already rolled back optimistic update.
         // No stopSession cleanup needed — sidecar didn't persist anything on failure.
         const reason = error instanceof Error ? error.message : "Failed to send message";
         toast.error(reason);
+        return;
+      }
+
+      try {
+        onMessageSent?.();
+      } catch (callbackError) {
+        console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
     },
     [messageInput, model, sendMessageMutation, sessionId, workspacePath, agentType, onMessageSent]

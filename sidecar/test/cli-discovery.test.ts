@@ -3,12 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 const mockExecSync = vi.fn();
+const mockExecFileSync = vi.fn();
 const mockExistsSync = vi.fn();
 const mockSendError = vi.fn();
 const mockUpdateSessionStatus = vi.fn().mockReturnValue({ ok: true, value: undefined });
 
 vi.mock("child_process", () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
+  execFileSync: (...args: unknown[]) => mockExecFileSync(...args),
 }));
 
 vi.mock("fs", async (importOriginal) => {
@@ -71,10 +73,10 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    // Shell discovery (first call), then version check (second call)
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery failed"); })
-      .mockReturnValueOnce("1.0.0");
+    // Shell discovery uses execSync — fail it so we fall through to static candidates
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery failed"); });
+    // Verification uses execFileSync
+    mockExecFileSync.mockReturnValueOnce("1.0.0");
 
     const result = discoverExecutable(config, state);
 
@@ -93,8 +95,8 @@ describe("discoverExecutable", () => {
       .mockReturnValueOnce(true)   // /bad/path exists
       .mockReturnValueOnce(true);  // /good/path exists
 
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery failed"); })
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery failed"); });
+    mockExecFileSync
       .mockImplementationOnce(() => { throw new Error("version check failed"); }) // /bad/path
       .mockReturnValueOnce("2.0.0"); // /good/path
 
@@ -112,6 +114,7 @@ describe("discoverExecutable", () => {
 
     mockExistsSync.mockReturnValue(false);
     mockExecSync.mockImplementation(() => { throw new Error("not found"); });
+    mockExecFileSync.mockImplementation(() => { throw new Error("not found"); });
 
     const result = discoverExecutable(config, state);
 
@@ -132,12 +135,9 @@ describe("discoverExecutable", () => {
     const result = discoverExecutable(config, state);
 
     expect(result.success).toBe(false);
-    // execSync should not be called with the missing candidate path
-    // (only shell discovery should fire, which uses "command -v")
-    const verifyCalls = mockExecSync.mock.calls.filter(
-      (call) => typeof call[0] === "string" && call[0].includes("/nonexistent/cli")
-    );
-    expect(verifyCalls).toHaveLength(0);
+    // execFileSync should not be called for the missing candidate
+    // (only shell discovery via execSync should fire)
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
   it("uses env var override with highest priority", () => {
@@ -146,9 +146,8 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery"); })
-      .mockReturnValueOnce("3.0.0"); // env override succeeds
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockReturnValueOnce("3.0.0"); // env override succeeds
 
     const result = discoverExecutable(config, state);
 
@@ -162,9 +161,8 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery"); })
-      .mockReturnValueOnce("4.0.0");
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockReturnValueOnce("4.0.0");
 
     const result = discoverExecutable(config, state);
 
@@ -181,9 +179,8 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery"); })
-      .mockReturnValueOnce("5.0.0");
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockReturnValueOnce("5.0.0");
 
     const result = discoverExecutable(config, state);
 
@@ -191,25 +188,44 @@ describe("discoverExecutable", () => {
     expect(state.executablePath).toBe("/fallback/cli");
   });
 
-  it("uses node prefix for .js candidates", () => {
+  it("uses execFileSync with node for .js candidates", () => {
     const config = makeConfig({
       staticCandidates: ["/usr/lib/cli.js"],
     });
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery"); })
-      .mockReturnValueOnce("6.0.0");
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockReturnValueOnce("6.0.0");
 
     discoverExecutable(config, state);
 
-    // The verification call should use `node` prefix for .js files
-    const verifyCall = mockExecSync.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("node")
+    // Verification uses execFileSync with "node" as first arg and path in args array
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "node",
+      ["/usr/lib/cli.js", "-v"],
+      expect.objectContaining({ encoding: "utf-8", timeout: 5000 })
     );
-    expect(verifyCall).toBeDefined();
-    expect(verifyCall![0]).toContain('node "/usr/lib/cli.js"');
+  });
+
+  it("uses execFileSync with candidate directly for native binaries", () => {
+    const config = makeConfig({
+      staticCandidates: ["/usr/bin/testcli"],
+    });
+    const state = makeState();
+
+    mockExistsSync.mockReturnValue(true);
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockReturnValueOnce("7.0.0");
+
+    discoverExecutable(config, state);
+
+    // Native binary: candidate is the executable, versionFlag in args array
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "/usr/bin/testcli",
+      ["-v"],
+      expect.objectContaining({ encoding: "utf-8", timeout: 5000 })
+    );
   });
 
   it("deduplicates candidates from extraCandidates", () => {
@@ -220,15 +236,14 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync
-      .mockImplementationOnce(() => { throw new Error("shell discovery"); })
-      .mockImplementationOnce(() => { throw new Error("verify failed"); });
+    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecFileSync.mockImplementation(() => { throw new Error("verify failed"); });
 
     discoverExecutable(config, state);
 
     // Should only try to verify /usr/bin/cli once (not twice for the duplicate)
-    const verifyCalls = mockExecSync.mock.calls.filter(
-      (call) => typeof call[0] === "string" && call[0].includes("/usr/bin/cli")
+    const verifyCalls = mockExecFileSync.mock.calls.filter(
+      (call) => call[0] === "/usr/bin/cli" || (call[1] as string[])?.includes("/usr/bin/cli")
     );
     expect(verifyCalls).toHaveLength(1);
   });
@@ -282,6 +297,28 @@ describe("blockIfNotInitialized", () => {
 
     expect(blocked).toBe(true);
     expect(mockSendError).toHaveBeenCalled();
+  });
+
+  it("still updates session status when sendError throws", () => {
+    const state: DiscoveryState = {
+      executablePath: "",
+      result: { success: false, error: "Not found" },
+    };
+
+    mockSendError.mockImplementationOnce(() => {
+      throw new Error("No tunnel attached");
+    });
+
+    const blocked = blockIfNotInitialized(state, "claude", "session-1");
+
+    expect(blocked).toBe(true);
+    // updateSessionStatus must still be called despite sendError throwing
+    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+      "session-1",
+      "error",
+      expect.stringContaining("Not found"),
+      "internal"
+    );
   });
 
   it("returns false when initialization succeeded", () => {

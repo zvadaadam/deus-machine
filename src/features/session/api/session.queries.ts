@@ -293,6 +293,12 @@ export function useSendMessage() {
         queryKeys.sessions.messages(sessionId)
       );
 
+      // Snapshot workspace-by-repo cache before optimistic update so we can
+      // restore the exact prior status on error (instead of hardcoding "idle").
+      const previousWorkspaceByRepo = queryClient.getQueriesData<RepoGroup[]>({
+        queryKey: ["workspaces", "by-repo"],
+      });
+
       // Create optimistic user message
       const optimisticId =
         typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -347,7 +353,7 @@ export function useSendMessage() {
         }
       );
 
-      return { previousMessages };
+      return { previousMessages, previousWorkspaceByRepo };
     },
 
     onError: (_err, variables, context) => {
@@ -358,21 +364,14 @@ export function useSendMessage() {
           context.previousMessages
         );
       }
-      // Roll back optimistic workspace status
-      queryClient.setQueriesData<RepoGroup[]>(
-        { queryKey: ["workspaces", "by-repo"] },
-        (old) => {
-          if (!old) return old;
-          return old.map((group) => ({
-            ...group,
-            workspaces: group.workspaces.map((ws) =>
-              ws.current_session_id === variables.sessionId
-                ? { ...ws, session_status: "idle" as SessionStatus }
-                : ws
-            ),
-          }));
-        }
-      );
+      // Roll back optimistic workspace status from snapshot
+      if (context?.previousWorkspaceByRepo?.length) {
+        context.previousWorkspaceByRepo.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["workspaces", "by-repo"] });
+      }
     },
 
     onSettled: async (_, error, variables) => {

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // vi.hoisted() ensures variables are available when vi.mock factories run.
 // ============================================================================
 
-const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockSessionWriter } = vi.hoisted(() => ({
+const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync, mockSessionWriter } = vi.hoisted(() => ({
   mockClaudeSDK: vi.fn(),
   mockFrontendAPI: {
     sendMessage: vi.fn(),
@@ -16,6 +16,7 @@ const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockSessionWriter } = vi.h
     detachTunnel: vi.fn(),
   },
   mockExecSync: vi.fn(),
+  mockExecFileSync: vi.fn(),
   mockSessionWriter: {
     saveAssistantMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
     saveToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
@@ -54,6 +55,7 @@ vi.mock("../agents/opendevs-tools", () => ({
 
 vi.mock("child_process", () => ({
   execSync: mockExecSync,
+  execFileSync: mockExecFileSync,
 }));
 
 vi.mock("fs", async (importOriginal) => {
@@ -93,12 +95,16 @@ describe("claude-handler", () => {
   describe("initializeClaude", () => {
     it("succeeds when claude executable is found", () => {
       mockExecSync.mockReturnValue("1.0.0\n");
+      mockExecFileSync.mockReturnValue("1.0.0\n");
       const result = initializeClaude();
       expect(result.success).toBe(true);
     });
 
     it("fails when no executable is found", () => {
       mockExecSync.mockImplementation(() => {
+        throw new Error("not found");
+      });
+      mockExecFileSync.mockImplementation(() => {
         throw new Error("not found");
       });
       const result = initializeClaude();
@@ -108,7 +114,7 @@ describe("claude-handler", () => {
 
     it("tries multiple candidate paths", () => {
       let callCount = 0;
-      mockExecSync.mockImplementation(() => {
+      mockExecFileSync.mockImplementation(() => {
         callCount++;
         // Fail on first candidate, succeed on second
         if (callCount < 2) throw new Error("not found");
@@ -138,12 +144,16 @@ describe("claude-handler", () => {
     beforeEach(() => {
       // Initialize successfully first
       mockExecSync.mockReturnValue("1.0.0\n");
+      mockExecFileSync.mockReturnValue("1.0.0\n");
       initializeClaude();
     });
 
     it("blocks query when initialization failed", async () => {
       // Reset to failed state
       mockExecSync.mockImplementation(() => {
+        throw new Error("not found");
+      });
+      mockExecFileSync.mockImplementation(() => {
         throw new Error("not found");
       });
       initializeClaude();
@@ -507,6 +517,7 @@ describe("claude-handler", () => {
   describe("edge cases", () => {
     beforeEach(() => {
       mockExecSync.mockReturnValue("1.0.0\n");
+      mockExecFileSync.mockReturnValue("1.0.0\n");
       initializeClaude();
     });
 
@@ -724,12 +735,20 @@ describe("claude-handler", () => {
       // Cancel (closes the queue via terminateSession → sendTerminate → promptQueue.close())
       await handler.handleCancel("sess-push-closed");
 
-      // This should not throw — push after close returns false silently
-      // The handleQuery for a follow-up would create a new generator
-      expect(() => {
-        // Direct access would be through session.sendMessage, but after cancel
-        // the session is cleaned up. This test verifies the queue handles it.
-      }).not.toThrow();
+      // Let the cancellation propagate
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Verify cancellation flow completed: checkpoint was created
+      expect(createCheckpoint).toHaveBeenCalledWith(
+        "sess-push-closed",
+        "turn-1",
+        "end",
+        "/test",
+        "claudeHandler"
+      );
+
+      // No unexpected errors sent to frontend during push-after-close
+      expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
     });
   });
 
@@ -740,6 +759,7 @@ describe("claude-handler", () => {
   describe("handleClaudeCancel", () => {
     beforeEach(() => {
       mockExecSync.mockReturnValue("1.0.0\n");
+      mockExecFileSync.mockReturnValue("1.0.0\n");
       initializeClaude();
     });
 
@@ -750,6 +770,9 @@ describe("claude-handler", () => {
 
     it("blocks cancel when initialization failed", async () => {
       mockExecSync.mockImplementation(() => {
+        throw new Error("not found");
+      });
+      mockExecFileSync.mockImplementation(() => {
         throw new Error("not found");
       });
       initializeClaude();
