@@ -148,6 +148,15 @@ describe("session-writer WriteResult", () => {
       expect(updateCall![0]).toContain("last_user_message_at");
     });
 
+    it("clears error_message and error_category in the session UPDATE", () => {
+      saveUserMessage("session-1", "Retry the task");
+      const prepareCalls = mockDbPrepare.mock.calls as string[][];
+      const updateCall = prepareCalls.find((args) => args[0]?.includes("UPDATE sessions SET status"));
+      expect(updateCall).toBeDefined();
+      expect(updateCall![0]).toContain("error_message = NULL");
+      expect(updateCall![0]).toContain("error_category = NULL");
+    });
+
     it("uses default model 'opus' when no model provided", () => {
       saveUserMessage("session-1", "Hello");
       // Find the INSERT run call — it gets the model as 5th arg

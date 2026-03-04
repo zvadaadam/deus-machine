@@ -77,11 +77,11 @@ export async function incrementalFetchAndMerge(
         after: lastSeq || undefined,
         limit: MESSAGE_PAGE_SIZE,
       });
-      if (newer.messages.length > 0) {
-        queryClient.setQueryData<PaginatedMessages>(queryKey, (old) =>
-          mergeNewerMessages(old, newer)
-        );
-      }
+      // Always merge — even when zero new messages arrive, metadata like
+      // has_newer may have changed and needs to be reflected in the cache.
+      queryClient.setQueryData<PaginatedMessages>(queryKey, (old) =>
+        mergeNewerMessages(old, newer)
+      );
     } catch {
       queryClient.invalidateQueries({ queryKey });
     }

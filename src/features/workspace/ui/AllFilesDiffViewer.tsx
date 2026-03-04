@@ -90,16 +90,21 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
     // Finds the topmost section whose top edge is at or above the container's
     // vertical midpoint. More reliable than distributed IntersectionObservers
     // in memoized children with content-visibility: auto.
-    const activeFileRef = useRef<string | null>(null);
+    const activeFileRef = useRef<{ workspaceId: string; path: string | null }>({
+      workspaceId,
+      path: null,
+    });
 
     // Shared helper — updates all active-file state + store in one place.
     const setActiveFilePath = useCallback((path: string | null) => {
-      if (path === activeFileRef.current) return;
-      activeFileRef.current = path;
+      const currentWorkspaceId = workspaceIdRef.current;
+      const prev = activeFileRef.current;
+      if (prev.workspaceId === currentWorkspaceId && prev.path === path) return;
+      activeFileRef.current = { workspaceId: currentWorkspaceId, path };
       setActiveFile(path);
       onActiveFileChangeRef.current?.(path);
       workspaceLayoutActions.setSelectedFile(
-        workspaceIdRef.current,
+        currentWorkspaceId,
         path ? { path, source: "changes" } : null
       );
     }, []);
