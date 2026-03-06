@@ -123,7 +123,7 @@ app.patch('/workspaces/:id', async (c) => {
   }
   const updated = getWorkspaceRaw(db, c.req.param('id'));
   broadcastWorkspacesAndStats();
-  invalidate(['workspaces', 'stats']);
+  invalidate(['workspaces', 'sessions', 'stats']);
   return c.json(updated);
 });
 

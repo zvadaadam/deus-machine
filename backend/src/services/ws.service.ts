@@ -216,8 +216,7 @@ export function handleProtocolMessage(connectionId: string, msg: Record<string, 
     })
     .otherwise(() => {
       // Route q:* frames to query engine handler
-      const type = msg.type as string;
-      if (type?.startsWith("q:")) {
+      if (typeof msg.type === "string" && msg.type.startsWith("q:")) {
         extendedHandlers.onQueryFrame?.(connectionId, msg);
       }
     });

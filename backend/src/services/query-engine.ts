@@ -96,7 +96,7 @@ export function invalidate(resources: string[]): void {
   // Phase 1: Push fresh data to active subscribers
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {
-      subs.delete(connectionId);
+      removeSubs(connectionId);
       continue;
     }
 
@@ -157,33 +157,35 @@ function handleSubscribe(connectionId: string, msg: Record<string, unknown>): vo
   const resource = msg.resource as QueryResource;
   const params = (msg.params as Record<string, unknown>) ?? {};
 
-  // Get or create subscription map for this connection
-  let connSubs = subs.get(connectionId);
-  if (!connSubs) {
-    connSubs = new Map();
-    subs.set(connectionId, connSubs);
-  }
-
-  // Store subscription by client-assigned ID (replaces if same ID reused on reconnect)
-  connSubs.set(id, { id, resource, params });
-
-  // For messages: initialize cursor to current max seq
-  if (resource === "messages" && params.sessionId) {
-    const cursorKey = `${connectionId}:${id}`;
-    try {
-      const db = getDatabase();
-      const row = db.prepare(
-        "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
-      ).get(params.sessionId as string) as { max_seq: number } | undefined;
-      messageCursors.set(cursorKey, row?.max_seq ?? 0);
-    } catch {
-      messageCursors.set(cursorKey, 0);
-    }
-  }
-
-  // Send initial snapshot
+  // Send initial snapshot — only register subscription if query succeeds
+  // (avoids zombie subscriptions when runQuery throws on invalid params)
   try {
     const data = runQuery(resource, params);
+
+    // Get or create subscription map for this connection
+    let connSubs = subs.get(connectionId);
+    if (!connSubs) {
+      connSubs = new Map();
+      subs.set(connectionId, connSubs);
+    }
+
+    // Store subscription by client-assigned ID (replaces if same ID reused on reconnect)
+    connSubs.set(id, { id, resource, params });
+
+    // For messages: initialize cursor to current max seq
+    if (resource === "messages" && params.sessionId) {
+      const cursorKey = `${connectionId}:${id}`;
+      try {
+        const db = getDatabase();
+        const row = db.prepare(
+          "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
+        ).get(params.sessionId as string) as { max_seq: number } | undefined;
+        messageCursors.set(cursorKey, row?.max_seq ?? 0);
+      } catch {
+        messageCursors.set(cursorKey, 0);
+      }
+    }
+
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (err) {
     sendFrame(connectionId, {
@@ -303,6 +305,7 @@ function runMutation(action: string, params: Record<string, unknown>): unknown {
 
       db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
       broadcastWorkspacesAndStats();
+      invalidate(["workspaces", "stats"]);
       return { success: true };
     })
     .with("updateWorkspaceTitle", () => {
@@ -316,6 +319,7 @@ function runMutation(action: string, params: Record<string, unknown>): unknown {
 
       db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
       broadcastWorkspacesAndStats();
+      invalidate(["workspaces"]);
       return { success: true };
     })
     .otherwise(() => {

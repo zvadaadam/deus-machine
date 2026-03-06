@@ -218,6 +218,7 @@ function handleRelayFrame(frame: RelayFrame): void {
         // Clean up existing connection (idempotent on tunnel reconnect)
         const existingConnId = clientToConn.get(f.clientId);
         if (existingConnId) {
+          removeQuerySubs(existingConnId);
           clientWatches.delete(existingConnId);
           removeConnection(existingConnId);
         }
