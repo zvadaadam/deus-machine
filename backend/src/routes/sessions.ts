@@ -100,7 +100,7 @@ app.post('/sessions/:id/messages', async (c) => {
   const tDbEnd = Date.now();
 
   broadcastWorkspacesAndStats();
-  invalidate(['workspaces', 'sessions', 'messages']);
+  invalidate(['workspaces', 'sessions', 'messages', 'stats']);
 
   const createdMessage = getMessageById(db, messageId);
   console.log(`[TIMING][sessions POST] session=${sessionId} dbWrite=${tDbEnd - tDbStart}ms total=${Date.now() - t0}ms`);

@@ -61,6 +61,7 @@ export function getWorkspacesByRepo(
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
       w.git_target_branch, w.state, w.current_session_id,
+      w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
