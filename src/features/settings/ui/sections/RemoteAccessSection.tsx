@@ -114,12 +114,12 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
   const devices = devicesQuery.data ?? [];
 
   // Derive the web app URL from the relay WebSocket URL
-  // e.g., wss://relay.opendevs.sh → https://app.opendevs.sh/server/{serverId}
+  // e.g., wss://relay.rundeus.com → https://app.rundeus.com/server/{serverId}
   const accessUrl = (() => {
     if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
     try {
       const url = new URL(relayStatus.relayUrl);
-      const host = url.hostname; // e.g., relay.opendevs.sh
+      const host = url.hostname; // e.g., relay.rundeus.com
       const domain = host.replace(/^relay\./, "app.");
       return `https://${domain}/server/${relayStatus.serverId}`;
     } catch {
@@ -133,7 +133,7 @@ export function RemoteAccessSection({ settings, saveSetting }: SettingsSectionPr
       <div>
         <h3 className="text-base font-semibold">Remote Access</h3>
         <p className="text-muted-foreground mt-1 text-base">
-          Connect to OpenDevs from your phone or another browser via the cloud relay.
+          Connect to Deus from your phone or another browser via the cloud relay.
         </p>
       </div>
 

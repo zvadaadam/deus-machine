@@ -1,28 +1,32 @@
 // backend/src/services/relay.service.ts
 // Manages the outbound WebSocket tunnel to the cloud relay.
 // Creates virtual WsConnections in ws.service for relay-forwarded clients.
+// Registers extended protocol handlers (data requests, session watching, send_message)
+// that work for both local WS and relay-tunneled connections.
 
 import { execSync } from "child_process";
 import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
+import { uuidv7 } from "../../../shared/lib/uuid";
 import { getSetting } from "./settings.service";
 import { getRelayCredentials } from "./auth.service";
 import {
   addConnection,
   removeConnection,
   getConnection,
-  recordPong,
-  addSubscriptions,
-  removeSubscriptions,
+  setProtocolHandlers,
+  handleProtocolMessage,
   type WsSendable,
 } from "./ws.service";
 import { validateDeviceToken, validatePairCode, createDeviceToken } from "./auth.service";
 import { getDatabase } from "../lib/database";
-import { getStats } from "../db";
+import { getDashboardWorkspaces, getStats, getSessionRaw, getMessageById } from "../db";
+import { broadcastWorkspacesAndStats } from "./dashboard-broadcast";
+import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs, invalidate } from "./query-engine";
 
-// ---- State ----
+// ---- Tunnel State ----
 
 let tunnelWs: WebSocket | null = null;
 let relayUrl: string | null = null;
@@ -31,34 +35,52 @@ let relayToken: string | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 
-// Maps relay clientId → ws.service connectionId
-const clientMap = new Map<string, string>();
+// ---- Bidirectional Client Map ----
+// Maps relay clientId <-> ws.service connectionId. Both directions O(1).
+// The invariant: every key in clientToConn exists exactly once in connToClient.
 
-// Server-side session watcher: pushes new messages to clients as they appear in the DB.
-// Tracks per-client watched sessionId and last seen message seq to compute deltas.
+const clientToConn = new Map<string, string>();
+const connToClient = new Map<string, string>();
+
+function linkClient(clientId: string, connectionId: string): void {
+  clientToConn.set(clientId, connectionId);
+  connToClient.set(connectionId, clientId);
+}
+
+function unlinkClient(clientId: string): string | undefined {
+  const connectionId = clientToConn.get(clientId);
+  if (connectionId) connToClient.delete(connectionId);
+  clientToConn.delete(clientId);
+  return connectionId;
+}
+
+function unlinkAll(): void {
+  clientToConn.clear();
+  connToClient.clear();
+}
+
+// ---- Session Watcher ----
+// Server-side push of message deltas to watching clients.
+// Works for both local WS and relay connections via WsSendable.
+
 interface SessionWatch {
   sessionId: string;
-  lastSeq: number; // highest seq we've pushed to this client
+  lastSeq: number;
 }
-const clientWatches = new Map<string, SessionWatch>(); // connectionId → watch state
+
+const clientWatches = new Map<string, SessionWatch>();
 let watcherInterval: ReturnType<typeof setInterval> | null = null;
-const WATCHER_POLL_MS = 1_000; // 1s server-side check — one query covers all watchers
+const WATCHER_POLL_MS = 1_000;
 
 const MAX_RECONNECT_DELAY = 30_000;
 const BASE_RECONNECT_DELAY = 1_000;
 
 // ---- Server Name Detection ----
 
-/** Detect a human-friendly name for this computer from the OS.
- *  macOS: "Adam's MacBook Pro" (scutil ComputerName)
- *  Linux/other: hostname stripped of .local suffix
- *  Last resort: "{username}'s computer" */
 function getServerName(): string {
-  // User-configured override in settings
   const custom = getSetting("server_name") as string | undefined;
   if (custom) return custom;
 
-  // macOS: scutil --get ComputerName returns the friendly name
   if (platform() === "darwin") {
     try {
       const name = execSync("scutil --get ComputerName", { encoding: "utf-8", timeout: 2000 }).trim();
@@ -66,17 +88,26 @@ function getServerName(): string {
     } catch { /* fall through */ }
   }
 
-  // Any platform: use hostname, strip .local suffix
   const host = hostname().replace(/\.local$/, "");
   if (host && host !== "localhost") return host;
 
-  // Last resort
   try {
     return `${userInfo().username}'s computer`;
   } catch {
-    return "OpenDevs Server";
+    return "Deus Server";
   }
 }
+
+// ---- Extended Protocol Handlers ----
+// Registered once at module load. These handle request/watch_session/send_message
+// for ALL authenticated connections (local WS + relay virtual).
+
+setProtocolHandlers({
+  onRequest: handleDataRequest,
+  onWatchSession: handleWatchSession,
+  onSendMessage: handleSendMessage,
+  onQueryFrame: handleQueryFrame,
+});
 
 // ---- Public API ----
 
@@ -100,30 +131,34 @@ export function disconnectFromRelay(): void {
     tunnelWs.close(1000, "Disconnecting");
     tunnelWs = null;
   }
-  // Clean up all virtual connections
-  for (const [, connId] of clientMap) {
+  for (const [, connId] of clientToConn) {
+    removeQuerySubs(connId);
+    clientWatches.delete(connId);
     removeConnection(connId);
   }
-  clientMap.clear();
+  unlinkAll();
+  stopWatcherIfEmpty();
 }
 
 export function getRelayStatus(): { connected: boolean; clients: number; serverId: string | null; relayUrl: string | null } {
-  // Fall back to settings when the relay hasn't been initialized yet
-  // (e.g., server just started, relay not connected). The URL and server ID
-  // are still useful for the UI to show the access URL.
   const effectiveUrl = relayUrl ?? (getSetting("relay_url") as string | undefined) ?? null;
   const creds = serverId ? null : getRelayCredentials();
   const effectiveServerId = serverId ?? creds?.serverId ?? null;
 
   return {
     connected: tunnelWs?.readyState === WebSocket.OPEN,
-    clients: clientMap.size,
+    clients: clientToConn.size,
     serverId: effectiveServerId,
     relayUrl: effectiveUrl,
   };
 }
 
-// ---- Internal ----
+/** Immediately run one tick of the session watcher (for /api/notify). */
+export function triggerWatcherTick(): void {
+  tickWatcher();
+}
+
+// ---- Tunnel Lifecycle ----
 
 function openTunnel(): void {
   if (!relayUrl || !serverId || !relayToken) return;
@@ -157,14 +192,13 @@ function openTunnel(): void {
   tunnelWs.on("close", (code, reason) => {
     console.log(`[Relay] Tunnel closed: ${code} ${reason}`);
     tunnelWs = null;
-    // Clean up all virtual connections and watches on tunnel close
-    for (const [, connId] of clientMap) {
+    for (const [, connId] of clientToConn) {
+      removeQuerySubs(connId);
       clientWatches.delete(connId);
       removeConnection(connId);
     }
-    clientMap.clear();
+    unlinkAll();
     stopWatcherIfEmpty();
-    // Reconnect if we still want to be connected
     if (relayUrl) scheduleReconnect();
   });
 
@@ -179,33 +213,30 @@ function handleRelayFrame(frame: RelayFrame): void {
       console.log("[Relay] Registered with relay successfully");
     })
     .with({ type: "client_connected" }, (f) => {
-      // Validate device token locally
       const device = validateDeviceToken(f.deviceToken);
       if (device) {
-        // Clean up existing connection for this clientId (relay may re-forward
-        // client_connected on tunnel reconnection — must be idempotent)
-        const existingConnId = clientMap.get(f.clientId);
+        // Clean up existing connection (idempotent on tunnel reconnect)
+        const existingConnId = clientToConn.get(f.clientId);
         if (existingConnId) {
           clientWatches.delete(existingConnId);
           removeConnection(existingConnId);
         }
 
-        // Create a virtual WsConnection that sends data back through the relay tunnel
+        // Virtual WsSendable routes data back through the relay tunnel
         const virtualWs: WsSendable = {
           send(data: string | ArrayBuffer) {
             const payload = typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
             sendToRelay({ type: "data", clientId: f.clientId, payload });
           },
-          close(_code?: number, _reason?: string) {
-            // Client disconnect is handled by the relay — no-op here
+          close() {
+            // No-op — relay manages client disconnect
           },
         };
         const connId = addConnection(virtualWs, device.id, true);
-        clientMap.set(f.clientId, connId);
+        linkClient(f.clientId, connId);
         sendToRelay({ type: "auth_response", clientId: f.clientId, allowed: true });
         console.log(`[Relay] Client ${f.clientId} authenticated as device ${device.name}`);
 
-        // Push initial state snapshot to the newly connected client
         pushInitialState(f.clientId);
       } else {
         sendToRelay({
@@ -218,26 +249,24 @@ function handleRelayFrame(frame: RelayFrame): void {
       }
     })
     .with({ type: "client_disconnected" }, (f) => {
-      const connId = clientMap.get(f.clientId);
+      const connId = unlinkClient(f.clientId);
       if (connId) {
+        removeQuerySubs(connId);
         clientWatches.delete(connId);
         stopWatcherIfEmpty();
         removeConnection(connId);
-        clientMap.delete(f.clientId);
         console.log(`[Relay] Client ${f.clientId} disconnected`);
       }
     })
     .with({ type: "data" }, (f) => {
-      // Forward data from relay client to the virtual WsConnection's message handler
-      const connId = clientMap.get(f.clientId);
+      const connId = clientToConn.get(f.clientId);
       if (!connId) return;
-      const conn = getConnection(connId);
-      if (!conn) return;
+      if (!getConnection(connId)) return;
 
-      // Parse and handle the inner WS protocol message
       try {
         const msg = JSON.parse(f.payload) as Record<string, unknown>;
-        handleVirtualClientMessage(connId, msg);
+        // Unified protocol handler — same as local WS clients
+        handleProtocolMessage(connId, msg);
       } catch {
         // Ignore malformed inner messages
       }
@@ -254,11 +283,8 @@ function handleRelayFrame(frame: RelayFrame): void {
     .exhaustive();
 }
 
-/**
- * Handle a pairing code request forwarded from the relay.
- * Validates the one-time code (consumed on success), creates a device token,
- * and sends the result back through the tunnel.
- */
+// ---- Pairing ----
+
 function handlePairRequest(pairId: string, code: string, deviceName: string): void {
   if (!validatePairCode(code)) {
     sendToRelay({ type: "pair_response", pairId, success: false, reason: "Invalid or expired pairing code" });
@@ -271,31 +297,10 @@ function handlePairRequest(pairId: string, code: string, deviceName: string): vo
   console.log(`[Relay] Pair request ${pairId} succeeded, device "${deviceName}" paired`);
 }
 
-/**
- * Push an initial state snapshot (workspaces + stats) to a newly-authenticated relay client.
- * Stats use the canonical getStats() query; workspace SQL matches the relay/broadcast pattern.
- */
 function pushInitialState(clientId: string): void {
   try {
     const db = getDatabase();
-
-    const workspaces = db.prepare(`
-      SELECT
-        w.id, w.slug, w.title,
-        w.git_branch, w.git_target_branch,
-        w.state, w.current_session_id,
-        w.pr_url, w.pr_number, w.setup_status, w.error_message,
-        w.updated_at,
-        r.name as repo_name, r.root_path, r.git_default_branch,
-        s.status as session_status, s.model,
-        s.last_user_message_at as latest_message_sent_at
-      FROM workspaces w
-      LEFT JOIN repositories r ON w.repository_id = r.id
-      LEFT JOIN sessions s ON w.current_session_id = s.id
-      WHERE w.state != 'archived'
-      ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
-    `).all();
-
+    const workspaces = getDashboardWorkspaces(db);
     const stats = getStats(db);
 
     sendToRelay({
@@ -303,80 +308,24 @@ function pushInitialState(clientId: string): void {
       clientId,
       payload: JSON.stringify({ type: "initial_state", workspaces, stats, serverName: getServerName() }),
     });
-    console.log(`[Relay] Pushed initial state to client ${clientId}: ${(workspaces as unknown[]).length} workspaces`);
+    console.log(`[Relay] Pushed initial state to client ${clientId}: ${workspaces.length} workspaces`);
   } catch (err) {
     console.error("[Relay] Failed to push initial state:", err);
   }
 }
 
-/**
- * Handle inner WS protocol messages from relay-connected clients.
- * Same logic as the onMessage handler in app.ts, but for virtual connections.
- */
-function handleVirtualClientMessage(connectionId: string, msg: Record<string, unknown>): void {
-  match(msg.type as string)
-    .with("pong", () => {
-      recordPong(connectionId);
-    })
-    .with("subscribe", () => {
-      if (Array.isArray(msg.topics)) {
-        addSubscriptions(connectionId, msg.topics as string[]);
-      }
-    })
-    .with("unsubscribe", () => {
-      if (Array.isArray(msg.topics)) {
-        removeSubscriptions(connectionId, msg.topics as string[]);
-      }
-    })
-    .with("request", () => {
-      handleDataRequest(connectionId, msg);
-    })
-    .with("watch_session", () => {
-      handleWatchSession(connectionId, msg.sessionId as string | null);
-    })
-    .otherwise(() => {
-      // Unknown message type — ignore
-    });
-}
+// ---- Data Requests ----
+// Handles on-demand data requests from any authenticated connection.
+// Sends responses via conn.ws.send() — works for both local and relay clients.
 
-/**
- * Handle on-demand data requests from relay-connected web clients.
- * Stats use the canonical getStats() query; workspace/session/message queries use inline SQL.
- */
 function handleDataRequest(connectionId: string, msg: Record<string, unknown>): void {
-  let relayClientId: string | null = null;
-  for (const [cId, connId] of clientMap) {
-    if (connId === connectionId) {
-      relayClientId = cId;
-      break;
-    }
-  }
-  if (!relayClientId) return;
-
   try {
     const db = getDatabase();
     const resource = msg.resource as string;
     const requestId = msg.requestId as string | undefined;
 
     const data = match(resource)
-      .with("workspaces", () =>
-        db.prepare(`
-          SELECT
-            w.id, w.slug, w.title,
-            w.git_branch, w.git_target_branch,
-            w.state, w.current_session_id,
-            w.pr_url, w.pr_number, w.setup_status, w.error_message,
-            w.updated_at,
-            r.name as repo_name, r.root_path, r.git_default_branch,
-            s.status as session_status, s.model,
-            s.last_user_message_at as latest_message_sent_at
-          FROM workspaces w
-          LEFT JOIN repositories r ON w.repository_id = r.id
-          LEFT JOIN sessions s ON w.current_session_id = s.id
-          WHERE w.state != 'archived'
-          ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
-        `).all()
-      )
+      .with("workspaces", () => getDashboardWorkspaces(db))
       .with("stats", () => getStats(db))
       .with("sessions", () => {
         const workspaceId = msg.workspaceId as string;
@@ -403,57 +352,119 @@ function handleDataRequest(connectionId: string, msg: Record<string, unknown>): 
       })
       .otherwise(() => null);
 
-    sendToRelay({
-      type: "data",
-      clientId: relayClientId,
-      payload: JSON.stringify({ type: "response", resource, requestId, data }),
-    });
+    sendToConnection(connectionId, { type: "response", resource, requestId, data });
   } catch (err) {
     console.error(`[Relay] Failed to handle data request:`, err);
   }
 }
 
-// ---- Server-side session watcher ----
-// Instead of clients polling for messages, the backend watches the DB
-// and pushes only new messages (delta) to each watching client.
+// ---- Send Message ----
+// Saves user message to DB and broadcasts. Does NOT dispatch to sidecar —
+// the sidecar is only reachable via Unix socket from Rust. Agent dispatch
+// from relay clients is a follow-up (requires backend → sidecar channel).
+
+function handleSendMessage(connectionId: string, msg: Record<string, unknown>): void {
+  const sessionId = msg.sessionId as string | undefined;
+  const content = msg.content as string | undefined;
+  const model = msg.model as string | undefined;
+  const requestId = msg.requestId as string | undefined;
+
+  if (!sessionId || !content) {
+    sendToConnection(connectionId, {
+      type: "send_message_response",
+      requestId,
+      success: false,
+      error: "sessionId and content are required",
+    });
+    return;
+  }
+
+  try {
+    const result = writeUserMessage(sessionId, content, model);
+    sendToConnection(connectionId, {
+      type: "send_message_response",
+      requestId,
+      ...result,
+    });
+  } catch (err) {
+    console.error("[Relay] send_message failed:", err);
+    sendToConnection(connectionId, {
+      type: "send_message_response",
+      requestId,
+      success: false,
+      error: "Internal error",
+    });
+  }
+}
 
 /**
- * Client wants to watch a session for live message updates.
- * Pass sessionId=null to stop watching.
+ * Persist a user message and mark session as working.
+ * Shared write logic — same transaction as POST /sessions/:id/messages.
  */
+export function writeUserMessage(
+  sessionId: string,
+  content: string,
+  model?: string,
+): { success: true; messageId: string } | { success: false; error: string } {
+  const db = getDatabase();
+  const session = getSessionRaw(db, sessionId);
+  if (!session) {
+    return { success: false, error: "Session not found" };
+  }
+
+  const messageId = uuidv7();
+  const sentAt = new Date().toISOString();
+  const messageModel = model || "opus";
+
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO messages (id, session_id, role, content, sent_at, model)
+      VALUES (?, ?, 'user', ?, ?, ?)
+    `).run(messageId, sessionId, content, sentAt, messageModel);
+
+    db.prepare(
+      "UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(sentAt, sessionId);
+  })();
+
+  broadcastWorkspacesAndStats();
+  invalidate(["workspaces", "sessions", "messages"]);
+
+  return { success: true, messageId };
+}
+
+// ---- Session Watcher ----
+// Pushes message deltas to any watching client (local WS or relay).
+// Sends via conn.ws.send() — the WsSendable abstraction handles routing.
+
 function handleWatchSession(connectionId: string, sessionId: string | null): void {
   if (!sessionId) {
     clientWatches.delete(connectionId);
-    console.log(`[Relay] Client ${connectionId} stopped watching`);
     stopWatcherIfEmpty();
     return;
   }
 
-  // Start watching: seed lastSeq from current max seq in DB so we only push NEW messages
   try {
     const db = getDatabase();
-    const row = db.prepare(`
-      SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?
-    `).get(sessionId) as { max_seq: number } | undefined;
+    const row = db.prepare(
+      "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
+    ).get(sessionId) as { max_seq: number } | undefined;
 
     clientWatches.set(connectionId, {
       sessionId,
       lastSeq: row?.max_seq ?? 0,
     });
-    console.log(`[Relay] Client ${connectionId} watching session ${sessionId} from seq ${row?.max_seq ?? 0}`);
     startWatcher();
   } catch (err) {
     console.error("[Relay] Failed to start session watch:", err);
   }
 }
 
-/** Start the 1s interval if not already running. */
 function startWatcher(): void {
   if (watcherInterval) return;
   watcherInterval = setInterval(tickWatcher, WATCHER_POLL_MS);
 }
 
-/** Stop the interval when no clients are watching. */
 function stopWatcherIfEmpty(): void {
   if (clientWatches.size === 0 && watcherInterval) {
     clearInterval(watcherInterval);
@@ -461,28 +472,22 @@ function stopWatcherIfEmpty(): void {
   }
 }
 
-/**
- * One tick of the watcher: for each unique watched session,
- * query new messages since lastSeq and push to watching clients.
- * Groups by session so one query serves all clients watching the same session.
- */
 function tickWatcher(): void {
   if (clientWatches.size === 0) return;
 
-  // Group watchers by sessionId → { connectionIds, minLastSeq }
-  const sessionGroups = new Map<string, { watchers: Array<{ connectionId: string; lastSeq: number }> }>();
+  // Group watchers by sessionId
+  const sessionGroups = new Map<string, Array<{ connectionId: string; lastSeq: number }>>();
   for (const [connectionId, watch] of clientWatches) {
-    // Verify connection still exists
     if (!getConnection(connectionId)) {
       clientWatches.delete(connectionId);
       continue;
     }
     let group = sessionGroups.get(watch.sessionId);
     if (!group) {
-      group = { watchers: [] };
+      group = [];
       sessionGroups.set(watch.sessionId, group);
     }
-    group.watchers.push({ connectionId, lastSeq: watch.lastSeq });
+    group.push({ connectionId, lastSeq: watch.lastSeq });
   }
 
   stopWatcherIfEmpty();
@@ -491,9 +496,8 @@ function tickWatcher(): void {
   try {
     const db = getDatabase();
 
-    for (const [sessionId, group] of sessionGroups) {
-      // Find the minimum lastSeq among all watchers for this session
-      const minSeq = Math.min(...group.watchers.map((w) => w.lastSeq));
+    for (const [sessionId, watchers] of sessionGroups) {
+      const minSeq = Math.min(...watchers.map((w) => w.lastSeq));
 
       const newMessages = db.prepare(`
         SELECT id, session_id, seq, role, content, sent_at, model
@@ -506,35 +510,20 @@ function tickWatcher(): void {
 
       const maxSeq = newMessages[newMessages.length - 1].seq;
 
-      // Push to each watcher — filter per-client to only send messages they haven't seen
-      for (const watcher of group.watchers) {
+      for (const watcher of watchers) {
         const clientMessages = watcher.lastSeq < minSeq
           ? newMessages
           : newMessages.filter((m) => m.seq > watcher.lastSeq);
 
         if (clientMessages.length === 0) continue;
 
-        // Find relay clientId for this connectionId
-        let relayClientId: string | null = null;
-        for (const [cId, connId] of clientMap) {
-          if (connId === watcher.connectionId) {
-            relayClientId = cId;
-            break;
-          }
-        }
-        if (!relayClientId) continue;
-
-        sendToRelay({
-          type: "data",
-          clientId: relayClientId,
-          payload: JSON.stringify({
-            type: "session_messages_delta",
-            sessionId,
-            messages: clientMessages,
-          }),
+        // Send via WsSendable — works for both local WS and relay virtual connections
+        sendToConnection(watcher.connectionId, {
+          type: "session_messages_delta",
+          sessionId,
+          messages: clientMessages,
         });
 
-        // Update lastSeq for this watcher
         const watchState = clientWatches.get(watcher.connectionId);
         if (watchState) watchState.lastSeq = maxSeq;
       }
@@ -544,9 +533,17 @@ function tickWatcher(): void {
   }
 }
 
-/** Immediately run one tick of the session watcher (for /api/notify). */
-export function triggerWatcherTick(): void {
-  tickWatcher();
+// ---- Helpers ----
+
+/** Send a JSON message to a specific connection via WsSendable. */
+function sendToConnection(connectionId: string, payload: Record<string, unknown>): void {
+  const conn = getConnection(connectionId);
+  if (!conn) return;
+  try {
+    conn.ws.send(JSON.stringify(payload));
+  } catch {
+    // Connection may have closed
+  }
 }
 
 function sendToRelay(frame: ServerFrame): void {

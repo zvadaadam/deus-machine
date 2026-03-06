@@ -1,7 +1,8 @@
 // backend/src/services/ws.service.ts
 // WebSocket connection manager for remote access.
-// Manages connected clients, heartbeat pings, and message routing.
+// Manages connected clients, heartbeat pings, message routing, and protocol dispatch.
 
+import { match } from "ts-pattern";
 import type { WSContext } from "hono/ws";
 
 /** Minimal interface for sending/closing WebSocket-like connections.
@@ -163,4 +164,61 @@ function checkHeartbeats(): void {
   }
 
   if (connections.size === 0) stopHeartbeat();
+}
+
+// ---- Protocol Dispatch ----
+
+/** Handlers for extended protocol messages beyond core pong/subscribe/unsubscribe. */
+export interface WsProtocolHandlers {
+  onRequest?: (connectionId: string, msg: Record<string, unknown>) => void;
+  onWatchSession?: (connectionId: string, sessionId: string | null) => void;
+  onSendMessage?: (connectionId: string, msg: Record<string, unknown>) => void;
+  onQueryFrame?: (connectionId: string, msg: Record<string, unknown>) => void;
+}
+
+let extendedHandlers: WsProtocolHandlers = {};
+
+/** Register handlers for extended protocol messages. Called once at startup. */
+export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
+  extendedHandlers = handlers;
+}
+
+/**
+ * Handle an incoming WS protocol message for an authenticated connection.
+ * Shared by local WS (app.ts) and virtual relay connections (relay.service.ts).
+ *
+ * Core protocol (always available): pong, subscribe, unsubscribe
+ * Extended protocol (registered via setProtocolHandlers): request, watch_session, send_message
+ */
+export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
+  match(msg.type as string)
+    .with("pong", () => {
+      recordPong(connectionId);
+    })
+    .with("subscribe", () => {
+      if (Array.isArray(msg.topics)) {
+        addSubscriptions(connectionId, msg.topics as string[]);
+      }
+    })
+    .with("unsubscribe", () => {
+      if (Array.isArray(msg.topics)) {
+        removeSubscriptions(connectionId, msg.topics as string[]);
+      }
+    })
+    .with("request", () => {
+      extendedHandlers.onRequest?.(connectionId, msg);
+    })
+    .with("watch_session", () => {
+      extendedHandlers.onWatchSession?.(connectionId, msg.sessionId as string | null);
+    })
+    .with("send_message", () => {
+      extendedHandlers.onSendMessage?.(connectionId, msg);
+    })
+    .otherwise(() => {
+      // Route q:* frames to query engine handler
+      const type = msg.type as string;
+      if (type?.startsWith("q:")) {
+        extendedHandlers.onQueryFrame?.(connectionId, msg);
+      }
+    });
 }
