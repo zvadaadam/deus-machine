@@ -31,19 +31,13 @@ export interface Settings {
   experimental_notebooks?: boolean;
   experimental_design?: boolean;
 
-  // Messaging Gateway
-  telegram_bot_token?: string;
-  whatsapp_session_dir?: string;
-  gateway_enabled?: boolean;
-  gateway_allowed_user_ids?: string;
-
   // Remote Access
   remote_access_enabled?: boolean;
 
   // Relay
   relay_server_id?: string;
   relay_token?: string;
-  relay_url?: string; // e.g., "wss://relay.opendevs.sh"
+  relay_url?: string; // e.g., "wss://relay.rundeus.com"
 }
 
 /**

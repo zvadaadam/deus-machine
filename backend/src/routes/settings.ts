@@ -5,7 +5,7 @@ import { SaveSettingBody } from '../lib/schemas';
 import { connectToRelay, disconnectFromRelay } from '../services/relay.service';
 import { getRelayCredentials, generateRelayCredentials } from '../services/auth.service';
 
-const DEFAULT_RELAY_URL = "wss://relay.opendevs.sh";
+const DEFAULT_RELAY_URL = "wss://relay.rundeus.com";
 
 const app = new Hono();
 
