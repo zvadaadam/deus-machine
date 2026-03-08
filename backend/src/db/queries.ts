@@ -26,6 +26,7 @@ const WORKSPACE_DETAILS_SELECT = `
   SELECT
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
     w.git_target_branch, w.state, w.current_session_id,
+    w.pr_url, w.pr_number,
     w.setup_status, w.error_message, w.init_stage,
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch,
@@ -60,6 +61,7 @@ export function getWorkspacesByRepo(
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
       w.git_target_branch, w.state, w.current_session_id,
+      w.pr_url, w.pr_number,
       w.setup_status, w.error_message, w.init_stage,
       w.updated_at,
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
@@ -115,6 +117,18 @@ export function getWorkspaceWithRepo(
     LEFT JOIN repositories r ON w.repository_id = r.id
     WHERE w.id = ?
   `).get(id) as WorkspaceWithDetailsRow | undefined;
+}
+
+/**
+ * Non-archived workspaces for dashboard broadcast and relay clients.
+ * Used by: dashboard-broadcast, relay initial state, relay data requests.
+ */
+export function getDashboardWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
+  return db.prepare(`
+    ${WORKSPACE_DETAILS_SELECT}
+    WHERE w.state != 'archived'
+    ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
+  `).all() as WorkspaceWithDetailsRow[];
 }
 
 // ─── Session Queries ─────────────────────────────────────────

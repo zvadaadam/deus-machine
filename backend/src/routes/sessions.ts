@@ -14,6 +14,7 @@ import {
   getMessageById,
 } from '../db';
 import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
+import { invalidate } from '../services/query-engine';
 
 /**
  * Session Routes
@@ -99,6 +100,7 @@ app.post('/sessions/:id/messages', async (c) => {
   const tDbEnd = Date.now();
 
   broadcastWorkspacesAndStats();
+  invalidate(['workspaces', 'sessions', 'messages', 'stats']);
 
   const createdMessage = getMessageById(db, messageId);
   console.log(`[TIMING][sessions POST] session=${sessionId} dbWrite=${tDbEnd - tDbStart}ms total=${Date.now() - t0}ms`);
@@ -120,6 +122,7 @@ app.post('/sessions/:id/stop', (c) => {
 
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
   broadcastWorkspacesAndStats();
+  invalidate(['workspaces', 'sessions', 'stats']);
 
   const updatedSession = getSessionRaw(db, sessionId);
   return c.json({ success: true, session: updatedSession });

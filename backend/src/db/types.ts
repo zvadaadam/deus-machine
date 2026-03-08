@@ -61,6 +61,8 @@ export interface WorkspaceWithDetailsRow {
   git_target_branch: string | null;
   state: string;
   current_session_id: string | null;
+  pr_url: string | null;
+  pr_number: number | null;
   init_stage: string | null;
   updated_at: string;
 

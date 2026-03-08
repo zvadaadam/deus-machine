@@ -42,6 +42,14 @@ vi.mock('fs', () => ({
   ...mockFs,
 }));
 
+vi.mock('../../../src/services/dashboard-broadcast', () => ({
+  broadcastWorkspacesAndStats: vi.fn(),
+}));
+
+vi.mock('../../../src/services/query-engine', () => ({
+  invalidate: vi.fn(),
+}));
+
 import { detectPackageManager, initializeWorkspace, type InitContext } from '../../../src/services/workspace-init.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────

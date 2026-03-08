@@ -148,7 +148,7 @@ const SIMULATOR_BUILD_TIMEOUT_MS = 600_000;
 
 class FrontendClientClass {
   // Multi-tunnel: all connected clients receive notifications.
-  // The gateway and desktop app can be connected simultaneously.
+  // The relay and desktop app can be connected simultaneously.
   private tunnels = new Set<RpcConnection>();
 
   attachTunnel(tunnel: RpcConnection): void {
@@ -551,7 +551,10 @@ class FrontendClientClass {
     });
   }
 
-  onClaudeAuth(tunnel: RpcConnection, handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>): void {
+  onClaudeAuth(
+    tunnel: RpcConnection,
+    handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>
+  ): void {
     tunnel.addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
       if (!isClaudeAuthRequest(params)) {
         return Promise.reject(new Error("Invalid claudeAuth request"));
@@ -561,7 +564,10 @@ class FrontendClientClass {
     });
   }
 
-  onWorkspaceInit(tunnel: RpcConnection, handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>): void {
+  onWorkspaceInit(
+    tunnel: RpcConnection,
+    handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>
+  ): void {
     tunnel.addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
       if (!isWorkspaceInitRequest(params)) {
         return Promise.reject(new Error("Invalid workspaceInit request"));
@@ -571,7 +577,10 @@ class FrontendClientClass {
     });
   }
 
-  onContextUsage(tunnel: RpcConnection, handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>): void {
+  onContextUsage(
+    tunnel: RpcConnection,
+    handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>
+  ): void {
     tunnel.addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
       if (!isContextUsageRequest(params)) {
         return Promise.reject(new Error("Invalid contextUsage request"));
@@ -593,7 +602,10 @@ class FrontendClientClass {
     });
   }
 
-  onResetGenerator(tunnel: RpcConnection, handler: (request: Omit<ResetGeneratorRequest, "type">) => void): void {
+  onResetGenerator(
+    tunnel: RpcConnection,
+    handler: (request: Omit<ResetGeneratorRequest, "type">) => void
+  ): void {
     tunnel.addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
       if (!isResetGeneratorRequest(params)) return Promise.resolve(undefined);
       const { type: _, ...input } = params;
@@ -631,7 +643,9 @@ class FrontendClientClass {
     }
     const elapsed = Date.now() - t0;
     if (elapsed > 5) {
-      console.log(`[TIMING][FrontendClient] ${label} broadcast took ${elapsed}ms (${this.tunnels.size} tunnels)`);
+      console.log(
+        `[TIMING][FrontendClient] ${label} broadcast took ${elapsed}ms (${this.tunnels.size} tunnels)`
+      );
     }
   }
 

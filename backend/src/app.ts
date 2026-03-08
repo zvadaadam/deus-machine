@@ -1,4 +1,3 @@
-import { match } from 'ts-pattern';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createNodeWebSocket } from '@hono/node-ws';
@@ -9,10 +8,9 @@ import { validateDeviceToken } from './services/auth.service';
 import {
   addConnection,
   removeConnection,
-  recordPong,
-  addSubscriptions,
-  removeSubscriptions,
+  handleProtocolMessage,
 } from './services/ws.service';
+import { removeSubs as removeQuerySubs } from './services/query-engine';
 import { getRelayStatus } from './services/relay.service';
 import healthRoutes from './routes/health';
 import workspaceRoutes from './routes/workspaces';
@@ -114,24 +112,13 @@ export function createApp() {
           return;
         }
 
-        // Authenticated — handle protocol messages
-        match(msg)
-          .with({ type: 'pong' }, () => recordPong(connectionId!))
-          .with({ type: 'subscribe' }, (m) => {
-            if (Array.isArray(m.topics)) {
-              addSubscriptions(connectionId!, m.topics as string[]);
-            }
-          })
-          .with({ type: 'unsubscribe' }, (m) => {
-            if (Array.isArray(m.topics)) {
-              removeSubscriptions(connectionId!, m.topics as string[]);
-            }
-          })
-          .otherwise(() => {});
+        // Authenticated — handle protocol messages (shared with relay virtual connections)
+        handleProtocolMessage(connectionId!, msg);
       },
 
       onClose() {
         if (connectionId) {
+          removeQuerySubs(connectionId);
           removeConnection(connectionId);
           connectionId = null;
         }
