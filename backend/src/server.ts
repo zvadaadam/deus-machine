@@ -62,13 +62,19 @@ const server = serve({
 // Inject WebSocket support into the HTTP server
 injectWebSocket(server);
 
+// Migrate old relay URL to new domain
+const storedRelayUrl = getSetting("relay_url") as string | null;
+if (storedRelayUrl === "wss://relay.opendevs.sh") {
+  saveSetting("relay_url", "wss://relay.rundeus.com");
+}
+
 // Connect to relay if remote access is enabled.
 // Auto-provisions relay URL and credentials if missing (same logic as settings route).
 const remoteEnabled = getSetting("remote_access_enabled");
 if (remoteEnabled === true) {
   let relayUrl = getSetting("relay_url") as string | null;
   if (!relayUrl) {
-    relayUrl = "wss://relay.opendevs.sh";
+    relayUrl = "wss://relay.rundeus.com";
     saveSetting("relay_url", relayUrl);
   }
   let creds = getRelayCredentials();

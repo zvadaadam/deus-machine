@@ -47,3 +47,21 @@ export type {
 
 // GitHub types
 export type { PRStatus, GhCliStatus, DevServer } from "./github";
+
+// Query protocol types
+export type {
+  QueryResource,
+  MutationName,
+  QClientFrame,
+  QServerFrame,
+  QRequestFrame,
+  QSubscribeFrame,
+  QUnsubscribeFrame,
+  QMutateFrame,
+  QResponseFrame,
+  QSnapshotFrame,
+  QDeltaFrame,
+  QMutateResultFrame,
+  QInvalidateFrame,
+  QErrorFrame,
+} from "./query-protocol";
