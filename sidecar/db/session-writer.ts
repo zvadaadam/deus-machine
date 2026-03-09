@@ -9,6 +9,7 @@ import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
 import { notifyBackend } from "./backend-notifier";
 import { FrontendClient } from "../frontend-client";
+import type { AgentType, ErrorCategory } from "../protocol";
 
 // ── WriteResult ──────────────────────────────────────────────────────────
 
@@ -41,9 +42,10 @@ export function saveAssistantMessage(
   // Other stop_reasons (e.g. max_tokens) are communicated via session error events.
   // Old DB rows may have envelope for any stop_reason — the frontend read shim
   // in normalizeContentBlocks handles backward compat.
-  const contentPayload = message.stop_reason === "cancelled"
-    ? { message: { stop_reason: "cancelled" }, blocks: message.content ?? [] }
-    : message.content ?? [];
+  const contentPayload =
+    message.stop_reason === "cancelled"
+      ? { message: { stop_reason: "cancelled" }, blocks: message.content ?? [] }
+      : (message.content ?? []);
   const content = JSON.stringify(contentPayload);
 
   try {
@@ -62,7 +64,9 @@ export function saveAssistantMessage(
 
     const totalMs = Date.now() - t0;
     if (totalMs > 10) {
-      console.log(`[TIMING][SESSION-WRITER] saveAssistantMessage session=${sessionId} insert=${insertMs}ms notify=${notifyMs}ms total=${totalMs}ms`);
+      console.log(
+        `[TIMING][SESSION-WRITER] saveAssistantMessage session=${sessionId} insert=${insertMs}ms notify=${notifyMs}ms total=${totalMs}ms`
+      );
     }
     return { ok: true, value: messageId };
   } catch (error) {
@@ -182,9 +186,9 @@ export function saveUserMessage(
 export function lookupWorkspaceId(sessionId: string): string | null {
   const db = getDatabase();
   try {
-    const row = db
-      .prepare("SELECT workspace_id FROM sessions WHERE id = ?")
-      .get(sessionId) as { workspace_id: string } | undefined;
+    const row = db.prepare("SELECT workspace_id FROM sessions WHERE id = ?").get(sessionId) as
+      | { workspace_id: string }
+      | undefined;
     return row?.workspace_id ?? null;
   } catch {
     return null;
@@ -196,13 +200,13 @@ export function lookupWorkspaceId(sessionId: string): string | null {
  * Used to include the correct agentType in status events instead of
  * hardcoding "claude" (which would be wrong for Codex sessions).
  */
-export function lookupAgentType(sessionId: string): string {
+export function lookupAgentType(sessionId: string): AgentType {
   const db = getDatabase();
   try {
-    const row = db
-      .prepare("SELECT agent_type FROM sessions WHERE id = ?")
-      .get(sessionId) as { agent_type: string } | undefined;
-    return row?.agent_type ?? "claude";
+    const row = db.prepare("SELECT agent_type FROM sessions WHERE id = ?").get(sessionId) as
+      | { agent_type: string }
+      | undefined;
+    return (row?.agent_type as AgentType) ?? "claude";
   } catch {
     return "claude";
   }
@@ -259,7 +263,9 @@ export function updateSessionStatus(
           agentType,
           status,
           ...(status === "error" && errorMessage ? { errorMessage } : {}),
-          ...(status === "error" && errorCategory ? { errorCategory } : {}),
+          ...(status === "error" && errorCategory
+            ? { errorCategory: errorCategory as ErrorCategory }
+            : {}),
           ...(workspaceId ? { workspaceId } : {}),
         });
       } catch {
@@ -305,11 +311,13 @@ export function updateContextUsage(
   const db = getDatabase();
 
   try {
-    const result = db.prepare(
-      `
+    const result = db
+      .prepare(
+        `
       UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?
     `
-    ).run(tokenCount, usedPercent, sessionId);
+      )
+      .run(tokenCount, usedPercent, sessionId);
     if (result.changes === 0) {
       console.warn(`[SESSION-WRITER] updateContextUsage: no session found for ${sessionId}`);
     }
@@ -367,9 +375,9 @@ export function lookupAgentSessionId(sessionId: string): string | null {
   const db = getDatabase();
 
   try {
-    const row = db
-      .prepare("SELECT agent_session_id FROM sessions WHERE id = ?")
-      .get(sessionId) as { agent_session_id: string | null } | undefined;
+    const row = db.prepare("SELECT agent_session_id FROM sessions WHERE id = ?").get(sessionId) as
+      | { agent_session_id: string | null }
+      | undefined;
 
     return row?.agent_session_id ?? null;
   } catch (error) {
@@ -428,9 +436,7 @@ export function reconcileStuckSessions(): WriteResult<number> {
 
     const count = result.changes;
     if (count > 0) {
-      console.log(
-        `[SESSION-WRITER] Reconciled ${count} stuck session(s) from 'working' to 'idle'`
-      );
+      console.log(`[SESSION-WRITER] Reconciled ${count} stuck session(s) from 'working' to 'idle'`);
     }
     return { ok: true, value: count };
   } catch (error) {

@@ -11,6 +11,7 @@
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
 import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 import { simulatorService } from "../api/simulator.service";
 import type { SimulatorInfo, StreamInfo } from "../types";
 
@@ -49,37 +50,31 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const getSimulatorsRef = useRef(callbacks.getSimulators);
   getSimulatorsRef.current = callbacks.getSimulators;
-  const sendResponse = useCallback(
-    async (id: unknown, result: unknown) => {
-      const response = JSON.stringify({
-        jsonrpc: "2.0",
-        result,
-        id,
-      });
-      try {
-        await invoke("send_sidecar_message", { message: response });
-      } catch (err) {
-        console.error("[SimulatorRPC] Failed to send response:", err);
-      }
-    },
-    []
-  );
+  const sendResponse = useCallback(async (id: unknown, result: unknown) => {
+    const response = JSON.stringify({
+      jsonrpc: "2.0",
+      result,
+      id,
+    });
+    try {
+      await invoke("send_sidecar_message", { message: response });
+    } catch (err) {
+      console.error("[SimulatorRPC] Failed to send response:", err);
+    }
+  }, []);
 
-  const sendError = useCallback(
-    async (id: unknown, message: string) => {
-      const response = JSON.stringify({
-        jsonrpc: "2.0",
-        error: { code: -32000, message },
-        id,
-      });
-      try {
-        await invoke("send_sidecar_message", { message: response });
-      } catch (err) {
-        console.error("[SimulatorRPC] Failed to send error:", err);
-      }
-    },
-    []
-  );
+  const sendError = useCallback(async (id: unknown, message: string) => {
+    const response = JSON.stringify({
+      jsonrpc: "2.0",
+      error: { code: -32000, message },
+      id,
+    });
+    try {
+      await invoke("send_sidecar_message", { message: response });
+    } catch (err) {
+      console.error("[SimulatorRPC] Failed to send error:", err);
+    }
+  }, []);
 
   // -- Screenshot: capture JPEG from ObjC bridge, return as base64 -----------
 
@@ -102,10 +97,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         const base64 = btoa(binary);
 
         await sendResponse(id, { image: base64 });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await sendResponse(id, {
           image: "",
-          error: err.message || "Screenshot failed",
+          error: getErrorMessage(err),
         });
       }
     },
@@ -126,8 +121,8 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         await simulatorService.sendTouch(workspaceId, x, y, "ended");
 
         await sendResponse(id, { success: true });
-      } catch (err: any) {
-        await sendResponse(id, { success: false, error: err.message || "Tap failed" });
+      } catch (err: unknown) {
+        await sendResponse(id, { success: false, error: getErrorMessage(err) });
       }
     },
     [sendResponse]
@@ -162,8 +157,8 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         await simulatorService.sendTouch(workspaceId, endX, endY, "ended");
 
         await sendResponse(id, { success: true });
-      } catch (err: any) {
-        await sendResponse(id, { success: false, error: err.message || "Swipe failed" });
+      } catch (err: unknown) {
+        await sendResponse(id, { success: false, error: getErrorMessage(err) });
       }
     },
     [sendResponse]
@@ -211,8 +206,8 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         } else {
           await sendResponse(id, { success: true });
         }
-      } catch (err: any) {
-        await sendResponse(id, { success: false, error: err.message || "Type failed" });
+      } catch (err: unknown) {
+        await sendResponse(id, { success: false, error: getErrorMessage(err) });
       }
     },
     [sendResponse]
@@ -237,10 +232,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         }
 
         await sendResponse(id, { success: true });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await sendResponse(id, {
           success: false,
-          error: err.message || "Key press failed",
+          error: getErrorMessage(err),
         });
       }
     },
@@ -261,10 +256,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           bundleId: app.bundle_id,
           appName: app.name,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await sendResponse(id, {
           success: false,
-          error: err.message || "Build & run failed",
+          error: getErrorMessage(err),
         });
       }
     },
@@ -301,10 +296,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           isAvailable: s.is_available,
         }));
         await sendResponse(id, { devices });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await sendResponse(id, {
           devices: [],
-          error: err.message || "Failed to list devices",
+          error: getErrorMessage(err),
         });
       }
     },
@@ -340,10 +335,10 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           port: stream.port,
           hidAvailable: stream.hid_available,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await sendResponse(id, {
           success: false,
-          error: err.message || "Failed to start simulator",
+          error: getErrorMessage(err),
         });
       }
     },
@@ -410,25 +405,80 @@ function charToKeycode(char: string): { code: number; shift: boolean } | null {
 
   // USB HID usage codes (Usage Page 0x07)
   const CHAR_MAP: Record<string, number> = {
-    a: 0x04, b: 0x05, c: 0x06, d: 0x07, e: 0x08, f: 0x09,
-    g: 0x0a, h: 0x0b, i: 0x0c, j: 0x0d, k: 0x0e, l: 0x0f,
-    m: 0x10, n: 0x11, o: 0x12, p: 0x13, q: 0x14, r: 0x15,
-    s: 0x16, t: 0x17, u: 0x18, v: 0x19, w: 0x1a, x: 0x1b,
-    y: 0x1c, z: 0x1d,
-    "1": 0x1e, "2": 0x1f, "3": 0x20, "4": 0x21, "5": 0x22,
-    "6": 0x23, "7": 0x24, "8": 0x25, "9": 0x26, "0": 0x27,
-    "\n": 0x28, "\t": 0x2b, " ": 0x2c,
-    "-": 0x2d, "=": 0x2e, "[": 0x2f, "]": 0x30, "\\": 0x31,
-    ";": 0x33, "'": 0x34, "`": 0x35, ",": 0x36, ".": 0x37,
+    a: 0x04,
+    b: 0x05,
+    c: 0x06,
+    d: 0x07,
+    e: 0x08,
+    f: 0x09,
+    g: 0x0a,
+    h: 0x0b,
+    i: 0x0c,
+    j: 0x0d,
+    k: 0x0e,
+    l: 0x0f,
+    m: 0x10,
+    n: 0x11,
+    o: 0x12,
+    p: 0x13,
+    q: 0x14,
+    r: 0x15,
+    s: 0x16,
+    t: 0x17,
+    u: 0x18,
+    v: 0x19,
+    w: 0x1a,
+    x: 0x1b,
+    y: 0x1c,
+    z: 0x1d,
+    "1": 0x1e,
+    "2": 0x1f,
+    "3": 0x20,
+    "4": 0x21,
+    "5": 0x22,
+    "6": 0x23,
+    "7": 0x24,
+    "8": 0x25,
+    "9": 0x26,
+    "0": 0x27,
+    "\n": 0x28,
+    "\t": 0x2b,
+    " ": 0x2c,
+    "-": 0x2d,
+    "=": 0x2e,
+    "[": 0x2f,
+    "]": 0x30,
+    "\\": 0x31,
+    ";": 0x33,
+    "'": 0x34,
+    "`": 0x35,
+    ",": 0x36,
+    ".": 0x37,
     "/": 0x38,
   };
 
   // Shifted characters (map to the base key's HID code)
   const SHIFT_CHAR_MAP: Record<string, number> = {
-    "!": 0x1e, "@": 0x1f, "#": 0x20, $: 0x21, "%": 0x22,
-    "^": 0x23, "&": 0x24, "*": 0x25, "(": 0x26, ")": 0x27,
-    _: 0x2d, "+": 0x2e, "{": 0x2f, "}": 0x30, "|": 0x31,
-    ":": 0x33, '"': 0x34, "~": 0x35, "<": 0x36, ">": 0x37,
+    "!": 0x1e,
+    "@": 0x1f,
+    "#": 0x20,
+    $: 0x21,
+    "%": 0x22,
+    "^": 0x23,
+    "&": 0x24,
+    "*": 0x25,
+    "(": 0x26,
+    ")": 0x27,
+    _: 0x2d,
+    "+": 0x2e,
+    "{": 0x2f,
+    "}": 0x30,
+    "|": 0x31,
+    ":": 0x33,
+    '"': 0x34,
+    "~": 0x35,
+    "<": 0x36,
+    ">": 0x37,
     "?": 0x38,
   };
 

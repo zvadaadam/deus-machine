@@ -5,17 +5,17 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import type { Workspace, DiffStats } from "../types";
+import type { DiffStats } from "../types";
 
 interface WorkspaceState {
-  // Selected workspace
-  selectedWorkspace: Workspace | null;
+  // Selected workspace ID (derive full object from React Query data via useMemo)
+  selectedWorkspaceId: string | null;
 
   // Diff stats cache (by workspace ID)
   diffStats: Record<string, DiffStats>;
 
   // Actions
-  selectWorkspace: (workspace: Workspace | null) => void;
+  selectWorkspace: (workspaceId: string | null) => void;
   clearSelection: () => void;
   setDiffStats: (workspaceId: string, stats: DiffStats) => void;
   setMultipleDiffStats: (stats: Record<string, DiffStats>) => void;
@@ -25,16 +25,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   devtools(
     (set) => ({
       // Initial state
-      selectedWorkspace: null,
+      selectedWorkspaceId: null,
       diffStats: {},
 
       // Actions
-      selectWorkspace: (workspace) => {
-        set({ selectedWorkspace: workspace }, false, "workspace/select");
+      selectWorkspace: (workspaceId) => {
+        set({ selectedWorkspaceId: workspaceId }, false, "workspace/select");
       },
 
       clearSelection: () => {
-        set({ selectedWorkspace: null }, false, "workspace/clearSelection");
+        set({ selectedWorkspaceId: null }, false, "workspace/clearSelection");
       },
 
       setDiffStats: (workspaceId, stats) =>
@@ -72,8 +72,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
  * Stable Actions - Call from anywhere without causing re-renders
  */
 export const workspaceActions = {
-  selectWorkspace: (workspace: Workspace | null) =>
-    useWorkspaceStore.getState().selectWorkspace(workspace),
+  selectWorkspace: (workspaceId: string | null) =>
+    useWorkspaceStore.getState().selectWorkspace(workspaceId),
   clearSelection: () => useWorkspaceStore.getState().clearSelection(),
   setDiffStats: (workspaceId: string, stats: DiffStats) =>
     useWorkspaceStore.getState().setDiffStats(workspaceId, stats),

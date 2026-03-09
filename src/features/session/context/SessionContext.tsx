@@ -14,15 +14,22 @@
  */
 
 import { createContext, useContext, ReactNode, useMemo } from "react";
-import type { ContentBlock, Message, SessionStatus } from "../types";
+import type { ContentBlock, Message, MessageRole, SessionStatus } from "../types";
 import type { ToolResultMap } from "../ui/chat-types";
 
 interface SessionContextValue {
   parseContent: (content: string) => (ContentBlock | string)[] | string;
   toolResultMap: ToolResultMap;
-  parentToolUseMap: Map<string, string>;     // messageId → parentToolUseId
-  subagentMessages: Map<string, Message[]>;  // toolUseId → child messages
+  parentToolUseMap: Map<string, string>; // messageId → parentToolUseId
+  subagentMessages: Map<string, Message[]>; // toolUseId → child messages
   sessionStatus: SessionStatus;
+  /** Renders a content block via BlockRenderer. Injected to break circular imports. */
+  renderBlock: (
+    block: ContentBlock | string,
+    index: number,
+    role?: MessageRole,
+    isStreaming?: boolean
+  ) => ReactNode;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -33,6 +40,13 @@ interface SessionProviderProps {
   parentToolUseMap: Map<string, string>;
   subagentMessages: Map<string, Message[]>;
   sessionStatus: SessionStatus;
+  /** Renders a content block via BlockRenderer. Injected to break circular imports. */
+  renderBlock: (
+    block: ContentBlock | string,
+    index: number,
+    role?: MessageRole,
+    isStreaming?: boolean
+  ) => ReactNode;
   children: ReactNode;
 }
 
@@ -42,13 +56,21 @@ export function SessionProvider({
   parentToolUseMap,
   subagentMessages,
   sessionStatus,
+  renderBlock,
   children,
 }: SessionProviderProps) {
   // Memoize context value to prevent unnecessary re-renders
   // React uses Object.is() to compare values, so new object {} !== {} even if contents are same
   const value = useMemo(
-    () => ({ parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus }),
-    [parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus]
+    () => ({
+      parseContent,
+      toolResultMap,
+      parentToolUseMap,
+      subagentMessages,
+      sessionStatus,
+      renderBlock,
+    }),
+    [parseContent, toolResultMap, parentToolUseMap, subagentMessages, sessionStatus, renderBlock]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef, type CSSProperties } from "react";
+import { useState, useMemo, useEffect, useCallback, type CSSProperties } from "react";
 import { Copy, Check, Plus, X, MessageSquarePlus, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,7 @@ import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import { getSingularPatch, parseDiffFromFile } from "@pierre/diffs";
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import { useDiffOptions } from "@/shared/lib/diffOptions";
+import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 
 interface DiffViewerProps {
   filePath?: string;
@@ -18,6 +19,8 @@ interface DiffViewerProps {
   onClose?: () => void;
   /** When true, renders with natural height (no h-full / internal scroll) for stacking inside a scrollable parent */
   embedded?: boolean;
+  /** Required for sending diff comments to the chat input */
+  workspaceId?: string;
 }
 
 /**
@@ -60,12 +63,11 @@ export function DiffViewer({
   error: errorProp = null,
   onClose,
   embedded = false,
+  workspaceId,
 }: DiffViewerProps) {
   const [copied, setCopied] = useState(false);
   const [comments, setComments] = useState<DiffComment[]>([]);
   const [draftComment, setDraftComment] = useState<DiffCommentDraft | null>(null);
-  const draftCommentRef = useRef<DiffCommentDraft | null>(null);
-  draftCommentRef.current = draftComment;
   const [showAll, setShowAll] = useState(false);
 
   const baseDiffOptions = useDiffOptions<DiffCommentMeta>();
@@ -164,7 +166,7 @@ export function DiffViewer({
   );
 
   const handleSaveDraft = useCallback(() => {
-    const draft = draftCommentRef.current;
+    const draft = draftComment;
     if (!draft) return;
     const trimmed = draft.text.trim();
     if (!trimmed) {
@@ -180,7 +182,7 @@ export function DiffViewer({
     };
     setComments((prev) => [...prev, newComment]);
     setDraftComment(null);
-  }, []);
+  }, [draftComment]);
 
   const handleCancelDraft = useCallback(() => {
     setDraftComment(null);
@@ -207,10 +209,11 @@ export function DiffViewer({
 
   const handleSendToChat = useCallback(
     (comment: DiffComment) => {
+      if (!workspaceId) return;
       const text = formatCommentForChat(comment, comment.lineNumber, comment.side);
-      window.dispatchEvent(new CustomEvent("insert-to-chat", { detail: { text } }));
+      chatInsertActions.insertText(workspaceId, text);
     },
-    [formatCommentForChat]
+    [formatCommentForChat, workspaceId]
   );
 
   const lineAnnotations = useMemo<DiffLineAnnotation<DiffCommentMeta>[]>(
@@ -247,7 +250,7 @@ export function DiffViewer({
       if (!meta) return null;
 
       if (meta.isDraft) {
-        const draft = draftCommentRef.current;
+        const draft = draftComment;
         return (
           <div className="diff-comment-card">
             <Textarea
@@ -300,7 +303,7 @@ export function DiffViewer({
         </div>
       );
     },
-    [handleCancelDraft, handleRemoveComment, handleSaveDraft, handleSendToChat]
+    [draftComment, handleCancelDraft, handleRemoveComment, handleSaveDraft, handleSendToChat]
   );
 
   const headerActions = (

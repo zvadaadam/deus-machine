@@ -13,6 +13,7 @@ import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { FrontendClient } from "../../frontend-client";
+import { getErrorMessage } from "../../../shared/lib/errors";
 
 // ============================================================================
 // Snapshot file-based fallback constants
@@ -88,9 +89,9 @@ function formatSnapshotResponse(
       const filename = `snapshot-${timestamp}.log`;
       filePath = join(BROWSER_LOGS_DIR, filename);
       writeFileSync(filePath, snapshot, "utf-8");
-    } catch (err: any) {
+    } catch (err: unknown) {
       // File write failed — fall back to truncated inline
-      console.warn(`[browser] Failed to write snapshot file: ${err.message}`);
+      console.warn(`[browser] Failed to write snapshot file: ${getErrorMessage(err)}`);
     }
 
     if (filePath) {
@@ -180,12 +181,12 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
             content: [
               {
                 type: "text",
-                text: `Browser not available: ${err.message}. Make sure the browser tab is open.`,
+                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser tab is open.`,
               },
             ],
           };
@@ -244,9 +245,9 @@ The element is scrolled into view, focused, and clicked with proper mouse event 
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -313,9 +314,9 @@ The element is focused and text is entered. Use submit: true to press Enter afte
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -364,9 +365,9 @@ The element is focused and text is entered. Use submit: true to press Enter afte
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -450,9 +451,9 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -517,9 +518,9 @@ If a ref is provided, the matching element is passed as the 'element' argument. 
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -573,9 +574,9 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
           return {
             content: [{ type: "text", text: `Pressed key: ${args.key}` }],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -627,9 +628,9 @@ hover states, or any UI that appears on mouse hover. Returns a page snapshot aft
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -691,9 +692,9 @@ to select by option value or visible text. Returns a page snapshot after selecti
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -734,9 +735,9 @@ to select by option value or visible text. Returns a page snapshot after selecti
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -785,9 +786,9 @@ Messages are formatted as [LEVEL] message.`,
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -905,12 +906,12 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
           parts.push({ type: "text", text: context });
 
           return { content: parts };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
             content: [
               {
                 type: "text",
-                text: `Browser not available: ${err.message}. Make sure the browser tab is open.`,
+                text: `Browser not available: ${getErrorMessage(err)}. Make sure the browser tab is open.`,
               },
             ],
           };
@@ -965,9 +966,9 @@ Requests are formatted as [TYPE] URL (duration, size).`,
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -1046,9 +1047,9 @@ Two modes:
           );
 
           return { content: [{ type: "text", text }] };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text", text: `Browser not available: ${err.message}` }],
+            content: [{ type: "text", text: `Browser not available: ${getErrorMessage(err)}` }],
           };
         }
       }

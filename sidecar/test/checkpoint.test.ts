@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const { mockExecFileSync } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
@@ -14,6 +14,10 @@ describe("createCheckpoint", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("creates a start checkpoint with correct git commands", () => {
     mockExecFileSync
       .mockReturnValueOnce("abc123def456\n") // rev-parse HEAD
@@ -23,26 +27,22 @@ describe("createCheckpoint", () => {
 
     createCheckpoint("sess-1", "turn-1", "start", "/test/repo", "test");
 
-    // Verify git rev-parse HEAD
     expect(mockExecFileSync).toHaveBeenCalledWith("git", ["rev-parse", "HEAD"], {
       cwd: "/test/repo",
       encoding: "utf-8",
     });
 
-    // Verify git write-tree
     expect(mockExecFileSync).toHaveBeenCalledWith("git", ["write-tree"], {
       cwd: "/test/repo",
       encoding: "utf-8",
     });
 
-    // Verify git commit-tree (with tree and parent)
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "git",
       expect.arrayContaining(["commit-tree", "tree123", "-p", "abc123def456"]),
       expect.objectContaining({ cwd: "/test/repo" })
     );
 
-    // Verify git update-ref with correct checkpoint name
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "git",
       expect.arrayContaining([
@@ -63,7 +63,6 @@ describe("createCheckpoint", () => {
 
     createCheckpoint("sess-2", "turn-5", "end", "/workspace", "handler");
 
-    // Verify update-ref includes the correct checkpoint ref name
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "git",
       expect.arrayContaining([
@@ -83,40 +82,65 @@ describe("createCheckpoint", () => {
 
     createCheckpoint("sess-1", "turn-1", "start", "/repo", "test");
 
-    // commit-tree is the 3rd call (index 2). Args array is the 2nd param.
     const commitTreeArgs = mockExecFileSync.mock.calls[2][1];
     const messageIdx = commitTreeArgs.indexOf("-m");
     const commitMessage = commitTreeArgs[messageIdx + 1];
     expect(commitMessage).toContain("checkpoint:session-sess-1-turn-turn-1-start");
   });
 
-  it("skips checkpoint during merge (status 128)", () => {
-    const mergeError: any = new Error("merge in progress");
-    mergeError.status = 128;
+  it("skips checkpoint for unresolved git state", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const mergeError = new Error(
+      "Command failed: git write-tree\nfile.txt: unmerged (123)\nfatal: git-write-tree: error building trees"
+    );
     mockExecFileSync.mockImplementation(() => {
       throw mergeError;
     });
 
-    // Should not throw
     expect(() => createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")).not.toThrow();
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("skips checkpoint when merge message is present", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const mergeError = new Error("fatal: merge in progress");
     mockExecFileSync.mockImplementation(() => {
       throw mergeError;
     });
 
     expect(() => createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")).not.toThrow();
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not treat unrelated status 128 failures as merge state", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = new Error("fatal: repository corrupt");
+    (error as Error & { status?: number }).status = 128;
+    mockExecFileSync.mockImplementation(() => {
+      throw error;
+    });
+
+    expect(() => createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")).not.toThrow();
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("skipped"))).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "test Checkpoint start failed:",
+      "fatal: repository corrupt"
+    );
   });
 
   it("logs error for non-merge failures", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const error = new Error("permission denied");
     mockExecFileSync.mockImplementation(() => {
       throw error;
     });
 
-    // Should not throw, just log
     expect(() => createCheckpoint("sess-1", "turn-1", "start", "/repo", "test")).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith("test Checkpoint start failed:", "permission denied");
   });
 });
