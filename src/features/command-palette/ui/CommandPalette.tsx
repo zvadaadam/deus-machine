@@ -77,7 +77,7 @@ export function CommandPalette({ actionOverrides = {} }: CommandPaletteProps) {
       closeCommandPalette();
       setSearch("");
       setPage("home");
-      selectWorkspace(workspace);
+      selectWorkspace(workspace.id);
     },
     [closeCommandPalette, selectWorkspace]
   );

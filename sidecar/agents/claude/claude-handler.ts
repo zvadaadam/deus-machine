@@ -2,11 +2,15 @@
 // ClaudeAgentHandler — implements AgentHandler for the Claude Agent SDK.
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
-import { query as claudeSDK } from "@anthropic-ai/claude-agent-sdk";
+import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext, resolveStreamOutcome, executeOutcome } from "./stream-context";
-import { deserializeMessage, processMessage, type ProcessMessageOptions } from "./message-processor";
+import {
+  deserializeMessage,
+  processMessage,
+  type ProcessMessageOptions,
+} from "./message-processor";
 import { lookupAgentSessionId } from "../../db/session-writer";
 import type { AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
@@ -122,7 +126,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       isSessionActive(session) && options.shouldResetGenerator !== true && !settingsChangedFlag;
 
     if (canReuse) {
-      console.log(`[TIMING][handleQuery] REUSE session=${sessionId} decisionTime=${Date.now() - tHandleQuery}ms`);
+      console.log(
+        `[TIMING][handleQuery] REUSE session=${sessionId} decisionTime=${Date.now() - tHandleQuery}ms`
+      );
 
       // Hot-swap model if it changed
       if (modelChanged && session) {
@@ -161,7 +167,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Update permission mode if provided
       if (query && options.permissionMode) {
         try {
-          await query.setPermissionMode(options.permissionMode);
+          await query.setPermissionMode(options.permissionMode as PermissionMode);
         } catch (error) {
           console.error(
             `Failed to update permission mode: ${error instanceof Error ? error.message : String(error)}`
@@ -180,7 +186,9 @@ export class ClaudeAgentHandler implements AgentHandler {
           : options.shouldResetGenerator
             ? "should reset generator"
             : "settings changed";
-      console.log(`[TIMING][handleQuery] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tHandleQuery}ms`);
+      console.log(
+        `[TIMING][handleQuery] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tHandleQuery}ms`
+      );
 
       if (isSessionActive(session)) {
         terminateSession(sessionId);
@@ -284,7 +292,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     if (existingQuery) {
       try {
-        await existingQuery.setPermissionMode(permissionMode);
+        await existingQuery.setPermissionMode(permissionMode as PermissionMode);
         console.log(`Permission mode updated to ${permissionMode} for session ${sessionId}`);
       } catch (error) {
         console.error(
@@ -439,7 +447,9 @@ export class ClaudeAgentHandler implements AgentHandler {
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
       });
-      console.log(`[TIMING][${generatorId}] buildAgentEnvironment took ${Date.now() - tEnvStart}ms`);
+      console.log(
+        `[TIMING][${generatorId}] buildAgentEnvironment took ${Date.now() - tEnvStart}ms`
+      );
 
       // Auto-inject resume for session continuity after sidecar restart.
       // If no explicit resume was provided and a previous agent_session_id
@@ -456,9 +466,13 @@ export class ClaudeAgentHandler implements AgentHandler {
           options = { ...options, resume: savedAgentSessionId };
         }
       }
-      console.log(`[TIMING][${generatorId}] resumeLookup took ${Date.now() - tResumeStart}ms resume=${!!options.resume} resumeId=${options.resume ?? "none"}`);
+      console.log(
+        `[TIMING][${generatorId}] resumeLookup took ${Date.now() - tResumeStart}ms resume=${!!options.resume} resumeId=${options.resume ?? "none"}`
+      );
       if (options.resume) {
-        console.log(`[RESUME-DEBUG][${generatorId}] Attempting resume with agent_session_id=${options.resume} for session=${sessionId}`);
+        console.log(
+          `[RESUME-DEBUG][${generatorId}] Attempting resume with agent_session_id=${options.resume} for session=${sessionId}`
+        );
       }
 
       // Build SDK options using the dedicated builder
@@ -469,11 +483,17 @@ export class ClaudeAgentHandler implements AgentHandler {
       const promptInput = buildPromptIterable(promptQueue, sessionId);
 
       // Start the SDK query
-      console.log(`[TIMING][${generatorId}] SDK spawn starting (elapsed since processStart: ${Date.now() - tProcessStart}ms)`);
-      console.log(`[RESUME-DEBUG][${generatorId}] SDK options: resume=${sdkOptions.resume ?? "none"} cwd=${sdkOptions.cwd} model=${sdkOptions.model} permissionMode=${sdkOptions.permissionMode}`);
+      console.log(
+        `[TIMING][${generatorId}] SDK spawn starting (elapsed since processStart: ${Date.now() - tProcessStart}ms)`
+      );
+      console.log(
+        `[RESUME-DEBUG][${generatorId}] SDK options: resume=${sdkOptions.resume ?? "none"} cwd=${sdkOptions.cwd} model=${sdkOptions.model} permissionMode=${sdkOptions.permissionMode}`
+      );
       const tSdkSpawn = Date.now();
       const queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
-      console.log(`[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`);
+      console.log(
+        `[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`
+      );
 
       setQuery(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
@@ -494,7 +514,9 @@ export class ClaudeAgentHandler implements AgentHandler {
         ctx.messageCount++;
         if (ctx.firstMessageTime === null) {
           ctx.firstMessageTime = Date.now();
-          console.log(`[TIMING][${generatorId}] FIRST_MESSAGE received after ${ctx.firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`);
+          console.log(
+            `[TIMING][${generatorId}] FIRST_MESSAGE received after ${ctx.firstMessageTime - tSdkSpawn}ms (type=${(message as any)?.type})`
+          );
         }
         // Deserialize, persist, and forward to frontend.
         // See message-processor.ts for the critical side-effect ordering.
@@ -506,12 +528,16 @@ export class ClaudeAgentHandler implements AgentHandler {
 
           // Log per-message timing for first 5 messages, then every 10th
           if (ctx.messageCount <= 5 || ctx.messageCount % 10 === 0) {
-            console.log(`[TIMING][${generatorId}] msg#${ctx.messageCount} type=${cleanMessage.type}${cleanMessage.type === "result" ? "/" + cleanMessage.subtype : ""} elapsed=${Date.now() - tStreamStart}ms`);
+            console.log(
+              `[TIMING][${generatorId}] msg#${ctx.messageCount} type=${cleanMessage.type}${cleanMessage.type === "result" ? "/" + cleanMessage.subtype : ""} elapsed=${Date.now() - tStreamStart}ms`
+            );
           }
         }
       }
 
-      console.log(`[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`);
+      console.log(
+        `[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`
+      );
 
       // Resolve outcome and execute side effects (cancel, idle, error).
       // See stream-context.ts for the classification logic.

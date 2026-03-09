@@ -10,6 +10,7 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { FrontendClient } from "../../frontend-client";
+import { getErrorMessage } from "../../../shared/lib/errors";
 
 /**
  * Creates the iOS simulator automation tool definitions for a given session.
@@ -69,9 +70,11 @@ Example output:
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text" as const, text: `Failed to list simulators: ${err.message}` }],
+            content: [
+              { type: "text" as const, text: `Failed to list simulators: ${getErrorMessage(err)}` },
+            ],
           };
         }
       }
@@ -127,12 +130,12 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
           return {
             content: [{ type: "text" as const, text: details }],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Failed to start simulator: ${err.message}. Make sure the UDID is valid (use iOSSimulatorListDevices to check).`,
+                text: `Failed to start simulator: ${getErrorMessage(err)}. Make sure the UDID is valid (use iOSSimulatorListDevices to check).`,
               },
             ],
           };
@@ -172,12 +175,12 @@ The simulator must be booted and streaming (use iOSSimulatorStart first).`,
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Simulator not available: ${err.message}. Use iOSSimulatorStart to boot a simulator first.`,
+                text: `Simulator not available: ${getErrorMessage(err)}. Use iOSSimulatorStart to boot a simulator first.`,
               },
             ],
           };
@@ -228,9 +231,11 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text" as const, text: `Simulator not available: ${err.message}` }],
+            content: [
+              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+            ],
           };
         }
       }
@@ -288,9 +293,11 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text" as const, text: `Simulator not available: ${err.message}` }],
+            content: [
+              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+            ],
           };
         }
       }
@@ -339,9 +346,11 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text" as const, text: `Simulator not available: ${err.message}` }],
+            content: [
+              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+            ],
           };
         }
       }
@@ -397,9 +406,11 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
               },
             ],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
-            content: [{ type: "text" as const, text: `Simulator not available: ${err.message}` }],
+            content: [
+              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+            ],
           };
         }
       }
@@ -453,12 +464,12 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
           return {
             content: [{ type: "text" as const, text: details }],
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Build & run failed: ${err.message}. Make sure a simulator is booted (use iOSSimulatorStart) and the workspace contains an Xcode project.`,
+                text: `Build & run failed: ${getErrorMessage(err)}. Make sure a simulator is booted (use iOSSimulatorStart) and the workspace contains an Xcode project.`,
               },
             ],
           };

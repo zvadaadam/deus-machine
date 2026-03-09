@@ -6,10 +6,9 @@
  * using the existing BlockRenderer, with tighter spacing and indentation.
  */
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, Fragment } from "react";
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
-import { BlockRenderer } from "./BlockRenderer";
 import { useSession } from "../../context";
 
 interface SubagentMessageListProps {
@@ -19,7 +18,7 @@ interface SubagentMessageListProps {
 export const SubagentMessageList = memo(function SubagentMessageList({
   messages,
 }: SubagentMessageListProps) {
-  const { parseContent } = useSession();
+  const { parseContent, renderBlock } = useSession();
 
   // Parse all messages into content blocks, filtering out tool_result-only and empty messages
   const renderableBlocks = useMemo(() => {
@@ -58,7 +57,7 @@ export const SubagentMessageList = memo(function SubagentMessageList({
   return (
     <div className="border-border/30 flex flex-col gap-0.5 border-l pl-3">
       {renderableBlocks.map(({ block, key }, index) => (
-        <BlockRenderer key={key} block={block} index={index} role="assistant" isStreaming={false} />
+        <Fragment key={key}>{renderBlock(block, index, "assistant", false)}</Fragment>
       ))}
     </div>
   );

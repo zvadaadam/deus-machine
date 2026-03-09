@@ -12,13 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { AgentConfigService } from "./agent-config.service";
-
-function getErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return (error as { message: string }).message;
-  }
-  return "An unexpected error occurred";
-}
+import { getErrorMessage } from "@shared/lib/errors";
 
 /**
  * Fetch config items for a category + scope.

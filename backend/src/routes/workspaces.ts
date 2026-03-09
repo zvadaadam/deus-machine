@@ -5,6 +5,7 @@ import os from 'os';
 import { spawn, execFile, execSync } from 'child_process';
 import { promisify } from 'util';
 import { uuidv7 } from '@shared/lib/uuid';
+import { getErrorMessage, isExecError } from '@shared/lib/errors';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
@@ -183,15 +184,17 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
     }
 
     return c.json({ file, diff: output, old_content: oldContent, new_content: newContent });
-  } catch (gitError: any) {
+  } catch (gitError: unknown) {
+    const msg = getErrorMessage(gitError);
+    const killed = isExecError(gitError) && gitError.killed;
     const errorResponse: any = {
       error: 'diff_failed', message: 'Failed to get diff', retryable: true,
       details: { file, parentBranch, reason: null as string | null }
     };
-    if (gitError.killed) { errorResponse.message = 'Diff operation timed out'; errorResponse.details.reason = 'timeout'; }
-    else if (gitError.message?.includes('unknown revision')) { errorResponse.message = 'Parent branch not found'; errorResponse.details.reason = 'branch_not_found'; errorResponse.retryable = false; }
-    else if (gitError.message?.includes('not a git repository')) { errorResponse.message = 'Not a git repository'; errorResponse.details.reason = 'not_git_repo'; errorResponse.retryable = false; }
-    else { errorResponse.details.reason = 'git_error'; errorResponse.details.errorMessage = gitError.message; }
+    if (killed) { errorResponse.message = 'Diff operation timed out'; errorResponse.details.reason = 'timeout'; }
+    else if (msg.includes('unknown revision')) { errorResponse.message = 'Parent branch not found'; errorResponse.details.reason = 'branch_not_found'; errorResponse.retryable = false; }
+    else if (msg.includes('not a git repository')) { errorResponse.message = 'Not a git repository'; errorResponse.details.reason = 'not_git_repo'; errorResponse.retryable = false; }
+    else { errorResponse.details.reason = 'git_error'; errorResponse.details.errorMessage = msg; }
     return c.json(errorResponse, 500);
   }
 });
@@ -208,13 +211,16 @@ async function runGh(args: string[], options: { cwd: string; timeoutMs?: number 
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
     });
     return { success: true, stdout: stdout.trim() };
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return { success: false, error: 'gh_not_installed', message: 'GitHub CLI (gh) is not installed' };
-    if (err.killed) return { success: false, error: 'timeout', message: 'GitHub CLI command timed out' };
-    const output = `${err.stderr ?? ''} ${err.stdout ?? ''}`.toLowerCase();
-    if (output.includes('gh auth login') || output.includes('not logged into any github hosts'))
-      return { success: false, error: 'gh_not_authenticated', message: 'GitHub CLI is not authenticated' };
-    return { success: false, error: 'unknown', message: err.stderr || err.message || 'Failed to run gh CLI' };
+  } catch (err: unknown) {
+    if (isExecError(err)) {
+      if (err.code === 'ENOENT') return { success: false, error: 'gh_not_installed', message: 'GitHub CLI (gh) is not installed' };
+      if (err.killed) return { success: false, error: 'timeout', message: 'GitHub CLI command timed out' };
+      const output = `${err.stderr ?? ''} ${err.stdout ?? ''}`.toLowerCase();
+      if (output.includes('gh auth login') || output.includes('not logged into any github hosts'))
+        return { success: false, error: 'gh_not_authenticated', message: 'GitHub CLI is not authenticated' };
+      return { success: false, error: 'unknown', message: err.stderr || err.message || 'Failed to run gh CLI' };
+    }
+    return { success: false, error: 'unknown', message: getErrorMessage(err) };
   }
 }
 

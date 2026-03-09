@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { getErrorMessage } from "@shared/lib/errors";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -7,15 +8,9 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Safely extracts an error message from any error type.
- * Handles Error instances, objects with message property, and unknown types.
+ * @deprecated Use `getErrorMessage` from `@shared/lib/errors` directly.
  */
-export function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error !== null && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return String(error);
-}
+export const extractErrorMessage = getErrorMessage;
 
 /**
  * Extracts the repository name from a GitHub URL.
@@ -26,14 +21,22 @@ export function extractErrorMessage(error: unknown): string {
 export function extractRepoNameFromUrl(url: string): string | null {
   // SSH format: git@github.com:user/repo.git
   if (url.startsWith("git@")) {
-    const name = url.split(":")[1]?.split("/").pop()?.replace(/\.git$/, "");
+    const name = url
+      .split(":")[1]
+      ?.split("/")
+      .pop()
+      ?.replace(/\.git$/, "");
     return name || null;
   }
 
   // HTTPS format: https://github.com/user/repo.git
   try {
     const pathname = new URL(url).pathname;
-    const name = pathname.split("/").filter(Boolean).pop()?.replace(/\.git$/, "");
+    const name = pathname
+      .split("/")
+      .filter(Boolean)
+      .pop()
+      ?.replace(/\.git$/, "");
     return name || null;
   } catch {
     return null;
