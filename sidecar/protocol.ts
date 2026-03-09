@@ -3,6 +3,13 @@
 // between the OpenDevs frontend/backend and the sidecar agent runtime.
 
 import { z } from "zod";
+import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "../shared/enums";
+import {
+  EnterPlanModeNotificationSchema,
+  ErrorResponseSchema,
+  MessageResponseSchema,
+  StatusChangedNotificationSchema,
+} from "../shared/session-events";
 
 // ============================================================================
 // RPC Method & Notification Constants
@@ -69,20 +76,17 @@ export const FRONTEND_RPC_METHODS = {
 // Zod Schemas
 // ============================================================================
 
-export const AgentTypeSchema = z.enum(["claude", "codex", "unknown"]);
-
-/** Error categories for structured error responses (inspired by Codex CodexErrorInfo) */
-export const ErrorCategorySchema = z.enum([
-  "auth",
-  "rate_limit",
-  "context_limit",
-  "network",
-  "abort",
-  "invalid_request",
-  "db_write",
-  "process_exit",
-  "internal",
-]);
+// Canonical shared schemas — re-exported here for backwards compatibility with
+// existing sidecar imports.
+export {
+  AgentTypeSchema,
+  EnterPlanModeNotificationSchema,
+  ErrorCategorySchema,
+  ErrorResponseSchema,
+  MessageResponseSchema,
+  SessionStatusSchema,
+  StatusChangedNotificationSchema,
+};
 
 /** Synchronous ACK/reject response for query method */
 export const QueryAckResponseSchema = z.object({
@@ -161,37 +165,6 @@ export const ResetGeneratorRequestSchema = z.object({
   type: z.literal("reset_generator"),
   id: z.string(),
   agentType: AgentTypeSchema,
-});
-
-export const MessageResponseSchema = z.object({
-  id: z.string(),
-  type: z.literal("message"),
-  agentType: AgentTypeSchema,
-  data: z.unknown(),
-});
-
-export const ErrorResponseSchema = z.object({
-  id: z.string(),
-  type: z.literal("error"),
-  error: z.string(),
-  agentType: AgentTypeSchema,
-  category: ErrorCategorySchema.optional(),
-});
-
-export const EnterPlanModeNotificationSchema = z.object({
-  type: z.literal("enter_plan_mode_notification"),
-  id: z.string(),
-  agentType: AgentTypeSchema,
-});
-
-export const StatusChangedNotificationSchema = z.object({
-  type: z.literal("status_changed"),
-  id: z.string(),
-  agentType: AgentTypeSchema,
-  status: z.enum(["idle", "working", "error"]),
-  errorMessage: z.string().optional(),
-  errorCategory: ErrorCategorySchema.optional(),
-  workspaceId: z.string().optional(),
 });
 
 // ============================================================================
@@ -524,7 +497,13 @@ export const SimSwipeRequestSchema = z.object({
   startY: NormalizedCoord.describe("Normalized start Y (0.0–1.0)"),
   endX: NormalizedCoord.describe("Normalized end X (0.0–1.0)"),
   endY: NormalizedCoord.describe("Normalized end Y (0.0–1.0)"),
-  durationMs: z.number().int().positive().max(30_000).optional().describe("Swipe duration in ms (default: 300)"),
+  durationMs: z
+    .number()
+    .int()
+    .positive()
+    .max(30_000)
+    .optional()
+    .describe("Swipe duration in ms (default: 300)"),
 });
 
 export const SimSwipeResponseSchema = z.object({

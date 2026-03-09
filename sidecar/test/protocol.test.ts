@@ -10,6 +10,7 @@ import {
   MessageResponseSchema,
   ErrorResponseSchema,
   EnterPlanModeNotificationSchema,
+  StatusChangedNotificationSchema,
   AgentTypeSchema,
   isQueryRequest,
   isCancelRequest,
@@ -34,6 +35,7 @@ import {
   buildMessageResponse,
   buildErrorResponse,
   buildEnterPlanModeNotification,
+  buildStatusChangedNotification,
 } from "./builders";
 
 // ============================================================================
@@ -309,6 +311,27 @@ describe("EnterPlanModeNotificationSchema", () => {
     expect(
       EnterPlanModeNotificationSchema.safeParse(buildEnterPlanModeNotification()).success
     ).toBe(true);
+  });
+});
+
+describe("StatusChangedNotificationSchema", () => {
+  it("accepts every canonical session status", () => {
+    const statuses = ["idle", "working", "error", "needs_response", "needs_plan_response"] as const;
+
+    for (const status of statuses) {
+      expect(
+        StatusChangedNotificationSchema.safeParse(buildStatusChangedNotification({ status }))
+          .success
+      ).toBe(true);
+    }
+  });
+
+  it("rejects unknown session statuses", () => {
+    expect(
+      StatusChangedNotificationSchema.safeParse(
+        buildStatusChangedNotification({ status: "paused" })
+      ).success
+    ).toBe(false);
   });
 });
 

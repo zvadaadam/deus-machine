@@ -1,0 +1,53 @@
+// shared/enums.ts
+// Canonical Zod enum schemas — single source of truth for all discriminator
+// enums used across frontend, backend, and sidecar.
+//
+// Import the *Schema when you need runtime validation (Zod .parse/.safeParse).
+// Import the inferred *type* when you only need TypeScript checking.
+// Both are exported from this file.
+
+import { z } from "zod";
+
+// ── Session ──────────────────────────────────────────────────────────────
+
+/** All possible session statuses across the full lifecycle. */
+export const SessionStatusSchema = z.enum([
+  "idle",
+  "working",
+  "error",
+  "needs_response",
+  "needs_plan_response",
+]);
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+
+export const MessageRoleSchema = z.enum(["user", "assistant"]);
+export type MessageRole = z.infer<typeof MessageRoleSchema>;
+
+// ── Workspace ────────────────────────────────────────────────────────────
+
+/** Workspace lifecycle states (git worktree). */
+export const WorkspaceStateSchema = z.enum(["ready", "initializing", "archived", "error"]);
+export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
+
+/** Workspace initialization progress. */
+export const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
+export type SetupStatus = z.infer<typeof SetupStatusSchema>;
+
+// ── Agent ────────────────────────────────────────────────────────────────
+
+export const AgentTypeSchema = z.enum(["claude", "codex", "unknown"]);
+export type AgentType = z.infer<typeof AgentTypeSchema>;
+
+/** Structured error categories for agent error responses. */
+export const ErrorCategorySchema = z.enum([
+  "auth",
+  "rate_limit",
+  "context_limit",
+  "network",
+  "abort",
+  "invalid_request",
+  "db_write",
+  "process_exit",
+  "internal",
+]);
+export type ErrorCategory = z.infer<typeof ErrorCategorySchema>;

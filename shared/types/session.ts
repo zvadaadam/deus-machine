@@ -3,15 +3,24 @@
  * Types for Claude Code session management and message handling
  */
 
-export type MessageRole = "user" | "assistant";
-
-/**
- * Session status indicating current agent state
- *
- * @see src/features/sidebar/lib/status.ts for status derivation logic
- */
-// Backend can also emit "needs_response" and "needs_plan_response" when awaiting user input.
-export type SessionStatus = "idle" | "working" | "error" | "needs_response" | "needs_plan_response";
+// Canonical enum types — defined as Zod schemas in shared/enums.ts,
+// imported here for local use and re-exported for backwards compat.
+import type { MessageRole, SessionStatus } from "../enums";
+import type {
+  EnterPlanModeNotification as SessionEnterPlanModeEvent,
+  ErrorResponse as SessionErrorEvent,
+  MessageResponse as SessionMessageEvent,
+  SessionNotification,
+  StatusChangedNotification as SessionStatusEvent,
+} from "../session-events";
+export type { MessageRole, SessionStatus };
+export type {
+  SessionMessageEvent,
+  SessionErrorEvent,
+  SessionEnterPlanModeEvent,
+  SessionStatusEvent,
+  SessionNotification,
+};
 
 /**
  * Base message entity
@@ -94,29 +103,6 @@ export interface ThinkingBlock {
   signature?: string; // Encrypted signature from Claude
 }
 
-// -- Tauri event payloads (sidecar → Rust → frontend) --
-
-/** Payload for session:message and session:error Tauri events */
-export interface SessionMessageEvent {
-  id: string;
-  type: "message" | "error";
-  agentType: string;
-  data?: unknown;
-  error?: string;
-  category?: string;
-}
-
-/** Payload for session:status-changed Tauri event */
-export interface SessionStatusEvent {
-  id: string;
-  type: "status_changed";
-  agentType: string;
-  status: SessionStatus;
-  errorMessage?: string;
-  errorCategory?: string;
-  workspaceId?: string;
-}
-
 /**
  * Session information
  * Metadata about a Claude Code session
@@ -125,14 +111,14 @@ export interface SessionStatusEvent {
 export interface Session {
   id: string;
   workspace_id: string;
-  agent_type: string;
+  agent_type: import("../enums").AgentType;
   model: string;
   agent_session_id?: string | null;
   title?: string | null;
   status: SessionStatus;
   message_count: number;
   error_message?: string | null;
-  error_category?: string | null;
+  error_category?: import("../enums").ErrorCategory | null;
   last_user_message_at?: string | null;
   context_token_count: number;
   context_used_percent: number;

@@ -28,6 +28,11 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
+  SessionMessageEvent,
+  SessionErrorEvent,
+  SessionEnterPlanModeEvent,
+  SessionStatusEvent,
+  SessionNotification,
 } from "./session";
 
 // Repository types
