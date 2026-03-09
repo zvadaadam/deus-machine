@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WorkspaceStateSchema } from '@shared/enums';
 
 // ============================================================================
 // Config Schemas
@@ -69,12 +70,12 @@ export const CreateRepoBody = z.object({
 // Workspace Schemas
 // ============================================================================
 
-const WorkspaceState = z.enum([
-  'initializing', 'ready', 'working', 'error', 'archived',
-]);
+// WorkspaceStateSchema imported from shared/enums.ts — single source of truth.
+// Previously had a local 5-value enum including "working" which doesn't belong
+// in workspace state (that's a session status).
 
 export const PatchWorkspaceBody = z.object({
-  state: WorkspaceState.optional(),
+  state: WorkspaceStateSchema.optional(),
 });
 
 export const CreateWorkspaceBody = z.object({

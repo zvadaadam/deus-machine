@@ -23,7 +23,13 @@ import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Session, SessionStatus, SessionMessageEvent, SessionStatusEvent } from "@shared/types/session";
+import type {
+  Session,
+  SessionEnterPlanModeEvent,
+  SessionErrorEvent,
+  SessionStatus,
+  SessionStatusEvent,
+} from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
 /**
@@ -54,12 +60,17 @@ export function useGlobalSessionNotifications() {
     const unlistenFns: Array<() => void> = [];
 
     function registerListener(promise: Promise<() => void>) {
-      promise.then((fn) => {
-        if (cancelled) { fn(); return; }
-        unlistenFns.push(fn);
-      }).catch(() => {
-        // listen() can reject if Tauri runtime is torn down during navigation
-      });
+      promise
+        .then((fn) => {
+          if (cancelled) {
+            fn();
+            return;
+          }
+          unlistenFns.push(fn);
+        })
+        .catch(() => {
+          // listen() can reject if Tauri runtime is torn down during navigation
+        });
     }
 
     function flushFinishedBatch() {
@@ -93,7 +104,7 @@ export function useGlobalSessionNotifications() {
 
     // --- Error notifications (instant, category-aware) ---
     registerListener(
-      listen<SessionMessageEvent>("session:error", (event) => {
+      listen<SessionErrorEvent>("session:error", (event) => {
         const { id, error, category } = event.payload;
 
         // Analytics fires regardless of window focus — we always want error data
@@ -122,7 +133,7 @@ export function useGlobalSessionNotifications() {
 
     // --- Plan mode notifications (instant) ---
     registerListener(
-      listen<SessionMessageEvent>("session:enter-plan-mode", (event) => {
+      listen<SessionEnterPlanModeEvent>("session:enter-plan-mode", (event) => {
         if (isWindowFocused()) return;
 
         const { id } = event.payload;
@@ -140,29 +151,23 @@ export function useGlobalSessionNotifications() {
     // Uses setQueriesData (direct cache write) instead of invalidateQueries
     // (HTTP round-trip) for immediate sidebar feedback.
     registerListener(
-      listen<SessionStatusEvent>(
-        "session:status-changed",
-        (event) => {
-          const { id: sessionId, status, workspaceId } = event.payload;
+      listen<SessionStatusEvent>("session:status-changed", (event) => {
+        const { id: sessionId, status, workspaceId } = event.payload;
 
-          queryClient.setQueriesData<RepoGroup[]>(
-            { queryKey: ["workspaces", "by-repo"] },
-            (old) => {
-              if (!old) return old;
-              return old.map((group) => ({
-                ...group,
-                workspaces: group.workspaces.map((ws) =>
-                  // Primary: match by workspaceId from event payload (reliable)
-                  // Fallback: match by current_session_id (backward compat)
-                  (workspaceId && ws.id === workspaceId) || ws.current_session_id === sessionId
-                    ? { ...ws, session_status: status as SessionStatus }
-                    : ws
-                ),
-              }));
-            }
-          );
-        }
-      )
+        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) => {
+          if (!old) return old;
+          return old.map((group) => ({
+            ...group,
+            workspaces: group.workspaces.map((ws) =>
+              // Primary: match by workspaceId from event payload (reliable)
+              // Fallback: match by current_session_id (backward compat)
+              (workspaceId && ws.id === workspaceId) || ws.current_session_id === sessionId
+                ? { ...ws, session_status: status }
+                : ws
+            ),
+          }));
+        });
+      })
     );
 
     // --- Status transition detection via session:message events ---

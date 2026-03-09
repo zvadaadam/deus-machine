@@ -15,5 +15,8 @@ export type {
   Session,
   SessionStatus,
   SessionMessageEvent,
+  SessionErrorEvent,
+  SessionEnterPlanModeEvent,
   SessionStatusEvent,
+  SessionNotification,
 } from "@shared/types/session";

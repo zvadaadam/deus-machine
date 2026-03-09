@@ -9,7 +9,7 @@ import { uuidv7 } from "../../shared/lib/uuid";
 import { getDatabase } from "./index";
 import { notifyBackend } from "./backend-notifier";
 import { FrontendClient } from "../frontend-client";
-import type { AgentType, ErrorCategory } from "../protocol";
+import type { AgentType, ErrorCategory, SessionStatus } from "../../shared/enums";
 
 // ── WriteResult ──────────────────────────────────────────────────────────
 
@@ -221,7 +221,9 @@ export function lookupAgentType(sessionId: string): AgentType {
  * Retries once on SQLITE_BUSY since this is the most critical write —
  * a failed status update leaves the session stuck in "working" forever.
  */
-export type SessionStatus = "idle" | "working" | "error";
+// SessionStatus is now imported from shared/enums.ts (canonical 5-value enum)
+// instead of the local 3-value definition that was missing "needs_response"
+// and "needs_plan_response".
 
 export function updateSessionStatus(
   sessionId: string,
