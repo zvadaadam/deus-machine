@@ -18,6 +18,7 @@ import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.que
 import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
+import { BlockRenderer } from "./blocks/BlockRenderer";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ import {
 import { isTauriEnv } from "@/platform/tauri";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import type { InspectedElement } from "./InspectedElementCard";
+import type { ContentBlock, MessageRole } from "../types";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
@@ -276,7 +278,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       // TODO: Implement API call to update session thinking level
     };
 
-
     // Manifest status — cache-only read (staleTime: Infinity, already fetched by MainContent)
     // Default to true while loading to prevent the setup nudge from flashing briefly
     const { data: manifestData } = useManifestTasks(workspaceId ?? null);
@@ -284,7 +285,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
 
     // Show compact button when there are enough messages to benefit from compacting
     const showCompactButton = messages.length > 10;
-
 
     // Session actions using custom hook
     const { sendMessage, stopSession, compactConversation, createPR, sending } = useSessionActions({
@@ -379,6 +379,15 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       resolveQuestion(sessionId, ["USER_CANCELLED"]);
     }, [resolveQuestion, sessionId]);
 
+    // Stable renderBlock callback injected into SessionContext to break the circular import:
+    // BlockRenderer → ToolUseBlock → SubagentGroupBlock → SubagentMessageList → BlockRenderer
+    const renderBlock = useCallback(
+      (block: ContentBlock | string, index: number, role?: MessageRole, isStreaming?: boolean) => (
+        <BlockRenderer block={block} index={index} role={role} isStreaming={isStreaming} />
+      ),
+      []
+    );
+
     // Drop overlay shared between embedded and dialog layouts
     const dropOverlay = isDragging && (
       <div className="animate-drop-overlay-enter absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -401,6 +410,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           parentToolUseMap={parentToolUseMap}
           subagentMessages={subagentMessages}
           sessionStatus={sessionStatus}
+          renderBlock={renderBlock}
         >
           <div
             className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
@@ -513,6 +523,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 parentToolUseMap={parentToolUseMap}
                 subagentMessages={subagentMessages}
                 sessionStatus={sessionStatus}
+                renderBlock={renderBlock}
               >
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat

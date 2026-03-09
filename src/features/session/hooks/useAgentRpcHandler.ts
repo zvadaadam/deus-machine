@@ -22,6 +22,7 @@
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef, useState } from "react";
 import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 import { gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
 
 // ============================================================================
@@ -94,23 +95,34 @@ export function useAgentRpcHandler(
 
   // Keep refs stable across renders so handlers don't need to be recreated
   const contextRef = useRef(context);
-  contextRef.current = context;
-
   const pendingRequestsRef = useRef(pendingRequests);
-  pendingRequestsRef.current = pendingRequests;
 
   // Notify parent when pending map changes
   const onPendingChangeRef = useRef(onPendingChange);
-  onPendingChangeRef.current = onPendingChange;
 
-  const setPendingAndNotify = useCallback((updater: (prev: Map<string, PendingAgentRequest>) => Map<string, PendingAgentRequest>) => {
-    setPendingRequests((prev) => {
-      const next = updater(prev);
-      // Schedule notification after state update settles
-      setTimeout(() => onPendingChangeRef.current?.(next), 0);
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
+  useEffect(() => {
+    pendingRequestsRef.current = pendingRequests;
+  }, [pendingRequests]);
+
+  useEffect(() => {
+    onPendingChangeRef.current = onPendingChange;
+  }, [onPendingChange]);
+
+  const setPendingAndNotify = useCallback(
+    (updater: (prev: Map<string, PendingAgentRequest>) => Map<string, PendingAgentRequest>) => {
+      setPendingRequests((prev) => {
+        const next = updater(prev);
+        // Schedule notification after state update settles
+        setTimeout(() => onPendingChangeRef.current?.(next), 0);
+        return next;
+      });
+    },
+    []
+  );
 
   // ============================================================================
   // Shared RPC response helpers
@@ -182,7 +194,12 @@ export function useAgentRpcHandler(
       }
 
       if (import.meta.env.DEV) {
-        console.log("[AgentRPC] askUserQuestion pending for session:", sessionId, questions.length, "questions");
+        console.log(
+          "[AgentRPC] askUserQuestion pending for session:",
+          sessionId,
+          questions.length,
+          "questions"
+        );
       }
 
       setPendingAndNotify((prev) => {
@@ -228,28 +245,20 @@ export function useAgentRpcHandler(
           await sendResponse(id, { diff: result.diff });
         } else if (stat) {
           // File list with stats
-          const result = await gitDiffFiles(
-            ws.workspacePath,
-            ws.parentBranch,
-            ws.defaultBranch
-          );
+          const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
           const statText = result.files
             .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
             .join("\n");
           await sendResponse(id, { diff: statText });
         } else {
           // All changed files list (summary, not full patch — patches can be huge)
-          const result = await gitDiffFiles(
-            ws.workspacePath,
-            ws.parentBranch,
-            ws.defaultBranch
-          );
+          const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
           const fileList = result.files.map((f) => f.file).join("\n");
           await sendResponse(id, { diff: fileList });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("[AgentRPC] getDiff failed:", err);
-        await sendResponse(id, { error: err.message || "getDiff failed" });
+        await sendResponse(id, { error: getErrorMessage(err) });
       }
     },
     [sendResponse]

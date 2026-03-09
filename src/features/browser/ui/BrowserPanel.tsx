@@ -40,10 +40,17 @@ import {
 import { useBrowser } from "../hooks/useBrowser";
 import { BrowserTabBar } from "./BrowserTabBar";
 import { BrowserTab } from "./BrowserTab";
-import type { BrowserTabState, BrowserTabHandle, ConsoleLog, PersistedBrowserTab, ElementSelectedEvent } from "../types";
+import type {
+  BrowserTabState,
+  BrowserTabHandle,
+  ConsoleLog,
+  PersistedBrowserTab,
+  ElementSelectedEvent,
+} from "../types";
 import { createBrowserTab, deriveTitleFromUrl, hydratePersistedTab } from "../types";
 import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { invoke } from "@/platform/tauri";
 
 const MAX_LOGS = 500;
@@ -440,44 +447,42 @@ export function BrowserPanel({
     );
   }, []);
 
-  /** Dispatch element selection to the chat input via CustomEvent.
+  /** Dispatch element selection to the chat input via chatInsertStore.
    *  Only handles "element-selected" — "area-selected" is intentionally ignored
    *  since area selections have no element metadata to reference. */
   const handleElementSelected = useCallback(
     (_tabId: string, event: ElementSelectedEvent) => {
-      if (event.type !== "element-selected" || !event.element) return;
+      if (event.type !== "element-selected" || !event.element || !workspaceId) return;
 
       // Serialize Record<string, string> fields as semicolon-separated strings
       const serialize = (rec: Record<string, string> | undefined, sep: string) =>
-        rec ? Object.entries(rec).map(([k, v]) => `${k}${sep}${v}`).join("; ") : undefined;
+        rec
+          ? Object.entries(rec)
+              .map(([k, v]) => `${k}${sep}${v}`)
+              .join("; ")
+          : undefined;
 
-      window.dispatchEvent(
-        new CustomEvent("insert-to-chat", {
-          detail: {
-            element: {
-              ref: event.ref ?? "",
-              tagName: event.element.tagName,
-              path: event.element.path,
-              innerText: event.element.innerText,
-              context: event.context,
-              reactComponent: event.reactComponent?.name,
-              file: event.reactComponent?.fileName ?? undefined,
-              line: event.reactComponent?.lineNumber?.toString() ?? undefined,
-              styles: serialize(event.element.styles, ": "),
-              props: serialize(event.element.props, "="),
-              attributes: serialize(event.element.attributes, "="),
-              innerHTML: event.element.innerHTML,
-            },
-          },
-        })
-      );
+      chatInsertActions.insertElement(workspaceId, {
+        ref: event.ref ?? "",
+        tagName: event.element.tagName,
+        path: event.element.path,
+        innerText: event.element.innerText,
+        context: event.context,
+        reactComponent: event.reactComponent?.name,
+        file: event.reactComponent?.fileName ?? undefined,
+        line: event.reactComponent?.lineNumber?.toString() ?? undefined,
+        styles: serialize(event.element.styles, ": "),
+        props: serialize(event.element.props, "="),
+        attributes: serialize(event.element.attributes, "="),
+        innerHTML: event.element.innerHTML,
+      });
     },
-    []
+    [workspaceId]
   );
 
   /** Capture the active tab's WKWebView as JPEG and dispatch to chat input */
   const handleScreenshot = useCallback(async () => {
-    if (!activeTab?.webviewLabel || !activeTab.currentUrl) return;
+    if (!activeTab?.webviewLabel || !activeTab.currentUrl || !workspaceId) return;
     try {
       const base64 = await invoke<string>("screenshot_browser_webview", {
         label: activeTab.webviewLabel,
@@ -489,13 +494,11 @@ export function BrowserPanel({
       }
       const blob = new Blob([bytes], { type: "image/jpeg" });
       const file = new File([blob], `browser-screenshot-${Date.now()}.jpg`, { type: "image/jpeg" });
-      window.dispatchEvent(
-        new CustomEvent("insert-to-chat", { detail: { files: [file] } })
-      );
+      chatInsertActions.insertFiles(workspaceId, [file]);
     } catch (err) {
       console.error("Browser screenshot failed:", err);
     }
-  }, [activeTab?.webviewLabel, activeTab?.currentUrl]);
+  }, [activeTab?.webviewLabel, activeTab?.currentUrl, workspaceId]);
 
   // --- Navigation (operates on active tab) ---
 
@@ -831,7 +834,7 @@ export function BrowserPanel({
           aria-label={mobileView ? "Switch to desktop view" : "Switch to mobile view"}
         >
           {mobileView ? (
-            <Monitor className="h-4 w-4 text-primary" />
+            <Monitor className="text-primary h-4 w-4" />
           ) : (
             <Smartphone className="h-4 w-4" />
           )}
@@ -876,7 +879,7 @@ export function BrowserPanel({
               (() => {
                 try {
                   return (
-                    <DropdownMenuLabel className="text-muted-foreground truncate text-2xs font-normal">
+                    <DropdownMenuLabel className="text-muted-foreground text-2xs truncate font-normal">
                       {new URL(activeTab.currentUrl).hostname}
                     </DropdownMenuLabel>
                   );
@@ -942,11 +945,15 @@ export function BrowserPanel({
             if (activeTab.devtoolsOpen) {
               invoke("close_browser_devtools", { label: activeTab.webviewLabel })
                 .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: false }))
-                .catch((err) => handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`));
+                .catch((err) =>
+                  handleAddLog(activeTab.id, "error", `Close devtools failed: ${err}`)
+                );
             } else {
               invoke("open_browser_devtools", { label: activeTab.webviewLabel })
                 .then(() => handleUpdateTab(activeTab.id, { devtoolsOpen: true }))
-                .catch((err) => handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`));
+                .catch((err) =>
+                  handleAddLog(activeTab.id, "error", `Open devtools failed: ${err}`)
+                );
             }
           }}
           disabled={!activeTab?.currentUrl}
@@ -959,18 +966,20 @@ export function BrowserPanel({
       </div>
 
       {/* Tab content — devtools opens as floating window (docked not yet supported).
-        * See open_browser_devtools in webview.rs for full history of docking attempts.
-        *
-        * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
-        * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
-        * broke mobile view: the placeholder's getBoundingClientRect() returned
-        * stale full-width values because absolute-positioned elements don't
-        * reliably inherit width constraints from their containing block when
-        * parent containers restructure (mx-auto, flex centering). Grid stacking
-        * keeps tabs in normal flow so they inherit w-[390px] naturally and
-        * ResizeObserver fires on actual size changes. */}
+       * See open_browser_devtools in webview.rs for full history of docking attempts.
+       *
+       * Tab stacking uses CSS Grid (all tabs in [grid-area:1/1]) instead of
+       * absolute positioning. Previous approach (absolute inset-0 on BrowserTab)
+       * broke mobile view: the placeholder's getBoundingClientRect() returned
+       * stale full-width values because absolute-positioned elements don't
+       * reliably inherit width constraints from their containing block when
+       * parent containers restructure (mx-auto, flex centering). Grid stacking
+       * keeps tabs in normal flow so they inherit w-[390px] naturally and
+       * ResizeObserver fires on actual size changes. */}
       <div className={`relative min-h-0 flex-1 overflow-hidden ${mobileView ? "bg-muted/30" : ""}`}>
-        <div className={`grid h-full ${mobileView ? "mx-auto w-[390px] border-border/40 border-x" : "w-full"}`}>
+        <div
+          className={`grid h-full ${mobileView ? "border-border/40 mx-auto w-[390px] border-x" : "w-full"}`}
+        >
           {tabs.length === 0 ? (
             <div className="text-muted-foreground/50 flex h-full items-center justify-center text-xs">
               Click + to open a browser tab

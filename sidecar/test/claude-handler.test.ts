@@ -5,27 +5,28 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // vi.hoisted() ensures variables are available when vi.mock factories run.
 // ============================================================================
 
-const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync, mockSessionWriter } = vi.hoisted(() => ({
-  mockClaudeSDK: vi.fn(),
-  mockFrontendAPI: {
-    sendMessage: vi.fn(),
-    sendError: vi.fn(),
-    sendEnterPlanModeNotification: vi.fn(),
-    requestExitPlanMode: vi.fn(),
-    attachTunnel: vi.fn(),
-    detachTunnel: vi.fn(),
-  },
-  mockExecSync: vi.fn(),
-  mockExecFileSync: vi.fn(),
-  mockSessionWriter: {
-    saveAssistantMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-    saveToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-    saveAgentSessionId: vi.fn(() => ({ ok: true, value: "sess-id" })),
-    lookupAgentSessionId: vi.fn(() => null),
-    updateSessionStatus: vi.fn(() => ({ ok: true, value: "sess-id" })),
-    reconcileStuckSessions: vi.fn(() => ({ ok: true, value: 0 })),
-  },
-}));
+const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync, mockSessionWriter } =
+  vi.hoisted(() => ({
+    mockClaudeSDK: vi.fn(),
+    mockFrontendAPI: {
+      sendMessage: vi.fn(),
+      sendError: vi.fn(),
+      sendEnterPlanModeNotification: vi.fn(),
+      requestExitPlanMode: vi.fn(),
+      attachTunnel: vi.fn(),
+      detachTunnel: vi.fn(),
+    },
+    mockExecSync: vi.fn(),
+    mockExecFileSync: vi.fn(),
+    mockSessionWriter: {
+      saveAssistantMessage: vi.fn((..._args: unknown[]) => ({ ok: true, value: "msg-id" })),
+      saveToolResultMessage: vi.fn((..._args: unknown[]) => ({ ok: true, value: "msg-id" })),
+      saveAgentSessionId: vi.fn((..._args: unknown[]) => ({ ok: true, value: "sess-id" })),
+      lookupAgentSessionId: vi.fn((..._args: unknown[]): string | null => null),
+      updateSessionStatus: vi.fn((..._args: unknown[]) => ({ ok: true, value: "sess-id" })),
+      reconcileStuckSessions: vi.fn((..._args: unknown[]) => ({ ok: true, value: 0 })),
+    },
+  }));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
   const actual = (await importOriginal()) as any;
@@ -523,7 +524,11 @@ describe("claude-handler", () => {
 
     it("does NOT capture agent_session_id when resume option is set", async () => {
       const mockMessages = [
-        { type: "assistant", message: { role: "assistant", content: "hi" }, session_id: "new-sdk-sess" },
+        {
+          type: "assistant",
+          message: { role: "assistant", content: "hi" },
+          session_id: "new-sdk-sess",
+        },
         { type: "result", subtype: "success" },
       ];
       let idx = 0;
@@ -582,7 +587,11 @@ describe("claude-handler", () => {
 
     it("captures agent_session_id on first message for new sessions", async () => {
       const mockMessages = [
-        { type: "assistant", message: { role: "assistant", content: "hi" }, session_id: "sdk-sess-new" },
+        {
+          type: "assistant",
+          message: { role: "assistant", content: "hi" },
+          session_id: "sdk-sess-new",
+        },
         { type: "result", subtype: "success" },
       ];
       let idx = 0;

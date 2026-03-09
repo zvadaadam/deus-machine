@@ -103,10 +103,12 @@ export function discoverExecutable(
         .filter((p) => !p.includes("node_modules"))
         .join(":");
     }
-    const resolved = execSync(
-      `"${shell}" -l -c "command -v ${config.shellCommand}"`,
-      { encoding: "utf-8", timeout: 5000, env: cleanEnv, stdio: ["ignore", "pipe", "pipe"] }
-    ).trim();
+    const resolved = execSync(`"${shell}" -l -c "command -v ${config.shellCommand}"`, {
+      encoding: "utf-8",
+      timeout: 5000,
+      env: cleanEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
     if (resolved && !candidates.includes(resolved)) {
       candidates.push(resolved);
     }
@@ -146,7 +148,11 @@ export function discoverExecutable(
 }
 
 function verifyCandidate(candidate: string, versionFlag: string): string {
-  const opts = { encoding: "utf-8" as const, timeout: 5000, stdio: ["ignore", "pipe", "pipe"] as const };
+  const opts = {
+    encoding: "utf-8" as const,
+    timeout: 5000,
+    stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+  };
 
   // JS entrypoint installed via a global package manager
   if (candidate.endsWith(".js")) {

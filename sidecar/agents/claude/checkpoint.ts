@@ -4,6 +4,7 @@
 // Stored as private git refs under refs/opendevs-checkpoints/.
 
 import { execFileSync } from "child_process";
+import { getErrorMessage, isExecError } from "../../../shared/lib/errors";
 
 /**
  * Creates a start or end checkpoint for a given session turn.
@@ -62,12 +63,13 @@ export function createCheckpoint(
     execFileSync("git", ["update-ref", refName, commitHash], { cwd, encoding: "utf-8" });
 
     console.log(`${logPrefix} Created ${checkpointType} checkpoint: ${commitHash.substring(0, 8)}`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Skip during merge/rebase
-    if (error.status === 128 || error.message?.includes("merge")) {
+    const msg = getErrorMessage(error);
+    if ((isExecError(error) && error.status === 128) || msg.includes("merge")) {
       console.log(`${logPrefix} Checkpoint ${checkpointType} skipped: merge in progress`);
     } else {
-      console.error(`${logPrefix} Checkpoint ${checkpointType} failed:`, error.message || error);
+      console.error(`${logPrefix} Checkpoint ${checkpointType} failed:`, msg);
     }
   }
 }

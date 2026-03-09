@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { isExecError } from '@shared/lib/errors';
 
 const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
 const PARENT_BRANCH_CACHE_TTL_MS = 5000;
@@ -363,9 +364,9 @@ export function getFileDiff(workspacePath: string, parentBranch: string, filePat
     return execFileSync('git', ['diff', '--no-index', '--', '/dev/null', safePath], {
       cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
     }).toString();
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Exit code 1 = differences found (expected); stdout contains the diff
-    if (e.stdout) return e.stdout.toString();
+    if (isExecError(e) && e.stdout) return e.stdout.toString();
     throw e;
   }
 }
