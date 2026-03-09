@@ -20,7 +20,7 @@
 // agent sessions can each have their own pending request simultaneously.
 
 import { match } from "ts-pattern";
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
 import { invoke, listen, isTauriEnv } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
@@ -99,27 +99,32 @@ export function useAgentRpcHandler(
 
   // Notify parent when pending map changes
   const onPendingChangeRef = useRef(onPendingChange);
+  const hasCommittedPendingRequestsRef = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     contextRef.current = context;
   }, [context]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     pendingRequestsRef.current = pendingRequests;
   }, [pendingRequests]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onPendingChangeRef.current = onPendingChange;
   }, [onPendingChange]);
 
+  useEffect(() => {
+    if (!hasCommittedPendingRequestsRef.current) {
+      hasCommittedPendingRequestsRef.current = true;
+      return;
+    }
+
+    onPendingChangeRef.current?.(pendingRequests);
+  }, [pendingRequests]);
+
   const setPendingAndNotify = useCallback(
     (updater: (prev: Map<string, PendingAgentRequest>) => Map<string, PendingAgentRequest>) => {
-      setPendingRequests((prev) => {
-        const next = updater(prev);
-        // Schedule notification after state update settles
-        setTimeout(() => onPendingChangeRef.current?.(next), 0);
-        return next;
-      });
+      setPendingRequests((prev) => updater(prev));
     },
     []
   );
