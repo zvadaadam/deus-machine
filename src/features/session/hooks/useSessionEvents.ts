@@ -24,7 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isTauriEnv } from "@/platform/tauri";
 import { incrementalFetchAndMerge } from "../lib/messageCache";
-import type { Session, SessionStatus, SessionMessageEvent, SessionStatusEvent } from "../types";
+import type { Session, SessionErrorEvent, SessionMessageEvent, SessionStatusEvent } from "../types";
 
 /**
  * Listen for real-time session message events
@@ -49,11 +49,7 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     // Catch-up fetch: reconcile any messages missed while this hook was unmounted
     // (navigation to another session, socket hiccup, app backgrounded, etc.).
     // One cheap DB query on mount — handles ALL stale-cache scenarios.
-    incrementalFetchAndMerge(
-      queryClient,
-      sessionId,
-      queryKeys.sessions.messages(sessionId)
-    );
+    incrementalFetchAndMerge(queryClient, sessionId, queryKeys.sessions.messages(sessionId));
     // Also refresh session detail to catch status changes (working→idle during navigation)
     queryClient.invalidateQueries({
       queryKey: queryKeys.sessions.detail(sessionId),
@@ -67,12 +63,17 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     const unlistenFns: Array<() => void> = [];
 
     function registerListener(promise: Promise<() => void>) {
-      promise.then((fn) => {
-        if (cancelled) { fn(); return; } // Cleanup already ran — detach immediately
-        unlistenFns.push(fn);
-      }).catch(() => {
-        // listen() can reject if Tauri runtime is torn down during navigation
-      });
+      promise
+        .then((fn) => {
+          if (cancelled) {
+            fn();
+            return;
+          } // Cleanup already ran — detach immediately
+          unlistenFns.push(fn);
+        })
+        .catch(() => {
+          // listen() can reject if Tauri runtime is torn down during navigation
+        });
     }
 
     // Listen for message events from sidecar-v2
@@ -90,11 +91,7 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
           // Incremental fetch: only get messages newer than what we have.
           // Session detail is NOT invalidated here — status changes arrive via
           // the dedicated session:status-changed event listener below.
-          incrementalFetchAndMerge(
-            queryClient,
-            sessionId,
-            queryKeys.sessions.messages(sessionId)
-          );
+          incrementalFetchAndMerge(queryClient, sessionId, queryKeys.sessions.messages(sessionId));
 
           // Invalidate PR status so we detect PRs created/updated by the agent.
           // staleTime (10s) prevents excessive refetches from rapid events.
@@ -112,24 +109,21 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     // because the error details are already in the event payload — no need
     // for an HTTP round-trip. Same pattern as the status-changed handler.
     registerListener(
-      listen<SessionMessageEvent>("session:error", (event) => {
+      listen<SessionErrorEvent>("session:error", (event) => {
         const { id, error, category } = event.payload;
 
         if (id === sessionId) {
           console.error("[Events] Session error:", error, category ? `[${category}]` : "");
 
-          queryClient.setQueryData<Session>(
-            queryKeys.sessions.detail(sessionId),
-            (old) => {
-              if (!old) return old;
-              return {
-                ...old,
-                status: "error" as SessionStatus,
-                error_message: error ?? null,
-                error_category: category ?? null,
-              };
-            }
-          );
+          queryClient.setQueryData<Session>(queryKeys.sessions.detail(sessionId), (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              status: "error",
+              error_message: error ?? null,
+              error_category: category ?? null,
+            };
+          });
         }
       })
     );
@@ -150,18 +144,15 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
           // so use setQueryData instead of invalidateQueries (avoids a refetch).
           // Workspace list cache is updated by the global listener in
           // useGlobalSessionNotifications (handles ALL sessions, not just active one).
-          queryClient.setQueryData<Session>(
-            queryKeys.sessions.detail(sessionId),
-            (old) => {
-              if (!old) return old;
-              return {
-                ...old,
-                status: status as SessionStatus,
-                error_message: status === "error" ? (errorMessage ?? null) : null,
-                error_category: status === "error" ? (errorCategory ?? null) : null,
-              };
-            }
-          );
+          queryClient.setQueryData<Session>(queryKeys.sessions.detail(sessionId), (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              status,
+              error_message: status === "error" ? (errorMessage ?? null) : null,
+              error_category: status === "error" ? (errorCategory ?? null) : null,
+            };
+          });
         }
       })
     );
@@ -172,6 +163,4 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
       unlistenFns.forEach((fn) => fn());
     };
   }, [sessionId, workspaceId, queryClient]);
-
 }
-

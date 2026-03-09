@@ -4,7 +4,14 @@ import { errorHandler } from '../../../src/middleware/error-handler';
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
-const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace } = vi.hoisted(() => {
+const {
+  mockStmt,
+  mockDb,
+  mockExecFileAsync,
+  mockInitializeWorkspace,
+  mockBroadcastWorkspacesAndStats,
+  mockInvalidate,
+} = vi.hoisted(() => {
   const mockStmt = {
     all: vi.fn(() => []),
     get: vi.fn(),
@@ -16,7 +23,16 @@ const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace } = vi.hois
   };
   const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }));
   const mockInitializeWorkspace = vi.fn(() => Promise.resolve());
-  return { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace };
+  const mockBroadcastWorkspacesAndStats = vi.fn();
+  const mockInvalidate = vi.fn();
+  return {
+    mockStmt,
+    mockDb,
+    mockExecFileAsync,
+    mockInitializeWorkspace,
+    mockBroadcastWorkspacesAndStats,
+    mockInvalidate,
+  };
 });
 
 vi.mock('../../../src/lib/database', () => ({
@@ -29,6 +45,14 @@ vi.mock('../../../src/services/workspace.service', () => ({
 
 vi.mock('../../../src/services/workspace-init.service', () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
+}));
+
+vi.mock('../../../src/services/dashboard-broadcast', () => ({
+  broadcastWorkspacesAndStats: (...args: unknown[]) => mockBroadcastWorkspacesAndStats(...args),
+}));
+
+vi.mock('../../../src/services/query-engine', () => ({
+  invalidate: (...args: unknown[]) => mockInvalidate(...args),
 }));
 
 vi.mock('../../../src/services/git.service', () => ({
@@ -389,5 +413,33 @@ describe('POST /workspaces', () => {
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ parentBranch: 'main' }),
     );
+  });
+});
+
+describe('PATCH /workspaces/:id', () => {
+  it('rejects session-only state values like working', async () => {
+    const res = await app.request('/workspaces/ws-test-uuid', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: 'working' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockStmt.run).not.toHaveBeenCalled();
+  });
+
+  it('accepts canonical workspace state values from shared enums', async () => {
+    mockStmt.get.mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, state: 'ready' });
+
+    const res = await app.request('/workspaces/ws-test-uuid', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: 'ready' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockStmt.run).toHaveBeenCalledWith('ready', 'ws-test-uuid');
+    expect(mockBroadcastWorkspacesAndStats).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).toHaveBeenCalledWith(['workspaces', 'sessions', 'stats']);
   });
 });
