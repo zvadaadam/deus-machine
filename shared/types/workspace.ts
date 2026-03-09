@@ -5,8 +5,10 @@
 
 import type { SessionStatus } from "./session";
 
-export type WorkspaceState = "ready" | "initializing" | "archived" | "error";
-export type SetupStatus = "none" | "running" | "completed" | "failed";
+// Canonical enum types — defined as Zod schemas in shared/enums.ts,
+// imported here for local use and re-exported for backwards compat.
+import type { WorkspaceState, SetupStatus } from "../enums";
+export type { WorkspaceState, SetupStatus };
 
 /**
  * Core workspace entity
