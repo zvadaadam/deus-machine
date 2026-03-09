@@ -16,10 +16,22 @@ const {
   mockSendMessage: vi.fn(),
   mockSendError: vi.fn(),
   mockClassifyStopReason: vi.fn(),
-  mockSaveAssistantMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-  mockSaveToolResultMessage: vi.fn(() => ({ ok: true, value: "msg-id" })),
-  mockSaveAgentSessionId: vi.fn(() => ({ ok: true, value: "sess-id" })),
-  mockUpdateSessionStatus: vi.fn(() => ({ ok: true, value: "sess-id" })),
+  mockSaveAssistantMessage: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
+    ok: true,
+    value: "msg-id",
+  })),
+  mockSaveToolResultMessage: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
+    ok: true,
+    value: "msg-id",
+  })),
+  mockSaveAgentSessionId: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
+    ok: true,
+    value: "sess-id",
+  })),
+  mockUpdateSessionStatus: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
+    ok: true,
+    value: "sess-id",
+  })),
 }));
 
 vi.mock("../frontend-client", () => ({
@@ -266,7 +278,11 @@ describe("processMessage", () => {
 
   describe("agent_session_id capture", () => {
     it("captures session_id on first message (one-shot)", () => {
-      const msg = { type: "assistant", message: { role: "assistant", content: "" }, session_id: "sdk-sess-1" };
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
       const session = makeSession();
 
       processMessage(msg, makeCtx(), session, makeOpts());
@@ -276,7 +292,11 @@ describe("processMessage", () => {
     });
 
     it("does not re-capture when agentSessionIdCaptured is true", () => {
-      const msg = { type: "assistant", message: { role: "assistant", content: "" }, session_id: "sdk-sess-2" };
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-2",
+      };
       const session = makeSession({ agentSessionIdCaptured: true });
 
       processMessage(msg, makeCtx(), session, makeOpts());
@@ -285,7 +305,11 @@ describe("processMessage", () => {
     });
 
     it("skips capture in resume mode", () => {
-      const msg = { type: "assistant", message: { role: "assistant", content: "" }, session_id: "sdk-sess-1" };
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
       const session = makeSession();
 
       processMessage(msg, makeCtx(), session, makeOpts({ isResume: true }));
@@ -296,7 +320,11 @@ describe("processMessage", () => {
 
     it("handles saveAgentSessionId failure gracefully", () => {
       mockSaveAgentSessionId.mockReturnValueOnce({ ok: false, error: "db error" });
-      const msg = { type: "assistant", message: { role: "assistant", content: "" }, session_id: "sdk-sess-1" };
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
       const session = makeSession();
 
       processMessage(msg, makeCtx(), session, makeOpts());
@@ -327,7 +355,12 @@ describe("processMessage", () => {
         agentType: "claude",
         category: "max_tokens",
       });
-      expect(mockUpdateSessionStatus).toHaveBeenCalledWith("sess-1", "error", "max tokens", "max_tokens");
+      expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+        "sess-1",
+        "error",
+        "max tokens",
+        "max_tokens"
+      );
       expect(ctx.stopReasonError).toBe(true);
     });
 

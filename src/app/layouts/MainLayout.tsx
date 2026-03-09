@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
@@ -34,13 +34,20 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
+import {
+  useChatInsertStore,
+  chatInsertActions,
+  deliverChatInsertPayload,
+  deserializeChatInsertPayload,
+  isChatInsertForWorkspace,
+  type SerializedChatInsertPayload,
+} from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
-import { invoke } from "@/platform/tauri";
+import { invoke, listen, isTauriEnv } from "@/platform/tauri";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
-import { createOptimisticWorkspace } from "@/features/workspace/lib/workspace.utils";
 
 /**
  * SidebarResizeHandle — drag handle on the sidebar's right edge.
@@ -76,8 +83,8 @@ function SidebarResizeHandle({
 }
 
 export function MainLayout() {
-  // Zustand stores - Global state
-  const selectedWorkspace = useWorkspaceStore((state) => state.selectedWorkspace);
+  // Zustand stores - Global state (ID-only; full object derived from React Query below)
+  const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
@@ -92,42 +99,23 @@ export function MainLayout() {
   const workspacesQuery = useWorkspacesByRepo();
   const statsQuery = useStats();
 
-  const repoGroups = workspacesQuery.data || [];
+  const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
   const loading = workspacesQuery.isLoading || statsQuery.isLoading;
 
-  // Sync Zustand selectedWorkspace with React Query data.
-  // The store holds a snapshot from when the user clicked — it goes stale when
-  // the backend updates workspace fields (state, current_session_id, session_status).
-  // Without this sync, ChatArea never sees the session created by the init pipeline.
-  useEffect(() => {
-    if (!selectedWorkspace || !repoGroups.length) return;
-    const fresh = repoGroups
-      .flatMap((g) => g.workspaces)
-      .find((w) => w.id === selectedWorkspace.id);
-    if (!fresh) return;
-    const statusChanged = fresh.session_status !== selectedWorkspace.session_status;
-
-    if (
-      fresh.current_session_id !== selectedWorkspace.current_session_id ||
-      fresh.state !== selectedWorkspace.state ||
-      statusChanged ||
-      fresh.init_stage !== selectedWorkspace.init_stage ||
-      fresh.setup_status !== selectedWorkspace.setup_status
-    ) {
-      // Clear stale diff caches when workspace transitions init→ready.
-      // During initialization, git state is incomplete and any cached diffs
-      // would be garbage (+500K/-1M). Force a fresh fetch on the detail panel.
-      const initJustFinished =
-        selectedWorkspace.state === "initializing" && fresh.state === "ready";
-
-      if (initJustFinished) {
-        queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffStats(fresh.id) });
-        queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffFiles(fresh.id) });
-        queryClient.removeQueries({ queryKey: queryKeys.workspaces.uncommittedFiles(fresh.id) });
-      }
-      selectWorkspace(fresh);
+  // Derive the full workspace object from React Query data.
+  // The store only holds an ID; this useMemo resolves it to a Workspace
+  // on every React Query refresh, eliminating the old sync effect entirely.
+  const selectedWorkspace = useMemo(() => {
+    if (!selectedWorkspaceId || !repoGroups.length) return null;
+    for (const group of repoGroups) {
+      const found = group.workspaces.find((w) => w.id === selectedWorkspaceId);
+      if (found) return found;
     }
-  }, [repoGroups, selectedWorkspace, selectWorkspace, queryClient]);
+    return null;
+  }, [selectedWorkspaceId, repoGroups]);
+
+  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
+  selectedWorkspaceIdRef.current = selectedWorkspaceId;
 
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
@@ -223,46 +211,54 @@ export function MainLayout() {
     },
   });
 
-  // Listen for 'insert-to-chat' events from BrowserPanel / DiffViewer
+  // Subscribe to chatInsertStore for content dispatched from BrowserPanel / DiffViewer / SimulatorPanel
   useEffect(() => {
-    const handleInsertToChat = (event: Event) => {
-      if (!(event instanceof CustomEvent) || !workspaceChatPanelRef.current) return;
-      const detail = event.detail as { text?: string; element?: Record<string, unknown>; files?: File[] } | undefined;
+    const unsubStore = useChatInsertStore.subscribe((state, prevState) => {
+      if (!state.pending || state.pending === prevState.pending) return;
 
-      // File attachment (e.g., browser screenshot)
-      if (detail?.files?.length) {
-        workspaceChatPanelRef.current.addFiles(detail.files);
-        return;
-      }
+      const payload = state.pending;
+      chatInsertActions.consume();
 
-      // Element insertion from InSpec mode
-      if (detail?.element) {
-        workspaceChatPanelRef.current.addInspectedElement(detail.element as {
-          ref: string;
-          tagName: string;
-          path: string;
-          innerText?: string;
-          context?: "local" | "external";
-          reactComponent?: string;
-          file?: string;
-          line?: string;
-          styles?: string;
-          props?: string;
-          attributes?: string;
-          innerHTML?: string;
+      if (!workspaceChatPanelRef.current) return;
+      if (!isChatInsertForWorkspace(payload, selectedWorkspaceIdRef.current)) return;
+
+      deliverChatInsertPayload(workspaceChatPanelRef.current, payload);
+    });
+
+    if (!isTauriEnv) {
+      return unsubStore;
+    }
+
+    let cancelled = false;
+    let unlistenDetached: (() => void) | null = null;
+
+    listen<SerializedChatInsertPayload>("chat-insert", (event) => {
+      void deserializeChatInsertPayload(event.payload)
+        .then((payload) => {
+          if (!cancelled) {
+            chatInsertActions.dispatch(payload);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to deserialize detached chat insert:", error);
         });
-        return;
-      }
+    })
+      .then((unlisten) => {
+        if (cancelled) {
+          unlisten();
+          return;
+        }
+        unlistenDetached = unlisten;
+      })
+      .catch((error) => {
+        console.error("Failed to subscribe to detached chat inserts:", error);
+      });
 
-      // Plain text insertion (e.g., from DiffViewer)
-      const text = typeof detail?.text === "string" ? detail.text.trim() : "";
-      if (text) {
-        workspaceChatPanelRef.current.insertText(text);
-      }
+    return () => {
+      cancelled = true;
+      unsubStore();
+      unlistenDetached?.();
     };
-
-    window.addEventListener("insert-to-chat", handleInsertToChat);
-    return () => window.removeEventListener("insert-to-chat", handleInsertToChat);
   }, []);
 
   // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
@@ -310,18 +306,13 @@ export function MainLayout() {
 
     setCreating(true);
 
-    // Optimistically select a placeholder so the UI immediately shows
-    // the "Setting up..." state while the backend creates the workspace.
-    const repoGroup = repoGroups.find((g) => g.repo_id === selectedRepoId);
-    const optimistic = createOptimisticWorkspace(selectedRepoId, repoGroup?.repo_name ?? "");
     const repoIdToCreate = selectedRepoId;
-    selectWorkspace(optimistic);
     setSelectedRepoId("");
     closeNewWorkspaceModal();
 
     try {
       const workspace = await createWorkspaceMutation.mutateAsync(repoIdToCreate);
-      selectWorkspace(workspace);
+      selectWorkspace(workspace.id);
     } catch (error) {
       selectWorkspace(null);
       console.error("Error creating workspace:", error);
@@ -333,7 +324,7 @@ export function MainLayout() {
 
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
-      selectWorkspace(workspace);
+      selectWorkspace(workspace.id);
     },
     [selectWorkspace]
   );
@@ -344,15 +335,9 @@ export function MainLayout() {
       if (repoId) {
         setCreating(true);
 
-        // Optimistically select a placeholder so the UI immediately shows
-        // the "Setting up..." state instead of waiting for the HTTP round-trip.
-        const repoGroup = repoGroups.find((g) => g.repo_id === repoId);
-        const optimistic = createOptimisticWorkspace(repoId, repoGroup?.repo_name ?? "");
-        selectWorkspace(optimistic);
-
         try {
           const workspace = await createWorkspaceMutation.mutateAsync(repoId);
-          selectWorkspace(workspace);
+          selectWorkspace(workspace.id);
         } catch (error) {
           selectWorkspace(null);
           console.error("Error creating workspace:", error);
@@ -365,7 +350,7 @@ export function MainLayout() {
       // No repo context — show the modal so user can pick one
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace, repoGroups]
+    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace]
   );
 
   async function saveSystemPrompt(newPrompt: string) {
@@ -414,7 +399,7 @@ export function MainLayout() {
 
       // Auto-create first workspace and select it for seamless onboarding
       const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
-      selectWorkspace(workspace);
+      selectWorkspace(workspace.id);
       toast.success(`"${repo.name}" ready`);
     } catch (error) {
       console.error("Error adding repository:", error);
@@ -482,7 +467,7 @@ export function MainLayout() {
       // Force sidebar to show the new workspace immediately
       await queryClient.refetchQueries({ queryKey: queryKeys.workspaces.all });
 
-      selectWorkspace(readyWorkspace || workspace);
+      selectWorkspace((readyWorkspace || workspace).id);
       setShowCloneModal(false);
       setCloneError(null);
       setCloneStatus(null);

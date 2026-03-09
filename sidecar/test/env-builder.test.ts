@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock shell-env before importing
 const { mockGetShellEnvironment } = vi.hoisted(() => ({
-  mockGetShellEnvironment: vi.fn(() => ({ PATH: "/usr/bin", HOME: "/home/test" })),
+  mockGetShellEnvironment: vi.fn(
+    (): Record<string, string> => ({ PATH: "/usr/bin", HOME: "/home/test" })
+  ),
 }));
 
 vi.mock("../agents/shell-env", () => ({

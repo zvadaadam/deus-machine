@@ -4,7 +4,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import { FrontendClient } from "../../frontend-client";
 import { createCheckpoint } from "./checkpoint";
 import { createOpenDevsMCPServer } from "../opendevs-tools";
@@ -21,10 +21,10 @@ import { buildWorkspaceContext } from "../workspace-context";
 
 export const DEFAULT_PROMPT = {
   type: "preset" as const,
-  preset: "claude_code",
+  preset: "claude_code" as const,
 };
 
-export const DEFAULT_SETTING_SOURCES = ["user", "project", "local"];
+export const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "local"];
 
 /**
  * Builds the append system prompt with dynamic workspace context.
@@ -225,7 +225,7 @@ export function buildSdkOptions(
 ): Options {
   const modelToUse = mapModelForProvider(options?.model, env);
   const workingDirectory = options?.cwd;
-  const permissionMode = options?.permissionMode;
+  const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
 
   const sdkOptions: Record<string, unknown> = {
     maxTurns: options?.maxTurns || 1_000,
@@ -235,7 +235,7 @@ export function buildSdkOptions(
     pathToClaudeCodeExecutable: getClaudeExecutablePath(),
     systemPrompt: {
       type: "preset" as const,
-      preset: "claude_code",
+      preset: "claude_code" as const,
       append: buildAppendSystemPrompt(workingDirectory),
     },
     settingSources: DEFAULT_SETTING_SOURCES,
@@ -243,7 +243,7 @@ export function buildSdkOptions(
     additionalDirectories: options?.additionalDirectories ?? [],
     env,
     disallowedTools: ["AskUserQuestion"],
-    permissionMode: permissionMode ?? "default",
+    permissionMode,
   };
 
   if (options?.chromeEnabled) {

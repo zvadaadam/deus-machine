@@ -4,12 +4,20 @@
  * Loaded when App.tsx detects `?window=browser-detached` in the URL.
  * Renders BrowserPanel full-screen and syncs workspace changes from the
  * main window via Tauri events.
+ *
+ * Insert-to-chat payloads are bridged back to the main window over a Tauri
+ * event because detached windows run in a separate JS runtime.
  */
 
 import { useState, useEffect } from "react";
 import { BrowserPanel } from "./BrowserPanel";
-import { isTauriEnv, listen } from "@/platform/tauri";
+import { emit, isTauriEnv, listen } from "@/platform/tauri";
 import type { DetachedBrowserWorkspaceContext } from "@/features/browser/store";
+import {
+  useChatInsertStore,
+  chatInsertActions,
+  serializeChatInsertPayload,
+} from "@/shared/stores/chatInsertStore";
 
 interface WorkspaceChangePayload {
   workspaceId: string;
@@ -43,6 +51,26 @@ export function DetachedBrowserWindow() {
   );
 
   const workspaceId = workspaceContext?.workspaceId ?? null;
+
+  useEffect(() => {
+    if (!isTauriEnv) return;
+
+    const unsubscribe = useChatInsertStore.subscribe((state, prevState) => {
+      if (!state.pending || state.pending === prevState.pending) return;
+
+      const payload = state.pending;
+      void serializeChatInsertPayload(payload)
+        .then((serialized) => emit("chat-insert", serialized))
+        .catch((error) => {
+          console.error("[DetachedBrowserWindow] Failed to bridge chat insert:", error);
+        })
+        .finally(() => {
+          chatInsertActions.consume();
+        });
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Listen for workspace changes from the main window
   useEffect(() => {

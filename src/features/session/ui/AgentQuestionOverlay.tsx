@@ -15,7 +15,7 @@
 //   - All questions are answered before the response is sent (batch, not streaming).
 //   - The overlay appears inline above MessageInput, same position as PlanApprovalOverlay.
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,12 @@ interface AgentQuestionOverlayProps {
   onDismiss: () => void;
 }
 
-export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }: AgentQuestionOverlayProps) {
+export function AgentQuestionOverlay({
+  request,
+  agentType,
+  onSubmit,
+  onDismiss,
+}: AgentQuestionOverlayProps) {
   const reduceMotion = useReducedMotion();
 
   // Track answers per question index
@@ -42,18 +47,7 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
   const [otherText, setOtherText] = useState<Record<number, string>>({});
   const otherInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset all local state when a new request arrives so stale answers
-  // from a previous question flow never leak into the new one.
-  // (SessionPanel already keys this component by rpcId, but this makes
-  // the component self-resilient regardless of how the consumer mounts it.)
-  useEffect(() => {
-    setAnswers([]);
-    setCurrentIndex(0);
-    setShowOtherInput({});
-    setOtherText({});
-  }, [request?.rpcId]);
-
-  const questions = request?.questions ?? [];
+  const questions = useMemo(() => request?.questions ?? [], [request?.questions]);
 
   const handleOptionClick = useCallback(
     (questionIndex: number, option: string) => {
@@ -94,19 +88,16 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
     [questions, answers, onSubmit]
   );
 
-  const handleOtherClick = useCallback(
-    (questionIndex: number) => {
-      setShowOtherInput((prev) => {
-        const isShowing = !prev[questionIndex];
-        if (isShowing) {
-          // Focus the input after it renders
-          setTimeout(() => otherInputRef.current?.focus(), 0);
-        }
-        return { ...prev, [questionIndex]: isShowing };
-      });
-    },
-    []
-  );
+  const handleOtherClick = useCallback((questionIndex: number) => {
+    setShowOtherInput((prev) => {
+      const isShowing = !prev[questionIndex];
+      if (isShowing) {
+        // Focus the input after it renders
+        setTimeout(() => otherInputRef.current?.focus(), 0);
+      }
+      return { ...prev, [questionIndex]: isShowing };
+    });
+  }, []);
 
   const handleOtherSubmit = useCallback(
     (questionIndex: number) => {
@@ -162,7 +153,8 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
       }
 
       const current = (answers[questionIndex] as string[] | undefined) ?? [];
-      const totalSelections = current.length + (customText && !current.includes(customText) ? 1 : 0);
+      const totalSelections =
+        current.length + (customText && !current.includes(customText) ? 1 : 0);
       if (totalSelections === 0) return; // Require at least one selection
 
       if (questionIndex < questions.length - 1) {
@@ -228,11 +220,11 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
           <div className="mb-3 flex items-start gap-2.5">
             {(() => {
               const Logo = getAgentLogo(agentType || "claude");
-              return Logo ? (
-                <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              ) : null;
+              return Logo ? <Logo className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : null;
             })()}
-            <p className="text-foreground min-w-0 text-sm font-medium">{currentQuestion.question}</p>
+            <p className="text-foreground min-w-0 text-sm font-medium">
+              {currentQuestion.question}
+            </p>
           </div>
 
           {/* Option chips */}
@@ -250,7 +242,7 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
                   onClick={() => handleOptionClick(currentIndex, option)}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                    "transition-colors duration-150 ease",
+                    "ease transition-colors duration-150",
                     "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                     isSelected
                       ? "border-primary bg-primary/10 text-primary"
@@ -273,11 +265,11 @@ export function AgentQuestionOverlay({ request, agentType, onSubmit, onDismiss }
               onClick={() => handleOtherClick(currentIndex)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                "transition-colors duration-150 ease",
+                "ease transition-colors duration-150",
                 "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                 isOtherOpen
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border border-dashed text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground border-dashed"
               )}
               aria-label="Type a custom answer"
             >

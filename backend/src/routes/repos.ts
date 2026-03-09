@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import { uuidv7 } from '@shared/lib/uuid';
+import { getErrorCode } from '@shared/lib/errors';
 import { getDatabase } from '../lib/database';
 import { ValidationError, ConflictError } from '../lib/errors';
 import { parseBody } from '../lib/validate';
@@ -30,7 +31,7 @@ app.post('/repos', async (c) => {
 
   // Verify permissions
   try { fs.accessSync(root_path, fs.constants.R_OK | fs.constants.X_OK); }
-  catch (err: any) { return c.json({ error: 'Path is not accessible (permission denied)', details: err.code }, 403); }
+  catch (err: unknown) { return c.json({ error: 'Path is not accessible (permission denied)', details: getErrorCode(err) }, 403); }
 
   const stats = fs.statSync(root_path);
   if (!stats.isDirectory()) throw new ValidationError('Path is not a directory');

@@ -66,6 +66,7 @@ import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
 import { hasStream } from "../machine";
 import type { SimPhase } from "../store";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import type { SimulatorInfo } from "../types";
 import { SimulatorStreamViewer } from "./SimulatorStreamViewer";
 import { SimulatorAppBar } from "./SimulatorAppBar";
@@ -254,7 +255,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         return null;
       }
     },
-    [workspaceId]
+    [updateSelectedUdid, workspaceId]
   );
 
   // Listen for simulator RPC requests from the sidecar (agent tools)
@@ -396,7 +397,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         canRetry: false,
       });
     }
-  }, [workspaceId]);
+  }, [updateSelectedUdid, workspaceId]);
 
   useEffect(() => {
     loadSimulators();
@@ -592,7 +593,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
         type: "image/png",
       });
-      window.dispatchEvent(new CustomEvent("insert-to-chat", { detail: { files: [file] } }));
+      chatInsertActions.insertFiles(workspaceId, [file]);
     } catch (e) {
       console.error("Screenshot failed:", e);
     }

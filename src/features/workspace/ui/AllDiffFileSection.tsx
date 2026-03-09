@@ -41,14 +41,16 @@ function AllDiffFileSectionInner({
   onOpenFile,
 }: AllDiffFileSectionProps) {
   const filePath = fileChange.file || fileChange.file_path || "";
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedState, setCollapsedState] = useState({
+    value: false,
+    expandStateKey,
+  });
   const [isNearVisible, setIsNearVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset collapsed state when expandStateKey changes (collapse-all/expand-all)
-  useEffect(() => {
-    setCollapsed(false);
-  }, [expandStateKey]);
+  // Collapse state resets to expanded whenever expandStateKey changes,
+  // without requiring a state update from an effect.
+  const collapsed = collapsedState.expandStateKey === expandStateKey ? collapsedState.value : false;
 
   // Register ref for scroll-to-file and parent scroll-spy
   const refCallback = useCallback(
@@ -85,11 +87,7 @@ function AllDiffFileSectionInner({
   );
 
   return (
-    <div
-      ref={refCallback}
-      data-diff-path={filePath}
-      className="diff-section-contained"
-    >
+    <div ref={refCallback} data-diff-path={filePath} className="diff-section-contained">
       {/* Sticky file header — two sibling buttons to avoid nesting interactive elements */}
       <div
         className={`flex w-full items-center gap-2 px-3 py-1.5 transition-colors duration-200 ease-[cubic-bezier(.165,.84,.44,1)] ${
@@ -97,7 +95,7 @@ function AllDiffFileSectionInner({
             ? "bg-muted/60"
             : collapsed
               ? "bg-muted/15 hover:bg-muted/30"
-              : "bg-[var(--bg-elevated)] hover:bg-muted/50"
+              : "hover:bg-muted/50 bg-[var(--bg-elevated)]"
         }`}
         style={{
           position: "sticky",
@@ -108,7 +106,12 @@ function AllDiffFileSectionInner({
         {/* Collapse toggle — covers chevron, path, and stats */}
         <button
           type="button"
-          onClick={() => setCollapsed((prev) => !prev)}
+          onClick={() =>
+            setCollapsedState((prev) => ({
+              value: prev.expandStateKey === expandStateKey ? !prev.value : true,
+              expandStateKey,
+            }))
+          }
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           {collapsed ? (
@@ -117,9 +120,13 @@ function AllDiffFileSectionInner({
             <ChevronDown className="text-muted-foreground/60 h-3.5 w-3.5 flex-shrink-0" />
           )}
 
-          <span className={`min-w-0 flex-1 truncate text-sm font-medium${
-            collapsed ? " text-muted-foreground/70" : ""
-          }`}>{filePath}</span>
+          <span
+            className={`min-w-0 flex-1 truncate text-sm font-medium${
+              collapsed ? "text-muted-foreground/70" : ""
+            }`}
+          >
+            {filePath}
+          </span>
 
           {/* +N / -N stats */}
           <span className="flex flex-shrink-0 items-center gap-1.5 text-sm tabular-nums">
@@ -137,7 +144,7 @@ function AllDiffFileSectionInner({
           <button
             type="button"
             onClick={() => onOpenFile(filePath)}
-            className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200 ease"
+            className="text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md transition-colors duration-200"
             title="Open in editor"
           >
             <FileCode className="h-3 w-3" />
@@ -155,6 +162,7 @@ function AllDiffFileSectionInner({
           isLoading={isNearVisible ? isLoading : true}
           error={error?.message}
           embedded
+          workspaceId={workspaceId}
         />
       )}
     </div>
