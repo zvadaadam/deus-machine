@@ -4,7 +4,20 @@
 // Stored as private git refs under refs/opendevs-checkpoints/.
 
 import { execFileSync } from "child_process";
-import { getErrorMessage, isExecError } from "../../../shared/lib/errors";
+import { getErrorMessage } from "../../../shared/lib/errors";
+
+const CHECKPOINT_SKIP_PATTERNS = [
+  "merge in progress",
+  "rebase in progress",
+  "unmerged",
+  "error building trees",
+  "resolve your current index first",
+] as const;
+
+function shouldSkipCheckpoint(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return CHECKPOINT_SKIP_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
 
 /**
  * Creates a start or end checkpoint for a given session turn.
@@ -64,10 +77,9 @@ export function createCheckpoint(
 
     console.log(`${logPrefix} Created ${checkpointType} checkpoint: ${commitHash.substring(0, 8)}`);
   } catch (error: unknown) {
-    // Skip during merge/rebase
     const msg = getErrorMessage(error);
-    if ((isExecError(error) && error.status === 128) || msg.includes("merge")) {
-      console.log(`${logPrefix} Checkpoint ${checkpointType} skipped: merge in progress`);
+    if (shouldSkipCheckpoint(msg)) {
+      console.log(`${logPrefix} Checkpoint ${checkpointType} skipped: merge/rebase in progress`);
     } else {
       console.error(`${logPrefix} Checkpoint ${checkpointType} failed:`, msg);
     }
