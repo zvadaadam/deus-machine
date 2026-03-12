@@ -113,7 +113,7 @@ export const WorkspaceProgressSchema = z.object({
 export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
 
 export const QueryInvalidateSchema = z.object({
-  resources: z.array(z.string()),
+  resources: z.array(z.enum(QUERY_RESOURCES)),
 });
 export type QueryInvalidateEvent = z.infer<typeof QueryInvalidateSchema>;
 
