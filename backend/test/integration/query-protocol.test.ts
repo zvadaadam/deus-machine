@@ -1,5 +1,5 @@
 /**
- * Deus Query protocol integration tests.
+ * Query protocol integration tests.
  *
  * Spins up a real HTTP server + SQLite DB + WebSocket, then exercises every
  * q:* frame type end-to-end:
@@ -50,6 +50,7 @@ import fs from "fs";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
+import { resetStatsCache } from "../../src/db";
 import { invalidate } from "../../src/services/query-engine";
 
 // ---- Constants ----
@@ -199,12 +200,15 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  resetStatsCache();
+
   // Reset messages to clean state for each test
   testDb.exec("DELETE FROM messages");
   seedMessages();
 
-  // Reset workspace state (mutations may have changed it)
+  // Reset workspace and session state (mutations may have changed them)
   testDb.prepare("UPDATE workspaces SET state = 'ready', title = 'Tokyo workspace' WHERE id = ?").run(WS_ID);
+  testDb.prepare("UPDATE sessions SET status = 'idle', last_user_message_at = NULL WHERE id = ?").run(SESS_ID);
 });
 
 afterAll(() => {
@@ -563,10 +567,80 @@ describe("q:mutate → q:mutate_result", () => {
     }
   });
 
-  // sendMessage mutation skipped — it uses require("./relay.service") which
-  // doesn't resolve through vitest's module transform. The mutation dispatch
-  // pipeline is proven by archiveWorkspace + updateWorkspaceTitle above.
-  // writeUserMessage itself is a pure DB function tested via relay.service tests.
+  it("sends a message and updates the session status", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:mutate",
+        id: "mut-3",
+        action: "sendMessage",
+        params: { sessionId: SESS_ID, content: "queued work", model: "sonnet" },
+      }, "q:mutate_result");
+
+      expect(res.id).toBe("mut-3");
+      expect(res.success).toBe(true);
+      expect(res.data).toEqual(
+        expect.objectContaining({
+          messageId: expect.any(String),
+          seq: expect.any(Number),
+        })
+      );
+
+      const messageRow = testDb.prepare(
+        "SELECT session_id, role, content, model FROM messages WHERE id = ?"
+      ).get(res.data.messageId) as
+        | { session_id: string; role: string; content: string; model: string }
+        | undefined;
+      expect(messageRow).toEqual({
+        session_id: SESS_ID,
+        role: "user",
+        content: "queued work",
+        model: "sonnet",
+      });
+
+      const sessionRow = testDb.prepare(
+        "SELECT status FROM sessions WHERE id = ?"
+      ).get(SESS_ID) as { status: string };
+      expect(sessionRow.status).toBe("working");
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("pushes fresh stats snapshots after sendMessage", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const initial = await sendAndReceive(ws, {
+        type: "q:subscribe",
+        id: "sub_stats_send",
+        resource: "stats",
+      }, "q:snapshot");
+      expect(initial.id).toBe("sub_stats_send");
+      expect(initial.data.messages).toBe(3);
+      expect(initial.data.sessions_working).toBe(0);
+
+      const pushedSnapshot = waitForMessage(ws, "q:snapshot");
+      ws.send(JSON.stringify({
+        type: "q:mutate",
+        id: "mut-4",
+        action: "sendMessage",
+        params: { sessionId: SESS_ID, content: "updates stats" },
+      }));
+
+      const [result, snapshot] = await Promise.all([
+        waitForMessage(ws, "q:mutate_result"),
+        pushedSnapshot,
+      ]);
+
+      expect(result.id).toBe("mut-4");
+      expect(result.success).toBe(true);
+      expect(snapshot.id).toBe("sub_stats_send");
+      expect(snapshot.data.messages).toBe(4);
+      expect(snapshot.data.sessions_working).toBe(1);
+    } finally {
+      ws.close();
+    }
+  });
 
   it("returns error for unknown mutation", async () => {
     const { ws } = await connectAndAuth();
@@ -603,21 +677,36 @@ describe("Error handling", () => {
     }
   });
 
+  it("returns q:error for malformed q:* frames", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:mutate",
+        id: 123,
+        action: "sendMessage",
+        params: { sessionId: SESS_ID, content: "bad" },
+      }, "q:error");
+
+      expect(res.id).toBe("unknown");
+      expect(res.code).toBe("INVALID_FRAME");
+      expect(res.message).toContain("Frame requires string id");
+    } finally {
+      ws.close();
+    }
+  });
+
   it("handles invalidation after client disconnect without crashing", async () => {
     const { ws } = await connectAndAuth();
 
-    // Subscribe
     await sendAndReceive(ws, {
       type: "q:subscribe",
       id: "sub_cleanup",
       resource: "workspaces",
     }, "q:snapshot");
 
-    // Close the connection
     ws.close();
     await new Promise((r) => setTimeout(r, 100));
 
-    // Invalidation should not throw
     expect(() => invalidate(["workspaces"])).not.toThrow();
   });
 });

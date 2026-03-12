@@ -15,7 +15,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useWorkspacesByRepo,
-  useStats,
   useBulkDiffStats,
   usePRStatus,
   useGhStatus,
@@ -40,11 +39,10 @@ import {
   deliverChatInsertPayload,
   deserializeChatInsertPayload,
   isChatInsertForWorkspace,
-  type SerializedChatInsertPayload,
 } from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
-import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import { invoke, listen, isTauriEnv, createListenerGroup, CHAT_INSERT } from "@/platform/tauri";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
 import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
@@ -97,10 +95,9 @@ export function MainLayout() {
   // TanStack Query
   const queryClient = useQueryClient();
   const workspacesQuery = useWorkspacesByRepo();
-  const statsQuery = useStats();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
-  const loading = workspacesQuery.isLoading || statsQuery.isLoading;
+  const loading = workspacesQuery.isLoading;
 
   // Derive the full workspace object from React Query data.
   // The store only holds an ID; this useMemo resolves it to a Workspace
@@ -229,35 +226,23 @@ export function MainLayout() {
       return unsubStore;
     }
 
-    let cancelled = false;
-    let unlistenDetached: (() => void) | null = null;
+    const listeners = createListenerGroup();
 
-    listen<SerializedChatInsertPayload>("chat-insert", (event) => {
-      void deserializeChatInsertPayload(event.payload)
-        .then((payload) => {
-          if (!cancelled) {
+    listeners.register(
+      listen(CHAT_INSERT, (event) => {
+        void deserializeChatInsertPayload(event.payload)
+          .then((payload) => {
             chatInsertActions.dispatch(payload);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to deserialize detached chat insert:", error);
-        });
-    })
-      .then((unlisten) => {
-        if (cancelled) {
-          unlisten();
-          return;
-        }
-        unlistenDetached = unlisten;
+          })
+          .catch((error) => {
+            console.error("Failed to deserialize detached chat insert:", error);
+          });
       })
-      .catch((error) => {
-        console.error("Failed to subscribe to detached chat inserts:", error);
-      });
+    );
 
     return () => {
-      cancelled = true;
       unsubStore();
-      unlistenDetached?.();
+      listeners.cleanup();
     };
   }, []);
 

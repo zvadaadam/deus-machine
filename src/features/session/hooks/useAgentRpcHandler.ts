@@ -21,19 +21,13 @@
 
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
-import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import { invoke, listen, isTauriEnv, SIDECAR_REQUEST } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
 
 // ============================================================================
 // Types
 // ============================================================================
-
-interface SidecarRpcRequest {
-  id: unknown;
-  method: string;
-  params: Record<string, unknown>;
-}
 
 export interface PlanModeRequest {
   type: "exitPlanMode";
@@ -371,7 +365,7 @@ export function useAgentRpcHandler(
   useEffect(() => {
     if (!isTauriEnv) return;
 
-    const unlistenPromise = listen<SidecarRpcRequest>("sidecar:request", (event) => {
+    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
       const { id, method, params } = event.payload;
 
       if (import.meta.env.DEV) {

@@ -9,7 +9,7 @@
 
 import { useCallback } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { emit, isTauriEnv } from "@/platform/tauri";
+import { emit, isTauriEnv, BROWSER_WORKSPACE_CHANGE } from "@/platform/tauri";
 import {
   browserWindowActions,
   useBrowserWindowStore,
@@ -71,7 +71,7 @@ export function useBrowserDetach(context: DetachedBrowserWorkspaceContext | null
     if (existing) {
       browserWindowActions.setDetachedWorkspace(context);
       attachDestroyListener(existing);
-      await emit("browser-window:workspace-change", context);
+      await emit(BROWSER_WORKSPACE_CHANGE, context);
       await existing.setFocus();
       return;
     }

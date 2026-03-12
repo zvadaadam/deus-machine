@@ -1,5 +1,5 @@
 // backend/src/services/query-engine.ts
-// Deus Query engine — handles q:* protocol frames for typed reactive queries.
+// Query engine — handles q:* protocol frames for typed reactive queries.
 // Module singleton: subscription state + dispatch logic.
 // Works for both local WS and relay-tunneled connections via WsSendable.
 //
@@ -17,20 +17,44 @@ import {
   hasOlderMessages,
   hasNewerMessages,
   getWorkspaceRaw,
+  getMaxMessageSeq,
+  getMessagesDelta,
+  resetStatsCache,
 } from "../db";
+import { writeUserMessage } from "./message-writer";
 import { getConnection, broadcast } from "./ws.service";
-import { broadcastWorkspacesAndStats } from "./dashboard-broadcast";
-import type {
-  QueryResource,
-  QServerFrame,
+import {
+  QUERY_RESOURCES,
+  MUTATION_NAMES,
+  type MutationName,
+  type QueryResource,
+  type QServerFrame,
 } from "../../../shared/types/query-protocol";
 
 // ---- Subscription State ----
 
+type QueryParams = Record<string, unknown>;
+
+interface ResourceFrameInput {
+  id: string;
+  resource: string;
+  params: QueryParams;
+}
+
+interface UnsubscribeFrameInput {
+  id: string;
+}
+
+interface MutateFrameInput {
+  id: string;
+  action: string;
+  params: QueryParams;
+}
+
 interface Sub {
   id: string;
   resource: QueryResource;
-  params: Record<string, unknown>;
+  params: QueryParams;
 }
 
 /** Per-connection active subscriptions, keyed by client-assigned sub ID. */
@@ -46,30 +70,39 @@ const messageCursors = new Map<string, number>();
  * Handle an incoming q:* frame from an authenticated connection.
  * Registered as onQueryFrame in ws.service protocol handlers.
  */
-export function handleFrame(connectionId: string, msg: Record<string, unknown>): void {
-  const type = msg.type as string;
+export function handleFrame(connectionId: string, msg: QueryParams): void {
+  const type = typeof msg.type === "string" ? msg.type : "unknown";
 
-  match(type)
-    .with("q:request", () => {
-      handleRequest(connectionId, msg);
-    })
-    .with("q:subscribe", () => {
-      handleSubscribe(connectionId, msg);
-    })
-    .with("q:unsubscribe", () => {
-      handleUnsubscribe(connectionId, msg);
-    })
-    .with("q:mutate", () => {
-      handleMutate(connectionId, msg);
-    })
-    .otherwise(() => {
-      sendFrame(connectionId, {
-        type: "q:error",
-        id: (msg.id as string) ?? "unknown",
-        code: "UNKNOWN_FRAME",
-        message: `Unknown query frame type: ${type}`,
+  try {
+    match(type)
+      .with("q:request", () => {
+        handleRequest(connectionId, parseResourceFrame(msg));
+      })
+      .with("q:subscribe", () => {
+        handleSubscribe(connectionId, parseResourceFrame(msg));
+      })
+      .with("q:unsubscribe", () => {
+        handleUnsubscribe(connectionId, parseUnsubscribeFrame(msg));
+      })
+      .with("q:mutate", () => {
+        handleMutate(connectionId, parseMutateFrame(msg));
+      })
+      .otherwise(() => {
+        sendFrame(connectionId, {
+          type: "q:error",
+          id: getFrameId(msg),
+          code: "UNKNOWN_FRAME",
+          message: `Unknown query frame type: ${type}`,
+        });
       });
+  } catch (err) {
+    sendFrame(connectionId, {
+      type: "q:error",
+      id: getFrameId(msg),
+      code: "INVALID_FRAME",
+      message: err instanceof Error ? err.message : "Invalid query frame",
     });
+  }
 }
 
 /** Remove all subscriptions for a connection (cleanup on disconnect). */
@@ -92,7 +125,11 @@ export function removeSubs(connectionId: string): void {
  * Messages are special: they use q:delta (cursor-based) instead of full snapshots,
  * and are excluded from the q:invalidate broadcast.
  */
-export function invalidate(resources: string[]): void {
+export function invalidate(resources: QueryResource[]): void {
+  if (resources.includes("stats")) {
+    resetStatsCache();
+  }
+
   // Phase 1: Push fresh data to active subscribers
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {
@@ -123,24 +160,35 @@ export function invalidate(resources: string[]): void {
   }
 
   // Phase 2: Broadcast q:invalidate for unmounted caches (exclude messages)
-  const broadcastResources = resources.filter(r => r !== "messages") as QueryResource[];
+  const broadcastResources = resources.filter(r => r !== "messages");
   if (broadcastResources.length > 0) {
-    broadcast(JSON.stringify({
-      type: "q:invalidate",
-      resources: broadcastResources,
-    } satisfies QServerFrame));
+    broadcast(
+      JSON.stringify({
+        type: "q:invalidate",
+        resources: broadcastResources,
+      } satisfies QServerFrame)
+    );
+  }
+
+  // Phase 3: Emit stdout signal for Rust → Tauri event relay (desktop only).
+  // Messages excluded: desktop gets session:message Tauri events directly from sidecar.
+  // Suppressed in test environments to avoid polluting test output.
+  if (process.env.NODE_ENV !== "test") {
+    const tauriResources = resources.filter(r => r !== "messages");
+    if (tauriResources.length > 0) {
+      process.stdout.write(`OPENDEVS_INVALIDATE:${JSON.stringify({ resources: tauriResources })}\n`);
+    }
   }
 }
 
 // ---- Frame Handlers ----
 
-function handleRequest(connectionId: string, msg: Record<string, unknown>): void {
-  const id = msg.id as string;
-  const resource = msg.resource as QueryResource;
-  const params = (msg.params as Record<string, unknown>) ?? {};
+function handleRequest(connectionId: string, msg: ResourceFrameInput): void {
+  const { id, resource, params } = msg;
 
   try {
-    const data = runQuery(resource, params);
+    const typedResource = toQueryResource(resource);
+    const data = runQuery(typedResource, params);
     sendFrame(connectionId, { type: "q:response", id, data });
   } catch (err) {
     sendFrame(connectionId, {
@@ -152,15 +200,16 @@ function handleRequest(connectionId: string, msg: Record<string, unknown>): void
   }
 }
 
-function handleSubscribe(connectionId: string, msg: Record<string, unknown>): void {
-  const id = msg.id as string;
-  const resource = msg.resource as QueryResource;
-  const params = (msg.params as Record<string, unknown>) ?? {};
+function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
+  const { id, resource, params } = msg;
+
+  // Validate resource upfront — fail fast before running query
+  const typedResource = toQueryResource(resource);
 
   // Send initial snapshot — only register subscription if query succeeds
   // (avoids zombie subscriptions when runQuery throws on invalid params)
   try {
-    const data = runQuery(resource, params);
+    const data = runQuery(typedResource, params);
 
     // Get or create subscription map for this connection
     let connSubs = subs.get(connectionId);
@@ -170,19 +219,19 @@ function handleSubscribe(connectionId: string, msg: Record<string, unknown>): vo
     }
 
     // Store subscription by client-assigned ID (replaces if same ID reused on reconnect)
-    connSubs.set(id, { id, resource, params });
+    connSubs.set(id, { id, resource: typedResource, params });
 
     // For messages: initialize cursor to current max seq
-    if (resource === "messages" && params.sessionId) {
+    if (typedResource === "messages") {
+      const sessionId = readStringParam(params, "sessionId");
       const cursorKey = `${connectionId}:${id}`;
-      try {
-        const db = getDatabase();
-        const row = db.prepare(
-          "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
-        ).get(params.sessionId as string) as { max_seq: number } | undefined;
-        messageCursors.set(cursorKey, row?.max_seq ?? 0);
-      } catch {
-        messageCursors.set(cursorKey, 0);
+      if (sessionId) {
+        try {
+          const db = getDatabase();
+          messageCursors.set(cursorKey, getMaxMessageSeq(db, sessionId));
+        } catch {
+          messageCursors.set(cursorKey, 0);
+        }
       }
     }
 
@@ -197,8 +246,8 @@ function handleSubscribe(connectionId: string, msg: Record<string, unknown>): vo
   }
 }
 
-function handleUnsubscribe(connectionId: string, msg: Record<string, unknown>): void {
-  const id = msg.id as string;
+function handleUnsubscribe(connectionId: string, msg: UnsubscribeFrameInput): void {
+  const { id } = msg;
 
   const connSubs = subs.get(connectionId);
   if (!connSubs) return;
@@ -214,11 +263,8 @@ function handleUnsubscribe(connectionId: string, msg: Record<string, unknown>): 
   }
 }
 
-function handleMutate(connectionId: string, msg: Record<string, unknown>): void {
-  const id = msg.id as string;
-  // Client sends `action`, not `mutation`
-  const action = msg.action as string;
-  const params = (msg.params as Record<string, unknown>) ?? {};
+function handleMutate(connectionId: string, msg: MutateFrameInput): void {
+  const { id, action, params } = msg;
 
   try {
     const result = runMutation(action, params);
@@ -240,97 +286,95 @@ function handleMutate(connectionId: string, msg: Record<string, unknown>): void 
 
 // ---- Query Dispatch ----
 
-function runQuery(resource: string, params: Record<string, unknown>): unknown {
+function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
   return match(resource)
     .with("workspaces", () => getDashboardWorkspaces(db))
     .with("stats", () => getStats(db))
     .with("sessions", () => {
-      const workspaceId = params.workspaceId as string;
+      const workspaceId = readStringParam(params, "workspaceId");
       if (!workspaceId) throw new Error("sessions requires workspaceId param");
       return getSessionsByWorkspaceId(db, workspaceId);
     })
     .with("messages", () => {
-      const sessionId = params.sessionId as string;
+      const sessionId = readStringParam(params, "sessionId");
       if (!sessionId) throw new Error("messages requires sessionId param");
 
       const rows = getMessages(db, sessionId, {
-        limit: (params.limit as number) || 50,
-        before: params.before as number | undefined,
-        after: params.after as number | undefined,
+        limit: readNumberParam(params, "limit") ?? 50,
+        before: readNumberParam(params, "before"),
+        after: readNumberParam(params, "after"),
       });
 
-      const hasOlder = rows.length > 0
-        ? hasOlderMessages(db, sessionId, rows[0].seq)
-        : false;
+      const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
       const hasNewer = rows.length > 0
         ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq)
         : false;
 
       return { messages: rows, hasOlder, hasNewer };
     })
-    .otherwise(() => {
-      throw new Error(`Unknown resource: ${resource}`);
-    });
+    .exhaustive();
 }
 
 // ---- Mutation Dispatch ----
 
-function runMutation(action: string, params: Record<string, unknown>): unknown {
-  return match(action)
+function runMutation(action: string, params: QueryParams): unknown {
+  const typedAction = toMutationName(action);
+
+  return match(typedAction)
     .with("sendMessage", () => {
-      // Lazy import to avoid circular dependency with relay.service.ts
-      const { writeUserMessage } = require("./relay.service") as typeof import("./relay.service");
-      const result = writeUserMessage(
-        params.sessionId as string,
-        params.content as string,
-        params.model as string | undefined,
-      );
-      if (!result.success) throw new Error((result as any).error);
+      const sessionId = readStringParam(params, "sessionId");
+      const content = readStringParam(params, "content");
+      const model = readStringParam(params, "model");
+      if (!sessionId || !content) {
+        throw new Error("sendMessage requires sessionId and content");
+      }
+
+      const result = writeUserMessage(sessionId, content, model);
+      if (!result.success) throw new Error(result.error);
+      invalidate(["workspaces", "sessions", "messages", "stats"]);
       // Client expects { messageId, seq } — get seq from the inserted message
       const db = getDatabase();
-      const row = db.prepare(
-        "SELECT seq FROM messages WHERE id = ?"
-      ).get((result as any).messageId) as { seq: number } | undefined;
-      return { messageId: (result as any).messageId, seq: row?.seq ?? 0 };
+      const row = db.prepare("SELECT seq FROM messages WHERE id = ?").get(result.messageId) as
+        | { seq: number }
+        | undefined;
+      return { messageId: result.messageId, seq: row?.seq ?? 0 };
     })
     .with("archiveWorkspace", () => {
       const db = getDatabase();
-      const workspaceId = params.workspaceId as string;
+      const workspaceId = readStringParam(params, "workspaceId");
       if (!workspaceId) throw new Error("archiveWorkspace requires workspaceId");
 
       const workspace = getWorkspaceRaw(db, workspaceId);
       if (!workspace) throw new Error("Workspace not found");
 
       db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
-      broadcastWorkspacesAndStats();
       invalidate(["workspaces", "stats"]);
       return { success: true };
     })
     .with("updateWorkspaceTitle", () => {
       const db = getDatabase();
-      const workspaceId = params.workspaceId as string;
-      const title = params.title as string;
-      if (!workspaceId || title === undefined) throw new Error("updateWorkspaceTitle requires workspaceId and title");
+      const workspaceId = readStringParam(params, "workspaceId");
+      const title = readStringParam(params, "title");
+      if (!workspaceId || title === undefined) {
+        throw new Error("updateWorkspaceTitle requires workspaceId and title");
+      }
 
       const workspace = getWorkspaceRaw(db, workspaceId);
       if (!workspace) throw new Error("Workspace not found");
 
       db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
-      broadcastWorkspacesAndStats();
       invalidate(["workspaces"]);
       return { success: true };
     })
-    .otherwise(() => {
-      throw new Error(`Unknown mutation: ${action}`);
-    });
+    .exhaustive();
 }
 
 // ---- Message Delta Push ----
 
-function pushMessageDelta(connectionId: string, subId: string, params: Record<string, unknown>): void {
-  const sessionId = params.sessionId as string;
+function pushMessageDelta(connectionId: string, subId: string, params: QueryParams): void {
+  const sessionId = readStringParam(params, "sessionId");
   if (!sessionId) return;
 
   const cursorKey = `${connectionId}:${subId}`;
@@ -338,13 +382,7 @@ function pushMessageDelta(connectionId: string, subId: string, params: Record<st
 
   try {
     const db = getDatabase();
-    const newMessages = db.prepare(`
-      SELECT id, session_id, seq, role, content, turn_id, model,
-             agent_message_id, sent_at, cancelled_at, parent_tool_use_id
-      FROM messages
-      WHERE session_id = ? AND seq > ?
-      ORDER BY seq ASC
-    `).all(sessionId, lastSeq) as Array<{ seq: number; [key: string]: unknown }>;
+    const newMessages = getMessagesDelta(db, sessionId, lastSeq);
 
     if (newMessages.length === 0) return;
 
@@ -372,4 +410,75 @@ function sendFrame(connectionId: string, frame: QServerFrame): void {
   } catch {
     // Connection may have closed
   }
+}
+
+function parseResourceFrame(msg: QueryParams): ResourceFrameInput {
+  return {
+    id: requireString(msg.id, "id"),
+    resource: requireString(msg.resource, "resource"),
+    params: getParams(msg.params),
+  };
+}
+
+function parseUnsubscribeFrame(msg: QueryParams): UnsubscribeFrameInput {
+  return {
+    id: requireString(msg.id, "id"),
+  };
+}
+
+function parseMutateFrame(msg: QueryParams): MutateFrameInput {
+  return {
+    id: requireString(msg.id, "id"),
+    action: requireString(msg.action, "action"),
+    params: getParams(msg.params),
+  };
+}
+
+function getParams(value: unknown): QueryParams {
+  if (value == null) return {};
+  if (isRecord(value)) return value;
+  throw new Error("Frame params must be an object");
+}
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Frame requires string ${field}`);
+  }
+  return value;
+}
+
+function getFrameId(msg: QueryParams): string {
+  return typeof msg.id === "string" ? msg.id : "unknown";
+}
+
+function isRecord(value: unknown): value is QueryParams {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStringParam(params: QueryParams, key: string): string | undefined {
+  const value = params[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNumberParam(params: QueryParams, key: string): number | undefined {
+  const value = params[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function isQueryResource(value: string): value is QueryResource {
+  return (QUERY_RESOURCES as readonly string[]).includes(value);
+}
+
+function toQueryResource(value: string): QueryResource {
+  if (!isQueryResource(value)) throw new Error(`Unknown resource: ${value}`);
+  return value;
+}
+
+function isMutationName(value: string): value is MutationName {
+  return (MUTATION_NAMES as readonly string[]).includes(value);
+}
+
+function toMutationName(value: string): MutationName {
+  if (!isMutationName(value)) throw new Error(`Unknown mutation: ${value}`);
+  return value;
 }

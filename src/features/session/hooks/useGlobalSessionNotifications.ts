@@ -15,21 +15,21 @@
  */
 
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
-import { isTauriEnv } from "@/platform/tauri";
+import {
+  isTauriEnv,
+  listen,
+  createListenerGroup,
+  SESSION_ERROR,
+  SESSION_ENTER_PLAN_MODE,
+  SESSION_STATUS_CHANGED,
+} from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
-import { queryKeys } from "@/shared/api/queryKeys";
-import type {
-  Session,
-  SessionEnterPlanModeEvent,
-  SessionErrorEvent,
-  SessionStatus,
-  SessionStatusEvent,
-} from "@shared/types/session";
+import { applySessionStatusToRepoGroups } from "@/features/workspace/lib/dashboardRealtime";
+import type { SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
 /**
@@ -52,26 +52,7 @@ export function useGlobalSessionNotifications() {
   useEffect(() => {
     if (!isTauriEnv) return;
 
-    // Cancelled flag prevents race condition in React Strict Mode:
-    // mount → cleanup → mount happens rapidly. Without this flag, the first
-    // mount's async listen() promise resolves after cleanup and removes the
-    // second mount's listener.
-    let cancelled = false;
-    const unlistenFns: Array<() => void> = [];
-
-    function registerListener(promise: Promise<() => void>) {
-      promise
-        .then((fn) => {
-          if (cancelled) {
-            fn();
-            return;
-          }
-          unlistenFns.push(fn);
-        })
-        .catch(() => {
-          // listen() can reject if Tauri runtime is torn down during navigation
-        });
-    }
+    const listeners = createListenerGroup();
 
     function flushFinishedBatch() {
       const batch = finishedBatch.current;
@@ -103,8 +84,8 @@ export function useGlobalSessionNotifications() {
     }
 
     // --- Error notifications (instant, category-aware) ---
-    registerListener(
-      listen<SessionErrorEvent>("session:error", (event) => {
+    listeners.register(
+      listen(SESSION_ERROR, (event) => {
         const { id, error, category } = event.payload;
 
         // Analytics fires regardless of window focus — we always want error data
@@ -132,8 +113,8 @@ export function useGlobalSessionNotifications() {
     );
 
     // --- Plan mode notifications (instant) ---
-    registerListener(
-      listen<SessionEnterPlanModeEvent>("session:enter-plan-mode", (event) => {
+    listeners.register(
+      listen(SESSION_ENTER_PLAN_MODE, (event) => {
         if (isWindowFocused()) return;
 
         const { id } = event.payload;
@@ -145,83 +126,57 @@ export function useGlobalSessionNotifications() {
       })
     );
 
-    // --- Global status change → update workspace list cache directly ---
+    // --- Global status change → sidebar cache + transition notifications ---
     // useSessionEvents only handles the *current* session. This global listener
     // ensures sidebar status indicators update for ALL sessions instantly.
-    // Uses setQueriesData (direct cache write) instead of invalidateQueries
-    // (HTTP round-trip) for immediate sidebar feedback.
-    registerListener(
-      listen<SessionStatusEvent>("session:status-changed", (event) => {
-        const { id: sessionId, status, workspaceId } = event.payload;
+    //
+    // Notification policy hangs off this authoritative domain event rather than
+    // React Query cache transitions (a derived view). This avoids timing issues
+    // if cache updates are batched, deferred, or arrive out of order.
+    listeners.register(
+      listen(SESSION_STATUS_CHANGED, (event) => {
+        const { id, status } = event.payload;
 
-        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) => {
-          if (!old) return old;
-          return old.map((group) => ({
-            ...group,
-            workspaces: group.workspaces.map((ws) =>
-              // Primary: match by workspaceId from event payload (reliable)
-              // Fallback: match by current_session_id (backward compat)
-              (workspaceId && ws.id === workspaceId) || ws.current_session_id === sessionId
-                ? { ...ws, session_status: status }
-                : ws
-            ),
-          }));
-        });
+        // 1. Patch sidebar cache directly (no HTTP round-trip)
+        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
+          applySessionStatusToRepoGroups(old, event.payload)
+        );
+
+        // 2. Detect status transitions for analytics + notifications
+        const prevStatus = prevStatusMap.current.get(id);
+        prevStatusMap.current.set(id, status as SessionStatus);
+
+        if (!prevStatus || prevStatus === status) return;
+
+        // working → idle = agent finished — track regardless of window focus
+        if (prevStatus === "working" && status === "idle") {
+          track("ai_turn_completed", {
+            session_id: id,
+            agent_type: event.payload.agentType,
+          });
+        }
+
+        if (isWindowFocused()) return;
+
+        // working → idle = agent finished (notification only when backgrounded)
+        if (prevStatus === "working" && status === "idle") {
+          queueFinished(id);
+        }
+
+        // → needs_response = agent needs user input
+        if (status === "needs_response") {
+          sendNotification({
+            title: "Agent needs input",
+            body: `Session ${id.substring(0, 8)} is waiting for your response`,
+            sound: "Ping",
+          });
+        }
+
+        // Error and plan-mode notifications are handled by the direct Tauri
+        // event listeners above (session:error, session:enter-plan-mode) which
+        // fire immediately — no need to duplicate them here.
       })
     );
-
-    // --- Status transition detection via session:message events ---
-    // When we receive a message event, the session detail query will be
-    // invalidated (by useSessionEvents). We subscribe to cache updates
-    // to detect status transitions across ALL sessions.
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type !== "updated" || !event.query.queryKey[0]) return;
-
-      // Only watch session detail queries: ["sessions", "detail", id]
-      const key = event.query.queryKey;
-      if (key[0] !== "sessions" || key[1] !== "detail") return;
-
-      const session = event.query.state.data as Session | undefined;
-      if (!session?.id || !session.status) return;
-
-      const prevStatus = prevStatusMap.current.get(session.id);
-      prevStatusMap.current.set(session.id, session.status);
-
-      // Skip the first observation (no transition to compare)
-      if (!prevStatus) return;
-      // Skip non-transitions
-      if (prevStatus === session.status) return;
-
-      // working → idle = agent finished — track regardless of window focus
-      if (prevStatus === "working" && session.status === "idle") {
-        track("ai_turn_completed", {
-          session_id: session.id,
-          agent_type: session.agent_type,
-          model: session.model,
-          context_used_percent: session.context_used_percent,
-        });
-      }
-
-      if (isWindowFocused()) return;
-
-      // working → idle = agent finished (notification only when backgrounded)
-      if (prevStatus === "working" && session.status === "idle") {
-        queueFinished(session.id);
-      }
-
-      // → needs_response = agent needs user input
-      if (session.status === "needs_response") {
-        sendNotification({
-          title: "Agent needs input",
-          body: `Session ${session.id.substring(0, 8)} is waiting for your response`,
-          sound: "Ping",
-        });
-      }
-
-      // Error and plan-mode notifications are handled by the direct Tauri
-      // event listeners above (session:error, session:enter-plan-mode) which
-      // fire immediately — no need to duplicate them via cache transitions.
-    });
 
     // --- Setup failure notifications via workspace cache ---
     const unsubscribeWorkspaces = queryClient.getQueryCache().subscribe((event) => {
@@ -280,9 +235,7 @@ export function useGlobalSessionNotifications() {
     });
 
     return () => {
-      cancelled = true;
-      unlistenFns.forEach((fn) => fn());
-      unsubscribe();
+      listeners.cleanup();
       unsubscribeWorkspaces();
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
     };

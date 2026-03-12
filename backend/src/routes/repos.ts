@@ -13,6 +13,8 @@ import { getAllRepositories, getRepositoryByRootPath, getRepositoryById, getMaxR
 import { readManifest, getNormalizedTasks, writeManifest } from '../services/manifest.service';
 import { OpenDevsManifestSchema } from '../lib/opendevs-manifest';
 import { NotFoundError } from '../lib/errors';
+import { invalidate } from '../services/query-engine';
+import type { QueryResource } from '../../../shared/types/query-protocol';
 
 const app = new Hono();
 
@@ -59,6 +61,7 @@ app.post('/repos', async (c) => {
 
   const repoId = uuidv7();
   const repo = insertRepo(root_path, repoId, repoName, defaultBranch);
+  invalidate(["stats"] as QueryResource[]);
   return c.json(repo, 201);
 });
 

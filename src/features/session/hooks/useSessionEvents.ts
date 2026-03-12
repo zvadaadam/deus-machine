@@ -19,12 +19,18 @@
  */
 
 import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { isTauriEnv } from "@/platform/tauri";
+import {
+  isTauriEnv,
+  listen,
+  createListenerGroup,
+  SESSION_MESSAGE,
+  SESSION_ERROR,
+  SESSION_STATUS_CHANGED,
+} from "@/platform/tauri";
 import { incrementalFetchAndMerge } from "../lib/messageCache";
-import type { Session, SessionErrorEvent, SessionMessageEvent, SessionStatusEvent } from "../types";
+import type { Session } from "../types";
 
 /**
  * Listen for real-time session message events
@@ -55,30 +61,11 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
       queryKey: queryKeys.sessions.detail(sessionId),
     });
 
-    // Cancelled flag prevents race condition in React Strict Mode:
-    // mount → cleanup → mount happens rapidly. Without this flag, the first
-    // mount's async listen() promise resolves after cleanup and removes the
-    // second mount's listener.
-    let cancelled = false;
-    const unlistenFns: Array<() => void> = [];
-
-    function registerListener(promise: Promise<() => void>) {
-      promise
-        .then((fn) => {
-          if (cancelled) {
-            fn();
-            return;
-          } // Cleanup already ran — detach immediately
-          unlistenFns.push(fn);
-        })
-        .catch(() => {
-          // listen() can reject if Tauri runtime is torn down during navigation
-        });
-    }
+    const listeners = createListenerGroup();
 
     // Listen for message events from sidecar-v2
-    registerListener(
-      listen<SessionMessageEvent>("session:message", (event) => {
+    listeners.register(
+      listen(SESSION_MESSAGE, (event) => {
         const { id, data } = event.payload;
 
         // Only process events for this session
@@ -108,8 +95,8 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     // Uses setQueryData (direct cache write) instead of invalidateQueries
     // because the error details are already in the event payload — no need
     // for an HTTP round-trip. Same pattern as the status-changed handler.
-    registerListener(
-      listen<SessionErrorEvent>("session:error", (event) => {
+    listeners.register(
+      listen(SESSION_ERROR, (event) => {
         const { id, error, category } = event.payload;
 
         if (id === sessionId) {
@@ -131,8 +118,8 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     // Listen for status change events from sidecar-v2
     // Replaces 5s polling for working→idle/error transitions.
     // Sidecar emits this from updateSessionStatus() after DB write.
-    registerListener(
-      listen<SessionStatusEvent>("session:status-changed", (event) => {
+    listeners.register(
+      listen(SESSION_STATUS_CHANGED, (event) => {
         const { id, status, errorMessage, errorCategory } = event.payload;
 
         if (id === sessionId) {
@@ -158,9 +145,6 @@ export function useSessionEvents(sessionId: string | null, workspaceId?: string 
     );
 
     // Cleanup: set cancelled flag so late-resolving promises don't leak listeners
-    return () => {
-      cancelled = true;
-      unlistenFns.forEach((fn) => fn());
-    };
+    return () => listeners.cleanup();
   }, [sessionId, workspaceId, queryClient]);
 }

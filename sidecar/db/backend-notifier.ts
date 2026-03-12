@@ -3,10 +3,12 @@
 // Uses microtask coalescing (Beck's design): multiple writes in the same synchronous
 // call stack are batched into a single HTTP POST.
 
+import type { SidecarNotifyEvent } from "../../shared/events";
+
 const NOTIFY_URL = process.env.BACKEND_NOTIFY_URL;
 
 // Pending notifications to be sent in the next microtask
-let pending: Array<{ event: string; sessionId?: string }> | null = null;
+let pending: Array<{ event: SidecarNotifyEvent; sessionId?: string }> | null = null;
 
 /**
  * Notify the backend that something changed in the DB.
@@ -15,7 +17,7 @@ let pending: Array<{ event: string; sessionId?: string }> | null = null;
  * Uses queueMicrotask to coalesce rapid-fire writes (e.g., during streaming
  * where 10+ messages/sec arrive) into a single HTTP POST per event loop tick.
  */
-export function notifyBackend(event: string, sessionId?: string): void {
+export function notifyBackend(event: SidecarNotifyEvent, sessionId?: string): void {
   if (!NOTIFY_URL) return;
 
   if (!pending) {

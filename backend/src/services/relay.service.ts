@@ -9,7 +9,6 @@ import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
-import { uuidv7 } from "../../../shared/lib/uuid";
 import { getSetting } from "./settings.service";
 import { getRelayCredentials } from "./auth.service";
 import {
@@ -22,9 +21,9 @@ import {
 } from "./ws.service";
 import { validateDeviceToken, validatePairCode, createDeviceToken } from "./auth.service";
 import { getDatabase } from "../lib/database";
-import { getDashboardWorkspaces, getStats, getSessionRaw, getMessageById } from "../db";
-import { broadcastWorkspacesAndStats } from "./dashboard-broadcast";
+import { getDashboardWorkspaces, getStats, getMaxMessageSeq, getMessagesDelta } from "../db";
 import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs, invalidate } from "./query-engine";
+import { writeUserMessage } from "./message-writer";
 
 // ---- Tunnel State ----
 
@@ -94,7 +93,7 @@ function getServerName(): string {
   try {
     return `${userInfo().username}'s computer`;
   } catch {
-    return "Deus Server";
+    return "OpenDevs Server";
   }
 }
 
@@ -382,6 +381,9 @@ function handleSendMessage(connectionId: string, msg: Record<string, unknown>): 
 
   try {
     const result = writeUserMessage(sessionId, content, model);
+    if (result.success) {
+      invalidate(["workspaces", "sessions", "messages", "stats"]);
+    }
     sendToConnection(connectionId, {
       type: "send_message_response",
       requestId,
@@ -398,42 +400,6 @@ function handleSendMessage(connectionId: string, msg: Record<string, unknown>): 
   }
 }
 
-/**
- * Persist a user message and mark session as working.
- * Shared write logic — same transaction as POST /sessions/:id/messages.
- */
-export function writeUserMessage(
-  sessionId: string,
-  content: string,
-  model?: string,
-): { success: true; messageId: string } | { success: false; error: string } {
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-  if (!session) {
-    return { success: false, error: "Session not found" };
-  }
-
-  const messageId = uuidv7();
-  const sentAt = new Date().toISOString();
-  const messageModel = model || "opus";
-
-  db.transaction(() => {
-    db.prepare(`
-      INSERT INTO messages (id, session_id, role, content, sent_at, model)
-      VALUES (?, ?, 'user', ?, ?, ?)
-    `).run(messageId, sessionId, content, sentAt, messageModel);
-
-    db.prepare(
-      "UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(sentAt, sessionId);
-  })();
-
-  broadcastWorkspacesAndStats();
-  invalidate(["workspaces", "sessions", "messages"]);
-
-  return { success: true, messageId };
-}
-
 // ---- Session Watcher ----
 // Pushes message deltas to any watching client (local WS or relay).
 // Sends via conn.ws.send() — the WsSendable abstraction handles routing.
@@ -447,13 +413,10 @@ function handleWatchSession(connectionId: string, sessionId: string | null): voi
 
   try {
     const db = getDatabase();
-    const row = db.prepare(
-      "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
-    ).get(sessionId) as { max_seq: number } | undefined;
 
     clientWatches.set(connectionId, {
       sessionId,
-      lastSeq: row?.max_seq ?? 0,
+      lastSeq: getMaxMessageSeq(db, sessionId),
     });
     startWatcher();
   } catch (err) {
@@ -500,12 +463,7 @@ function tickWatcher(): void {
     for (const [sessionId, watchers] of sessionGroups) {
       const minSeq = Math.min(...watchers.map((w) => w.lastSeq));
 
-      const newMessages = db.prepare(`
-        SELECT id, session_id, seq, role, content, sent_at, model
-        FROM messages
-        WHERE session_id = ? AND seq > ?
-        ORDER BY seq ASC
-      `).all(sessionId, minSeq) as Array<{ seq: number; [key: string]: unknown }>;
+      const newMessages = getMessagesDelta(db, sessionId, minSeq);
 
       if (newMessages.length === 0) continue;
 

@@ -10,7 +10,14 @@
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import {
+  invoke,
+  listen,
+  isTauriEnv,
+  SIDECAR_REQUEST,
+  BROWSER_PAGE_LOAD,
+  BROWSER_URL_CHANGE,
+} from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { evalWithResult } from "./eval-with-result";
 import {
@@ -51,12 +58,6 @@ function safeParseWebviewJson(raw: string): any {
     const preview = raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
     throw new Error(`Malformed JSON from webview: ${preview}`);
   }
-}
-
-interface SidecarRpcRequest {
-  id: unknown;
-  method: string;
-  params: Record<string, unknown>;
 }
 
 /**
@@ -119,7 +120,7 @@ async function waitForPageLoad(
     }
 
     // Primary: browser:page-load (real navigations)
-    listen<{ label: string; url: string; event: string }>("browser:page-load", (evt) => {
+    listen(BROWSER_PAGE_LOAD, (evt) => {
       if (evt.payload.label === label && evt.payload.event === "finished") {
         onLoad(evt.payload.url);
       }
@@ -130,7 +131,7 @@ async function waitForPageLoad(
 
     // Secondary: browser:url-change (SPA navigations via popstate)
     if (alsoListenUrlChange) {
-      listen<{ label: string; url: string }>("browser:url-change", (evt) => {
+      listen(BROWSER_URL_CHANGE, (evt) => {
         if (evt.payload.label === label) {
           onLoad(evt.payload.url);
         }
@@ -901,7 +902,7 @@ export function useBrowserRpcHandler(
   useEffect(() => {
     if (!isTauriEnv) return;
 
-    const unlistenPromise = listen<SidecarRpcRequest>("sidecar:request", (event) => {
+    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
       const { id, method, params } = event.payload;
       if (import.meta.env.DEV) {
         console.log("[BrowserRPC] Received request:", method);

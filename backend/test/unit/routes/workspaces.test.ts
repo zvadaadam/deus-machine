@@ -9,7 +9,6 @@ const {
   mockDb,
   mockExecFileAsync,
   mockInitializeWorkspace,
-  mockBroadcastWorkspacesAndStats,
   mockInvalidate,
 } = vi.hoisted(() => {
   const mockStmt = {
@@ -23,14 +22,12 @@ const {
   };
   const mockExecFileAsync = vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }));
   const mockInitializeWorkspace = vi.fn(() => Promise.resolve());
-  const mockBroadcastWorkspacesAndStats = vi.fn();
   const mockInvalidate = vi.fn();
   return {
     mockStmt,
     mockDb,
     mockExecFileAsync,
     mockInitializeWorkspace,
-    mockBroadcastWorkspacesAndStats,
     mockInvalidate,
   };
 });
@@ -45,10 +42,6 @@ vi.mock('../../../src/services/workspace.service', () => ({
 
 vi.mock('../../../src/services/workspace-init.service', () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
-}));
-
-vi.mock('../../../src/services/dashboard-broadcast', () => ({
-  broadcastWorkspacesAndStats: (...args: unknown[]) => mockBroadcastWorkspacesAndStats(...args),
 }));
 
 vi.mock('../../../src/services/query-engine', () => ({
@@ -439,7 +432,6 @@ describe('PATCH /workspaces/:id', () => {
 
     expect(res.status).toBe(200);
     expect(mockStmt.run).toHaveBeenCalledWith('ready', 'ws-test-uuid');
-    expect(mockBroadcastWorkspacesAndStats).toHaveBeenCalledTimes(1);
     expect(mockInvalidate).toHaveBeenCalledWith(['workspaces', 'sessions', 'stats']);
   });
 });

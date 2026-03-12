@@ -10,16 +10,10 @@
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import { invoke, listen, isTauriEnv } from "@/platform/tauri";
+import { invoke, listen, isTauriEnv, SIDECAR_REQUEST } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { simulatorService } from "../api/simulator.service";
 import type { SimulatorInfo, StreamInfo } from "../types";
-
-interface SidecarRpcRequest {
-  id: unknown;
-  method: string;
-  params: Record<string, unknown>;
-}
 
 /**
  * Callbacks from SimulatorPanel that let the RPC handler trigger
@@ -350,7 +344,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   useEffect(() => {
     if (!isTauriEnv) return;
 
-    const unlistenPromise = listen<SidecarRpcRequest>("sidecar:request", (event) => {
+    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
       const { id, method, params } = event.payload;
       if (import.meta.env.DEV) {
         console.log("[SimulatorRPC] Received request:", method);

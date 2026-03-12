@@ -1,15 +1,16 @@
-// Deus Query protocol types — typed reactive query frames over WebSocket.
-// Must match the client contract in devs-web packages/types/src/query-protocol.ts.
+// Query protocol — WebSocket wire format for the cloud relay.
 // All frame types prefixed with "q:" so they route cleanly in the ws.service dispatcher.
+//
+// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, SIDECAR_NOTIFY_EVENTS)
+// live in shared/events.ts — the single source of truth for all app events
+// and resources. This file only defines the wire format that carries them.
 
-// ---- Resource Definitions ----
+import type { QueryResource, MutationName } from "../events";
 
-/** Queryable resources — must match the client's ResourceName. */
-export type QueryResource = "workspaces" | "stats" | "sessions" | "messages";
-
-// ---- Mutation Definitions ----
-
-export type MutationName = "sendMessage" | "archiveWorkspace" | "updateWorkspaceTitle";
+// Re-export so existing `import { QueryResource } from "query-protocol"` still works.
+export type { QueryResource, MutationName };
+export { QUERY_RESOURCES, MUTATION_NAMES, SIDECAR_NOTIFY_EVENTS } from "../events";
+export type { SidecarNotifyEvent } from "../events";
 
 // ---- Client → Server Frames ----
 

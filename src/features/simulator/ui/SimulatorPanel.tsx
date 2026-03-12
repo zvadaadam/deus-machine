@@ -59,7 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
-import { listen } from "@/platform/tauri";
+import { listen, SIM_BUILD_LOG } from "@/platform/tauri";
 import { simulatorService } from "../api/simulator.service";
 import { useSimulatorRpcHandler } from "../automation/useSimulatorRpcHandler";
 import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
@@ -297,7 +297,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       return;
     }
     let unlisten: (() => void) | null = null;
-    listen<{ workspaceId: string; line: string }>("sim:build-log", (event) => {
+    listen(SIM_BUILD_LOG, (event) => {
       if (event.payload.workspaceId !== workspaceId) return;
       setBuildLogs((prev) => {
         const next = [...prev, event.payload.line];
