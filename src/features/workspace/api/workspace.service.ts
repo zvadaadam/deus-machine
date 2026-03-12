@@ -139,7 +139,7 @@ export const WorkspaceService = {
           workspace.git_default_branch || ""
         );
         return {
-          files: result.files as FileChange[],
+          files: result.files,
           truncated: result.truncated,
           totalCount: result.total_count,
         };
@@ -199,7 +199,7 @@ export const WorkspaceService = {
     }
     try {
       const files = await gitUncommittedFiles(getWorkspacePath(workspace));
-      return files as FileChange[];
+      return files;
     } catch {
       return [];
     }
@@ -218,7 +218,7 @@ export const WorkspaceService = {
     }
     try {
       const files = await gitLastTurnFiles(getWorkspacePath(workspace), sessionId);
-      return files as FileChange[];
+      return files;
     } catch {
       // No checkpoints exist yet — expected for new sessions
       return [];
