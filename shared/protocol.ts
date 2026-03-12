@@ -29,6 +29,20 @@ export const SIDECAR_NOTIFICATIONS = {
 } as const;
 
 // ============================================================================
+// Shared Field Schemas
+// ============================================================================
+
+/** Matches the Claude Agent SDK's PermissionMode union type. */
+export const PermissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "bypassPermissions",
+  "plan",
+  "dontAsk",
+]);
+export type PermissionMode = z.infer<typeof PermissionModeSchema>;
+
+// ============================================================================
 // Query (frontend → sidecar)
 // ============================================================================
 
@@ -36,10 +50,10 @@ export const SIDECAR_NOTIFICATIONS = {
 export const QueryOptionsSchema = z.object({
   cwd: z.string().min(1),
   model: z.string().min(1).optional(),
-  maxThinkingTokens: z.number().optional(),
-  maxTurns: z.number().optional(),
+  maxThinkingTokens: z.number().int().positive().optional(),
+  maxTurns: z.number().int().positive().optional(),
   turnId: z.string().min(1).optional(),
-  permissionMode: z.string().min(1).optional(),
+  permissionMode: PermissionModeSchema.optional(),
   claudeEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
   opendevsEnv: z.record(z.string(), z.string()).optional(),
@@ -54,9 +68,9 @@ export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
 
 export const QueryRequestSchema = z.object({
   type: z.literal("query"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
-  prompt: z.string(),
+  prompt: z.string().min(1),
   options: QueryOptionsSchema,
 });
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
@@ -74,7 +88,7 @@ export type QueryAckResponse = z.infer<typeof QueryAckResponseSchema>;
 
 export const CancelRequestSchema = z.object({
   type: z.literal("cancel"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
 });
 export type CancelRequest = z.infer<typeof CancelRequestSchema>;
@@ -85,10 +99,10 @@ export type CancelRequest = z.infer<typeof CancelRequestSchema>;
 
 export const ClaudeAuthRequestSchema = z.object({
   type: z.literal("claude_auth"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
   options: z.object({
-    cwd: z.string(),
+    cwd: z.string().min(1),
   }),
 });
 export type ClaudeAuthRequest = z.infer<typeof ClaudeAuthRequestSchema>;
@@ -99,10 +113,10 @@ export type ClaudeAuthRequest = z.infer<typeof ClaudeAuthRequestSchema>;
 
 export const WorkspaceInitRequestSchema = z.object({
   type: z.literal("workspace_init"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
   options: z.object({
-    cwd: z.string(),
+    cwd: z.string().min(1),
     ghToken: z.string().optional(),
     claudeEnvVars: z.string().optional(),
   }),
@@ -115,11 +129,11 @@ export type WorkspaceInitRequest = z.infer<typeof WorkspaceInitRequestSchema>;
 
 export const ContextUsageRequestSchema = z.object({
   type: z.literal("context_usage"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
   options: z.object({
-    cwd: z.string(),
-    claudeSessionId: z.string(),
+    cwd: z.string().min(1),
+    claudeSessionId: z.string().min(1),
   }),
 });
 export type ContextUsageRequest = z.infer<typeof ContextUsageRequestSchema>;
@@ -130,16 +144,15 @@ export type ContextUsageRequest = z.infer<typeof ContextUsageRequestSchema>;
 
 export const UpdatePermissionModeRequestSchema = z.object({
   type: z.literal("update_permission_mode"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
-  permissionMode: z.string(),
+  permissionMode: PermissionModeSchema,
 });
 export type UpdatePermissionModeRequest = z.infer<typeof UpdatePermissionModeRequestSchema>;
 
 export const ResetGeneratorRequestSchema = z.object({
   type: z.literal("reset_generator"),
-  id: z.string(),
+  id: z.string().min(1),
   agentType: AgentTypeSchema,
 });
 export type ResetGeneratorRequest = z.infer<typeof ResetGeneratorRequestSchema>;
-
