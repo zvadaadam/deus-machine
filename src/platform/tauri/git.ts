@@ -6,18 +6,8 @@
  * using libgit2 in-process (~5-20ms vs 50-200ms via git CLI).
  */
 
+import type { DiffStats, FileChange } from "@shared/types/workspace";
 import { invoke } from "./invoke";
-
-export interface TauriDiffStats {
-  additions: number;
-  deletions: number;
-}
-
-export interface TauriDiffFile {
-  file: string;
-  additions: number;
-  deletions: number;
-}
 
 export interface TauriFileDiff {
   file: string;
@@ -26,22 +16,22 @@ export interface TauriFileDiff {
   new_content: string | null;
 }
 
+export interface TauriChangedFilesResult {
+  files: FileChange[];
+  truncated: boolean;
+  total_count: number;
+}
+
 export function gitDiffStats(
   workspacePath: string,
   parentBranch: string,
   defaultBranch: string
-): Promise<TauriDiffStats> {
-  return invoke<TauriDiffStats>("git_diff_stats", {
+): Promise<DiffStats> {
+  return invoke<DiffStats>("git_diff_stats", {
     workspacePath,
     parentBranch,
     defaultBranch,
   });
-}
-
-export interface TauriChangedFilesResult {
-  files: TauriDiffFile[];
-  truncated: boolean;
-  total_count: number;
 }
 
 export function gitDiffFiles(
@@ -70,8 +60,8 @@ export function gitDiffFile(
   });
 }
 
-export function gitUncommittedFiles(workspacePath: string): Promise<TauriDiffFile[]> {
-  return invoke<TauriDiffFile[]>("git_uncommitted_files", {
+export function gitUncommittedFiles(workspacePath: string): Promise<FileChange[]> {
+  return invoke<FileChange[]>("git_uncommitted_files", {
     workspacePath,
   });
 }
@@ -79,8 +69,8 @@ export function gitUncommittedFiles(workspacePath: string): Promise<TauriDiffFil
 export function gitLastTurnFiles(
   workspacePath: string,
   sessionId: string
-): Promise<TauriDiffFile[]> {
-  return invoke<TauriDiffFile[]>("git_last_turn_files", {
+): Promise<FileChange[]> {
+  return invoke<FileChange[]>("git_last_turn_files", {
     workspacePath,
     sessionId,
   });
