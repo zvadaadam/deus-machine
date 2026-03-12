@@ -3,6 +3,13 @@
  * Types for GitHub PR and repository operations
  */
 
+/** Individual CI check result from GitHub's statusCheckRollup */
+export interface CheckDetail {
+  name: string;
+  status: "passing" | "failing" | "pending";
+  url?: string;
+}
+
 /**
  * Pull Request status information
  * Metadata about a PR associated with a workspace
@@ -21,6 +28,8 @@ export interface PRStatus {
   checks_done?: number;
   /** Total number of checks in the rollup */
   checks_total?: number;
+  /** Per-check breakdown from statusCheckRollup */
+  checks?: CheckDetail[];
   review_status?: "approved" | "changes_requested" | "review_required" | "none";
   error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "network" | null;
 }

@@ -33,7 +33,7 @@ import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "./BranchSelector";
 import {
   RESOLVE_CONFLICTS,
-  FIX_CI,
+  fixCIPrompt,
   ADDRESS_REVIEW,
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
@@ -122,7 +122,7 @@ export function PRActions({
             icon={<CircleX className="h-2.5 w-2.5" />}
             label={s.checksTotal > 0 ? `Fix CI · ${s.checksDone}/${s.checksTotal}` : "Fix CI"}
             variant="destructive"
-            onClick={() => onSendAgentMessage?.(FIX_CI)}
+            onClick={() => onSendAgentMessage?.(fixCIPrompt(s.failingChecks))}
             disabled={!onSendAgentMessage}
           />
         ))

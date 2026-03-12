@@ -7,7 +7,7 @@
  * Pure function. No React. Trivially testable.
  */
 
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus, CheckDetail } from "@/shared/types";
 
 /**
  * Discriminated union of all possible PR action states.
@@ -33,7 +33,14 @@ export type PRActionState =
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
   | { type: "conflicts"; prNumber: number; prUrl: string }
-  | { type: "ci_failing"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
+  | {
+      type: "ci_failing";
+      prNumber: number;
+      prUrl: string;
+      checksDone: number;
+      checksTotal: number;
+      failingChecks: CheckDetail[];
+    }
   | { type: "changes_requested"; prNumber: number; prUrl: string }
   | { type: "ci_pending"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
   | { type: "ready_to_merge"; prNumber: number; prUrl: string; targetBranch: string }
@@ -100,7 +107,8 @@ export function derivePRActionState(
   const checksDone = prStatus.checks_done ?? 0;
   const checksTotal = prStatus.checks_total ?? 0;
   if (prStatus.ci_status === "failing") {
-    return { type: "ci_failing", prNumber, prUrl, checksDone, checksTotal };
+    const failingChecks = (prStatus.checks ?? []).filter((c) => c.status === "failing");
+    return { type: "ci_failing", prNumber, prUrl, checksDone, checksTotal, failingChecks };
   }
   if (prStatus.review_status === "changes_requested") {
     return { type: "changes_requested", prNumber, prUrl };

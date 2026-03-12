@@ -42,4 +42,5 @@ export type {
   PRStatus,
   GhCliStatus,
   DevServer,
+  CheckDetail,
 } from "@shared/types";
