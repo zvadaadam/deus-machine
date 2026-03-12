@@ -20,10 +20,7 @@ if (sentryDsn) {
 }
 
 // Ensure Tauri class is applied (backup check - head script may run before __TAURI__ is available)
-if (
-  typeof window !== "undefined" &&
-  ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
-) {
+if ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__) {
   document.documentElement.classList.add("tauri");
 }
 
@@ -33,26 +30,24 @@ window.addEventListener("focus", () =>
 );
 window.addEventListener("blur", () => document.documentElement.classList.add("window-inactive"));
 
-if (typeof window !== "undefined") {
-  const w = window as Window & { __opendevsErrorHandlers__?: boolean };
-  if (!w.__opendevsErrorHandlers__) {
-    w.__opendevsErrorHandlers__ = true;
+const w = window as Window & { __opendevsErrorHandlers__?: boolean };
+if (!w.__opendevsErrorHandlers__) {
+  w.__opendevsErrorHandlers__ = true;
 
-    window.addEventListener("error", (event) => {
-      reportError(event.error ?? event.message, {
-        source: "window.error",
-        extra: {
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        },
-      });
+  window.addEventListener("error", (event) => {
+    reportError(event.error ?? event.message, {
+      source: "window.error",
+      extra: {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+      },
     });
+  });
 
-    window.addEventListener("unhandledrejection", (event) => {
-      reportError(event.reason, { source: "window.unhandledrejection" });
-    });
-  }
+  window.addEventListener("unhandledrejection", (event) => {
+    reportError(event.reason, { source: "window.unhandledrejection" });
+  });
 }
 
 const posthogOptions = {

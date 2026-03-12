@@ -33,10 +33,8 @@ interface RightSidePanelProps {
   workspace: Workspace;
   /** Which content tab is active -- drives content switching */
   activeTab: RightSideTab;
-  /** Open a diff (switches to code tab) */
-  onOpenDiffTab: (filePath: string) => void;
-  /** Open a file preview (switches to code tab) */
-  onOpenFilePreview: (filePath: string) => void;
+  /** Switch to the code tab (used by file click handlers) */
+  onSwitchToCodeTab: () => void;
   /** Whether file watcher is active -- disables polling in useFileChanges */
   isWatched?: boolean;
   /** Insert a code review prompt into the chat input */
@@ -46,8 +44,7 @@ interface RightSidePanelProps {
 export function RightSidePanel({
   workspace,
   activeTab,
-  onOpenDiffTab,
-  onOpenFilePreview,
+  onSwitchToCodeTab,
   isWatched = false,
   onReview,
 }: RightSidePanelProps) {
@@ -146,19 +143,13 @@ export function RightSidePanel({
   const handleFileClick = useCallback(
     (path: string) => {
       if (changedPaths.has(path)) {
-        // Changed file — relative path, open diff viewer
         setSelectedFilePath(path, "changes");
-        onOpenDiffTab(path);
       } else {
-        // Regular file — build full workspace path, open preview
-        const base = workspace.workspace_path.replace(/\/+$/, "");
-        const rel = path.replace(/^\/+/, "");
-        const fullPath = `${base}/${rel}`;
         setSelectedFilePath(path, "files");
-        onOpenFilePreview(fullPath);
       }
+      onSwitchToCodeTab();
     },
-    [changedPaths, onOpenDiffTab, onOpenFilePreview, setSelectedFilePath, workspace.workspace_path]
+    [changedPaths, onSwitchToCodeTab, setSelectedFilePath]
   );
 
   return (
