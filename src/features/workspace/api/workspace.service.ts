@@ -147,7 +147,14 @@ export const WorkspaceService = {
         // Rust git failed — fall through to HTTP
       }
     }
-    return apiClient.get<{ files: FileChange[] }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
+    const result = await apiClient.get<{ files: FileChange[]; truncated?: boolean; total_count?: number }>(
+      ENDPOINTS.WORKSPACE_DIFF_FILES(id)
+    );
+    return {
+      files: result.files,
+      truncated: result.truncated ?? false,
+      totalCount: result.total_count ?? result.files.length,
+    };
   },
 
   /**
