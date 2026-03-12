@@ -4,6 +4,7 @@
 // of if/return chains in processWithGenerator's post-loop + catch blocks.
 
 import { match } from "ts-pattern";
+import { getErrorMessage } from "../../../shared/lib/errors";
 import { classifyError } from "../error-classifier";
 import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
 import { updateSessionStatus } from "../../db/session-writer";
@@ -132,7 +133,7 @@ export function executeOutcome(
     })
     .with({ type: "genuine_error" }, ({ error, ownsSession }) => {
       const classified = classifyError(error);
-      const rawErrorMsg = error instanceof Error ? error.message : String(error);
+      const rawErrorMsg = getErrorMessage(error);
       const errorName = error instanceof Error ? error.name : "non-Error";
       const errorStack = error instanceof Error
         ? error.stack?.split("\n").slice(0, 5).join("\n")

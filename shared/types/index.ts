@@ -35,6 +35,15 @@ export type {
   SessionNotification,
 } from "./session";
 
+// Session type guards
+export {
+  isTextBlock,
+  isImageBlock,
+  isToolUseBlock,
+  isToolResultBlock,
+  isThinkingBlock,
+} from "./session";
+
 // Repository types
 export type { Repository, Stats } from "./repository";
 

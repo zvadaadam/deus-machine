@@ -14,6 +14,7 @@ import {
   incrementalFetchAndMerge,
 } from "../lib/messageCache";
 import type { ContentBlock, Message, Session, SessionStatus, ToolResultBlock } from "../types";
+import { isToolResultBlock } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
@@ -143,16 +144,8 @@ export function useSessionWithMessages(sessionId: string | null) {
 
       const blocks = parseContent(msg.content);
       if (Array.isArray(blocks)) {
-        blocks.forEach((block) => {
-          if (
-            typeof block === "object" &&
-            block &&
-            "type" in block &&
-            "tool_use_id" in block &&
-            block.type === "tool_result"
-          ) {
-            resultMap.set((block as { tool_use_id: string }).tool_use_id, block as ToolResultBlock);
-          }
+        blocks.filter(isToolResultBlock).forEach((block) => {
+          resultMap.set(block.tool_use_id, block);
         });
       }
     });

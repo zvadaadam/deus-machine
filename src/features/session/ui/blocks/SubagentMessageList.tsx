@@ -9,6 +9,7 @@
 import { memo, useMemo, Fragment } from "react";
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
+import { isToolResultBlock, isToolUseBlock } from "@/features/session/types";
 import { useSession } from "../../context";
 
 interface SubagentMessageListProps {
@@ -32,18 +33,15 @@ export const SubagentMessageList = memo(function SubagentMessageList({
       const onlyToolResults =
         contentBlocks.length > 0 &&
         contentBlocks.every(
-          (b: ContentBlock | string) => typeof b === "object" && b?.type === "tool_result"
+          (b: ContentBlock | string) => isToolResultBlock(b)
         );
       if (onlyToolResults) return;
 
       contentBlocks.forEach((block: ContentBlock | string, index: number) => {
         // Skip standalone tool_result blocks (they render inline with tool_use)
-        if (typeof block === "object" && block?.type === "tool_result") return;
+        if (isToolResultBlock(block)) return;
 
-        const key =
-          typeof block === "object" && block?.type === "tool_use"
-            ? block.id
-            : `${message.id}:${index}`;
+        const key = isToolUseBlock(block) ? block.id : `${message.id}:${index}`;
 
         blocks.push({ block, key });
       });
