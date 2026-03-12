@@ -34,12 +34,12 @@ export const SIDECAR_NOTIFICATIONS = {
 
 /** Options passed alongside a query request. */
 export const QueryOptionsSchema = z.object({
-  cwd: z.string(),
-  model: z.string().optional(),
+  cwd: z.string().min(1),
+  model: z.string().min(1).optional(),
   maxThinkingTokens: z.number().optional(),
   maxTurns: z.number().optional(),
-  turnId: z.string().optional(),
-  permissionMode: z.string().optional(),
+  turnId: z.string().min(1).optional(),
+  permissionMode: z.string().min(1).optional(),
   claudeEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
   opendevsEnv: z.record(z.string(), z.string()).optional(),
@@ -47,8 +47,8 @@ export const QueryOptionsSchema = z.object({
   chromeEnabled: z.boolean().optional(),
   strictDataPrivacy: z.boolean().optional(),
   shouldResetGenerator: z.boolean().optional(),
-  resume: z.string().optional(),
-  resumeSessionAt: z.string().optional(),
+  resume: z.string().min(1).optional(),
+  resumeSessionAt: z.string().min(1).optional(),
 });
 export type QueryOptions = z.infer<typeof QueryOptionsSchema>;
 

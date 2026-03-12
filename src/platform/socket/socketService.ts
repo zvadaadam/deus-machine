@@ -13,7 +13,7 @@
 
 import { invoke, isTauriEnv } from "@/platform/tauri";
 import type { AgentType } from "@shared/enums";
-import { SIDECAR_METHODS } from "@shared/protocol";
+import { QueryAckResponseSchema, SIDECAR_METHODS } from "@shared/protocol";
 import type { CancelRequest, QueryAckResponse, QueryOptions, QueryRequest } from "@shared/protocol";
 
 // Re-export shared types for downstream consumers
@@ -132,12 +132,17 @@ class UnixSocketService {
       prompt,
       options,
     };
-    const ack = await this.request<QueryAckResponse>(SIDECAR_METHODS.QUERY, params);
+    const raw = await this.request<QueryAckResponse>(SIDECAR_METHODS.QUERY, params);
+    const parsed = QueryAckResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.error("[SOCKET] Invalid QueryAckResponse from sidecar:", parsed.error.message);
+      return { accepted: false, reason: "Invalid response from sidecar" };
+    }
 
     if (import.meta.env.DEV)
-      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8), ack);
+      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8), parsed.data);
 
-    return ack;
+    return parsed.data;
   }
 
   /**
