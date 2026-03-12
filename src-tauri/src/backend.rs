@@ -111,7 +111,9 @@ impl BackendManager {
                     if let Some(json_str) = line.strip_prefix("OPENDEVS_INVALIDATE:") {
                         if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
                             if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
-                                let _ = handle.emit("query:invalidate", &payload);
+                                if let Err(e) = handle.emit("query:invalidate", &payload) {
+                                    eprintln!("[BACKEND] Failed to emit query:invalidate: {}", e);
+                                }
                             }
                         }
                     }

@@ -95,7 +95,7 @@ export function useQueryInvalidation() {
 
     listeners.register(
       listen(QUERY_INVALIDATE, (event) => {
-        dispatchInvalidation(queryClient, event.payload.resources);
+        dispatchInvalidation(queryClient, event.payload?.resources ?? []);
       })
     );
 

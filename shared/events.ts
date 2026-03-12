@@ -185,8 +185,6 @@ export const GitCloneProgressSchema = z.object({
 });
 export type GitCloneProgressEvent = z.infer<typeof GitCloneProgressSchema>;
 
-/** Serialized chat insert payload (Rust → frontend).
- *  Keep in sync with SerializedChatInsertPayload in chatInsertStore.ts. */
 /** InspectElement schema — matches the shape emitted by the browser InSpec handler
  *  through Rust. Keep in sync with InspectElement in parseInspectTags.ts. */
 const InspectElementSchema = z.object({
@@ -204,6 +202,8 @@ const InspectElementSchema = z.object({
   innerHTML: z.string().optional(),
 });
 
+/** Serialized chat insert payload (Rust → frontend).
+ *  Keep in sync with SerializedChatInsertPayload in chatInsertStore.ts. */
 export const ChatInsertSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
