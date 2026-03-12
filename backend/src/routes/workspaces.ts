@@ -243,6 +243,24 @@ const FAILING_CONCLUSIONS = new Set([
 // Note: CheckRun uses `status` field, StatusContext uses `state` field.
 const PENDING_STATUSES = new Set(['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED']);
 
+/**
+ * Classify a single GitHub check (CheckRun or StatusContext) into a uniform status.
+ * GitHub's statusCheckRollup contains two object types:
+ *   - CheckRun (__typename: "CheckRun"): uses `conclusion` + `status`
+ *   - StatusContext (__typename: "StatusContext"): uses `state`
+ */
+function classifyCheck(check: any): 'passing' | 'failing' | 'pending' {
+  if (check.__typename === 'StatusContext') {
+    if (check.state === 'FAILURE' || check.state === 'ERROR') return 'failing';
+    if (check.state === 'PENDING' || check.state === 'EXPECTED') return 'pending';
+    return 'passing';
+  }
+  // CheckRun
+  if (FAILING_CONCLUSIONS.has(check.conclusion)) return 'failing';
+  if (check.conclusion === 'STALE' || check.conclusion == null || PENDING_STATUSES.has(check.status)) return 'pending';
+  return 'passing';
+}
+
 // PR status — async, fork-aware, explicit errors
 app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
   const workspacePath = c.get('workspacePath');
@@ -338,31 +356,12 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
       if (state === 'merged') mergeStatus = 'merged';
       else if (pr.mergeable === 'MERGEABLE') mergeStatus = 'ready';
 
-      // Derive CI status from statusCheckRollup.
-      // The array contains TWO different object types:
-      //   - CheckRun (__typename: "CheckRun"): uses `conclusion` (SUCCESS/FAILURE/null) + `status`
-      //   - StatusContext (__typename: "StatusContext"): uses `state` (SUCCESS/FAILURE/PENDING/ERROR)
-      // We must handle both — StatusContext has no `conclusion` field at all.
       const checks: any[] = pr.statusCheckRollup ?? [];
       let ciStatus: 'passing' | 'failing' | 'pending' | 'unknown' = 'unknown';
       if (checks.length > 0) {
-        const hasFailing = checks.some((c: any) => {
-          if (c.__typename === 'StatusContext') {
-            return c.state === 'FAILURE' || c.state === 'ERROR';
-          }
-          return FAILING_CONCLUSIONS.has(c.conclusion);
-        });
-        const hasPending = checks.some((c: any) => {
-          if (c.__typename === 'StatusContext') {
-            return c.state === 'PENDING' || c.state === 'EXPECTED';
-          }
-          // CheckRun: null conclusion means still running, STALE means re-run needed
-          return c.conclusion === 'STALE' ||
-            c.conclusion == null ||
-            PENDING_STATUSES.has(c.status);
-        });
-        if (hasFailing) ciStatus = 'failing';
-        else if (hasPending) ciStatus = 'pending';
+        const statuses = checks.map(classifyCheck);
+        if (statuses.includes('failing')) ciStatus = 'failing';
+        else if (statuses.includes('pending')) ciStatus = 'pending';
         else ciStatus = 'passing';
       }
 

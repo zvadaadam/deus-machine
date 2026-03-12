@@ -27,6 +27,7 @@ import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
 import { invoke, listen, createListenerGroup, BROWSER_PAGE_LOAD, BROWSER_TITLE_CHANGED, BROWSER_URL_CHANGE } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 import type { BrowserTabState, BrowserTabHandle, ConsoleLog, ElementSelectedEvent } from "../types";
 import { deriveTitleFromUrl } from "../types";
 import {
@@ -415,7 +416,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         if (consoleDrainFails <= 3 || consoleDrainFails % 50 === 0) {
           console.warn(
             `[BrowserTab] console drain failed (${consoleDrainFails}x):`,
-            err instanceof Error ? err.message : String(err)
+            getErrorMessage(err)
           );
         }
       } finally {
@@ -491,7 +492,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         if (failCount <= 3 || failCount % 50 === 0) {
           console.warn(
             `[BrowserTab] inspect drain failed (${failCount}x):`,
-            err instanceof Error ? err.message : String(err)
+            getErrorMessage(err)
           );
         }
       } finally {
@@ -561,7 +562,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
         }
       } catch (verifyErr) {
         onAddLog(tabId, "warn",
-          `Inspect verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+          `Inspect verification failed: ${getErrorMessage(verifyErr)}`
         );
         return;
       }
@@ -570,8 +571,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       onUpdateTab(tabId, { injected: true, injectionFailed: false });
       onAddLog(tabId, "info", "Automation scripts injected successfully");
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      onAddLog(tabId, "error", `Injection failed: ${errorMsg}`);
+      onAddLog(tabId, "error", `Injection failed: ${getErrorMessage(err)}`);
       onUpdateTab(tabId, { injectionFailed: true });
     }
   }, [tabId, webviewLabel, onUpdateTab, onAddLog]);
@@ -608,7 +608,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       onUpdateTab(tabId, { selectorActive: enabling });
     } catch (err) {
       onAddLog(tabId, "error",
-        `Inspect mode toggle failed: ${err instanceof Error ? err.message : String(err)}`
+        `Inspect mode toggle failed: ${getErrorMessage(err)}`
       );
     }
   }, [webviewLabel, tabId, tab.selectorActive, injectAutomation, onUpdateTab, onAddLog]);

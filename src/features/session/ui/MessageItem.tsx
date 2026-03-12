@@ -7,6 +7,7 @@
 
 import type { Message } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
+import { isImageBlock, isTextBlock, isToolUseBlock } from "@/features/session/types";
 import { BlockRenderer, ToolGroupBlock } from "./blocks";
 import { groupToolStreaks, type GroupedItem } from "./utils/groupTools";
 import { match } from "ts-pattern";
@@ -62,7 +63,7 @@ export const MessageItem = memo(function MessageItem({
     const images: ContentBlock[] = [];
     const others: (ContentBlock | string)[] = [];
     for (const block of contentBlocks as (ContentBlock | string)[]) {
-      if (typeof block === "object" && block?.type === "image") {
+      if (isImageBlock(block)) {
         images.push(block);
       } else {
         others.push(block);
@@ -90,7 +91,7 @@ export const MessageItem = memo(function MessageItem({
       return contentBlocks
         .map((block: ContentBlock | string) => {
           if (typeof block === "string") return block;
-          if (block?.type === "text") return block.text;
+          if (isTextBlock(block)) return block.text;
           return "";
         })
         .join("\n");
@@ -106,10 +107,7 @@ export const MessageItem = memo(function MessageItem({
   const renderContentBlocks = (blocks: (ContentBlock | string)[]) => {
     return blocks.map((block: ContentBlock | string, index: number) => {
       // Generate unique key: use tool_use id if available, otherwise fallback to index
-      const key =
-        typeof block === "object" && block?.type === "tool_use"
-          ? block.id
-          : `${message.id}:${index}`;
+      const key = isToolUseBlock(block) ? block.id : `${message.id}:${index}`;
 
       // A text block is "streaming" when it is the last text block in the last
       // message of the actively-streaming turn. Everything else = full opacity.
@@ -171,7 +169,7 @@ export const MessageItem = memo(function MessageItem({
     const blocks = contentBlocks as (ContentBlock | string)[];
     for (let i = blocks.length - 1; i >= 0; i--) {
       const block = blocks[i];
-      if (typeof block === "string" || (typeof block === "object" && block?.type === "text")) {
+      if (typeof block === "string" || isTextBlock(block)) {
         lastTextBlockIndex = i;
         break;
       }
@@ -204,10 +202,7 @@ export const MessageItem = memo(function MessageItem({
             match(item)
               .with({ kind: "single" }, (s) => {
                 const { block, originalIndex } = s;
-                const key =
-                  typeof block === "object" && block?.type === "tool_use"
-                    ? (block as ContentBlock & { id: string }).id
-                    : `${message.id}:${originalIndex}`;
+                const key = isToolUseBlock(block) ? block.id : `${message.id}:${originalIndex}`;
                 const isBlockStreaming =
                   isStreamingTurn && isLastInTurn && originalIndex === lastTextBlockIndex;
                 return (

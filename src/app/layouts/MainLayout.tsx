@@ -45,7 +45,8 @@ import type { Workspace } from "@/shared/types";
 import { invoke, listen, isTauriEnv, createListenerGroup, CHAT_INSERT } from "@/platform/tauri";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
-import { extractErrorMessage, extractRepoNameFromUrl } from "@/shared/lib/utils";
+import { extractRepoNameFromUrl } from "@/shared/lib/utils";
+import { getErrorMessage } from "@shared/lib/errors";
 
 /**
  * SidebarResizeHandle — drag handle on the sidebar's right edge.
@@ -270,14 +271,14 @@ export function MainLayout() {
             label: "Undo",
             onClick: () => {
               unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
-                toast.error(extractErrorMessage(error));
+                toast.error(getErrorMessage(error));
               });
             },
           },
         });
       } catch (error) {
         console.error("Error archiving workspace:", error);
-        toast.error(extractErrorMessage(error));
+        toast.error(getErrorMessage(error));
       }
     },
     [selectWorkspace]
@@ -301,7 +302,7 @@ export function MainLayout() {
     } catch (error) {
       selectWorkspace(null);
       console.error("Error creating workspace:", error);
-      toast.error(extractErrorMessage(error));
+      toast.error(getErrorMessage(error));
     } finally {
       setCreating(false);
     }
@@ -326,7 +327,7 @@ export function MainLayout() {
         } catch (error) {
           selectWorkspace(null);
           console.error("Error creating workspace:", error);
-          toast.error(extractErrorMessage(error));
+          toast.error(getErrorMessage(error));
         } finally {
           setCreating(false);
         }
@@ -349,7 +350,7 @@ export function MainLayout() {
       closeSystemPromptModal();
     } catch (error) {
       console.error("Failed to save system prompt:", error);
-      toast.error(extractErrorMessage(error));
+      toast.error(getErrorMessage(error));
     }
   }
 
@@ -388,7 +389,7 @@ export function MainLayout() {
       toast.success(`"${repo.name}" ready`);
     } catch (error) {
       console.error("Error adding repository:", error);
-      const message = extractErrorMessage(error);
+      const message = getErrorMessage(error);
       toast.error(message);
     }
   }
@@ -465,7 +466,7 @@ export function MainLayout() {
     } catch (error) {
       if (!isStale()) {
         console.error("Error cloning repository:", error);
-        setCloneError(extractErrorMessage(error));
+        setCloneError(getErrorMessage(error));
         setCloneStatus(null);
       }
     } finally {

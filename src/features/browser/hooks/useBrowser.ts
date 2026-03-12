@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke, isTauriEnv } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 
 interface BrowserStatus {
   running: boolean;
@@ -104,9 +105,9 @@ export function useBrowser() {
       }
     } catch (error) {
       const kind = error instanceof Error ? error.name : typeof error;
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = getErrorMessage(error);
       console.error("[useBrowser] Error starting server:", kind, msg);
-      const errorMessage = error instanceof Error ? error.message : "Failed to start browser";
+      const errorMessage = getErrorMessage(error);
       setStatus({
         running: false,
         port: null,
@@ -132,7 +133,7 @@ export function useBrowser() {
       });
     } catch (error) {
       const kind = error instanceof Error ? error.name : typeof error;
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = getErrorMessage(error);
       console.error("[useBrowser] Error stopping server:", kind, msg);
     }
   }, []);

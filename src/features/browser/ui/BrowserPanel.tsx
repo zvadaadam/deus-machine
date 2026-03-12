@@ -52,6 +52,7 @@ import { useBrowserRpcHandler } from "../automation/useBrowserRpcHandler";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { chatInsertActions } from "@/shared/stores/chatInsertStore";
 import { invoke } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
@@ -334,7 +335,7 @@ export function BrowserPanel({
   useEffect(() => {
     if (!devBrowserStatus.running && !devBrowserStatus.error) {
       startServer().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = getErrorMessage(err);
         if (!message.includes("VITE_DEV_BROWSER_PATH")) {
           console.error("Failed to auto-start dev-browser:", err);
         }

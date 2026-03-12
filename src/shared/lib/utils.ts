@@ -1,16 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { getErrorMessage } from "@shared/lib/errors";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-
-/**
- * Safely extracts an error message from any error type.
- * @deprecated Use `getErrorMessage` from `@shared/lib/errors` directly.
- */
-export const extractErrorMessage = getErrorMessage;
 
 /**
  * Extracts the repository name from a GitHub URL.

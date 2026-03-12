@@ -3,6 +3,7 @@
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
 import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
+import { getErrorMessage } from "../../../shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext, resolveStreamOutcome, executeOutcome } from "./stream-context";
@@ -145,7 +146,7 @@ export class ClaudeAgentHandler implements AgentHandler {
             if (updatedSession) updatedSession.currentModel = options.model;
           } catch (error) {
             console.error(
-              `Failed to update model: ${error instanceof Error ? error.message : String(error)}`
+              `Failed to update model: ${getErrorMessage(error)}`
             );
           }
         }
@@ -159,7 +160,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           session!.currentMaxThinkingTokens = options.maxThinkingTokens;
         } catch (error) {
           console.error(
-            `Failed to update maxThinkingTokens: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to update maxThinkingTokens: ${getErrorMessage(error)}`
           );
         }
       }
@@ -170,7 +171,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           await query.setPermissionMode(options.permissionMode as PermissionMode);
         } catch (error) {
           console.error(
-            `Failed to update permission mode: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to update permission mode: ${getErrorMessage(error)}`
           );
         }
       }
@@ -296,7 +297,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         console.log(`Permission mode updated to ${permissionMode} for session ${sessionId}`);
       } catch (error) {
         console.error(
-          `Failed to update permission mode: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to update permission mode: ${getErrorMessage(error)}`
         );
       }
     }
@@ -363,7 +364,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       const accountInfo = await queryResult.accountInfo();
       return { accountInfo };
     } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
+      return { error: getErrorMessage(error) };
     } finally {
       void queryResult.interrupt().catch((error: Error) => {
         console.error(`[getClaudeAccountInfo] Error during interrupt:`, error);
@@ -395,7 +396,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       return { slashCommands, mcpServers };
     } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
+      return { error: getErrorMessage(error) };
     } finally {
       void queryResult.interrupt().catch((error: Error) => {
         console.error(`[getClaudeWorkspaceInitData] Error during interrupt:`, error);

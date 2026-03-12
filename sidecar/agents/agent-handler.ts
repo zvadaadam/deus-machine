@@ -3,6 +3,7 @@
 // Each agent type (claude, codex, etc.) implements AgentHandler and
 // registers itself in the registry during sidecar startup.
 
+import { getErrorMessage } from "../../shared/lib/errors";
 import type { AgentType, QueryRequest } from "../protocol";
 
 /** Options passed to handleQuery, validated by QueryRequestSchema in protocol.ts */
@@ -64,7 +65,7 @@ export function initializeAllAgents(): Map<AgentType, { success: boolean; error?
     } catch (error) {
       results.set(type, {
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }
