@@ -25,7 +25,6 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
-import { broadcastWorkspacesAndStats } from './dashboard-broadcast';
 import { invalidate } from './query-engine';
 
 const execFileAsync = promisify(execFile);
@@ -292,7 +291,6 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
         emitProgress(ctx.workspaceId, 'error', `Failed at: ${stage.name}`);
 
         // Workspace transitioned to 'error' — notify connected clients.
-        broadcastWorkspacesAndStats();
         invalidate(['workspaces', 'stats']);
         return;
       }
@@ -304,8 +302,6 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
   emitProgress(ctx.workspaceId, 'done', 'Ready');
 
   // Workspace transitioned to 'ready' — push to all connected clients.
-  // Legacy protocol gets workspace list + stats; query-protocol subscribers
-  // get fresh snapshots + q:invalidate for unmounted caches.
-  broadcastWorkspacesAndStats();
+  // Query-protocol subscribers get fresh snapshots + q:invalidate for unmounted caches.
   invalidate(['workspaces', 'stats', 'sessions']);
 }

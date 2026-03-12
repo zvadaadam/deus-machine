@@ -6,6 +6,7 @@
 // surface DB failures instead of silently swallowing them.
 
 import { uuidv7 } from "../../shared/lib/uuid";
+import { NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS, NOTIFY_SESSION_UPDATED } from "../../shared/events";
 import { getDatabase } from "./index";
 import { notifyBackend } from "./backend-notifier";
 import { FrontendClient } from "../frontend-client";
@@ -59,7 +60,7 @@ export function saveAssistantMessage(
     const insertMs = Date.now() - tInsert;
 
     const tNotify = Date.now();
-    notifyBackend("session:message", sessionId);
+    notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId);
     const notifyMs = Date.now() - tNotify;
 
     const totalMs = Date.now() - t0;
@@ -104,7 +105,7 @@ export function saveToolResultMessage(
     `
     ).run(messageId, sessionId, content, sentAt, message.id || null, parentToolUseId);
 
-    notifyBackend("session:message", sessionId);
+    notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId);
     return { ok: true, value: messageId };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -148,7 +149,7 @@ export function saveUserMessage(
     });
 
     saveAndActivate();
-    notifyBackend("session:message", sessionId);
+    notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId);
 
     // Emit statusChanged so the frontend receives a real Tauri event for
     // the working transition — not just the optimistic onMutate update.
@@ -250,7 +251,7 @@ export function updateSessionStatus(
       const updateMs = Date.now() - tUpdate;
 
       const tNotify = Date.now();
-      notifyBackend("session:status", sessionId);
+      notifyBackend(NOTIFY_SESSION_STATUS, sessionId);
       const notifyMs = Date.now() - tNotify;
 
       // Emit to frontend via Tauri event (desktop path).
@@ -323,7 +324,7 @@ export function updateContextUsage(
     if (result.changes === 0) {
       console.warn(`[SESSION-WRITER] updateContextUsage: no session found for ${sessionId}`);
     }
-    notifyBackend("session:updated", sessionId);
+    notifyBackend(NOTIFY_SESSION_UPDATED, sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

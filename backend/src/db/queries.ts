@@ -120,8 +120,8 @@ export function getWorkspaceWithRepo(
 }
 
 /**
- * Non-archived workspaces for dashboard broadcast and relay clients.
- * Used by: dashboard-broadcast, relay initial state, relay data requests.
+ * Non-archived workspaces for query engine and relay clients.
+ * Used by: query-engine snapshots, relay initial state, relay data requests.
  */
 export function getDashboardWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
   return db.prepare(`
@@ -271,6 +271,25 @@ export function getMessageById(
   return db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as MessageRow | undefined;
 }
 
+/** Get the highest seq for a session (cursor initialization for real-time streaming). */
+export function getMaxMessageSeq(db: Database.Database, sessionId: string): number {
+  const row = db.prepare(
+    "SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?"
+  ).get(sessionId) as { max_seq: number } | undefined;
+  return row?.max_seq ?? 0;
+}
+
+/** Fetch all messages after a given seq (delta push for real-time streaming). */
+export function getMessagesDelta(
+  db: Database.Database,
+  sessionId: string,
+  afterSeq: number
+): MessageRow[] {
+  return db.prepare(
+    "SELECT * FROM messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC"
+  ).all(sessionId, afterSeq) as MessageRow[];
+}
+
 // ─── Repository Queries ─────────────────────────────────────
 
 export function getAllRepositories(db: Database.Database): RepositoryWithCountsRow[] {
@@ -314,8 +333,14 @@ export function getMaxRepositorySortOrder(db: Database.Database): number {
 
 // ─── Stats Queries ───────────────────────────────────────────
 
+let cachedStats: StatsRow | null = null;
+let cachedAt = 0;
+const STATS_TTL_MS = 5_000;
+
 export function getStats(db: Database.Database): StatsRow {
-  return db.prepare(`
+  const now = Date.now();
+  if (cachedStats && now - cachedAt < STATS_TTL_MS) return cachedStats;
+  cachedStats = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM workspaces) as workspaces,
       (SELECT COUNT(*) FROM workspaces WHERE state = 'ready') as workspaces_ready,
@@ -326,5 +351,13 @@ export function getStats(db: Database.Database): StatsRow {
       (SELECT COUNT(*) FROM sessions WHERE status = 'working') as sessions_working,
       (SELECT COUNT(*) FROM messages) as messages
   `).get() as StatsRow;
+  cachedAt = now;
+  return cachedStats;
+}
+
+/** Reset the in-memory stats cache (for testing). */
+export function resetStatsCache(): void {
+  cachedStats = null;
+  cachedAt = 0;
 }
 

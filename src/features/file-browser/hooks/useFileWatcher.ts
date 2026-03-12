@@ -22,17 +22,11 @@
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { listen, invoke, isTauriEnv } from "@/platform/tauri";
+import { listen, invoke, isTauriEnv, FS_CHANGED } from "@/platform/tauri";
 import { queryKeys } from "@/shared/api/queryKeys";
 
 /** Delay before starting watcher to let filesystem settle after worktree checkout */
 const WATCHER_SETTLING_DELAY_MS = 2000;
-
-interface FileChangeEvent {
-  workspace_path: string;
-  change_type: "fileschanged" | "metadataonly";
-  affected_count: number;
-}
 
 /**
  * Watch a workspace for file changes and invalidate caches on change.
@@ -76,8 +70,8 @@ export function useFileWatcher(
     }, WATCHER_SETTLING_DELAY_MS);
 
     // Listen for debounced change events
-    const unlistenPromise = listen<FileChangeEvent>(
-      "fs:changed",
+    const unlistenPromise = listen(
+      FS_CHANGED,
       (event) => {
         const { workspace_path, change_type, affected_count } = event.payload;
 

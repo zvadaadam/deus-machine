@@ -1,8 +1,9 @@
 /**
  * Workspace Init Events Hook
  *
- * Listens for workspace initialization progress events from Tauri
- * and invalidates React Query cache on terminal states (done/error).
+ * Listens for workspace initialization progress events from Tauri,
+ * patches in-flight sidebar state, and invalidates React Query cache on
+ * terminal states (done/error).
  *
  * Event flow:
  * 1. Backend's initializeWorkspace() emits OPENDEVS_WORKSPACE_PROGRESS:{json} to stdout
@@ -13,16 +14,14 @@
  */
 
 import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { isTauriEnv } from "@/platform/tauri";
-
-interface WorkspaceProgressEvent {
-  workspaceId: string;
-  step: string;
-  label: string;
-}
+import { isTauriEnv, listen, createListenerGroup, WORKSPACE_PROGRESS } from "@/platform/tauri";
+import type { RepoGroup } from "@shared/types/workspace";
+import {
+  applyWorkspaceProgressToRepoGroups,
+  isTerminalWorkspaceProgressStep,
+} from "../lib/dashboardRealtime";
 
 /**
  * Listen for workspace initialization progress events.
@@ -35,21 +34,24 @@ export function useWorkspaceInitEvents() {
   useEffect(() => {
     if (!isTauriEnv) return;
 
-    const unlistenPromise = listen<WorkspaceProgressEvent>(
-      "workspace:progress",
-      (event) => {
-        const { step } = event.payload;
+    const listeners = createListenerGroup();
+
+    listeners.register(
+      listen(WORKSPACE_PROGRESS, (event) => {
+        const { step, workspaceId } = event.payload;
 
         if (import.meta.env.DEV) {
           console.log("[Events] Workspace progress:", event.payload);
         }
 
+        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
+          applyWorkspaceProgressToRepoGroups(old, event.payload)
+        );
+
         // Terminal states: clear any diff caches that may have been populated
         // during init (race window between state→ready and git checkout -- .),
         // then invalidate workspace list to pick up the final state.
-        if (step === "done" || step.startsWith("error")) {
-          const { workspaceId } = event.payload;
-
+        if (isTerminalWorkspaceProgressStep(step)) {
           queryClient.removeQueries({
             queryKey: queryKeys.workspaces.diffStats(workspaceId),
           });
@@ -63,11 +65,9 @@ export function useWorkspaceInitEvents() {
             queryKey: queryKeys.workspaces.all,
           });
         }
-      }
+      })
     );
 
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
+    return () => listeners.cleanup();
   }, [queryClient]);
 }

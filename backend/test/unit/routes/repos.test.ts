@@ -42,6 +42,11 @@ vi.mock('@shared/lib/uuid', () => ({
   uuidv7: vi.fn(() => 'test-uuid-1234'),
 }));
 
+const mockInvalidate = vi.fn();
+vi.mock('../../../src/services/query-engine', () => ({
+  invalidate: (...args: unknown[]) => mockInvalidate(...args),
+}));
+
 import reposRoutes from '../../../src/routes/repos';
 
 // Wrap the sub-app with error handler like the real app does
@@ -113,6 +118,7 @@ describe('POST /repos', () => {
     const body = await res.json();
     expect(body.id).toBe('test-uuid-1234');
     expect(body.name).toBe('my-project');
+    expect(mockInvalidate).toHaveBeenCalledWith(['stats']);
   });
 
   it('returns 409 when repo already exists', async () => {

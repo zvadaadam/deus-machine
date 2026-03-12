@@ -27,8 +27,8 @@ import {
   getSessionsByWorkspaceId,
 } from '../db';
 import type { WorkspaceWithDetailsRow } from '../db';
-import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 import { invalidate } from '../services/query-engine';
+import type { QueryResource } from '../../../shared/types/query-protocol';
 
 const execFileAsync = promisify(execFile);
 
@@ -123,7 +123,6 @@ app.patch('/workspaces/:id', async (c) => {
     }
   }
   const updated = getWorkspaceRaw(db, c.req.param('id'));
-  broadcastWorkspacesAndStats();
   invalidate(['workspaces', 'sessions', 'stats']);
   return c.json(updated);
 });
@@ -570,7 +569,6 @@ app.post('/workspaces', async (c) => {
     try {
       db.prepare("UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'")
         .run(workspaceId);
-      broadcastWorkspacesAndStats();
       invalidate(["workspaces", "stats"]);
     } catch {}
   });
@@ -578,10 +576,9 @@ app.post('/workspaces', async (c) => {
   const workspace = getWorkspaceWithRepo(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found after creation');
 
-  // Broadcast immediately so relay/web clients see the workspace in 'initializing' state.
-  // Legacy protocol gets workspace list + stats; query-protocol subscribers get snapshots.
-  // The init pipeline will broadcast again when it transitions to 'ready'.
-  broadcastWorkspacesAndStats();
+  // Push immediately so clients see the workspace in 'initializing' state.
+  // Query-protocol subscribers get snapshots + q:invalidate for unmounted caches.
+  // The init pipeline will invalidate again when it transitions to 'ready'.
   invalidate(['workspaces', 'stats']);
 
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
@@ -618,7 +615,6 @@ app.post('/workspaces/:id/sessions', (c) => {
   });
 
   createSession();
-  broadcastWorkspacesAndStats();
   invalidate(['workspaces', 'sessions', 'stats']);
 
   const session = getSessionRaw(db, sessionId);

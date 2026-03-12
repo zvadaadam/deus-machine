@@ -11,20 +11,13 @@
 
 import { useState, useEffect } from "react";
 import { BrowserPanel } from "./BrowserPanel";
-import { emit, isTauriEnv, listen } from "@/platform/tauri";
+import { emit, isTauriEnv, listen, BROWSER_WORKSPACE_CHANGE, CHAT_INSERT } from "@/platform/tauri";
 import type { DetachedBrowserWorkspaceContext } from "@/features/browser/store";
 import {
   useChatInsertStore,
   chatInsertActions,
   serializeChatInsertPayload,
 } from "@/shared/stores/chatInsertStore";
-
-interface WorkspaceChangePayload {
-  workspaceId: string;
-  directoryName?: string | null;
-  repoName?: string | null;
-  branch?: string | null;
-}
 
 function parseInitialContext(): DetachedBrowserWorkspaceContext | null {
   const params = new URLSearchParams(window.location.search);
@@ -60,7 +53,7 @@ export function DetachedBrowserWindow() {
 
       const payload = state.pending;
       void serializeChatInsertPayload(payload)
-        .then((serialized) => emit("chat-insert", serialized))
+        .then((serialized) => emit(CHAT_INSERT, serialized))
         .catch((error) => {
           console.error("[DetachedBrowserWindow] Failed to bridge chat insert:", error);
         })
@@ -74,8 +67,8 @@ export function DetachedBrowserWindow() {
 
   // Listen for workspace changes from the main window
   useEffect(() => {
-    const unlistenPromise = listen<WorkspaceChangePayload>(
-      "browser-window:workspace-change",
+    const unlistenPromise = listen(
+      BROWSER_WORKSPACE_CHANGE,
       (event) => {
         setWorkspaceContext((prev) => ({
           workspaceId: event.payload.workspaceId,

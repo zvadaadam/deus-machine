@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { uuidv7 } from '@shared/lib/uuid';
 import { getDatabase } from '../lib/database';
 import { NotFoundError } from '../lib/errors';
 import { parseBody } from '../lib/validate';
@@ -13,8 +12,8 @@ import {
   hasNewerMessages,
   getMessageById,
 } from '../db';
-import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 import { invalidate } from '../services/query-engine';
+import { writeUserMessage } from '../services/message-writer';
 
 /**
  * Session Routes
@@ -75,35 +74,17 @@ app.get('/sessions/:id/messages', (c) => {
  */
 app.post('/sessions/:id/messages', async (c) => {
   const t0 = Date.now();
-  const db = getDatabase();
   const sessionId = c.req.param('id');
   const { content, model } = parseBody(CreateMessageBody, await c.req.json());
 
-  const session = getSessionRaw(db, sessionId);
-  if (!session) throw new NotFoundError('Session not found');
+  const result = writeUserMessage(sessionId, content, model);
+  if (!result.success) throw new NotFoundError(result.error);
 
-  const messageId = uuidv7();
-  const sentAt = new Date().toISOString();
-  const messageModel = model || 'opus';
-
-  const tDbStart = Date.now();
-  const insertMessageAndUpdateSession = db.transaction(() => {
-    db.prepare(`
-      INSERT INTO messages (id, session_id, role, content, sent_at, model)
-      VALUES (?, ?, 'user', ?, ?, ?)
-    `).run(messageId, sessionId, content, sentAt, messageModel);
-
-    db.prepare("UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?").run(sentAt, sessionId);
-  });
-
-  insertMessageAndUpdateSession();
-  const tDbEnd = Date.now();
-
-  broadcastWorkspacesAndStats();
   invalidate(['workspaces', 'sessions', 'messages', 'stats']);
 
-  const createdMessage = getMessageById(db, messageId);
-  console.log(`[TIMING][sessions POST] session=${sessionId} dbWrite=${tDbEnd - tDbStart}ms total=${Date.now() - t0}ms`);
+  const db = getDatabase();
+  const createdMessage = getMessageById(db, result.messageId);
+  console.log(`[TIMING][sessions POST] session=${sessionId} total=${Date.now() - t0}ms`);
   return c.json(createdMessage);
 });
 
@@ -121,7 +102,6 @@ app.post('/sessions/:id/stop', (c) => {
   if (!session) throw new NotFoundError('Session not found');
 
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
-  broadcastWorkspacesAndStats();
   invalidate(['workspaces', 'sessions', 'stats']);
 
   const updatedSession = getSessionRaw(db, sessionId);
