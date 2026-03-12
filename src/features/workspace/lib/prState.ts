@@ -116,11 +116,16 @@ export function derivePRActionState(
   if (prStatus.ci_status === "pending") {
     return { type: "ci_pending", prNumber, prUrl, checksDone, checksTotal };
   }
-  if (prStatus.merge_status === "ready") {
+  // merge_status "ready" means GitHub confirmed MERGEABLE. But GitHub may
+  // also report UNKNOWN while recalculating — treat CI passing + no blockers
+  // as ready so we don't flash "Awaiting review" during that window.
+  if (
+    prStatus.merge_status === "ready" ||
+    (prStatus.ci_status === "passing" && !prStatus.has_conflicts)
+  ) {
     return { type: "ready_to_merge", prNumber, prUrl, targetBranch };
   }
 
-  // Fallback: CI passing + review needed, or any other open PR state
-  // (draft, unknown CI, etc.) — safest default, no destructive action
+  // Fallback: unknown CI, draft PRs, or any other open PR state
   return { type: "awaiting_review", prNumber, prUrl };
 }
