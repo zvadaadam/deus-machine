@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { listen } from "@tauri-apps/api/event";
+import { listen, PTY_DATA, PTY_EXIT } from "@/platform/tauri";
 import { ptyCommands, isTauriEnv } from "@/platform";
 import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
@@ -176,14 +176,14 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
       });
 
     // Listen for PTY data
-    const unlistenData = listen<{ id: string; data: number[] }>("pty-data", (event) => {
+    const unlistenData = listen(PTY_DATA, (event) => {
       if (!disposed && event.payload.id === ptyId) {
         xterm.write(new TextDecoder().decode(new Uint8Array(event.payload.data)));
       }
     });
 
     // Listen for PTY exit
-    const unlistenExit = listen<{ id: string }>("pty-exit", (event) => {
+    const unlistenExit = listen(PTY_EXIT, (event) => {
       if (!disposed && event.payload.id === ptyId) {
         xterm.write("\r\n\x1b[90mSession ended\x1b[0m\r\n");
       }

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { triggerWatcherTick } from '../services/relay.service';
-import { broadcastWorkspacesAndStats } from '../services/dashboard-broadcast';
 import { invalidate } from '../services/query-engine';
+import { NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS, NOTIFY_SESSION_UPDATED, SIDECAR_NOTIFY_EVENTS, type QueryResource, type SidecarNotifyEvent } from '../../../shared/events';
 
 const app = new Hono();
 
@@ -13,8 +13,8 @@ const app = new Hono();
  *
  * Notification events:
  * - session:message  → trigger watcher tick (pushes message deltas to watching clients)
- * - session:status   → broadcast workspace list + stats snapshot
- * - session:updated  → broadcast workspace list + stats snapshot
+ * - session:status   → invalidate workspaces, sessions, stats
+ * - session:updated  → invalidate workspaces, sessions
  */
 app.post('/notify', async (c) => {
   const { notifications } = await c.req.json<{
@@ -26,25 +26,23 @@ app.post('/notify', async (c) => {
   }
 
   let needsWatcherTick = false;
-  let needsBroadcast = false;
 
   // Map sidecar events → query resources for push-first invalidation
-  const INVALIDATION_MAP: Record<string, string[]> = {
-    'session:message': ['messages'],
-    'session:status':  ['workspaces', 'sessions', 'stats'],
-    'session:updated': ['workspaces', 'sessions'],
+  const INVALIDATION_MAP: Record<SidecarNotifyEvent, QueryResource[]> = {
+    [NOTIFY_SESSION_MESSAGE]: ['messages'],
+    [NOTIFY_SESSION_STATUS]:  ['workspaces', 'sessions', 'stats'],
+    [NOTIFY_SESSION_UPDATED]: ['workspaces', 'sessions'],
   };
-  const resourcesToInvalidate = new Set<string>();
+  const resourcesToInvalidate = new Set<QueryResource>();
 
   for (const n of notifications) {
-    if (n.event === 'session:message') {
+    if (n.event === NOTIFY_SESSION_MESSAGE) {
       needsWatcherTick = true;
     }
-    if (n.event === 'session:status' || n.event === 'session:updated') {
-      needsBroadcast = true;
+    if ((SIDECAR_NOTIFY_EVENTS as readonly string[]).includes(n.event)) {
+      const resources = INVALIDATION_MAP[n.event as SidecarNotifyEvent];
+      resources.forEach((r) => resourcesToInvalidate.add(r));
     }
-    const resources = INVALIDATION_MAP[n.event];
-    if (resources) resources.forEach(r => resourcesToInvalidate.add(r));
   }
 
   // Trigger watcher immediately so watching clients get message deltas
@@ -52,12 +50,7 @@ app.post('/notify', async (c) => {
     triggerWatcherTick();
   }
 
-  // Broadcast updated workspace list + stats to all connected clients
-  if (needsBroadcast) {
-    broadcastWorkspacesAndStats();
-  }
-
-  // Push-first invalidation for Deus Query subscribers
+  // Push-first invalidation for query subscribers
   if (resourcesToInvalidate.size > 0) {
     invalidate([...resourcesToInvalidate]);
   }

@@ -263,7 +263,8 @@ impl SocketManager {
                                         let params = rpc_msg.get("params").cloned()
                                             .unwrap_or(Value::Null);
 
-                                        // Map JSON-RPC methods to Tauri event names
+                                        // Map JSON-RPC methods to app event names
+                                        // SYNC: Event names must match shared/events.ts (AppEventMap)
                                         let event_name = match method {
                                             "message" => "session:message",
                                             "queryError" => "session:error",

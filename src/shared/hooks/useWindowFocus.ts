@@ -32,6 +32,13 @@ function notifySubscribers() {
 /**
  * Set up Tauri window focus/blur listeners at module level.
  * These fire on OS-level focus changes — not just tab visibility.
+ *
+ * Intentionally module-level (no cleanup): This is a process-lifetime singleton.
+ * The focused state is shared across all React component instances via
+ * useSyncExternalStore. The listeners live for the app's entire lifetime,
+ * matching the lifetime of the Tauri window they track. Cleaning them up
+ * would break isWindowFocused() calls from non-React code (e.g., notification
+ * handlers in useGlobalSessionNotifications).
  */
 if (isTauriEnv) {
   (async () => {

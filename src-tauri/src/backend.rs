@@ -95,12 +95,23 @@ impl BackendManager {
                     // Parse workspace init progress events and relay as Tauri events.
                     // Backend emits: OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
                     // We parse the JSON and emit it as a "workspace:progress" Tauri event.
+                    // SYNC: Event names must match shared/events.ts (AppEventMap)
                     if let Some(json_str) = line.strip_prefix("OPENDEVS_WORKSPACE_PROGRESS:") {
                         if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
                             if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
                                 if let Err(e) = handle.emit("workspace:progress", &payload) {
                                     eprintln!("[BACKEND] Failed to emit workspace:progress: {}", e);
                                 }
+                            }
+                        }
+                    }
+
+                    // Parse query invalidation events and relay as Tauri events.
+                    // Backend emits: OPENDEVS_INVALIDATE:{"resources":["workspaces","stats"]}
+                    if let Some(json_str) = line.strip_prefix("OPENDEVS_INVALIDATE:") {
+                        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
+                            if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
+                                let _ = handle.emit("query:invalidate", &payload);
                             }
                         }
                     }

@@ -26,19 +26,11 @@ export type ChatInsertPayload =
   | { type: "files"; workspaceId: string; files: File[] }
   | { type: "element"; workspaceId: string; element: InspectElement };
 
-export type SerializedChatInsertPayload =
-  | { type: "text"; workspaceId: string; text: string }
-  | { type: "element"; workspaceId: string; element: InspectElement }
-  | {
-      type: "files";
-      workspaceId: string;
-      files: Array<{
-        name: string;
-        type: string;
-        lastModified: number;
-        base64: string;
-      }>;
-    };
+// SerializedChatInsertPayload is the Zod-inferred type from the event catalog.
+// The Zod schema validates the transport shape; the inferred type aligns with
+// InspectElement so no casting is needed at the boundary.
+import type { SerializedChatInsertPayload } from "@shared/events";
+export type { SerializedChatInsertPayload };
 
 export interface ChatInsertTarget {
   insertText: (text: string) => void;

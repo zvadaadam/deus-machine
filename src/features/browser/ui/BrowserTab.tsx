@@ -26,7 +26,7 @@ import { useRef, useState, useEffect, useLayoutEffect, useCallback, useImperativ
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2, Globe } from "lucide-react";
-import { invoke, listen } from "@/platform/tauri";
+import { invoke, listen, createListenerGroup, BROWSER_PAGE_LOAD, BROWSER_TITLE_CHANGED, BROWSER_URL_CHANGE } from "@/platform/tauri";
 import type { BrowserTabState, BrowserTabHandle, ConsoleLog, ElementSelectedEvent } from "../types";
 import { deriveTitleFromUrl } from "../types";
 import {
@@ -293,27 +293,13 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
       .catch(() => {});
   }, [mobileView, visible, webviewReady, hasLoaded, webviewLabel]);
 
-  // --- Tauri event listeners (page load, title, SPA nav, console) ---
+  // --- Tauri event listeners (page load, title, SPA nav) ---
   useEffect(() => {
-    let aborted = false;
-    const unsubs: Array<() => void> = [];
-
-    /** Register a Tauri listener with race-safe cleanup */
-    function safeListen<T>(event: string, handler: (evt: { payload: T }) => void) {
-      listen<T>(event, handler).then((unsub) => {
-        if (aborted) { unsub(); return; }
-        unsubs.push(unsub);
-      }).catch((err) => {
-        if (!aborted) {
-          console.warn(`[BrowserTab] listen(${event}) failed`, err);
-        }
-      });
-    }
+    const listeners = createListenerGroup();
 
     // Page load events
-    safeListen<{ label: string; url: string; event: string }>(
-      "browser:page-load",
-      (evt) => {
+    listeners.register(
+      listen(BROWSER_PAGE_LOAD, (evt) => {
         const { label, url, event: eventType } = evt.payload;
         if (label !== webviewLabel) return;
 
@@ -333,23 +319,21 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           onUpdateTab(tabId, { loading: false, currentUrl: url, error: null });
           onAddLog(tabId, "info", `Page loaded: ${url}`);
         }
-      }
+      })
     );
 
     // Title change events (regular, non-opendevs title changes)
-    safeListen<{ label: string; title: string }>(
-      "browser:title-changed",
-      (evt) => {
+    listeners.register(
+      listen(BROWSER_TITLE_CHANGED, (evt) => {
         const { label, title } = evt.payload;
         if (label !== webviewLabel) return;
         onUpdateTab(tabId, { title });
-      }
+      })
     );
 
     // SPA navigation events (pushState/replaceState detected by init script)
-    safeListen<{ label: string; url: string }>(
-      "browser:url-change",
-      (evt) => {
+    listeners.register(
+      listen(BROWSER_URL_CHANGE, (evt) => {
         const { label, url } = evt.payload;
         if (label !== webviewLabel) return;
         // Update URL bar and current URL, derive new title
@@ -358,7 +342,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
           currentUrl: url,
           title: deriveTitleFromUrl(url),
         });
-      }
+      })
     );
 
     // Console logs are drained via eval_browser_webview_with_result in the
@@ -370,10 +354,7 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     // (BROWSER_INIT_SCRIPT's SPA nav + inspect script) racing on document.title,
     // causing silent message loss via WKWebView's title-change coalescing.
 
-    return () => {
-      aborted = true;
-      unsubs.forEach((fn) => fn());
-    };
+    return () => listeners.cleanup();
   }, [webviewLabel, tabId, onUpdateTab, onAddLog]);
 
   // --- Periodic console drain (only when visible and webview ready) ---

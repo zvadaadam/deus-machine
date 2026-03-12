@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { resetStatsCache } from '../../../src/db/queries';
 
 const mockStmt = {
   get: vi.fn(() => ({
@@ -23,6 +24,7 @@ import app from '../../../src/routes/stats';
 beforeEach(() => {
   vi.clearAllMocks();
   mockDb.prepare.mockReturnValue(mockStmt);
+  resetStatsCache();
 });
 
 describe('GET /stats', () => {
