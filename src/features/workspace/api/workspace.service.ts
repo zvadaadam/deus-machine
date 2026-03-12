@@ -139,7 +139,7 @@ export const WorkspaceService = {
           workspace.git_default_branch || ""
         );
         return {
-          files: result.files as FileChange[],
+          files: result.files,
           truncated: result.truncated,
           totalCount: result.total_count,
         };
@@ -147,7 +147,14 @@ export const WorkspaceService = {
         // Rust git failed — fall through to HTTP
       }
     }
-    return apiClient.get<{ files: FileChange[] }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
+    const result = await apiClient.get<{ files: FileChange[]; truncated?: boolean; total_count?: number }>(
+      ENDPOINTS.WORKSPACE_DIFF_FILES(id)
+    );
+    return {
+      files: result.files,
+      truncated: result.truncated ?? false,
+      totalCount: result.total_count ?? result.files.length,
+    };
   },
 
   /**
@@ -199,7 +206,7 @@ export const WorkspaceService = {
     }
     try {
       const files = await gitUncommittedFiles(getWorkspacePath(workspace));
-      return files as FileChange[];
+      return files;
     } catch {
       return [];
     }
@@ -218,7 +225,7 @@ export const WorkspaceService = {
     }
     try {
       const files = await gitLastTurnFiles(getWorkspacePath(workspace), sessionId);
-      return files as FileChange[];
+      return files;
     } catch {
       // No checkpoints exist yet — expected for new sessions
       return [];

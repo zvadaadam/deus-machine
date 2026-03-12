@@ -12,36 +12,12 @@
  */
 
 import { invoke, isTauriEnv } from "@/platform/tauri";
+import type { AgentType } from "@shared/enums";
+import { QueryAckResponseSchema, SIDECAR_METHODS } from "@shared/protocol";
+import type { CancelRequest, QueryAckResponse, QueryOptions, QueryRequest } from "@shared/protocol";
 
-/** JSON-RPC 2.0 request structure */
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  method: string;
-  params: Record<string, unknown>;
-  id?: string | number;
-}
-
-/** Synchronous ACK/reject from sidecar for query requests */
-export interface QueryAckResponse {
-  accepted: boolean;
-  reason?: string;
-}
-
-/** Agent query options */
-export interface QueryOptions {
-  cwd: string;
-  model?: string;
-  maxThinkingTokens?: number;
-  turnId?: string;
-  permissionMode?: string;
-  claudeEnvVars?: string;
-  ghToken?: string;
-  additionalDirectories?: string[];
-  chromeEnabled?: boolean;
-  strictDataPrivacy?: boolean;
-  shouldResetGenerator?: boolean;
-  resume?: string;
-}
+// Re-export shared types for downstream consumers
+export type { QueryAckResponse, QueryOptions };
 
 /**
  * Unix Socket Service (Singleton)
@@ -108,12 +84,7 @@ class UnixSocketService {
     }
 
     const id = ++this.rpcIdCounter;
-    const request: JsonRpcRequest = {
-      jsonrpc: "2.0",
-      method,
-      params,
-      id,
-    };
+    const request = { jsonrpc: "2.0" as const, method, params, id };
 
     let response: Record<string, unknown>;
     try {
@@ -150,20 +121,28 @@ class UnixSocketService {
     sessionId: string,
     prompt: string,
     options: QueryOptions,
-    agentType: "claude" | "codex" | "unknown" = "claude"
+    agentType: AgentType = "claude"
   ): Promise<QueryAckResponse> {
-    const ack = await this.request<QueryAckResponse>("query", {
+    // Typed against QueryRequest — compiler catches shape mismatches
+    // if shared/protocol.ts adds or changes fields.
+    const params: QueryRequest = {
       type: "query",
       id: sessionId,
       agentType,
       prompt,
       options,
-    });
+    };
+    const raw = await this.request<QueryAckResponse>(SIDECAR_METHODS.QUERY, params);
+    const parsed = QueryAckResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.error("[SOCKET] Invalid QueryAckResponse from sidecar:", parsed.error.message);
+      return { accepted: false, reason: "Invalid response from sidecar" };
+    }
 
     if (import.meta.env.DEV)
-      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8), ack);
+      console.log("[SOCKET] 📤 Query sent to sidecar-v2:", sessionId.substring(0, 8), parsed.data);
 
-    return ack;
+    return parsed.data;
   }
 
   /**
@@ -171,13 +150,14 @@ class UnixSocketService {
    */
   async cancelQuery(
     sessionId: string,
-    agentType: "claude" | "codex" | "unknown" = "claude"
+    agentType: AgentType = "claude"
   ): Promise<void> {
-    await this.request("cancel", {
+    const params: CancelRequest = {
       type: "cancel",
       id: sessionId,
       agentType,
-    });
+    };
+    await this.request(SIDECAR_METHODS.CANCEL, params);
 
     if (import.meta.env.DEV) console.log("[SOCKET] 🛑 Query cancelled:", sessionId.substring(0, 8));
   }
