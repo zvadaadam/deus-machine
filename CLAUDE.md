@@ -77,6 +77,41 @@ Frontend receives:
   Tauri event → useSessionEvents hook → invalidates React Query → UI updates
 ```
 
+### Event Catalog (`shared/events.ts`)
+
+All real-time events flowing through the app are defined in one file: `shared/events.ts`. This is the single source of truth for event names, payload schemas, and domain constants.
+
+**What's in it:**
+- **Event name constants** (`SESSION_MESSAGE`, `WORKSPACE_PROGRESS`, etc.) — used by both frontend `listen()`/`emit()` and referenced by Rust via `SYNC:` comments
+- **Zod payload schemas** — define the shape of every event payload. Used for runtime validation at the Rust→TS boundary
+- **`AppEventMap`** — maps event names to payload types. Powers auto-inferred types in `listen()`
+- **`AppEventSchemaMap`** — maps event names to Zod schemas. Used by `listen()` for runtime validation
+- **Domain constant arrays** — `QUERY_RESOURCES`, `MUTATION_NAMES`, `SIDECAR_NOTIFY_EVENTS` with derived union types
+
+**Adding a new event:**
+1. Add the event name constant in `shared/events.ts`
+2. Define the Zod schema + inferred type
+3. Add to `AppEventMap` (compile-time types) and `AppEventSchemaMap` (runtime validation) — TypeScript will error if you forget either
+4. If emitted from Rust, update the corresponding `.rs` file with a `SYNC:` comment
+
+**Frontend event listening:**
+```ts
+// Type-safe — payload type auto-inferred from AppEventMap
+import { listen, SESSION_MESSAGE, createListenerGroup } from "@/platform/tauri";
+
+// In useEffect hooks, always use createListenerGroup for cleanup:
+const listeners = createListenerGroup();
+listeners.register(listen(SESSION_MESSAGE, (e) => e.payload.id));
+return () => listeners.cleanup();
+```
+
+**Runtime validation:** The `listen()` wrapper in `platform/tauri/invoke.ts` validates every known event payload against its Zod schema. On failure it logs `console.error` but still delivers the original payload — the app doesn't crash, but Rust↔TS drift is surfaced during development.
+
+**Rules:**
+- Never use raw string event names in `listen()` or `emit()` — always import constants from the catalog
+- Session event schemas live in `shared/session-events.ts` (canonical Zod schemas), imported into `events.ts`
+- The barrel export `src/platform/tauri/index.ts` re-exports everything from `events.ts`, so `import { listen, SESSION_MESSAGE } from "@/platform/tauri"` works
+
 ## Database: Standalone OpenDevs Database
 
 Our app owns its own SQLite database:
@@ -797,17 +832,17 @@ This app manages tens of repos and hundreds of workspaces with multiple concurre
 
 ### Request Volume at Scale (Example)
 
-At 50 repos / 200+ workspaces / 10 active sessions, these are the hot pollers that dominate steady-state load. Numbers below are rough estimates and should be validated with telemetry, but they illustrate the order of magnitude.
+At 50 repos / 200+ workspaces / 10 active sessions, steady-state load comes from a mix of event-driven refetches and conditional polling. Workspaces and stats are now push-invalidated (no polling), which eliminated the two heaviest pollers.
 
-| Interval | Source                                                | Estimated queries/sec |
-| -------- | ----------------------------------------------------- | --------------------- |
-| 2s       | `useWorkspacesByRepo` (list + per-row latest message) | ~100/s                |
-| 2s       | `useStats` (8 full table scans)                       | ~4/s                  |
-| 2-5s     | `useSession` per active session (x10)                 | ~3-5/s                |
-| 5s       | `useDiffStats` per working workspace                  | ~2/s                  |
-| 5s       | `useFileChanges` per working workspace                | ~2/s                  |
+| Trigger | Source                                                | Estimated queries/sec |
+| ------- | ----------------------------------------------------- | --------------------- |
+| Event   | `useWorkspacesByRepo` (invalidated via `query:invalidate` event) | On-demand only |
+| Event   | `useStats` (invalidated via `query:invalidate` event) | On-demand only |
+| 2-5s    | `useSession` per active session (x10)                 | ~3-5/s                |
+| 5s      | `useDiffStats` per working workspace                  | ~2/s                  |
+| 5s      | `useFileChanges` per working workspace                | ~2/s                  |
 
-The single biggest offender is the N+1 pattern in the workspace list. Fixing that and de-duplicating polls yields immediate wins.
+The remaining pollers are conditional (only when sessions are "working"). The N+1 pattern in the workspace list query is still the main optimization target.
 
 ### Database Rules
 
@@ -843,16 +878,15 @@ BEGIN UPDATE {table} SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
 ### Polling Discipline
 
-**Events over polling** — on desktop (Tauri), prefer event-driven invalidation over polling. Currently only `session:message` uses Tauri events. Workspace state changes, session status changes, and new workspace creation should also emit events to eliminate polling.
+**Events over polling** — on desktop (Tauri), prefer event-driven invalidation over polling. The push-first invalidation pipeline (`invalidate()` → stdout → Rust → `query:invalidate` Tauri event → `useQueryInvalidation` hook → React Query cache) handles workspaces, stats, sessions, and messages. Only use polling for data without a dedicated event path.
 
-**Polling budget** — the app should never exceed ~5 HTTP requests/second in steady state (all sources combined). Current state violates this: `useWorkspacesByRepo` (every 2s) + `useStats` (every 2s) + per-session polls = ~110 queries/s at scale.
+**Polling budget** — the app should stay under ~5 HTTP requests/second in steady state. With event-driven invalidation for workspaces/stats/sessions, the main pollers are conditional `useDiffStats` and `useFileChanges` (only when sessions are "working").
 
 **Polling frequency rules:**
 
-- **2s polling**: Only for the single active/selected workspace's session when status is "working"
-- **5-10s polling**: For sidebar workspace list (or replace with events)
+- **2-5s polling**: Only for per-session hooks when status is "working" (diff stats, file changes)
 - **30s+ / on-demand**: For everything else (settings, repos, config, PR status)
-- **Never poll**: Data that can use Tauri events (messages on desktop, workspace state changes)
+- **Never poll**: Data that uses the `query:invalidate` event pipeline (workspaces, stats, sessions, messages)
 
 **Conditional polling** — always gate polling on relevant state. `useDiffStats` already does this (only polls when session is "working"). Apply the same pattern everywhere: don't poll idle workspaces, don't poll settings, don't poll repos.
 
@@ -892,12 +926,12 @@ Git polling can dwarf DB time when scaled across many workspaces. Treat git call
 
 ### Read-Layer Migration Priority
 
-When moving reads from Node.js HTTP to Rust Tauri IPC (see "Moving the Read Layer to Rust" above), prioritize by polling frequency:
+When moving reads from Node.js HTTP to Rust Tauri IPC (see "Moving the Read Layer to Rust" above), prioritize by query weight and frequency:
 
-1. **First**: `GET /workspaces/by-repo` — polled every 2s, heaviest query (N+1 + joins)
-2. **Second**: `GET /stats` — polled every 2s, 8 full table scans
+1. **First**: `GET /workspaces/by-repo` — heaviest query (N+1 + joins), event-invalidated but still benefits from IPC speed
+2. **Second**: `GET /stats` — consolidated count query, event-invalidated
 3. **Third**: `GET /sessions/:id` — polled every 2-5s per active session
-4. **Fourth**: `GET /sessions/:id/messages` — polled every 2s in web mode
+4. **Fourth**: `GET /sessions/:id/messages` — event-invalidated, paginated
 5. **Later**: On-demand reads (repos, settings, config, PR status)
 
 Each migration should also fix the underlying query (add indexes, eliminate N+1, add pagination) — moving a bad query to Rust just makes it a faster bad query.
