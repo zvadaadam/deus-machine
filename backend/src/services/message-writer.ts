@@ -33,7 +33,7 @@ export function writeUserMessage(
     `).run(messageId, sessionId, content, sentAt, messageModel);
 
     db.prepare(
-      "UPDATE sessions SET status = 'working', last_user_message_at = ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE sessions SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?"
     ).run(sentAt, sessionId);
   })();
 
