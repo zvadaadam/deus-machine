@@ -12,13 +12,6 @@ import {
   EnterPlanModeNotificationSchema,
   StatusChangedNotificationSchema,
   AgentTypeSchema,
-  isQueryRequest,
-  isCancelRequest,
-  isClaudeAuthRequest,
-  isWorkspaceInitRequest,
-  isContextUsageRequest,
-  isUpdatePermissionModeRequest,
-  isResetGeneratorRequest,
   SIDECAR_METHODS,
   SIDECAR_NOTIFICATIONS,
   FRONTEND_NOTIFICATIONS,
@@ -336,73 +329,77 @@ describe("StatusChangedNotificationSchema", () => {
 });
 
 // ============================================================================
-// Type Guards
+// Schema Validation (safeParse)
 // ============================================================================
 
-describe("Type guards", () => {
-  describe("isQueryRequest", () => {
-    it("returns true for valid query request", () => {
-      expect(isQueryRequest(buildQueryRequest())).toBe(true);
+describe("Schema validation", () => {
+  describe("QueryRequestSchema", () => {
+    it("accepts valid query request", () => {
+      expect(QueryRequestSchema.safeParse(buildQueryRequest()).success).toBe(true);
     });
 
-    it("returns false for cancel request", () => {
-      expect(isQueryRequest(buildCancelRequest())).toBe(false);
+    it("rejects cancel request", () => {
+      expect(QueryRequestSchema.safeParse(buildCancelRequest()).success).toBe(false);
     });
 
-    it("returns false for null", () => {
-      expect(isQueryRequest(null)).toBe(false);
+    it("rejects null", () => {
+      expect(QueryRequestSchema.safeParse(null).success).toBe(false);
     });
 
-    it("returns false for string", () => {
-      expect(isQueryRequest("not a request")).toBe(false);
-    });
-  });
-
-  describe("isCancelRequest", () => {
-    it("returns true for valid cancel request", () => {
-      expect(isCancelRequest(buildCancelRequest())).toBe(true);
-    });
-
-    it("returns false for query request", () => {
-      expect(isCancelRequest(buildQueryRequest())).toBe(false);
+    it("rejects string", () => {
+      expect(QueryRequestSchema.safeParse("not a request").success).toBe(false);
     });
   });
 
-  describe("isClaudeAuthRequest", () => {
-    it("returns true for valid auth request", () => {
-      expect(isClaudeAuthRequest(buildClaudeAuthRequest())).toBe(true);
+  describe("CancelRequestSchema", () => {
+    it("accepts valid cancel request", () => {
+      expect(CancelRequestSchema.safeParse(buildCancelRequest()).success).toBe(true);
     });
 
-    it("returns false for non-auth request", () => {
-      expect(isClaudeAuthRequest(buildCancelRequest())).toBe(false);
-    });
-  });
-
-  describe("isWorkspaceInitRequest", () => {
-    it("returns true for valid workspace init request", () => {
-      expect(isWorkspaceInitRequest(buildWorkspaceInitRequest())).toBe(true);
+    it("rejects query request", () => {
+      expect(CancelRequestSchema.safeParse(buildQueryRequest()).success).toBe(false);
     });
   });
 
-  describe("isContextUsageRequest", () => {
-    it("returns true for valid context usage request", () => {
-      expect(isContextUsageRequest(buildContextUsageRequest())).toBe(true);
+  describe("ClaudeAuthRequestSchema", () => {
+    it("accepts valid auth request", () => {
+      expect(ClaudeAuthRequestSchema.safeParse(buildClaudeAuthRequest()).success).toBe(true);
+    });
+
+    it("rejects non-auth request", () => {
+      expect(ClaudeAuthRequestSchema.safeParse(buildCancelRequest()).success).toBe(false);
     });
   });
 
-  describe("isUpdatePermissionModeRequest", () => {
-    it("returns true for valid permission mode request", () => {
-      expect(isUpdatePermissionModeRequest(buildUpdatePermissionModeRequest())).toBe(true);
+  describe("WorkspaceInitRequestSchema", () => {
+    it("accepts valid workspace init request", () => {
+      expect(WorkspaceInitRequestSchema.safeParse(buildWorkspaceInitRequest()).success).toBe(true);
     });
   });
 
-  describe("isResetGeneratorRequest", () => {
-    it("returns true for valid reset generator request", () => {
-      expect(isResetGeneratorRequest(buildResetGeneratorRequest())).toBe(true);
+  describe("ContextUsageRequestSchema", () => {
+    it("accepts valid context usage request", () => {
+      expect(ContextUsageRequestSchema.safeParse(buildContextUsageRequest()).success).toBe(true);
+    });
+  });
+
+  describe("UpdatePermissionModeRequestSchema", () => {
+    it("accepts valid permission mode request", () => {
+      expect(
+        UpdatePermissionModeRequestSchema.safeParse(buildUpdatePermissionModeRequest()).success
+      ).toBe(true);
+    });
+  });
+
+  describe("ResetGeneratorRequestSchema", () => {
+    it("accepts valid reset generator request", () => {
+      expect(ResetGeneratorRequestSchema.safeParse(buildResetGeneratorRequest()).success).toBe(
+        true
+      );
     });
 
-    it("returns false for undefined", () => {
-      expect(isResetGeneratorRequest(undefined)).toBe(false);
+    it("rejects undefined", () => {
+      expect(ResetGeneratorRequestSchema.safeParse(undefined).success).toBe(false);
     });
   });
 });

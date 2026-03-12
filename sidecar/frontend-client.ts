@@ -4,17 +4,17 @@
 
 import type { RpcConnection } from "./rpc-connection";
 import {
+  CancelRequestSchema,
+  ClaudeAuthRequestSchema,
+  ContextUsageRequestSchema,
   FRONTEND_NOTIFICATIONS,
   FRONTEND_RPC_METHODS,
+  QueryRequestSchema,
+  ResetGeneratorRequestSchema,
   SIDECAR_METHODS,
   SIDECAR_NOTIFICATIONS,
-  isQueryRequest,
-  isCancelRequest,
-  isClaudeAuthRequest,
-  isWorkspaceInitRequest,
-  isContextUsageRequest,
-  isUpdatePermissionModeRequest,
-  isResetGeneratorRequest,
+  UpdatePermissionModeRequestSchema,
+  WorkspaceInitRequestSchema,
 } from "./protocol";
 import type {
   QueryRequest,
@@ -536,16 +536,18 @@ class FrontendClientClass {
 
   onQuery(handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>): void {
     this.requireTunnel().addMethod(SIDECAR_METHODS.QUERY, async (params) => {
-      if (!isQueryRequest(params)) return { accepted: false, reason: "Invalid query request" };
-      const { type: _, ...input } = params;
+      const parsed = QueryRequestSchema.safeParse(params);
+      if (!parsed.success) return { accepted: false, reason: "Invalid query request" };
+      const { type: _, ...input } = parsed.data;
       return handler(input);
     });
   }
 
   onCancel(tunnel: RpcConnection, handler: (request: Omit<CancelRequest, "type">) => void): void {
     tunnel.addMethod(SIDECAR_METHODS.CANCEL, (params) => {
-      if (!isCancelRequest(params)) return Promise.resolve(undefined);
-      const { type: _, ...input } = params;
+      const parsed = CancelRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.resolve(undefined);
+      const { type: _, ...input } = parsed.data;
       handler(input);
       return Promise.resolve(undefined);
     });
@@ -556,10 +558,9 @@ class FrontendClientClass {
     handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>
   ): void {
     tunnel.addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
-      if (!isClaudeAuthRequest(params)) {
-        return Promise.reject(new Error("Invalid claudeAuth request"));
-      }
-      const { type: _, ...input } = params;
+      const parsed = ClaudeAuthRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.reject(new Error("Invalid claudeAuth request"));
+      const { type: _, ...input } = parsed.data;
       return handler(input);
     });
   }
@@ -569,10 +570,9 @@ class FrontendClientClass {
     handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>
   ): void {
     tunnel.addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
-      if (!isWorkspaceInitRequest(params)) {
-        return Promise.reject(new Error("Invalid workspaceInit request"));
-      }
-      const { type: _, ...input } = params;
+      const parsed = WorkspaceInitRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.reject(new Error("Invalid workspaceInit request"));
+      const { type: _, ...input } = parsed.data;
       return handler(input);
     });
   }
@@ -582,10 +582,9 @@ class FrontendClientClass {
     handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>
   ): void {
     tunnel.addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
-      if (!isContextUsageRequest(params)) {
-        return Promise.reject(new Error("Invalid contextUsage request"));
-      }
-      const { type: _, ...input } = params;
+      const parsed = ContextUsageRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.reject(new Error("Invalid contextUsage request"));
+      const { type: _, ...input } = parsed.data;
       return handler(input);
     });
   }
@@ -595,8 +594,9 @@ class FrontendClientClass {
     handler: (request: Omit<UpdatePermissionModeRequest, "type">) => void
   ): void {
     tunnel.addMethod(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE, (params) => {
-      if (!isUpdatePermissionModeRequest(params)) return Promise.resolve(undefined);
-      const { type: _, ...input } = params;
+      const parsed = UpdatePermissionModeRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.resolve(undefined);
+      const { type: _, ...input } = parsed.data;
       handler(input);
       return Promise.resolve(undefined);
     });
@@ -607,8 +607,9 @@ class FrontendClientClass {
     handler: (request: Omit<ResetGeneratorRequest, "type">) => void
   ): void {
     tunnel.addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
-      if (!isResetGeneratorRequest(params)) return Promise.resolve(undefined);
-      const { type: _, ...input } = params;
+      const parsed = ResetGeneratorRequestSchema.safeParse(params);
+      if (!parsed.success) return Promise.resolve(undefined);
+      const { type: _, ...input } = parsed.data;
       handler(input);
       return Promise.resolve(undefined);
     });
