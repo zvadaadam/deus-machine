@@ -13,42 +13,37 @@ import {
 } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { API_CONFIG } from "@/shared/config/api.config";
 import type { Workspace, RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import { createOptimisticWorkspace } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
 
 /**
- * Fetch workspaces grouped by repository with polling.
- * Includes "initializing" workspaces so new ones appear immediately in the sidebar.
- * Polls faster (2s) when any workspace is initializing to catch the ready transition.
+ * Fetch workspaces grouped by repository.
+ *
+ * Event-driven invalidation handles freshness — no polling needed.
+ * Refetches on mount and window focus for reconciliation.
  */
 export function useWorkspacesByRepo(state: string = "ready,initializing") {
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
-    refetchInterval: (query) => {
-      const data = query.state.data as RepoGroup[] | undefined;
-      const hasInitializing = data?.some((g) =>
-        g.workspaces.some((w) => w.state === "initializing")
-      );
-      return hasInitializing ? 2_000 : 10_000;
-    },
     staleTime: 5000,
+    refetchOnWindowFocus: "always",
   });
 }
 
 /**
- * Fetch global stats with polling
- * Stats counters change slowly — no need for real-time accuracy
+ * Fetch global stats.
+ *
+ * Explicit invalidation + focus reconciliation — no polling.
  */
 export function useStats() {
   return useQuery({
     queryKey: queryKeys.stats.all,
     queryFn: () => RepoService.fetchStats(),
-    refetchInterval: 30_000,
     staleTime: 15_000,
+    refetchOnWindowFocus: "always",
   });
 }
 
@@ -339,7 +334,7 @@ export function useFileDiff(
  * 1. User clicks "+" → placeholder workspace appears instantly in sidebar
  * 2. Backend creates workspace (state = "initializing"), returns it
  * 3. onSuccess replaces placeholder with real data, triggers refetch
- * 4. Polling (2s during init) catches the "ready" transition
+ * 4. Workspace progress events + terminal invalidation catch the ready transition
  */
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();

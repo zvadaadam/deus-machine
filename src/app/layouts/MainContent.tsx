@@ -35,7 +35,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { PanelLeft } from "lucide-react";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
-import { emit } from "@/platform/tauri";
+import { emit, BROWSER_WORKSPACE_CHANGE } from "@/platform/tauri";
 import { useBrowserWindowStore } from "@/features/browser/store";
 import { track } from "@/platform/analytics";
 import { ChatArea } from "./ChatArea";
@@ -218,7 +218,7 @@ export function MainContent({
 
   useEffect(() => {
     if (!isBrowserDetached || !detachedWorkspaceContext) return;
-    void emit("browser-window:workspace-change", detachedWorkspaceContext);
+    void emit(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
   }, [isBrowserDetached, detachedWorkspaceContext]);
 
   // Diff handlers: opening a diff switches to code tab.

@@ -12,15 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-
-interface GitCloneProgress {
-  percent: number;
-  received: number;
-  total: number;
-  received_bytes: number;
-  status: string;
-  phase: "connecting" | "receiving" | "indexing" | "resolving" | "complete";
-}
+import { listen, GIT_CLONE_PROGRESS, type GitCloneProgressEvent } from "@/platform/tauri";
 
 /** User-friendly phase labels */
 const PHASE_LABELS: Record<string, string> = {
@@ -63,7 +55,7 @@ export function CloneRepositoryModal({
   const [githubUrl, setGithubUrl] = useState("");
   const [targetPath, setTargetPath] = useState("");
   const [defaultPath, setDefaultPath] = useState("");
-  const [progress, setProgress] = useState<GitCloneProgress | null>(null);
+  const [progress, setProgress] = useState<GitCloneProgressEvent | null>(null);
   const previousCloning = useRef(cloning);
 
   // Resolve default destination path on mount
@@ -91,9 +83,8 @@ export function CloneRepositoryModal({
     let cancelled = false;
 
     (async () => {
-      const { listen } = await import("@tauri-apps/api/event");
       if (cancelled) return;
-      unlisten = await listen<GitCloneProgress>("git-clone-progress", (event) => {
+      unlisten = await listen(GIT_CLONE_PROGRESS, (event) => {
         setProgress(event.payload);
       });
     })();

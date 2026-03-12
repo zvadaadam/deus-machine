@@ -13,13 +13,7 @@ import {
   INITIAL_MESSAGE_PAGE_SIZE,
   incrementalFetchAndMerge,
 } from "../lib/messageCache";
-import type {
-  ContentBlock,
-  Message,
-  Session,
-  SessionStatus,
-  ToolResultBlock,
-} from "../types";
+import type { ContentBlock, Message, Session, SessionStatus, ToolResultBlock } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
@@ -338,20 +332,17 @@ export function useSendMessage() {
       // Optimistically set workspace status to "working" in sidebar cache.
       // Handles the startup race where the first Tauri event arrives before
       // the workspace list has loaded (cache empty → event matching fails).
-      queryClient.setQueriesData<RepoGroup[]>(
-        { queryKey: ["workspaces", "by-repo"] },
-        (old) => {
-          if (!old) return old;
-          return old.map((group) => ({
-            ...group,
-            workspaces: group.workspaces.map((ws) =>
-              ws.current_session_id === sessionId
-                ? { ...ws, session_status: "working" as SessionStatus }
-                : ws
-            ),
-          }));
-        }
-      );
+      queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) => {
+        if (!old) return old;
+        return old.map((group) => ({
+          ...group,
+          workspaces: group.workspaces.map((ws) =>
+            ws.current_session_id === sessionId
+              ? { ...ws, session_status: "working" as SessionStatus }
+              : ws
+          ),
+        }));
+      });
 
       return { previousMessages, previousWorkspaceByRepo };
     },
@@ -430,9 +421,14 @@ export function useStopSession() {
         session_id: sessionId,
         agent_type: session?.agent_type,
       });
-      // Invalidate session to update status
+      // Immediate invalidation for snappy UI feedback (~50ms faster than event path).
+      // Backend also calls invalidate(["workspaces","sessions","stats"]) which flows
+      // through Tauri events → useQueryInvalidation. React Query deduplicates.
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.detail(sessionId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.workspaces.all,
       });
     },
   });
@@ -454,14 +450,15 @@ export function useCreateSession() {
         agent_type: newSession?.agent_type,
         model: newSession?.model,
       });
-      // Invalidate workspace lists so sidebar picks up new current_session_id
+      // Immediate invalidation for snappy UI feedback (~50ms faster than event path).
+      // Backend also calls invalidate(["workspaces","sessions","stats"]) which flows
+      // through Tauri events → useQueryInvalidation. React Query deduplicates.
       queryClient.invalidateQueries({
-        queryKey: queryKeys.workspaces.byRepo(),
+        queryKey: queryKeys.workspaces.all,
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.detail(workspaceId),
       });
-      // Invalidate workspace sessions so chat tabs pick up the new session
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.byWorkspace(workspaceId),
       });

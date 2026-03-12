@@ -42,10 +42,6 @@ vi.mock('fs', () => ({
   ...mockFs,
 }));
 
-vi.mock('../../../src/services/dashboard-broadcast', () => ({
-  broadcastWorkspacesAndStats: vi.fn(),
-}));
-
 vi.mock('../../../src/services/query-engine', () => ({
   invalidate: vi.fn(),
 }));
