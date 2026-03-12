@@ -6,21 +6,10 @@
  * using libgit2 in-process (~5-20ms vs 50-200ms via git CLI).
  */
 
-import type { DiffStats, FileChange } from "@shared/types/workspace";
+import type { BranchInfo, ChangedFilesResult, DiffStats, FileChange, FileDiff } from "@shared/types/workspace";
 import { invoke } from "./invoke";
 
-export interface TauriFileDiff {
-  file: string;
-  diff: string;
-  old_content: string | null;
-  new_content: string | null;
-}
-
-export interface TauriChangedFilesResult {
-  files: FileChange[];
-  truncated: boolean;
-  total_count: number;
-}
+export type { BranchInfo, ChangedFilesResult, FileDiff };
 
 export function gitDiffStats(
   workspacePath: string,
@@ -38,8 +27,8 @@ export function gitDiffFiles(
   workspacePath: string,
   parentBranch: string,
   defaultBranch: string
-): Promise<TauriChangedFilesResult> {
-  return invoke<TauriChangedFilesResult>("git_diff_files", {
+): Promise<ChangedFilesResult> {
+  return invoke<ChangedFilesResult>("git_diff_files", {
     workspacePath,
     parentBranch,
     defaultBranch,
@@ -51,8 +40,8 @@ export function gitDiffFile(
   parentBranch: string,
   defaultBranch: string,
   filePath: string
-): Promise<TauriFileDiff> {
-  return invoke<TauriFileDiff>("git_diff_file", {
+): Promise<FileDiff> {
+  return invoke<FileDiff>("git_diff_file", {
     workspacePath,
     parentBranch,
     defaultBranch,
@@ -82,14 +71,8 @@ export function gitDetectDefaultBranch(rootPath: string): Promise<string> {
   });
 }
 
-export interface TauriBranchInfo {
-  name: string;
-  is_remote: boolean;
-  is_head: boolean;
-}
-
-export function gitListBranches(workspacePath: string): Promise<TauriBranchInfo[]> {
-  return invoke<TauriBranchInfo[]>("git_list_branches", {
+export function gitListBranches(workspacePath: string): Promise<BranchInfo[]> {
+  return invoke<BranchInfo[]>("git_list_branches", {
     workspacePath,
   });
 }
