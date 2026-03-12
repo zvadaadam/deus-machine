@@ -60,7 +60,7 @@ export type {
 } from "./api";
 
 // GitHub types
-export type { PRStatus, GhCliStatus, DevServer } from "./github";
+export type { PRStatus, GhCliStatus, DevServer, CheckDetail } from "./github";
 
 // Query protocol types
 export type {
