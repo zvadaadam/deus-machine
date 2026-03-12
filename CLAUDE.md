@@ -838,7 +838,7 @@ At 50 repos / 200+ workspaces / 10 active sessions, steady-state load comes from
 | ------- | ----------------------------------------------------- | --------------------- |
 | Event   | `useWorkspacesByRepo` (invalidated via `query:invalidate` event) | On-demand only |
 | Event   | `useStats` (invalidated via `query:invalidate` event) | On-demand only |
-| 2-5s    | `useSession` per active session (x10)                 | ~3-5/s                |
+| Event   | `useSession` (invalidated via `session:status-changed` event) | On-demand only |
 | 5s      | `useDiffStats` per working workspace                  | ~2/s                  |
 | 5s      | `useFileChanges` per working workspace                | ~2/s                  |
 
@@ -930,7 +930,7 @@ When moving reads from Node.js HTTP to Rust Tauri IPC (see "Moving the Read Laye
 
 1. **First**: `GET /workspaces/by-repo` — heaviest query (N+1 + joins), event-invalidated but still benefits from IPC speed
 2. **Second**: `GET /stats` — consolidated count query, event-invalidated
-3. **Third**: `GET /sessions/:id` — polled every 2-5s per active session
+3. **Third**: `GET /sessions/:id` — event-invalidated, frequently fetched for active sessions
 4. **Fourth**: `GET /sessions/:id/messages` — event-invalidated, paginated
 5. **Later**: On-demand reads (repos, settings, config, PR status)
 
