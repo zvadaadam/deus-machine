@@ -447,8 +447,7 @@ function applyDisplayNames(fileDiff: FileDiffMetadata, fallbackName: string): Fi
 }
 
 function toBaseName(path: string): string {
-  const unquoted = path.startsWith('"') && path.endsWith('"') ? path.slice(1, -1) : path;
-  const cleaned = unquoted.replace(/^a\//, "").replace(/^b\//, "");
+  const cleaned = normalizeGitPath(path);
   const parts = cleaned.split("/");
   return parts[parts.length - 1] || cleaned;
 }

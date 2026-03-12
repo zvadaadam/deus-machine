@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { isTauriEnv } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 
 export type UpdateStage = "idle" | "checking" | "downloading" | "ready" | "error";
 
@@ -60,7 +61,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       isDownloadingRef.current = false;
       setState({
         stage: "error",
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }, []);
@@ -99,7 +100,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     } catch (err) {
       setState({
         stage: "error",
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
       return false;
     }

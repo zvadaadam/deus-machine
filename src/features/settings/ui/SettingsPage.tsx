@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { match } from "ts-pattern";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { getErrorMessage } from "@shared/lib/errors";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTheme } from "@/app/providers";
@@ -77,7 +78,7 @@ export function SettingsPage() {
     } catch (error) {
       console.error("Failed to save setting:", error);
       toast.error(
-        `Failed to save setting: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to save setting: ${getErrorMessage(error)}`
       );
       return false;
     }

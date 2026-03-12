@@ -59,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
+import { getErrorMessage } from "@shared/lib/errors";
 import { listen, SIM_BUILD_LOG } from "@/platform/tauri";
 import { simulatorService } from "../api/simulator.service";
 import { useSimulatorRpcHandler } from "../automation/useSimulatorRpcHandler";
@@ -246,7 +247,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
         simulatorStoreActions.setSession(workspaceId, { phase: "streaming", udid, stream });
         return stream;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = getErrorMessage(e);
         simulatorStoreActions.setSession(workspaceId, {
           phase: "error",
           message: `Failed to start: ${msg}`,
@@ -393,7 +394,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
       // This is orthogonal to the session lifecycle.
       simulatorStoreActions.setSession(workspaceId, {
         phase: "error",
-        message: `Failed to load simulators: ${e instanceof Error ? e.message : String(e)}`,
+        message: `Failed to load simulators: ${getErrorMessage(e)}`,
         canRetry: false,
       });
     }
@@ -490,7 +491,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     } catch (e) {
       simulatorStoreActions.dispatch(workspaceId, {
         type: "ERROR",
-        message: `Failed to boot simulator: ${e instanceof Error ? e.message : String(e)}`,
+        message: `Failed to boot simulator: ${getErrorMessage(e)}`,
         canRetry: true,
       });
     }
@@ -510,7 +511,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     } catch (e) {
       simulatorStoreActions.dispatch(workspaceId, {
         type: "ERROR",
-        message: `Build failed: ${e instanceof Error ? e.message : String(e)}`,
+        message: `Build failed: ${getErrorMessage(e)}`,
         canRetry: true,
       });
     }

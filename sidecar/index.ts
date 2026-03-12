@@ -24,6 +24,7 @@ import * as util from "util";
 import { exec } from "child_process";
 import { StringDecoder } from "string_decoder";
 
+import { getErrorMessage } from "../shared/lib/errors";
 import { RpcConnection } from "./rpc-connection";
 import { FrontendClient } from "./frontend-client";
 import { closeDatabase } from "./db/index";
@@ -310,7 +311,7 @@ class UnifiedSidecar {
             process.kill(Number(pid), "SIGTERM");
             console.log(`[CLEANUP] Sent SIGTERM to child PID ${pid}`);
           } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : String(e);
+            const errorMsg = getErrorMessage(e);
             console.log(`[CLEANUP] Failed to kill child PID ${pid}: ${errorMsg}`);
           }
         });

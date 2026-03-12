@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import { Github, Loader2 } from "lucide-react";
 import { invoke } from "@/platform/tauri";
+import { getErrorMessage } from "@shared/lib/errors";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queryClient } from "@/shared/api/queryClient";
@@ -57,7 +58,7 @@ async function cloneAndRegisterInBackground() {
     try {
       await invoke("git_clone", { url: REPO.url, targetPath: target });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = getErrorMessage(err);
       if (!isAlreadyClonedError(message)) {
         console.error("[OpenDevs] Clone failed:", message);
         toast.error("Couldn\u2019t clone OpenDevs. You can add it later from the sidebar.");
