@@ -15,6 +15,7 @@
  */
 
 import type { ContentBlock, Message, ToolUseBlock } from "@/shared/types";
+import { isToolUseBlock } from "@shared/types/session";
 
 export interface SingleBlock {
   kind: "single";
@@ -30,10 +31,6 @@ export interface ToolStreak {
 }
 
 export type GroupedItem = SingleBlock | ToolStreak;
-
-function isToolUseBlock(block: ContentBlock | string): block is ToolUseBlock {
-  return typeof block === "object" && block?.type === "tool_use";
-}
 
 /**
  * Read-only exploration tools that can be visually grouped.

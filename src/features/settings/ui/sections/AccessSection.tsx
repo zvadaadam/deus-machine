@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Copy, Trash2, Smartphone, Monitor, RefreshCw, ArrowUpRight } from "lucide-react";
+import { getErrorMessage } from "@shared/lib/errors";
 import {
   usePairedDevices,
   useGeneratePairCode,
@@ -340,7 +341,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       setCodeExpiresAt(Date.now() + result.expires_in_seconds * 1000);
     } catch (error) {
       toast.error(
-        `Failed to generate code: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to generate code: ${getErrorMessage(error)}`
       );
     }
   }
@@ -351,7 +352,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       toast.success(`Revoked "${device.name}"`);
     } catch (error) {
       toast.error(
-        `Failed to revoke device: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to revoke device: ${getErrorMessage(error)}`
       );
     }
   }

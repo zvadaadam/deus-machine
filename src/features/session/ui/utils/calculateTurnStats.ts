@@ -10,6 +10,7 @@
  */
 
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock } from "@/shared/types";
+import { isToolUseBlock } from "@shared/types/session";
 
 export interface TurnStats {
   toolCount: number;
@@ -63,8 +64,8 @@ export function calculateTurnStats(
       }
 
       // Count tool_use blocks
-      if (block.type === "tool_use") {
-        const toolUse = block as ToolUseBlock;
+      if (isToolUseBlock(block)) {
+        const toolUse = block;
         stats.toolCount++;
 
         // Count subagents (Task/Agent tool_use blocks)

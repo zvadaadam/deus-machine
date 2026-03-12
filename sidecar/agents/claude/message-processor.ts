@@ -3,6 +3,7 @@
 // frontend, updates stream context. Extracted from the for-await loop body
 // in processWithGenerator.
 
+import { getErrorMessage } from "../../../shared/lib/errors";
 import { FrontendClient } from "../../frontend-client";
 import { classifyStopReason } from "../error-classifier";
 import {
@@ -55,7 +56,7 @@ export function deserializeMessage(
   } catch (parseError) {
     console.error(
       `[${generatorId}] Failed to serialize/parse SDK message, skipping:`,
-      parseError instanceof Error ? parseError.message : String(parseError)
+      getErrorMessage(parseError)
     );
     return null;
   }

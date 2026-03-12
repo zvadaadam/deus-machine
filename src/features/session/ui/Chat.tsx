@@ -1,6 +1,7 @@
 import { match } from "ts-pattern";
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
+import { isToolResultBlock } from "@/features/session/types";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
@@ -230,8 +231,7 @@ export function Chat({
         isArray &&
         contentBlocks.length > 0 &&
         contentBlocks.every(
-          (block: ContentBlock | string) =>
-            typeof block === "object" && block?.type === "tool_result"
+          (block: ContentBlock | string) => isToolResultBlock(block)
         );
       const isEmpty =
         (isArray && contentBlocks.length === 0) ||

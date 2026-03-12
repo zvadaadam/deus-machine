@@ -5,6 +5,7 @@
 // All write functions return WriteResult so callers can detect and
 // surface DB failures instead of silently swallowing them.
 
+import { getErrorMessage } from "../../shared/lib/errors";
 import { uuidv7 } from "../../shared/lib/uuid";
 import { NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS, NOTIFY_SESSION_UPDATED } from "../../shared/events";
 import { getDatabase } from "./index";
@@ -71,7 +72,7 @@ export function saveAssistantMessage(
     }
     return { ok: true, value: messageId };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to save assistant message:`, msg);
     return { ok: false, error: msg };
   }
@@ -108,7 +109,7 @@ export function saveToolResultMessage(
     notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId);
     return { ok: true, value: messageId };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to save tool_result message:`, msg);
     return { ok: false, error: msg };
   }
@@ -170,7 +171,7 @@ export function saveUserMessage(
 
     return { ok: true, value: messageId };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to save user message:`, msg);
     return { ok: false, error: msg };
   }
@@ -281,7 +282,7 @@ export function updateSessionStatus(
       );
       return { ok: true, value: undefined };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = getErrorMessage(error);
       if (attempt === 0 && (msg.includes("SQLITE_BUSY") || msg.includes("database is locked"))) {
         console.log(`[TIMING][SESSION-WRITER] SQLITE_BUSY on status update, retrying in 200ms...`);
         // Synchronous wait — better-sqlite3 is sync anyway
@@ -327,7 +328,7 @@ export function updateContextUsage(
     notifyBackend(NOTIFY_SESSION_UPDATED, sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to update context usage:`, msg);
     return { ok: false, error: msg };
   }
@@ -361,7 +362,7 @@ export function saveAgentSessionId(
     );
     return { ok: true, value: undefined };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to save agent_session_id:`, msg);
     return { ok: false, error: msg };
   }
@@ -384,7 +385,7 @@ export function lookupAgentSessionId(sessionId: string): string | null {
 
     return row?.agent_session_id ?? null;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to lookup agent_session_id:`, msg);
     return null;
   }
@@ -443,7 +444,7 @@ export function reconcileStuckSessions(): WriteResult<number> {
     }
     return { ok: true, value: count };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = getErrorMessage(error);
     console.error(`[SESSION-WRITER] Failed to reconcile stuck sessions:`, msg);
     return { ok: false, error: msg };
   }

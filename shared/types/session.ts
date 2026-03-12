@@ -92,6 +92,26 @@ export interface ToolResultBlock {
   is_error?: boolean;
 }
 
+export function isTextBlock(block: ContentBlock | string): block is TextBlock {
+  return typeof block === "object" && block !== null && block.type === "text";
+}
+
+export function isImageBlock(block: ContentBlock | string): block is ImageBlock {
+  return typeof block === "object" && block !== null && block.type === "image";
+}
+
+export function isToolUseBlock(block: ContentBlock | string): block is ToolUseBlock {
+  return typeof block === "object" && block !== null && block.type === "tool_use";
+}
+
+export function isToolResultBlock(block: ContentBlock | string): block is ToolResultBlock {
+  return typeof block === "object" && block !== null && block.type === "tool_result" && "tool_use_id" in block;
+}
+
+export function isThinkingBlock(block: ContentBlock | string): block is ThinkingBlock {
+  return typeof block === "object" && block !== null && block.type === "thinking";
+}
+
 /**
  * Thinking block
  * Contains Claude's internal reasoning process
