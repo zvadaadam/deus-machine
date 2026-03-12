@@ -358,8 +358,11 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
 
       const checks: any[] = pr.statusCheckRollup ?? [];
       let ciStatus: 'passing' | 'failing' | 'pending' | 'unknown' = 'unknown';
+      let checksDone = 0;
+      const checksTotal = checks.length;
       if (checks.length > 0) {
         const statuses = checks.map(classifyCheck);
+        checksDone = statuses.filter(s => s !== 'pending').length;
         if (statuses.includes('failing')) ciStatus = 'failing';
         else if (statuses.includes('pending')) ciStatus = 'pending';
         else ciStatus = 'passing';
@@ -381,6 +384,8 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
         is_draft: pr.isDraft === true,
         has_conflicts: pr.mergeStateStatus === 'DIRTY',
         ci_status: ciStatus,
+        checks_done: checksDone,
+        checks_total: checksTotal,
         review_status: reviewStatus,
         error: null,
       });

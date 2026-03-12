@@ -33,9 +33,9 @@ export type PRActionState =
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
   | { type: "conflicts"; prNumber: number; prUrl: string }
-  | { type: "ci_failing"; prNumber: number; prUrl: string }
+  | { type: "ci_failing"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
   | { type: "changes_requested"; prNumber: number; prUrl: string }
-  | { type: "ci_pending"; prNumber: number; prUrl: string }
+  | { type: "ci_pending"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
   | { type: "ready_to_merge"; prNumber: number; prUrl: string; targetBranch: string }
   | { type: "awaiting_review"; prNumber: number; prUrl: string };
 
@@ -47,7 +47,7 @@ export type PRActionState =
 export function derivePRActionState(
   prStatus: PRStatus | null,
   ghStatus: GhCliStatus | null | undefined,
-  targetBranch: string,
+  targetBranch: string
 ): PRActionState {
   // gh CLI gates everything
   if (ghStatus && !ghStatus.isInstalled) {
@@ -97,14 +97,16 @@ export function derivePRActionState(
   if (prStatus.has_conflicts) {
     return { type: "conflicts", prNumber, prUrl };
   }
+  const checksDone = prStatus.checks_done ?? 0;
+  const checksTotal = prStatus.checks_total ?? 0;
   if (prStatus.ci_status === "failing") {
-    return { type: "ci_failing", prNumber, prUrl };
+    return { type: "ci_failing", prNumber, prUrl, checksDone, checksTotal };
   }
   if (prStatus.review_status === "changes_requested") {
     return { type: "changes_requested", prNumber, prUrl };
   }
   if (prStatus.ci_status === "pending") {
-    return { type: "ci_pending", prNumber, prUrl };
+    return { type: "ci_pending", prNumber, prUrl, checksDone, checksTotal };
   }
   if (prStatus.merge_status === "ready") {
     return { type: "ready_to_merge", prNumber, prUrl, targetBranch };

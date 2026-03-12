@@ -17,6 +17,10 @@ export interface PRStatus {
   is_draft?: boolean;
   has_conflicts?: boolean;
   ci_status?: "passing" | "failing" | "pending" | "unknown";
+  /** Number of checks that have completed (passing + failing, excludes pending) */
+  checks_done?: number;
+  /** Total number of checks in the rollup */
+  checks_total?: number;
   review_status?: "approved" | "changes_requested" | "review_required" | "none";
   error?: "gh_not_installed" | "gh_not_authenticated" | "timeout" | "network" | null;
 }
