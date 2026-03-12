@@ -42,7 +42,7 @@ import { ChatArea } from "./ChatArea";
 import { RightSidePanel } from "./RightSidePanel";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
-import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
 
 interface MainContentProps {
   selectedWorkspace: Workspace | null;
@@ -171,7 +171,7 @@ export function MainContent({
   }, [setRightPanelCollapsed]);
 
   // --- Keyboard shortcuts ---
-  useKeyboardShortcuts({
+  usePanelShortcuts({
     enabled: selectedWorkspace !== null,
     chatPanelCollapsed,
     chatPanelRef,
@@ -221,20 +221,10 @@ export function MainContent({
     void emit(BROWSER_WORKSPACE_CHANGE, detachedWorkspaceContext);
   }, [isBrowserDetached, detachedWorkspaceContext]);
 
-  // Diff handlers: opening a diff switches to code tab.
-  const handleOpenDiff = useCallback(
-    (_filePath: string) => {
-      setRightSideTab("code");
-    },
-    [setRightSideTab]
-  );
-
-  const handleOpenFilePreview = useCallback(
-    (_filePath: string) => {
-      setRightSideTab("code");
-    },
-    [setRightSideTab]
-  );
+  // Switching to code tab — used by file clicks (diff or preview) in RightSidePanel.
+  const handleSwitchToCodeTab = useCallback(() => {
+    setRightSideTab("code");
+  }, [setRightSideTab]);
 
   // Insert code review prompt into chat input
   const handleInsertReviewPrompt = useCallback(() => {
@@ -370,8 +360,7 @@ export function MainContent({
                       <RightSidePanel
                         workspace={selectedWorkspace}
                         activeTab={effectiveRightSideTab}
-                        onOpenDiffTab={handleOpenDiff}
-                        onOpenFilePreview={handleOpenFilePreview}
+                        onSwitchToCodeTab={handleSwitchToCodeTab}
                         isWatched={isWatched}
                         onReview={handleInsertReviewPrompt}
                       />
