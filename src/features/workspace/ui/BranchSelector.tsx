@@ -3,9 +3,9 @@ import { Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useBranches } from "../api/workspace.queries";
 import { cn } from "@/shared/lib/utils";
-import type { TauriBranchInfo } from "@/platform/tauri/git";
+import type { BranchInfo } from "@shared/types/workspace";
 
-const EMPTY_BRANCHES: readonly TauriBranchInfo[] = [];
+const EMPTY_BRANCHES: readonly BranchInfo[] = [];
 
 interface BranchSelectorProps {
   workspacePath: string | null;

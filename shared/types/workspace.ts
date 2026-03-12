@@ -97,3 +97,32 @@ export interface FileChangeGroup {
   first_timestamp: string;
   last_timestamp: string;
 }
+
+/**
+ * Full file diff content from git
+ * Includes raw diff text and old/new file contents for side-by-side view
+ */
+export interface FileDiff {
+  file: string;
+  diff: string;
+  old_content: string | null;
+  new_content: string | null;
+}
+
+/**
+ * Result from listing changed files with truncation info
+ */
+export interface ChangedFilesResult {
+  files: FileChange[];
+  truncated: boolean;
+  total_count: number;
+}
+
+/**
+ * Git branch information
+ */
+export interface BranchInfo {
+  name: string;
+  is_remote: boolean;
+  is_head: boolean;
+}
