@@ -33,6 +33,10 @@ impl BrowserManager {
             return Ok(());
         }
 
+        // Clear stale connection metadata before each launch
+        *self.port.lock().unwrap() = None;
+        *self.auth_token.lock().unwrap() = None;
+
         println!("[BROWSER] Starting dev-browser HTTP server at {}", dev_browser_path.display());
 
         // Run bun run start:http with PORT=0 for dynamic port allocation
@@ -127,6 +131,8 @@ impl BrowserManager {
                 Ok(Some(status)) => {
                     eprintln!("[BROWSER] Process exited unexpectedly (exit: {})", status);
                     *lock = None;
+                    *self.port.lock().unwrap() = None;
+                    *self.auth_token.lock().unwrap() = None;
                     false
                 }
                 Ok(None) => true,  // Still running
@@ -139,6 +145,8 @@ impl BrowserManager {
                 }
             }
         } else {
+            *self.port.lock().unwrap() = None;
+            *self.auth_token.lock().unwrap() = None;
             false
         }
     }
