@@ -54,7 +54,10 @@ export function createNotebookMCPServer(
         // NODE_PATH, and any other env vars the sidecar was launched with.
         // The MCP SDK's StdioClientTransport only auto-inherits a small
         // whitelist (HOME, PATH, SHELL, TERM, USER, LOGNAME on macOS).
-        ...(process.env as Record<string, string>),
+        // Filter out undefined values (process.env values are string | undefined).
+        ...Object.fromEntries(
+          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+        ),
         NOTEBOOK_CWD: workingDirectory,
         NOTEBOOK_PATH: notebookPath,
       },

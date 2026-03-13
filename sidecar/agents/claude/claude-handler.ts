@@ -157,7 +157,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (maxThinkingTokensChanged && session && query) {
         try {
           await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
-          session!.currentMaxThinkingTokens = options.maxThinkingTokens;
+          session.currentMaxThinkingTokens = options.maxThinkingTokens;
         } catch (error) {
           console.error(
             `Failed to update maxThinkingTokens: ${getErrorMessage(error)}`

@@ -224,7 +224,7 @@ describe("session-writer WriteResult", () => {
       expect(result.ok).toBe(false);
     });
 
-    it("retries once on SQLITE_BUSY then fails", () => {
+    it("fails immediately on SQLITE_BUSY (busy_timeout PRAGMA handles retries)", () => {
       mockDbRun.mockImplementation(() => {
         throw new Error("SQLITE_BUSY: database is locked");
       });
@@ -234,8 +234,8 @@ describe("session-writer WriteResult", () => {
       if (!result.ok) {
         expect(result.error).toContain("SQLITE_BUSY");
       }
-      // Should have been called exactly 2 times (initial + 1 retry)
-      expect(mockDbRun).toHaveBeenCalledTimes(2);
+      // No application-level retry — busy_timeout PRAGMA (5000ms) handles it
+      expect(mockDbRun).toHaveBeenCalledTimes(1);
       mockDbRun.mockReset();
     });
 
