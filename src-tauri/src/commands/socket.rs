@@ -36,14 +36,6 @@ pub fn receive_sidecar_message(
 }
 
 #[tauri::command]
-pub fn disconnect_from_sidecar(
-    socket_manager: State<'_, SocketManager>,
-) -> Result<String, String> {
-    socket_manager.disconnect()?;
-    Ok("Disconnected".to_string())
-}
-
-#[tauri::command]
 pub fn is_sidecar_connected(
     socket_manager: State<'_, SocketManager>,
 ) -> Result<bool, String> {

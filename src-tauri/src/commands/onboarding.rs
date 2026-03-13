@@ -207,9 +207,9 @@ unsafe fn get_ns_window() -> Result<*mut objc::runtime::Object, String> {
     Ok(ns_window)
 }
 
-/// Recursively find WKWebView and set drawsBackground = false.
+/// Recursively find WKWebView and set drawsBackground.
 #[cfg(target_os = "macos")]
-unsafe fn disable_webview_background(view: *mut objc::runtime::Object) -> bool {
+unsafe fn set_webview_draws_background(view: *mut objc::runtime::Object, draws: bool) -> bool {
     use objc::runtime::{Class, Object};
     use objc::{msg_send, sel, sel_impl};
 
@@ -220,14 +220,14 @@ unsafe fn disable_webview_background(view: *mut objc::runtime::Object) -> bool {
     if let Some(wk_class) = Class::get("WKWebView") {
         let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
         if is_wk {
-            let no: *mut Object = msg_send![objc::class!(NSNumber), numberWithBool: false];
+            let val: *mut Object = msg_send![objc::class!(NSNumber), numberWithBool: draws];
             let key_cstr = std::ffi::CString::new("drawsBackground").unwrap();
             let key: *mut Object = msg_send![
                 objc::class!(NSString),
                 stringWithUTF8String: key_cstr.as_ptr()
             ];
-            let _: () = msg_send![view, setValue: no forKey: key];
-            println!("[ONBOARDING] WKWebView.drawsBackground = false");
+            let _: () = msg_send![view, setValue: val forKey: key];
+            println!("[ONBOARDING] WKWebView.drawsBackground = {}", draws);
             return true;
         }
     }
@@ -236,44 +236,7 @@ unsafe fn disable_webview_background(view: *mut objc::runtime::Object) -> bool {
     let count: usize = msg_send![subviews, count];
     for i in 0..count {
         let subview: *mut Object = msg_send![subviews, objectAtIndex: i as usize];
-        if disable_webview_background(subview) {
-            return true;
-        }
-    }
-
-    false
-}
-
-/// Recursively find WKWebView and set drawsBackground = true (restore after onboarding).
-#[cfg(target_os = "macos")]
-unsafe fn restore_webview_background(view: *mut objc::runtime::Object) -> bool {
-    use objc::runtime::{Class, Object};
-    use objc::{msg_send, sel, sel_impl};
-
-    if view.is_null() {
-        return false;
-    }
-
-    if let Some(wk_class) = Class::get("WKWebView") {
-        let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
-        if is_wk {
-            let yes: *mut Object = msg_send![objc::class!(NSNumber), numberWithBool: true];
-            let key_cstr = std::ffi::CString::new("drawsBackground").unwrap();
-            let key: *mut Object = msg_send![
-                objc::class!(NSString),
-                stringWithUTF8String: key_cstr.as_ptr()
-            ];
-            let _: () = msg_send![view, setValue: yes forKey: key];
-            println!("[ONBOARDING] WKWebView.drawsBackground = true (restored)");
-            return true;
-        }
-    }
-
-    let subviews: *mut Object = msg_send![view, subviews];
-    let count: usize = msg_send![subviews, count];
-    for i in 0..count {
-        let subview: *mut Object = msg_send![subviews, objectAtIndex: i as usize];
-        if restore_webview_background(subview) {
+        if set_webview_draws_background(subview, draws) {
             return true;
         }
     }
@@ -462,7 +425,7 @@ pub fn enter_onboarding_mode(_app_handle: tauri::AppHandle) -> Result<(), String
                 set_visual_effect_views_hidden(search_root, true);
 
                 // Also disable WKWebView drawsBackground
-                disable_webview_background(content_view);
+                set_webview_draws_background(content_view, false);
             }
 
             // Swap to unconstrained subclass — bypasses macOS window constraints.
@@ -651,7 +614,7 @@ pub fn exit_onboarding_mode(_app_handle: tauri::AppHandle) -> Result<(), String>
                     set_visual_effect_views_hidden(search_root, false);
 
                     // Restore WKWebView drawsBackground
-                    restore_webview_background(content_view);
+                    set_webview_draws_background(content_view, true);
                 }
 
                 // Restore saved frame WITHOUT animation — window is hidden anyway.

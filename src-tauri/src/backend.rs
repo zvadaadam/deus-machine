@@ -144,10 +144,28 @@ impl BackendManager {
         *self.port.lock().unwrap()
     }
 
-    /// Check if backend is running
+    /// Check if backend is running (detects crashed processes via try_wait)
     pub fn is_running(&self) -> bool {
-        let process = self.process.lock().unwrap();
-        process.is_some()
+        let mut process = self.process.lock().unwrap();
+        if let Some(ref mut child) = *process {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    eprintln!("[BACKEND] Process exited unexpectedly (exit: {})", status);
+                    *process = None;
+                    *self.port.lock().unwrap() = None;
+                    false
+                }
+                Ok(None) => true,
+                Err(e) => {
+                    eprintln!("[BACKEND] Failed to check process status: {}", e);
+                    *process = None;
+                    *self.port.lock().unwrap() = None;
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     /// Stop the backend server
