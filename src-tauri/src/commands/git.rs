@@ -1,7 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 use tauri::Emitter;
-use crate::git;
+use crate::git::{self, DiffStats, DiffFile, ChangedFilesResult, FileDiffResult};
 
 #[derive(serde::Serialize, Clone)]
 pub struct GitCloneProgress {
@@ -356,46 +356,15 @@ pub async fn git_clone(
 }
 
 // ============================================================================
-// NEW GIT COMMANDS (delegate to crate::git module)
+// GIT COMMANDS (delegate to crate::git module)
 // ============================================================================
-
-/// Response types for git diff operations
-#[derive(serde::Serialize)]
-pub struct DiffStatsResponse {
-    pub additions: u32,
-    pub deletions: u32,
-}
-
-#[derive(serde::Serialize)]
-pub struct DiffFileResponse {
-    pub file: String,
-    pub additions: u32,
-    pub deletions: u32,
-}
-
-#[derive(serde::Serialize)]
-pub struct ChangedFilesResponse {
-    pub files: Vec<DiffFileResponse>,
-    /// True if the list was truncated (too many files)
-    pub truncated: bool,
-    /// Total number of changed files (before truncation)
-    pub total_count: usize,
-}
-
-#[derive(serde::Serialize)]
-pub struct FileDiffResponse {
-    pub file: String,
-    pub diff: String,
-    pub old_content: Option<String>,
-    pub new_content: Option<String>,
-}
 
 #[tauri::command]
 pub fn git_diff_stats(
     workspace_path: String,
     parent_branch: String,
     default_branch: String,
-) -> Result<DiffStatsResponse, String> {
+) -> Result<DiffStats, String> {
     let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let stats = git::get_diff_stats(&workspace_path, &resolved)?;
@@ -406,7 +375,7 @@ pub fn git_diff_stats(
             stats.additions, stats.deletions, elapsed.as_millis(), workspace_path
         );
     }
-    Ok(DiffStatsResponse { additions: stats.additions, deletions: stats.deletions })
+    Ok(stats)
 }
 
 #[tauri::command]
@@ -414,7 +383,7 @@ pub fn git_diff_files(
     workspace_path: String,
     parent_branch: String,
     default_branch: String,
-) -> Result<ChangedFilesResponse, String> {
+) -> Result<ChangedFilesResult, String> {
     let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let result = git::get_changed_files(&workspace_path, &resolved)?;
@@ -425,13 +394,7 @@ pub fn git_diff_files(
             workspace_path,
             if result.truncated { " TRUNCATED" } else { "" });
     }
-    Ok(ChangedFilesResponse {
-        files: result.files.into_iter().map(|f| DiffFileResponse {
-            file: f.file, additions: f.additions, deletions: f.deletions
-        }).collect(),
-        truncated: result.truncated,
-        total_count: result.total_count,
-    })
+    Ok(result)
 }
 
 #[tauri::command]
@@ -440,7 +403,7 @@ pub fn git_diff_file(
     parent_branch: String,
     default_branch: String,
     file_path: String,
-) -> Result<FileDiffResponse, String> {
+) -> Result<FileDiffResult, String> {
     let start = Instant::now();
     let resolved = git::resolve_parent_branch(&workspace_path, Some(&parent_branch), Some(&default_branch));
     let diff = git::get_file_patch(&workspace_path, &resolved, &file_path)?;
@@ -448,7 +411,6 @@ pub fn git_diff_file(
     let old_content = git::get_git_file_content(&workspace_path, &merge_base, &file_path)?;
 
     // Read from working directory (not HEAD) since diffs compare merge-base against workdir.
-    // Matches the Node.js fallback in backend/src/routes/workspaces.ts.
     // Validate that file_path doesn't escape the workspace (prevents path traversal).
     let workdir_path = validate_workspace_path(&workspace_path, &file_path)?;
     let new_content = match std::fs::read(&workdir_path) {
@@ -467,38 +429,22 @@ pub fn git_diff_file(
     if elapsed.as_millis() > 200 {
         println!("[GIT] git_diff_file took {}ms ({}: {})", elapsed.as_millis(), workspace_path, file_path);
     }
-    Ok(FileDiffResponse { file: file_path, diff, old_content, new_content })
+    Ok(FileDiffResult { file: file_path, diff, old_content, new_content })
 }
 
 #[tauri::command]
 pub fn git_uncommitted_files(
     workspace_path: String,
-) -> Result<Vec<DiffFileResponse>, String> {
-    let files = git::get_uncommitted_files(&workspace_path)?;
-    Ok(files
-        .into_iter()
-        .map(|f| DiffFileResponse {
-            file: f.file,
-            additions: f.additions,
-            deletions: f.deletions,
-        })
-        .collect())
+) -> Result<Vec<DiffFile>, String> {
+    git::get_uncommitted_files(&workspace_path)
 }
 
 #[tauri::command]
 pub fn git_last_turn_files(
     workspace_path: String,
     session_id: String,
-) -> Result<Vec<DiffFileResponse>, String> {
-    let files = git::get_last_turn_files(&workspace_path, &session_id)?;
-    Ok(files
-        .into_iter()
-        .map(|f| DiffFileResponse {
-            file: f.file,
-            additions: f.additions,
-            deletions: f.deletions,
-        })
-        .collect())
+) -> Result<Vec<DiffFile>, String> {
+    git::get_last_turn_files(&workspace_path, &session_id)
 }
 
 #[tauri::command]
@@ -612,16 +558,16 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn diff_stats_response_serializes() {
-        let resp = DiffStatsResponse { additions: 42, deletions: 7 };
+    fn diff_stats_serializes() {
+        let resp = DiffStats { additions: 42, deletions: 7 };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"additions\":42"));
         assert!(json.contains("\"deletions\":7"));
     }
 
     #[test]
-    fn diff_file_response_serializes() {
-        let resp = DiffFileResponse {
+    fn diff_file_serializes() {
+        let resp = DiffFile {
             file: "test.rs".to_string(),
             additions: 10,
             deletions: 3,
@@ -631,8 +577,8 @@ mod tests {
     }
 
     #[test]
-    fn file_diff_response_serializes_with_none_content() {
-        let resp = FileDiffResponse {
+    fn file_diff_result_serializes_with_none_content() {
+        let resp = FileDiffResult {
             file: "new.rs".to_string(),
             diff: "+added line".to_string(),
             old_content: None,

@@ -19,6 +19,15 @@ use std::path::PathBuf;
 
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
+/// Browser definitions: (name, keychain_service, cookie_db_path_suffix).
+/// Path suffix is relative to $HOME.
+const BROWSER_DEFINITIONS: &[(&str, &str, &str)] = &[
+    ("Chrome", "Chrome Safe Storage", "Library/Application Support/Google/Chrome/Default/Cookies"),
+    ("Arc", "Arc Safe Storage", "Library/Application Support/Arc/User Data/Default/Cookies"),
+    ("Brave", "Brave Safe Storage", "Library/Application Support/BraveSoftware/Brave-Browser/Default/Cookies"),
+    ("Edge", "Microsoft Edge Safe Storage", "Library/Application Support/Microsoft Edge/Default/Cookies"),
+];
+
 /// A browser that can provide cookies
 #[derive(Debug, Serialize, Clone)]
 pub struct InstalledBrowser {
@@ -45,51 +54,17 @@ pub struct DecryptedCookie {
 #[tauri::command]
 pub async fn get_cookie_browsers() -> Result<Vec<InstalledBrowser>, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let browsers = vec![
-        InstalledBrowser {
-            name: "Chrome".to_string(),
-            keychain_service: "Chrome Safe Storage".to_string(),
-            cookie_db_path: format!(
-                "{}/Library/Application Support/Google/Chrome/Default/Cookies",
-                home
-            ),
-            available: false,
-        },
-        InstalledBrowser {
-            name: "Arc".to_string(),
-            keychain_service: "Arc Safe Storage".to_string(),
-            cookie_db_path: format!(
-                "{}/Library/Application Support/Arc/User Data/Default/Cookies",
-                home
-            ),
-            available: false,
-        },
-        InstalledBrowser {
-            name: "Brave".to_string(),
-            keychain_service: "Brave Safe Storage".to_string(),
-            cookie_db_path: format!(
-                "{}/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cookies",
-                home
-            ),
-            available: false,
-        },
-        InstalledBrowser {
-            name: "Edge".to_string(),
-            keychain_service: "Microsoft Edge Safe Storage".to_string(),
-            cookie_db_path: format!(
-                "{}/Library/Application Support/Microsoft Edge/Default/Cookies",
-                home
-            ),
-            available: false,
-        },
-    ];
-
-    let mut result: Vec<InstalledBrowser> = Vec::new();
-    for mut browser in browsers {
-        browser.available = PathBuf::from(&browser.cookie_db_path).exists();
-        result.push(browser);
+    let mut result = Vec::new();
+    for (name, keychain_service, path_suffix) in BROWSER_DEFINITIONS {
+        let cookie_db_path = format!("{}/{}", home, path_suffix);
+        let available = PathBuf::from(&cookie_db_path).exists();
+        result.push(InstalledBrowser {
+            name: name.to_string(),
+            keychain_service: keychain_service.to_string(),
+            cookie_db_path,
+            available,
+        });
     }
-
     Ok(result)
 }
 
@@ -106,38 +81,12 @@ pub async fn sync_browser_cookies(
 ) -> Result<Vec<DecryptedCookie>, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
 
-    // Find the browser config
-    let (keychain_service, cookie_db_path) = match browser_name.as_str() {
-        "Chrome" => (
-            "Chrome Safe Storage",
-            format!(
-                "{}/Library/Application Support/Google/Chrome/Default/Cookies",
-                home
-            ),
-        ),
-        "Arc" => (
-            "Arc Safe Storage",
-            format!(
-                "{}/Library/Application Support/Arc/User Data/Default/Cookies",
-                home
-            ),
-        ),
-        "Brave" => (
-            "Brave Safe Storage",
-            format!(
-                "{}/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cookies",
-                home
-            ),
-        ),
-        "Edge" => (
-            "Microsoft Edge Safe Storage",
-            format!(
-                "{}/Library/Application Support/Microsoft Edge/Default/Cookies",
-                home
-            ),
-        ),
-        _ => return Err(format!("Unknown browser: {}", browser_name)),
-    };
+    // Find the browser config from shared definitions
+    let (keychain_service, cookie_db_path) = BROWSER_DEFINITIONS
+        .iter()
+        .find(|(name, _, _)| *name == browser_name.as_str())
+        .map(|(_, ks, suffix)| (*ks, format!("{}/{}", home, suffix)))
+        .ok_or_else(|| format!("Unknown browser: {}", browser_name))?;
 
     // Step 1: Get encryption key from macOS Keychain
     let keychain_password = get_keychain_password(keychain_service)?;
