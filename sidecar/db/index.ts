@@ -91,5 +91,3 @@ export function closeDatabase(): void {
     dbClosed = true;
   }
 }
-
-export { DEFAULT_DB_PATH };

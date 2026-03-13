@@ -106,9 +106,7 @@ export function settingsChanged(
 ): boolean {
   if (!oldSettings) return true;
 
-  const normalizeValue = (val: any) => (val === null || val === undefined ? undefined : val);
-
-  if (normalizeValue(oldSettings.claudeEnvVars) !== normalizeValue(newSettings?.claudeEnvVars)) {
+  if (oldSettings.claudeEnvVars !== newSettings?.claudeEnvVars) {
     return true;
   }
 
@@ -143,12 +141,4 @@ export function terminateSession(sessionId: string): void {
   }
   // Note: queries cleanup is owned by processWithGenerator's finally block.
   // We only signal termination here — the finally block calls deleteQuery + deleteSession.
-}
-
-/**
- * Clears all sessions and queries. Used in tests.
- */
-export function clearAllSessions(): void {
-  activeSessions.clear();
-  queries.clear();
 }
