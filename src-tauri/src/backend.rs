@@ -164,6 +164,8 @@ impl BackendManager {
                 }
             }
         } else {
+            // No process — clear any stale port
+            *self.port.lock().unwrap() = None;
             false
         }
     }
@@ -180,6 +182,9 @@ impl BackendManager {
                 Err(e) => eprintln!("[BACKEND] Backend stopped (wait error: {})", e),
             }
         }
+
+        // Clear stale port so a subsequent start() doesn't skip the wait loop
+        *self.port.lock().unwrap() = None;
 
         Ok(())
     }

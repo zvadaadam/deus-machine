@@ -65,9 +65,14 @@ impl BrowserManager {
                     println!("[BROWSER] {}", line);
 
                     // Parse port from "Server URL: http://localhost:PORT"
+                    // Extract only leading digits to handle suffixes like "/" or " (ready)"
                     if line.contains("Server URL:") && line.contains("localhost:") {
-                        if let Some(url_part) = line.split("localhost:").nth(1) {
-                            let port_str = url_part.trim();
+                        if let Some((_, url_part)) = line.split_once("localhost:") {
+                            let port_str = url_part
+                                .trim()
+                                .split(|c: char| !c.is_ascii_digit())
+                                .next()
+                                .unwrap_or_default();
                             if let Ok(port_num) = port_str.parse::<u16>() {
                                 *port_clone.lock().unwrap() = Some(port_num);
                                 println!("[BROWSER] Detected port: {}", port_num);
