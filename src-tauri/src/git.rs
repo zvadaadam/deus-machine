@@ -298,6 +298,24 @@ fn count_file_lines(path: &std::path::Path) -> u32 {
     }
 }
 
+/// Parse a single `git diff --numstat` line into a DiffFile.
+/// Format: "{additions}\t{deletions}\t{filename}" (binary files show "-" for counts).
+fn parse_numstat_line(line: &str) -> Option<DiffFile> {
+    if line.is_empty() {
+        return None;
+    }
+    let parts: Vec<&str> = line.split('\t').collect();
+    if parts.len() >= 3 {
+        Some(DiffFile {
+            file: parts[2].to_string(),
+            additions: parts[0].parse().unwrap_or(0),
+            deletions: parts[1].parse().unwrap_or(0),
+        })
+    } else {
+        None
+    }
+}
+
 /// Count lines in untracked files and return them as DiffFile entries.
 /// Supplements `git diff --numstat` which excludes untracked files.
 fn collect_untracked_files(workspace_path: &str) -> Vec<DiffFile> {
@@ -482,22 +500,14 @@ pub fn get_diff_stats(workspace_path: &str, parent_branch: &str) -> Result<DiffS
     let mut additions = 0u32;
     let mut deletions = 0u32;
 
-    for line in numstat.lines() {
-        if line.is_empty() {
-            continue;
-        }
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() >= 2 {
-            // Binary files show "-" instead of numbers
-            additions += parts[0].parse::<u32>().unwrap_or(0);
-            deletions += parts[1].parse::<u32>().unwrap_or(0);
-        }
+    for f in numstat.lines().filter_map(parse_numstat_line) {
+        additions += f.additions;
+        deletions += f.deletions;
     }
 
     // Untracked files (new files not yet git-added by agents)
-    let untracked = collect_untracked_files(workspace_path);
-    for file in &untracked {
-        additions += file.additions;
+    for f in &collect_untracked_files(workspace_path) {
+        additions += f.additions;
     }
 
     Ok(DiffStats {
@@ -523,21 +533,7 @@ pub fn get_changed_files(
 
     let numstat = run_git_long(workspace_path, &["diff", &merge_base, "--numstat"])?;
 
-    let mut files: Vec<DiffFile> = Vec::new();
-
-    for line in numstat.lines() {
-        if line.is_empty() {
-            continue;
-        }
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() >= 3 {
-            files.push(DiffFile {
-                file: parts[2].to_string(),
-                additions: parts[0].parse().unwrap_or(0),
-                deletions: parts[1].parse().unwrap_or(0),
-            });
-        }
-    }
+    let mut files: Vec<DiffFile> = numstat.lines().filter_map(parse_numstat_line).collect();
 
     // Add untracked files (new files not yet git-added by agents)
     files.extend(collect_untracked_files(workspace_path));
@@ -840,21 +836,7 @@ pub fn get_uncommitted_files(workspace_path: &str) -> Result<Vec<DiffFile>, Stri
     // Tracked file changes: staged + unstaged (git diff HEAD --numstat)
     let numstat = run_git(workspace_path, &["diff", "HEAD", "--numstat"])?;
 
-    let mut files: Vec<DiffFile> = Vec::new();
-
-    for line in numstat.lines() {
-        if line.is_empty() {
-            continue;
-        }
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() >= 3 {
-            files.push(DiffFile {
-                file: parts[2].to_string(),
-                additions: parts[0].parse().unwrap_or(0),
-                deletions: parts[1].parse().unwrap_or(0),
-            });
-        }
-    }
+    let mut files: Vec<DiffFile> = numstat.lines().filter_map(parse_numstat_line).collect();
 
     // Untracked files
     files.extend(collect_untracked_files(workspace_path));
