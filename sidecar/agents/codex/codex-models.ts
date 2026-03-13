@@ -10,5 +10,5 @@ const DEFAULT_MODEL = "o4-mini";
  * names are passed through directly to the SDK.
  */
 export function resolveCodexModel(model: string | undefined): string {
-  return model || DEFAULT_MODEL;
+  return model ?? DEFAULT_MODEL;
 }
