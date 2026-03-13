@@ -19,19 +19,3 @@ pub fn unwatch_workspace(
     watcher.unwatch(&workspace_path)
 }
 
-/// Check if a workspace is currently being watched.
-#[tauri::command]
-pub fn is_workspace_watched(
-    workspace_path: String,
-    watcher: tauri::State<'_, WatcherManager>,
-) -> bool {
-    watcher.is_watching(&workspace_path)
-}
-
-/// List all currently watched workspace paths (diagnostics).
-#[tauri::command]
-pub fn list_watched_workspaces(
-    watcher: tauri::State<'_, WatcherManager>,
-) -> Vec<String> {
-    watcher.list_watched()
-}

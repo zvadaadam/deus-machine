@@ -107,26 +107,23 @@ fn main() {
             let backend_manager: tauri::State<BackendManager> = app.state();
             backend_manager.set_app_handle(app.handle().clone());
 
-            // Determine backend path
-            // In dev: Get the workspace root (project directory)
-            // In prod: resources/backend/server.cjs (bundled in app)
-            let backend_path = if cfg!(dev) {
-                // Development mode - resolve relative to the executable
+            // Compute the base directory for bundled resources.
+            // Dev: project root (4 levels up from the Tauri executable).
+            // Prod: Contents/Resources/ inside the app bundle.
+            let resource_base = if cfg!(dev) {
                 let exe = std::env::current_exe()
-                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
-                let exe_dir = exe.ancestors()
+                    .map_err(|e| format!("Failed to get current exe: {e}"))?;
+                exe.ancestors()
                     .nth(4)
                     .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
-                    .to_path_buf();
-                exe_dir.join("backend/server.cjs")
+                    .to_path_buf()
             } else {
-                // Production mode
                 app.path()
                     .resource_dir()
-                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
-                    .join("backend/server.cjs")
+                    .map_err(|e| format!("Failed to get resource dir: {e}"))?
             };
 
+            let backend_path = resource_base.join("backend/server.cjs");
             println!("[TAURI] Starting backend from: {}", backend_path.display());
 
             match backend_manager.start(backend_path.clone(), &db_path) {
@@ -146,27 +143,10 @@ fn main() {
             // Start sidecar-v2 (agent runtime)
             let sidecar_manager: tauri::State<SidecarManager> = app.state();
 
-            // Determine sidecar path
-            let exe_dir = if cfg!(dev) {
-                let exe = std::env::current_exe()
-                    .map_err(|e| format!("Failed to get current exe: {}", e))?;
-                exe.ancestors()
-                    .nth(4)
-                    .ok_or_else(|| "Executable path does not have enough parent directories".to_string())?
-                    .to_path_buf()
-            } else {
-                app.path()
-                    .resource_dir()
-                    .map_err(|e| format!("Failed to get resource dir: {}", e))?
-            };
-
-            // Sidecar path: resources/bin/index.bundled.cjs
-            // In dev: relative to working directory
-            // In prod: relative to resource_dir (Contents/Resources/)
             let sidecar_path = if cfg!(dev) {
-                exe_dir.join("src-tauri/resources/bin/index.bundled.cjs")
+                resource_base.join("src-tauri/resources/bin/index.bundled.cjs")
             } else {
-                exe_dir.join("bin/index.bundled.cjs")
+                resource_base.join("bin/index.bundled.cjs")
             };
 
             println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
@@ -272,7 +252,6 @@ fn main() {
                         commands::connect_to_sidecar,
                         commands::send_sidecar_message,
                         commands::receive_sidecar_message,
-                        commands::disconnect_from_sidecar,
                         commands::is_sidecar_connected,
                         commands::get_sidecar_socket_path,
                         commands::get_backend_port,
@@ -324,8 +303,6 @@ fn main() {
                         commands::db_get_messages,
                         commands::watch_workspace,
                         commands::unwatch_workspace,
-                        commands::is_workspace_watched,
-                        commands::list_watched_workspaces,
                         $(commands::$extra),*
                     ]
                 };

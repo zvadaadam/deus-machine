@@ -77,6 +77,8 @@ struct WatcherEntry {
     _watcher: RecommendedWatcher,
     /// Canonicalized path being watched
     canonical_path: PathBuf,
+    /// Cached gitignore matcher — built once on watch(), rebuilt when .gitignore changes
+    gitignore: Option<Gitignore>,
 }
 
 /// Pending debounce state for a workspace
@@ -132,6 +134,7 @@ impl WatcherManager {
         *running = true;
         drop(running);
 
+        let watchers = self.watchers.clone();
         let pending = self.pending.clone();
         let app_handle = self.app_handle.clone();
         let debounce_running = self.debounce_running.clone();
@@ -168,9 +171,25 @@ impl WatcherManager {
                     }
                 }
 
-                // Flush each ready batch (outside the lock)
+                // Flush each ready batch (outside the pending lock)
                 for (workspace_path, batch) in to_flush {
-                    let filtered = filter_ignored_paths(&workspace_path, &batch.raw_paths);
+                    // Check if .gitignore itself changed — rebuild cache if so
+                    let gitignore_changed = batch.raw_paths.iter().any(|p| {
+                        p.file_name().and_then(|n| n.to_str()) == Some(".gitignore")
+                    });
+                    if gitignore_changed {
+                        if let Some(entry) = watchers.write().get_mut(&workspace_path) {
+                            entry.gitignore = build_gitignore(&workspace_path);
+                        }
+                    }
+
+                    // Use cached gitignore from WatcherEntry (avoids re-parsing on every flush)
+                    let cached_gi = watchers.read()
+                        .get(&workspace_path)
+                        .and_then(|e| e.gitignore.clone());
+                    let filtered = filter_ignored_paths_with(
+                        &workspace_path, &batch.raw_paths, cached_gi.as_ref(),
+                    );
                     let affected_count = filtered.len();
 
                     if affected_count == 0 {
@@ -274,6 +293,7 @@ impl WatcherManager {
         let entry = WatcherEntry {
             _watcher: watcher,
             canonical_path: canonical.clone(),
+            gitignore: build_gitignore(&canonical),
         };
 
         self.watchers.write().insert(canonical.clone(), entry);
@@ -359,8 +379,21 @@ fn build_gitignore(workspace_path: &Path) -> Option<Gitignore> {
 
 /// Filter a batch of changed paths through .gitignore rules.
 /// Returns only paths that are NOT ignored.
-fn filter_ignored_paths(workspace_path: &Path, paths: &[PathBuf]) -> Vec<PathBuf> {
-    let gitignore = build_gitignore(workspace_path);
+/// Uses a pre-built Gitignore when available (cached in WatcherEntry),
+/// falls back to building from disk if not provided.
+fn filter_ignored_paths_with(
+    workspace_path: &Path,
+    paths: &[PathBuf],
+    cached_gitignore: Option<&Gitignore>,
+) -> Vec<PathBuf> {
+    let built;
+    let gitignore = match cached_gitignore {
+        Some(gi) => Some(gi),
+        None => {
+            built = build_gitignore(workspace_path);
+            built.as_ref()
+        }
+    };
 
     paths
         .iter()
@@ -371,7 +404,7 @@ fn filter_ignored_paths(workspace_path: &Path, paths: &[PathBuf]) -> Vec<PathBuf
             }
 
             // Check against .gitignore rules
-            if let Some(ref gi) = gitignore {
+            if let Some(gi) = gitignore {
                 let relative = path.strip_prefix(workspace_path).unwrap_or(path);
                 let is_dir = path.is_dir();
 
@@ -490,7 +523,7 @@ mod tests {
             root.join(".git/objects/abc123"),
         ];
 
-        let filtered = filter_ignored_paths(root, &paths);
+        let filtered = filter_ignored_paths_with(root, &paths, None);
 
         // Only app.ts should pass through
         assert_eq!(filtered.len(), 1);
@@ -509,7 +542,7 @@ mod tests {
             root.join("src/main.rs"),
         ];
 
-        let filtered = filter_ignored_paths(root, &paths);
+        let filtered = filter_ignored_paths_with(root, &paths, None);
 
         assert_eq!(filtered.len(), 1);
         assert!(filtered[0].ends_with("src/main.rs"));

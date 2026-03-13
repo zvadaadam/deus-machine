@@ -13,6 +13,7 @@ pub struct PtySession {
 }
 
 struct PtySessionInternal {
+    master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     _reader_thread: thread::JoinHandle<()>,
 }
@@ -98,6 +99,7 @@ impl PtyManager {
         });
 
         let session = PtySessionInternal {
+            master: pair.master,
             writer,
             _reader_thread: reader_thread,
         };
@@ -107,10 +109,19 @@ impl PtyManager {
         Ok(id)
     }
 
-    pub fn resize(&self, _id: &str, _cols: u16, _rows: u16) -> anyhow::Result<()> {
-        // Note: portable-pty doesn't expose resize directly on the writer
-        // This is a limitation we'll document
-        Ok(())
+    pub fn resize(&self, id: &str, cols: u16, rows: u16) -> anyhow::Result<()> {
+        let sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.get(id) {
+            session.master.resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }).map_err(|e| anyhow::anyhow!("Failed to resize PTY: {}", e))?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("PTY instance not found: {}", id))
+        }
     }
 
     pub fn write(&self, id: &str, data: Vec<u8>) -> anyhow::Result<()> {
