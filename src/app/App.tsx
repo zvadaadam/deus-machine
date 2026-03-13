@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import type { ComponentType, ReactNode, ErrorInfo } from "react";
-import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import type { ErrorInfo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import { LazyMotion, domAnimation } from "framer-motion";
 import { MainLayout } from "./layouts/MainLayout";
 import { DetachedBrowserWindow } from "@/features/browser/ui/DetachedBrowserWindow";
 import { ErrorFallback, DashboardError } from "@/shared/components";
@@ -12,7 +13,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { OnboardingOverlay } from "@/features/onboarding";
 import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
-import { isTauriEnv, invoke } from "@/platform/tauri";
+import { invoke } from "@/platform/tauri";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
@@ -24,24 +25,17 @@ import { useAnalyticsConsent } from "@/platform/analytics";
 // The main window creates it with ?window=browser-detached in the URL.
 const isDetachedBrowser =
   new URLSearchParams(window.location.search).get("window") === "browser-detached";
-type ConditionalErrorBoundaryProps = {
-  fallback: ComponentType<FallbackProps>;
-  onReset?: () => void;
-  onError?: (error: unknown, info: ErrorInfo) => void;
-  children: ReactNode;
-};
 
-function ConditionalErrorBoundary({
-  fallback,
-  onReset,
-  onError,
-  children,
-}: ConditionalErrorBoundaryProps) {
-  return (
-    <ErrorBoundary FallbackComponent={fallback} onReset={onReset} onError={onError}>
-      {children}
-    </ErrorBoundary>
-  );
+/** Shared error handler for React error boundaries — reports + stores component stack. */
+function createBoundaryErrorHandler(source: string) {
+  return (error: unknown, info: ErrorInfo) => {
+    reportError(error, {
+      source,
+      extra: { componentStack: info.componentStack ?? undefined },
+    });
+    (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
+      info.componentStack ?? undefined;
+  };
 }
 
 /**
@@ -114,10 +108,8 @@ function AppContent({ reset }: { reset: () => void }) {
       return;
     }
     if (windowShownRef.current) return;
-    if (isTauriEnv) {
-      invoke("show_main_window").catch(console.error);
-      windowShownRef.current = true;
-    }
+    invoke("show_main_window").catch(console.error);
+    windowShownRef.current = true;
   }, [settingsQuery.isLoading, showOnboarding]);
 
   // Remote browser auth gate: show pairing page if not authenticated
@@ -138,23 +130,13 @@ function AppContent({ reset }: { reset: () => void }) {
           <Route
             path="/"
             element={
-              <ConditionalErrorBoundary
-                fallback={DashboardError}
+              <ErrorBoundary
+                FallbackComponent={DashboardError}
                 onReset={reset}
-                onError={(error, info) => {
-                  reportError(error, {
-                    source: "react.error-boundary.root",
-                    extra: { componentStack: info.componentStack ?? undefined },
-                  });
-                  if (typeof window !== "undefined") {
-                    (
-                      window as { __APP_LAST_COMPONENT_STACK__?: string }
-                    ).__APP_LAST_COMPONENT_STACK__ = info.componentStack ?? undefined;
-                  }
-                }}
+                onError={createBoundaryErrorHandler("react.error-boundary.root")}
               >
                 <MainLayout />
-              </ConditionalErrorBoundary>
+              </ErrorBoundary>
             }
           />
         </Routes>
@@ -182,7 +164,7 @@ const WINDOW_SHOW_TIMEOUT_MS = 5_000;
 function useWindowShowSafetyNet() {
   const shownRef = useRef(false);
   useEffect(() => {
-    if (!isTauriEnv || shownRef.current) return;
+    if (shownRef.current) return;
     const timer = setTimeout(() => {
       if (!shownRef.current) {
         shownRef.current = true;
@@ -198,43 +180,32 @@ function App() {
   // Safety net — force-show window if nothing else does within 5s
   useWindowShowSafetyNet();
 
-  // Detached browser window: minimal shell with just the browser panel
-  if (isDetachedBrowser) {
-    return (
-      <QueryClientProvider>
-        <ThemeProvider>
-          <DetachedBrowserWindow />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
-  }
-
-  return (
+  const content = isDetachedBrowser ? (
+    // Detached browser window: minimal shell with just the browser panel
+    <QueryClientProvider>
+      <ThemeProvider>
+        <DetachedBrowserWindow />
+      </ThemeProvider>
+    </QueryClientProvider>
+  ) : (
     <QueryClientProvider>
       <QueryErrorResetBoundary>
         {({ reset }) => (
-          <ConditionalErrorBoundary
-            fallback={ErrorFallback}
+          <ErrorBoundary
+            FallbackComponent={ErrorFallback}
             onReset={reset}
-            onError={(error, info) => {
-              reportError(error, {
-                source: "react.error-boundary",
-                extra: { componentStack: info.componentStack ?? undefined },
-              });
-              if (typeof window !== "undefined") {
-                (window as { __APP_LAST_COMPONENT_STACK__?: string }).__APP_LAST_COMPONENT_STACK__ =
-                  info.componentStack ?? undefined;
-              }
-            }}
+            onError={createBoundaryErrorHandler("react.error-boundary")}
           >
             <ThemeProvider>
               <AppContent reset={reset} />
             </ThemeProvider>
-          </ConditionalErrorBoundary>
+          </ErrorBoundary>
         )}
       </QueryErrorResetBoundary>
     </QueryClientProvider>
   );
+
+  return <LazyMotion features={domAnimation} strict>{content}</LazyMotion>;
 }
 
 export default App;

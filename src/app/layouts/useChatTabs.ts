@@ -40,6 +40,13 @@ function sessionToTab(session: Session, sequence: number): Tab {
   };
 }
 
+/** Count started tabs of a given agent type, excluding a specific tab. */
+function countStartedTabsOfType(tabs: Tab[], agentType: string, excludeTabId: string): number {
+  return tabs.filter(
+    (t) => t.id !== excludeTabId && t.data?.hasStarted && t.data?.agentType === agentType
+  ).length;
+}
+
 /** Compute per-agent-type sequence numbers for a list of sessions (in order). */
 function computeSequences(sessions: Session[]): Map<string, number> {
   const counters = new Map<string, number>();
@@ -329,13 +336,8 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       let nextLabel = hasStarted ? tab.label : NEW_CHAT_LABEL;
 
       if (hasStarted) {
-        const taken = prevTabs.filter(
-          (candidate) =>
-            candidate.id !== tabId &&
-            candidate.data?.hasStarted &&
-            candidate.data?.agentType === nextAgentType
-        ).length;
-        nextLabel = buildStartedChatLabel(nextAgentType, taken + 1);
+        const sequence = countStartedTabsOfType(prevTabs, nextAgentType, tabId) + 1;
+        nextLabel = buildStartedChatLabel(nextAgentType, sequence);
       }
 
       const updatedTabs = [...prevTabs];
@@ -357,18 +359,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (tab.data?.hasStarted) return prevTabs;
 
       const agentType = (tab.data?.agentType as RuntimeAgentType | undefined) ?? "claude";
-      const taken = prevTabs.filter(
-        (candidate) =>
-          candidate.id !== tabId &&
-          candidate.data?.hasStarted &&
-          candidate.data?.agentType === agentType
-      ).length;
-      const nextSequence = taken + 1;
+      const sequence = countStartedTabsOfType(prevTabs, agentType, tabId) + 1;
 
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: buildStartedChatLabel(agentType, nextSequence),
+        label: buildStartedChatLabel(agentType, sequence),
         data: { ...tab.data, agentType, hasStarted: true },
       };
       return updatedTabs;

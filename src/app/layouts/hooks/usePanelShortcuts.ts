@@ -1,5 +1,5 @@
 /**
- * Keyboard Shortcuts Hook
+ * Panel Shortcut Hook
  *
  * Cmd+\  toggles the session (chat) panel
  * Cmd+]  toggles the content panel
@@ -11,7 +11,7 @@
 import { useEffect } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
-interface UseKeyboardShortcutsOptions {
+interface UsePanelShortcutsOptions {
   /** Whether any workspace is selected (shortcuts disabled without one) */
   enabled: boolean;
   /** Chat panel state */
@@ -22,13 +22,13 @@ interface UseKeyboardShortcutsOptions {
   contentPanelRef: React.RefObject<ImperativePanelHandle | null>;
 }
 
-export function useKeyboardShortcuts({
+export function usePanelShortcuts({
   enabled,
   chatPanelCollapsed,
   chatPanelRef,
   contentPanelCollapsed,
   contentPanelRef,
-}: UseKeyboardShortcutsOptions) {
+}: UsePanelShortcutsOptions) {
   useEffect(() => {
     if (!enabled) return;
     const handler = (e: KeyboardEvent) => {

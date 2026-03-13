@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { toast } from "sonner";
 import type { SessionPanelRef } from "@/features/session";
 import { NewWorkspaceModal, CloneRepositoryModal } from "@/features/repository";
-import type { Repository } from "@/features/repository/types";
 import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
@@ -12,22 +10,16 @@ import {
   useTauriDragZone,
   useWindowResizing,
 } from "@/shared/hooks";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   useWorkspacesByRepo,
   useBulkDiffStats,
   usePRStatus,
   useGhStatus,
-  useCreateWorkspace,
   useArchiveWorkspace,
   useUnarchiveWorkspace,
-  useSystemPrompt,
-  useUpdateSystemPrompt,
 } from "@/features/workspace/api";
-import { WorkspaceService } from "@/features/workspace/api/workspace.service";
-import { queryKeys } from "@/shared/api/queryKeys";
 import { useResizeHandle } from "@/features/workspace";
-import { useRepos, useAddRepo } from "@/features/repository/api";
+import { useRepos } from "@/features/repository/api";
 import { useSettings as useSettingsQuery } from "@/features/settings";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
@@ -42,10 +34,12 @@ import {
 } from "@/shared/stores/chatInsertStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
-import { invoke, listen, isTauriEnv, createListenerGroup, CHAT_INSERT } from "@/platform/tauri";
+import { listen, createListenerGroup, CHAT_INSERT } from "@/platform/tauri";
 import { CommandPalette } from "@/features/command-palette";
 import { MainContent } from "./MainContent";
-import { extractRepoNameFromUrl } from "@/shared/lib/utils";
+import { useRepoActions } from "./hooks/useRepoActions";
+import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
+import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 
 /**
@@ -94,7 +88,6 @@ export function MainLayout() {
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
   // TanStack Query
-  const queryClient = useQueryClient();
   const workspacesQuery = useWorkspacesByRepo();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
@@ -118,14 +111,6 @@ export function MainLayout() {
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
 
-  // Local component state
-  const [selectedRepoId, setSelectedRepoId] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const [showCloneModal, setShowCloneModal] = useState(false);
-  const [cloneError, setCloneError] = useState<string | null>(null);
-  const [cloneStatus, setCloneStatus] = useState<string | null>(null);
-
   // Sidebar resize: null = default 344px, number = user-set width
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
   // Tracks drag state to disable sidebar CSS transitions during resize
@@ -134,25 +119,9 @@ export function MainLayout() {
   // Ref for inserting text from browser element selector
   const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
 
-  // Generation counter: prevents stale clone invocations from mutating state.
-  // Each call to handleCloneRepository captures its generation; if the counter
-  // advances (via close or a new clone), earlier invocations bail out.
-  const cloneGenerationRef = useRef(0);
-
-  // Queries for repos, settings, system prompt
+  // Queries for repos, settings
   const reposQuery = useRepos();
   const settingsQuery = useSettingsQuery();
-  const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
-
-  // Local draft state for system prompt modal
-  const [systemPromptDraft, setSystemPromptDraft] = useState("");
-
-  // Initialize system prompt draft when modal opens
-  useEffect(() => {
-    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
-      setSystemPromptDraft(systemPromptQuery.data || "");
-    }
-  }, [showSystemPromptModal, systemPromptQuery.data]);
 
   const repos = reposQuery.data || [];
   const username = settingsQuery.data?.user_name || "My Account";
@@ -167,12 +136,84 @@ export function MainLayout() {
     sessionStatus: selectedWorkspace?.session_status ?? undefined,
   });
 
-  // Mutations
-  const createWorkspaceMutation = useCreateWorkspace();
+  // --- Extracted hooks ---
+
+  const repoActions = useRepoActions({
+    selectWorkspace,
+    openNewWorkspaceModal,
+    closeNewWorkspaceModal,
+  });
+
+  // --- System prompt (inline — small scope, one modal) ---
+
+  const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
+  const updateSystemPromptMutation = useUpdateSystemPrompt();
+  const [systemPromptDraft, setSystemPromptDraft] = useState("");
+
+  // Initialize system prompt draft when modal opens
+  useEffect(() => {
+    if (showSystemPromptModal && systemPromptQuery.data !== undefined) {
+      setSystemPromptDraft(systemPromptQuery.data || "");
+    }
+  }, [showSystemPromptModal, systemPromptQuery.data]);
+
+  async function saveSystemPrompt() {
+    if (!selectedWorkspace) return;
+    try {
+      await updateSystemPromptMutation.mutateAsync({
+        workspaceId: selectedWorkspace.id,
+        systemPrompt: systemPromptDraft,
+      });
+      closeSystemPromptModal();
+    } catch (error) {
+      console.error("Failed to save system prompt:", error);
+      toast.error(getErrorMessage(error));
+    }
+  }
+
+  // --- Archive with undo (ref-stable for memoized sidebar items) ---
+
   const archiveWorkspaceMutation = useArchiveWorkspace();
   const unarchiveMutation = useUnarchiveWorkspace();
-  const addRepoMutation = useAddRepo();
-  const updateSystemPromptMutation = useUpdateSystemPrompt();
+
+  // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
+  // change frequently (every render / every workspace click), so we capture
+  // them in refs to keep the callback identity stable. This matters because
+  // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
+  const archiveMutationRef = useRef(archiveWorkspaceMutation);
+  archiveMutationRef.current = archiveWorkspaceMutation;
+  const unarchiveMutationRef = useRef(unarchiveMutation);
+  unarchiveMutationRef.current = unarchiveMutation;
+  const selectedWorkspaceRef = useRef(selectedWorkspace);
+  selectedWorkspaceRef.current = selectedWorkspace;
+
+  const archiveWorkspace = useCallback(
+    async (workspaceId: string) => {
+      try {
+        await archiveMutationRef.current.mutateAsync(workspaceId);
+        if (selectedWorkspaceRef.current?.id === workspaceId) {
+          selectWorkspace(null);
+        }
+        toast("Workspace archived", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
+                toast.error(getErrorMessage(error));
+              });
+            },
+          },
+        });
+      } catch (error) {
+        console.error("Error archiving workspace:", error);
+        toast.error(getErrorMessage(error));
+      }
+    },
+    [selectWorkspace]
+  );
+
+  // --- Global hooks ---
 
   // Zoom (Cmd+=/Cmd+-/Cmd+0)
   useZoom();
@@ -223,10 +264,6 @@ export function MainLayout() {
       deliverChatInsertPayload(workspaceChatPanelRef.current, payload);
     });
 
-    if (!isTauriEnv) {
-      return unsubStore;
-    }
-
     const listeners = createListenerGroup();
 
     listeners.register(
@@ -247,259 +284,12 @@ export function MainLayout() {
     };
   }, []);
 
-  // Ref-stable archive handler: archiveWorkspaceMutation and selectedWorkspace
-  // change frequently (every render / every workspace click), so we capture
-  // them in refs to keep the callback identity stable. This matters because
-  // onArchive flows through the entire sidebar tree to every memoized WorkspaceItem.
-  const archiveMutationRef = useRef(archiveWorkspaceMutation);
-  archiveMutationRef.current = archiveWorkspaceMutation;
-  const unarchiveMutationRef = useRef(unarchiveMutation);
-  unarchiveMutationRef.current = unarchiveMutation;
-  const selectedWorkspaceRef = useRef(selectedWorkspace);
-  selectedWorkspaceRef.current = selectedWorkspace;
-
-  const archiveWorkspace = useCallback(
-    async (workspaceId: string) => {
-      try {
-        await archiveMutationRef.current.mutateAsync(workspaceId);
-        if (selectedWorkspaceRef.current?.id === workspaceId) {
-          selectWorkspace(null);
-        }
-        toast("Workspace archived", {
-          duration: 5000,
-          action: {
-            label: "Undo",
-            onClick: () => {
-              unarchiveMutationRef.current.mutateAsync(workspaceId).catch((error) => {
-                toast.error(getErrorMessage(error));
-              });
-            },
-          },
-        });
-      } catch (error) {
-        console.error("Error archiving workspace:", error);
-        toast.error(getErrorMessage(error));
-      }
-    },
-    [selectWorkspace]
-  );
-
-  async function createWorkspace() {
-    if (!selectedRepoId) {
-      toast.error("Please select a repository");
-      return;
-    }
-
-    setCreating(true);
-
-    const repoIdToCreate = selectedRepoId;
-    setSelectedRepoId("");
-    closeNewWorkspaceModal();
-
-    try {
-      const workspace = await createWorkspaceMutation.mutateAsync(repoIdToCreate);
-      selectWorkspace(workspace.id);
-    } catch (error) {
-      selectWorkspace(null);
-      console.error("Error creating workspace:", error);
-      toast.error(getErrorMessage(error));
-    } finally {
-      setCreating(false);
-    }
-  }
-
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
       selectWorkspace(workspace.id);
     },
     [selectWorkspace]
   );
-
-  const handleNewWorkspace = useCallback(
-    async (repoId?: string) => {
-      // When repoId is known (clicked "+" on a specific repo), skip the modal
-      if (repoId) {
-        setCreating(true);
-
-        try {
-          const workspace = await createWorkspaceMutation.mutateAsync(repoId);
-          selectWorkspace(workspace.id);
-        } catch (error) {
-          selectWorkspace(null);
-          console.error("Error creating workspace:", error);
-          toast.error(getErrorMessage(error));
-        } finally {
-          setCreating(false);
-        }
-        return;
-      }
-      // No repo context — show the modal so user can pick one
-      openNewWorkspaceModal();
-    },
-    [openNewWorkspaceModal, createWorkspaceMutation, selectWorkspace]
-  );
-
-  async function saveSystemPrompt(newPrompt: string) {
-    if (!selectedWorkspace) return;
-
-    try {
-      await updateSystemPromptMutation.mutateAsync({
-        workspaceId: selectedWorkspace.id,
-        systemPrompt: newPrompt,
-      });
-      closeSystemPromptModal();
-    } catch (error) {
-      console.error("Failed to save system prompt:", error);
-      toast.error(getErrorMessage(error));
-    }
-  }
-
-  async function handleOpenProject() {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Project Directory",
-      });
-
-      if (!selected) return;
-
-      const folderPath =
-        typeof selected === "string" ? selected : (selected as { path: string }).path;
-
-      let repo: Repository;
-      try {
-        repo = await addRepoMutation.mutateAsync(folderPath);
-      } catch (err) {
-        // If repo already exists (409 Conflict), use the existing one.
-        // API error shape: { status: 409, details: { error: "...", details: repoObject } }
-        const addError = err as { status?: number; details?: { details?: Repository } };
-        const existingRepo = addError?.details?.details;
-        if (addError?.status === 409 && existingRepo?.id) {
-          repo = existingRepo;
-        } else {
-          throw err;
-        }
-      }
-
-      // Auto-create first workspace and select it for seamless onboarding
-      const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
-      selectWorkspace(workspace.id);
-      toast.success(`"${repo.name}" ready`);
-    } catch (error) {
-      console.error("Error adding repository:", error);
-      const message = getErrorMessage(error);
-      toast.error(message);
-    }
-  }
-
-  async function handleCloneRepository(githubUrl: string, targetPath: string) {
-    // Advance generation so any in-flight clone from a previous invocation bails out.
-    const generation = ++cloneGenerationRef.current;
-    const isStale = () => generation !== cloneGenerationRef.current;
-
-    setCloning(true);
-    setCloneError(null);
-    setCloneStatus(null);
-    try {
-      const repoName = extractRepoNameFromUrl(githubUrl);
-      if (!repoName) {
-        setCloneError("Invalid repository URL");
-        setCloning(false);
-        return;
-      }
-
-      let cloneTarget = targetPath;
-      if (!cloneTarget) {
-        const { homeDir, join } = await import("@tauri-apps/api/path");
-        cloneTarget = await join(await homeDir(), "Developer", repoName);
-      } else if (!targetPath.endsWith(repoName) && !targetPath.endsWith(`${repoName}/`)) {
-        const { join } = await import("@tauri-apps/api/path");
-        cloneTarget = await join(targetPath, repoName);
-      }
-
-      // Phase 1: Git clone (progress events shown by modal)
-      await invoke("git_clone", { url: githubUrl, targetPath: cloneTarget });
-      if (isStale()) return;
-
-      // Phase 2: Register repository
-      setCloneStatus("Adding repository...");
-      let repo: Repository;
-      try {
-        repo = await addRepoMutation.mutateAsync(cloneTarget);
-      } catch (err) {
-        // If repo already exists (409 Conflict), use the existing one.
-        // API error shape: { status: 409, details: { error: "...", details: repoObject } }
-        const addError = err as { status?: number; details?: { details?: Repository } };
-        const existingRepo = addError?.details?.details;
-        if (addError?.status === 409 && existingRepo?.id) {
-          repo = existingRepo;
-        } else {
-          throw err;
-        }
-      }
-      if (isStale()) return;
-
-      // Phase 3: Create workspace (returns immediately as 'initializing')
-      setCloneStatus("Setting up workspace...");
-      const workspace = await createWorkspaceMutation.mutateAsync(repo.id);
-      if (isStale()) return;
-
-      // Phase 4: Wait for workspace to become 'ready' (git worktree runs async)
-      const readyWorkspace = await waitForWorkspaceReady(workspace.id, isStale);
-      if (isStale()) return;
-
-      // Force sidebar to show the new workspace immediately
-      await queryClient.refetchQueries({ queryKey: queryKeys.workspaces.all });
-
-      selectWorkspace((readyWorkspace || workspace).id);
-      setShowCloneModal(false);
-      setCloneError(null);
-      setCloneStatus(null);
-
-      if (readyWorkspace) {
-        toast.success(`"${repo.name}" ready`);
-      } else {
-        toast.info(`"${repo.name}" cloned — workspace is still setting up`);
-      }
-    } catch (error) {
-      if (!isStale()) {
-        console.error("Error cloning repository:", error);
-        setCloneError(getErrorMessage(error));
-        setCloneStatus(null);
-      }
-    } finally {
-      if (!isStale()) {
-        setCloning(false);
-      }
-    }
-  }
-
-  /** Poll workspace until state becomes 'ready' or timeout (15s). */
-  async function waitForWorkspaceReady(
-    workspaceId: string,
-    isStale: () => boolean
-  ): Promise<Workspace | null> {
-    const maxWaitMs = 15_000;
-    const pollMs = 400;
-    const deadline = Date.now() + maxWaitMs;
-
-    while (Date.now() < deadline) {
-      if (isStale()) return null;
-      let ws: Workspace | undefined;
-      try {
-        ws = await WorkspaceService.fetchById(workspaceId);
-      } catch {
-        // fetchById failed — backend might be busy, keep trying
-      }
-      if (ws?.state === "ready") return ws;
-      if (ws?.state === "error") throw new Error("Workspace setup failed");
-      await new Promise((r) => setTimeout(r, pollMs));
-    }
-    // Timed out — workspace might still become ready via polling
-    return null;
-  }
 
   return (
     <SidebarProvider
@@ -523,9 +313,9 @@ export function MainLayout() {
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
-          onNewWorkspace={handleNewWorkspace}
-          onAddRepository={handleOpenProject}
-          onCloneRepository={() => setShowCloneModal(true)}
+          onNewWorkspace={repoActions.handleNewWorkspace}
+          onAddRepository={repoActions.handleOpenProject}
+          onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onArchive={archiveWorkspace}
           profile={{ username }}
         />
@@ -544,8 +334,8 @@ export function MainLayout() {
           ghStatus={ghStatusQuery.data}
           workspaceChatPanelRef={workspaceChatPanelRef}
           onCreateWorkspace={openNewWorkspaceModal}
-          onOpenProject={handleOpenProject}
-          onCloneRepository={() => setShowCloneModal(true)}
+          onOpenProject={repoActions.handleOpenProject}
+          onCloneRepository={() => repoActions.setShowCloneModal(true)}
         />
       )}
 
@@ -553,11 +343,11 @@ export function MainLayout() {
       <NewWorkspaceModal
         show={showNewWorkspaceModal}
         repos={repos}
-        selectedRepoId={selectedRepoId}
-        creating={creating}
+        selectedRepoId={repoActions.selectedRepoId}
+        creating={repoActions.creating}
         onClose={closeNewWorkspaceModal}
-        onRepoChange={setSelectedRepoId}
-        onCreate={createWorkspace}
+        onRepoChange={repoActions.setSelectedRepoId}
+        onCreate={repoActions.createWorkspaceFromModal}
       />
 
       <SystemPromptModal
@@ -568,31 +358,24 @@ export function MainLayout() {
         saving={updateSystemPromptMutation.isPending}
         onClose={closeSystemPromptModal}
         onChange={setSystemPromptDraft}
-        onSave={() => saveSystemPrompt(systemPromptDraft)}
+        onSave={saveSystemPrompt}
       />
 
       <CloneRepositoryModal
-        show={showCloneModal}
-        cloning={cloning}
-        error={cloneError}
-        statusMessage={cloneStatus}
-        onClose={() => {
-          // Advance generation so any in-flight clone invocation becomes stale
-          cloneGenerationRef.current++;
-          setShowCloneModal(false);
-          setCloneError(null);
-          setCloneStatus(null);
-          setCloning(false);
-        }}
-        onClone={handleCloneRepository}
-        onClearError={() => setCloneError(null)}
+        show={repoActions.showCloneModal}
+        cloning={repoActions.cloning}
+        error={repoActions.cloneError}
+        statusMessage={repoActions.cloneStatus}
+        onClose={repoActions.closeCloneModal}
+        onClone={repoActions.handleCloneRepository}
+        onClearError={repoActions.clearCloneError}
       />
 
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
         actionOverrides={{
-          "open-project": handleOpenProject,
-          "clone-repository": () => setShowCloneModal(true),
+          "open-project": repoActions.handleOpenProject,
+          "clone-repository": () => repoActions.setShowCloneModal(true),
         }}
       />
     </SidebarProvider>
