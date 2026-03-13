@@ -5,8 +5,9 @@ import type { Workspace } from "@/shared/types";
  * while the backend creates the real workspace asynchronously.
  *
  * Used in:
- * - MainLayout.createWorkspace() (modal flow)
- * - MainLayout.handleNewWorkspace() (quick "+" button flow)
+ * - useRepoActions.createAndSelectWorkspace() (quick "+" button flow)
+ * - useRepoActions.handleOpenProject() (native folder dialog flow)
+ * - useRepoActions.handleCloneRepository() (git clone flow)
  * - useCreateWorkspace() onMutate (React Query optimistic update)
  */
 export function createOptimisticWorkspace(repoId: string, repoName: string): Workspace {
