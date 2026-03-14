@@ -25,13 +25,3 @@ export interface ToolRendererProps {
  * Tool renderer component type
  */
 export type ToolRenderer = React.ComponentType<ToolRendererProps>;
-
-/**
- * Tool metadata
- */
-export interface ToolMetadata {
-  name: string;
-  icon?: string;
-  color?: "default" | "success" | "error" | "info";
-  description?: string;
-}

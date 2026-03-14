@@ -1,4 +1,2 @@
-#!/bin/sh
-# Entire CLI hooks
-# Post-commit hook: condense session data if commit has Entire-Checkpoint trailer
-entire hooks git post-commit 2>/dev/null || true
+#!/usr/bin/env sh
+. "$(dirname "$0")/h"

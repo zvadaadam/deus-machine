@@ -38,7 +38,7 @@ interface AgentModelOption {
  * - models: available models for the model picker dropdown
  * - groupLabel: header text in the model picker ("Claude Code", "Codex")
  */
-export interface AgentConfig {
+interface AgentConfig {
   /** DB-compatible agent_type string (matches sessions.agent_type) */
   readonly id: RuntimeAgentType;
   /** Human label for display (e.g. "Claude", "Codex") */
@@ -131,18 +131,17 @@ export interface RuntimeModelOption {
 }
 
 /** Flat model options array, derived from agent configs. */
-export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = MODEL_PICKER_GROUPS.flatMap(
-  (config) =>
-    config.models.map(
-      (m): RuntimeModelOption => ({
-        value: `${config.id}:${m.model}`,
-        model: m.model,
-        label: m.label,
-        agentType: config.id,
-        group: config.id as "claude" | "codex",
-        isNew: m.isNew,
-      })
-    )
+export const RUNTIME_MODEL_OPTIONS: RuntimeModelOption[] = MODEL_PICKER_GROUPS.flatMap((config) =>
+  config.models.map(
+    (m): RuntimeModelOption => ({
+      value: `${config.id}:${m.model}`,
+      model: m.model,
+      label: m.label,
+      agentType: config.id,
+      group: config.id as "claude" | "codex",
+      isNew: m.isNew,
+    })
+  )
 );
 
 // ── Utility functions (unchanged signatures) ─────────────────────────

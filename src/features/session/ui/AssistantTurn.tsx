@@ -63,7 +63,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   isLatest,
   isWorking,
 }: AssistantTurnProps) {
-  const { parseContent, toolResultMap } = useSession();
+  const { parseContent } = useSession();
 
   const [isManuallyExpanded, setIsManuallyExpanded] = useState<boolean | null>(null);
   // Latest turn always starts expanded so users can see all content,
@@ -72,10 +72,7 @@ export const AssistantTurn = memo(function AssistantTurn({
   // User can still manually collapse via TurnStatsHeader click.
   const isExpanded = isManuallyExpanded !== null ? isManuallyExpanded : isLatest;
 
-  const stats = useMemo(
-    () => calculateTurnStats(messages, parseContent, toolResultMap),
-    [messages, parseContent, toolResultMap]
-  );
+  const stats = useMemo(() => calculateTurnStats(messages, parseContent), [messages, parseContent]);
 
   const isStreaming = isLatest && isWorking;
 
