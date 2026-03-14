@@ -99,6 +99,17 @@ export function ensureRelayConnected(): void {
   if (!creds) {
     creds = generateRelayCredentials();
   }
+  // Already connected or connecting with same credentials — skip
+  if (
+    relayUrl === url &&
+    serverId === creds.serverId &&
+    relayToken === creds.relayToken &&
+    tunnelWs &&
+    (tunnelWs.readyState === WebSocket.OPEN || tunnelWs.readyState === WebSocket.CONNECTING)
+  ) {
+    return;
+  }
+
   connectToRelay(url, creds.serverId, creds.relayToken);
 }
 
