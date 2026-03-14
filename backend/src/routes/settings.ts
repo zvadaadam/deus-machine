@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { getAllSettings, saveSetting } from '../services/settings.service';
-import { parseBody } from '../lib/validate';
-import { SaveSettingBody } from '../lib/schemas';
+import { parseBody, SaveSettingBody } from '../lib/schemas';
 import { ensureRelayConnected, disconnectFromRelay } from '../services/relay.service';
 
 const app = new Hono();

@@ -6,8 +6,7 @@
 // DELETE /auth/devices/:id — localhost-only, revokes a device
 
 import { Hono } from "hono";
-import { parseBody } from "../lib/validate";
-import { PairBody } from "../lib/schemas";
+import { parseBody, PairBody } from "../lib/schemas";
 import {
   generatePairCode,
   validatePairCode,

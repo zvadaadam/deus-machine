@@ -7,9 +7,9 @@ import {
   getHooks, saveHooks,
   getSkills, saveSkill, deleteSkill,
 } from '../services/config.service';
-import { parseBody } from '../lib/validate';
 import { ValidationError, NotFoundError } from '../lib/errors';
 import {
+  parseBody,
   SaveMcpServersBody,
   SaveCommandBody,
   SaveAgentBody,
