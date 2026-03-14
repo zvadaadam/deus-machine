@@ -107,7 +107,7 @@ function disableRemoteAccess() {
 
 /** Generate a pairing code from localhost. Returns the code string. */
 async function generateCode(): Promise<string> {
-  const res = await app.request("/api/auth/generate-pair-code", {
+  const res = await app.request("/api/remote-auth/generate-pair-code", {
     method: "POST",
     headers: LOCAL_HEADERS,
   });
@@ -118,7 +118,7 @@ async function generateCode(): Promise<string> {
 
 /** Pair a device using a code. Returns { token, device }. */
 async function pairDevice(code: string, deviceName = "Test Device"): Promise<{ token: string; device: { id: string; name: string } }> {
-  const res = await app.request("/api/auth/pair", {
+  const res = await app.request("/api/remote-auth/pair", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -168,7 +168,7 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
   });
 
   it("rejects code generation from remote IP", async () => {
-    const res = await app.request("/api/auth/generate-pair-code", {
+    const res = await app.request("/api/remote-auth/generate-pair-code", {
       method: "POST",
       headers: REMOTE_HEADERS,
     });
@@ -206,7 +206,7 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
     await pairDevice(code); // First use succeeds
 
     // Second use fails
-    const res = await app.request("/api/auth/pair", {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -251,7 +251,7 @@ describe("Device management: list, revoke, verify revocation", () => {
     const code = await generateCode();
     await pairDevice(code, "My Phone");
 
-    const res = await app.request("/api/auth/devices", { headers: LOCAL_HEADERS });
+    const res = await app.request("/api/remote-auth/devices", { headers: LOCAL_HEADERS });
     expect(res.status).toBe(200);
     const { devices } = await res.json();
     expect(devices).toHaveLength(1);
@@ -272,7 +272,7 @@ describe("Device management: list, revoke, verify revocation", () => {
     expect(before.status).not.toBe(401);
 
     // Revoke the device
-    const revokeRes = await app.request(`/api/auth/devices/${device.id}`, {
+    const revokeRes = await app.request(`/api/remote-auth/devices/${device.id}`, {
       method: "DELETE",
       headers: LOCAL_HEADERS,
     });
@@ -286,7 +286,7 @@ describe("Device management: list, revoke, verify revocation", () => {
   });
 
   it("returns 404 when revoking a nonexistent device", async () => {
-    const res = await app.request("/api/auth/devices/does-not-exist", {
+    const res = await app.request("/api/remote-auth/devices/does-not-exist", {
       method: "DELETE",
       headers: LOCAL_HEADERS,
     });
@@ -295,7 +295,7 @@ describe("Device management: list, revoke, verify revocation", () => {
 
   it("rejects device management from remote IPs", async () => {
     // /auth/devices is localhost-only, but auth middleware will reject first (no token)
-    const res = await app.request("/api/auth/devices", {
+    const res = await app.request("/api/remote-auth/devices", {
       headers: REMOTE_HEADERS,
     });
     expect(res.status).toBe(401);
@@ -308,7 +308,7 @@ describe("Pairing validation: Zod schema enforcement", () => {
   });
 
   it("rejects pair request with empty code", async () => {
-    const res = await app.request("/api/auth/pair", {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -321,7 +321,7 @@ describe("Pairing validation: Zod schema enforcement", () => {
   });
 
   it("rejects pair request with no body", async () => {
-    const res = await app.request("/api/auth/pair", {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -334,7 +334,7 @@ describe("Pairing validation: Zod schema enforcement", () => {
 
   it("accepts optional deviceName", async () => {
     const code = await generateCode();
-    const res = await app.request("/api/auth/pair", {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -356,7 +356,7 @@ describe("Rate limiting across the full stack", () => {
   it("locks out an IP after 10 failed pairing attempts", async () => {
     // Burn through 10 failures with bad codes
     for (let i = 0; i < 10; i++) {
-      await app.request("/api/auth/pair", {
+      await app.request("/api/remote-auth/pair", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -367,7 +367,7 @@ describe("Rate limiting across the full stack", () => {
     }
 
     // 11th attempt should be rate-limited
-    const res = await app.request("/api/auth/pair", {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -381,7 +381,7 @@ describe("Rate limiting across the full stack", () => {
   it("rate limit applies to auth middleware too (protected endpoints)", async () => {
     // Exhaust rate limit
     for (let i = 0; i < 10; i++) {
-      await app.request("/api/auth/pair", {
+      await app.request("/api/remote-auth/pair", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -451,7 +451,7 @@ describe("Multiple devices: independent tokens", () => {
     expect(res2.status).toBe(200);
 
     // Devices list should show both
-    const listRes = await app.request("/api/auth/devices", { headers: LOCAL_HEADERS });
+    const listRes = await app.request("/api/remote-auth/devices", { headers: LOCAL_HEADERS });
     const { devices } = await listRes.json();
     expect(devices).toHaveLength(2);
   });
@@ -464,7 +464,7 @@ describe("Multiple devices: independent tokens", () => {
     const { token: token2 } = await pairDevice(code2, "Tablet");
 
     // Revoke Phone
-    await app.request(`/api/auth/devices/${device1.id}`, {
+    await app.request(`/api/remote-auth/devices/${device1.id}`, {
       method: "DELETE",
       headers: LOCAL_HEADERS,
     });

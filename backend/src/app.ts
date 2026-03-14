@@ -17,7 +17,7 @@ import healthRoutes from './routes/health';
 import workspaceRoutes from './routes/workspaces';
 import sessionRoutes from './routes/sessions';
 import repoRoutes from './routes/repos';
-import configRoutes from './routes/config';
+import agentConfigRoutes from './routes/agent-config';
 import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
@@ -44,7 +44,7 @@ export function createApp() {
   app.route('/api', workspaceRoutes);
   app.route('/api', sessionRoutes);
   app.route('/api', repoRoutes);
-  app.route('/api', configRoutes);
+  app.route('/api', agentConfigRoutes);
   app.route('/api', settingsRoutes);
   app.route('/api', statsRoutes);
   app.route('/api', notifyRoutes);

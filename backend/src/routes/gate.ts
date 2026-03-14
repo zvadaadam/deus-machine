@@ -205,7 +205,7 @@ function gatePage() {
 
       try {
         const isMobile = /Mobile|iPhone|Android/i.test(navigator.userAgent);
-        const res = await fetch('/api/auth/pair', {
+        const res = await fetch('/api/remote-auth/pair', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code, deviceName: isMobile ? 'Mobile Browser' : 'Web Browser' })

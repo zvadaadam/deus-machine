@@ -40,38 +40,41 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submitCode = useCallback(async (w: string, n: string) => {
-    const code = `${w.toUpperCase()}-${n}`;
-    setError(null);
-    setIsPending(true);
+  const submitCode = useCallback(
+    async (w: string, n: string) => {
+      const code = `${w.toUpperCase()}-${n}`;
+      setError(null);
+      setIsPending(true);
 
-    try {
-      // POST to the backend's pair endpoint (same origin for remote clients)
-      const baseUrl = `${window.location.protocol}//${window.location.host}`;
-      const response = await fetch(`${baseUrl}/api/auth/pair`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code,
-          deviceName: navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Web Browser",
-        }),
-      });
+      try {
+        // POST to the backend's pair endpoint (same origin for remote clients)
+        const baseUrl = `${window.location.protocol}//${window.location.host}`;
+        const response = await fetch(`${baseUrl}/api/remote-auth/pair`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code,
+            deviceName: navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Web Browser",
+          }),
+        });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        const msg = data?.error ?? "Invalid pairing code";
-        setError(msg);
-        return;
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          const msg = data?.error ?? "Invalid pairing code";
+          setError(msg);
+          return;
+        }
+
+        const data = await response.json();
+        onPaired(data.token, data.device?.name);
+      } catch {
+        setError("Could not connect to server");
+      } finally {
+        setIsPending(false);
       }
-
-      const data = await response.json();
-      onPaired(data.token, data.device?.name);
-    } catch {
-      setError("Could not connect to server");
-    } finally {
-      setIsPending(false);
-    }
-  }, [onPaired]);
+    },
+    [onPaired]
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,11 +118,7 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
         </div>
 
         {/* Pairing form */}
-        <form
-          ref={formRef}
-          onSubmit={handleSubmit}
-          className="space-y-6"
-        >
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label className="text-sm font-medium">Pairing Code</Label>
             <div className="flex items-center gap-2">
@@ -133,7 +132,7 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
-                className="font-mono text-center text-lg uppercase tracking-wider"
+                className="text-center font-mono text-lg tracking-wider uppercase"
                 disabled={isPending}
               />
               <span className="text-muted-foreground text-xl font-bold">-</span>
@@ -145,16 +144,14 @@ export function PairGatePage({ onPaired }: PairGatePageProps) {
                 value={number}
                 onChange={handleNumberChange}
                 autoComplete="off"
-                className="font-mono text-center text-lg tracking-wider"
+                className="text-center font-mono text-lg tracking-wider"
                 maxLength={4}
                 disabled={isPending}
               />
             </div>
           </div>
 
-          {error && (
-            <p className="text-destructive text-center text-sm">{error}</p>
-          )}
+          {error && <p className="text-destructive text-center text-sm">{error}</p>}
 
           <Button
             type="submit"
