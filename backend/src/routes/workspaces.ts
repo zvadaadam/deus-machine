@@ -356,10 +356,18 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
       if (state === 'merged') mergeStatus = 'merged';
       else if (pr.mergeable === 'MERGEABLE') mergeStatus = 'ready';
 
-      const checks: any[] = pr.statusCheckRollup ?? [];
+      const rawChecks: any[] = pr.statusCheckRollup ?? [];
       let ciStatus: 'passing' | 'failing' | 'pending' | 'unknown' = 'unknown';
-      if (checks.length > 0) {
-        const statuses = checks.map(classifyCheck);
+      let checksDone = 0;
+      const checksTotal = rawChecks.length;
+      const checkDetails = rawChecks.map((check: any) => ({
+        name: check.name || check.context || 'Unknown',
+        status: classifyCheck(check),
+        url: check.detailsUrl || check.targetUrl || undefined,
+      }));
+      if (rawChecks.length > 0) {
+        const statuses = checkDetails.map((c: any) => c.status);
+        checksDone = statuses.filter((s: string) => s !== 'pending').length;
         if (statuses.includes('failing')) ciStatus = 'failing';
         else if (statuses.includes('pending')) ciStatus = 'pending';
         else ciStatus = 'passing';
@@ -381,6 +389,9 @@ app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
         is_draft: pr.isDraft === true,
         has_conflicts: pr.mergeStateStatus === 'DIRTY',
         ci_status: ciStatus,
+        checks_done: checksDone,
+        checks_total: checksTotal,
+        checks: checkDetails,
         review_status: reviewStatus,
         error: null,
       });

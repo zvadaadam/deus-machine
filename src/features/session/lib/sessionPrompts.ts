@@ -27,8 +27,14 @@ export function createPRPrompt(targetBranch = "main"): string {
 /** Instructs the agent to resolve merge conflicts on the PR */
 export const RESOLVE_CONFLICTS = "Resolve the merge conflicts on the PR and push the fix";
 
-/** Instructs the agent to fix failing CI checks */
-export const FIX_CI = "Fix the failing CI checks on the PR";
+/** Instructs the agent to fix failing CI checks, with optional check details */
+export function fixCIPrompt(failingChecks?: { name: string; url?: string }[]): string {
+  if (!failingChecks?.length) return "Fix the failing CI checks on the PR";
+  const list = failingChecks
+    .map((c) => (c.url ? `- ${c.name}: ${c.url}` : `- ${c.name}`))
+    .join("\n");
+  return `Fix the failing CI checks on the PR:\n\n${list}`;
+}
 
 /** Instructs the agent to address review comments */
 export const ADDRESS_REVIEW = "Address the review comments on the PR";

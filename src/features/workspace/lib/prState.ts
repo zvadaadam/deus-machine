@@ -7,7 +7,7 @@
  * Pure function. No React. Trivially testable.
  */
 
-import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus, CheckDetail } from "@/shared/types";
 
 /**
  * Discriminated union of all possible PR action states.
@@ -33,9 +33,16 @@ export type PRActionState =
   | { type: "merged"; prNumber: number; prUrl: string }
   | { type: "closed"; prNumber: number; prUrl: string }
   | { type: "conflicts"; prNumber: number; prUrl: string }
-  | { type: "ci_failing"; prNumber: number; prUrl: string }
+  | {
+      type: "ci_failing";
+      prNumber: number;
+      prUrl: string;
+      checksDone: number;
+      checksTotal: number;
+      failingChecks: CheckDetail[];
+    }
   | { type: "changes_requested"; prNumber: number; prUrl: string }
-  | { type: "ci_pending"; prNumber: number; prUrl: string }
+  | { type: "ci_pending"; prNumber: number; prUrl: string; checksDone: number; checksTotal: number }
   | { type: "ready_to_merge"; prNumber: number; prUrl: string; targetBranch: string }
   | { type: "awaiting_review"; prNumber: number; prUrl: string };
 
@@ -47,7 +54,7 @@ export type PRActionState =
 export function derivePRActionState(
   prStatus: PRStatus | null,
   ghStatus: GhCliStatus | null | undefined,
-  targetBranch: string,
+  targetBranch: string
 ): PRActionState {
   // gh CLI gates everything
   if (ghStatus && !ghStatus.isInstalled) {
@@ -97,20 +104,28 @@ export function derivePRActionState(
   if (prStatus.has_conflicts) {
     return { type: "conflicts", prNumber, prUrl };
   }
+  const checksDone = prStatus.checks_done ?? 0;
+  const checksTotal = prStatus.checks_total ?? 0;
   if (prStatus.ci_status === "failing") {
-    return { type: "ci_failing", prNumber, prUrl };
+    const failingChecks = (prStatus.checks ?? []).filter((c) => c.status === "failing");
+    return { type: "ci_failing", prNumber, prUrl, checksDone, checksTotal, failingChecks };
   }
   if (prStatus.review_status === "changes_requested") {
     return { type: "changes_requested", prNumber, prUrl };
   }
   if (prStatus.ci_status === "pending") {
-    return { type: "ci_pending", prNumber, prUrl };
+    return { type: "ci_pending", prNumber, prUrl, checksDone, checksTotal };
   }
-  if (prStatus.merge_status === "ready") {
+  // merge_status "ready" means GitHub confirmed MERGEABLE. But GitHub may
+  // also report UNKNOWN while recalculating — treat CI passing + no blockers
+  // as ready so we don't flash "Awaiting review" during that window.
+  if (
+    prStatus.merge_status === "ready" ||
+    (prStatus.ci_status === "passing" && !prStatus.has_conflicts)
+  ) {
     return { type: "ready_to_merge", prNumber, prUrl, targetBranch };
   }
 
-  // Fallback: CI passing + review needed, or any other open PR state
-  // (draft, unknown CI, etc.) — safest default, no destructive action
+  // Fallback: unknown CI, draft PRs, or any other open PR state
   return { type: "awaiting_review", prNumber, prUrl };
 }
