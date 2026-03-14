@@ -21,21 +21,3 @@ export function formatTimeAgo(dateString: string): string {
   if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d ago`;
   return `${Math.floor(seconds / 2592000)}mo ago`;
 }
-
-/**
- * Format file size to human-readable format
- * @param bytes - File size in bytes
- * @returns Formatted file size (e.g., "1.5 MB")
- */
-export function formatFileSize(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = bytes;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-
-  return `${size.toFixed(1)} ${units[unitIndex]}`;
-}

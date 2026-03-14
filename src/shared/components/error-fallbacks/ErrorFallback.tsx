@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { FallbackProps } from "react-error-boundary";
 import { Button } from "@/components/ui/button";
 import { isTauriEnv, invoke } from "@/platform/tauri";
+import { normalizeError } from "@/shared/utils/errorReporting";
 
 /**
  * Default error fallback for the app-level error boundary.
@@ -120,18 +121,4 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
       </div>
     </div>
   );
-}
-
-function normalizeError(error: unknown): { message: string; stack?: string } {
-  if (error instanceof Error) {
-    return { message: error.message, stack: error.stack };
-  }
-  if (typeof error === "string") {
-    return { message: error };
-  }
-  try {
-    return { message: JSON.stringify(error) };
-  } catch {
-    return { message: String(error) };
-  }
 }
