@@ -19,7 +19,7 @@ vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: () => mockGetAllSettings(),
 }));
 
-import { authMiddleware } from "../../../src/middleware/auth";
+import { authMiddleware } from "../../../src/middleware/remote-auth";
 import { remoteGateMiddleware, invalidateRemoteGateCache } from "../../../src/middleware/remote-gate";
 
 function createTestApp(middleware: any) {

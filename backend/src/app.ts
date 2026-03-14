@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { errorHandler } from './middleware/error-handler';
 import { remoteGateMiddleware } from './middleware/remote-gate';
-import { authMiddleware } from './middleware/auth';
+import { authMiddleware } from './middleware/remote-auth';
 import { validateDeviceToken } from './services/auth.service';
 import {
   addConnection,

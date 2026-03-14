@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { getDatabase } from '../lib/database';
 import { NotFoundError } from '../lib/errors';
-import { parseBody } from '../lib/validate';
-import { CreateMessageBody } from '../lib/schemas';
+import { parseBody, CreateMessageBody } from '../lib/schemas';
 import {
   getAllSessions,
   getSessionById,
