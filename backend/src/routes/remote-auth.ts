@@ -17,7 +17,7 @@ import {
   checkRateLimit,
   recordFailure,
   resetRateLimit,
-} from "../services/auth.service";
+} from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
 const app = new Hono();

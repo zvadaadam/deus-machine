@@ -9,7 +9,7 @@ import {
   updateLastSeen,
   checkRateLimit,
   type PairedDevice,
-} from "../services/auth.service";
+} from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
 const PUBLIC_PATHS = new Set([

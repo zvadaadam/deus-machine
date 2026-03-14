@@ -4,7 +4,7 @@ import { createNodeWebSocket } from '@hono/node-ws';
 import { errorHandler } from './middleware/error-handler';
 import { remoteGateMiddleware } from './middleware/remote-gate';
 import { authMiddleware } from './middleware/remote-auth';
-import { validateDeviceToken } from './services/auth.service';
+import { validateDeviceToken } from './services/remote-auth.service';
 import {
   addConnection,
   removeConnection,

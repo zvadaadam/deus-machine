@@ -6,7 +6,7 @@ import {
   getAgents, saveAgent, deleteAgent,
   getHooks, saveHooks,
   getSkills, saveSkill, deleteSkill,
-} from '../services/config.service';
+} from '../services/agent-config.service';
 import { ValidationError, NotFoundError } from '../lib/errors';
 import {
   parseBody,

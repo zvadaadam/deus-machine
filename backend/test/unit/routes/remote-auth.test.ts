@@ -26,7 +26,7 @@ const mockCheckRateLimit = vi.fn(() => 0);
 const mockRecordFailure = vi.fn();
 const mockResetRateLimit = vi.fn();
 
-vi.mock("../../../src/services/auth.service", () => ({
+vi.mock("../../../src/services/remote-auth.service", () => ({
   generatePairCode: (...args: unknown[]) => mockGeneratePairCode(...args),
   validatePairCode: (...args: unknown[]) => mockValidatePairCode(...args),
   createDeviceToken: (...args: unknown[]) => mockCreateDeviceToken(...args),

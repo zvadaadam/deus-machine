@@ -28,7 +28,7 @@ import {
   recordFailure,
   resetRateLimit,
   _clearAll,
-} from "../../../src/services/auth.service";
+} from "../../../src/services/remote-auth.service";
 
 beforeEach(() => {
   vi.clearAllMocks();
