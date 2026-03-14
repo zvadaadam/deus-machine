@@ -24,21 +24,21 @@ export interface ConfigDisplayItem {
   raw: unknown;
 }
 
-/** What the backend returns for GET /config/skills */
+/** What the backend returns for GET /agent-config/skills */
 export interface SkillItem {
   name: string;
   description: string;
   content: string;
 }
 
-/** What the backend returns for GET /config/commands */
+/** What the backend returns for GET /agent-config/commands */
 export interface CommandItem {
   name: string;
   description: string;
   content: string;
 }
 
-/** What the backend returns for GET /config/agents */
+/** What the backend returns for GET /agent-config/agents */
 export interface AgentItem {
   id: string;
   name?: string;
@@ -46,7 +46,7 @@ export interface AgentItem {
   tools?: string[];
 }
 
-/** What the backend returns for GET /config/mcp-servers */
+/** What the backend returns for GET /agent-config/mcp-servers */
 export interface McpServerItem {
   name: string;
   command: string;

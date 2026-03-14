@@ -14,7 +14,7 @@ import { isLocalhost, getClientIp } from "../lib/network";
 
 const PUBLIC_PATHS = new Set([
   "/api/health",
-  "/api/auth/pair",
+  "/api/remote-auth/pair",
 ]);
 
 /**

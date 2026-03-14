@@ -46,9 +46,9 @@ beforeEach(() => {
   mockCheckRateLimit.mockReturnValue(0);
 });
 
-describe("POST /auth/pair", () => {
+describe("POST /remote-auth/pair", () => {
   it("returns token on valid code", async () => {
-    const res = await authRoutes.request("/auth/pair", {
+    const res = await authRoutes.request("/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -66,7 +66,7 @@ describe("POST /auth/pair", () => {
 
   it("returns 401 on invalid code", async () => {
     mockValidatePairCode.mockReturnValue(false);
-    const res = await authRoutes.request("/auth/pair", {
+    const res = await authRoutes.request("/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -80,7 +80,7 @@ describe("POST /auth/pair", () => {
 
   it("returns 429 when rate-limited", async () => {
     mockCheckRateLimit.mockReturnValue(60_000);
-    const res = await authRoutes.request("/auth/pair", {
+    const res = await authRoutes.request("/remote-auth/pair", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -92,9 +92,9 @@ describe("POST /auth/pair", () => {
   });
 });
 
-describe("POST /auth/generate-pair-code", () => {
+describe("POST /remote-auth/generate-pair-code", () => {
   it("returns code from localhost", async () => {
-    const res = await authRoutes.request("/auth/generate-pair-code", {
+    const res = await authRoutes.request("/remote-auth/generate-pair-code", {
       method: "POST",
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
@@ -105,7 +105,7 @@ describe("POST /auth/generate-pair-code", () => {
   });
 
   it("rejects from remote IP", async () => {
-    const res = await authRoutes.request("/auth/generate-pair-code", {
+    const res = await authRoutes.request("/remote-auth/generate-pair-code", {
       method: "POST",
       headers: { "x-forwarded-for": "192.168.1.50" },
     });
@@ -113,9 +113,9 @@ describe("POST /auth/generate-pair-code", () => {
   });
 });
 
-describe("GET /auth/devices", () => {
+describe("GET /remote-auth/devices", () => {
   it("returns devices from localhost", async () => {
-    const res = await authRoutes.request("/auth/devices", {
+    const res = await authRoutes.request("/remote-auth/devices", {
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
     expect(res.status).toBe(200);
@@ -124,16 +124,16 @@ describe("GET /auth/devices", () => {
   });
 
   it("rejects from remote IP", async () => {
-    const res = await authRoutes.request("/auth/devices", {
+    const res = await authRoutes.request("/remote-auth/devices", {
       headers: { "x-forwarded-for": "192.168.1.50" },
     });
     expect(res.status).toBe(403);
   });
 });
 
-describe("DELETE /auth/devices/:id", () => {
+describe("DELETE /remote-auth/devices/:id", () => {
   it("revokes device from localhost", async () => {
-    const res = await authRoutes.request("/auth/devices/dev1", {
+    const res = await authRoutes.request("/remote-auth/devices/dev1", {
       method: "DELETE",
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
@@ -144,7 +144,7 @@ describe("DELETE /auth/devices/:id", () => {
 
   it("returns 404 when device not found", async () => {
     mockRevokeDevice.mockReturnValue(false);
-    const res = await authRoutes.request("/auth/devices/nonexistent", {
+    const res = await authRoutes.request("/remote-auth/devices/nonexistent", {
       method: "DELETE",
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
@@ -152,7 +152,7 @@ describe("DELETE /auth/devices/:id", () => {
   });
 
   it("rejects from remote IP", async () => {
-    const res = await authRoutes.request("/auth/devices/dev1", {
+    const res = await authRoutes.request("/remote-auth/devices/dev1", {
       method: "DELETE",
       headers: { "x-forwarded-for": "192.168.1.50" },
     });

@@ -17,7 +17,7 @@ function buildQueryString(scope: string, repoPath?: string): string {
 export const AgentConfigService = {
   list: <T>(category: string, scope: string, repoPath?: string): Promise<T> => {
     const qs = buildQueryString(scope, repoPath);
-    return apiClient.get<T>(`/config/${category}?${qs}`);
+    return apiClient.get<T>(`/agent-config/${category}?${qs}`);
   },
 
   save: (
@@ -27,7 +27,7 @@ export const AgentConfigService = {
     repoPath?: string
   ): Promise<{ success: boolean }> => {
     const qs = buildQueryString(scope, repoPath);
-    return apiClient.post(`/config/${category}?${qs}`, data);
+    return apiClient.post(`/agent-config/${category}?${qs}`, data);
   },
 
   remove: (
@@ -37,6 +37,6 @@ export const AgentConfigService = {
     repoPath?: string
   ): Promise<{ success: boolean }> => {
     const qs = buildQueryString(scope, repoPath);
-    return apiClient.delete(`/config/${category}/${encodeURIComponent(id)}?${qs}`);
+    return apiClient.delete(`/agent-config/${category}/${encodeURIComponent(id)}?${qs}`);
   },
 };
