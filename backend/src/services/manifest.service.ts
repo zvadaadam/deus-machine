@@ -119,7 +119,7 @@ export function detectManifestFromProject(rootPath: string, repoName: string): R
   if (fs.existsSync(pkgJsonPath)) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-      const pm = fs.existsSync(path.join(rootPath, 'bun.lock')) ? 'bun' :
+      const pm = (fs.existsSync(path.join(rootPath, 'bun.lock')) || fs.existsSync(path.join(rootPath, 'bun.lockb'))) ? 'bun' :
                  fs.existsSync(path.join(rootPath, 'pnpm-lock.yaml')) ? 'pnpm' :
                  fs.existsSync(path.join(rootPath, 'yarn.lock')) ? 'yarn' : 'npm';
       const run = pm === 'npm' ? 'npm run' : `${pm} run`;
