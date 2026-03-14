@@ -39,3 +39,7 @@ okey now lookign the the file config in the backned routes, is ther somethign te
 ---
 
 I can see that it's actually not the correct name, the config, it's like agent config, right? This is for the agents. So we should rename this to agent config and the extract project path is actually defining and getting what kind of scope it is, right?
+
+---
+
+This is a cleanup of the whole backend, so I want to update these things here.
