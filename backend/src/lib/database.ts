@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SCHEMA_SQL, MIGRATIONS } from './schema';
+import { SCHEMA_SQL, MIGRATIONS } from '@shared/schema';
 
 const DEFAULT_DB_PATH = path.join(
   process.env.HOME || os.homedir(),

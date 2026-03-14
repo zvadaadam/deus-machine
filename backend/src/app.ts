@@ -3,8 +3,8 @@ import { cors } from 'hono/cors';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { errorHandler } from './middleware/error-handler';
 import { remoteGateMiddleware } from './middleware/remote-gate';
-import { authMiddleware } from './middleware/auth';
-import { validateDeviceToken } from './services/auth.service';
+import { authMiddleware } from './middleware/remote-auth';
+import { validateDeviceToken } from './services/remote-auth.service';
 import {
   addConnection,
   removeConnection,
@@ -12,21 +12,20 @@ import {
 } from './services/ws.service';
 import { removeSubs as removeQuerySubs } from './services/query-engine';
 import { getRelayStatus } from './services/relay.service';
+import { isLocalhost, getClientIp } from './lib/network';
 import healthRoutes from './routes/health';
 import workspaceRoutes from './routes/workspaces';
+import workspaceDiffRoutes from './routes/workspaces.diff';
+import workspacePrRoutes from './routes/workspaces.pr';
+import workspaceDesignRoutes from './routes/workspaces.design';
 import sessionRoutes from './routes/sessions';
 import repoRoutes from './routes/repos';
-import configRoutes from './routes/config';
+import agentConfigRoutes from './routes/agent-config';
 import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
-import authRoutes from './routes/auth';
-import gateRoutes from './routes/gate';
+import authRoutes from './routes/remote-auth';
 import notifyRoutes from './routes/notify';
-
-function isLocalhostIp(ip: string): boolean {
-  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
-}
 
 export function createApp() {
   const app = new Hono();
@@ -45,16 +44,16 @@ export function createApp() {
   app.route('/api', healthRoutes);
   app.route('/api', authRoutes);
   app.route('/api', workspaceRoutes);
+  app.route('/api', workspaceDiffRoutes);
+  app.route('/api', workspacePrRoutes);
+  app.route('/api', workspaceDesignRoutes);
   app.route('/api', sessionRoutes);
   app.route('/api', repoRoutes);
-  app.route('/api', configRoutes);
+  app.route('/api', agentConfigRoutes);
   app.route('/api', settingsRoutes);
   app.route('/api', statsRoutes);
   app.route('/api', notifyRoutes);
   app.route('/api', onboardingRoutes);
-
-  // Browser gate page — serves pairing form at "/" for remote clients
-  app.route('', gateRoutes);
 
   // Relay status endpoint
   app.get('/api/relay/status', (c) => {
@@ -65,14 +64,8 @@ export function createApp() {
   // Localhost connections are auto-authenticated. Remote clients must send
   // { type: "initialize", token: "..." } as their first message.
   app.get('/ws', upgradeWebSocket((c) => {
-    // Capture client IP from the upgrade request (closure per connection).
-    // Use TCP socket address first — proxy headers are trivially spoofable
-    // when no reverse proxy sits in front of the server.
-    const socketIp = (c.env as any)?.incoming?.socket?.remoteAddress;
-    const forwarded = c.req.header('x-forwarded-for');
-    const ip = socketIp
-      ?? (forwarded ? forwarded.split(',')[0].trim() : undefined);
-    const isLocal = ip ? isLocalhostIp(ip) : false;
+    const ip = getClientIp(c);
+    const isLocal = isLocalhost(ip);
     let connectionId: string | null = null;
 
     return {
@@ -113,7 +106,7 @@ export function createApp() {
         }
 
         // Authenticated — handle protocol messages (shared with relay virtual connections)
-        handleProtocolMessage(connectionId!, msg);
+        handleProtocolMessage(connectionId, msg);
       },
 
       onClose() {

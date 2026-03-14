@@ -16,7 +16,6 @@ export interface WsConnection {
   id: string;
   ws: WsSendable;
   deviceId: string | null;
-  subscriptions: Set<string>;
   lastPong: number;
   /** True for relay-tunneled connections (skip direct heartbeat pings) */
   isVirtual?: boolean;
@@ -39,7 +38,6 @@ export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual
     id,
     ws,
     deviceId,
-    subscriptions: new Set(),
     lastPong: Date.now(),
     isVirtual,
   });
@@ -73,35 +71,6 @@ export function broadcast(message: string): void {
     } catch {
       // Connection may have closed — will be cleaned up on next heartbeat
     }
-  }
-}
-
-/** Broadcast a message to connections subscribed to a specific topic. */
-export function broadcastToSubscribers(topic: string, message: string): void {
-  for (const conn of connections.values()) {
-    if (conn.subscriptions.has(topic)) {
-      try {
-        conn.ws.send(message);
-      } catch {
-        // Will be cleaned up on next heartbeat
-      }
-    }
-  }
-}
-
-/** Add subscription topics to a connection. */
-export function addSubscriptions(id: string, topics: string[]): void {
-  const conn = connections.get(id);
-  if (conn) {
-    for (const topic of topics) conn.subscriptions.add(topic);
-  }
-}
-
-/** Remove subscription topics from a connection. */
-export function removeSubscriptions(id: string, topics: string[]): void {
-  const conn = connections.get(id);
-  if (conn) {
-    for (const topic of topics) conn.subscriptions.delete(topic);
   }
 }
 
@@ -168,11 +137,8 @@ function checkHeartbeats(): void {
 
 // ---- Protocol Dispatch ----
 
-/** Handlers for extended protocol messages beyond core pong/subscribe/unsubscribe. */
+/** Handler for q:* query protocol frames. */
 export interface WsProtocolHandlers {
-  onRequest?: (connectionId: string, msg: Record<string, unknown>) => void;
-  onWatchSession?: (connectionId: string, sessionId: string | null) => void;
-  onSendMessage?: (connectionId: string, msg: Record<string, unknown>) => void;
   onQueryFrame?: (connectionId: string, msg: Record<string, unknown>) => void;
 }
 
@@ -187,32 +153,13 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
  * Handle an incoming WS protocol message for an authenticated connection.
  * Shared by local WS (app.ts) and virtual relay connections (relay.service.ts).
  *
- * Core protocol (always available): pong, subscribe, unsubscribe
- * Extended protocol (registered via setProtocolHandlers): request, watch_session, send_message
+ * Core: pong
+ * Query protocol: q:* frames routed to query engine
  */
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
   match(msg.type as string)
     .with("pong", () => {
       recordPong(connectionId);
-    })
-    .with("subscribe", () => {
-      if (Array.isArray(msg.topics)) {
-        addSubscriptions(connectionId, msg.topics as string[]);
-      }
-    })
-    .with("unsubscribe", () => {
-      if (Array.isArray(msg.topics)) {
-        removeSubscriptions(connectionId, msg.topics as string[]);
-      }
-    })
-    .with("request", () => {
-      extendedHandlers.onRequest?.(connectionId, msg);
-    })
-    .with("watch_session", () => {
-      extendedHandlers.onWatchSession?.(connectionId, msg.sessionId as string | null);
-    })
-    .with("send_message", () => {
-      extendedHandlers.onSendMessage?.(connectionId, msg);
     })
     .otherwise(() => {
       // Route q:* frames to query engine handler

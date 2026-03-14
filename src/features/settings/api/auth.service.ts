@@ -18,13 +18,13 @@ export interface PairCodeResponse {
 
 export const AuthService = {
   generatePairCode: (): Promise<PairCodeResponse> =>
-    apiClient.post<PairCodeResponse>("/auth/generate-pair-code"),
+    apiClient.post<PairCodeResponse>("/remote-auth/generate-pair-code"),
 
   listDevices: (): Promise<{ devices: PairedDevice[] }> =>
-    apiClient.get<{ devices: PairedDevice[] }>("/auth/devices"),
+    apiClient.get<{ devices: PairedDevice[] }>("/remote-auth/devices"),
 
   revokeDevice: (id: string): Promise<{ success: boolean }> =>
-    apiClient.delete<{ success: boolean }>(`/auth/devices/${id}`),
+    apiClient.delete<{ success: boolean }>(`/remote-auth/devices/${id}`),
 
   getRelayStatus: (): Promise<RelayStatus> => apiClient.get<RelayStatus>("/relay/status"),
 };

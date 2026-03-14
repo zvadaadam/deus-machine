@@ -106,19 +106,6 @@ export function getWorkspaceRaw(
   return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined;
 }
 
-/** Workspace + repo only (no session JOIN). Used after workspace creation. */
-export function getWorkspaceWithRepo(
-  db: Database.Database,
-  id: string
-): WorkspaceWithDetailsRow | undefined {
-  return db.prepare(`
-    SELECT w.*, r.name as repo_name, r.root_path, r.git_default_branch
-    FROM workspaces w
-    LEFT JOIN repositories r ON w.repository_id = r.id
-    WHERE w.id = ?
-  `).get(id) as WorkspaceWithDetailsRow | undefined;
-}
-
 /**
  * Non-archived workspaces for query engine and relay clients.
  * Used by: query-engine snapshots, relay initial state, relay data requests.

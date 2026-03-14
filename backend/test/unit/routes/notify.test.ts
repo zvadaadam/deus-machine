@@ -1,14 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockInvalidate = vi.fn();
-const mockTriggerWatcherTick = vi.fn();
 
 vi.mock('../../../src/services/query-engine', () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
-}));
-
-vi.mock('../../../src/services/relay.service', () => ({
-  triggerWatcherTick: () => mockTriggerWatcherTick(),
 }));
 
 import app from '../../../src/routes/notify';
@@ -30,15 +25,6 @@ describe('POST /notify', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(mockInvalidate).not.toHaveBeenCalled();
-    expect(mockTriggerWatcherTick).not.toHaveBeenCalled();
-  });
-
-  it('triggers watcher tick for session:message', async () => {
-    const res = await post({
-      notifications: [{ event: 'session:message', sessionId: 's-1' }],
-    });
-    expect(res.status).toBe(200);
-    expect(mockTriggerWatcherTick).toHaveBeenCalledTimes(1);
   });
 
   it('invalidates messages for session:message', async () => {
@@ -58,7 +44,6 @@ describe('POST /notify', () => {
     expect(resources).toContain('workspaces');
     expect(resources).toContain('sessions');
     expect(resources).toContain('stats');
-    expect(mockTriggerWatcherTick).not.toHaveBeenCalled();
   });
 
   it('invalidates workspaces, sessions for session:updated', async () => {
@@ -93,7 +78,6 @@ describe('POST /notify', () => {
     });
     expect(res.status).toBe(200);
     expect(mockInvalidate).not.toHaveBeenCalled();
-    expect(mockTriggerWatcherTick).not.toHaveBeenCalled();
   });
 
   it('handles mixed known and unknown events', async () => {
@@ -104,7 +88,6 @@ describe('POST /notify', () => {
         { event: 'bogus' },
       ],
     });
-    expect(mockTriggerWatcherTick).toHaveBeenCalledTimes(1);
     expect(mockInvalidate).toHaveBeenCalledTimes(1);
     expect(mockInvalidate.mock.calls[0][0]).toContain('messages');
   });

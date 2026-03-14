@@ -40,7 +40,7 @@ import {
   COMMANDS_DIR,
   AGENTS_DIR,
   SETTINGS_PATH,
-} from '../../../src/services/config.service';
+} from '../../../src/services/agent-config.service';
 
 beforeEach(() => {
   vi.clearAllMocks();
