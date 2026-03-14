@@ -3,7 +3,7 @@
   "checkpoint_id": "01abc435104e",
   "strategy": "manual-commit",
   "branch": "zvadaadam/remove-dead-code",
-  "checkpoints_count": 5,
+  "checkpoints_count": 6,
   "files_touched": [
     "src/features/agent-config/index.ts",
     "src/features/agent-config/store/agent-config.store.ts",
@@ -46,13 +46,19 @@
       "transcript": "/01/abc435104e/3/full.jsonl",
       "content_hash": "/01/abc435104e/3/content_hash.txt",
       "prompt": "/01/abc435104e/3/prompt.txt"
+    },
+    {
+      "metadata": "/01/abc435104e/4/metadata.json",
+      "transcript": "/01/abc435104e/4/full.jsonl",
+      "content_hash": "/01/abc435104e/4/content_hash.txt",
+      "prompt": "/01/abc435104e/4/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 870,
-    "cache_creation_tokens": 514425,
-    "cache_read_tokens": 3178025,
-    "output_tokens": 25685,
-    "api_call_count": 63
+    "input_tokens": 902,
+    "cache_creation_tokens": 585919,
+    "cache_read_tokens": 5065096,
+    "output_tokens": 35179,
+    "api_call_count": 91
   }
 }
