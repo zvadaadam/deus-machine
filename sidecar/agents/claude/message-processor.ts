@@ -177,7 +177,11 @@ export function processMessage(
     }
   }
 
-  // 6. result/success → mark query as succeeded
+  // 6. result/success → mark query as succeeded and transition to idle.
+  // Must happen HERE (inside the loop), not in executeOutcome (post-loop),
+  // because the streaming loop stays alive between turns — the prompt queue
+  // blocks waiting for the next user message, so the post-loop never runs
+  // until the entire conversation ends.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
     ctx.querySucceeded = true;
     if (!ctx.stopReasonError) {

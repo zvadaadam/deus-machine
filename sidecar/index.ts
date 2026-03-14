@@ -119,8 +119,8 @@ class UnifiedSidecar {
     });
 
     // Graceful shutdown handlers
-    process.on("SIGINT", async () => {
-      console.log("\n[SIGNAL] Received SIGINT, shutting down gracefully...");
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`\n[SIGNAL] Received ${signal}, shutting down gracefully...`);
       try {
         await this.cleanup();
         console.log("[SIGNAL] Cleanup complete, exiting process");
@@ -129,19 +129,9 @@ class UnifiedSidecar {
       } finally {
         process.exit(0);
       }
-    });
-
-    process.on("SIGTERM", async () => {
-      console.log("\n[SIGNAL] Received SIGTERM, shutting down gracefully...");
-      try {
-        await this.cleanup();
-        console.log("[SIGNAL] Cleanup complete, exiting process");
-      } catch (error) {
-        console.error("[SIGNAL] Cleanup failed:", error);
-      } finally {
-        process.exit(0);
-      }
-    });
+    };
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   }
 
   /**
@@ -153,7 +143,7 @@ class UnifiedSidecar {
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
     // handleQuery is NOT awaited — the ACK returns immediately after validation.
-    FrontendClient.onQuery(async (request) => {
+    FrontendClient.onQuery(rpcTunnel, async (request) => {
       const tQueryReceived = Date.now();
       console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`);
       const agent = getAgent(request.agentType);

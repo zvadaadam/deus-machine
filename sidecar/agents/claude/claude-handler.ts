@@ -6,7 +6,9 @@ import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-ag
 import { getErrorMessage } from "../../../shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
-import { createStreamContext, resolveStreamOutcome, executeOutcome } from "./stream-context";
+import { createStreamContext } from "./stream-context";
+import { classifyError } from "../error-classifier";
+import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
 import {
   deserializeMessage,
   processMessage,
@@ -157,7 +159,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (maxThinkingTokensChanged && session && query) {
         try {
           await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
-          session!.currentMaxThinkingTokens = options.maxThinkingTokens;
+          session.currentMaxThinkingTokens = options.maxThinkingTokens;
         } catch (error) {
           console.error(
             `Failed to update maxThinkingTokens: ${getErrorMessage(error)}`
@@ -436,7 +438,6 @@ export class ClaudeAgentHandler implements AgentHandler {
     };
 
     // Mutable context accumulated during the streaming loop.
-    // Replaces scattered boolean flags — see stream-context.ts for field docs.
     const ctx = createStreamContext();
 
     try {
@@ -540,17 +541,74 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[TIMING][${generatorId}] STREAM_COMPLETE messages=${ctx.messageCount} totalStreamTime=${Date.now() - tStreamStart}ms totalProcessTime=${Date.now() - tProcessStart}ms`
       );
 
-      // Resolve outcome and execute side effects (cancel, idle, error).
-      // See stream-context.ts for the classification logic.
-      const postLoopOutcome = resolveStreamOutcome(ctx, session, null, sessionId);
-      executeOutcome(postLoopOutcome, sessionId, ctx, options, generatorId);
-      if (postLoopOutcome.type === "cancelled") return;
+      // Post-loop: stream ended cleanly (prompt queue closed or SDK finished).
+      // Turn-level idle is already set by processMessage on result/success.
+      // This handles conversation-end: cancel persistence only.
+      if (session.cancelledByUser) {
+        persistCancellation(sessionId, "claude", options.model || "opus");
+        console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
+        return;
+      }
+      console.log(`[${generatorId}] Stream completed: ${sessionId}`);
     } catch (error) {
-      // Resolve outcome from the catch context — covers cancel-via-throw,
-      // post-success SIGINT, and genuine errors.
-      const catchOutcome = resolveStreamOutcome(ctx, session, error, sessionId);
-      executeOutcome(catchOutcome, sessionId, ctx, options, generatorId);
-      if (catchOutcome.type !== "genuine_error") return;
+      // Cancel takes priority — abort signal can surface as a thrown error.
+      if (session.cancelledByUser) {
+        persistCancellation(sessionId, "claude", options.model || "opus");
+        console.log(`[${generatorId}] Session cancelled by user (catch): ${sessionId}`);
+        return;
+      }
+
+      // Post-success process exit: the CLI shuts down between turns and the
+      // SDK reports the signal-based exit as an error. Expected cleanup, not failure.
+      if (ctx.querySucceeded) {
+        console.log(`[${generatorId}] Process exited after successful query (expected cleanup)`);
+        return;
+      }
+
+      // Genuine error — check if this generator still owns the session.
+      // A rapid re-query can replace the session before the catch runs.
+      const currentSession = getSession(sessionId);
+      const ownsSession = !currentSession || currentSession === session;
+
+      const classified = classifyError(error);
+      const errorName = error instanceof Error ? error.name : "non-Error";
+      const errorStack = error instanceof Error
+        ? error.stack?.split("\n").slice(0, 5).join("\n")
+        : "no stack";
+      const extraProps = error instanceof Error
+        ? Object.getOwnPropertyNames(error)
+            .filter((k) => !["message", "stack", "name"].includes(k))
+            .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
+            .join(" ")
+        : "";
+
+      console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
+      console.error(
+        `[${generatorId}] Error details:`,
+        `name=${errorName}`,
+        `wasResume=${!!options.resume}`,
+        `resumeId=${options.resume ?? "none"}`,
+        `querySucceeded=${ctx.querySucceeded}`,
+        `messageCount=${ctx.messageCount}`,
+        extraProps ? `extraProps={${extraProps}}` : "extraProps={}",
+      );
+      console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
+
+      if (ownsSession) {
+        notifyAndRecordError(sessionId, "claude", classified, (c) => {
+          if (c.category !== "process_exit") return c.message;
+          const parts: string[] = [c.message];
+          if (options.resume) parts.push("(resumed session)");
+          if (ctx.messageCount > 0) {
+            parts.push(`after ${ctx.messageCount} message${ctx.messageCount !== 1 ? "s" : ""}`);
+          } else {
+            parts.push("before receiving any messages");
+          }
+          if (ctx.lastResultError) parts.push(`— ${ctx.lastResultError}`);
+          if (extraProps) parts.push(`[${extraProps}]`);
+          return parts.join(" ");
+        });
+      }
     } finally {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;

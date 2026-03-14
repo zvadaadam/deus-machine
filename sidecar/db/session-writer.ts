@@ -7,7 +7,7 @@
 
 import { getErrorMessage } from "../../shared/lib/errors";
 import { uuidv7 } from "../../shared/lib/uuid";
-import { NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS, NOTIFY_SESSION_UPDATED } from "../../shared/events";
+import { NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS } from "../../shared/events";
 import { getDatabase } from "./index";
 import { notifyBackend } from "./backend-notifier";
 import { FrontendClient } from "../frontend-client";
@@ -220,13 +220,8 @@ export function lookupAgentType(sessionId: string): AgentType {
  * Update session status (e.g., from 'working' to 'idle').
  * Called when a query completes (result.type === 'result' && result.subtype === 'success').
  *
- * Retries once on SQLITE_BUSY since this is the most critical write —
- * a failed status update leaves the session stuck in "working" forever.
+ * busy_timeout PRAGMA (5000ms) handles SQLITE_BUSY retries at the driver level.
  */
-// SessionStatus is now imported from shared/enums.ts (canonical 5-value enum)
-// instead of the local 3-value definition that was missing "needs_response"
-// and "needs_plan_response".
-
 export function updateSessionStatus(
   sessionId: string,
   status: SessionStatus,
@@ -236,100 +231,55 @@ export function updateSessionStatus(
   const t0 = Date.now();
   const db = getDatabase();
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const tUpdate = Date.now();
-      db.prepare(
-        `
-        UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?
-      `
-      ).run(
-        status,
-        status === "error" ? (errorMessage ?? null) : null,
-        status === "error" ? (errorCategory ?? null) : null,
-        sessionId
-      );
-      const updateMs = Date.now() - tUpdate;
-
-      const tNotify = Date.now();
-      notifyBackend(NOTIFY_SESSION_STATUS, sessionId);
-      const notifyMs = Date.now() - tNotify;
-
-      // Emit to frontend via Tauri event (desktop path).
-      // Fire-and-forget: tunnel may not be attached during startup
-      // (reconcileStuckSessions) or after sidecar restart.
-      try {
-        const workspaceId = lookupWorkspaceId(sessionId);
-        const agentType = lookupAgentType(sessionId);
-        FrontendClient.sendStatusChanged({
-          type: "status_changed",
-          id: sessionId,
-          agentType,
-          status,
-          ...(status === "error" && errorMessage ? { errorMessage } : {}),
-          ...(status === "error" && errorCategory
-            ? { errorCategory: errorCategory as ErrorCategory }
-            : {}),
-          ...(workspaceId ? { workspaceId } : {}),
-        });
-      } catch {
-        // No tunnel attached — frontend will pick up via fallback poll
-      }
-
-      const totalMs = Date.now() - t0;
-      console.log(
-        `[TIMING][SESSION-WRITER] updateSessionStatus session=${sessionId} status='${status}' update=${updateMs}ms notify=${notifyMs}ms total=${totalMs}ms${attempt > 0 ? ` retries=${attempt}` : ""}${errorMessage ? ` error: ${errorMessage}` : ""}`
-      );
-      return { ok: true, value: undefined };
-    } catch (error) {
-      const msg = getErrorMessage(error);
-      if (attempt === 0 && (msg.includes("SQLITE_BUSY") || msg.includes("database is locked"))) {
-        console.log(`[TIMING][SESSION-WRITER] SQLITE_BUSY on status update, retrying in 200ms...`);
-        // Synchronous wait — better-sqlite3 is sync anyway
-        const start = Date.now();
-        while (Date.now() - start < 200) {
-          /* spin */
-        }
-        continue;
-      }
-      console.error(`[SESSION-WRITER] Failed to update session status:`, msg);
-      return { ok: false, error: msg };
-    }
-  }
-  return { ok: false, error: "unreachable" };
-}
-
-// ── Context Usage ─────────────────────────────────────────────────────
-
-/**
- * Update session's context token count and usage percentage.
- * Called after a turn completes when the SDK reports token usage.
- * The frontend reads these via useSession() — notifyBackend triggers
- * immediate React Query invalidation so the UI updates without polling.
- */
-export function updateContextUsage(
-  sessionId: string,
-  tokenCount: number,
-  usedPercent: number
-): WriteResult<void> {
-  const db = getDatabase();
-
   try {
-    const result = db
-      .prepare(
-        `
-      UPDATE sessions SET context_token_count = ?, context_used_percent = ?, updated_at = datetime('now') WHERE id = ?
+    const tUpdate = Date.now();
+    // busy_timeout PRAGMA (5000ms) handles SQLITE_BUSY retries at the driver level.
+    // No application-level retry loop needed.
+    db.prepare(
+      `
+      UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?
     `
-      )
-      .run(tokenCount, usedPercent, sessionId);
-    if (result.changes === 0) {
-      console.warn(`[SESSION-WRITER] updateContextUsage: no session found for ${sessionId}`);
+    ).run(
+      status,
+      status === "error" ? (errorMessage ?? null) : null,
+      status === "error" ? (errorCategory ?? null) : null,
+      sessionId
+    );
+    const updateMs = Date.now() - tUpdate;
+
+    const tNotify = Date.now();
+    notifyBackend(NOTIFY_SESSION_STATUS, sessionId);
+    const notifyMs = Date.now() - tNotify;
+
+    // Emit to frontend via Tauri event (desktop path).
+    // Fire-and-forget: tunnel may not be attached during startup
+    // (reconcileStuckSessions) or after sidecar restart.
+    try {
+      const workspaceId = lookupWorkspaceId(sessionId);
+      const agentType = lookupAgentType(sessionId);
+      FrontendClient.sendStatusChanged({
+        type: "status_changed",
+        id: sessionId,
+        agentType,
+        status,
+        ...(status === "error" && errorMessage ? { errorMessage } : {}),
+        ...(status === "error" && errorCategory
+          ? { errorCategory: errorCategory as ErrorCategory }
+          : {}),
+        ...(workspaceId ? { workspaceId } : {}),
+      });
+    } catch {
+      // No tunnel attached — frontend will pick up via fallback poll
     }
-    notifyBackend(NOTIFY_SESSION_UPDATED, sessionId);
+
+    const totalMs = Date.now() - t0;
+    console.log(
+      `[TIMING][SESSION-WRITER] updateSessionStatus session=${sessionId} status='${status}' update=${updateMs}ms notify=${notifyMs}ms total=${totalMs}ms${errorMessage ? ` error: ${errorMessage}` : ""}`
+    );
     return { ok: true, value: undefined };
   } catch (error) {
     const msg = getErrorMessage(error);
-    console.error(`[SESSION-WRITER] Failed to update context usage:`, msg);
+    console.error(`[SESSION-WRITER] Failed to update session status:`, msg);
     return { ok: false, error: msg };
   }
 }
@@ -420,11 +370,11 @@ export function reconcileStuckSessions(): WriteResult<number> {
       error_category: string | null;
     }>;
 
-    console.log(
+    console.debug(
       `[SESSION-WRITER] Session state at startup (${allSessions.length} recent sessions):`
     );
     for (const s of allSessions) {
-      console.log(
+      console.debug(
         `  [${s.id.substring(0, 8)}] status=${s.status} agent_session_id=${s.agent_session_id ?? "null"} error=${s.error_message ?? "none"} category=${s.error_category ?? "none"}`
       );
     }

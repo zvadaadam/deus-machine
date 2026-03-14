@@ -150,8 +150,9 @@ export class CodexAgentHandler implements AgentHandler {
     console.log("Handling Codex cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
+    // Signal abort — processQuery's post-loop/catch path owns the
+    // status transition via persistCancellation (sets idle + notifies frontend).
     abortCodexSession(sessionId);
-    updateSessionStatus(sessionId, "idle");
   }
 
   handleReset(sessionId: string): void {
