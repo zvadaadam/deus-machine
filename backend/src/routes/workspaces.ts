@@ -6,6 +6,7 @@ import { spawn, execFile, execSync } from 'child_process';
 import { promisify } from 'util';
 import { uuidv7 } from '@shared/lib/uuid';
 import { getErrorMessage, isExecError } from '@shared/lib/errors';
+import { runGh, classifyCheck } from '../services/gh.service';
 import { getDatabase } from '../lib/database';
 import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
 import { NotFoundError, ValidationError } from '../lib/errors';
@@ -20,7 +21,7 @@ import {
   getWorkspacesByRepo,
   getWorkspaceById,
   getWorkspaceRaw,
-  getWorkspaceWithRepo,
+  getWorkspaceForMiddleware,
   getRepositoryById,
   getAllRepositorySummaries,
   getSessionRaw,
@@ -198,31 +199,6 @@ app.get('/workspaces/:id/diff-file', withWorkspace, (c) => {
   }
 });
 
-// Helper: run gh CLI command with timeout, explicit error classification
-async function runGh(args: string[], options: { cwd: string; timeoutMs?: number }): Promise<
-  { success: true; stdout: string } | { success: false; error: 'gh_not_installed' | 'gh_not_authenticated' | 'timeout' | 'unknown'; message: string }
-> {
-  try {
-    const { stdout, stderr } = await execFileAsync('gh', args, {
-      cwd: options.cwd,
-      encoding: 'utf-8',
-      timeout: options.timeoutMs ?? 5000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
-    });
-    return { success: true, stdout: stdout.trim() };
-  } catch (err: unknown) {
-    if (isExecError(err)) {
-      if (err.code === 'ENOENT') return { success: false, error: 'gh_not_installed', message: 'GitHub CLI (gh) is not installed' };
-      if (err.killed) return { success: false, error: 'timeout', message: 'GitHub CLI command timed out' };
-      const output = `${err.stderr ?? ''} ${err.stdout ?? ''}`.toLowerCase();
-      if (output.includes('gh auth login') || output.includes('not logged into any github hosts'))
-        return { success: false, error: 'gh_not_authenticated', message: 'GitHub CLI is not authenticated' };
-      return { success: false, error: 'unknown', message: err.stderr || err.message || 'Failed to run gh CLI' };
-    }
-    return { success: false, error: 'unknown', message: getErrorMessage(err) };
-  }
-}
-
 // gh CLI status check — cached on frontend with long staleTime
 app.get('/gh-status', async (c) => {
   const versionResult = await runGh(['--version'], { cwd: process.cwd(), timeoutMs: 2000 });
@@ -230,36 +206,6 @@ app.get('/gh-status', async (c) => {
   const authResult = await runGh(['auth', 'status'], { cwd: process.cwd(), timeoutMs: 5000 });
   return c.json({ isInstalled: true, isAuthenticated: authResult.success });
 });
-
-// GitHub Check Suite conclusions that indicate a non-passing terminal state.
-// Full GraphQL enum: ACTION_REQUIRED, CANCELLED, FAILURE, NEUTRAL, SKIPPED,
-// STALE, STARTUP_FAILURE, SUCCESS, TIMED_OUT.
-// NEUTRAL/SKIPPED are intentionally non-blocking (count as passing).
-// STALE means re-run is needed (count as pending below).
-const FAILING_CONCLUSIONS = new Set([
-  'FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED', 'CANCELLED',
-]);
-// CheckRun `status` values that indicate the check hasn't completed yet.
-// Note: CheckRun uses `status` field, StatusContext uses `state` field.
-const PENDING_STATUSES = new Set(['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED']);
-
-/**
- * Classify a single GitHub check (CheckRun or StatusContext) into a uniform status.
- * GitHub's statusCheckRollup contains two object types:
- *   - CheckRun (__typename: "CheckRun"): uses `conclusion` + `status`
- *   - StatusContext (__typename: "StatusContext"): uses `state`
- */
-function classifyCheck(check: any): 'passing' | 'failing' | 'pending' {
-  if (check.__typename === 'StatusContext') {
-    if (check.state === 'FAILURE' || check.state === 'ERROR') return 'failing';
-    if (check.state === 'PENDING' || check.state === 'EXPECTED') return 'pending';
-    return 'passing';
-  }
-  // CheckRun
-  if (FAILING_CONCLUSIONS.has(check.conclusion)) return 'failing';
-  if (check.conclusion === 'STALE' || check.conclusion == null || PENDING_STATUSES.has(check.status)) return 'pending';
-  return 'passing';
-}
 
 // PR status — async, fork-aware, explicit errors
 app.get('/workspaces/:id/pr-status', withWorkspace, async (c) => {
@@ -474,11 +420,6 @@ app.post('/workspaces/:id/open-pen-file', withWorkspace, async (c) => {
   return c.json({ success: true });
 });
 
-// Dev servers (stub)
-app.get('/workspaces/:id/dev-servers', (c) => {
-  return c.json({ servers: [] });
-});
-
 // Create workspace
 app.post('/workspaces', async (c) => {
   const db = getDatabase();
@@ -583,7 +524,7 @@ app.post('/workspaces', async (c) => {
     } catch {}
   });
 
-  const workspace = getWorkspaceWithRepo(db, workspaceId);
+  const workspace = getWorkspaceForMiddleware(db, workspaceId);
   if (!workspace) throw new NotFoundError('Workspace not found after creation');
 
   // Push immediately so clients see the workspace in 'initializing' state.

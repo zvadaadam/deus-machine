@@ -12,6 +12,7 @@ import {
 } from './services/ws.service';
 import { removeSubs as removeQuerySubs } from './services/query-engine';
 import { getRelayStatus } from './services/relay.service';
+import { isLocalhost, getClientIp } from './lib/network';
 import healthRoutes from './routes/health';
 import workspaceRoutes from './routes/workspaces';
 import sessionRoutes from './routes/sessions';
@@ -23,10 +24,6 @@ import onboardingRoutes from './routes/onboarding';
 import authRoutes from './routes/auth';
 import gateRoutes from './routes/gate';
 import notifyRoutes from './routes/notify';
-
-function isLocalhostIp(ip: string): boolean {
-  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
-}
 
 export function createApp() {
   const app = new Hono();
@@ -65,14 +62,8 @@ export function createApp() {
   // Localhost connections are auto-authenticated. Remote clients must send
   // { type: "initialize", token: "..." } as their first message.
   app.get('/ws', upgradeWebSocket((c) => {
-    // Capture client IP from the upgrade request (closure per connection).
-    // Use TCP socket address first — proxy headers are trivially spoofable
-    // when no reverse proxy sits in front of the server.
-    const socketIp = (c.env as any)?.incoming?.socket?.remoteAddress;
-    const forwarded = c.req.header('x-forwarded-for');
-    const ip = socketIp
-      ?? (forwarded ? forwarded.split(',')[0].trim() : undefined);
-    const isLocal = ip ? isLocalhostIp(ip) : false;
+    const ip = getClientIp(c);
+    const isLocal = isLocalhost(ip);
     let connectionId: string | null = null;
 
     return {
@@ -113,7 +104,7 @@ export function createApp() {
         }
 
         // Authenticated — handle protocol messages (shared with relay virtual connections)
-        handleProtocolMessage(connectionId!, msg);
+        handleProtocolMessage(connectionId, msg);
       },
 
       onClose() {

@@ -73,7 +73,6 @@ app.get('/sessions/:id/messages', (c) => {
  * This endpoint is kept for non-Tauri clients (cloud relay, web gateway).
  */
 app.post('/sessions/:id/messages', async (c) => {
-  const t0 = Date.now();
   const sessionId = c.req.param('id');
   const { content, model } = parseBody(CreateMessageBody, await c.req.json());
 
@@ -84,7 +83,6 @@ app.post('/sessions/:id/messages', async (c) => {
 
   const db = getDatabase();
   const createdMessage = getMessageById(db, result.messageId);
-  console.log(`[TIMING][sessions POST] session=${sessionId} total=${Date.now() - t0}ms`);
   return c.json(createdMessage);
 });
 
