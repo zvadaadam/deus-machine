@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "57ecaa49ce6b",
+  "session_id": "e325ef78-f83f-498b-8c79-c8eafa4e4925",
   "strategy": "manual-commit",
+  "created_at": "2026-03-14T21:38:23.177435Z",
   "branch": "zvadaadam/remove-dead-code",
-  "checkpoints_count": 8,
+  "checkpoints_count": 7,
   "files_touched": [
     ".husky/_/commit-msg",
     ".husky/_/post-commit",
@@ -26,25 +28,27 @@
     "src/features/workspace/api/workspace.service.ts",
     "src/shared/types/index.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/57/ecaa49ce6b/0/metadata.json",
-      "transcript": "/57/ecaa49ce6b/0/full.jsonl",
-      "content_hash": "/57/ecaa49ce6b/0/content_hash.txt",
-      "prompt": "/57/ecaa49ce6b/0/prompt.txt"
-    },
-    {
-      "metadata": "/57/ecaa49ce6b/1/metadata.json",
-      "transcript": "/57/ecaa49ce6b/1/full.jsonl",
-      "content_hash": "/57/ecaa49ce6b/1/content_hash.txt",
-      "prompt": "/57/ecaa49ce6b/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "0754f0e83f70",
+  "checkpoint_transcript_start": 143,
+  "transcript_lines_at_start": 143,
   "token_usage": {
-    "input_tokens": 147,
-    "cache_creation_tokens": 352470,
-    "cache_read_tokens": 13159331,
-    "output_tokens": 26418,
-    "api_call_count": 122
+    "input_tokens": 91,
+    "cache_creation_tokens": 184922,
+    "cache_read_tokens": 10749890,
+    "output_tokens": 18304,
+    "api_call_count": 81
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T21:38:22.85244Z",
+    "agent_lines": 203,
+    "human_added": 12,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 221,
+    "agent_percentage": 91.8552036199095
   }
 }
