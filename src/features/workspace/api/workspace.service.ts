@@ -15,35 +15,10 @@ import {
 } from "@/platform/tauri/git";
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
 
-/** Normalized task from opendevs.json manifest */
-export interface NormalizedTask {
-  name: string;
-  command: string;
-  description: string | null;
-  icon: string;
-  persistent: boolean;
-  mode: "concurrent" | "nonconcurrent";
-  depends: string[];
-  env: Record<string, string>;
-}
-
-/** Response from GET /workspaces/:id/manifest */
-export interface ManifestResponse {
-  manifest: Record<string, unknown> | null;
-  tasks: NormalizedTask[];
-}
-
-/** Response from POST /workspaces/:id/tasks/:name/run */
-export interface TaskRunResponse {
-  ptyId: string;
-  command: string;
-  cwd: string;
-  env: Record<string, string>;
-  persistent: boolean;
-  mode: "concurrent" | "nonconcurrent";
-}
+export type { NormalizedTask, ManifestResponse, TaskRunResponse };
 
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
@@ -61,16 +36,6 @@ function getWorkspacePath(ws: WorkspaceGitInfo): string {
 
 export const WorkspaceService = {
   /**
-   * Fetch all workspaces
-   */
-  fetchAll: async (params?: WorkspaceQueryParams): Promise<Workspace[]> => {
-    const queryString = params
-      ? `?${new URLSearchParams(params as Record<string, string>).toString()}`
-      : "";
-    return apiClient.get<Workspace[]>(`${ENDPOINTS.WORKSPACES}${queryString}`);
-  },
-
-  /**
    * Fetch workspaces grouped by repository.
    * Uses Rust/rusqlite via Tauri IPC when available (~1ms),
    * falls back to Node.js HTTP when in web mode (~50-200ms).
@@ -85,13 +50,6 @@ export const WorkspaceService = {
     }
     const query = state ? `?state=${state}` : "";
     return apiClient.get<RepoGroup[]>(`${ENDPOINTS.WORKSPACES_BY_REPO}${query}`);
-  },
-
-  /**
-   * Fetch single workspace by ID
-   */
-  fetchById: async (id: string): Promise<Workspace> => {
-    return apiClient.get<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id));
   },
 
   /**
@@ -147,9 +105,11 @@ export const WorkspaceService = {
         // Rust git failed — fall through to HTTP
       }
     }
-    const result = await apiClient.get<{ files: FileChange[]; truncated?: boolean; total_count?: number }>(
-      ENDPOINTS.WORKSPACE_DIFF_FILES(id)
-    );
+    const result = await apiClient.get<{
+      files: FileChange[];
+      truncated?: boolean;
+      total_count?: number;
+    }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
     return {
       files: result.files,
       truncated: result.truncated ?? false,

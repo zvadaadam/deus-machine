@@ -14,11 +14,6 @@ export type {
   ThinkingBlock,
   Session,
   SessionStatus,
-  SessionMessageEvent,
-  SessionErrorEvent,
-  SessionEnterPlanModeEvent,
-  SessionStatusEvent,
-  SessionNotification,
 } from "@shared/types/session";
 
 export {

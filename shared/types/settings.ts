@@ -40,37 +40,8 @@ export interface Settings {
   relay_url?: string; // e.g., "wss://relay.rundeus.com"
 }
 
-/**
- * MCP (Model Context Protocol) Server configuration
- * Configures external context providers for Claude
- */
-export interface MCPServer {
-  name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-}
-
-/**
- * Custom slash command definition
- * User-defined commands for quick actions
- */
-export interface Command {
-  name: string;
-  description: string;
-  content: string;
-}
-
-/**
- * Agent configuration
- * Sub-agents that can be invoked by Claude
- */
-export interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  tools: string[];
-}
+// Config item types (MCPServer, Command, Agent) moved to shared/types/agent-config.ts
+// as McpServerItem, CommandItem, AgentItem — canonical types shared by frontend + backend.
 
 /**
  * Settings section identifiers

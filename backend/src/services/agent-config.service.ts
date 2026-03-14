@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { McpConfigFile, AgentConfigFile, SettingsFile } from '../lib/schemas';
+import type { SkillItem, CommandItem, AgentItem, McpServerItem, HooksMap } from '@shared/types/agent-config';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const COMMANDS_DIR = path.join(CLAUDE_DIR, 'commands');
@@ -44,7 +45,7 @@ ensureDirectories();
 // MCP Servers
 // ============================================================================
 
-export function getMcpServers(projectPath?: string): Array<{ name: string; command: string; args: string[]; env: Record<string, string> }> {
+export function getMcpServers(projectPath?: string): McpServerItem[] {
   const configPath = path.join(resolveClaudeDir(projectPath), 'plugins', 'config.json');
   if (!fs.existsSync(configPath)) return [];
 
@@ -107,12 +108,12 @@ export function saveMcpServers(servers: Array<{ name: string; command: string; a
 // Commands
 // ============================================================================
 
-export function getCommands(projectPath?: string): Array<{ name: string; description: string; content: string }> {
+export function getCommands(projectPath?: string): CommandItem[] {
   const commandsDir = path.join(resolveClaudeDir(projectPath), 'commands');
   if (!fs.existsSync(commandsDir)) return [];
 
   const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
-  const commands: Array<{ name: string; description: string; content: string }> = [];
+  const commands: CommandItem[] = [];
 
   files.forEach(file => {
     const filePath = path.join(commandsDir, file);
@@ -150,12 +151,12 @@ export function deleteCommand(name: string, projectPath?: string): boolean {
 // Agents
 // ============================================================================
 
-export function getAgents(projectPath?: string): Array<{ id: string; name?: string; description?: string; tools?: string[] }> {
+export function getAgents(projectPath?: string): AgentItem[] {
   const agentsDir = path.join(resolveClaudeDir(projectPath), 'agents');
   if (!fs.existsSync(agentsDir)) return [];
 
   const files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.json'));
-  const agents: Array<{ id: string; name?: string; description?: string; tools?: string[] }> = [];
+  const agents: AgentItem[] = [];
 
   files.forEach(file => {
     const filePath = path.join(agentsDir, file);
@@ -200,7 +201,7 @@ export function deleteAgent(id: string, projectPath?: string): boolean {
 // Hooks
 // ============================================================================
 
-export function getHooks(projectPath?: string): Record<string, unknown> {
+export function getHooks(projectPath?: string): HooksMap {
   const settingsPath = path.join(resolveClaudeDir(projectPath), 'settings.json');
   if (!fs.existsSync(settingsPath)) return {};
 
@@ -220,7 +221,7 @@ export function getHooks(projectPath?: string): Record<string, unknown> {
   return parsed.data.hooks;
 }
 
-export function saveHooks(hooks: Record<string, unknown>, projectPath?: string): void {
+export function saveHooks(hooks: HooksMap, projectPath?: string): void {
   const settingsPath = path.join(resolveClaudeDir(projectPath), 'settings.json');
   let settings: Record<string, unknown> = {};
   if (fs.existsSync(settingsPath)) {
@@ -270,12 +271,12 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
   return { frontmatter, body: match[2] };
 }
 
-export function getSkills(projectPath?: string): Array<{ name: string; description: string; content: string }> {
+export function getSkills(projectPath?: string): SkillItem[] {
   const skillsDir = path.join(resolveClaudeDir(projectPath), 'skills');
   if (!fs.existsSync(skillsDir)) return [];
 
   const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-  const skills: Array<{ name: string; description: string; content: string }> = [];
+  const skills: SkillItem[] = [];
 
   entries.forEach(entry => {
     if (!entry.isDirectory()) return;

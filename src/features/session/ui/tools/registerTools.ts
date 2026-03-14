@@ -96,11 +96,6 @@ export function registerAllTools() {
   toolRegistry.register("GetWorkspaceDiff", GetWorkspaceDiffToolRenderer);
   toolRegistry.register("DiffComment", DiffCommentToolRenderer);
   toolRegistry.register("GetTerminalOutput", GetTerminalOutputToolRenderer);
-
-  if (import.meta.env.DEV) {
-    const stats = toolRegistry.getStats();
-    console.log("[ToolRegistry] Initialization complete:", stats);
-  }
 }
 
 // Auto-initialize on import (idempotent)

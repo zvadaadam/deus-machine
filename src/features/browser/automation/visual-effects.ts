@@ -87,18 +87,6 @@ export function buildScreenshotFlashJs(rect?: {
 }
 
 /**
- * Build JS for element highlight effect (blue outline pulse).
- * Used to show which element the AI is inspecting/screenshotting.
- */
-export function buildHighlightElementJs(ref: string): string {
-  return `(function(){
-  if (!window.__opendevsVisuals) return;
-  var el = document.querySelector('[data-opendevs-ref="${ref}"]');
-  if (el) window.__opendevsVisuals.highlightElement(el);
-})()`;
-}
-
-/**
  * Build JS for page scan effect (thin blue line sweeps down viewport).
  * Used to show the AI is reading/scanning the page (BrowserSnapshot).
  */
@@ -114,19 +102,3 @@ export const KEY_FLASH_JS = `(function(){
   if (window.__opendevsVisuals) window.__opendevsVisuals.keyFlash();
 })()`;
 
-/**
- * Show ambient edge glow — signals "AI is operating this browser tab."
- * Soft inset vignette that breathes gently while active.
- * Call before tool execution begins; pair with HIDE_ACTIVE_GLOW_JS when done.
- */
-export const SHOW_ACTIVE_GLOW_JS = `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.showActiveGlow();
-})()`;
-
-/**
- * Hide the active glow — signals tool execution is complete.
- * Captures current breathing opacity for a smooth fade-out (no jump).
- */
-export const HIDE_ACTIVE_GLOW_JS = `(function(){
-  if (window.__opendevsVisuals) window.__opendevsVisuals.hideActiveGlow();
-})()`;

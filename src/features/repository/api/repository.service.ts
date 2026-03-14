@@ -8,21 +8,7 @@ import { ENDPOINTS } from "@/shared/config/api.config";
 import { isTauriAvailable } from "@/platform/tauri/invoke";
 import { dbGetStats } from "@/platform/tauri/db";
 import type { Repository, Stats } from "../types";
-
-/** Shape returned by GET /repos/:id/manifest */
-export interface RepoManifestResponse {
-  manifest: Record<string, unknown> | null;
-  tasks: Array<{
-    name: string;
-    command: string;
-    description: string | null;
-    icon: string;
-    persistent: boolean;
-    mode: "concurrent" | "nonconcurrent";
-    depends: string[];
-    env: Record<string, string>;
-  }>;
-}
+import type { ManifestResponse } from "@shared/types/manifest";
 
 export const RepoService = {
   /**
@@ -65,8 +51,8 @@ export const RepoService = {
   /**
    * Read opendevs.json manifest for a repo
    */
-  fetchManifest: async (repoId: string): Promise<RepoManifestResponse> => {
-    return apiClient.get<RepoManifestResponse>(ENDPOINTS.REPO_MANIFEST(repoId));
+  fetchManifest: async (repoId: string): Promise<ManifestResponse> => {
+    return apiClient.get<ManifestResponse>(ENDPOINTS.REPO_MANIFEST(repoId));
   },
 
   /**
@@ -80,6 +66,8 @@ export const RepoService = {
    * Auto-detect manifest from project files (package.json, Cargo.toml, etc.)
    */
   detectManifest: async (repoId: string): Promise<{ manifest: Record<string, unknown> }> => {
-    return apiClient.get<{ manifest: Record<string, unknown> }>(ENDPOINTS.REPO_DETECT_MANIFEST(repoId));
+    return apiClient.get<{ manifest: Record<string, unknown> }>(
+      ENDPOINTS.REPO_DETECT_MANIFEST(repoId)
+    );
   },
 };
