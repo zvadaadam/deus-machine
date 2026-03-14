@@ -1,0 +1,542 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/minsk directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/minsk/.context/attachments/Review request.md (5.7 KB)
+</system_instruction>
+
+
+
+Please review the changes in this workspace
+
+---
+
+<system-instruction>
+The user has added 6 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR refactors the backend by extracting network utilities into a dedicated module, simplifying relay connection initialization, narrowing WebSocket protocol handling to query frames only, and consolidating common functionality into centralized services (GitHub CLI operations, manifest detection). Removes the getWorkspaceWithRepo database query and replaces it with getWorkspaceForMiddleware.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Network Utilities Consolidation** <br> `backend/src/lib/network.ts`, `backend/src/app.ts`, `backend/src/middleware/auth.ts`, `backend/src/middleware/remote-gate.ts`, `backend/src/routes/auth.ts`|Extracts IP detection logic (isLocalhost, getClientIp) and DEFAULT_RELAY_URL into centralized network.ts module; all dependent files import from this module instead of maintaining duplicate implementations.|
+|**Relay Service Refactoring** <br> `backend/src/services/relay.service.ts`, `backend/src/server.ts`, `backend/src/routes/settings.ts`|Introduces ensureRelayConnected() to bootstrap relay connection with credentials; removes multi-protocol handlers (onRequest, onWatchSession, onSendMessage) and session watcher logic; simplifies relay initialization and management across server startup and settings routes.|
+|**WebSocket Protocol Narrowing** <br> `backend/src/services/ws.service.ts`, `backend/src/routes/notify.ts`|Removes topic-based subscription API (broadcastToSubscribers, addSubscriptions, removeSubscriptions) and narrowed WsProtocolHandlers to only onQueryFrame; eliminates watcher tick triggering and related protocol handlers; notify route simplifies by removing needsWatcherTick logic.|
+|**New Centralized Services** <br> `backend/src/services/gh.service.ts`, `backend/src/services/manifest.service.ts`|Adds gh.service with runGh CLI wrapper and check classification logic (FAILING_CONCLUSIONS, PENDING_STATUSES, classifyCheck); enhances manifest.service with detectManifestFromProject for inferring build configurations from project files (Node.js, Rust, Python, Makefile).|
+|**Database and Route Simplifications** <br> `backend/src/db/queries.ts`, `backend/src/routes/workspaces.ts`, `backend/src/routes/repos.ts`, `backend/src/routes/sessions.ts`|Removes getWorkspaceWithRepo query and replaces with getWorkspaceForMiddleware; moves detectManifestFromProject out of repos.ts to manifest.service; replaces inline GitHub check classification with imported classifyCheck from gh.service; removes timing instrumentation from sessions endpoint.|
+|**Test Updates** <br> `backend/test/unit/routes/notify.test.ts`|Removes mocking and assertions for watcher tick behavior (triggerWatcherTick); retains invalidation behavior validation.|
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~45 minutes
+
+## Poem
+
+> 🐰 With whiskers held high, the code takes its place,
+> Network utilities sorted with grace!
+> Relay connections now simple and lean,
+> Services extracted, the cleanest we've seen,
+> The warren's refactored—organized, bright! ✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- pr_review_plan_action_start -->
+
+<details>
+<summary>📝 Coding Plan</summary>
+
+- [ ] <!-- {"checkboxId": "6ad8a4e1-0b3a-4ea2-9b5b-d82c1f47d1f2"} --> Generate coding plan for human review comments
+
+</details>
+
+<!-- pr_review_plan_action_end -->
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/ZpeBPGsWUIq6/REDACTED/REDACTED/KCo8M27xHUPja/REDACTED/d0haC4ABqWVVhlSUjAtd18M88z1fxQl/REDACTED/REDACTED/REDACTED/REDACTED/RQzQ8RFA/n4L+I8f50HgP/REDACTED/J+Mq+SvwVQSChyrv6QF/hq5gSCgHmhAc5/REDACTED/REDACTED/Rc397dIwAZ7reYDg9tOvIg/EqeEZCgwagD8vW5uknMl8FSp159gXlk/REDACTED/REDACTED/ed6ZS/REDACTED/REDACTED/F8jepp6yRh4/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/O4CotwQ/PyJ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/87anM+VlR1Vg8dojy/REDACTED/REDACTED/WEQIaUjOnOTLfrTCy5e3EbS/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/BX2QIR0C8ShDem4Q/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/pgN1YX9Luq3UEh4oh61/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/AN/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/bOGf+wKHE7QF+O4B/j3Zj032BCAEBUTWSjhI/KyVSHVE/REDACTED/PHmwtaQ/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/PbbSL37ggRVe7QCVb0BbI89/u6mhvCKx17vIeByPD/REDACTED/aAA= -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: backend/src/lib/network.ts
+Line: 18
+User comment: "_⚠️ Potential issue_ | _🔴 Critical_
+
+**Don't use this shared IP resolver as-is for localhost/auth bypass decisions.**
+
+Line 15 is now the source of truth for the localhost exemptions in `backend/src/routes/auth.ts`, `backend/src/middleware/auth.ts`, `backend/src/middleware/remote-gate.ts`, and the WebSocket handshake in `backend/src/app.ts`. A same-host reverse proxy will present `remoteAddress` as `127.0.0.1`/`::1`, so remote traffic is treated as localhost and skips auth; if `incoming.socket` is absent, the fallback headers are also trusted without any proxy allowlist. That makes the new shared helper an auth bypass.
+
+<details>
+<summary>🔒 Suggested fix sketch</summary>
+
+```diff
+ export function getClientIp(c: any): string | undefined {
+-  return (
+-    (c.env as any)?.incoming?.socket?.remoteAddress ||
+-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+-    c.req.header("x-real-ip")
+-  );
++  const remoteAddress = (c.env as any)?.incoming?.socket?.remoteAddress;
++  const forwardedFor = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
++  const realIp = c.req.header("x-real-ip")?.trim();
++
++  // Only honor proxy headers when the direct peer is a trusted/local proxy.
++  if (isLocalhost(remoteAddress)) {
++    return forwardedFor || realIp || remoteAddress;
++  }
++
++  return remoteAddress;
+ }
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/lib/network.ts` around lines 13 - 18, The getClientIp helper
+currently mixes socket.remoteAddress and proxy headers and is being used as the
+authoritative "is-localhost" source causing auth bypasses; change getClientIp
+(and its call sites) so it no longer blindly trusts x-forwarded-for/x-real-ip or
+socket.remoteAddress for localhost checks: either (A) make getClientIp return
+both the direct peer address and any proxy-supplied address (e.g., {peer:
+string|undefined, forwarded: string|undefined}) so auth middleware (auth.ts,
+middleware/auth.ts, middleware/remote-gate.ts, app.ts) can enforce a proper
+trusted-proxy allowlist and explicit logic, or (B) add an options parameter to
+getClientIp (e.g., {trustProxy: boolean}) that defaults to false and only reads
+x-forwarded-for/x-real-ip when trustProxy is true and the caller validates the
+proxy; update callers to explicitly opt-in and perform trusted-proxy checks
+before treating addresses as localhost. Ensure you reference getClientIp in your
+changes and do not rely on implicit header fallback for auth decisions.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50ThoZ. 
+
+
+Comment #3:
+
+File: backend/src/services/manifest.service.ts
+Line: 125
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+fd 'bun\.lockb|bun\.lock|package\.json$' . | sort
+rg -n --glob 'package.json' '"packageManager"\s*:\s*"bun@' .
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 255
+
+---
+
+🌐 Web query:
+
+`bun.lockb vs bun.lock Bun package manager lockfile naming`
+
+💡 Result:
+
+- **`bun.lockb`** = Bun’s **older binary** lockfile format (used by default **before Bun v1.2**). It’s not meant to be edited/diffed easily. [1][2]  
+- **`bun.lock`** = Bun’s **newer text-based** lockfile format (introduced in **Bun v1.1.39**, and made the **default in Bun v1.2+**). It’s human-readable and git-diffable. [1][3]
+
+**Migration:** To convert an existing `bun.lockb` to the text lockfile, run:
+`bun install --save-text-lockfile --frozen-lockfile --lockfile-only`
+then delete `bun.lockb`. [1][2]
+
+**Which to commit?** Bun’s docs recommend committing the lockfile (`bun.lock` for modern Bun). [1]
+
+**Sources:**  
+[1] Bun docs – Lockfile: `bun.lock` default; `bun.lockb` legacy + migration command. ([bun.sh](https://bun.sh/docs/install/lockfile?utm_source=openai))  
+[2] Bun docs – `bun install`: `bun.lockb` pre-1.2; migration command. ([bun.com](https://bun.com/docs/pm/cli/install?utm_source=openai))  
+[3] Vercel changelog: `bun.lock` introduced in 1.1.39; planned/default in 1.2. ([vercel.com](https://vercel.com/changelog/buns-text-lockfile-is-now-supported-with-zero-configuration?utm_source=openai))
+
+Citations:
+
+- 1: https://bun.sh/docs/install/lockfile?utm_source=openai
+- 2: https://bun.com/docs/pm/cli/install?utm_source=openai
+- 3: https://vercel.com/changelog/buns-text-lockfile-is-now-supported-with-zero-configuration?utm_source=openai
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the actual implementation in manifest.service.ts
+cd backend/src/services && cat -n manifest.service.ts | head -200
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 9724
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for any references to bun.lockb in the codebase
+rg 'bun\.lockb' .
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 424
+
+---
+
+</details>
+
+**Match `manifest.service.ts` package manager detection to `workspace-init.service.ts` by checking both Bun lockfile names.**
+
+Line 122 checks only `bun.lock`, but the codebase already establishes the correct pattern in `workspace-init.service.ts` to check both `bun.lock` and `bun.lockb`. This inconsistency means Bun projects with the older binary lockfile (`bun.lockb`) will be incorrectly detected as npm, leading to wrong setup commands and task prefixes.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-      const pm = fs.existsSync(path.join(rootPath, 'bun.lock')) ? 'bun' :
++      const pm = (fs.existsSync(path.join(rootPath, 'bun.lock')) || fs.existsSync(path.join(rootPath, 'bun.lockb'))) ? 'bun' :
+                  fs.existsSync(path.join(rootPath, 'pnpm-lock.yaml')) ? 'pnpm' :
+                  fs.existsSync(path.join(rootPath, 'yarn.lock')) ? 'yarn' : 'npm';
+```
+
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+      const pm = (fs.existsSync(path.join(rootPath, 'bun.lock')) || fs.existsSync(path.join(rootPath, 'bun.lockb'))) ? 'bun' :
+                 fs.existsSync(path.join(rootPath, 'pnpm-lock.yaml')) ? 'pnpm' :
+                 fs.existsSync(path.join(rootPath, 'yarn.lock')) ? 'yarn' : 'npm';
+      const run = pm === 'npm' ? 'npm run' : `${pm} run`;
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/manifest.service.ts` around lines 121 - 125, Update the
+package manager detection in manifest.service.ts so it checks for both Bun
+lockfile names like workspace-init.service.ts does: when computing pm (the const
+currently created alongside pkg and run), include existence checks for both
+'bun.lock' and 'bun.lockb' (e.g., treat either as Bun) before falling back to
+pnpm, yarn, or npm; ensure the derived run string (const run) continues to use
+pm to pick the correct run prefix.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50Thoa. 
+
+
+Comment #4:
+
+File: backend/src/services/manifest.service.ts
+Line: 163
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Later ecosystem setup steps are dropped here.**
+
+Lines 130-163 only keep the first detected `setup` command. A repo with `package.json` plus `Cargo.toml` or `pyproject.toml` gets the Node install step, but never the Rust/Python setup, so the generated manifest is incomplete for polyglot projects.
+
+<details>
+<summary>🛠️ Suggested fix sketch</summary>
+
+```diff
+ export function detectManifestFromProject(rootPath: string, repoName: string): Record<string, unknown> {
+   const manifest: Record<string, unknown> = { version: 1, name: repoName };
+   const tasks: Record<string, unknown> = {};
+   const requires: Record<string, string> = {};
++  const setupSteps: string[] = [];
+@@
+-      manifest.scripts = { setup: `${pm} install` };
+-      manifest.lifecycle = { setup: `${pm} install` };
++      setupSteps.push(`${pm} install`);
+@@
+-    if (!manifest.scripts) manifest.scripts = { setup: 'cargo build' };
+-    if (!manifest.lifecycle) manifest.lifecycle = { setup: 'cargo build' };
++    setupSteps.push('cargo build');
+@@
+-    if (!manifest.scripts) manifest.scripts = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
+-    if (!manifest.lifecycle) manifest.lifecycle = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
++    setupSteps.push(
++      fs.existsSync(requirementsPath)
++        ? `${pip} install -r requirements.txt`
++        : `${pip} install -e .`,
++    );
+@@
++  if (setupSteps.length > 0) {
++    const setup = setupSteps.join(' && ');
++    manifest.scripts = { setup };
++    manifest.lifecycle = { setup };
++  }
++
+   if (Object.keys(requires).length > 0) manifest.requires = requires;
+   if (Object.keys(tasks).length > 0) manifest.tasks = tasks;
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/manifest.service.ts` around lines 130 - 163, The
+manifest generation currently overwrites manifest.scripts.setup and
+manifest.lifecycle.setup when detecting multiple ecosystems, causing earlier
+setup steps (e.g., Node) to be lost when Rust/Python is also present; update the
+code in the Node/Cargo/Python detection blocks to merge setup steps instead of
+replacing them by: detect if manifest.scripts?.setup (and
+manifest.lifecycle?.setup) already exists and if so convert it to or append to
+an array of setup commands (preserving existing value) rather than overwriting,
+and keep adding task entries to tasks (e.g., tasks.build, tasks.test) as you do
+now; update handling for both scripts and lifecycle to support string or
+string[] so all detected ecosystem setup commands (Node, Cargo, pip/uv) are
+retained.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50Thod. 
+
+
+Comment #5:
+
+File: backend/src/services/relay.service.ts
+Line: 103
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Make `ensureRelayConnected()` idempotent before reusing it from multiple entry points.**
+
+`backend/src/routes/settings.ts`, Lines 17-20, and `backend/src/server.ts`, Lines 64-67, both call this helper now. Today every call falls through to `connectToRelay()`, which always opens a new socket. A repeated enable/save can leave two tunnels alive, and the older socket's later `close` handler can clear `tunnelWs` and disconnect clients that belong to the newer tunnel.
+
+<details>
+<summary>🔧 One safe guard for duplicate connects</summary>
+
+```diff
+ export function ensureRelayConnected(): void {
+   let url = getSetting("relay_url") as string | null;
+   if (!url) {
+     url = DEFAULT_RELAY_URL;
+     saveSetting("relay_url", url);
+   }
+   let creds = getRelayCredentials();
+   if (!creds) {
+     creds = generateRelayCredentials();
+   }
++  if (
++    relayUrl === url &&
++    serverId === creds.serverId &&
++    relayToken === creds.relayToken &&
++    tunnelWs &&
++    (tunnelWs.readyState === WebSocket.OPEN ||
++      tunnelWs.readyState === WebSocket.CONNECTING)
++  ) {
++    return;
++  }
+   connectToRelay(url, creds.serverId, creds.relayToken);
+ }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/relay.service.ts` around lines 92 - 103,
+ensureRelayConnected currently always calls connectToRelay which can open
+duplicate sockets; make it idempotent by first checking existing
+connection/connection-in-progress and returning early if set. Modify
+ensureRelayConnected to consult the module-level connection state (e.g., the
+existing tunnelWs or a new isConnecting/isConnected flag or a connecting
+Promise) and only call connectToRelay(url, creds.serverId, creds.relayToken)
+when there is no active or pending connection; set/clear the flag or Promise
+around connectToRelay so concurrent callers wait for or skip duplicate attempts
+and avoid opening multiple sockets.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:grasshopper -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50Thof. 
+
+
+Comment #6:
+
+File: backend/src/services/ws.service.ts
+Line: 143
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Fail fast for unconfigured query protocol handler.**
+
+`q:*` frames are currently dropped silently when `onQueryFrame` is unset (`extendedHandlers = {}` + optional chaining). In this dispatch path, silent drops can leave clients waiting indefinitely. Make the handler required or add an explicit error path/log + close behavior.
+
+
+
+<details>
+<summary>Proposed fix</summary>
+
+```diff
+ export interface WsProtocolHandlers {
+-  onQueryFrame?: (connectionId: string, msg: Record<string, unknown>) => void;
++  onQueryFrame: (connectionId: string, msg: Record<string, unknown>) => void;
+ }
+
+-let extendedHandlers: WsProtocolHandlers = {};
++let extendedHandlers: WsProtocolHandlers | null = null;
+
+ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
+   extendedHandlers = handlers;
+ }
+
+ // ...
+ if (typeof msg.type === "string" && msg.type.startsWith("q:")) {
+-  extendedHandlers.onQueryFrame?.(connectionId, msg);
++  if (!extendedHandlers) {
++    console.warn("[WS] Dropping q:* frame because protocol handlers are not initialized");
++    return;
++  }
++  extendedHandlers.onQueryFrame(connectionId, msg);
+ }
+```
+</details>
+
+
+Also applies to: 145-149, 166-168
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/ws.service.ts` around lines 141 - 143, The
+WsProtocolHandlers interface currently makes onQueryFrame optional which causes
+q:* frames to be silently dropped (extendedHandlers = {} + optional chaining);
+change handling so failures are noisy: either make onQueryFrame required on
+WsProtocolHandlers (remove the ? from onQueryFrame) or, in the q:* dispatch path
+(where you call onQueryFrame(connectionId, msg)), add an explicit branch that
+logs an error via the connection/process logger, sends an error frame/message to
+the client, and closes the connection (or returns a protocol error) when
+onQueryFrame is unset; ensure you reference WsProtocolHandlers, the onQueryFrame
+symbol, and the dispatch location that uses extendedHandlers/optional chaining
+so reviewers can find and update the code consistently.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50Thog. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
