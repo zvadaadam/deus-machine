@@ -1,5 +1,9 @@
 /**
  * Re-export settings types from shared definitions
- * Original types moved to shared/types/settings.ts
  */
-export type { Settings, MCPServer, Command, Agent, SettingsSection } from "@shared/types/settings";
+export type { Settings, SettingsSection } from "@shared/types/settings";
+export type {
+  McpServerItem as MCPServer,
+  CommandItem as Command,
+  AgentItem as Agent,
+} from "@shared/types/agent-config";

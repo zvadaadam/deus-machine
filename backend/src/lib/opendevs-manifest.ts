@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export type { NormalizedTask } from '@shared/types/manifest';
+
 /**
  * Zod schemas for opendevs.json manifest.
  *
@@ -40,17 +42,3 @@ export const OpenDevsManifestSchema = z.object({
 }).passthrough();
 
 export type OpenDevsManifest = z.infer<typeof OpenDevsManifestSchema>;
-
-/** Normalized task — string shorthand expanded to full object form */
-export interface NormalizedTask {
-  name: string;
-  command: string;
-  description: string | null;
-  icon: string;
-  persistent: boolean;
-  mode: 'concurrent' | 'nonconcurrent';
-  depends: string[];
-  env: Record<string, string>;
-}
-
-export type SetupStatus = 'none' | 'running' | 'completed' | 'failed';
