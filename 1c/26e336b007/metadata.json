@@ -3,7 +3,7 @@
   "checkpoint_id": "1c26e336b007",
   "strategy": "manual-commit",
   "branch": "zvadaadam/remove-dead-code",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     ".husky/_/commit-msg",
     ".husky/_/post-commit",
@@ -29,13 +29,19 @@
       "transcript": "/1c/26e336b007/1/full.jsonl",
       "content_hash": "/1c/26e336b007/1/content_hash.txt",
       "prompt": "/1c/26e336b007/1/prompt.txt"
+    },
+    {
+      "metadata": "/1c/26e336b007/2/metadata.json",
+      "transcript": "/1c/26e336b007/2/full.jsonl",
+      "content_hash": "/1c/26e336b007/2/content_hash.txt",
+      "prompt": "/1c/26e336b007/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 2003,
-    "cache_creation_tokens": 190990,
-    "cache_read_tokens": 3340063,
-    "output_tokens": 10803,
-    "api_call_count": 36
+    "input_tokens": 2011,
+    "cache_creation_tokens": 230045,
+    "cache_read_tokens": 3555997,
+    "output_tokens": 14509,
+    "api_call_count": 42
   }
 }
