@@ -37,7 +37,7 @@ vi.mock("../../../src/services/auth.service", () => ({
   resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
 
-import authRoutes from "../../../src/routes/auth";
+import authRoutes from "../../../src/routes/remote-auth";
 
 beforeEach(() => {
   vi.clearAllMocks();
