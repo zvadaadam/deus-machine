@@ -1,17 +1,11 @@
 /**
  * Tool Renderer Registry
  *
- * Central registry for tool-specific renderers using the Registry Pattern.
- * Allows dynamic registration and retrieval of tool renderers.
+ * Central registry for tool-specific renderers.
  *
  * Usage:
  *   toolRegistry.register('Edit', EditToolRenderer);
  *   const Renderer = toolRegistry.getRenderer('Edit');
- *
- * Benefits:
- *   - Extensible: Add new tools without modifying core code
- *   - Type-safe: Full TypeScript support
- *   - Discoverable: Can list all registered tools
  */
 
 import type { ToolRenderer } from "../chat-types";
@@ -24,30 +18,7 @@ class ToolRendererRegistry {
    * Register a tool renderer
    */
   register(toolName: string, renderer: ToolRenderer): void {
-    if (!toolName || typeof toolName !== "string") {
-      console.error("[ToolRegistry] Invalid tool name:", toolName);
-      return;
-    }
-
-    if (!renderer) {
-      console.error("[ToolRegistry] Invalid renderer for tool:", toolName);
-      return;
-    }
-
     this.renderers.set(toolName, renderer);
-
-    if (import.meta.env.DEV) {
-      console.log(`[ToolRegistry] ✓ Registered renderer for: ${toolName}`);
-    }
-  }
-
-  /**
-   * Register multiple tool renderers at once
-   */
-  registerBatch(tools: Record<string, ToolRenderer>): void {
-    Object.entries(tools).forEach(([name, renderer]) => {
-      this.register(name, renderer);
-    });
   }
 
   /**
@@ -55,16 +26,11 @@ class ToolRendererRegistry {
    */
   setDefault(renderer: ToolRenderer): void {
     this.defaultRenderer = renderer;
-
-    if (import.meta.env.DEV) {
-      console.log("[ToolRegistry] ✓ Set default renderer");
-    }
   }
 
   /**
    * Normalize a tool name by stripping MCP server prefixes.
    * "mcp__hive__BrowserSnapshot" → "BrowserSnapshot"
-   * Non-MCP names are returned as-is.
    */
   private normalizeName(toolName: string): string {
     if (toolName.startsWith("mcp__")) {
@@ -83,21 +49,16 @@ class ToolRendererRegistry {
   getRenderer(toolName: string): ToolRenderer {
     // Direct match first (built-in tools like Edit, Bash, Read)
     const renderer = this.renderers.get(toolName);
-
-    if (renderer) {
-      return renderer;
-    }
+    if (renderer) return renderer;
 
     // Try with MCP prefix stripped
     const bareName = this.normalizeName(toolName);
     if (bareName !== toolName) {
       const mcpRenderer = this.renderers.get(bareName);
-      if (mcpRenderer) {
-        return mcpRenderer;
-      }
+      if (mcpRenderer) return mcpRenderer;
     }
 
-    // Return default or throw error
+    // Return default or minimal fallback
     if (this.defaultRenderer) {
       if (import.meta.env.DEV) {
         console.warn(`[ToolRegistry] No renderer for "${toolName}", using default`);
@@ -105,67 +66,14 @@ class ToolRendererRegistry {
       return this.defaultRenderer;
     }
 
-    // No default set - this shouldn't happen in production
     console.error(`[ToolRegistry] No renderer found for "${toolName}" and no default set!`);
-
-    // Return a minimal fallback to prevent crashes
     return () => (
       <div className="bg-muted/50 text-muted-foreground rounded-md p-2 text-sm">
-        <strong>⚠️ No renderer available for tool: {toolName}</strong>
+        <strong>No renderer available for tool: {toolName}</strong>
       </div>
     );
-  }
-
-  /**
-   * Check if tool has a registered renderer.
-   * Handles MCP server prefixes the same way as getRenderer().
-   */
-  hasRenderer(toolName: string): boolean {
-    if (this.renderers.has(toolName)) return true;
-    const bareName = this.normalizeName(toolName);
-    return bareName !== toolName && this.renderers.has(bareName);
-  }
-
-  /**
-   * Get all registered tool names
-   */
-  getRegisteredTools(): string[] {
-    return Array.from(this.renderers.keys()).sort();
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getStats() {
-    return {
-      totalRenderers: this.renderers.size,
-      tools: this.getRegisteredTools(),
-      hasDefault: this.defaultRenderer !== null,
-    };
-  }
-
-  /**
-   * Clear all registrations (useful for testing)
-   */
-  clear(): void {
-    this.renderers.clear();
-    this.defaultRenderer = null;
-
-    if (import.meta.env.DEV) {
-      console.log("[ToolRegistry] Cleared all renderers");
-    }
   }
 }
 
 // Export singleton instance
 export const toolRegistry = new ToolRendererRegistry();
-
-// Log registry info in development
-if (import.meta.env.DEV) {
-  console.log("[ToolRegistry] Initialized tool renderer registry");
-
-  // Make it accessible from browser console for debugging
-  if (typeof window !== "undefined") {
-    (window as unknown as Record<string, unknown>).__toolRegistry = toolRegistry;
-  }
-}
