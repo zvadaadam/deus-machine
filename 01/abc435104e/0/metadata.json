@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "01abc435104e",
+  "session_id": "36cb63c4-8574-4be5-a094-c3829a06e49a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T19:26:05.043603Z",
+  "branch": "zvadaadam/remove-dead-code",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/features/onboarding/ui/AgentDotsVideo.stories.tsx",
+    "src/features/onboarding/ui/AgentDotsVideo.tsx",
+    "src/features/settings/ui/sections/RemoteAccessSection.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0c4e8e3e26fe",
+  "token_usage": {
+    "input_tokens": 20,
+    "cache_creation_tokens": 145170,
+    "cache_read_tokens": 795731,
+    "output_tokens": 6851,
+    "api_call_count": 14
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T19:26:04.952801Z",
+    "agent_lines": 0,
+    "human_added": 46,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 46,
+    "agent_percentage": 0
+  }
+}
