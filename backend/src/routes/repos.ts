@@ -3,15 +3,13 @@ import path from 'path';
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import { uuidv7 } from '@shared/lib/uuid';
-import { getErrorCode } from '@shared/lib/errors';
 import { getDatabase } from '../lib/database';
-import { ValidationError, ConflictError } from '../lib/errors';
+import { AppError, ValidationError, ConflictError, NotFoundError } from '../lib/errors';
 import { parseBody, CreateRepoBody } from '../lib/schemas';
 import { detectDefaultBranch } from '../services/git.service';
 import { getAllRepositories, getRepositoryByRootPath, getRepositoryById, getMaxRepositorySortOrder } from '../db';
 import { readManifest, getNormalizedTasks, writeManifest, detectManifestFromProject } from '../services/manifest.service';
 import { OpenDevsManifestSchema } from '../lib/opendevs-manifest';
-import { NotFoundError } from '../lib/errors';
 import { invalidate } from '../services/query-engine';
 import type { QueryResource } from '../../../shared/types/query-protocol';
 
@@ -32,7 +30,7 @@ app.post('/repos', async (c) => {
 
   // Verify permissions
   try { fs.accessSync(root_path, fs.constants.R_OK | fs.constants.X_OK); }
-  catch (err: unknown) { return c.json({ error: 'Path is not accessible (permission denied)', details: getErrorCode(err) }, 403); }
+  catch { throw new AppError(403, 'Path is not accessible (permission denied)'); }
 
   const stats = fs.statSync(root_path);
   if (!stats.isDirectory()) throw new ValidationError('Path is not a directory');
@@ -84,10 +82,8 @@ app.post('/repos/:id/manifest', async (c) => {
   const repo = getRepositoryById(db, c.req.param('id'));
   if (!repo) throw new NotFoundError('Repository not found');
 
-  const body = await c.req.json();
-  const parsed = OpenDevsManifestSchema.safeParse(body);
-  if (!parsed.success) return c.json({ error: 'Invalid manifest', issues: parsed.error.issues }, 400);
-  const success = writeManifest(repo.root_path, parsed.data);
+  const manifest = parseBody(OpenDevsManifestSchema, await c.req.json());
+  const success = writeManifest(repo.root_path, manifest);
   if (!success) return c.json({ error: 'Failed to write manifest' }, 500);
   return c.json({ success: true });
 });
