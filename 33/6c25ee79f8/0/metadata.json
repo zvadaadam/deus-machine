@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "336c25ee79f8",
+  "session_id": "08abbb72-cdbd-4475-8a52-5df3c69d106e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T16:12:44.552941Z",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/middleware/remote-auth.ts",
+    "backend/src/routes/agent-config.ts",
+    "backend/src/routes/config.ts",
+    "backend/src/routes/gate.ts",
+    "backend/src/routes/remote-auth.ts",
+    "backend/test/integration/auth-flow.test.ts",
+    "backend/test/unit/middleware/remote-auth.test.ts",
+    "backend/test/unit/routes/agent-config.test.ts",
+    "backend/test/unit/routes/config.test.ts",
+    "backend/test/unit/routes/remote-auth.test.ts",
+    "src/features/agent-config/api/agent-config.service.ts",
+    "src/features/agent-config/types.ts",
+    "src/features/agent-config/ui/categories/McpView.tsx",
+    "src/features/auth/ui/PairGatePage.tsx",
+    "src/features/settings/api/auth.service.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "72050bc1230f",
+  "token_usage": {
+    "input_tokens": 118,
+    "cache_creation_tokens": 395630,
+    "cache_read_tokens": 10055584,
+    "output_tokens": 31680,
+    "api_call_count": 82
+  },
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T16:12:44.01491Z",
+    "agent_lines": 416,
+    "human_added": 0,
+    "human_modified": 36,
+    "human_removed": 3,
+    "total_committed": 452,
+    "agent_percentage": 92.03539823008849
+  }
+}
