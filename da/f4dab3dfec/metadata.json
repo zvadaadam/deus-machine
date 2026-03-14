@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "daf4dab3dfec",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "backend/src/services/manifest.service.ts",
+    "backend/src/services/relay.service.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/da/f4dab3dfec/0/metadata.json",
+      "transcript": "/da/f4dab3dfec/0/full.jsonl",
+      "content_hash": "/da/f4dab3dfec/0/content_hash.txt",
+      "prompt": "/da/f4dab3dfec/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38,
+    "cache_creation_tokens": 209643,
+    "cache_read_tokens": 2319136,
+    "output_tokens": 15747,
+    "api_call_count": 31
+  }
+}
