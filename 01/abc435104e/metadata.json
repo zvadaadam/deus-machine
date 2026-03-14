@@ -5,7 +5,11 @@
   "branch": "zvadaadam/remove-dead-code",
   "checkpoints_count": 5,
   "files_touched": [
+    "src/features/agent-config/index.ts",
     "src/features/agent-config/store/agent-config.store.ts",
+    "src/features/agent-config/types.ts",
+    "src/features/agent-config/ui/AgentConfigPanel.tsx",
+    "src/features/agent-config/ui/categories/HooksView.tsx",
     "src/features/browser/automation/visual-effects.ts",
     "src/features/onboarding/ui/AgentDotsVideo.stories.tsx",
     "src/features/onboarding/ui/AgentDotsVideo.tsx",
@@ -15,7 +19,8 @@
     "src/features/sidebar/store/sidebarStore.ts",
     "src/features/workspace/api/workspace.service.ts",
     "src/features/workspace/store/index.ts",
-    "src/features/workspace/store/workspaceStore.ts"
+    "src/features/workspace/store/workspaceStore.ts",
+    "src/features/workspace/ui/ConfigPanel.tsx"
   ],
   "sessions": [
     {
@@ -35,13 +40,19 @@
       "transcript": "/01/abc435104e/2/full.jsonl",
       "content_hash": "/01/abc435104e/2/content_hash.txt",
       "prompt": "/01/abc435104e/2/prompt.txt"
+    },
+    {
+      "metadata": "/01/abc435104e/3/metadata.json",
+      "transcript": "/01/abc435104e/3/full.jsonl",
+      "content_hash": "/01/abc435104e/3/content_hash.txt",
+      "prompt": "/01/abc435104e/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 865,
-    "cache_creation_tokens": 488435,
-    "cache_read_tokens": 3099212,
-    "output_tokens": 24847,
-    "api_call_count": 60
+    "input_tokens": 870,
+    "cache_creation_tokens": 514425,
+    "cache_read_tokens": 3178025,
+    "output_tokens": 25685,
+    "api_call_count": 63
   }
 }
