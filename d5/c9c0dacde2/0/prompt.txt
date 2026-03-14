@@ -23,3 +23,7 @@ Okay, awesome. Can we go to the backend source middleware? I want to explore thi
 ---
 
 Okay, yes, this is good. So the remote gate, I think we should, or remote auth, it's good. We should rename the auth to remote auth, or should we merge also the remote gates to the remote auth, or what do you think?
+
+---
+
+Commit and push all changes
