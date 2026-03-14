@@ -53,3 +53,17 @@ export interface McpServerItem {
   args: string[];
   env: Record<string, string>;
 }
+
+/** What the backend returns for GET /config/hooks — event name → matcher groups */
+export interface HookCommand {
+  type: "command";
+  command: string;
+  timeout?: number;
+}
+
+export interface HookMatcherGroup {
+  matcher?: string;
+  hooks?: HookCommand[];
+}
+
+export type HooksMap = Record<string, HookMatcherGroup[]>;

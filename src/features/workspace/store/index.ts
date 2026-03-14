@@ -1,4 +1,4 @@
-export { useWorkspaceStore, workspaceActions } from "./workspaceStore";
+export { useWorkspaceStore } from "./workspaceStore";
 export {
   useWorkspaceLayoutStore,
   workspaceLayoutActions,

@@ -311,7 +311,6 @@ export function useAutoScroll({
 
   return {
     showScrollButton,
-    scrollToBottom,
     handleScrollToBottomClick: scrollToBottom,
     syncGeometry,
   };

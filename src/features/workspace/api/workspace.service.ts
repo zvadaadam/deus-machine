@@ -15,7 +15,7 @@ import {
 } from "@/platform/tauri/git";
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
-import type { WorkspaceQueryParams, PRStatus, GhCliStatus } from "@/shared/types";
+import type { PRStatus, GhCliStatus } from "@/shared/types";
 
 /** Normalized task from opendevs.json manifest */
 export interface NormalizedTask {
@@ -61,16 +61,6 @@ function getWorkspacePath(ws: WorkspaceGitInfo): string {
 
 export const WorkspaceService = {
   /**
-   * Fetch all workspaces
-   */
-  fetchAll: async (params?: WorkspaceQueryParams): Promise<Workspace[]> => {
-    const queryString = params
-      ? `?${new URLSearchParams(params as Record<string, string>).toString()}`
-      : "";
-    return apiClient.get<Workspace[]>(`${ENDPOINTS.WORKSPACES}${queryString}`);
-  },
-
-  /**
    * Fetch workspaces grouped by repository.
    * Uses Rust/rusqlite via Tauri IPC when available (~1ms),
    * falls back to Node.js HTTP when in web mode (~50-200ms).
@@ -85,13 +75,6 @@ export const WorkspaceService = {
     }
     const query = state ? `?state=${state}` : "";
     return apiClient.get<RepoGroup[]>(`${ENDPOINTS.WORKSPACES_BY_REPO}${query}`);
-  },
-
-  /**
-   * Fetch single workspace by ID
-   */
-  fetchById: async (id: string): Promise<Workspace> => {
-    return apiClient.get<Workspace>(ENDPOINTS.WORKSPACE_BY_ID(id));
   },
 
   /**
