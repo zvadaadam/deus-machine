@@ -1,0 +1,63 @@
+and shpuld we add some tets for the services wdyt?
+
+---
+
+Okay, but before we explore in the back-end source database, there is these types, but I thought that we are sharing the types somewhere. What do you think about this? Like, we want to achieve great extensible code base. Is it good that we have this copy of the types? Or I'm not saying this correctly. @backend/src/db/types.ts
+
+---
+
+Okay, and can we review the backend source lip? So, when I'm looking at it, I have a couple of things and I want you to tell me. The default DB path, how we are handling it, what do you think? Is it good? How we are doing it? Also, we have file schema and schemas. What do you think about that?
+
+---
+
+let';s do the rename, look at teh fodleer and the stuuff and let's change it
+
+---
+
+But now I can see that we have validation and what validates, it feels weird. And also the schema is the validation.ts now before it was schemas. Like, I don't understand why it's called validation. And do we have to have the schemas.ts to re-export? Like, is it necessary to have this file?
+
+---
+
+Okay, awesome. Can we go to the backend source middleware? I want to explore this folder and understand it. So the auth.ts, what is the auth here? This is basically for the remote access, right? So is it good to name it like generally auth? What do you think? And it's normal that the desktop apps are not secured?>
+
+---
+
+Okay, yes, this is good. So the remote gate, I think we should, or remote auth, it's good. We should rename the auth to remote auth, or should we merge also the remote gates to the remote auth, or what do you think?
+
+---
+
+Commit and push all changes
+
+---
+
+Alright, so let's move on to the backend source routes. And in the routes, when I'm looking at it, the first thing, what we are changing is the again, the auth.ts, is it an auth? It's more like a remote auth. So maybe this is something we should change. So it's named differently. And when you look at it, how it's written, is it okay? No. anti-patterns
+
+---
+
+okey now lookign the the file config in the backned routes, is ther somethign teh method with extractProjectPath? is liek the etartc workspace in the lib? is it correct
+
+---
+
+I can see that it's actually not the correct name, the config, it's like agent config, right? This is for the agents. So we should rename this to agent config and the extract project path is actually defining and getting what kind of scope it is, right?
+
+---
+
+This is a cleanup of the whole backend, so I want to update these things here.
+
+---
+
+Awesome, and can we also change the endpoint? I feel like the endpoint should say the agent config. And it's the same with the remote auth, now it only says auth, but it should be more clear. And yes, you have to update it in frontend too.
+
+---
+
+okey, let's move to another stuff, the gate.ts in thr backend routes? why do we have this????
+
+---
+
+But we have the remote website hosted on therandews.com, right so we dont realy need it?
+
+exploe th erelay and teh web - /Users/zvada/conductor/workspaces/devs-web/dallas-v3
+
+---
+
+let's deleete it, aand teh remote-auth taht's okey to have?
