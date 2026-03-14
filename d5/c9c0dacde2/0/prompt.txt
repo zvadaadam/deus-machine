@@ -1,0 +1,25 @@
+and shpuld we add some tets for the services wdyt?
+
+---
+
+Okay, but before we explore in the back-end source database, there is these types, but I thought that we are sharing the types somewhere. What do you think about this? Like, we want to achieve great extensible code base. Is it good that we have this copy of the types? Or I'm not saying this correctly. @backend/src/db/types.ts
+
+---
+
+Okay, and can we review the backend source lip? So, when I'm looking at it, I have a couple of things and I want you to tell me. The default DB path, how we are handling it, what do you think? Is it good? How we are doing it? Also, we have file schema and schemas. What do you think about that?
+
+---
+
+let';s do the rename, look at teh fodleer and the stuuff and let's change it
+
+---
+
+But now I can see that we have validation and what validates, it feels weird. And also the schema is the validation.ts now before it was schemas. Like, I don't understand why it's called validation. And do we have to have the schemas.ts to re-export? Like, is it necessary to have this file?
+
+---
+
+Okay, awesome. Can we go to the backend source middleware? I want to explore this folder and understand it. So the auth.ts, what is the auth here? This is basically for the remote access, right? So is it good to name it like generally auth? What do you think? And it's normal that the desktop apps are not secured?>
+
+---
+
+Okay, yes, this is good. So the remote gate, I think we should, or remote auth, it's good. We should rename the auth to remote auth, or should we merge also the remote gates to the remote auth, or what do you think?

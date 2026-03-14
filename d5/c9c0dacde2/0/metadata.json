@@ -1,0 +1,47 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d5c9c0dacde2",
+  "session_id": "08abbb72-cdbd-4475-8a52-5df3c69d106e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T15:50:05.816756Z",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/lib/database.ts",
+    "backend/src/lib/schema.ts",
+    "backend/src/lib/schemas.ts",
+    "backend/src/lib/validate.ts",
+    "backend/src/middleware/auth.ts",
+    "backend/src/middleware/remote-auth.ts",
+    "backend/src/routes/auth.ts",
+    "backend/src/routes/config.ts",
+    "backend/src/routes/repos.ts",
+    "backend/src/routes/sessions.ts",
+    "backend/src/routes/settings.ts",
+    "backend/src/routes/workspaces.ts",
+    "backend/test/unit/middleware/auth.test.ts",
+    "backend/test/unit/middleware/remote-auth.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "6ee18426a6f9",
+  "token_usage": {
+    "input_tokens": 84,
+    "cache_creation_tokens": 372053,
+    "cache_read_tokens": 6237786,
+    "output_tokens": 25027,
+    "api_call_count": 60
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T15:50:05.341159Z",
+    "agent_lines": 264,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 264,
+    "agent_percentage": 100
+  }
+}
