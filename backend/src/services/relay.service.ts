@@ -9,7 +9,7 @@ import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
 import { getSetting, saveSetting } from "./settings.service";
-import { getRelayCredentials, generateRelayCredentials, validateDeviceToken, validatePairCode, createDeviceToken } from "./auth.service";
+import { getRelayCredentials, generateRelayCredentials, validateDeviceToken, validatePairCode, createDeviceToken } from "./remote-auth.service";
 import { DEFAULT_RELAY_URL } from "../lib/network";
 import {
   addConnection,

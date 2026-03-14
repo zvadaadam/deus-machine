@@ -6,7 +6,7 @@ const mockValidateDeviceToken = vi.fn();
 const mockUpdateLastSeen = vi.fn();
 const mockCheckRateLimit = vi.fn(() => 0);
 
-vi.mock("../../../src/services/auth.service", () => ({
+vi.mock("../../../src/services/remote-auth.service", () => ({
   validateDeviceToken: (...args: unknown[]) => mockValidateDeviceToken(...args),
   updateLastSeen: (...args: unknown[]) => mockUpdateLastSeen(...args),
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
