@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e2467b44ef1b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/routes/workspaces.design.ts",
+    "backend/src/routes/workspaces.diff.ts",
+    "backend/src/routes/workspaces.pr.ts",
+    "backend/src/routes/workspaces.ts",
+    "backend/src/services/gh.service.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e2/467b44ef1b/0/metadata.json",
+      "transcript": "/e2/467b44ef1b/0/full.jsonl",
+      "content_hash": "/e2/467b44ef1b/0/content_hash.txt",
+      "prompt": "/e2/467b44ef1b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 200,
+    "cache_creation_tokens": 663116,
+    "cache_read_tokens": 21654914,
+    "output_tokens": 46136,
+    "api_call_count": 139
+  }
+}
