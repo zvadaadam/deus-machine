@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "01abc435104e",
+  "session_id": "e1eca485-e62e-4756-b00c-3fbde0be6435",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T19:26:14.346169Z",
+  "branch": "zvadaadam/remove-dead-code",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "src/features/sidebar/store/sidebarStore.ts",
+    "src/features/workspace/store/index.ts",
+    "src/features/agent-config/types.ts",
+    "src/features/session/hooks/useAutoScroll.ts",
+    "src/features/settings/ui/sections/RemoteAccessSection.tsx",
+    "src/features/workspace/ui/ConfigPanel.tsx",
+    "src/features/agent-config/index.ts",
+    "src/features/agent-config/ui/AgentConfigPanel.tsx",
+    "src/features/agent-config/ui/categories/HooksView.tsx",
+    "src/features/onboarding/ui/AgentDotsVideo.stories.tsx",
+    "src/features/onboarding/ui/AgentDotsVideo.tsx",
+    "src/features/sidebar/store/index.ts",
+    "src/features/workspace/api/workspace.service.ts",
+    "src/features/workspace/store/workspaceStore.ts",
+    "src/features/agent-config/store/agent-config.store.ts",
+    "src/features/browser/automation/visual-effects.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "41b2ae8c7de0",
+  "token_usage": {
+    "input_tokens": 5,
+    "cache_creation_tokens": 25990,
+    "cache_read_tokens": 78813,
+    "output_tokens": 838,
+    "api_call_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T19:26:14.340477Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 109,
+    "total_committed": 46,
+    "agent_percentage": 0
+  }
+}
