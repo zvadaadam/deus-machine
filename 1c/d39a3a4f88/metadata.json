@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1cd39a3a4f88",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "backend/src/routes/repos.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1c/d39a3a4f88/0/metadata.json",
+      "transcript": "/1c/d39a3a4f88/0/full.jsonl",
+      "content_hash": "/1c/d39a3a4f88/0/content_hash.txt",
+      "prompt": "/1c/d39a3a4f88/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 187,
+    "cache_creation_tokens": 656652,
+    "cache_read_tokens": 20068135,
+    "output_tokens": 43427,
+    "api_call_count": 132
+  }
+}
