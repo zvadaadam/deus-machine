@@ -35,10 +35,6 @@ interface UIState {
   closeSettings: () => void;
   setActiveSettingsSection: (section: SettingsSection) => void;
 
-  // Legacy aliases (used by sidebar header/footer)
-  openSettingsModal: () => void;
-  closeSettingsModal: () => void;
-
   closeAllModals: () => void;
 }
 
@@ -66,8 +62,7 @@ export const useUIStore = create<UIState>()(
         set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
 
       // Command palette actions
-      openCommandPalette: () =>
-        set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
+      openCommandPalette: () => set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
 
       closeCommandPalette: () =>
         set({ commandPaletteOpen: false }, false, "ui/closeCommandPalette"),
@@ -87,10 +82,6 @@ export const useUIStore = create<UIState>()(
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
 
-      // Legacy aliases — point to the new settings view actions
-      openSettingsModal: () => get().openSettings(),
-      closeSettingsModal: () => get().closeSettings(),
-
       closeAllModals: () =>
         set(
           {
@@ -105,7 +96,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "ui-store",
-      enabled: process.env.NODE_ENV === "development",
+      enabled: import.meta.env.DEV,
     }
   )
 );
@@ -131,7 +122,5 @@ export const uiActions = {
   toggleCommandPalette: () => useUIStore.getState().toggleCommandPalette(),
   setActiveSettingsSection: (section: SettingsSection) =>
     useUIStore.getState().setActiveSettingsSection(section),
-  openSettingsModal: () => useUIStore.getState().openSettings(),
-  closeSettingsModal: () => useUIStore.getState().closeSettings(),
   closeAllModals: () => useUIStore.getState().closeAllModals(),
 };

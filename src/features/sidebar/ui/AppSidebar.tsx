@@ -35,7 +35,7 @@ export function AppSidebar({
   profile = { username: "User" },
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar } = useSidebar();
-  const openSettingsModal = useUIStore((s) => s.openSettingsModal);
+  const openSettings = useUIStore((s) => s.openSettings);
   const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
   const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
   const repositoryOrder = useSidebarStore((s) => s.repositoryOrder);
@@ -88,7 +88,7 @@ export function AppSidebar({
     <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
       <SidebarHeader
         profile={profile}
-        onOpenSettings={openSettingsModal}
+        onOpenSettings={openSettings}
         onToggleSidebar={toggleSidebar}
         isExpanded={isExpanded}
       />
