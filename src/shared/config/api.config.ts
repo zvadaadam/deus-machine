@@ -2,11 +2,9 @@
  * API Configuration
  * Central configuration for API endpoints and settings
  *
- * Supports dynamic port allocation in both Tauri app and web dev mode:
+ * Port resolution:
  * - Tauri app: Uses Rust backend manager via invoke('get_backend_port')
  * - Web dev: Uses VITE_BACKEND_PORT environment variable from dev.sh
- * - Port Discovery: Tries to discover backend port by checking /api/health
- * - Fallback: Port 3333 if neither is available
  */
 
 import { invoke, isTauriEnv } from "@/platform/tauri";
@@ -21,116 +19,6 @@ let portPromise: Promise<number> | null = null;
 // 30 attempts × 200ms = 6s covers the 5s startup timeout with margin.
 const TAURI_PORT_MAX_RETRIES = 30;
 const TAURI_PORT_RETRY_DELAY_MS = 200;
-
-// Common ports to try during discovery (most recently used ports)
-// Backend uses PORT=0 for dynamic allocation, so we try a range of common ports
-const DISCOVERY_PORTS = [
-  51176,
-  52820,
-  53792, // Recent dynamic ports
-  59270,
-  59271,
-  59269, // Previous attempts
-  3333,
-  3334,
-  3335, // Default fallback range
-  8080,
-  8081,
-  8082, // Alternative common ports
-  50000,
-  50001,
-  50002,
-  50003,
-  50004,
-  50005, // Dynamic port range
-  51000,
-  51001,
-  51002,
-  51003,
-  51004,
-  51005, // More dynamic ports
-  52000,
-  52001,
-  52002,
-  52003,
-  52004,
-  52005, // More dynamic ports
-  53000,
-  53001,
-  53002,
-  53003,
-  53004,
-  53005, // More dynamic ports
-];
-
-/**
- * Try to discover backend port by checking /api/health on common ports
- */
-async function isBackendHealthResponse(response: Response): Promise<boolean> {
-  if (!response.ok) return false;
-  try {
-    const data = await response.json();
-    return data?.app === "opendevs-backend" && data?.status === "ok";
-  } catch {
-    return false;
-  }
-}
-
-async function discoverBackendPort(): Promise<number | null> {
-  // Try localStorage first (fastest)
-  const stored = localStorage.getItem("opendevs_backend_port");
-  if (stored) {
-    const port = parseInt(stored);
-    try {
-      const response = await fetch(`http://localhost:${port}/api/health`, {
-        method: "GET",
-        signal: AbortSignal.timeout(1000),
-      });
-      if (await isBackendHealthResponse(response)) {
-        if (import.meta.env.DEV) console.log(`[API] Found backend on stored port: ${port}`);
-        return port;
-      }
-    } catch (e) {
-      // Port changed, continue discovery
-    }
-  }
-
-  // Try discovery on common ports in parallel for speed
-  if (import.meta.env.DEV)
-    console.log(`[API] Scanning ${DISCOVERY_PORTS.length} ports for backend...`);
-
-  const portChecks = DISCOVERY_PORTS.map(async (port) => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 500);
-
-      const response = await fetch(`http://localhost:${port}/api/health`, {
-        method: "GET",
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (await isBackendHealthResponse(response)) {
-        return port;
-      }
-    } catch (e) {
-      // Port not available
-    }
-    return null;
-  });
-
-  const results = await Promise.all(portChecks);
-  const foundPort = results.find((port) => port !== null);
-
-  if (foundPort) {
-    if (import.meta.env.DEV) console.log(`[API] Discovered backend on port: ${foundPort}`);
-    localStorage.setItem("opendevs_backend_port", foundPort.toString());
-    return foundPort;
-  }
-
-  return null;
-}
 
 /**
  * Get the backend port (cached after first call).
@@ -161,14 +49,15 @@ async function getBackendPort(): Promise<number> {
       }
     }
 
-    // 2. Try Tauri API (for Tauri app mode) — retry with backoff.
+    // 2. Try Tauri API — retry with backoff.
     // The backend is managed by Rust and WILL start, but the port may not
     // be available yet if we're called before setup() finishes.
     if (isTauriEnv) {
       for (let attempt = 0; attempt < TAURI_PORT_MAX_RETRIES; attempt++) {
         try {
           const port = await invoke<number>("get_backend_port");
-          if (import.meta.env.DEV) console.log(`[API] Using Tauri backend port: ${port} (attempt ${attempt + 1})`);
+          if (import.meta.env.DEV)
+            console.log(`[API] Using Tauri backend port: ${port} (attempt ${attempt + 1})`);
           cachedPort = port;
           return port;
         } catch {
@@ -183,28 +72,8 @@ async function getBackendPort(): Promise<number> {
       throw new Error("Backend port not available after retries");
     }
 
-    // 3. Non-Tauri: single invoke attempt (will fail fast if not in Tauri)
-    try {
-      const port = await invoke<number>("get_backend_port");
-      if (import.meta.env.DEV) console.log(`[API] Using Tauri backend port: ${port}`);
-      cachedPort = port;
-      return port;
-    } catch {
-      if (import.meta.env.DEV)
-        console.log("[API] Tauri API not available, trying port discovery...");
-    }
-
-    // 4. Try port discovery (for web browser accessing Vite dev server)
-    const discoveredPort = await discoverBackendPort();
-    if (discoveredPort) {
-      if (import.meta.env.DEV)
-        console.log(`[API] Using discovered backend port: ${discoveredPort}`);
-      cachedPort = discoveredPort;
-      return discoveredPort;
-    }
-
-    // 5. Fallback to hardcoded port — do NOT cache so next call retries
-    console.warn("[API] Could not discover backend port, falling back to default port 3333");
+    // 3. Fallback for non-Tauri dev mode without VITE_BACKEND_PORT
+    console.warn("[API] No port source available, falling back to default port 3333");
     return 3333;
   })();
 
@@ -226,7 +95,6 @@ export async function getBaseURL(): Promise<string> {
 
 export const API_CONFIG = {
   getBaseURL,
-  POLL_INTERVAL: 2000, // 2 seconds
   REQUEST_TIMEOUT: 30000, // 30 seconds
 } as const;
 
@@ -247,7 +115,8 @@ export const ENDPOINTS = {
   WORKSPACE_MANIFEST: (id: string) => `/workspaces/${id}/manifest`,
   WORKSPACE_RETRY_SETUP: (id: string) => `/workspaces/${id}/retry-setup`,
   WORKSPACE_SETUP_LOGS: (id: string) => `/workspaces/${id}/setup-logs`,
-  WORKSPACE_TASK_RUN: (id: string, taskName: string) => `/workspaces/${id}/tasks/${encodeURIComponent(taskName)}/run`,
+  WORKSPACE_TASK_RUN: (id: string, taskName: string) =>
+    `/workspaces/${id}/tasks/${encodeURIComponent(taskName)}/run`,
 
   // Session endpoints
   SESSIONS: "/sessions",
