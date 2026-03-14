@@ -1,4 +1,4 @@
-// backend/src/routes/auth.ts
+// backend/src/routes/remote-auth.ts
 // Auth endpoints for remote access pairing and device management.
 // POST /auth/pair — public, rate-limited, exchanges code for token
 // POST /auth/generate-pair-code — localhost-only, creates a new code
@@ -6,6 +6,7 @@
 // DELETE /auth/devices/:id — localhost-only, revokes a device
 
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import { parseBody, PairBody } from "../lib/schemas";
 import {
   generatePairCode,
@@ -21,13 +22,13 @@ import { isLocalhost, getClientIp } from "../lib/network";
 
 const app = new Hono();
 
-function requireLocalhost(c: any): Response | null {
-  const ip = getClientIp(c);
-  if (!isLocalhost(ip)) {
+/** Reject non-localhost requests with 403. */
+const localhostOnly = createMiddleware(async (c, next) => {
+  if (!isLocalhost(getClientIp(c))) {
     return c.json({ error: "This endpoint is only available from localhost" }, 403);
   }
-  return null;
-}
+  await next();
+});
 
 // POST /auth/pair — public, exchanges pairing code for device token
 app.post("/auth/pair", async (c) => {
@@ -68,10 +69,7 @@ app.post("/auth/pair", async (c) => {
 });
 
 // POST /auth/generate-pair-code — localhost-only
-app.post("/auth/generate-pair-code", (c) => {
-  const denied = requireLocalhost(c);
-  if (denied) return denied;
-
+app.post("/auth/generate-pair-code", localhostOnly, (c) => {
   const { code, expiresAt } = generatePairCode();
   const expiresInSeconds = Math.round((expiresAt - Date.now()) / 1000);
 
@@ -79,18 +77,12 @@ app.post("/auth/generate-pair-code", (c) => {
 });
 
 // GET /auth/devices — localhost-only
-app.get("/auth/devices", (c) => {
-  const denied = requireLocalhost(c);
-  if (denied) return denied;
-
+app.get("/auth/devices", localhostOnly, (c) => {
   return c.json({ devices: listDevices() });
 });
 
 // DELETE /auth/devices/:id — localhost-only
-app.delete("/auth/devices/:id", (c) => {
-  const denied = requireLocalhost(c);
-  if (denied) return denied;
-
+app.delete("/auth/devices/:id", localhostOnly, (c) => {
   const id = c.req.param("id");
   const deleted = revokeDevice(id);
   if (!deleted) {

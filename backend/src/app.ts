@@ -21,7 +21,7 @@ import configRoutes from './routes/config';
 import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
-import authRoutes from './routes/auth';
+import authRoutes from './routes/remote-auth';
 import gateRoutes from './routes/gate';
 import notifyRoutes from './routes/notify';
 
