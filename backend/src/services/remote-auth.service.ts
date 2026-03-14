@@ -1,4 +1,4 @@
-// backend/src/services/auth.service.ts
+// backend/src/services/remote-auth.service.ts
 // Core auth logic for remote access: pairing codes, device tokens, rate limiting.
 // Pairing codes are ephemeral (in-memory), device tokens are persistent (DB).
 

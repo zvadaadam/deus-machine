@@ -47,7 +47,7 @@ vi.mock("../../src/server", () => ({
 import fs from "fs";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
-import { _clearAll as clearAuthState, createDeviceToken } from "../../src/services/auth.service";
+import { _clearAll as clearAuthState, createDeviceToken } from "../../src/services/remote-auth.service";
 import { invalidateRemoteGateCache } from "../../src/middleware/remote-gate";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
 import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";

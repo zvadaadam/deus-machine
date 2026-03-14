@@ -6,7 +6,7 @@ const mockValidateDeviceToken = vi.fn();
 const mockUpdateLastSeen = vi.fn();
 const mockCheckRateLimit = vi.fn(() => 0);
 
-vi.mock("../../../src/services/auth.service", () => ({
+vi.mock("../../../src/services/remote-auth.service", () => ({
   validateDeviceToken: (...args: unknown[]) => mockValidateDeviceToken(...args),
   updateLastSeen: (...args: unknown[]) => mockUpdateLastSeen(...args),
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
@@ -19,14 +19,14 @@ vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: () => mockGetAllSettings(),
 }));
 
-import { authMiddleware } from "../../../src/middleware/auth";
+import { authMiddleware } from "../../../src/middleware/remote-auth";
 import { remoteGateMiddleware, invalidateRemoteGateCache } from "../../../src/middleware/remote-gate";
 
 function createTestApp(middleware: any) {
   const app = new Hono();
   app.use("*", middleware);
   app.get("/api/health", (c) => c.json({ ok: true }));
-  app.post("/api/auth/pair", (c) => c.json({ paired: true }));
+  app.post("/api/remote-auth/pair", (c) => c.json({ paired: true }));
   app.get("/api/workspaces", (c) => c.json({ workspaces: [] }));
   return app;
 }
@@ -70,8 +70,8 @@ describe("authMiddleware", () => {
     expect(res.status).toBe(200);
   });
 
-  it("passes /api/auth/pair without auth", async () => {
-    const res = await app.request("/api/auth/pair", {
+  it("passes /api/remote-auth/pair without auth", async () => {
+    const res = await app.request("/api/remote-auth/pair", {
       method: "POST",
       headers: { "x-forwarded-for": "192.168.1.50" },
     });

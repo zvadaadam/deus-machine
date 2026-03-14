@@ -3,9 +3,8 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 import { closeAll as closeAllWsConnections } from './services/ws.service';
-import { connectToRelay, disconnectFromRelay } from './services/relay.service';
-import { getRelayCredentials, generateRelayCredentials } from './services/auth.service';
-import { getSetting, saveSetting } from './services/settings.service';
+import { ensureRelayConnected, disconnectFromRelay } from './services/relay.service';
+import { getSetting } from './services/settings.service';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -62,26 +61,9 @@ const server = serve({
 // Inject WebSocket support into the HTTP server
 injectWebSocket(server);
 
-// Migrate old relay URL to new domain
-const storedRelayUrl = getSetting("relay_url") as string | null;
-if (storedRelayUrl === "wss://relay.opendevs.sh") {
-  saveSetting("relay_url", "wss://relay.rundeus.com");
-}
-
-// Connect to relay if remote access is enabled.
-// Auto-provisions relay URL and credentials if missing (same logic as settings route).
 const remoteEnabled = getSetting("remote_access_enabled");
 if (remoteEnabled === true) {
-  let relayUrl = getSetting("relay_url") as string | null;
-  if (!relayUrl) {
-    relayUrl = "wss://relay.rundeus.com";
-    saveSetting("relay_url", relayUrl);
-  }
-  let creds = getRelayCredentials();
-  if (!creds) {
-    creds = generateRelayCredentials();
-  }
-  connectToRelay(relayUrl, creds.serverId, creds.relayToken);
+  ensureRelayConnected();
 }
 
 // Global error handlers

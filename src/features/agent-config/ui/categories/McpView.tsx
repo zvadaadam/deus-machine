@@ -2,10 +2,10 @@
  * MCP Servers category view — fetches, displays, and manages CRUD for MCP server configs.
  *
  * MCP servers have: name (identity), command, args (array), env (key-value map).
- * The API endpoint is /config/mcp-servers (hyphenated).
+ * The API endpoint is /agent-config/mcp-servers (hyphenated).
  *
  * NOTE: MCP servers are saved as a full array via POST /config/mcp-servers,
- * not individually. The save mutation replaces the entire servers list.
+ * not individually. The save mutation replaces the entire servers list via POST /agent-config/mcp-servers.
  * For add/edit, we rebuild the full list and POST it.
  */
 
