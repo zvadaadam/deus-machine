@@ -1,0 +1,23 @@
+<system-instruction>
+The user has added 2 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: src/features/session/hooks/useAutoScroll.ts
+Line: 314
+User comment: "but this scroll to bottom gotta beused right b soemthign or not? we have this button which forces use to scorl to bottom"
+
+Comment metadata:
+This comment was left on the base branch.
+
+
+Comment #2:
+
+File: src/features/settings/ui/sections/RemoteAccessSection.tsx
+Line: 41
+User comment: "are u shure this is not used i thouught we use it for the remote acces relay"
+
+Comment metadata:
+This comment was left on the base branch.
+
+</system-instruction>

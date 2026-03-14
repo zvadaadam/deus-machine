@@ -3,12 +3,19 @@
   "checkpoint_id": "01abc435104e",
   "strategy": "manual-commit",
   "branch": "zvadaadam/remove-dead-code",
-  "checkpoints_count": 2,
+  "checkpoints_count": 5,
   "files_touched": [
     "src/features/agent-config/store/agent-config.store.ts",
+    "src/features/browser/automation/visual-effects.ts",
     "src/features/onboarding/ui/AgentDotsVideo.stories.tsx",
     "src/features/onboarding/ui/AgentDotsVideo.tsx",
-    "src/features/settings/ui/sections/RemoteAccessSection.tsx"
+    "src/features/session/hooks/useAutoScroll.ts",
+    "src/features/settings/ui/sections/RemoteAccessSection.tsx",
+    "src/features/sidebar/store/index.ts",
+    "src/features/sidebar/store/sidebarStore.ts",
+    "src/features/workspace/api/workspace.service.ts",
+    "src/features/workspace/store/index.ts",
+    "src/features/workspace/store/workspaceStore.ts"
   ],
   "sessions": [
     {
@@ -22,13 +29,19 @@
       "transcript": "/01/abc435104e/1/full.jsonl",
       "content_hash": "/01/abc435104e/1/content_hash.txt",
       "prompt": "/01/abc435104e/1/prompt.txt"
+    },
+    {
+      "metadata": "/01/abc435104e/2/metadata.json",
+      "transcript": "/01/abc435104e/2/full.jsonl",
+      "content_hash": "/01/abc435104e/2/content_hash.txt",
+      "prompt": "/01/abc435104e/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 35,
-    "cache_creation_tokens": 294132,
-    "cache_read_tokens": 1220857,
-    "output_tokens": 12095,
-    "api_call_count": 23
+    "input_tokens": 865,
+    "cache_creation_tokens": 488435,
+    "cache_read_tokens": 3099212,
+    "output_tokens": 24847,
+    "api_call_count": 60
   }
 }
