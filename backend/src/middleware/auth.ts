@@ -10,21 +10,12 @@ import {
   checkRateLimit,
   type PairedDevice,
 } from "../services/auth.service";
+import { isLocalhost, getClientIp } from "../lib/network";
 
 const PUBLIC_PATHS = new Set([
   "/api/health",
   "/api/auth/pair",
 ]);
-
-function isLocalhost(ip: string | undefined): boolean {
-  if (!ip) return false; // Unknown IP should be treated as remote, not local
-  return (
-    ip === "127.0.0.1" ||
-    ip === "::1" ||
-    ip === "::ffff:127.0.0.1" ||
-    ip === "localhost"
-  );
-}
 
 /**
  * Auth middleware for remote access.
@@ -35,12 +26,7 @@ function isLocalhost(ip: string | undefined): boolean {
  * 5. Missing/invalid token → 401
  */
 export const authMiddleware = createMiddleware(async (c, next) => {
-  // Use the TCP socket address first — proxy headers are trivially spoofable
-  // when no reverse proxy sits in front of the server.
-  // In @hono/node-server, the socket lives at c.env.incoming.socket.
-  const clientIp = (c.env as any)?.incoming?.socket?.remoteAddress
-    || c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
-    || c.req.header("x-real-ip");
+  const clientIp = getClientIp(c);
 
   // Localhost exempt — desktop app unchanged
   if (isLocalhost(clientIp)) {
