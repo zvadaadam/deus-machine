@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "07b045f95bdb",
+  "session_id": "cfd2ea1e-c0f4-45c0-ac87-67ef293c184b",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T17:22:53.509087Z",
+  "branch": "zvadaadam/sidecar-refactor-review",
+  "checkpoints_count": 6,
+  "files_touched": [
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "62447b1fc2b2",
+  "transcript_identifier_at_start": "21ee06bd-4aa4-4168-9055-079dc0665bcf",
+  "token_usage": {
+    "input_tokens": 145,
+    "cache_creation_tokens": 569654,
+    "cache_read_tokens": 11110308,
+    "output_tokens": 35445,
+    "api_call_count": 115
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T17:22:52.853347Z",
+    "agent_lines": 0,
+    "human_added": 103,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 103,
+    "agent_percentage": 0
+  }
+}

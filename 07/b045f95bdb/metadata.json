@@ -3,7 +3,7 @@
   "checkpoint_id": "07b045f95bdb",
   "strategy": "manual-commit",
   "branch": "zvadaadam/sidecar-refactor-review",
-  "checkpoints_count": 0,
+  "checkpoints_count": 6,
   "files_touched": [
     ".husky/_/commit-msg",
     ".husky/_/post-commit",
@@ -16,13 +16,19 @@
       "transcript": "/07/b045f95bdb/0/full.jsonl",
       "content_hash": "/07/b045f95bdb/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/07/b045f95bdb/1/metadata.json",
+      "transcript": "/07/b045f95bdb/1/full.jsonl",
+      "content_hash": "/07/b045f95bdb/1/content_hash.txt",
+      "prompt": "/07/b045f95bdb/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 5,
-    "cache_creation_tokens": 20152,
-    "cache_read_tokens": 87063,
-    "output_tokens": 945,
-    "api_call_count": 3
+    "input_tokens": 150,
+    "cache_creation_tokens": 589806,
+    "cache_read_tokens": 11197371,
+    "output_tokens": 36390,
+    "api_call_count": 118
   }
 }

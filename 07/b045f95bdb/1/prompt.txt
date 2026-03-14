@@ -1,0 +1,5 @@
+okey and do u think claude handler shoudl communicate with the databse there? i see that it queries db for the ahent session id for whater to resume, hmm, should we pas it this value an not acces the db tehre wdty?
+
+---
+
+Okay, let's maybe move to more general things and when I look at a sidecar, why, what is this thing actually is like, is it a note back end or why do we have the build.ts? I'm just like a little confused from this and if we are not doing some anti-patterns on how to actually ride this sidecar and should it be called sidecar, isn't it like a coding agent server, companion, look at it and think about this.
