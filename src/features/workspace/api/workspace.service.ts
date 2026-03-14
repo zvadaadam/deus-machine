@@ -16,34 +16,9 @@ import {
 import { dbGetWorkspacesByRepo } from "@/platform/tauri/db";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { PRStatus, GhCliStatus } from "@/shared/types";
+import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
 
-/** Normalized task from opendevs.json manifest */
-export interface NormalizedTask {
-  name: string;
-  command: string;
-  description: string | null;
-  icon: string;
-  persistent: boolean;
-  mode: "concurrent" | "nonconcurrent";
-  depends: string[];
-  env: Record<string, string>;
-}
-
-/** Response from GET /workspaces/:id/manifest */
-export interface ManifestResponse {
-  manifest: Record<string, unknown> | null;
-  tasks: NormalizedTask[];
-}
-
-/** Response from POST /workspaces/:id/tasks/:name/run */
-export interface TaskRunResponse {
-  ptyId: string;
-  command: string;
-  cwd: string;
-  env: Record<string, string>;
-  persistent: boolean;
-  mode: "concurrent" | "nonconcurrent";
-}
+export type { NormalizedTask, ManifestResponse, TaskRunResponse };
 
 /** Workspace data needed for Tauri git commands (subset of Workspace) */
 export interface WorkspaceGitInfo {
@@ -130,9 +105,11 @@ export const WorkspaceService = {
         // Rust git failed — fall through to HTTP
       }
     }
-    const result = await apiClient.get<{ files: FileChange[]; truncated?: boolean; total_count?: number }>(
-      ENDPOINTS.WORKSPACE_DIFF_FILES(id)
-    );
+    const result = await apiClient.get<{
+      files: FileChange[];
+      truncated?: boolean;
+      total_count?: number;
+    }>(ENDPOINTS.WORKSPACE_DIFF_FILES(id));
     return {
       files: result.files,
       truncated: result.truncated ?? false,

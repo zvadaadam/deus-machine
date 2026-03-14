@@ -3,14 +3,9 @@ import Database from 'better-sqlite3';
 import { existsSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, basename } from 'path';
+import type { RecentProject } from '@shared/types/onboarding';
 
 const app = new Hono();
-
-interface RecentProject {
-  path: string;
-  name: string;
-  source: 'cursor' | 'vscode' | 'claude';
-}
 
 app.get('/onboarding/recent-projects', (c) => {
   const home = homedir();

@@ -11,8 +11,4 @@ export interface GhAuthResult {
   username: string | null;
 }
 
-export interface RecentProject {
-  path: string;
-  name: string;
-  source: "cursor" | "vscode" | "claude";
-}
+export type { RecentProject } from "@shared/types/onboarding";

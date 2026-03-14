@@ -48,7 +48,18 @@ export {
 export type { Repository, Stats } from "./repository";
 
 // Settings types
-export type { Settings, MCPServer, Command, Agent, SettingsSection } from "./settings";
+export type { Settings, SettingsSection } from "./settings";
+
+// Agent config types (shared between frontend and backend)
+export type {
+  SkillItem,
+  CommandItem,
+  AgentItem,
+  McpServerItem,
+  HookCommand,
+  HookMatcherGroup,
+  HooksMap,
+} from "./agent-config";
 
 // API types
 export type {
@@ -58,6 +69,12 @@ export type {
   PaginatedResponse,
   WorkspaceQueryParams,
 } from "./api";
+
+// Manifest types (shared between frontend and backend)
+export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manifest";
+
+// Onboarding types (shared between frontend and backend)
+export type { RecentProject } from "./onboarding";
 
 // GitHub types
 export type { PRStatus, GhCliStatus, DevServer, CheckDetail } from "./github";

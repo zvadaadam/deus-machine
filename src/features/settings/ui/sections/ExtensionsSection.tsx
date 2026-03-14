@@ -51,8 +51,12 @@ export function ExtensionsSection({ mcpServers, commands, agents }: ExtensionsSe
           isEmpty={agents.length === 0}
         >
           {agents.map((agent) => (
-            <ConfigItem key={agent.name} title={agent.name} description={agent.description}>
-              {agent.tools?.length > 0 && (
+            <ConfigItem
+              key={agent.id}
+              title={agent.name ?? agent.id}
+              description={agent.description}
+            >
+              {agent.tools && agent.tools.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {agent.tools.map((tool) => (
                     <Badge key={tool} variant="secondary" className="text-xs font-normal">
