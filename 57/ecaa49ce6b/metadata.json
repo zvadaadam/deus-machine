@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "57ecaa49ce6b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/remove-dead-code",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg",
+    "backend/src/lib/opendevs-manifest.ts",
+    "backend/src/routes/onboarding.ts",
+    "backend/src/services/agent-config.service.ts",
+    "shared/types/index.ts",
+    "shared/types/settings.ts",
+    "src/features/agent-config/types.ts",
+    "src/features/onboarding/types.ts",
+    "src/features/repository/api/repository.queries.ts",
+    "src/features/repository/api/repository.service.ts",
+    "src/features/settings/types.ts",
+    "src/features/settings/ui/sections/ExtensionsSection.tsx",
+    "src/features/workspace/api/workspace.service.ts",
+    "src/shared/types/index.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/57/ecaa49ce6b/0/metadata.json",
+      "transcript": "/57/ecaa49ce6b/0/full.jsonl",
+      "content_hash": "/57/ecaa49ce6b/0/content_hash.txt",
+      "prompt": "/57/ecaa49ce6b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 56,
+    "cache_creation_tokens": 167548,
+    "cache_read_tokens": 2409441,
+    "output_tokens": 8114,
+    "api_call_count": 41
+  }
+}

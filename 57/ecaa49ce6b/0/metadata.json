@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "57ecaa49ce6b",
+  "session_id": "ce62c776-5603-4255-b6cb-fd4224b323fb",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T21:38:22.808216Z",
+  "branch": "zvadaadam/remove-dead-code",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg",
+    "backend/src/lib/opendevs-manifest.ts",
+    "backend/src/routes/onboarding.ts",
+    "backend/src/services/agent-config.service.ts",
+    "shared/types/index.ts",
+    "shared/types/settings.ts",
+    "src/features/agent-config/types.ts",
+    "src/features/onboarding/types.ts",
+    "src/features/repository/api/repository.queries.ts",
+    "src/features/repository/api/repository.service.ts",
+    "src/features/settings/types.ts",
+    "src/features/settings/ui/sections/ExtensionsSection.tsx",
+    "src/features/workspace/api/workspace.service.ts",
+    "src/shared/types/index.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "7186338bc72f",
+  "token_usage": {
+    "input_tokens": 56,
+    "cache_creation_tokens": 167548,
+    "cache_read_tokens": 2409441,
+    "output_tokens": 8114,
+    "api_call_count": 41
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T21:38:22.72432Z",
+    "agent_lines": 98,
+    "human_added": 117,
+    "human_modified": 6,
+    "human_removed": 0,
+    "total_committed": 221,
+    "agent_percentage": 44.34389140271493
+  }
+}
