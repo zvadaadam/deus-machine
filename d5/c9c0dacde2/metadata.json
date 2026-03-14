@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d5c9c0dacde2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/lib/database.ts",
+    "backend/src/lib/schema.ts",
+    "backend/src/lib/schemas.ts",
+    "backend/src/lib/validate.ts",
+    "backend/src/middleware/auth.ts",
+    "backend/src/middleware/remote-auth.ts",
+    "backend/src/routes/auth.ts",
+    "backend/src/routes/config.ts",
+    "backend/src/routes/repos.ts",
+    "backend/src/routes/sessions.ts",
+    "backend/src/routes/settings.ts",
+    "backend/src/routes/workspaces.ts",
+    "backend/test/unit/middleware/auth.test.ts",
+    "backend/test/unit/middleware/remote-auth.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d5/c9c0dacde2/0/metadata.json",
+      "transcript": "/d5/c9c0dacde2/0/full.jsonl",
+      "content_hash": "/d5/c9c0dacde2/0/content_hash.txt",
+      "prompt": "/d5/c9c0dacde2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 84,
+    "cache_creation_tokens": 372053,
+    "cache_read_tokens": 6237786,
+    "output_tokens": 25027,
+    "api_call_count": 60
+  }
+}
