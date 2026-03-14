@@ -1,0 +1,13 @@
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: src/shared/components/BranchName.tsx
+Line: 10
+User comment: "what is not used instead? we used to have it but somethign we use instead?"
+
+Comment metadata:
+This comment was left on the base branch.
+
+</system-instruction>

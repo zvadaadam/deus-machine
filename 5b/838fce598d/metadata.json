@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5b838fce598d",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/shared-cleanup",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/features/sidebar/ui/AppSidebar.tsx",
+    "src/shared/api/index.ts",
+    "src/shared/components/BranchName.tsx",
+    "src/shared/components/error-fallbacks/DashboardError.tsx",
+    "src/shared/components/error-fallbacks/ErrorFallback.tsx",
+    "src/shared/components/index.ts",
+    "src/shared/config/api.config.ts",
+    "src/shared/config/index.ts",
+    "src/shared/hooks/useSocket.ts",
+    "src/shared/lib/formatters.ts",
+    "src/shared/lib/index.ts",
+    "src/shared/stores/layoutCoordinationStore.ts",
+    "src/shared/stores/uiStore.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5b/838fce598d/0/metadata.json",
+      "transcript": "/5b/838fce598d/0/full.jsonl",
+      "content_hash": "/5b/838fce598d/0/content_hash.txt",
+      "prompt": "/5b/838fce598d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5479,
+    "cache_creation_tokens": 301796,
+    "cache_read_tokens": 3334789,
+    "output_tokens": 17712,
+    "api_call_count": 46
+  }
+}
