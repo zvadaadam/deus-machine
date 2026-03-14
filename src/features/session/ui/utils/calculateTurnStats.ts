@@ -47,8 +47,9 @@ export function calculateTurnStats(messages: Message[], parseContent: ParseConte
         subagentCount++;
       }
 
-      if (block.input?.file_path) {
-        fileSet.add(block.input.file_path);
+      const filePath = block.input?.file_path;
+      if (typeof filePath === "string" && filePath.length > 0) {
+        fileSet.add(filePath);
       }
     }
   }
