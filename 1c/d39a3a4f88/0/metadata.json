@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1cd39a3a4f88",
+  "session_id": "08abbb72-cdbd-4475-8a52-5df3c69d106e",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T17:27:37.682105Z",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "backend/src/routes/repos.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "ed1283fe2106",
+  "token_usage": {
+    "input_tokens": 187,
+    "cache_creation_tokens": 656652,
+    "cache_read_tokens": 20068135,
+    "output_tokens": 43427,
+    "api_call_count": 132
+  },
+  "session_metrics": {
+    "turn_count": 19
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T17:27:36.943103Z",
+    "agent_lines": 4,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 4,
+    "agent_percentage": 100
+  }
+}
