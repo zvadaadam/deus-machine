@@ -298,3 +298,7 @@ do ut
 ---
 
 shoud we maybe merge workapc einitn and workapace.sevice togtehr >?
+
+---
+
+Commit and push all changes
