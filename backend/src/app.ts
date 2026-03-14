@@ -22,7 +22,6 @@ import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
 import authRoutes from './routes/remote-auth';
-import gateRoutes from './routes/gate';
 import notifyRoutes from './routes/notify';
 
 export function createApp() {
@@ -49,9 +48,6 @@ export function createApp() {
   app.route('/api', statsRoutes);
   app.route('/api', notifyRoutes);
   app.route('/api', onboardingRoutes);
-
-  // Browser gate page — serves pairing form at "/" for remote clients
-  app.route('', gateRoutes);
 
   // Relay status endpoint
   app.get('/api/relay/status', (c) => {

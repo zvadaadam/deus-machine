@@ -402,32 +402,6 @@ describe("Rate limiting across the full stack", () => {
   });
 });
 
-describe("Gate page: server-rendered HTML", () => {
-  it("serves HTML at / for remote clients (when remote enabled)", async () => {
-    enableRemoteAccess();
-    const res = await app.request("/", { headers: REMOTE_HEADERS });
-    // Remote gate passes, no auth on /, so we get the HTML
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("Connect to OpenDevs");
-    expect(html).toContain("pair-form");
-  });
-
-  it("blocks gate page when remote access is disabled", async () => {
-    disableRemoteAccess();
-    const res = await app.request("/", { headers: REMOTE_HEADERS });
-    expect(res.status).toBe(403);
-  });
-
-  it("serves gate page to localhost regardless of remote setting", async () => {
-    disableRemoteAccess();
-    const res = await app.request("/", { headers: LOCAL_HEADERS });
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("Connect to OpenDevs");
-  });
-});
-
 describe("Multiple devices: independent tokens", () => {
   beforeEach(() => {
     enableRemoteAccess();
