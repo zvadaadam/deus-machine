@@ -1,0 +1,28 @@
+I want you to think and explore. Actually, the parts of the... We have these types of the agent config and these types are probably shared also in the back end. And they are copied, right? Can you explore that? And like shouldn't we put it into the shared folder? and explore.
+
+---
+
+LET'S GO
+
+---
+
+OKYE GRETA IF YOU LOK THOUG TEH SRC FEATURES ANY OTHER SIMSIALR PATERN E AHVE TAHT SOME TTPES W EHAVE DEFINE D AND USIN ALSO IN THE BACKEND BUT SHOUDL BE SHARED?
+
+---
+
+go ene more board and epxlore pelase these patterns and tehn give teh report and recomendation
+
+---
+
+let's go
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/columbus-v2/.context/attachments/PR instructions.md (945 B)
+</system_instruction>
+
+
+
+Create a PR
