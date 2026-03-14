@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5f987ef2b7ed",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/backend-simplify-review",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/middleware/remote-auth.ts",
+    "backend/src/routes/agent-config.ts",
+    "backend/src/routes/remote-auth.ts",
+    "backend/src/services/agent-config.service.ts",
+    "backend/src/services/auth.service.ts",
+    "backend/src/services/config.service.ts",
+    "backend/src/services/relay.service.ts",
+    "backend/src/services/remote-auth.service.ts",
+    "backend/test/integration/auth-flow.test.ts",
+    "backend/test/integration/ws-auth.test.ts",
+    "backend/test/unit/middleware/remote-auth.test.ts",
+    "backend/test/unit/routes/agent-config.test.ts",
+    "backend/test/unit/routes/remote-auth.test.ts",
+    "backend/test/unit/services/agent-config.service.test.ts",
+    "backend/test/unit/services/auth.service.test.ts",
+    "backend/test/unit/services/config.service.test.ts",
+    "backend/test/unit/services/remote-auth.service.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5f/987ef2b7ed/0/metadata.json",
+      "transcript": "/5f/987ef2b7ed/0/full.jsonl",
+      "content_hash": "/5f/987ef2b7ed/0/content_hash.txt",
+      "prompt": "/5f/987ef2b7ed/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2160,
+    "cache_creation_tokens": 730347,
+    "cache_read_tokens": 35060629,
+    "output_tokens": 56264,
+    "api_call_count": 192
+  }
+}
