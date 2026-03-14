@@ -28,7 +28,7 @@ import { useAgentConfigList, useSaveConfigItem } from "../../api/agent-config.qu
 import { CategoryContentArea } from "../CategoryContentArea";
 import { ConfigItemExpanded } from "../shared/ConfigItemExpanded";
 import { useCategoryCrud } from "../hooks/useCategoryCrud";
-import type { ConfigDisplayItem, ConfigScope } from "../../types";
+import type { ConfigDisplayItem, ConfigScope, HookMatcherGroup, HooksMap } from "../../types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -49,16 +49,21 @@ interface HooksViewProps {
   repoName?: string;
 }
 
+const EMPTY_FORM_GROUP: FormMatcherGroup = { matcher: "", commands: [{ command: "", timeout: "" }] };
+
+function createEmptyGroups(): FormMatcherGroup[] {
+  return [{ ...EMPTY_FORM_GROUP, commands: [{ ...EMPTY_FORM_GROUP.commands[0] }] }];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
 /** Summarize hook handlers into a human-readable description line */
-function summarizeHandlers(handlers: unknown): string {
+function summarizeHandlers(handlers: HookMatcherGroup[]): string {
   if (!Array.isArray(handlers) || handlers.length === 0) return "No handlers";
 
-  type MatcherGroup = { matcher?: string; hooks?: Array<{ command?: string; timeout?: number }> };
-  const groups = handlers as MatcherGroup[];
+  const groups = handlers;
   const totalCommands = groups.reduce((n, g) => n + (g.hooks?.length ?? 0), 0);
 
   if (totalCommands === 0) return "No commands";
@@ -82,7 +87,7 @@ function summarizeHandlers(handlers: unknown): string {
 }
 
 function hooksToDisplayItems(
-  hooks: Record<string, unknown> | undefined,
+  hooks: HooksMap | undefined,
   scope: ConfigScope
 ): ConfigDisplayItem[] {
   if (!hooks || typeof hooks !== "object") return [];
@@ -97,23 +102,21 @@ function hooksToDisplayItems(
 }
 
 /** Convert raw handlers to structured form state */
-function handlersToFormGroups(handlers: unknown): FormMatcherGroup[] {
+function handlersToFormGroups(handlers: HookMatcherGroup[] | undefined): FormMatcherGroup[] {
   if (!Array.isArray(handlers) || handlers.length === 0) {
-    return [{ matcher: "", commands: [{ command: "", timeout: "" }] }];
+    return createEmptyGroups();
   }
 
-  return handlers.map(
-    (h: { matcher?: string; hooks?: Array<{ command?: string; timeout?: number }> }) => ({
-      matcher: h.matcher ?? "",
-      commands:
-        Array.isArray(h.hooks) && h.hooks.length > 0
-          ? h.hooks.map((cmd) => ({
-              command: cmd.command ?? "",
-              timeout: cmd.timeout != null ? String(cmd.timeout) : "",
-            }))
-          : [{ command: "", timeout: "" }],
-    })
-  );
+  return handlers.map((h) => ({
+    matcher: h.matcher ?? "",
+    commands:
+      Array.isArray(h.hooks) && h.hooks.length > 0
+        ? h.hooks.map((cmd) => ({
+            command: cmd.command ?? "",
+            timeout: cmd.timeout != null ? String(cmd.timeout) : "",
+          }))
+        : [{ command: "", timeout: "" }],
+  }));
 }
 
 /** Convert form state back to API format */
@@ -130,10 +133,6 @@ function formGroupsToHandlers(groups: FormMatcherGroup[]) {
         })),
     }))
     .filter((g) => g.hooks.length > 0);
-}
-
-function createEmptyGroups(): FormMatcherGroup[] {
-  return [{ matcher: "", commands: [{ command: "", timeout: "" }] }];
 }
 
 /** Known Claude Code hook events with descriptions and matcher hints */
@@ -201,8 +200,8 @@ function getMatcherHint(event: string): string {
 /* ------------------------------------------------------------------ */
 
 export function HooksView({ repoPath, repoName }: HooksViewProps) {
-  const globalQuery = useAgentConfigList<Record<string, unknown>>("hooks", "global");
-  const projectQuery = useAgentConfigList<Record<string, unknown>>("hooks", "project", repoPath, {
+  const globalQuery = useAgentConfigList<HooksMap>("hooks", "global");
+  const projectQuery = useAgentConfigList<HooksMap>("hooks", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -227,7 +226,7 @@ export function HooksView({ repoPath, repoName }: HooksViewProps) {
   }, []);
 
   const populateForm = useCallback((raw: unknown) => {
-    const item = raw as { event: string; handlers: unknown };
+    const item = raw as { event: string; handlers: HookMatcherGroup[] };
     setFormEvent(item.event);
     setFormGroups(handlersToFormGroups(item.handlers));
   }, []);

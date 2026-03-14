@@ -69,14 +69,3 @@ export const useSidebarStore = create<SidebarState>()(
   )
 );
 
-/**
- * Stable Actions - Call from event handlers/effects without causing re-renders.
- * Not reactive: use useSidebarStore selectors for render-time reads.
- */
-export const sidebarActions = {
-  toggleRepoCollapse: (repoId: string) => useSidebarStore.getState().toggleRepoCollapse(repoId),
-  setRepositoryOrder: (order: string[]) => useSidebarStore.getState().setRepositoryOrder(order),
-  reorderRepositories: <T extends { repo_id: string }>(repos: T[]) =>
-    useSidebarStore.getState().reorderRepositories(repos),
-  isRepoCollapsed: (repoId: string) => useSidebarStore.getState().collapsedRepos.has(repoId),
-};
