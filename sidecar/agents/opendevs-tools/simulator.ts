@@ -41,7 +41,7 @@ Example output:
           if (response.error) {
             return {
               content: [
-                { type: "text" as const, text: `Failed to list devices: ${response.error}` },
+                { type: "text", text: `Failed to list devices: ${response.error}` },
               ],
             };
           }
@@ -50,7 +50,7 @@ Example output:
             return {
               content: [
                 {
-                  type: "text" as const,
+                  type: "text",
                   text: "No iOS simulators found. Install simulators via Xcode → Settings → Platforms.",
                 },
               ],
@@ -65,7 +65,7 @@ Example output:
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Found ${response.devices.length} simulator(s):\n${lines.join("\n")}\n\nUse iOSSimulatorStart with a UDID to boot and start streaming a simulator.`,
               },
             ],
@@ -73,7 +73,7 @@ Example output:
         } catch (err: unknown) {
           return {
             content: [
-              { type: "text" as const, text: `Failed to list simulators: ${getErrorMessage(err)}` },
+              { type: "text", text: `Failed to list simulators: ${getErrorMessage(err)}` },
             ],
           };
         }
@@ -111,7 +111,7 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
           if (response.error) {
             return {
               content: [
-                { type: "text" as const, text: `Failed to start simulator: ${response.error}` },
+                { type: "text", text: `Failed to start simulator: ${response.error}` },
               ],
             };
           }
@@ -128,13 +128,13 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
             .join("\n");
 
           return {
-            content: [{ type: "text" as const, text: details }],
+            content: [{ type: "text", text: details }],
           };
         } catch (err: unknown) {
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Failed to start simulator: ${getErrorMessage(err)}. Make sure the UDID is valid (use iOSSimulatorListDevices to check).`,
               },
             ],
@@ -162,16 +162,16 @@ The simulator must be booted and streaming (use iOSSimulatorStart first).`,
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Screenshot failed: ${response.error}` }],
+              content: [{ type: "text", text: `Screenshot failed: ${response.error}` }],
             };
           }
 
           return {
             content: [
               {
-                type: "image" as const,
+                type: "image",
                 data: response.image,
-                mimeType: "image/jpeg" as const,
+                mimeType: "image/jpeg",
               },
             ],
           };
@@ -179,7 +179,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first).`,
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Simulator not available: ${getErrorMessage(err)}. Use iOSSimulatorStart to boot a simulator first.`,
               },
             ],
@@ -219,14 +219,14 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Tap failed: ${response.error}` }],
+              content: [{ type: "text", text: `Tap failed: ${response.error}` }],
             };
           }
 
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Tapped at (${args.x.toFixed(2)}, ${args.y.toFixed(2)}). Use iOSSimulatorScreenshot to see the result.`,
               },
             ],
@@ -234,7 +234,7 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
         } catch (err: unknown) {
           return {
             content: [
-              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
             ],
           };
         }
@@ -281,14 +281,14 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Swipe failed: ${response.error}` }],
+              content: [{ type: "text", text: `Swipe failed: ${response.error}` }],
             };
           }
 
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Swiped from (${args.startX.toFixed(2)}, ${args.startY.toFixed(2)}) to (${args.endX.toFixed(2)}, ${args.endY.toFixed(2)}). Use iOSSimulatorScreenshot to see the result.`,
               },
             ],
@@ -296,7 +296,7 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
         } catch (err: unknown) {
           return {
             content: [
-              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
             ],
           };
         }
@@ -330,7 +330,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
             return {
               content: [
                 {
-                  type: "text" as const,
+                  type: "text",
                   text: `Type failed: ${response.error ?? "Unknown error"}`,
                 },
               ],
@@ -341,7 +341,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Typed "${args.text.length > 50 ? args.text.slice(0, 50) + "..." : args.text}".${warning} Use iOSSimulatorScreenshot to see the result.`,
               },
             ],
@@ -349,7 +349,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
         } catch (err: unknown) {
           return {
             content: [
-              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
             ],
           };
         }
@@ -394,14 +394,14 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Key press failed: ${response.error}` }],
+              content: [{ type: "text", text: `Key press failed: ${response.error}` }],
             };
           }
 
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Pressed key ${args.keycode}${args.direction ? ` (${args.direction})` : ""}. Use iOSSimulatorScreenshot to see the result.`,
               },
             ],
@@ -409,7 +409,7 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
         } catch (err: unknown) {
           return {
             content: [
-              { type: "text" as const, text: `Simulator not available: ${getErrorMessage(err)}` },
+              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
             ],
           };
         }
@@ -448,7 +448,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
 
           if (response.error) {
             return {
-              content: [{ type: "text" as const, text: `Build & run failed: ${response.error}` }],
+              content: [{ type: "text", text: `Build & run failed: ${response.error}` }],
             };
           }
 
@@ -462,13 +462,13 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
             .join("\n");
 
           return {
-            content: [{ type: "text" as const, text: details }],
+            content: [{ type: "text", text: details }],
           };
         } catch (err: unknown) {
           return {
             content: [
               {
-                type: "text" as const,
+                type: "text",
                 text: `Build & run failed: ${getErrorMessage(err)}. Make sure a simulator is booted (use iOSSimulatorStart) and the workspace contains an Xcode project.`,
               },
             ],

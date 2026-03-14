@@ -227,7 +227,9 @@ export function buildSdkOptions(
   const workingDirectory = options?.cwd;
   const permissionMode = (options?.permissionMode ?? "default") as PermissionMode;
 
-  const sdkOptions: Record<string, unknown> = {
+  // Built as Partial<Options> and conditionally extended.
+  // Cast to Options at return — the SDK validates at runtime.
+  const sdkOptions: Partial<Options> = {
     maxTurns: options?.maxTurns || 1_000,
     model: modelToUse,
     maxThinkingTokens: options?.maxThinkingTokens,
@@ -244,10 +246,11 @@ export function buildSdkOptions(
     env,
     disallowedTools: ["AskUserQuestion"],
     permissionMode,
+    hooks: createHooks(sessionId),
   };
 
   if (options?.chromeEnabled) {
-    sdkOptions.extraArgs = { chrome: null };
+    (sdkOptions as any).extraArgs = { chrome: null };
   }
 
   if (options?.resumeSessionAt) {
@@ -258,8 +261,6 @@ export function buildSdkOptions(
     sdkOptions.resume = options.resume;
   }
 
-  sdkOptions.hooks = createHooks(sessionId);
-
   if (!options?.strictDataPrivacy) {
     sdkOptions.mcpServers = {
       opendevs: createOpenDevsMCPServer(sessionId),
@@ -267,5 +268,5 @@ export function buildSdkOptions(
     };
   }
 
-  return sdkOptions as unknown as Options;
+  return sdkOptions as Options;
 }

@@ -200,342 +200,50 @@ class FrontendClientClass {
 
   // ==========================================================================
   // OUTGOING REQUESTS (sidecar -> frontend, with timeout)
+  // All request methods delegate to rpc() — a typed wrapper over
+  // requireTunnel().request() + withTimeout().
   // ==========================================================================
 
-  async requestExitPlanMode(request: ExitPlanModeRequest): Promise<ExitPlanModeResponse> {
-    return this.withTimeout<ExitPlanModeResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,
-        request
-      ) as Promise<ExitPlanModeResponse>,
-      USER_FACING_TIMEOUT_MS,
-      "requestExitPlanMode"
-    );
-  }
+  // --- Core workspace RPCs ---
+  requestExitPlanMode(r: ExitPlanModeRequest) { return this.rpc<ExitPlanModeResponse>(FRONTEND_RPC_METHODS.EXIT_PLAN_MODE, r, USER_FACING_TIMEOUT_MS); }
+  requestAskUserQuestion(r: AskUserQuestionRequest) { return this.rpc<AskUserQuestionResponse>(FRONTEND_RPC_METHODS.ASK_USER_QUESTION, r, USER_FACING_TIMEOUT_MS); }
+  requestGetDiff(r: GetDiffRequest) { return this.rpc<GetDiffResponse>(FRONTEND_RPC_METHODS.GET_DIFF, r, DATA_QUERY_TIMEOUT_MS); }
+  requestDiffComment(r: DiffCommentRequest) { return this.rpc<DiffCommentResponse>(FRONTEND_RPC_METHODS.DIFF_COMMENT, r, DATA_QUERY_TIMEOUT_MS); }
+  requestGetTerminalOutput(r: GetTerminalOutputRequest) { return this.rpc<GetTerminalOutputResponse>(FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT, r, DATA_QUERY_TIMEOUT_MS); }
 
-  async requestAskUserQuestion(request: AskUserQuestionRequest): Promise<AskUserQuestionResponse> {
-    return this.withTimeout<AskUserQuestionResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.ASK_USER_QUESTION,
-        request
-      ) as Promise<AskUserQuestionResponse>,
-      USER_FACING_TIMEOUT_MS,
-      "requestAskUserQuestion"
-    );
-  }
+  // --- Browser automation RPCs ---
+  requestBrowserSnapshot(r: BrowserSnapshotRequest) { return this.rpc<BrowserSnapshotResponse>(FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT, r, BROWSER_SNAPSHOT_TIMEOUT_MS); }
+  requestBrowserClick(r: BrowserClickRequest) { return this.rpc<BrowserClickResponse>(FRONTEND_RPC_METHODS.BROWSER_CLICK, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserType(r: BrowserTypeRequest) { return this.rpc<BrowserTypeResponse>(FRONTEND_RPC_METHODS.BROWSER_TYPE, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserNavigate(r: BrowserNavigateRequest) { return this.rpc<BrowserNavigateResponse>(FRONTEND_RPC_METHODS.BROWSER_NAVIGATE, r, BROWSER_NAVIGATE_TIMEOUT_MS); }
+  requestBrowserGetState(r: BrowserGetStateRequest) { return this.rpc<BrowserGetStateResponse>(FRONTEND_RPC_METHODS.BROWSER_GET_STATE, r, DATA_QUERY_TIMEOUT_MS); }
+  requestBrowserWaitFor(r: BrowserWaitForRequest) { return this.rpc<BrowserWaitForResponse>(FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR, r, BROWSER_WAIT_FOR_TIMEOUT_MS); }
+  requestBrowserEvaluate(r: BrowserEvaluateRequest) { return this.rpc<BrowserEvaluateResponse>(FRONTEND_RPC_METHODS.BROWSER_EVALUATE, r, BROWSER_EVALUATE_TIMEOUT_MS); }
+  requestBrowserPressKey(r: BrowserPressKeyRequest) { return this.rpc<BrowserPressKeyResponse>(FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserHover(r: BrowserHoverRequest) { return this.rpc<BrowserHoverResponse>(FRONTEND_RPC_METHODS.BROWSER_HOVER, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserSelectOption(r: BrowserSelectOptionRequest) { return this.rpc<BrowserSelectOptionResponse>(FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserNavigateBack(r: BrowserNavigateBackRequest) { return this.rpc<BrowserNavigateBackResponse>(FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK, r, BROWSER_NAVIGATE_BACK_TIMEOUT_MS); }
+  requestBrowserConsoleMessages(r: BrowserConsoleMessagesRequest) { return this.rpc<BrowserConsoleMessagesResponse>(FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserNetworkRequests(r: BrowserNetworkRequestsRequest) { return this.rpc<BrowserNetworkRequestsResponse>(FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserScreenshot(r: BrowserScreenshotRequest) { return this.rpc<BrowserScreenshotResponse>(FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT, r, BROWSER_SCREENSHOT_TIMEOUT_MS); }
+  requestBrowserScroll(r: BrowserScrollRequest) { return this.rpc<BrowserScrollResponse>(FRONTEND_RPC_METHODS.BROWSER_SCROLL, r, BROWSER_INTERACTION_TIMEOUT_MS); }
 
-  async requestGetDiff(request: GetDiffRequest): Promise<GetDiffResponse> {
-    return this.withTimeout<GetDiffResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.GET_DIFF,
-        request
-      ) as Promise<GetDiffResponse>,
-      DATA_QUERY_TIMEOUT_MS,
-      "requestGetDiff"
-    );
-  }
-
-  async requestDiffComment(request: DiffCommentRequest): Promise<DiffCommentResponse> {
-    return this.withTimeout<DiffCommentResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.DIFF_COMMENT,
-        request
-      ) as Promise<DiffCommentResponse>,
-      DATA_QUERY_TIMEOUT_MS,
-      "requestDiffComment"
-    );
-  }
-
-  async requestGetTerminalOutput(
-    request: GetTerminalOutputRequest
-  ): Promise<GetTerminalOutputResponse> {
-    return this.withTimeout<GetTerminalOutputResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT,
-        request
-      ) as Promise<GetTerminalOutputResponse>,
-      DATA_QUERY_TIMEOUT_MS,
-      "requestGetTerminalOutput"
-    );
-  }
-
-  // ==========================================================================
-  // BROWSER AUTOMATION REQUESTS (sidecar -> frontend, with timeout)
-  // ==========================================================================
-
-  async requestBrowserSnapshot(request: BrowserSnapshotRequest): Promise<BrowserSnapshotResponse> {
-    return this.withTimeout<BrowserSnapshotResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT,
-        request
-      ) as Promise<BrowserSnapshotResponse>,
-      BROWSER_SNAPSHOT_TIMEOUT_MS,
-      "requestBrowserSnapshot"
-    );
-  }
-
-  async requestBrowserClick(request: BrowserClickRequest): Promise<BrowserClickResponse> {
-    return this.withTimeout<BrowserClickResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_CLICK,
-        request
-      ) as Promise<BrowserClickResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserClick"
-    );
-  }
-
-  async requestBrowserType(request: BrowserTypeRequest): Promise<BrowserTypeResponse> {
-    return this.withTimeout<BrowserTypeResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_TYPE,
-        request
-      ) as Promise<BrowserTypeResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserType"
-    );
-  }
-
-  async requestBrowserNavigate(request: BrowserNavigateRequest): Promise<BrowserNavigateResponse> {
-    return this.withTimeout<BrowserNavigateResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_NAVIGATE,
-        request
-      ) as Promise<BrowserNavigateResponse>,
-      BROWSER_NAVIGATE_TIMEOUT_MS,
-      "requestBrowserNavigate"
-    );
-  }
-
-  async requestBrowserGetState(request: BrowserGetStateRequest): Promise<BrowserGetStateResponse> {
-    return this.withTimeout<BrowserGetStateResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_GET_STATE,
-        request
-      ) as Promise<BrowserGetStateResponse>,
-      DATA_QUERY_TIMEOUT_MS,
-      "requestBrowserGetState"
-    );
-  }
-
-  async requestBrowserWaitFor(request: BrowserWaitForRequest): Promise<BrowserWaitForResponse> {
-    return this.withTimeout<BrowserWaitForResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR,
-        request
-      ) as Promise<BrowserWaitForResponse>,
-      BROWSER_WAIT_FOR_TIMEOUT_MS,
-      "requestBrowserWaitFor"
-    );
-  }
-
-  async requestBrowserEvaluate(request: BrowserEvaluateRequest): Promise<BrowserEvaluateResponse> {
-    return this.withTimeout<BrowserEvaluateResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_EVALUATE,
-        request
-      ) as Promise<BrowserEvaluateResponse>,
-      BROWSER_EVALUATE_TIMEOUT_MS,
-      "requestBrowserEvaluate"
-    );
-  }
-
-  async requestBrowserPressKey(request: BrowserPressKeyRequest): Promise<BrowserPressKeyResponse> {
-    return this.withTimeout<BrowserPressKeyResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY,
-        request
-      ) as Promise<BrowserPressKeyResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserPressKey"
-    );
-  }
-
-  async requestBrowserHover(request: BrowserHoverRequest): Promise<BrowserHoverResponse> {
-    return this.withTimeout<BrowserHoverResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_HOVER,
-        request
-      ) as Promise<BrowserHoverResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserHover"
-    );
-  }
-
-  async requestBrowserSelectOption(
-    request: BrowserSelectOptionRequest
-  ): Promise<BrowserSelectOptionResponse> {
-    return this.withTimeout<BrowserSelectOptionResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION,
-        request
-      ) as Promise<BrowserSelectOptionResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserSelectOption"
-    );
-  }
-
-  async requestBrowserNavigateBack(
-    request: BrowserNavigateBackRequest
-  ): Promise<BrowserNavigateBackResponse> {
-    return this.withTimeout<BrowserNavigateBackResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK,
-        request
-      ) as Promise<BrowserNavigateBackResponse>,
-      BROWSER_NAVIGATE_BACK_TIMEOUT_MS,
-      "requestBrowserNavigateBack"
-    );
-  }
-
-  async requestBrowserConsoleMessages(
-    request: BrowserConsoleMessagesRequest
-  ): Promise<BrowserConsoleMessagesResponse> {
-    return this.withTimeout<BrowserConsoleMessagesResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES,
-        request
-      ) as Promise<BrowserConsoleMessagesResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserConsoleMessages"
-    );
-  }
-
-  async requestBrowserNetworkRequests(
-    request: BrowserNetworkRequestsRequest
-  ): Promise<BrowserNetworkRequestsResponse> {
-    return this.withTimeout<BrowserNetworkRequestsResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS,
-        request
-      ) as Promise<BrowserNetworkRequestsResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserNetworkRequests"
-    );
-  }
-
-  async requestBrowserScreenshot(
-    request: BrowserScreenshotRequest
-  ): Promise<BrowserScreenshotResponse> {
-    return this.withTimeout<BrowserScreenshotResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT,
-        request
-      ) as Promise<BrowserScreenshotResponse>,
-      BROWSER_SCREENSHOT_TIMEOUT_MS,
-      "requestBrowserScreenshot"
-    );
-  }
-
-  async requestBrowserScroll(request: BrowserScrollRequest): Promise<BrowserScrollResponse> {
-    return this.withTimeout<BrowserScrollResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.BROWSER_SCROLL,
-        request
-      ) as Promise<BrowserScrollResponse>,
-      BROWSER_INTERACTION_TIMEOUT_MS,
-      "requestBrowserScroll"
-    );
-  }
-
-  // ==========================================================================
-  // SIMULATOR AUTOMATION REQUESTS (sidecar -> frontend, with timeout)
-  // ==========================================================================
-
-  async requestSimScreenshot(request: SimScreenshotRequest): Promise<SimScreenshotResponse> {
-    return this.withTimeout<SimScreenshotResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_SCREENSHOT,
-        request
-      ) as Promise<SimScreenshotResponse>,
-      SIMULATOR_SCREENSHOT_TIMEOUT_MS,
-      "requestSimScreenshot"
-    );
-  }
-
-  async requestSimTap(request: SimTapRequest): Promise<SimTapResponse> {
-    return this.withTimeout<SimTapResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_TAP,
-        request
-      ) as Promise<SimTapResponse>,
-      SIMULATOR_INTERACTION_TIMEOUT_MS,
-      "requestSimTap"
-    );
-  }
-
-  async requestSimSwipe(request: SimSwipeRequest): Promise<SimSwipeResponse> {
-    return this.withTimeout<SimSwipeResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_SWIPE,
-        request
-      ) as Promise<SimSwipeResponse>,
-      SIMULATOR_INTERACTION_TIMEOUT_MS,
-      "requestSimSwipe"
-    );
-  }
-
-  async requestSimTypeText(request: SimTypeTextRequest): Promise<SimTypeTextResponse> {
-    return this.withTimeout<SimTypeTextResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_TYPE_TEXT,
-        request
-      ) as Promise<SimTypeTextResponse>,
-      SIMULATOR_INTERACTION_TIMEOUT_MS,
-      "requestSimTypeText"
-    );
-  }
-
-  async requestSimPressKey(request: SimPressKeyRequest): Promise<SimPressKeyResponse> {
-    return this.withTimeout<SimPressKeyResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_PRESS_KEY,
-        request
-      ) as Promise<SimPressKeyResponse>,
-      SIMULATOR_INTERACTION_TIMEOUT_MS,
-      "requestSimPressKey"
-    );
-  }
-
-  async requestSimBuildAndRun(request: SimBuildAndRunRequest): Promise<SimBuildAndRunResponse> {
-    return this.withTimeout<SimBuildAndRunResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN,
-        request
-      ) as Promise<SimBuildAndRunResponse>,
-      SIMULATOR_BUILD_TIMEOUT_MS,
-      "requestSimBuildAndRun"
-    );
-  }
-
-  async requestSimListDevices(request: SimListDevicesRequest): Promise<SimListDevicesResponse> {
-    return this.withTimeout<SimListDevicesResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_LIST_DEVICES,
-        request
-      ) as Promise<SimListDevicesResponse>,
-      DATA_QUERY_TIMEOUT_MS,
-      "requestSimListDevices"
-    );
-  }
-
-  async requestSimStart(request: SimStartRequest): Promise<SimStartResponse> {
-    return this.withTimeout<SimStartResponse>(
-      this.requireTunnel().request(
-        FRONTEND_RPC_METHODS.SIM_START,
-        request
-      ) as Promise<SimStartResponse>,
-      SIMULATOR_BOOT_TIMEOUT_MS,
-      "requestSimStart"
-    );
-  }
+  // --- Simulator automation RPCs ---
+  requestSimScreenshot(r: SimScreenshotRequest) { return this.rpc<SimScreenshotResponse>(FRONTEND_RPC_METHODS.SIM_SCREENSHOT, r, SIMULATOR_SCREENSHOT_TIMEOUT_MS); }
+  requestSimTap(r: SimTapRequest) { return this.rpc<SimTapResponse>(FRONTEND_RPC_METHODS.SIM_TAP, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
+  requestSimSwipe(r: SimSwipeRequest) { return this.rpc<SimSwipeResponse>(FRONTEND_RPC_METHODS.SIM_SWIPE, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
+  requestSimTypeText(r: SimTypeTextRequest) { return this.rpc<SimTypeTextResponse>(FRONTEND_RPC_METHODS.SIM_TYPE_TEXT, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
+  requestSimPressKey(r: SimPressKeyRequest) { return this.rpc<SimPressKeyResponse>(FRONTEND_RPC_METHODS.SIM_PRESS_KEY, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
+  requestSimBuildAndRun(r: SimBuildAndRunRequest) { return this.rpc<SimBuildAndRunResponse>(FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN, r, SIMULATOR_BUILD_TIMEOUT_MS); }
+  requestSimListDevices(r: SimListDevicesRequest) { return this.rpc<SimListDevicesResponse>(FRONTEND_RPC_METHODS.SIM_LIST_DEVICES, r, DATA_QUERY_TIMEOUT_MS); }
+  requestSimStart(r: SimStartRequest) { return this.rpc<SimStartResponse>(FRONTEND_RPC_METHODS.SIM_START, r, SIMULATOR_BOOT_TIMEOUT_MS); }
 
   // ==========================================================================
   // INCOMING EVENTS (frontend -> sidecar)
   // ==========================================================================
 
-  onQuery(handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>): void {
-    this.requireTunnel().addMethod(SIDECAR_METHODS.QUERY, async (params) => {
+  onQuery(tunnel: RpcConnection, handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>): void {
+    tunnel.addMethod(SIDECAR_METHODS.QUERY, async (params) => {
       const parsed = QueryRequestSchema.safeParse(params);
       if (!parsed.success) return { accepted: false, reason: "Invalid query request" };
       const { type: _, ...input } = parsed.data;
@@ -618,6 +326,15 @@ class FrontendClientClass {
   // ==========================================================================
   // Internal helpers
   // ==========================================================================
+
+  /** Generic typed RPC: send a request to the frontend with a timeout. */
+  private async rpc<TRes>(method: string, params: unknown, timeoutMs: number): Promise<TRes> {
+    return this.withTimeout<TRes>(
+      this.requireTunnel().request(method, params) as Promise<TRes>,
+      timeoutMs,
+      method
+    );
+  }
 
   /** Returns the first available tunnel, or throws if none are connected. */
   private requireTunnel(): RpcConnection {

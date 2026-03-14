@@ -52,10 +52,3 @@ export function abortCodexSession(sessionId: string): void {
     session.isRunning = false;
   }
 }
-
-/**
- * Clears all sessions. Used in tests.
- */
-export function clearAllCodexSessions(): void {
-  activeSessions.clear();
-}
