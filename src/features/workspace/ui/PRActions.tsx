@@ -33,7 +33,7 @@ import { cn } from "@/shared/lib/utils";
 import { BranchSelector } from "./BranchSelector";
 import {
   RESOLVE_CONFLICTS,
-  FIX_CI,
+  fixCIPrompt,
   ADDRESS_REVIEW,
   MERGE_PR,
 } from "@/features/session/lib/sessionPrompts";
@@ -100,10 +100,10 @@ export function PRActions({
             onCreatePR={onCreatePR}
           />
         ))
-        .with({ type: "ci_pending" }, () => (
+        .with({ type: "ci_pending" }, (s) => (
           <StatusText
             icon={<Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />}
-            label="Checks running"
+            label={s.checksTotal > 0 ? `${s.checksDone}/${s.checksTotal} checks` : "Checks running"}
             variant="pending"
           />
         ))
@@ -117,12 +117,12 @@ export function PRActions({
             variant="closed"
           />
         ))
-        .with({ type: "ci_failing" }, () => (
+        .with({ type: "ci_failing" }, (s) => (
           <ActionButton
             icon={<CircleX className="h-2.5 w-2.5" />}
-            label="Fix CI"
+            label={s.checksTotal > 0 ? `Fix CI · ${s.checksDone}/${s.checksTotal}` : "Fix CI"}
             variant="destructive"
-            onClick={() => onSendAgentMessage?.(FIX_CI)}
+            onClick={() => onSendAgentMessage?.(fixCIPrompt(s.failingChecks))}
             disabled={!onSendAgentMessage}
           />
         ))
