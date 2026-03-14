@@ -95,3 +95,7 @@ commit and i wanna tackhle also this workspace route fike, what woudl u prove? /
 yeah gthis seems good, explroe if truely greta and let's do it 
 
 just teh worklapce.pem.ts (make it workspace.deesign.ts we wil etxend this to more design suporing stuff
+
+---
+
+Commit and push all changes
