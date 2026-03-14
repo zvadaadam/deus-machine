@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5b838fce598d",
+  "session_id": "85919f2c-e121-4116-b084-939508ef5e43",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T18:45:11.61692Z",
+  "branch": "zvadaadam/shared-cleanup",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/features/sidebar/ui/AppSidebar.tsx",
+    "src/shared/api/index.ts",
+    "src/shared/components/BranchName.tsx",
+    "src/shared/components/error-fallbacks/DashboardError.tsx",
+    "src/shared/components/error-fallbacks/ErrorFallback.tsx",
+    "src/shared/components/index.ts",
+    "src/shared/config/api.config.ts",
+    "src/shared/config/index.ts",
+    "src/shared/hooks/useSocket.ts",
+    "src/shared/lib/formatters.ts",
+    "src/shared/lib/index.ts",
+    "src/shared/stores/layoutCoordinationStore.ts",
+    "src/shared/stores/uiStore.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "66d992de754a",
+  "transcript_identifier_at_start": "9689eafe-e6db-4151-ba15-64ceb4aff97e",
+  "token_usage": {
+    "input_tokens": 5479,
+    "cache_creation_tokens": 301796,
+    "cache_read_tokens": 3334789,
+    "output_tokens": 17712,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T18:45:11.496437Z",
+    "agent_lines": 6,
+    "human_added": 4,
+    "human_modified": 7,
+    "human_removed": 0,
+    "total_committed": 17,
+    "agent_percentage": 35.294117647058826
+  }
+}
