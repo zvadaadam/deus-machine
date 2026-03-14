@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "1c26e336b007",
+  "session_id": "ff1f9bd0-aa3e-437b-8fe0-9d86ba721fc8",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-14T19:58:24.091171Z",
+  "branch": "zvadaadam/remove-dead-code",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/features/session/lib/agentRuntime.ts",
+    "src/features/session/types.ts",
+    "src/features/session/ui/AssistantTurn.tsx",
+    "src/features/session/ui/chat-types.ts",
+    "src/features/session/ui/tools/ToolRegistry.tsx",
+    "src/features/session/ui/tools/registerTools.ts",
+    "src/features/session/ui/utils/calculateTurnStats.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "7a1f2b83e472",
+  "token_usage": {
+    "input_tokens": 8,
+    "cache_creation_tokens": 39055,
+    "cache_read_tokens": 215934,
+    "output_tokens": 3706,
+    "api_call_count": 6
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-14T19:58:24.061907Z",
+    "agent_lines": 7,
+    "human_added": 1,
+    "human_modified": 20,
+    "human_removed": 0,
+    "total_committed": 28,
+    "agent_percentage": 25
+  }
+}
