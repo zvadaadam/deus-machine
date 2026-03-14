@@ -177,11 +177,16 @@ export function processMessage(
     }
   }
 
-  // 6. result/success → mark query as succeeded.
-  // Status transition to "idle" is owned by executeOutcome() in stream-context.ts
-  // after the streaming loop ends — not here. Doing it here would double-write.
+  // 6. result/success → mark query as succeeded and transition to idle.
+  // Must happen HERE (inside the loop), not in executeOutcome (post-loop),
+  // because the streaming loop stays alive between turns — the prompt queue
+  // blocks waiting for the next user message, so the post-loop never runs
+  // until the entire conversation ends.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
     ctx.querySucceeded = true;
+    if (!ctx.stopReasonError) {
+      updateSessionStatus(opts.sessionId, "idle");
+    }
   }
 
   // 7. result/error_during_execution → capture for error diagnostics

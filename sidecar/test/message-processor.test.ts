@@ -384,19 +384,17 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("result/success", () => {
-    it("sets querySucceeded but does not update status (owned by executeOutcome)", () => {
+    it("sets querySucceeded and updates status to idle", () => {
       const msg = { type: "result", subtype: "success" };
       const ctx = makeCtx();
 
       processMessage(msg, ctx, makeSession(), makeOpts());
 
       expect(ctx.querySucceeded).toBe(true);
-      // Status transition to idle is owned by executeOutcome in stream-context.ts,
-      // not processMessage — avoids double DB write on every completion.
-      expect(mockUpdateSessionStatus).not.toHaveBeenCalled();
+      expect(mockUpdateSessionStatus).toHaveBeenCalledWith("sess-1", "idle");
     });
 
-    it("sets querySucceeded even when stopReasonError is set", () => {
+    it("skips idle update when stopReasonError is already set", () => {
       const msg = { type: "result", subtype: "success" };
       const ctx = makeCtx({ stopReasonError: true });
 
