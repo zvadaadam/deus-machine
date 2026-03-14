@@ -85,3 +85,7 @@ i'm thinking why we have a lot of that logic insid eteh rourtes shoudlw emaybe m
 ---
 
 okey so let's move on into the workspace.ts route, anythign there?
+
+---
+
+commit and i wanna tackhle also this workspace route fike, what woudl u prove? /code-simplifier and if you woudl stratur eit better mot eclena no antipatterns
