@@ -1,4 +1,4 @@
-// backend/src/middleware/auth.ts
+// backend/src/middleware/remote-auth.ts
 // Bearer token validation for remote access.
 // Localhost requests are exempt (desktop app needs zero auth changes).
 // Public paths (health, pairing) are also exempt.
