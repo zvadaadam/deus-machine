@@ -43,3 +43,7 @@ I can see that it's actually not the correct name, the config, it's like agent c
 ---
 
 This is a cleanup of the whole backend, so I want to update these things here.
+
+---
+
+Awesome, and can we also change the endpoint? I feel like the endpoint should say the agent config. And it's the same with the remote auth, now it only says auth, but it should be more clear. And yes, you have to update it in frontend too.
