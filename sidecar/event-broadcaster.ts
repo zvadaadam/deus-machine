@@ -5,31 +5,11 @@
 // methods for canonical agent events and legacy notification formats.
 
 import type { RpcConnection } from "./rpc-connection";
-import {
-  CancelRequestSchema,
-  ClaudeAuthRequestSchema,
-  ContextUsageRequestSchema,
-  FRONTEND_NOTIFICATIONS,
-  FRONTEND_RPC_METHODS,
-  QueryRequestSchema,
-  ResetGeneratorRequestSchema,
-  SIDECAR_METHODS,
-  SIDECAR_NOTIFICATIONS,
-  UpdatePermissionModeRequestSchema,
-  WorkspaceInitRequestSchema,
-} from "./protocol";
+import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
 import { AGENT_EVENT_NAMES } from "../shared/agent-events";
 import type { AgentEvent, InteractionRequestType } from "../shared/agent-events";
 import type { AgentType, ErrorCategory } from "../shared/enums";
 import type {
-  QueryRequest,
-  QueryAckResponse,
-  CancelRequest,
-  ClaudeAuthRequest,
-  WorkspaceInitRequest,
-  ContextUsageRequest,
-  UpdatePermissionModeRequest,
-  ResetGeneratorRequest,
   MessageResponse,
   ErrorResponse,
   EnterPlanModeNotification,
@@ -565,94 +545,6 @@ class EventBroadcasterClass {
   }
   requestSimStart(r: SimStartRequest) {
     return this.rpc<SimStartResponse>(FRONTEND_RPC_METHODS.SIM_START, r, SIMULATOR_BOOT_TIMEOUT_MS);
-  }
-
-  // ==========================================================================
-  // INCOMING EVENTS (frontend -> sidecar)
-  // ==========================================================================
-
-  onQuery(
-    tunnel: RpcConnection,
-    handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>
-  ): void {
-    tunnel.addMethod(SIDECAR_METHODS.QUERY, async (params) => {
-      const parsed = QueryRequestSchema.safeParse(params);
-      if (!parsed.success) return { accepted: false, reason: "Invalid query request" };
-      const { type: _, ...input } = parsed.data;
-      return handler(input);
-    });
-  }
-
-  onCancel(tunnel: RpcConnection, handler: (request: Omit<CancelRequest, "type">) => void): void {
-    tunnel.addMethod(SIDECAR_METHODS.CANCEL, (params) => {
-      const parsed = CancelRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.resolve(undefined);
-      const { type: _, ...input } = parsed.data;
-      handler(input);
-      return Promise.resolve(undefined);
-    });
-  }
-
-  onClaudeAuth(
-    tunnel: RpcConnection,
-    handler: (request: Omit<ClaudeAuthRequest, "type">) => Promise<any>
-  ): void {
-    tunnel.addMethod(SIDECAR_METHODS.CLAUDE_AUTH, (params) => {
-      const parsed = ClaudeAuthRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.reject(new Error("Invalid claudeAuth request"));
-      const { type: _, ...input } = parsed.data;
-      return handler(input);
-    });
-  }
-
-  onWorkspaceInit(
-    tunnel: RpcConnection,
-    handler: (request: Omit<WorkspaceInitRequest, "type">) => Promise<any>
-  ): void {
-    tunnel.addMethod(SIDECAR_METHODS.WORKSPACE_INIT, (params) => {
-      const parsed = WorkspaceInitRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.reject(new Error("Invalid workspaceInit request"));
-      const { type: _, ...input } = parsed.data;
-      return handler(input);
-    });
-  }
-
-  onContextUsage(
-    tunnel: RpcConnection,
-    handler: (request: Omit<ContextUsageRequest, "type">) => Promise<any>
-  ): void {
-    tunnel.addMethod(SIDECAR_METHODS.CONTEXT_USAGE, (params) => {
-      const parsed = ContextUsageRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.reject(new Error("Invalid contextUsage request"));
-      const { type: _, ...input } = parsed.data;
-      return handler(input);
-    });
-  }
-
-  onUpdatePermissionMode(
-    tunnel: RpcConnection,
-    handler: (request: Omit<UpdatePermissionModeRequest, "type">) => void
-  ): void {
-    tunnel.addMethod(SIDECAR_NOTIFICATIONS.UPDATE_PERMISSION_MODE, (params) => {
-      const parsed = UpdatePermissionModeRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.resolve(undefined);
-      const { type: _, ...input } = parsed.data;
-      handler(input);
-      return Promise.resolve(undefined);
-    });
-  }
-
-  onResetGenerator(
-    tunnel: RpcConnection,
-    handler: (request: Omit<ResetGeneratorRequest, "type">) => void
-  ): void {
-    tunnel.addMethod(SIDECAR_NOTIFICATIONS.RESET_GENERATOR, (params) => {
-      const parsed = ResetGeneratorRequestSchema.safeParse(params);
-      if (!parsed.success) return Promise.resolve(undefined);
-      const { type: _, ...input } = parsed.data;
-      handler(input);
-      return Promise.resolve(undefined);
-    });
   }
 
   // ==========================================================================
