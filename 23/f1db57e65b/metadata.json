@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "23f1db57e65b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "shared/enums.ts",
+    "sidecar/agents/agent-handler.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/claude/claude-session.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/index.ts",
+    "sidecar/test/agent-handler.test.ts",
+    "sidecar/test/claude-handler.test.ts",
+    "sidecar/test/protocol.test.ts",
+    "src/features/session/lib/agentRuntime.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/f1db57e65b/0/metadata.json",
+      "transcript": "/23/f1db57e65b/0/full.jsonl",
+      "content_hash": "/23/f1db57e65b/0/content_hash.txt",
+      "prompt": "/23/f1db57e65b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
