@@ -3,7 +3,7 @@
   "checkpoint_id": "aeb349acea7f",
   "strategy": "manual-commit",
   "branch": "zvadaadam/explore-backend-sidecar",
-  "checkpoints_count": 0,
+  "checkpoints_count": 2,
   "files_touched": [
     "CLAUDE.md"
   ],
@@ -13,13 +13,19 @@
       "transcript": "/ae/b349acea7f/0/full.jsonl",
       "content_hash": "/ae/b349acea7f/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/ae/b349acea7f/1/metadata.json",
+      "transcript": "/ae/b349acea7f/1/full.jsonl",
+      "content_hash": "/ae/b349acea7f/1/content_hash.txt",
+      "prompt": "/ae/b349acea7f/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 3,
-    "cache_creation_tokens": 2734,
-    "cache_read_tokens": 59837,
-    "output_tokens": 483,
-    "api_call_count": 1
+    "input_tokens": 282,
+    "cache_creation_tokens": 1266048,
+    "cache_read_tokens": 48867088,
+    "output_tokens": 107722,
+    "api_call_count": 214
   }
 }
