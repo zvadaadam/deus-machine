@@ -69,6 +69,8 @@ export function getWorkspacesByRepo(
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
       r.git_default_branch,
       s.status as session_status, s.model,
+      s.error_category as session_error_category,
+      s.error_message as session_error_message,
       s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
