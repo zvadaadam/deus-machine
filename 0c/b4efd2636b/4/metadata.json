@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "0cb4efd2636b",
+  "session_id": "4c639459-8888-49de-aaf9-7cf10bd962a8",
   "strategy": "manual-commit",
+  "created_at": "2026-03-15T17:45:52.102687Z",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 3,
+  "checkpoints_count": 1,
   "files_touched": [
     "backend/src/app.ts",
     "backend/src/routes/notify.ts",
@@ -43,43 +45,25 @@
     "src/shared/hooks/useWsToolRequest.ts",
     "test/unit/shared/events.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/0c/b4efd2636b/0/metadata.json",
-      "transcript": "/0c/b4efd2636b/0/full.jsonl",
-      "content_hash": "/0c/b4efd2636b/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/0c/b4efd2636b/1/metadata.json",
-      "transcript": "/0c/b4efd2636b/1/full.jsonl",
-      "content_hash": "/0c/b4efd2636b/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/0c/b4efd2636b/2/metadata.json",
-      "transcript": "/0c/b4efd2636b/2/full.jsonl",
-      "content_hash": "/0c/b4efd2636b/2/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/0c/b4efd2636b/3/metadata.json",
-      "transcript": "/0c/b4efd2636b/3/full.jsonl",
-      "content_hash": "/0c/b4efd2636b/3/content_hash.txt",
-      "prompt": "/0c/b4efd2636b/3/prompt.txt"
-    },
-    {
-      "metadata": "/0c/b4efd2636b/4/metadata.json",
-      "transcript": "/0c/b4efd2636b/4/full.jsonl",
-      "content_hash": "/0c/b4efd2636b/4/content_hash.txt",
-      "prompt": "/0c/b4efd2636b/4/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "a07dede3c18f",
   "token_usage": {
-    "input_tokens": 15887,
-    "cache_creation_tokens": 416436,
-    "cache_read_tokens": 32941222,
-    "output_tokens": 76122,
-    "api_call_count": 157
+    "input_tokens": 3,
+    "cache_creation_tokens": 24538,
+    "cache_read_tokens": 8902,
+    "output_tokens": 6,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T17:45:52.100873Z",
+    "agent_lines": 308,
+    "human_added": 6,
+    "human_modified": 100,
+    "human_removed": 0,
+    "total_committed": 414,
+    "agent_percentage": 74.39613526570048
   }
 }
