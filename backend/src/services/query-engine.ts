@@ -170,7 +170,10 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
         // Workspaces with session context: try targeted delta
         try {
           const db = getDatabase();
-          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds);
+          const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
+          const allowedStates = new Set(stateFilter.split(",").map(s => s.trim()));
+          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds)
+            .filter(ws => allowedStates.has(ws.state));
           if (changedWorkspaces.length > 0) {
             const withPaths = changedWorkspaces.map(ws => ({
               ...ws,
@@ -402,7 +405,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
           grouped[repoId] = {
             repo_id: repoId,
             repo_name: workspace.repo_name || "Unknown",
-            sort_order: workspace.repo_sort_order || 999,
+            sort_order: workspace.repo_sort_order ?? 999,
             workspaces: [],
           };
         }
