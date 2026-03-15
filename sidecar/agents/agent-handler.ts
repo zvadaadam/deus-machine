@@ -123,6 +123,14 @@ export function initializeAllAgents(): Map<AgentType, { success: boolean; error?
 }
 
 /**
+ * Returns the list of registered agent type names.
+ * Used by the health endpoint to report available agents.
+ */
+export function getRegisteredAgentTypes(): AgentType[] {
+  return Array.from(registry.keys());
+}
+
+/**
  * Clears the registry. Used in tests to reset state between runs.
  */
 export function clearAgentRegistry(): void {

@@ -37,6 +37,16 @@ import { classifyError } from "./agents/error-classifier";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
+import {
+  handleHttpRequest,
+  isShuttingDown,
+  setShuttingDown,
+  setAgentsInitialized,
+  trackSession,
+  untrackSession,
+  waitForDrain,
+  cancelRemainingSessions,
+} from "./health";
 
 // ============================================================================
 // Logging
@@ -142,9 +152,34 @@ class UnifiedSidecar {
 
     console.log(`UnifiedSidecar: Initializing (transport=${mode})...`);
 
-    // Graceful shutdown handlers
+    // Graceful shutdown handlers — drain in-flight turns before exiting
     const gracefulShutdown = async (signal: string) => {
       console.log(`\n[SIGNAL] Received ${signal}, shutting down gracefully...`);
+
+      // 1. Stop accepting new turn/start requests
+      setShuttingDown(true);
+
+      // 2. Stop accepting new WS connections (close the HTTP listener)
+      if (this.httpServer) {
+        this.httpServer.close();
+        console.log("[SHUTDOWN] HTTP server closed to new connections");
+      }
+      if (this.unixServer) {
+        this.unixServer.close();
+        console.log("[SHUTDOWN] Unix server closed to new connections");
+      }
+
+      // 3. Wait for in-flight turns to drain (default 30s timeout)
+      console.log("[SHUTDOWN] Waiting for in-flight turns to drain...");
+      const drained = await waitForDrain();
+      if (drained) {
+        console.log("[SHUTDOWN] All turns drained successfully");
+      } else {
+        console.log("[SHUTDOWN] Drain timeout reached, cancelling remaining sessions");
+        cancelRemainingSessions();
+      }
+
+      // 4. Full cleanup (kill child processes, close WS clients)
       try {
         await this.cleanup();
         console.log("[SIGNAL] Cleanup complete, exiting process");
@@ -196,6 +231,11 @@ class UnifiedSidecar {
       const prompt = params?.prompt;
       const options = params?.options || {};
 
+      // Reject new turns during shutdown
+      if (isShuttingDown()) {
+        return { accepted: false, reason: "shutting down" };
+      }
+
       if (!sessionId || !prompt) {
         return { accepted: false, reason: "turn/start requires sessionId and prompt" };
       }
@@ -205,23 +245,32 @@ class UnifiedSidecar {
         return { accepted: false, reason: `No agent registered for type: ${agentType}` };
       }
 
-      agent.query(sessionId, prompt, options).catch((err) => {
-        console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
-        const classified = classifyError(err);
-        EventBroadcaster.sendError({
-          id: sessionId,
-          type: "error",
-          error: classified.message,
-          agentType,
-          category: classified.category,
+      // Track this session for graceful shutdown draining
+      trackSession(sessionId, agentType);
+
+      agent
+        .query(sessionId, prompt, options)
+        .catch((err) => {
+          console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
+          const classified = classifyError(err);
+          EventBroadcaster.sendError({
+            id: sessionId,
+            type: "error",
+            error: classified.message,
+            agentType,
+            category: classified.category,
+          });
+          EventBroadcaster.emitSessionError(
+            sessionId,
+            agentType,
+            classified.message,
+            classified.category
+          );
+        })
+        .finally(() => {
+          // Untrack when the turn completes (success, error, or cancel)
+          untrackSession(sessionId);
         });
-        EventBroadcaster.emitSessionError(
-          sessionId,
-          agentType,
-          classified.message,
-          classified.category
-        );
-      });
 
       EventBroadcaster.emitSessionStarted(sessionId, agentType);
 
@@ -256,6 +305,11 @@ class UnifiedSidecar {
     // Returns synchronous ACK/reject before async streaming begins.
     // query() is NOT awaited — the ACK returns immediately after validation.
     EventBroadcaster.onQuery(rpcTunnel, async (request) => {
+      // Reject new queries during shutdown
+      if (isShuttingDown()) {
+        return { accepted: false, reason: "shutting down" };
+      }
+
       const tQueryReceived = Date.now();
       console.log(
         `[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`
@@ -265,27 +319,36 @@ class UnifiedSidecar {
         return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
       }
 
+      // Track this session for graceful shutdown draining
+      trackSession(request.id, request.agentType);
+
       // The backend saves the user message BEFORE forwarding turn/start to the
       // agent-server. The agent-server just receives the query and starts the SDK.
-      agent.query(request.id, request.prompt, request.options).catch((err) => {
-        console.error(`[QUERY] Unhandled error in ${request.agentType} query:`, err);
-        // Recover: notify frontend of the error. The backend handles DB status updates
-        // via canonical events (session.error).
-        const classified = classifyError(err);
-        EventBroadcaster.sendError({
-          id: request.id,
-          type: "error",
-          error: classified.message,
-          agentType: request.agentType,
-          category: classified.category,
+      agent
+        .query(request.id, request.prompt, request.options)
+        .catch((err) => {
+          console.error(`[QUERY] Unhandled error in ${request.agentType} query:`, err);
+          // Recover: notify frontend of the error. The backend handles DB status updates
+          // via canonical events (session.error).
+          const classified = classifyError(err);
+          EventBroadcaster.sendError({
+            id: request.id,
+            type: "error",
+            error: classified.message,
+            agentType: request.agentType,
+            category: classified.category,
+          });
+          EventBroadcaster.emitSessionError(
+            request.id,
+            request.agentType,
+            classified.message,
+            classified.category
+          );
+        })
+        .finally(() => {
+          // Untrack when the turn completes (success, error, or cancel)
+          untrackSession(request.id);
         });
-        EventBroadcaster.emitSessionError(
-          request.id,
-          request.agentType,
-          classified.message,
-          classified.category
-        );
-      });
 
       // Dual-write: emit canonical session.started event after dispatch
       EventBroadcaster.emitSessionStarted(request.id, request.agentType);
@@ -516,6 +579,9 @@ class UnifiedSidecar {
       }
     }
 
+    // Mark agents as initialized for the /readyz endpoint
+    setAgentsInitialized(true);
+
     if (this.transportMode === "ws") {
       return this.startWebSocket();
     } else {
@@ -525,12 +591,10 @@ class UnifiedSidecar {
 
   private startWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Create a minimal HTTP server just for the WS upgrade.
+      // Create an HTTP server for health endpoints + WS upgrade.
       // Binding to 127.0.0.1 — agent-server only accepts local connections.
-      this.httpServer = createHttpServer((_req, res) => {
-        // Reject plain HTTP requests — this server only does WebSocket upgrades.
-        res.writeHead(426, { "Content-Type": "text/plain" });
-        res.end("Upgrade Required");
+      this.httpServer = createHttpServer((req, res) => {
+        handleHttpRequest(req, res, this.wss);
       });
 
       this.wss = new WebSocketServer({ server: this.httpServer });
