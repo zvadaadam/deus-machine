@@ -268,6 +268,19 @@ export function updateSessionStatus(
           : {}),
         ...(workspaceId ? { workspaceId } : {}),
       });
+
+      // Dual-write: emit canonical session lifecycle events alongside sendStatusChanged.
+      // These provide the provider-neutral event stream for the agent-server protocol.
+      if (status === "idle") {
+        FrontendClient.emitSessionIdle(sessionId, agentType);
+      } else if (status === "error") {
+        FrontendClient.emitSessionError(
+          sessionId,
+          agentType,
+          errorMessage ?? "Unknown error",
+          (errorCategory as ErrorCategory) ?? "internal"
+        );
+      }
     } catch {
       // No tunnel attached — frontend will pick up via fallback poll
     }

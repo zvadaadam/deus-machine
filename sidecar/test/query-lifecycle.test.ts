@@ -4,6 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockSendMessage = vi.fn();
 const mockSendError = vi.fn();
+const mockEmitSessionCancelled = vi.fn();
+const mockEmitMessageCancelled = vi.fn();
+const mockEmitSessionError = vi.fn();
 const mockSaveAssistantMessage = vi.fn();
 const mockUpdateSessionStatus = vi.fn();
 
@@ -11,6 +14,9 @@ vi.mock("../frontend-client", () => ({
   FrontendClient: {
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     sendError: (...args: unknown[]) => mockSendError(...args),
+    emitSessionCancelled: (...args: unknown[]) => mockEmitSessionCancelled(...args),
+    emitMessageCancelled: (...args: unknown[]) => mockEmitMessageCancelled(...args),
+    emitSessionError: (...args: unknown[]) => mockEmitSessionError(...args),
   },
 }));
 
@@ -70,9 +76,7 @@ describe("persistCancellation", () => {
       expect.objectContaining({ stop_reason: "cancelled" }),
       "o3-mini"
     );
-    expect(mockSendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ agentType: "codex" })
-    );
+    expect(mockSendMessage).toHaveBeenCalledWith(expect.objectContaining({ agentType: "codex" }));
     expect(mockUpdateSessionStatus).toHaveBeenCalledWith("session-2", "idle");
   });
 
@@ -189,5 +193,62 @@ describe("notifyAndRecordError", () => {
 
     // Only one error call (the original)
     expect(mockSendError).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits canonical session.error event alongside sendError", () => {
+    mockUpdateSessionStatus.mockReturnValue({ ok: true });
+
+    const classified: ClassifiedError = { category: "auth", message: "Unauthorized" };
+    notifyAndRecordError("session-1", "claude", classified);
+
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
+      "session-1",
+      "claude",
+      "Unauthorized",
+      "auth"
+    );
+  });
+
+  it("emits canonical session.error with enriched message when enrichMessage provided", () => {
+    mockUpdateSessionStatus.mockReturnValue({ ok: true });
+
+    const classified: ClassifiedError = { category: "process_exit", message: "Process exited" };
+    notifyAndRecordError("session-1", "claude", classified, (c) => `${c.message} (enriched)`);
+
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
+      "session-1",
+      "claude",
+      "Process exited (enriched)",
+      "process_exit"
+    );
+  });
+});
+
+// ── Canonical event dual-write ────────────────────────────────────────────
+
+describe("persistCancellation canonical events", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSaveAssistantMessage.mockReturnValue({ ok: true });
+    mockUpdateSessionStatus.mockReturnValue({ ok: true });
+  });
+
+  it("emits session.cancelled event", () => {
+    persistCancellation("session-1", "claude", "opus");
+
+    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
+  });
+
+  it("emits message.cancelled event", () => {
+    persistCancellation("session-1", "claude", "opus");
+
+    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
+  });
+
+  it("emits canonical events for codex agent type", () => {
+    persistCancellation("session-2", "codex", "o3-mini");
+
+    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
+    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
   });
 });

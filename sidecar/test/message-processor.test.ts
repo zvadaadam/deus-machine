@@ -7,6 +7,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
   mockSendMessage,
   mockSendError,
+  mockEmitAssistantMessage,
+  mockEmitToolResultMessage,
+  mockEmitMessageResult,
+  mockEmitAgentSessionId,
   mockClassifyStopReason,
   mockSaveAssistantMessage,
   mockSaveToolResultMessage,
@@ -15,6 +19,10 @@ const {
 } = vi.hoisted(() => ({
   mockSendMessage: vi.fn(),
   mockSendError: vi.fn(),
+  mockEmitAssistantMessage: vi.fn(),
+  mockEmitToolResultMessage: vi.fn(),
+  mockEmitMessageResult: vi.fn(),
+  mockEmitAgentSessionId: vi.fn(),
   mockClassifyStopReason: vi.fn(),
   mockSaveAssistantMessage: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
     ok: true,
@@ -38,6 +46,10 @@ vi.mock("../frontend-client", () => ({
   FrontendClient: {
     sendMessage: mockSendMessage,
     sendError: mockSendError,
+    emitAssistantMessage: mockEmitAssistantMessage,
+    emitToolResultMessage: mockEmitToolResultMessage,
+    emitMessageResult: mockEmitMessageResult,
+    emitAgentSessionId: mockEmitAgentSessionId,
   },
 }));
 
@@ -460,6 +472,109 @@ describe("processMessage", () => {
       processMessage(msg, ctx, makeSession(), makeOpts());
 
       expect(ctx.lastResultError).toBe("unknown");
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Canonical event dual-write
+  // --------------------------------------------------------------------------
+
+  describe("canonical event dual-write", () => {
+    it("emits message.assistant alongside sendMessage for assistant messages", () => {
+      const msg = {
+        type: "assistant",
+        message: { id: "sdk-msg-1", role: "assistant", content: "hello", stop_reason: "end_turn" },
+      };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts({ model: "opus" }));
+
+      expect(mockEmitAssistantMessage).toHaveBeenCalledWith(
+        "sess-1",
+        "claude",
+        expect.objectContaining({
+          id: "sdk-msg-1",
+          role: "assistant",
+          content: "hello",
+          stop_reason: "end_turn",
+        }),
+        "opus"
+      );
+    });
+
+    it("emits message.tool_result alongside sendMessage for tool_result messages", () => {
+      const msg = {
+        type: "user",
+        message: {
+          id: "sdk-msg-2",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "t1", content: "output" }],
+        },
+        parent_tool_use_id: "parent-1",
+      };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts({ model: "sonnet" }));
+
+      expect(mockEmitToolResultMessage).toHaveBeenCalledWith(
+        "sess-1",
+        "claude",
+        expect.objectContaining({
+          id: "sdk-msg-2",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "t1", content: "output" }],
+          parent_tool_use_id: "parent-1",
+        }),
+        "sonnet"
+      );
+    });
+
+    it("does not emit message.tool_result for user messages without tool_result", () => {
+      const msg = {
+        type: "user",
+        message: { role: "user", content: "hello" },
+      };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts());
+
+      expect(mockEmitToolResultMessage).not.toHaveBeenCalled();
+    });
+
+    it("emits message.result on result/success", () => {
+      const msg = { type: "result", subtype: "success" };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts());
+
+      expect(mockEmitMessageResult).toHaveBeenCalledWith("sess-1", "claude", "success");
+    });
+
+    it("emits agent.session_id when session_id is captured", () => {
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
+      const session = makeSession();
+      processMessage(msg, makeCtx(), session, makeOpts());
+
+      expect(mockEmitAgentSessionId).toHaveBeenCalledWith("sess-1", "sdk-sess-1");
+    });
+
+    it("does not emit agent.session_id when saveAgentSessionId fails", () => {
+      mockSaveAgentSessionId.mockReturnValueOnce({ ok: false, error: "db error" });
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts());
+
+      expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
+    });
+
+    it("does not emit agent.session_id during resume", () => {
+      const msg = {
+        type: "assistant",
+        message: { role: "assistant", content: "" },
+        session_id: "sdk-sess-1",
+      };
+      processMessage(msg, makeCtx(), makeSession(), makeOpts({ isResume: true }));
+
+      expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
     });
   });
 });

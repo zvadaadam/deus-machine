@@ -2,26 +2,43 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock setup ───────────────────────────────────────────────────────────
 
-const { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare, mockTransaction, mockSendStatusChanged } = vi.hoisted(() => {
-  const mockDbRun = vi.fn();
-  const mockDbGet = vi.fn();
-  const mockDbAll = vi.fn().mockReturnValue([]);
-  const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet, all: mockDbAll }));
-  // db.transaction(fn) returns a wrapped function that executes fn inside a transaction
-  const mockTransaction = vi.fn((fn: () => void) => {
-    const wrapped = () => fn();
-    return wrapped;
+const { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare, mockTransaction, mockSendStatusChanged } =
+  vi.hoisted(() => {
+    const mockDbRun = vi.fn();
+    const mockDbGet = vi.fn();
+    const mockDbAll = vi.fn().mockReturnValue([]);
+    const mockDbPrepare = vi.fn(() => ({ run: mockDbRun, get: mockDbGet, all: mockDbAll }));
+    // db.transaction(fn) returns a wrapped function that executes fn inside a transaction
+    const mockTransaction = vi.fn((fn: () => void) => {
+      const wrapped = () => fn();
+      return wrapped;
+    });
+    const mockSendStatusChanged = vi.fn();
+    return {
+      mockDbRun,
+      mockDbGet,
+      mockDbAll,
+      mockDbPrepare,
+      mockTransaction,
+      mockSendStatusChanged,
+    };
   });
-  const mockSendStatusChanged = vi.fn();
-  return { mockDbRun, mockDbGet, mockDbAll, mockDbPrepare, mockTransaction, mockSendStatusChanged };
-});
 
 vi.mock("../db/index", () => ({
   getDatabase: () => ({ prepare: mockDbPrepare, transaction: mockTransaction }),
 }));
 
+const { mockEmitSessionIdle, mockEmitSessionError } = vi.hoisted(() => ({
+  mockEmitSessionIdle: vi.fn(),
+  mockEmitSessionError: vi.fn(),
+}));
+
 vi.mock("../frontend-client", () => ({
-  FrontendClient: { sendStatusChanged: mockSendStatusChanged },
+  FrontendClient: {
+    sendStatusChanged: mockSendStatusChanged,
+    emitSessionIdle: mockEmitSessionIdle,
+    emitSessionError: mockEmitSessionError,
+  },
 }));
 
 import {
@@ -142,7 +159,9 @@ describe("session-writer WriteResult", () => {
     it("updates session status to working and sets last_user_message_at", () => {
       saveUserMessage("session-1", "Fix the bug");
       const prepareCalls = mockDbPrepare.mock.calls as string[][];
-      const updateCall = prepareCalls.find((args) => args[0]?.includes("UPDATE sessions SET status"));
+      const updateCall = prepareCalls.find((args) =>
+        args[0]?.includes("UPDATE sessions SET status")
+      );
       expect(updateCall).toBeDefined();
       expect(updateCall![0]).toContain("'working'");
       expect(updateCall![0]).toContain("last_user_message_at");
@@ -151,7 +170,9 @@ describe("session-writer WriteResult", () => {
     it("clears error_message and error_category in the session UPDATE", () => {
       saveUserMessage("session-1", "Retry the task");
       const prepareCalls = mockDbPrepare.mock.calls as string[][];
-      const updateCall = prepareCalls.find((args) => args[0]?.includes("UPDATE sessions SET status"));
+      const updateCall = prepareCalls.find((args) =>
+        args[0]?.includes("UPDATE sessions SET status")
+      );
       expect(updateCall).toBeDefined();
       expect(updateCall![0]).toContain("error_message = NULL");
       expect(updateCall![0]).toContain("error_category = NULL");
@@ -169,7 +190,9 @@ describe("session-writer WriteResult", () => {
 
     it("returns ok:false when transaction throws", () => {
       mockTransaction.mockImplementationOnce(() => {
-        return () => { throw new Error("SQLITE_BUSY: database is locked"); };
+        return () => {
+          throw new Error("SQLITE_BUSY: database is locked");
+        };
       });
       const result = saveUserMessage("session-1", "Hello");
       expect(result.ok).toBe(false);
@@ -180,7 +203,9 @@ describe("session-writer WriteResult", () => {
 
     it("does not persist anything when transaction fails (atomicity)", () => {
       mockTransaction.mockImplementationOnce(() => {
-        return () => { throw new Error("SQLITE_CONSTRAINT"); };
+        return () => {
+          throw new Error("SQLITE_CONSTRAINT");
+        };
       });
       const result = saveUserMessage("session-1", "Hello");
       expect(result.ok).toBe(false);
@@ -201,7 +226,9 @@ describe("session-writer WriteResult", () => {
 
     it("does not emit sendStatusChanged when transaction fails", () => {
       mockTransaction.mockImplementationOnce(() => {
-        return () => { throw new Error("SQLITE_BUSY"); };
+        return () => {
+          throw new Error("SQLITE_BUSY");
+        };
       });
       saveUserMessage("session-1", "Hello");
       expect(mockSendStatusChanged).not.toHaveBeenCalled();
@@ -274,6 +301,39 @@ describe("session-writer WriteResult", () => {
     it("does not break when sendStatusChanged throws", () => {
       mockSendStatusChanged.mockImplementationOnce(() => {
         throw new Error("No tunnel attached");
+      });
+      const result = updateSessionStatus("session-1", "idle");
+      expect(result.ok).toBe(true);
+    });
+
+    it("emits canonical session.idle event when status is idle", () => {
+      updateSessionStatus("session-1", "idle");
+      expect(mockEmitSessionIdle).toHaveBeenCalledWith("session-1", "claude");
+    });
+
+    it("emits canonical session.error event when status is error", () => {
+      updateSessionStatus("session-1", "error", "API key invalid", "auth");
+      expect(mockEmitSessionError).toHaveBeenCalledWith(
+        "session-1",
+        "claude",
+        "API key invalid",
+        "auth"
+      );
+    });
+
+    it("does not emit session.idle for non-idle status", () => {
+      updateSessionStatus("session-1", "error", "fail", "internal");
+      expect(mockEmitSessionIdle).not.toHaveBeenCalled();
+    });
+
+    it("does not emit session.error for non-error status", () => {
+      updateSessionStatus("session-1", "idle");
+      expect(mockEmitSessionError).not.toHaveBeenCalled();
+    });
+
+    it("does not break when canonical emit throws (inside try/catch)", () => {
+      mockEmitSessionIdle.mockImplementationOnce(() => {
+        throw new Error("emit failed");
       });
       const result = updateSessionStatus("session-1", "idle");
       expect(result.ok).toBe(true);

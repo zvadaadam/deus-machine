@@ -42,16 +42,13 @@ export function deserializeMessage(
 ): Record<string, unknown> | null {
   try {
     const seen = new WeakSet();
-    const messageStr = JSON.stringify(
-      message,
-      (_key, value) => {
-        if (typeof value === "object" && value !== null) {
-          if (seen.has(value)) return "[Circular]";
-          seen.add(value);
-        }
-        return value;
+    const messageStr = JSON.stringify(message, (_key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
       }
-    );
+      return value;
+    });
     return JSON.parse(messageStr);
   } catch (parseError) {
     console.error(
@@ -91,9 +88,7 @@ export function processMessage(
     | { id?: string; role?: string; content?: unknown; stop_reason?: string }
     | undefined;
   const parentToolUseId =
-    typeof cleanMessage.parent_tool_use_id === "string"
-      ? cleanMessage.parent_tool_use_id
-      : null;
+    typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null;
 
   // 1. One-shot: capture SDK session_id on the first message.
   // CRITICAL: Skip capture during resume attempts. When a resume
@@ -106,6 +101,9 @@ export function processMessage(
     if (saveResult.ok) {
       session.agentSessionIdCaptured = true;
       console.log(`[${opts.generatorId}] Captured agent_session_id: ${agentSessionId}`);
+
+      // Dual-write: emit canonical agent.session_id event
+      FrontendClient.emitAgentSessionId(opts.sessionId, agentSessionId);
     } else {
       console.error(
         `[${opts.generatorId}] Failed to persist agent_session_id: ${saveResult.error}`
@@ -126,6 +124,21 @@ export function processMessage(
     if (dbWriteMs > 10) {
       console.log(`[TIMING][${opts.generatorId}] saveAssistantMessage took ${dbWriteMs}ms`);
     }
+
+    // Dual-write: emit canonical message.assistant event
+    const assistantMsgId = msg.id || (writeResult.ok ? writeResult.value : "unknown");
+    FrontendClient.emitAssistantMessage(
+      opts.sessionId,
+      "claude",
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: msg.content,
+        stop_reason: msg.stop_reason ?? null,
+        parent_tool_use_id: parentToolUseId,
+      },
+      opts.model
+    );
   }
 
   // 3. Persist user messages with tool_result blocks
@@ -145,6 +158,20 @@ export function processMessage(
       if (dbWriteMs > 10) {
         console.log(`[TIMING][${opts.generatorId}] saveToolResultMessage took ${dbWriteMs}ms`);
       }
+
+      // Dual-write: emit canonical message.tool_result event
+      const toolResultMsgId = msg.id || (writeResult.ok ? writeResult.value : "unknown");
+      FrontendClient.emitToolResultMessage(
+        opts.sessionId,
+        "claude",
+        {
+          id: toolResultMsgId,
+          role: "user",
+          content: msg.content,
+          parent_tool_use_id: parentToolUseId,
+        },
+        opts.model
+      );
     }
   }
 
@@ -184,6 +211,10 @@ export function processMessage(
   // until the entire conversation ends.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
     ctx.querySucceeded = true;
+
+    // Dual-write: emit canonical message.result event
+    FrontendClient.emitMessageResult(opts.sessionId, "claude", "success");
+
     if (!ctx.stopReasonError) {
       updateSessionStatus(opts.sessionId, "idle");
     }
@@ -194,11 +225,12 @@ export function processMessage(
   // Even if the resume failed, the original ID must be preserved.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "error_during_execution") {
     const errors = cleanMessage.errors as string[] | undefined;
-    const resultError = Array.isArray(errors) && errors.length > 0
-      ? errors.join("; ")
-      : typeof cleanMessage.error === "string"
-        ? cleanMessage.error
-        : "unknown";
+    const resultError =
+      Array.isArray(errors) && errors.length > 0
+        ? errors.join("; ")
+        : typeof cleanMessage.error === "string"
+          ? cleanMessage.error
+          : "unknown";
     ctx.lastResultError = resultError;
     console.error(`[${opts.generatorId}] result/error_during_execution: ${resultError}`);
   }
