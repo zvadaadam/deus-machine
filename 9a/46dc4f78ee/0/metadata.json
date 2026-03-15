@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9a46dc4f78ee",
+  "session_id": "02d43cd2-68ad-4ce0-9924-5bf38ea2d6c7",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T22:12:48.003512Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "src/features/session/hooks/useSessionActions.ts",
+    "src/features/session/ui/SessionPanel.tsx",
+    "src/platform/index.ts",
+    "src/platform/socket/index.ts",
+    "src/platform/socket/socketService.ts",
+    "src/shared/hooks/index.ts",
+    "shared/events.ts",
+    "src/features/session/api/session.queries.ts",
+    "src/shared/hooks/useSocket.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "997e59a1ffd7",
+  "checkpoint_transcript_start": 5,
+  "transcript_lines_at_start": 5,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T22:12:47.976288Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 16,
+    "human_removed": 142,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
