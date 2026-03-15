@@ -1,0 +1,70 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/kyoto directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+explore this if need and what it gives us
+
+
+3. Event Sourcing for Session State
+
+What We Have Today
+Mutable rows. Direct mutations:
+
+UPDATE sessions SET status = 'working' WHERE id = ?;
+INSERT INTO session_messages (session_id, role, content, ...) VALUES (...);
+UPDATE sessions SET last_user_message_at = datetime('now') WHERE id = ?;
+State transitions are implicit — enforced by code ordering, not schema constraints. No history of transitions. If a session went idle → working → error → working → idle, you only see the final idle.
+
+What OpenDevs Does
+Full event sourcing with a Decider + Projector pattern:
+
+Commands (user intent) → Decider (validates invariants, emits events) → Event Store (append-only) → Projector (derives read model)
+Every state change is an immutable event with sequence, stream_version, command_id, causation_event_id
+Read model is a projection — cached in separate tables, rebuilt by replaying events
+What Would Actually Change (Hybrid Approach)
+Full event sourcing is overkill for us. T3 needs it because they’re building an enterprise product with compliance requirements. We’re a pro-consumer desktop app.
+
+But a lightweight event log would be hugely valuable for debugging and undo:
+
+CREATE TABLE session_events (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,  -- 'status_changed', 'message_saved', 'error_occurred', 'cancelled'
+  payload_json TEXT NOT NULL, -- { from: 'idle', to: 'working' }
+  command_id TEXT,            -- links related events
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+What this buys us:
+
+Copy
+Scenario	Today	With Event Log
+”Why did my session crash?”	Check sessions.error_message (current only)	Replay: idle → working → error with timestamps + payload
+”Can I undo the last agent action?”	No	Replay events, skip last N, derive prior state
+Duplicate message from network retry	Two messages saved	command_id dedup check
+Debug race condition between backend + sidecar	Guess from timestamps	Exact sequence visible in event log
+”What happened at 2:30 PM yesterday?”	Lost	SELECT * FROM session_events WHERE occurred_at BETWEEN ...
+What stays the same:
+
+sessions, messages, workspaces tables remain mutable (source of truth for reads)
+No projector needed — the event log is an audit trail, not the read model
+No eventual consistency — writes are still atomic transactions, event is appended in the same transaction
+Code change is minimal — in session-writer.ts:
+
+// Before:
+db.prepare("UPDATE sessions SET status = ? WHERE id = ?").run(status, sessionId);
+
+// After:
+db.transaction(() => {
+  db.prepare("INSERT INTO session_events (session_id, event_type, payload_json) VALUES (?, ?, ?)")
+    .run(sessionId, 'status_changed', JSON.stringify({ from: oldStatus, to: status }));
+  db.prepare("UPDATE sessions SET status = ? WHERE id = ?").run(status, sessionId);
+})();
+Verdict: Don’t do full event sourcing. Do a lightweight event log — append-only, same transaction as the mutation, queryable for debugging. Cost: one extra INSERT per state change. Gain: complete audit trail, undo potential, debuggability.
