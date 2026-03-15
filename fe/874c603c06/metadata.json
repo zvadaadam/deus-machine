@@ -3,7 +3,7 @@
   "checkpoint_id": "fe874c603c06",
   "strategy": "manual-commit",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "sidecar/test/e2e.test.ts"
   ],
@@ -43,13 +43,19 @@
       "transcript": "/fe/874c603c06/5/full.jsonl",
       "content_hash": "/fe/874c603c06/5/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/fe/874c603c06/6/metadata.json",
+      "transcript": "/fe/874c603c06/6/full.jsonl",
+      "content_hash": "/fe/874c603c06/6/content_hash.txt",
+      "prompt": "/fe/874c603c06/6/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 0
+    "input_tokens": 16346,
+    "cache_creation_tokens": 1919518,
+    "cache_read_tokens": 130378363,
+    "output_tokens": 180433,
+    "api_call_count": 510
   }
 }
