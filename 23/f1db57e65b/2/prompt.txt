@@ -1,0 +1,1388 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+If we would be designing this like this like the something like a codex app server, what kind of and this agent handler, what kind of like methods we should implement. We already have the agent handler, but like I want to explore based on the other apps, how actually this methods could be called, what are the parameters, what would be the functions. And And I think all three can give you these projects, give you some ideas.
+
+What we want to build is an agent server, something like Codex App Server, but it's going to be aggregating all the coding agents that are like Cloud Code, like agent CLI products, into one very easy communication style interface. I think already Codex App Server showed the direction, but we want to do an abstraction, like have a Cloud Code, but the Cloud Code has the agent SDK. I think something similar inside has the D3 code, so explore.
+
+Codex-app-server - /Users/zvada/conductor/workspaces/codex/indianapolis-v4
+Codex - /Applications/Codex.app/
+OpenDevs - /Users/zvada/conductor/workspaces/t3code/jakarta-v2
+
+---
+
+<task-notification>
+<task-id>a1eccdc751ac100f3</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore Codex App Server" completed</summary>
+<result>I apologize, but I'm encountering permission restrictions that prevent me from accessing the Codex App Server codebase at `/Users/zvada/conductor/workspaces/codex/indianapolis-v4`. 
+
+The tools I have available (Bash, Glob, Read) are all being denied permission to access this directory. This appears to be a system-level permission issue rather than a tool limitation.
+
+To proceed, I would need:
+
+1. **Verify the path is correct and accessible** - Could you confirm the exact location of the Codex App Server codebase?
+2. **Check permissions** - The directory may have restricted access that prevents reading
+3. **Alternative paths** - Is there a different location where the codebase is stored that I can access?
+
+Alternatively, if you have access to the directory, you could:
+- Copy relevant source files to a location I can access
+- Provide file paths and let me read them individually
+- Share the key source files directly in the chat
+
+Once I have access to the codebase, I can thoroughly analyze all the aspects you mentioned: server architecture, agent management, message protocols, streaming, session lifecycle, tool handling, and configuration.</result>
+<usage><total_tokens>42237</total_tokens><tool_uses>4</tool_uses><duration_ms>10630</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/a1eccdc751ac100f3.output
+
+---
+
+<task-notification>
+<task-id>ad789e2ed2d83da87</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore OpenDevs codebase" completed</summary>
+<result>I need to inform you of a limitation I'm encountering:
+
+**Issue:** I'm unable to access the path `/Users/zvada/conductor/workspaces/t3code/jakarta-v2` due to permission restrictions. The tools I have access to (Bash, Glob, Read) are all denying permission to read from that location.
+
+**Possible reasons:**
+1. The path may not exist or may be on a restricted volume
+2. There may be permission/ACL restrictions on that directory
+3. The path may be outside my accessible scope in this session
+
+**What I can do instead:**
+1. If you can verify the path exists and is readable, I may need different access permissions
+2. I could explore the codebase if you copy/move it to a more accessible location
+3. If the relevant code files are elsewhere or have a different path, please provide that
+
+Could you:
+1. Verify that `/Users/zvada/conductor/workspaces/t3code/jakarta-v2` exists and is readable?
+2. Check if there's a different path where the OpenDevs repository is located?
+3. Or confirm the exact structure/location of the codebase you'd like me to explore?
+
+Once I have access to the correct path, I'll be able to thoroughly analyze the agent server architecture, session management, message protocols, SDK integration, and all the other aspects you outlined.</result>
+<usage><total_tokens>42842</total_tokens><tool_uses>7</tool_uses><duration_ms>14256</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/ad789e2ed2d83da87.output
+
+---
+
+<task-notification>
+<task-id>aad4196e175257133</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore current agent handler" completed</summary>
+<result>Perfect. Now let me create a comprehensive summary document based on all the code I've read.
+
+## Complete Sidecar Architecture Summary
+
+I've completed a thorough exploration of the sidecar codebase. Here's the full picture:
+
+### **1. AGENT HANDLER INTERFACE** (`agents/agent-handler.ts`)
+
+**Core Methods (Required):**
+- `initialize(): { success: boolean; error?: string }` — One-time setup, verifies executables
+- `query(sessionId: string, prompt: string, options: QueryOptions): Promise<void>` — Process user prompt, NOT awaited, returns ACK immediately, streaming happens async
+- `cancel(sessionId: string): Promise<void>` — Stop running session
+- `reset(sessionId: string): void` — Tear down generator for a session
+
+**Optional Methods (Guarded by Capabilities):**
+- `auth?(params: AuthParams): Promise<any>` — Check account auth info
+- `initWorkspace?(params: InitWorkspaceParams): Promise<any>` — Get slash commands + MCP server status
+- `getContextUsage?(params: ContextUsageParams): Promise<any>` — Fetch context window usage
+- `updatePermissionMode?(sessionId: string, permissionMode: string): Promise<void>` — Hot-swap permission mode on active query
+
+**Capabilities:**
+```typescript
+interface AgentCapabilities {
+  auth: boolean;
+  workspaceInit: boolean;
+  contextUsage: boolean;
+  permissionMode: boolean;
+}
+```
+
+**Registry:**
+- `registerAgent(handler)` — Add handler to registry
+- `getAgent(type)` — Retrieve handler by type
+- `initializeAllAgents()` — Initialize all registered agents on startup
+- `clearAgentRegistry()` — Reset registry (tests only)
+
+---
+
+### **2. CLAUDE HANDLER** (`agents/claude/claude-handler.ts`)
+
+**Capabilities:** All four enabled (auth, workspaceInit, contextUsage, permissionMode)
+
+**Key Lifecycle:**
+
+1. **query()** decision tree:
+   - If session exists AND generator is active AND settings unchanged AND !shouldResetGenerator → **REUSE**: push prompt into existing message queue
+   - Otherwise → **NEW_GENERATOR**: terminate old session, create new SessionState, call `processWithGenerator()`
+
+2. **processWithGenerator()** (core streaming loop):
+   - Creates `AsyncQueue<string>` with initial prompt
+   - Builds SDK options via `buildSdkOptions()` with auto-resume support
+   - Creates `claudeSDK()` query (async iterable)
+   - Stores query object and iterator in SessionState
+   - **Streaming loop**: `for await (const message of queryResult)`
+     - Deserialize message (strip circular refs)
+     - Save to DB (assistant message or tool_result)
+     - Send to frontend via FrontendClient
+     - Update ctx (querySucceeded, stopReasonError, messageCount)
+   - **Post-loop**: Handle cancellation, process exit, or completion
+   - **Catch**: Classify error, notify frontend, update session status
+   - **Finally**: Clean up session/query only if this generator still owns the session (ref identity check)
+
+3. **Message Queue (sendMessage/sendTerminate)**:
+   - `session.sendMessage(prompt)` → pushes to queue, generator yields next
+   - `session.sendTerminate()` → closes queue, generator exits loop
+
+4. **Model/MaxThinkingTokens Hot-Swap**:
+   - If model changed and query exists → call `query.setModel(mappedModel)`
+   - If maxThinkingTokens changed → call `query.setMaxThinkingTokens()`
+   - Both applied before push to queue
+
+5. **Permission Mode Hot-Swap**:
+   - Via `query.setPermissionMode()` in both query() path and updatePermissionMode() method
+
+6. **Auto-Resume Support**:
+   - If no explicit `resume` param AND session has saved `agent_session_id` → auto-inject for continuity
+   - Skip when `shouldResetGenerator=true` (user wants clean start)
+   - One-shot capture: only save session_id on first message, skip on resume (prevents overwriting with failed resume ID)
+
+---
+
+### **3. CODEX HANDLER** (`agents/codex/codex-handler.ts`)
+
+**Capabilities:** All false (auth, workspaceInit, contextUsage, permissionMode disabled)
+
+**Key Differences from Claude:**
+
+1. **No Multi-Turn**: Codex has no persistent generator/message queue. Each query runs once (not streaming between turns).
+
+2. **Thread Management**:
+   - Reuse thread_id if session exists
+   - New thread for fresh session
+
+3. **Event Stream Processing**:
+   - `thread.runStreamed()` returns event iterator
+   - Match on event types: `thread.started`, `item.started/updated/completed`, `turn.completed/failed`, `error`
+
+4. **Message Mapping**:
+   - `mapItemToContentBlocks()` converts Codex ThreadItems to Claude-compatible format:
+     - agent_message → TextBlock
+     - reasoning → ThinkingBlock
+     - command_execution → ToolUseBlock + ToolResultBlock
+     - file_change, mcp_tool_call, web_search, todo_list → mapped accordingly
+
+5. **Real-Time Streaming**:
+   - Send to frontend on every event (not just completed)
+   - Only persist to DB on item.completed
+   - Turn.completed transitions session to idle
+   - Turn.failed or error calls notifyAndRecordError
+
+6. **Abort Signal**:
+   - Created via AbortController per query
+   - Passed to runStreamed() signal parameter
+   - Breaks loop if aborted, classifies as abort category
+
+---
+
+### **4. RPC CONNECTION** (`rpc-connection.ts`)
+
+**JSON-RPC 2.0 over newline-delimited JSON**
+
+- **Socket**: Raw TCP/Unix socket
+- **Framing**: Each message = single JSON line + newline
+- **Bidirectional**: JSONRPCServerAndClient (both send and receive)
+
+**Methods:**
+- `addMethod(name, handler)` — Register method sidecar can receive
+- `notify(method, params)` — Send one-way notification
+- `request(method, params)` → Promise — Send request and wait for response
+- `handleLine(jsonLine)` → boolean — Process one JSON-RPC line
+- `stop()` — Reject pending requests and tear down
+
+---
+
+### **5. FRONTEND CLIENT** (`frontend-client.ts`)
+
+**Singleton** that wraps RPC connections with typed methods
+
+**Multi-Tunnel Support:**
+- `attachTunnel(rpcConnection)` / `detachTunnel(tunnel?)`
+- Broadcasts notifications to ALL connected tunnels
+- Dead tunnels auto-removed on error
+
+**Outgoing Notifications (sidecar → frontend):**
+- `sendMessage(MessageResponse)` — Stream messages
+- `sendError(ErrorResponse)` — Stream errors
+- `sendEnterPlanModeNotification()` — Enter plan mode
+- `sendStatusChanged()` — Status transitions (working/idle/error)
+
+**Outgoing Requests (sidecar → frontend, with timeout):**
+- **Core**: exitPlanMode, askUserQuestion, getDiff, diffComment, getTerminalOutput
+- **Browser**: snapshot, click, type, navigate, getState, waitFor, evaluate, pressKey, hover, selectOption, navigateBack, consoleMessages, networkRequests, screenshot, scroll
+- **Simulator**: screenshot, tap, swipe, typeText, pressKey, buildAndRun, listDevices, start
+
+**Incoming Handlers (registered via onX methods):**
+- `onQuery(handler)` — Receives query request, returns `{ accepted: boolean; reason?: string }`
+- `onCancel(handler)` — Fire-and-forget cancel
+- `onClaudeAuth(handler)` — Auth check
+- `onWorkspaceInit(handler)` — Get slash commands + MCP servers
+- `onContextUsage(handler)` — Context window usage
+- `onUpdatePermissionMode(handler)` — Permission mode notification
+- `onResetGenerator(handler)` — Reset generator notification
+
+**Timeouts:**
+- User-facing: 120s (askUserQuestion)
+- Data queries: 10s (getDiff, getTerminalOutput)
+- Browser snapshot: 20s (long accessibility tree build)
+- Browser navigate: 30s (page load + snapshot)
+- Browser wait: 35s (30s polling + 5s buffer)
+- Simulator boot: 30s
+- Simulator build: 600s (10 minutes)
+
+---
+
+### **6. SIDECAR INDEX** (`index.ts`)
+
+**Bootstrap Flow:**
+
+1. **Initialize Sentry** (error reporting)
+2. **Create UnifiedSidecar instance**:
+   - Create Unix domain socket server at `/tmp/opendevs-sidecar-${pid}.sock`
+3. **Register agents** (ClaudeAgentHandler, CodexAgentHandler)
+4. **Initialize all agents** (verify executables)
+5. **Reconcile stuck sessions** (reset any in "working" status from crash)
+6. **Listen on socket**
+7. **Print SOCKET_PATH to stdout** (Rust parent consumes this)
+
+**JSON-RPC Setup (setupJsonRpc):**
+
+Registers these handlers on each new connection:
+
+- **query**: 
+  - Validates QueryRequest
+  - Saves user message + sets status='working' atomically
+  - Dispatches to agent.query() (NOT awaited)
+  - Returns { accepted: true/false }
+  - If unhandled error, sends queryError notification + updates status
+
+- **cancel**: 
+  - Dispatches to agent.cancel()
+  - Fire-and-forget
+
+- **claudeAuth**: 
+  - Dispatches to agent.auth() (if supported)
+  - Returns auth result
+
+- **workspaceInit**: 
+  - Dispatches to agent.initWorkspace() (if supported)
+  - Returns slash commands + MCP servers
+
+- **contextUsage**: 
+  - Dispatches to agent.getContextUsage() (if supported)
+  - Returns context usage data
+
+- **updatePermissionMode**: 
+  - Fire-and-forget notification
+  - Dispatches to agent.updatePermissionMode() (if supported)
+
+- **resetGenerator**: 
+  - Fire-and-forget notification
+  - Dispatches to agent.reset()
+
+**Graceful Shutdown:**
+- Kill child processes (pgrep -P ${pid})
+- Close database
+- Remove socket file
+
+**Error Handling:**
+- uncaughtException → log to stderr + Sentry + exit 1
+- unhandledRejection → log to stderr + Sentry (auto-captured)
+- Global error listener on server
+
+---
+
+### **7. DATABASE LAYER** (`db/`)
+
+**Connection** (`index.ts`):
+- Uses `better-sqlite3` (sync writes)
+- Path: `$HOME/Library/Application Support/com.opendevs.app/opendevs.db`
+- Pragmas: `journal_mode = WAL`, `foreign_keys = ON`, `busy_timeout = 5000`
+- Schema created on init (idempotent via `CREATE TABLE IF NOT EXISTS`)
+- Migrations run post-launch (skip on duplicate column)
+
+**Message Persistence** (`session-writer.ts`):
+
+1. **saveUserMessage(sessionId, content, model)**:
+   - Atomic transaction: INSERT message + UPDATE session status='working'
+   - Emits statusChanged notification
+   - Returns WriteResult
+
+2. **saveAssistantMessage(sessionId, message, model, parentToolUseId)**:
+   - JSON stringify content
+   - Special handling: if stop_reason='cancelled', wrap in envelope `{ message: { stop_reason: "cancelled" }, blocks: [...] }`
+   - Inserts with agent_message_id + parent_tool_use_id
+   - Notifies backend
+
+3. **saveToolResultMessage(sessionId, message, parentToolUseId)**:
+   - Saves tool_result blocks as "user" role
+   - Needed for frontend toolResultMap to link tool_use → result
+
+4. **updateSessionStatus(sessionId, status, errorMessage?, errorCategory?)**:
+   - Updates status + error fields
+   - Notifies backend + FrontendClient
+   - Timing logs if >5ms
+
+5. **Agent Session ID (Resume)**:
+   - `saveAgentSessionId(sessionId, agentSessionId)` — persist SDK session ID
+   - `lookupAgentSessionId(sessionId)` — retrieve for resume
+
+6. **Lookups**:
+   - `lookupWorkspaceId()` — for status events
+   - `lookupAgentType()` — for status events (not hardcoded)
+
+7. **Startup Reconciliation**:
+   - `reconcileStuckSessions()` — find sessions stuck in "working" after crash, reset to "idle"
+   - Logs session state (20 most recent) for debugging
+
+**WriteResult Pattern:**
+```typescript
+type WriteResult<T> = { ok: true; value: T } | { ok: false; error: string }
+```
+- All writes return this discriminated union
+- Callers can detect failures and surface them cleanly
+
+---
+
+### **8. MESSAGE FLOW IN DETAIL**
+
+**User sends query:**
+1. Frontend → RPC: `{ type: "query", id, agentType, prompt, options }`
+2. Sidecar receives: `onQuery()` → `QueryRequestSchema.safeParse()`
+3. Save user message + set status='working' atomically
+4. Dispatch: `agent.query(sessionId, prompt, options)`
+5. Return: `{ accepted: true }` immediately (ACK before streaming starts)
+
+**Streaming (Claude):**
+1. `processWithGenerator()` creates message queue + calls `claudeSDK()`
+2. For-await loop: `for await (const message of queryResult)`
+3. Per message:
+   - `deserializeMessage()` — strip circular refs
+   - `processMessage()`:
+     - Capture agent_session_id (one-shot)
+     - Save assistant message to DB
+     - Save tool_result message to DB
+     - Send to frontend via FrontendClient
+     - Classify stop_reason, emit error if needed
+     - Detect result/success, update session to idle
+     - Detect result/error_during_execution, capture for diagnostics
+4. Post-loop: handle cancellation vs normal completion
+
+**Streaming (Codex):**
+1. `processQuery()` calls `thread.runStreamed(prompt)`
+2. For-await loop: `for await (const event of events)`
+3. Per event: match on type (thread.started, item.*, turn.*)
+   - Send to frontend on every event
+   - Persist to DB on item.completed
+   - Update status on turn.completed
+4. Catch: classify error, notify frontend
+
+---
+
+### **9. KEY TYPES & SCHEMAS**
+
+**QueryRequest:**
+```typescript
+{
+  type: "query";
+  id: string;           // sessionId
+  agentType: "claude" | "codex";
+  prompt: string;
+  options: QueryOptions;  // model, resume, shouldResetGenerator, claudeEnvVars, etc.
+}
+```
+
+**QueryOptions:**
+```typescript
+{
+  model?: string;
+  maxThinkingTokens?: number;
+  turnId?: string;
+  cwd?: string;
+  resume?: string;  // agent_session_id from previous session
+  shouldResetGenerator?: boolean;
+  claudeEnvVars?: string;
+  opendevsEnv?: string;
+  ghToken?: string;
+  additionalDirectories?: string[];
+  chromeEnabled?: boolean;
+  strictDataPrivacy?: boolean;
+  permissionMode?: string;
+}
+```
+
+**MessageResponse:**
+```typescript
+{
+  id: string;           // sessionId
+  type: "message";
+  agentType: "claude" | "codex";
+  data: SDKMessage | Record<string, unknown>;  // The deserialized SDK message
+}
+```
+
+**ErrorResponse:**
+```typescript
+{
+  id: string;           // sessionId
+  type: "error";
+  error: string;        // Human-readable message
+  agentType: "claude" | "codex";
+  category: ErrorCategory;  // "abort" | "auth" | "internal" | etc.
+}
+```
+
+---
+
+### **10. SESSION STATE MANAGEMENT (Claude)**
+
+**SessionState** (in-memory per session):
+- `generator`: AsyncIterator<SDKMessage> — the SDK's message iterator
+- `sendMessage`: (msg: string) => void — push to prompt queue
+- `sendTerminate`: () => void — close queue
+- `currentSettings`: Settings object (env vars, directories, etc.)
+- `currentModel`: Current model name
+- `currentMaxThinkingTokens`: Max thinking tokens
+- `turnId`: Current turn ID
+- `cwd`: Working directory
+- `agentSessionIdCaptured`: One-shot flag for agent_session_id persistence
+- `cancelledByUser`: Flag set by cancel() before close()
+
+**Lifecycle:**
+- IDLE: freshly created, no generator
+- ACTIVE: generator running, can call sendMessage
+- TERMINATED: generator stopped, being cleaned up, reference kept for finally block
+
+---
+
+### **11. ERROR HANDLING & CLASSIFICATION**
+
+**classifyError** categorizes errors:
+- "abort" — user cancellation or AbortSignal
+- "auth" — authentication failure
+- "internal" — sidecar/system errors
+- "process_exit" — SDK process exited (sometimes expected)
+- "user" — malformed input
+- (others classified by error analysis)
+
+**Error Recovery:**
+- Per-generator catch block classifies error
+- Checks if this generator still owns the session (ref identity)
+- If owns: notifyAndRecordError(), updateSessionStatus()
+- Persist cancellation separately: set status='idle', don't set error_message
+
+---
+
+This architecture provides a clean separation between the SDK integration (agent handlers), the RPC protocol (bidirectional communication), and the database layer (persistence and state management), with careful attention to concurrency, error handling, and message ordering.</result>
+<usage><total_tokens>91146</total_tokens><tool_uses>16</tool_uses><duration_ms>64982</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/aad4196e175257133.output
+
+---
+
+<task-notification>
+<task-id>af46b13d0f519b0b5</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore Codex.app bundle" completed</summary>
+<result>Perfect! Now I have a comprehensive understanding of the agent server architecture. Let me compile my findings:
+
+## Codex Desktop App Agent Server Architecture
+
+Based on my thorough exploration of the Box IDE / Codex codebase (the open-source agent IDE being developed), here's how the agent server structures its multi-agent architecture and communication system:
+
+### High-Level Architecture
+
+The system uses a **multi-agent sidecar model** where:
+
+- **Sidecar** (Node.js) = Unified agent runtime managing Claude and Codex agents
+- **RPC Protocol** = JSON-RPC 2.0 over Unix domain socket with newline-delimited messages
+- **Agent Handlers** = Pluggable interface implemented per agent type (Claude SDK, Codex SDK)
+- **Frontend** = React app communicating via WebSocket/RPC tunnel
+- **Database** = SQLite for message persistence and session state
+
+---
+
+### 1. AGENT SERVER BOOTSTRAP & LIFECYCLE
+
+**File**: `/sidecar/index.ts` (420 lines)
+
+```typescript
+class UnifiedSidecar {
+  async start() {
+    // 1. Register all agent handlers
+    registerAgent(new ClaudeAgentHandler());
+    registerAgent(new CodexAgentHandler());
+    
+    // 2. Initialize all agents (verify executables, load configs)
+    initializeAllAgents();
+    
+    // 3. Reconcile stuck sessions from previous lifecycle
+    reconcileStuckSessions();
+    
+    // 4. Listen on Unix domain socket
+    this.server.listen(this.socketPath);
+    
+    // 5. Print socket path to stdout (consumed by Rust)
+    console.log(`SOCKET_PATH=${this.socketPath}`);
+  }
+}
+```
+
+**Key Features:**
+- Unix domain socket server (not TCP) for desktop app integration
+- Graceful shutdown on SIGINT/SIGTERM
+- Auto-cleanup of stale socket files
+- Child process lifecycle management (kills lingering agents)
+- Buffered logging with periodic flushing
+
+---
+
+### 2. RPC PROTOCOL (JSON-RPC 2.0)
+
+**Files**: `/sidecar/rpc-connection.ts`, `/shared/protocol.ts`
+
+**Connection Layer** (`RpcConnection`):
+```typescript
+class RpcConnection {
+  private peer: JSONRPCServerAndClient;
+  
+  // Receive newline-delimited JSON from socket
+  handleLine(line: string): boolean {
+    const payload = JSON.parse(line);
+    this.peer.receiveAndSend(payload); // Dispatch to handlers
+  }
+  
+  // Send JSON-RPC request/response
+  request(method: string, params: unknown): Promise<unknown>
+  notify(method: string, params: unknown): void
+}
+```
+
+**Message Format** (Newline-delimited):
+```
+{"jsonrpc":"2.0","method":"query","params":{...},"id":"1"}\n
+{"jsonrpc":"2.0","result":{"accepted":true},"id":"1"}\n
+{"jsonrpc":"2.0","method":"message","params":{...}}\n
+```
+
+**Sidecar Methods** (frontend → sidecar):
+```typescript
+SIDECAR_METHODS = {
+  QUERY: "query",              // Send message (request → response)
+  CANCEL: "cancel",            // Cancel running session
+  CLAUDE_AUTH: "claudeAuth",   // Check account auth
+  WORKSPACE_INIT: "workspaceInit", // Get slash commands + MCP servers
+  CONTEXT_USAGE: "contextUsage",   // Get context window usage
+}
+
+SIDECAR_NOTIFICATIONS = {
+  UPDATE_PERMISSION_MODE: "updatePermissionMode",
+  RESET_GENERATOR: "resetGenerator",
+}
+```
+
+**Frontend Notifications** (sidecar → frontend):
+```typescript
+FRONTEND_NOTIFICATIONS = {
+  MESSAGE: "message",           // Stream message
+  QUERY_ERROR: "queryError",    // Error response
+  ENTER_PLAN_MODE: "enterPlanModeNotification",
+  STATUS_CHANGED: "statusChanged",
+}
+```
+
+---
+
+### 3. AGENT HANDLER INTERFACE & REGISTRY
+
+**File**: `/sidecar/agents/agent-handler.ts`
+
+**Pluggable Interface:**
+```typescript
+interface AgentHandler {
+  readonly agentType: AgentType;  // "claude" | "codex"
+  readonly capabilities: AgentCapabilities;
+  
+  // Required methods
+  initialize(): { success: boolean; error?: string };
+  query(sessionId: string, prompt: string, options: QueryOptions): Promise<void>;
+  cancel(sessionId: string): Promise<void>;
+  reset(sessionId: string): void;
+  
+  // Optional provider-specific methods
+  auth?(params: AuthParams): Promise<any>;
+  initWorkspace?(params: InitWorkspaceParams): Promise<any>;
+  getContextUsage?(params: ContextUsageParams): Promise<any>;
+  updatePermissionMode?(sessionId: string, mode: string): Promise<void>;
+}
+```
+
+**Capability Declaration:**
+```typescript
+interface AgentCapabilities {
+  auth: boolean;         // Supports account auth check
+  workspaceInit: boolean;    // Supports slash commands + MCP servers
+  contextUsage: boolean;     // Supports context window tracking
+  permissionMode: boolean;   // Supports runtime permission mode changes
+}
+```
+
+**Dispatch by Agent Type:**
+```typescript
+FrontendClient.onQuery(async (request) => {
+  const agent = getAgent(request.agentType); // Lookup by type
+  if (!agent) return { accepted: false };
+  
+  // Save user message + set status='working' atomically
+  const writeResult = saveUserMessage(request.id, request.prompt);
+  if (!writeResult.ok) return { accepted: false, reason: writeResult.error };
+  
+  // Dispatch to agent handler (fire-and-forget)
+  agent.query(request.id, request.prompt, request.options).catch(err => {
+    // Error recovery: classify + notify frontend
+    const classified = classifyError(err);
+    notifyAndRecordError(request.id, request.agentType, classified);
+  });
+  
+  return { accepted: true }; // Immediate ACK
+});
+```
+
+---
+
+### 4. CLAUDE AGENT HANDLER
+
+**Files**: 
+- `/sidecar/agents/claude/claude-handler.ts` (610 lines)
+- `/sidecar/agents/claude/claude-session.ts` (state mgmt)
+- `/sidecar/agents/claude/message-processor.ts` (stream processing)
+
+**Multi-Turn Generator Pattern:**
+```typescript
+export class ClaudeAgentHandler implements AgentHandler {
+  readonly capabilities = {
+    auth: true,
+    workspaceInit: true,
+    contextUsage: true,
+    permissionMode: true,
+  };
+  
+  async query(sessionId: string, prompt: string, options: QueryOptions) {
+    const session = getSession(sessionId);
+    const canReuse = 
+      isSessionActive(session) &&
+      !options.shouldResetGenerator &&
+      !settingsChanged(session.currentSettings, options);
+    
+    if (canReuse) {
+      // Hot-swap model/permissions on active generator
+      if (options.model !== session.currentModel) {
+        await session.query.setModel(mappedModel);
+      }
+      // Push new prompt into existing generator queue
+      session.sendMessage(prompt);
+    } else {
+      // Create new SDK session with fresh generator
+      setSession(sessionId, newSession);
+      this.processWithGenerator(sessionId, prompt, options);
+    }
+  }
+}
+```
+
+**SDK Session Lifecycle:**
+```typescript
+private async processWithGenerator(
+  sessionId: string,
+  initialPrompt: string,
+  options: QueryOptions
+) {
+  // 1. Create message queue for multi-turn conversation
+  const promptQueue = new AsyncQueue<string>([initialPrompt]);
+  const session = getSession(sessionId);
+  session.sendMessage = (msg) => promptQueue.push(msg);
+  
+  // 2. Build SDK options (environment, checkpoint resume, etc.)
+  const sdkOptions = buildSdkOptions(sessionId, envForClaude, options);
+  
+  // 3. Start SDK session with resumption support
+  if (!options.resume) {
+    // Auto-resume from previous agent_session_id in DB
+    const savedId = lookupAgentSessionId(sessionId);
+    if (savedId) options.resume = savedId;
+  }
+  
+  const promptInput = buildPromptIterable(promptQueue, sessionId);
+  const queryResult = claudeSDK({ prompt: promptInput, options: sdkOptions });
+  setQuery(sessionId, queryResult);
+  session.generator = queryResult[Symbol.asyncIterator]();
+  
+  try {
+    // 4. Stream messages from Claude SDK
+    for await (const message of queryResult) {
+      const cleaned = deserializeMessage(message, generatorId);
+      processMessage(cleaned, ctx, session, msgOpts);
+    }
+  } catch (error) {
+    // Cancel handling + error classification
+    if (session.cancelledByUser) {
+      persistCancellation(sessionId, "claude", options.model);
+      return;
+    }
+    notifyAndRecordError(sessionId, "claude", classifyError(error));
+  } finally {
+    // Cleanup: only if generator still owns session (no rapid re-query)
+    const currentSession = getSession(sessionId);
+    if (currentSession === session) {
+      deleteQuery(sessionId);
+      deleteSession(sessionId);
+    }
+  }
+}
+```
+
+**Session State Tracking:**
+```typescript
+interface SessionState {
+  generator?: AsyncIterator<SDKMessage>;
+  sendMessage?: (message: string) => void;
+  sendTerminate?: () => void;
+  currentSettings?: {
+    claudeEnvVars?: string;
+    additionalDirectories?: string[];
+    chromeEnabled?: boolean;
+    strictDataPrivacy?: boolean;
+  };
+  currentModel?: string;
+  currentMaxThinkingTokens?: number;
+  turnId?: string;
+  cwd?: string;
+  agentSessionIdCaptured?: boolean;  // One-shot capture
+  cancelledByUser?: boolean;         // Cancel flag
+}
+```
+
+**Message Processing Pipeline:**
+```typescript
+function processMessage(
+  cleanMessage: Record<string, unknown>,
+  ctx: StreamContext,
+  session: SessionState,
+  opts: ProcessMessageOptions
+) {
+  // 1. Capture SDK session_id (one-shot, skip on resume)
+  if (!opts.isResume && !session.agentSessionIdCaptured && cleanMessage.session_id) {
+    saveAgentSessionId(sessionId, cleanMessage.session_id);
+    session.agentSessionIdCaptured = true;
+  }
+  
+  // 2. Persist assistant message to DB
+  const writeResult = saveAssistantMessage(sessionId, msg, opts.model);
+  
+  // 3. Persist tool_result messages
+  if (toolResult) {
+    saveToolResultMessage(sessionId, toolResult);
+  }
+  
+  // 4. Send to frontend (AFTER DB writes)
+  FrontendClient.sendMessage({
+    id: sessionId,
+    type: "message",
+    agentType: "claude",
+    data: { type: "assistant", message: msg },
+  });
+  
+  // 5. Classify stop_reason → error notification
+  const stopError = classifyStopReason(msg.stop_reason);
+  if (stopError) {
+    FrontendClient.sendError(stopError);
+  }
+  
+  // 6. Detect terminal states
+  if (msg.type === "result" && msg.subtype === "success") {
+    ctx.querySucceeded = true;
+    updateSessionStatus(sessionId, "idle");
+  }
+}
+```
+
+---
+
+### 5. CODEX AGENT HANDLER
+
+**Files**: 
+- `/sidecar/agents/codex/codex-handler.ts` (380 lines)
+- `/sidecar/agents/codex/codex-session.ts` (simpler than Claude)
+
+**Single-Turn Execution Model:**
+```typescript
+export class CodexAgentHandler implements AgentHandler {
+  readonly capabilities = {
+    auth: false,
+    workspaceInit: false,
+    contextUsage: false,
+    permissionMode: false,  // No provider-specific features
+  };
+  
+  async query(sessionId: string, prompt: string, options: QueryOptions) {
+    const existingSession = getCodexSession(sessionId);
+    
+    // If running, abort previous
+    if (existingSession?.isRunning) {
+      abortCodexSession(sessionId);
+    }
+    
+    // Fire-and-forget (unlike Claude's multi-turn)
+    this.processQuery(sessionId, prompt, options, existingSession?.threadId);
+  }
+}
+```
+
+**Event Streaming (Non-Interactive):**
+```typescript
+private async processQuery(
+  sessionId: string,
+  prompt: string,
+  options: QueryOptions,
+  existingThreadId?: string
+): Promise<void> {
+  const abortController = new AbortController();
+  const session = { threadId: existingThreadId, abortController, isRunning: true };
+  setCodexSession(sessionId, session);
+  
+  try {
+    // Dynamic ESM import (Codex SDK is ESM-only)
+    const { Codex } = await import("@openai/codex-sdk");
+    
+    const codex = new Codex({
+      apiKey: env.OPENAI_API_KEY,
+      codexPathOverride: getCodexExecutablePath(),
+      env,
+    });
+    
+    // Start or resume thread
+    const thread = existingThreadId
+      ? codex.resumeThread(existingThreadId, threadOptions)
+      : codex.startThread(threadOptions);
+    
+    // Run streamed (fetch full events stream, not async iterator)
+    const { events } = await thread.runStreamed(prompt, {
+      signal: abortController.signal,
+    });
+    
+    // Process event types
+    for await (const event of events) {
+      match(event)
+        .with({ type: "thread.started" }, (e) => {
+          session.threadId = e.thread_id;
+        })
+        .with({ type: P.union("item.started", "item.updated", "item.completed") }, (e) => {
+          // Map Codex event → Claude content blocks (for frontend compatibility)
+          const blocks = mapItemToContentBlocks(e.item);
+          
+          // Send real-time update
+          FrontendClient.sendMessage({
+            id: sessionId,
+            type: "message",
+            agentType: "codex",
+            data: { type: "assistant", message: { content: blocks } },
+          });
+          
+          // Persist completed items
+          if (e.type === "item.completed") {
+            saveAssistantMessage(sessionId, { content: blocks }, resolveCodexModel(options.model));
+          }
+        })
+        .with({ type: "turn.completed" }, (e) => {
+          FrontendClient.sendMessage({
+            id: sessionId,
+            type: "message",
+            agentType: "codex",
+            data: { type: "result", subtype: "success", usage: e.usage },
+          });
+          updateSessionStatus(sessionId, "idle");
+        })
+        .with({ type: "turn.failed" }, (e) => {
+          const classified = classifyError(e.error);
+          notifyAndRecordError(sessionId, "codex", classified);
+        });
+    }
+  } catch (error) {
+    // Same error path as Claude
+    const classified = classifyError(error);
+    if (classified.category === "abort") {
+      persistCancellation(sessionId, "codex", model);
+    } else {
+      notifyAndRecordError(sessionId, "codex", classified);
+    }
+  } finally {
+    // Cleanup session
+    const currentSession = getCodexSession(sessionId);
+    if (currentSession === session) {
+      currentSession.isRunning = false;
+    }
+  }
+}
+```
+
+**Message Mapping** (Codex → Claude format):
+```typescript
+function mapItemToContentBlocks(item: ThreadItem): unknown[] {
+  return match(item)
+    .with({ type: "agent_message" }, (i) => [{ type: "text", text: i.text }])
+    .with({ type: "command_execution" }, (cmd) => [
+      { type: "tool_use", id: `codex-cmd-${cmd.id}`, name: "Bash", input: { command: cmd.command } },
+      { type: "tool_result", tool_use_id: `codex-cmd-${cmd.id}`, content: cmd.aggregated_output, is_error: cmd.status === "failed" },
+    ])
+    .with({ type: "file_change" }, (fc) => [...])
+    .with({ type: "mcp_tool_call" }, (mcp) => [...])
+    .otherwise((i) => {
+      console.warn(`Unknown item type: ${(i as any).type}`);
+      return [];
+    });
+}
+```
+
+---
+
+### 6. FRONTEND COMMUNICATION FACADE
+
+**File**: `/sidecar/frontend-client.ts` (393 lines)
+
+**Singleton Pattern with Multi-Tunnel Support:**
+```typescript
+class FrontendClientClass {
+  private tunnels = new Set<RpcConnection>(); // Multiple connected clients
+  
+  attachTunnel(tunnel: RpcConnection): void {
+    this.tunnels.add(tunnel);
+  }
+  
+  // Outgoing notifications (broadcast to all tunnels)
+  sendMessage(response: MessageResponse): void {
+    this.broadcastNotification(FRONTEND_NOTIFICATIONS.MESSAGE, response);
+  }
+  
+  sendError(response: ErrorResponse): void {
+    this.broadcastNotification(FRONTEND_NOTIFICATIONS.QUERY_ERROR, response);
+  }
+  
+  // Outgoing RPC requests (with timeout)
+  requestBrowserSnapshot(r: BrowserSnapshotRequest) {
+    return this.rpc<BrowserSnapshotResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT,
+      r,
+      BROWSER_SNAPSHOT_TIMEOUT_MS
+    );
+  }
+  
+  // Incoming handlers
+  onQuery(tunnel, handler) {
+    tunnel.addMethod(SIDECAR_METHODS.QUERY, handler);
+  }
+}
+```
+
+**Timeout Configuration:**
+```typescript
+const USER_FACING_TIMEOUT_MS = 120_000;      // Human interaction
+const DATA_QUERY_TIMEOUT_MS = 10_000;        // Fetch ops
+const BROWSER_SNAPSHOT_TIMEOUT_MS = 20_000;  // Accessibility tree
+const BROWSER_NAVIGATE_TIMEOUT_MS = 30_000;  // Page load + snapshot
+const SIMULATOR_BUILD_TIMEOUT_MS = 600_000;  // Xcode build (10 min)
+```
+
+---
+
+### 7. MESSAGE PERSISTENCE & DATABASE
+
+**File**: `/sidecar/db/session-writer.ts`
+
+**Atomic User Message Save:**
+```typescript
+export function saveUserMessage(sessionId: string, content: string, model: string): WriteResult {
+  const db = getDatabase();
+  
+  try {
+    // Wrap in transaction: save message + set status='working'
+    const saveAndActivate = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO messages (id, session_id, role, content, sent_at, model)
+        VALUES (?, ?, 'user', ?, ?, ?)
+      `).run(messageId, sessionId, content, sentAt, model);
+      
+      db.prepare(`
+        UPDATE sessions SET status = 'working', last_user_message_at = ?,
+         error_message = NULL, error_category = NULL,
+         updated_at = datetime('now') WHERE id = ?
+      `).run(sentAt, sessionId);
+    });
+    
+    saveAndActivate();
+    notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId); // Async notify
+    return { ok: true, value: messageId };
+  } catch (error) {
+    return { ok: false, error: getErrorMessage(error) };
+  }
+}
+```
+
+**Assistant Message Save:**
+```typescript
+export function saveAssistantMessage(
+  sessionId: string,
+  message: { id?: string; role?: string; content?: unknown; stop_reason?: string },
+  model: string
+): WriteResult {
+  // Handle cancelled messages with special envelope
+  const contentPayload = message.stop_reason === "cancelled"
+    ? { message: { stop_reason: "cancelled" }, blocks: message.content ?? [] }
+    : (message.content ?? []);
+  
+  db.prepare(`
+    INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id)
+    VALUES (?, ?, 'assistant', ?, ?, ?, ?)
+  `).run(messageId, sessionId, JSON.stringify(contentPayload), sentAt, model, message.id || null);
+  
+  notifyBackend(NOTIFY_SESSION_MESSAGE, sessionId);
+}
+```
+
+**Database Schema** (5 tables):
+```sql
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  agent_type TEXT NOT NULL,
+  status TEXT DEFAULT 'idle',  -- idle, working, error, needs_response
+  error_message TEXT,
+  error_category TEXT,
+  created_at TEXT DEFAULT current_timestamp,
+  updated_at TEXT DEFAULT current_timestamp
+);
+
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,      -- user, assistant
+  content TEXT,            -- JSON content blocks
+  sent_at TEXT,
+  model TEXT,              -- opus, sonnet, haiku, etc.
+  agent_message_id TEXT,   -- SDK-provided ID
+  parent_tool_use_id TEXT,
+  created_at TEXT DEFAULT current_timestamp
+);
+
+CREATE INDEX idx_sessions_workspace_id ON sessions(workspace_id);
+CREATE INDEX idx_sessions_status ON sessions(status);
+CREATE INDEX idx_messages_session_id ON messages(session_id);
+CREATE INDEX idx_messages_session_role ON messages(session_id, role, created_at DESC);
+```
+
+---
+
+### 8. MESSAGE FLOW DIAGRAM
+
+```
+Frontend (React app)
+  ↓
+Rust Socket Relay (newline-delimited JSON)
+  ↓
+RpcConnection (JSON-RPC 2.0)
+  ↓
+FrontendClient.onQuery()
+  ↓
+Agent Registry: getAgent(agentType)
+  ↓
+Agent Handler (Claude or Codex)
+  │
+  ├─→ Claude: Multi-turn generator pattern
+  │   ├─ processWithGenerator()
+  │   ├─ AsyncQueue for message batching
+  │   ├─ SDK session resumption
+  │   └─ Real-time message streaming
+  │
+  └─→ Codex: Single-turn event streaming
+      ├─ Dynamic ESM import
+      ├─ Thread start/resume
+      ├─ Event matching + mapping
+      └─ Interrupt on abort signal
+  
+  ↓ (both paths)
+  
+saveUserMessage()        ← Atomic: message + status='working'
+  ↓
+Agent processes (SDK internal)
+  ↓ (streaming responses)
+deserializeMessage()     ← Strip circular refs
+  ↓
+processMessage()         ← DB persist + frontend notify
+  ├─ saveAssistantMessage()
+  ├─ saveToolResultMessage()
+  ├─ FrontendClient.sendMessage()
+  └─ updateSessionStatus()
+  
+  ↓ (on completion or error)
+  
+notifyAndRecordError() OR persistCancellation()
+  ↓
+updateSessionStatus()    ← Set status='idle' or 'error'
+  ↓
+Rust/Frontend receives notification → re-renders messages
+```
+
+---
+
+### 9. PROTOCOL SCHEMAS (Zod Validation)
+
+**File**: `/shared/protocol.ts`, `/sidecar/protocol.ts`
+
+```typescript
+// Request schemas
+QueryRequestSchema = {
+  type: "query",
+  id: string,
+  agentType: "claude" | "codex",
+  prompt: string,
+  options: {
+    cwd: string,
+    model?: string,
+    maxThinkingTokens?: number,
+    turnId?: string,
+    permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk",
+    claudeEnvVars?: string,
+    ghToken?: string,
+    opendevsEnv?: Record<string, string>,
+    additionalDirectories?: string[],
+    chromeEnabled?: boolean,
+    strictDataPrivacy?: boolean,
+    shouldResetGenerator?: boolean,
+    resume?: string,  // SDK session ID for resumption
+  }
+}
+
+// Response schemas
+QueryAckResponseSchema = {
+  accepted: boolean,
+  reason?: string,
+}
+
+MessageResponseSchema = {
+  id: string,
+  type: "message",
+  agentType: "claude" | "codex",
+  data: unknown,  // SDK message payload
+}
+
+ErrorResponseSchema = {
+  id: string,
+  type: "error",
+  error: string,
+  agentType: "claude" | "codex",
+  category?: "auth" | "rate_limit" | "context_limit" | "network" | "abort" | "invalid_request" | "db_write" | "process_exit" | "internal",
+}
+```
+
+---
+
+### 10. KEY DESIGN PATTERNS
+
+| Pattern | Purpose | Location |
+|---------|---------|----------|
+| **Agent Handler Interface** | Pluggable multi-agent dispatch | `agent-handler.ts` |
+| **Session Registry** | Per-session state (one map per agent type) | `claude-session.ts`, `codex-session.ts` |
+| **AsyncQueue** | Multi-turn message batching (Claude only) | `async-queue.ts` |
+| **Message Processor** | Separate DB/notify/frontend pipeline | `message-processor.ts` |
+| **Capability Declaration** | Feature detection w/o type casting | `AgentCapabilities` interface |
+| **WriteResult Union** | Explicit error handling (not null) | `session-writer.ts` |
+| **FrontendClient Singleton** | Centralized RPC + broadcast | `frontend-client.ts` |
+| **RPC Timeout Wrapper** | Per-method timeout configuration | `FrontendClient.rpc()` |
+| **Deserialization** | Circular reference stripping | `message-processor.ts` |
+| **Atomic Transactions** | User message + status in one write | `saveUserMessage()` |
+| **Session Ownership Check** | Prevent rapid re-query race | Reference identity in finally block |
+| **Error Classification** | Categorize + retry logic | `error-classifier.ts` |
+
+---
+
+### 11. KEY FILES SUMMARY
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `sidecar/index.ts` | 420 | Unified sidecar entry, RPC server, lifecycle |
+| `sidecar/agents/agent-handler.ts` | 131 | Interface, registry, capability detection |
+| `sidecar/agents/claude/claude-handler.ts` | 610 | Claude SDK multi-turn implementation |
+| `sidecar/agents/codex/codex-handler.ts` | 380 | Codex SDK single-turn implementation |
+| `sidecar/frontend-client.ts` | 393 | RPC facade, timeout management, broadcasting |
+| `sidecar/rpc-connection.ts` | 113 | JSON-RPC 2.0 over Unix socket |
+| `sidecar/protocol.ts` | 582 | All protocol schemas + types (Zod) |
+| `shared/protocol.ts` | 150+ | Shared RPC contract (canonical) |
+| `sidecar/db/session-writer.ts` | 250+ | Message persistence, transactions |
+| `shared/enums.ts` | 54 | All discriminator enums (single source of truth) |
+| `shared/session-events.ts` | 51 | Notification payloads (sidecar → frontend) |
+
+---
+
+### 12. ERROR HANDLING & RECOVERY
+
+```typescript
+// Classify error into category for retry logic
+const classified = classifyError(error);
+// Returns: { category: "auth" | "rate_limit" | "abort" | ..., message: string }
+
+// Atomic save + frontend notify
+notifyAndRecordError(sessionId, agentType, classified);
+
+// Persist cancellation (special envelope in DB)
+persistCancellation(sessionId, agentType, model);
+
+// Recovery: reconcile stuck sessions on startup
+reconcileStuckSessions(); // Resets status='working' → 'idle' from crash
+```
+
+---
+
+This architecture enables:
+✅ Multi-agent support (Claude + Codex + future agents)  
+✅ Provider-agnostic streaming (both interactive & event-based)  
+✅ Session resumption across sidecar restarts  
+✅ Real-time message persistence (DB before frontend notify)  
+✅ Atomic operations (user message + activation in one tx)  
+✅ Graceful cancellation (abort signals, cleanup guards)  
+✅ Type-safe RPC (Zod schemas, full TypeScript coverage)  
+✅ Timeout management (per-method configuration)  
+✅ Multi-client broadcast (relay + desktop app simultaneously)</result>
+<usage><total_tokens>93025</total_tokens><tool_uses>21</tool_uses><duration_ms>85097</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/af46b13d0f519b0b5.output
+
+---
+
+<task-notification>
+<task-id>aa9839c11f333d79a</task-id>
+<tool-use-id>toolu_01YboGgswBs9VgB2Xq42NaHH</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore Codex App Server retry" completed</summary>
+<result>I'm unable to access the `/Users/zvada/conductor/workspaces/codex/indianapolis-v4` directory with the available tools. The Bash and Glob tools are being restricted for that path.
+
+Let me check if this path is accessible or if there's a permissions issue. Could you verify:
+
+1. Does the directory `/Users/zvada/conductor/workspaces/codex/indianapolis-v4` exist and is it readable?
+2. Can you provide the absolute path or check if there's an alternative location where the Codex server code is stored?
+
+Alternatively, I notice from the initial context that we're in a git repository at `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6`. There may be relevant code here related to the agent architecture. Would you like me to:
+
+1. Explore the sidecar agent code in this repository (which handles Claude Agent SDK)?
+2. Look for references to Codex or other agent types?
+3. Or confirm the correct path to the Codex server you'd like me to analyze?
+
+This will help me provide the comprehensive codebase analysis you're looking for.</result>
+<usage><total_tokens>41577</total_tokens><tool_uses>2</tool_uses><duration_ms>7101</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/aa9839c11f333d79a.output
+
+---
+
+<task-notification>
+<task-id>ae44ab999e8da1197</task-id>
+<tool-use-id>toolu_011otxq2Mmb5gZangiuUwRb1</tool-use-id>
+<status>completed</status>
+<summary>Agent "Explore OpenDevs retry" completed</summary>
+<result>I need to clarify the issue. It appears that the path you provided (`/Users/zvada/conductor/workspaces/t3code/jakarta-v2`) may not exist or is not accessible from my current context. 
+
+Based on the environment information at the start, my working directory is `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6`, which is a different repository.
+
+Could you please:
+
+1. **Verify the correct path** to the OpenDevs codebase. Is it actually at `/Users/zvada/conductor/workspaces/t3code/jakarta-v2`?
+2. **Confirm if this path is accessible** - it appears to be outside my current working directory scope
+3. **Alternatively, provide a relative path** from the current directory if the codebase is located somewhere within the current git repository
+
+Alternatively, if you have access to this OpenDevs repository yourself, you could:
+- Clone it into a location I can access
+- Provide the file paths to key source files
+- Share the repository structure
+
+Once I have access to the correct directory, I'll be able to thoroughly analyze the codebase and provide comprehensive documentation on the agent server architecture, session management, message protocols, and all the other aspects you've requested.</result>
+<usage><total_tokens>42074</total_tokens><tool_uses>4</tool_uses><duration_ms>8828</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/ae44ab999e8da1197.output
+
+---
+
+<task-notification>
+<task-id>a821e270b9c70063c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Deep explore Codex CLI/SDK" completed</summary>
+<result>All file system tools (Bash, Glob, Grep, Read) are being denied permission. This is likely because the target path `/Users/zvada/conductor/workspaces/codex/indianapolis-v4` is outside the allowed working directory (`/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6`), and the sandbox is restricting access to only the current project's files.
+
+**To complete your request, I need you to do one of the following:**
+
+1. **Grant permission** when the tool permission prompts appear -- the tools should work if you approve them.
+
+2. **Run from the correct directory** -- if you start a Claude Code session from within `/Users/zvada/conductor/workspaces/codex/indianapolis-v4`, I'll have permission to read those files.
+
+3. **Copy the relevant files** into the current working directory so I can access them within the sandbox.
+
+4. **Run the bash commands yourself** and paste the output here -- I can then analyze the architecture from the output you provide.
+
+The five bash commands you listed in your prompt would give me the directory structure I need to start reading the source files. If you can run those and share the results, I can guide you on which files to read next, and then provide the thorough architectural summary you're looking for.</result>
+<usage><total_tokens>25636</total_tokens><tool_uses>12</tool_uses><duration_ms>29718</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/a821e270b9c70063c.output
+
+---
+
+<task-notification>
+<task-id>a2c4400345528564e</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "Deep explore OpenDevs" completed</summary>
+<result>The `EnterWorktree` tool won't help here -- it creates a new worktree within the current repo, not switch to a different project.
+
+**The core issue remains:** All file access tools (Bash, Glob, Read, Grep) are sandboxed to the current worktree at `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6`. I cannot access files at `/Users/zvada/conductor/workspaces/t3code/jakarta-v2`.
+
+**Here's what I recommend to get this done:**
+
+1. **Fastest option:** Open a new terminal and run the 4 commands you listed yourself, then paste the output here. I'll tell you exactly which files to share (you can `cat` them and paste the contents), and I'll give you the thorough analysis.
+
+2. **Cleanest option:** Start a separate Claude Code session rooted at `/Users/zvada/conductor/workspaces/t3code/jakarta-v2`. The tools will have full access there.
+
+3. **Alternative:** If you can adjust permissions/sandbox settings to allow read-only access to that path from this session, I can do the full exploration autonomously.
+
+Which approach would you prefer?</result>
+<usage><total_tokens>25434</total_tokens><tool_uses>9</tool_uses><duration_ms>31094</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/a2c4400345528564e.output
+
+---
+
+can u also ad this from it /Users/zvada/conductor/workspaces/agnt/chicago-v4
+
+it;s our impenntion of cloud vrison of it we wnan a mek the umtiel rop thing u kkw
