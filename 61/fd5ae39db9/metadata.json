@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "61fd5ae39db9",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-backend-sidecar",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "backend/src/db/queries.ts",
+    "backend/src/services/query-engine.ts",
+    "shared/types/query-protocol.ts",
+    "src-tauri/src/socket.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/61/fd5ae39db9/0/metadata.json",
+      "transcript": "/61/fd5ae39db9/0/full.jsonl",
+      "content_hash": "/61/fd5ae39db9/0/content_hash.txt",
+      "prompt": "/61/fd5ae39db9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 28,
+    "cache_creation_tokens": 63962,
+    "cache_read_tokens": 1950812,
+    "output_tokens": 8993,
+    "api_call_count": 20
+  }
+}

@@ -1,0 +1,746 @@
+<system-instruction>
+The user has added 7 comments to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: 
+Line: undefined
+User comment: "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This pull request migrates runtime session/event handling from Tauri events to a WebSocket query protocol (q:subscribe, q:snapshot, q:delta, q:command). Frontend subscribes to WS for snapshots/deltas, backend handles q:command frames and targeted invalidation context, and workspace/session error fields were added to DB/Rust/TS types.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**WebSocket Query Protocol Client & Server** <br> `src/platform/ws/query-protocol-client.ts`, `src/platform/ws/index.ts`, `backend/src/services/query-engine.ts`|Added a WS query-protocol client (connect, subscribe, sendCommand, event/connection listeners) and server-side q:command handling, command ack frames, targeted invalidate(ctx) support, and resubscription logic.|
+|**React Subscription Hooks** <br> `src/shared/hooks/useQuerySubscription.ts`, `src/shared/hooks/useQueryProtocol.ts`|New hook useQuerySubscription to subscribe to WS resources and merge q:delta/q:snapshot into React Query; useQueryProtocol connects WS on mount.|
+|**Session & Message Flow (frontend)** <br> `src/features/session/api/session.queries.ts`, `src/features/session/lib/messageCache.ts`, `src/features/session/hooks/useGlobalSessionNotifications.ts`, `src/features/session/ui/SessionPanel.tsx`, `src/features/session/hooks/useSessionActions.ts`|Replaced event-driven session updates with WS subscriptions (Infinity staleTime); added mergeMessageDelta; removed useSessionEvents usage and migrated notification logic to cache-driven detection.|
+|**Workspace Flow & Utilities** <br> `src/features/workspace/api/workspace.queries.ts`, `src/features/workspace/lib/workspace.utils.ts`|Workspaces and stats now subscribe via WS with mergeWorkspaceDelta; optimistic workspace includes new session_error_* fields.|
+|**Database / Rust Types & Queries** <br> `backend/src/db/queries.ts`, `backend/src/db/types.ts`, `src-tauri/src/db.rs`, `src-tauri/src/commands/db.rs`|Added session_error_category and session_error_message to workspace projections/types; new getWorkspacesBySessionIds query; Rust structs wired to read these columns.|
+|**Tauri / Socket Listener Removal** <br> `src-tauri/src/socket.rs`, `src-tauri/src/backend.rs`|Removed parsing/emission of OPENDEVS_INVALIDATE / sidecar notification-to-Tauri event path; notifications are logged/ignored (moved to WS protocol).|
+|**Removed Legacy Invalidation & Event Hooks** <br> `src/features/workspace/hooks/useQueryInvalidation.ts`, `src/features/session/hooks/useSessionEvents.ts`, `src/features/session/hooks/index.ts`|Deleted Tauri-based useQueryInvalidation and useSessionEvents; dispatchInvalidation and related test coverage removed.|
+|**Shared Protocol & Types** <br> `shared/events.ts`, `shared/types/query-protocol.ts`, `shared/types/workspace.ts`|Removed SESSION_* and QUERY_INVALIDATE exports; added COMMAND_NAMES, PROTOCOL_EVENTS, added "session" to QUERY_RESOURCES; new QCommand/QCommandAck/QEvent frames types exported.|
+|**Backend Notify Routing & Tests** <br> `backend/src/routes/notify.ts`, `backend/test/integration/query-protocol.test.ts`, `backend/test/unit/routes/notify.test.ts`, `test/unit/shared/events.test.ts`, `test/unit/platform/invoke.test.ts`, `test/unit/workspace/useQueryInvalidation.test.ts`|INVALIDATION_MAP extended for session events; invalidate calls now pass sessionIds in context; integration tests updated for RepoGroup shape, command flows, and delta behavior; unit tests adjusted/removed to match event surface changes.|
+|**Platform & Small API Changes** <br> `src/platform/tauri/invoke.ts`, `src/shared/config/api.config.ts`, `src/platform/ws/*`|Minor formatting/doc tweaks; getBackendPort exported; new ws barrel export for query-protocol-client.|
+|**Docs / Memory** <br> `.claude/agent-memory/deep-reviewer/MEMORY.md`, `CLAUDE.md`|Architecture docs updated to describe WS query-protocol, migration notes, observed latent bugs, and altered event/invalidation flows.|
+
+## Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+    participant Client as Client (React)
+    participant WS as WS Client
+    participant Backend as Backend (WS Server)
+    participant DB as Database
+    participant Cache as React Query Cache
+
+    rect rgba(100, 150, 200, 0.5)
+        Note over Client,Backend: OLD: Tauri event-driven flow
+        Client->>Backend: HTTP query (initial load)
+        Backend->>DB: SELECT workspaces
+        DB->>Backend: rows
+        Backend->>Client: HTTP response
+        Backend->>Client: emit Tauri event (session:message / status)
+        Client->>Cache: invalidateQueries / setQueryData
+    end
+
+    rect rgba(150, 200, 150, 0.5)
+        Note over Client,Backend: NEW: WebSocket query-protocol flow
+        Client->>WS: connect()
+        WS->>Backend: WebSocket handshake
+        Client->>WS: subscribe("workspaces", params)
+        WS->>Backend: q:subscribe
+        Backend->>DB: SELECT grouped workspaces
+        Backend->>WS: q:snapshot (full payload)
+        WS->>Client: snapshot -> Client sets cache (setQueryData)
+        Client->>WS: sendCommand("sendMessage", {sessionId, content})
+        WS->>Backend: q:command
+        Backend->>DB: insert message, update session
+        Backend->>WS: q:command_ack (accepted, commandId)
+        Backend->>WS: q:delta (workspace/session changes)
+        WS->>Client: delta -> Client merges via mergeDelta
+    end
+```
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~60 minutes
+
+## Poem
+
+> 🐰 I hopped from events to websocket streams,  
+> > snapshots, deltas — and bright little beams.  
+> > Commands that ack and caches that merge,  
+> > No more event fog, just tidy data surge.  
+> > A rabbit’s cheer for protocol dreams. 🥕
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- pr_review_plan_action_start -->
+
+<details>
+<summary>📝 Coding Plan</summary>
+
+- [ ] <!-- {"checkboxId": "6ad8a4e1-0b3a-4ea2-9b5b-d82c1f47d1f2"} --> Generate coding plan for human review comments
+
+</details>
+
+<!-- pr_review_plan_action_end -->
+
+<!-- tips_start -->
+
+---
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- REDACTED/REDACTED/REDACTED/REDACTED/BiHNFGdUi0LH92/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/ypYZWAvaxLlPGriLqYmwBgh/XNBgCYrwHE/REDACTED/CyVR0bEgRgYSJjKpyJJ/j/QNAAOw7BW/REDACTED/AD7YpdMA/REDACTED/REDACTED/REDACTED/XCJiW/ZAB8aWB2SPNAeQS/REDACTED/REDACTED/rOgLgBZdIkrVYAdNfHvTURAbfdVJcM/aoM8ToToI/LgJ2GINPVcbowEXorUNo9olAs/T3f1Gub/YYtoLge/TfJ/WAF/Mw9/b/REDACTED/REDACTED/REDACTED/REDACTED/nDWzQfBnDdFNVNAJT/REDACTED/REDACTED/REDACTED/REDACTED/UTtwDr3NMbx/oIWAXgTIPBH/REDACTED/REDACTED/MWHFa5ZdCmDerAHWV2wjorANiRo/REDACTED/REDACTED/H/REDACTED/zaGHJeGQ/NuCsXjQ9lAw64Cw/I9au/REDACTED/oEk6qhk5bJFqZZ6dNC/REDACTED/PXRUvnPy4BLqxv30Y7M7rtc4ynU/OJqCk4+p85bn8+bOpYU9s+qBySs5cei4i/88K8pvs5U/yPc40886y904C6QELeqFEgKFC/846+aWQELdS/S808y505y8ZRbPZcbeZdOna/Sk690Jrkq8m85ZIF/L3RoC4BkLA/REDACTED/REDACTED/REDACTED/YIWRSF3bTSWaSsoFSKV/REDACTED/REDACTED/REDACTED/REDACTED/y2an9m+/REDACTED/REDACTED/nqEWBhCLc5SbugMF/jRgwi4+AUC+E0Fy86+/REDACTED/sSyQHEaqNxN7jVwctZD2DNVNAk4/REDACTED/REDACTED/REDACTED/yiUVswlH/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/wYqiToAc0WjLeBcjKBIgktPCWJjLj/REDACTED/2o5gQziV3YETGC/4/9VKNgHSrdGhB545o8QD/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/baCRrKwjmtr+wkriuxM4kKSnKXFf/p4ltm8TUpP/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/2w2/REDACTED/REDACTED/REDACTED/QOQiDeV0agOcqqzI0F+wu2/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/c7pSQ7dH7oYBgAAIBrW0xP46HCSh5SAPCc/REDACTED/REDACTED/7thjIncjcVbyJFFDjvP42YWUPXH/REDACTED/REDACTED/REDACTED/REDACTED/DgF+YI4K3jIm/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/L0d/REDACTED/REDACTED/6FWyD78Y9Dmi5BTosXUX1b6r8Ww/REDACTED/v6Oq2oshhTQS/REDACTED/REDACTED/REDACTED/wQ2Sr+0C64DjejigRQ/REDACTED/REDACTED/REDACTED/ZgGp8W5zQst+7FgHkanwixQzw9/5Q1duhS/REDACTED/REDACTED/q//REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/eKdy/REDACTED/REDACTED/lRj0IrYRbCPwBksn5v0sYo/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/F0wXxO0MUR0AHUc/REDACTED/REDACTED/REDACTED/CfabfmC9J+ZiGSYn/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/FvqS/YQeSg7/REDACTED/IANnA2VEkqmABoDuQYDAqjEWE0o/REDACTED/DBixMLvG4BlnlMB/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/s8eQUE1YFYB8DiwmfBBpQRfLivxjsv/REDACTED/REDACTED/1uFCLYkXItrVIlgImWMPf3tFcmd/2mgL/REDACTED/mWU/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/QN8g+k/REDACTED/REDACTED/REDACTED/REDACTED/CtyOwsHASlKI7niEQV/REDACTED/REDACTED/REDACTED/1gQgIPsDiazAFSGeShpOe7/w4fftJW8ioJmJQLYptAsZwsC2Czr9p/UyTAThymBO8Tdwjda/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED/REDACTED -->
+
+<!-- internal state end -->"
+
+Comment metadata:
+This comment was left on a file.
+This comment was left on GitHub by @coderabbitai.
+
+
+Comment #2:
+
+File: backend/src/db/queries.ts
+Line: 138
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Missing `session_error_category` and `session_error_message` in query.**
+
+The new `getWorkspacesBySessionIds` function doesn't include the two new session error fields that were added to `WORKSPACE_DETAILS_SELECT`. This will cause the returned rows to lack these fields, breaking consistency with other workspace queries and potentially causing issues in the WS delta push flow that uses this function.
+
+
+
+<details>
+<summary>🐛 Proposed fix to add the missing fields</summary>
+
+```diff
+       s.status as session_status, s.model,
++      s.error_category as session_error_category,
++      s.error_message as session_error_message,
+       s.last_user_message_at as latest_message_sent_at
+```
+
+Apply this diff at line 131-132.
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/db/queries.ts` around lines 116 - 138, getWorkspacesBySessionIds
+is missing the two session fields (session_error_category and
+session_error_message) in its SELECT list; update the SQL in
+getWorkspacesBySessionIds to include s.session_error_category and
+s.session_error_message (with the same aliases used elsewhere) alongside the
+other s.* fields so the returned WorkspaceWithDetailsRow contains those
+properties and stays consistent with WORKSPACE_DETAILS_SELECT and other
+workspace queries.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewE. 
+
+
+Comment #3:
+
+File: backend/src/services/query-engine.ts
+Line: 188
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Targeted workspace delta can desync filtered subscribers and does repeated DB work.**
+
+Line 173 uses `getWorkspacesBySessionIds(...)` (no state filter), while Line 395 snapshot logic applies a `state` filter. That means filtered `workspaces` subscriptions can receive non-matching rows via delta. Also, this query runs per subscription inside nested loops.
+
+<details>
+<summary>💡 Proposed fix</summary>
+
+```diff
+ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext): void {
+   if (resources.includes("stats")) {
+     resetStatsCache();
+   }
++  const db = getDatabase();
++  const workspaceDeltaBase =
++    resources.includes("workspaces") && ctx?.sessionIds?.length
++      ? getWorkspacesBySessionIds(db, ctx.sessionIds)
++      : null;
+
+   // Phase 1: Push fresh data to active subscribers
+   for (const [connectionId, connSubs] of subs) {
+@@
+-      } else if (sub.resource === "workspaces" && ctx?.sessionIds?.length) {
++      } else if (sub.resource === "workspaces" && workspaceDeltaBase) {
+         // Workspaces with session context: try targeted delta
+         try {
+-          const db = getDatabase();
+-          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds);
++          const states = (readStringParam(sub.params, "state") ?? "ready,initializing")
++            .split(",")
++            .map((s) => s.trim())
++            .filter(Boolean);
++          const changedWorkspaces = workspaceDeltaBase.filter((ws) => states.includes(ws.state));
+           if (changedWorkspaces.length > 0) {
+             const withPaths = changedWorkspaces.map(ws => ({
+               ...ws,
+               workspace_path: computeWorkspacePath(ws),
+             }));
+             sendFrame(connectionId, {
+               type: "q:delta",
+               id: subId,
+               upserted: withPaths,
+             });
+           } else {
+             // Session IDs didn't match any workspaces — fall back to full snapshot
+             const data = runQuery(sub.resource, sub.params);
+             sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+           }
+```
+</details>
+
+
+As per coding guidelines: "`backend/src/**/*.{ts,tsx}`: Never run N queries in a loop (N+1 pattern). Use bulk endpoints or batched queries."
+
+
+Also applies to: 395-397
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/query-engine.ts` around lines 169 - 188, The delta
+branch uses getWorkspacesBySessionIds(db, ctx.sessionIds) without applying the
+subscription's state filter and is called per-subscription (N+1); change it to a
+batched, state-aware query by using the subscription's state (from
+sub.params.state) when fetching workspaces (e.g., introduce or use a
+getWorkspacesBySessionIdsWithState(db, sessionIds, state) or pass state into
+getWorkspacesBySessionIds) and move the DB call out of the per-subscription loop
+so you fetch matching workspaces once (or in bulk for all distinct state values)
+and then map results to subscriptions, still computing workspace_path with
+computeWorkspacePath and sending frames with sendFrame or falling back to
+runQuery(...) for full snapshots only when no matching filtered rows exist.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewF. 
+
+
+Comment #4:
+
+File: backend/src/services/query-engine.ts
+Line: 406
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+# First, locate and read the relevant file
+cat -n backend/src/services/query-engine.ts | sed -n '400,415p'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 810
+
+---
+
+🏁 Script executed:
+
+```shell
+# Check the type definition of workspace to understand repo_sort_order
+fd -t f "(workspace|query-engine)" backend/src --extension ts | head -20
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 376
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for workspace type definition
+rg -A 10 "interface.*[Ww]orkspace|type.*[Ww]orkspace" backend/src --max-count 5
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 6402
+
+---
+
+🏁 Script executed:
+
+```shell
+# Get the complete WorkspaceWithDetailsRow type definition
+cat -n backend/src/db/types.ts | sed -n '1,150p' | tail -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3313
+
+---
+
+🏁 Script executed:
+
+```shell
+# Search for repo_sort_order definition
+rg "repo_sort_order" backend/src -B 2 -A 2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1736
+
+---
+
+</details>
+
+**Use nullish coalescing for numeric sort fallback.**
+
+Line 405 uses `workspace.repo_sort_order || 999`; a valid `0` is treated as falsy and replaced with `999`. This also occurs in `backend/src/routes/workspaces.ts` with the same pattern.
+
+<details>
+<summary>✅ Proposed fixes</summary>
+
+```diff
+-            sort_order: workspace.repo_sort_order || 999,
++            sort_order: workspace.repo_sort_order ?? 999,
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+            sort_order: workspace.repo_sort_order ?? 999,
+            workspaces: [],
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/services/query-engine.ts` around lines 405 - 406, Replace the
+falsy-OR fallback that treats 0 as missing by using nullish coalescing: change
+occurrences that set sort_order using workspace.repo_sort_order || 999 to use
+workspace.repo_sort_order ?? 999 (and make the same change in
+backend/src/routes/workspaces.ts where repo_sort_order is defaulted) so that a
+valid numeric 0 is preserved while still defaulting to 999 when repo_sort_order
+is null or undefined.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewG. 
+
+
+Comment #5:
+
+File: shared/types/query-protocol.ts
+Line: 124
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Verify q:event callsites and event value usage before tightening the type.
+rg -nP --type=ts -C2 'type:\s*"q:event"|event:\s*"[^"]+"|event:\s*ProtocolEvent'
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 859
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Find ProtocolEvent definition
+rg -nP "type\s+ProtocolEvent|interface\s+ProtocolEvent|ProtocolEvent\s*=" --type=ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 142
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check what's exported from shared/events.ts
+head -100 shared/events.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 4440
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Find all QEventFrame instantiations/usages
+rg -nP "QEventFrame|q:event" --type=ts -A3 -B1 | head -150
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1808
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Find where QEventFrame is constructed or emitted
+rg -nP "QEventFrame\s*[{=]|event:\s*['\"]" --type=ts shared/ src/ sidecar/ | grep -v node_modules | head -100
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 312
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check test files for q:event message construction
+rg -nP "q:event|session:plan-mode|session:error|session:progress" --type=ts sidecar/test/ src/ 2>/dev/null | head -80
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 313
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if query-protocol.ts imports or references ProtocolEvent
+head -50 shared/types/query-protocol.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 1633
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Find all files that might send q:event messages (backend/Rust code)
+find . -type f \( -name "*.rs" -o -name "*.ts" \) | xargs rg -l "q:event" 2>/dev/null | grep -v node_modules
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 136
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for actual QEventFrame instantiation or construction
+rg -nP "type:\s*['\"]q:event|QEventFrame\s*\{" --type=ts -A2
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 284
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check git history or TODO/FIXME comments related to q:event
+rg -nP "TODO|FIXME|SYNC:|XXX" shared/types/query-protocol.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 43
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check the context around q:event handling in query-protocol-client.ts
+sed -n '187,295p' src/platform/ws/query-protocol-client.ts
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 3287
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Check if eventListeners is ever actually used
+rg -nP "eventListeners|onQEvent|addEventListener.*event" --type=ts src/
+```
+
+Repository: zvadaadam/box-ide
+
+Length of output: 549
+
+---
+
+</details>
+
+**Type `QEventFrame.event` as `ProtocolEvent` instead of `string`.**
+
+At line 122, `string` weakens the wire contract and allows out-of-catalog event names at compile time. The type `ProtocolEvent` (already imported from `shared/events.ts`) enforces the three valid protocol events: `"session:plan-mode"`, `"session:error"`, and `"session:progress"`.
+
+<details>
+<summary>Proposed type tightening</summary>
+
+```diff
+ export interface QEventFrame {
+   type: "q:event";
+-  event: string;
++  event: ProtocolEvent;
+   data: unknown;
+ }
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+/** Server pushes an ephemeral event (no subscription needed). */
+export interface QEventFrame {
+  type: "q:event";
+  event: ProtocolEvent;
+  data: unknown;
+}
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@shared/types/query-protocol.ts` around lines 119 - 124, Change the
+QEventFrame.event field from a plain string to the tighter ProtocolEvent type to
+enforce only allowed protocol events; locate the QEventFrame interface
+declaration (symbol: QEventFrame) and replace its event property type with
+ProtocolEvent (importing ProtocolEvent from shared/events.ts if not already
+imported) so the three valid values ("session:plan-mode", "session:error",
+"session:progress") are enforced at compile time.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewI. 
+
+
+Comment #6:
+
+File: src-tauri/src/socket.rs
+Line: 15
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Update stale comments that still describe old notification behavior.**
+
+The new wording is correct, but it now conflicts with Line 34 and Line 54, which still say notifications are emitted as Tauri events. Please align those comments to avoid future maintenance confusion.  
+
+
+<details>
+<summary>📝 Proposed comment-only fix</summary>
+
+```diff
+- *   Notifications (no "id") are emitted as Tauri events as before.
++ *   Notifications (no "id") are handled by the WS query protocol path and are
++ *   not emitted as Tauri events here.
+```
+
+```diff
+- * JSON-RPC notifications (without "id") are emitted as Tauri events.
++ * JSON-RPC notifications (without "id") are not emitted as Tauri events in
++ * this relay path.
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src-tauri/src/socket.rs` around lines 14 - 15, Update the stale inline
+comments in socket.rs so they consistently state that notifications from
+sidecar-v2 are logged (not emitted as Tauri events) and that session data flows
+via the backend WS query protocol (q:snapshot/q:delta); find and replace the
+older phrases that claim notifications are "emitted as Tauri events" (the
+comments around the top-of-file summary and the later comment blocks referencing
+Tauri events) to match the new wording exactly and keep the note about logging +
+q:snapshot/q:delta behavior consistent across the file.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewJ. 
+
+
+Comment #7:
+
+File: src/features/workspace/lib/workspace.utils.ts
+Line: 73
+User comment: "_⚠️ Potential issue_ | _🟡 Minor_
+
+**Upserted workspace with unknown `repository_id` is silently dropped.**
+
+When `upserted` contains a workspace whose `repository_id` doesn't match any existing `RepoGroup` in the cache, the workspace is skipped (Line 66). This could cause newly created workspaces to vanish from the UI if the corresponding repo group isn't in the cache yet.
+
+Consider whether you should create a new `RepoGroup` on the fly, or ensure upstream logic guarantees the group exists before pushing deltas.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/features/workspace/lib/workspace.utils.ts` around lines 62 - 73, The code
+currently drops upserted Workspace items when their repository_id doesn't match
+any existing RepoGroup in result; instead, update the loop in the upsert
+handling (the block referencing upserted, Workspace, result, RepoGroup,
+repository_id and repo_id) to create a new RepoGroup when group is undefined:
+build a new RepoGroup object with repo_id set to ws.repository_id and workspaces
+initialized to [ws] (and any other required default fields), push it into
+result, and continue; this ensures newly created workspaces aren’t silently lost
+when no matching RepoGroup exists in the cache.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:ocelot -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50aewK. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
