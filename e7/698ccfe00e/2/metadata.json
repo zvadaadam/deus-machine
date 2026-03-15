@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e7698ccfe00e",
+  "session_id": "30dfe662-559a-40a1-8a7b-36f808331ac1",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T18:31:29.159674Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/query-lifecycle.ts",
+    "sidecar/event-broadcaster.ts",
+    "sidecar/test/message-processor.test.ts",
+    "sidecar/agents/claude/message-processor.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/test/opendevs-tools.test.ts",
+    "sidecar/agents/cli-discovery.ts",
+    "sidecar/agents/opendevs-tools/simulator.ts",
+    "sidecar/test/cli-discovery.test.ts",
+    "sidecar/test/event-broadcaster.test.ts",
+    "sidecar/test/frontend-client.test.ts",
+    "sidecar/test/query-lifecycle.test.ts",
+    "sidecar/agents/claude/claude-sdk-options.ts",
+    "sidecar/agents/opendevs-tools/workspace.ts",
+    "sidecar/frontend-client.ts",
+    "sidecar/index.ts",
+    "sidecar/test/claude-handler.test.ts",
+    "sidecar/agents/opendevs-tools/browser.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "8e861de3dd7e",
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T18:31:29.159203Z",
+    "agent_lines": 1435,
+    "human_added": 0,
+    "human_modified": 13,
+    "human_removed": 12,
+    "total_committed": 1448,
+    "agent_percentage": 99.10220994475138
+  }
+}
