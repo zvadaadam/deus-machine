@@ -2,13 +2,11 @@
  * App Event Catalog
  *
  * Single source of truth for ALL real-time event names and their payload schemas.
- * These events flow through the app via different transports (Tauri IPC, stdout
- * relay, Unix socket) but the contracts are defined here regardless of how
- * they're delivered.
+ * These events flow through the app via Tauri IPC and WebSocket, but the
+ * contracts are defined here regardless of transport.
  *
  * Every `listen()` call in the frontend MUST use an event name from this file.
- * The Rust layer (socket.rs, backend.rs) must be kept in sync manually — see
- * the `SYNC:` comments in those files pointing back here.
+ * The Rust layer (backend.rs, sidecar.rs) must be kept in sync manually.
  *
  * Adding a new event:
  *   1. Add the event name constant below

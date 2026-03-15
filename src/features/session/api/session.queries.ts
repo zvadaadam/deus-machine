@@ -20,7 +20,7 @@ import type { RepoGroup } from "@shared/types/workspace";
 import { useMemo, useCallback } from "react";
 import { track } from "@/platform/analytics";
 import { parseContentBlocks } from "../lib/contentParser";
-import { socketService } from "@/platform/socket";
+import { sendCommand, connect, isConnected } from "@/platform/ws";
 import type { RuntimeAgentType } from "../lib/agentRuntime";
 
 /**
@@ -260,19 +260,19 @@ export function useSendMessage() {
       cwd?: string;
       agentType?: RuntimeAgentType;
     }): Promise<Message | void> => {
-      // Desktop (Tauri): sidecar saves message + starts agent atomically.
-      // The sidecar's onQuery handler persists the user message and sets
-      // status='working' in a single SQLite transaction before dispatching
-      // the agent — no partial-commit failure mode.
+      // Send message via WS command: backend saves user message to DB,
+      // forwards to agent-server, and pushes q:delta to subscribers.
       if (cwd) {
-        const ack = await socketService.sendQuery(
+        if (!isConnected()) await connect();
+        const ack = await sendCommand("sendMessage", {
           sessionId,
           content,
-          { cwd, model },
-          agentType || "claude"
-        );
+          model,
+          cwd,
+          agentType: agentType || "claude",
+        });
         if (!ack.accepted) {
-          throw new Error(ack.reason || "Agent rejected the query");
+          throw new Error(ack.error || "Agent rejected the query");
         }
         // No return value needed — WS q:delta handles message reconciliation.
         return;
