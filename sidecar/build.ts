@@ -40,6 +40,10 @@ build({
     //   to load it at runtime (CJS can dynamic-import ESM in modern Node.js).
     "@openai/codex",
     "@openai/codex-sdk",
+    // ws — WebSocket library with optional native extensions (bufferutil,
+    // utf-8-validate). Externalized so the runtime can resolve the correct
+    // platform-specific binaries.
+    "ws",
     // Sentry — optional dependency, loaded at runtime if DSN is configured
     "@sentry/node",
   ],

@@ -193,9 +193,12 @@ async function spawnSidecar(): Promise<{
 }> {
   // Use a temp DB so E2E tests don't touch the production database
   // and can seed session rows for FK-constrained inserts.
-  const dbPath = path.join(os.tmpdir(), `opendevs-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+  const dbPath = path.join(
+    os.tmpdir(),
+    `opendevs-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
+  );
 
-  const proc = spawn("node", [BUNDLE_PATH], {
+  const proc = spawn("node", [BUNDLE_PATH, "--listen", "unix://"], {
     env: {
       ...process.env,
       LOG_LEVEL: "debug",
@@ -276,7 +279,11 @@ async function killSidecar(sidecar: {
   // Clean up temp DB files (main + WAL + SHM)
   if (sidecar.dbPath) {
     for (const suffix of ["", "-wal", "-shm"]) {
-      try { fs.unlinkSync(sidecar.dbPath + suffix); } catch { /* ignore */ }
+      try {
+        fs.unlinkSync(sidecar.dbPath + suffix);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -299,12 +306,19 @@ function seedSession(dbPath: string, sessionId: string, agentType: string = "cla
   const rootPath = `/tmp/e2e-${sessionId}`;
 
   const seed = db.transaction(() => {
-    db.prepare("INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)")
-      .run(repoId, "e2e-test", rootPath);
-    db.prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES (?, ?, ?)")
-      .run(workspaceId, repoId, "e2e-test");
-    db.prepare("INSERT INTO sessions (id, workspace_id, agent_type, status) VALUES (?, ?, ?, ?)")
-      .run(sessionId, workspaceId, agentType, "idle");
+    db.prepare("INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)").run(
+      repoId,
+      "e2e-test",
+      rootPath
+    );
+    db.prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES (?, ?, ?)").run(
+      workspaceId,
+      repoId,
+      "e2e-test"
+    );
+    db.prepare(
+      "INSERT INTO sessions (id, workspace_id, agent_type, status) VALUES (?, ?, ?, ?)"
+    ).run(sessionId, workspaceId, agentType, "idle");
   });
 
   try {
