@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5a50b5d47cbc",
+  "session_id": "ffda2fd9-491d-42b6-a13c-fd0f0db9802d",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T21:17:02.83262Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "backend/src/services/query-engine.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/agents/session-store.ts",
+    "src-tauri/src/sidecar.rs",
+    "src/features/browser/automation/useBrowserRpcHandler.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2d0831c84969",
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 33821,
+    "cache_read_tokens": 0,
+    "output_tokens": 6,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T21:17:02.830234Z",
+    "agent_lines": 0,
+    "human_added": 8,
+    "human_modified": 29,
+    "human_removed": 0,
+    "total_committed": 8,
+    "agent_percentage": 0
+  }
+}
