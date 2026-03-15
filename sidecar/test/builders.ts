@@ -1,98 +1,9 @@
 import { randomUUID } from "crypto";
 
 /**
- * Test data builders for sidecar-v2 JSON-RPC protocol messages.
+ * Test data builders for sidecar JSON-RPC protocol messages.
  * Uses the builder pattern with overrides for concise, intent-clear tests.
  */
-
-// ============================================================================
-// Frontend → Sidecar requests
-// ============================================================================
-
-export function buildQueryRequest(overrides?: Record<string, any>) {
-  return {
-    type: "query",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    prompt: "Hello, Claude",
-    options: {
-      cwd: "/tmp/test-workspace",
-      model: "sonnet",
-      turnId: `turn_${randomUUID().slice(0, 8)}`,
-      permissionMode: "default",
-      ...overrides?.options,
-    },
-    ...overrides,
-  };
-}
-
-export function buildCancelRequest(overrides?: Record<string, any>) {
-  return {
-    type: "cancel",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    ...overrides,
-  };
-}
-
-export function buildClaudeAuthRequest(overrides?: Record<string, any>) {
-  return {
-    type: "claude_auth",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    options: {
-      cwd: "/tmp/test-workspace",
-      ...overrides?.options,
-    },
-    ...overrides,
-  };
-}
-
-export function buildWorkspaceInitRequest(overrides?: Record<string, any>) {
-  return {
-    type: "workspace_init",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    options: {
-      cwd: "/tmp/test-workspace",
-      ...overrides?.options,
-    },
-    ...overrides,
-  };
-}
-
-export function buildContextUsageRequest(overrides?: Record<string, any>) {
-  return {
-    type: "context_usage",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    options: {
-      cwd: "/tmp/test-workspace",
-      claudeSessionId: `claude_${randomUUID().slice(0, 8)}`,
-      ...overrides?.options,
-    },
-    ...overrides,
-  };
-}
-
-export function buildUpdatePermissionModeRequest(overrides?: Record<string, any>) {
-  return {
-    type: "update_permission_mode",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    permissionMode: "plan",
-    ...overrides,
-  };
-}
-
-export function buildResetGeneratorRequest(overrides?: Record<string, any>) {
-  return {
-    type: "reset_generator",
-    id: `sess_${randomUUID().slice(0, 8)}`,
-    agentType: "claude" as const,
-    ...overrides,
-  };
-}
 
 // ============================================================================
 // Sidecar → Frontend notifications / responses

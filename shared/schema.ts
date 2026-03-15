@@ -1,7 +1,7 @@
 /**
  * OpenDevs Database Schema — Single source of truth.
  *
- * Imported by both backend/src/lib/schema.ts and sidecar/db/schema.ts.
+ * Imported by backend/src/lib/schema.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, paired_devices

@@ -26,7 +26,6 @@ import {
   MUTATION_NAMES,
   COMMAND_NAMES,
   PROTOCOL_EVENTS,
-  SIDECAR_NOTIFY_EVENTS,
 } from "@shared/events";
 
 describe("shared/events", () => {
@@ -207,13 +206,6 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("session:progress");
       expect(PROTOCOL_EVENTS).toContain("tool:request");
       expect(PROTOCOL_EVENTS).toHaveLength(4);
-    });
-
-    it("SIDECAR_NOTIFY_EVENTS contains the expected events", () => {
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:message");
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:status");
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:updated");
-      expect(SIDECAR_NOTIFY_EVENTS).toHaveLength(3);
     });
   });
 });
