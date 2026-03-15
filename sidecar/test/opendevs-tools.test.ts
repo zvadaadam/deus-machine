@@ -9,8 +9,8 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
     requestGetTerminalOutput: vi.fn(),
   },
 }));
-vi.mock("../frontend-client", () => ({
-  FrontendClient: mockFrontendAPI,
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: mockFrontendAPI,
 }));
 
 import { createOpenDevsMCPServer } from "../agents/opendevs-tools";
@@ -82,7 +82,7 @@ describe("createOpenDevsMCPServer", () => {
   // ==========================================================================
 
   describe("AskUserQuestion", () => {
-    it("calls FrontendClient.requestAskUserQuestion with sessionId and questions", async () => {
+    it("calls EventBroadcaster.requestAskUserQuestion with sessionId and questions", async () => {
       mockFrontendAPI.requestAskUserQuestion.mockResolvedValue({
         answers: ["Option A"],
       });
@@ -156,7 +156,7 @@ describe("createOpenDevsMCPServer", () => {
   // ==========================================================================
 
   describe("GetWorkspaceDiff", () => {
-    it("returns diff content from FrontendClient", async () => {
+    it("returns diff content from EventBroadcaster", async () => {
       mockFrontendAPI.requestGetDiff.mockResolvedValue({
         diff: "--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new",
       });
@@ -227,7 +227,7 @@ describe("createOpenDevsMCPServer", () => {
   // ==========================================================================
 
   describe("DiffComment", () => {
-    it("posts comments via FrontendClient", async () => {
+    it("posts comments via EventBroadcaster", async () => {
       mockFrontendAPI.requestDiffComment.mockResolvedValue({ success: true });
 
       const comments = [

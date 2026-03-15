@@ -7,7 +7,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import { execSync, execFileSync } from "child_process";
-import { FrontendClient } from "../frontend-client";
+import { EventBroadcaster } from "../event-broadcaster";
 import type { AgentType } from "../protocol";
 
 // ============================================================================
@@ -178,7 +178,7 @@ export function blockIfNotInitialized(
   if (!state.result?.success) {
     const errorMsg = `Cannot process request: ${state.result?.error || "Initialization failed"}`;
     try {
-      FrontendClient.sendError({
+      EventBroadcaster.sendError({
         id: sessionId,
         type: "error",
         error: errorMsg,
@@ -190,7 +190,7 @@ export function blockIfNotInitialized(
     }
     // Emit canonical error event so the backend updates session status.
     // The backend set status='working' before forwarding turn/start to the sidecar.
-    FrontendClient.emitSessionError(sessionId, agentType, errorMsg, "internal");
+    EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
     console.log(`Blocked ${agentType} request due to initialization failure`);
     return true;
   }

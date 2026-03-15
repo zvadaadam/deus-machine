@@ -5,7 +5,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Options, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
-import { FrontendClient } from "../../frontend-client";
+import { EventBroadcaster } from "../../event-broadcaster";
 import { createCheckpoint } from "./checkpoint";
 import { createOpenDevsMCPServer } from "../opendevs-tools";
 import { createNotebookMCPServer } from "../notebook-server";
@@ -61,7 +61,7 @@ export function createCanUseTool(sessionId: string, workingDirectory: string | u
 
       let response: { approved: boolean; turnId?: string };
       try {
-        response = await FrontendClient.requestExitPlanMode({
+        response = await EventBroadcaster.requestExitPlanMode({
           sessionId,
           toolInput: input,
         });
@@ -198,7 +198,7 @@ export function createHooks(sessionId: string) {
         matcher: "EnterPlanMode",
         hooks: [
           () => {
-            FrontendClient.sendEnterPlanModeNotification({
+            EventBroadcaster.sendEnterPlanModeNotification({
               type: "enter_plan_mode_notification",
               id: sessionId,
               agentType: "claude",

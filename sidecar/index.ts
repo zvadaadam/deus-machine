@@ -32,7 +32,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 import { getErrorMessage } from "../shared/lib/errors";
 import { RpcConnection, wsTransport } from "./rpc-connection";
-import { FrontendClient } from "./frontend-client";
+import { EventBroadcaster } from "./event-broadcaster";
 import { classifyError } from "./agents/error-classifier";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
@@ -163,7 +163,7 @@ class UnifiedSidecar {
    * Transport-agnostic — works with both Unix socket and WebSocket tunnels.
    */
   private setupJsonRpc(rpcTunnel: RpcConnection): void {
-    FrontendClient.attachTunnel(rpcTunnel);
+    EventBroadcaster.attachTunnel(rpcTunnel);
 
     // --- Initialize handshake (backend agent-client sends this) ---
     rpcTunnel.addMethod("initialize", () => {
@@ -208,14 +208,14 @@ class UnifiedSidecar {
       agent.query(sessionId, prompt, options).catch((err) => {
         console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
         const classified = classifyError(err);
-        FrontendClient.sendError({
+        EventBroadcaster.sendError({
           id: sessionId,
           type: "error",
           error: classified.message,
           agentType,
           category: classified.category,
         });
-        FrontendClient.emitSessionError(
+        EventBroadcaster.emitSessionError(
           sessionId,
           agentType,
           classified.message,
@@ -223,7 +223,7 @@ class UnifiedSidecar {
         );
       });
 
-      FrontendClient.emitSessionStarted(sessionId, agentType);
+      EventBroadcaster.emitSessionStarted(sessionId, agentType);
 
       console.log(`[TIMING][turn/start] DISPATCHED session=${sessionId}`);
       return { accepted: true };
@@ -255,7 +255,7 @@ class UnifiedSidecar {
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
     // query() is NOT awaited — the ACK returns immediately after validation.
-    FrontendClient.onQuery(rpcTunnel, async (request) => {
+    EventBroadcaster.onQuery(rpcTunnel, async (request) => {
       const tQueryReceived = Date.now();
       console.log(
         `[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`
@@ -272,14 +272,14 @@ class UnifiedSidecar {
         // Recover: notify frontend of the error. The backend handles DB status updates
         // via canonical events (session.error).
         const classified = classifyError(err);
-        FrontendClient.sendError({
+        EventBroadcaster.sendError({
           id: request.id,
           type: "error",
           error: classified.message,
           agentType: request.agentType,
           category: classified.category,
         });
-        FrontendClient.emitSessionError(
+        EventBroadcaster.emitSessionError(
           request.id,
           request.agentType,
           classified.message,
@@ -288,7 +288,7 @@ class UnifiedSidecar {
       });
 
       // Dual-write: emit canonical session.started event after dispatch
-      FrontendClient.emitSessionStarted(request.id, request.agentType);
+      EventBroadcaster.emitSessionStarted(request.id, request.agentType);
 
       console.log(
         `[TIMING][QUERY] DISPATCHED session=${request.id} dispatchTime=${Date.now() - tQueryReceived}ms`
@@ -297,13 +297,13 @@ class UnifiedSidecar {
     });
 
     // --- Cancel (dispatch to agent by agentType) ---
-    FrontendClient.onCancel(rpcTunnel, (request) => {
+    EventBroadcaster.onCancel(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (agent) void agent.cancel(request.id);
     });
 
     // --- Auth check (dispatched by agentType) ---
-    FrontendClient.onClaudeAuth(rpcTunnel, (request) => {
+    EventBroadcaster.onClaudeAuth(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (!agent?.auth) {
         return Promise.reject(new Error(`Agent "${request.agentType}" does not support auth`));
@@ -312,7 +312,7 @@ class UnifiedSidecar {
     });
 
     // --- Workspace init (dispatched by agentType) ---
-    FrontendClient.onWorkspaceInit(rpcTunnel, (request) => {
+    EventBroadcaster.onWorkspaceInit(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (!agent?.initWorkspace) {
         return Promise.reject(
@@ -328,7 +328,7 @@ class UnifiedSidecar {
     });
 
     // --- Context usage (dispatched by agentType) ---
-    FrontendClient.onContextUsage(rpcTunnel, (request) => {
+    EventBroadcaster.onContextUsage(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (!agent?.getContextUsage) {
         return Promise.reject(
@@ -340,7 +340,7 @@ class UnifiedSidecar {
 
     // --- Permission mode updates (dispatched by agentType) ---
     // Fire-and-forget notification — no error if the agent doesn't support it
-    FrontendClient.onUpdatePermissionMode(rpcTunnel, (request) => {
+    EventBroadcaster.onUpdatePermissionMode(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (agent?.updatePermissionMode) {
         void agent.updatePermissionMode(request.id, request.permissionMode);
@@ -348,7 +348,7 @@ class UnifiedSidecar {
     });
 
     // --- Reset generator (dispatch to agent by agentType) ---
-    FrontendClient.onResetGenerator(rpcTunnel, (request) => {
+    EventBroadcaster.onResetGenerator(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (agent) agent.reset(request.id);
     });
@@ -391,7 +391,7 @@ class UnifiedSidecar {
     socket.on("close", (hadError) => {
       console.log(`Client disconnected (unix), hadError: ${hadError}`);
       rpcTunnel.stop();
-      FrontendClient.detachTunnel(rpcTunnel);
+      EventBroadcaster.detachTunnel(rpcTunnel);
     });
   }
 
@@ -422,7 +422,7 @@ class UnifiedSidecar {
     ws.on("close", (code: number, reason: Buffer) => {
       console.log(`Client disconnected (ws), code=${code} reason=${reason.toString()}`);
       rpcTunnel.stop();
-      FrontendClient.detachTunnel(rpcTunnel);
+      EventBroadcaster.detachTunnel(rpcTunnel);
     });
   }
 

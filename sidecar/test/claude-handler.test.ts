@@ -37,8 +37,8 @@ vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
   };
 });
 
-vi.mock("../frontend-client", () => ({
-  FrontendClient: mockFrontendAPI,
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: mockFrontendAPI,
 }));
 
 vi.mock("../agents/shell-env", () => ({
@@ -288,7 +288,7 @@ describe("claude-handler", () => {
       expect(sdkCall.options.mcpServers).toBeUndefined();
     });
 
-    it("streams messages back to frontend via FrontendClient.sendMessage", async () => {
+    it("streams messages back to frontend via EventBroadcaster.sendMessage", async () => {
       const mockMessages = [
         { type: "assistant", message: { role: "assistant", content: "Hello" } },
         { type: "result", session_id: "sdk-123" },
