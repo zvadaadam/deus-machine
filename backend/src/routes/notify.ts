@@ -26,9 +26,9 @@ app.post('/notify', async (c) => {
 
   // Map sidecar events → query resources for push-first invalidation
   const INVALIDATION_MAP: Record<SidecarNotifyEvent, QueryResource[]> = {
-    [NOTIFY_SESSION_MESSAGE]: ['messages'],
-    [NOTIFY_SESSION_STATUS]:  ['workspaces', 'sessions', 'stats'],
-    [NOTIFY_SESSION_UPDATED]: ['workspaces', 'sessions'],
+    [NOTIFY_SESSION_MESSAGE]: ['messages', 'session'],
+    [NOTIFY_SESSION_STATUS]:  ['workspaces', 'sessions', 'session', 'stats'],
+    [NOTIFY_SESSION_UPDATED]: ['workspaces', 'sessions', 'session'],
   };
   const resourcesToInvalidate = new Set<QueryResource>();
 
@@ -41,7 +41,13 @@ app.post('/notify', async (c) => {
 
   // Push-first invalidation for query subscribers
   if (resourcesToInvalidate.size > 0) {
-    invalidate([...resourcesToInvalidate]);
+    const sessionIds = notifications
+      .filter(n => n.sessionId)
+      .map(n => n.sessionId!);
+    invalidate(
+      [...resourcesToInvalidate],
+      sessionIds.length > 0 ? { sessionIds } : undefined
+    );
   }
 
   return c.json({ ok: true });

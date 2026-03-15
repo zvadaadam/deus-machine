@@ -11,7 +11,7 @@ import { Chat } from "./Chat";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
 import { useSocket } from "@/shared/hooks";
-import { useSessionActions, useSessionEvents } from "../hooks";
+import { useSessionActions } from "../hooks";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
 import { useSessionWithMessages, useLoadOlderMessages } from "../api/session.queries";
@@ -97,10 +97,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   ) => {
     // Custom hooks (useSocket manages socket connection lifecycle)
     useSocket();
-
-    // Real-time message updates: Tauri events (desktop) + incremental polling (web)
-    // workspaceId enables PR status invalidation when agent creates/updates PRs
-    useSessionEvents(sessionId, workspaceId);
 
     // Agent RPC handler — listens for sidecar:request events and manages pending UI state.
     // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can

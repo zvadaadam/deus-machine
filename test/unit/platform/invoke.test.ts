@@ -1,9 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterAll } from "vitest";
-import {
-  WORKSPACE_PROGRESS,
-  SESSION_MESSAGE,
-  QUERY_INVALIDATE,
-} from "@shared/events";
+import { WORKSPACE_PROGRESS, FS_CHANGED, PTY_DATA } from "@shared/events";
 
 // Simulate Tauri environment so isTauriEnv = true at module evaluation time
 const originalWindow = globalThis.window;
@@ -64,18 +60,23 @@ describe("listen() Zod validation", () => {
 
   it("strips unknown fields from validated payload", async () => {
     const handler = vi.fn();
-    await listen(QUERY_INVALIDATE, handler);
+    await listen(FS_CHANGED, handler);
 
-    const tauriHandler = capturedHandlers.get("query:invalidate");
+    const tauriHandler = capturedHandlers.get("fs:changed");
 
     // Rust sends extra field not in the schema
     tauriHandler!({
-      payload: { resources: ["workspaces"], _rustInternal: true },
+      payload: {
+        workspace_path: "/repo/.opendevs/alpha",
+        change_type: "fileschanged",
+        affected_count: 3,
+        _rustInternal: true,
+      },
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
     const receivedPayload = handler.mock.calls[0][0].payload;
-    expect(receivedPayload.resources).toEqual(["workspaces"]);
+    expect(receivedPayload.workspace_path).toBe("/repo/.opendevs/alpha");
     expect(receivedPayload).not.toHaveProperty("_rustInternal");
   });
 
@@ -101,7 +102,7 @@ describe("listen() Zod validation", () => {
     // Error should be logged
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Event "workspace:progress" payload failed schema validation'),
-      expect.anything(),
+      expect.anything()
     );
 
     consoleSpy.mockRestore();
@@ -127,7 +128,7 @@ describe("listen() Zod validation", () => {
 
   it("returns a callable unlisten function", async () => {
     const handler = vi.fn();
-    const unlisten = await listen(SESSION_MESSAGE, handler);
+    const unlisten = await listen(PTY_DATA, handler);
 
     expect(typeof unlisten).toBe("function");
   });

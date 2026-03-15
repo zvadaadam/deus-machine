@@ -41,76 +41,111 @@ return match(block)
 ```
 Frontend (React + Zustand + React Query)
     │
+    ├── WebSocket ──→ Node.js Backend (backend/)
+    │                  ├── Query Protocol (q:subscribe/q:snapshot/q:delta)
+    │                  │   All data: workspaces, stats, sessions, messages
+    │                  ├── Commands (q:command/q:command_ack)
+    │                  │   Async actions: sendMessage, stopSession
+    │                  ├── Mutations (q:mutate/q:mutate_result)
+    │                  │   Sync writes: archiveWorkspace, updateTitle
+    │                  └── Events (q:event) — ephemeral push (future)
+    │
     ├── Tauri IPC ──→ Rust Backend (src-tauri/)
     │                  ├── Git operations (libgit2 — fast, stateless)
     │                  ├── File scanning (.gitignore-aware, cached)
     │                  ├── Terminal / PTY sessions
     │                  ├── Process lifecycle (Node.js backend, sidecar, dev-browser)
-    │                  └── Socket relay (sidecar ↔ Tauri events)
+    │                  └── Socket relay (sidecar ↔ frontend for agent commands)
     │
     ├── HTTP REST ──→ Node.js Backend (backend/)
-    │                  ├── Database (SQLite — repos, workspaces, sessions, user messages)
+    │                  ├── Fallback for initial load (before WS connects)
     │                  ├── Workspace creation (git worktree + DB coordination)
     │                  ├── Config management (MCP servers, agents, hooks)
     │                  └── External services (GitHub PR status via gh CLI)
     │
-    └── Socket ────→ Sidecar (sidecar/)
+    └── Unix Socket → Sidecar (sidecar/)
                        ├── Claude Agent SDK (streaming responses)
                        ├── Message transformation (SDK → DB format)
                        ├── Assistant message persistence (direct SQLite writes)
-                       └── Real-time notifications → Rust → Tauri events → Frontend
+                       └── Notifies backend via HTTP POST → WS push to frontend
 ```
 
 ### Message Flow
 
 ```
 User sends message:
-  Frontend → HTTP POST → Backend saves user message to DB
-          → socketService.sendQuery() → Rust socket relay → Sidecar
+  Frontend → socketService.sendQuery() → Rust socket relay → Sidecar
+  Sidecar: saves user message + sets status='working' atomically
+  Sidecar: returns ACK → Frontend shows optimistic message
 
 Sidecar processes:
   Sidecar → Claude Agent SDK → streaming response
-         → transforms message → saves to SQLite (better-sqlite3)
-         → FrontendClient.sendMessage() → Rust socket → Tauri event
+         → saves assistant messages to SQLite
+         → POST /notify → Backend invalidate() → WS push
 
-Frontend receives:
-  Tauri event → useSessionEvents hook → invalidates React Query → UI updates
+Frontend receives (all via WebSocket):
+  q:delta  → new messages merged into cache (cursor-based)
+  q:snapshot → session status updated
+  q:delta  → workspace sidebar updated (targeted, ~800B)
 ```
 
-### Event Catalog (`shared/events.ts`)
+### WebSocket Query Protocol (`shared/types/query-protocol.ts`)
 
-All real-time events flowing through the app are defined in one file: `shared/events.ts`. This is the single source of truth for event names, payload schemas, and domain constants.
+All real-time data flows through a single WebSocket connection to the backend (`/ws`). The protocol uses `q:` prefixed JSON frames:
 
-**What's in it:**
-- **Event name constants** (`SESSION_MESSAGE`, `WORKSPACE_PROGRESS`, etc.) — used by both frontend `listen()`/`emit()` and referenced by Rust via `SYNC:` comments
-- **Zod payload schemas** — define the shape of every event payload. Used for runtime validation at the Rust→TS boundary
-- **`AppEventMap`** — maps event names to payload types. Powers auto-inferred types in `listen()`
-- **`AppEventSchemaMap`** — maps event names to Zod schemas. Used by `listen()` for runtime validation
-- **Domain constant arrays** — `QUERY_RESOURCES`, `MUTATION_NAMES`, `SIDECAR_NOTIFY_EVENTS` with derived union types
+**Frame types:**
 
-**Adding a new event:**
-1. Add the event name constant in `shared/events.ts`
-2. Define the Zod schema + inferred type
-3. Add to `AppEventMap` (compile-time types) and `AppEventSchemaMap` (runtime validation) — TypeScript will error if you forget either
-4. If emitted from Rust, update the corresponding `.rs` file with a `SYNC:` comment
+```
+DATA (reactive DB subscriptions):
+  q:subscribe / q:unsubscribe  → client subscribes to a resource
+  q:snapshot / q:delta          → server pushes full or incremental data
 
-**Frontend event listening:**
+MUTATIONS (sync data writes):
+  q:mutate / q:mutate_result    → archiveWorkspace, updateTitle
+
+COMMANDS (async actions, ACK only):
+  q:command / q:command_ack     → sendMessage, stopSession
+
+EVENTS (ephemeral push, no subscription):
+  q:event                       → plan-mode, progress (future use)
+```
+
+**Resources:** `workspaces`, `stats`, `sessions`, `session`, `messages` — defined in `QUERY_RESOURCES` array in `shared/events.ts`.
+
+**Frontend usage:**
+
 ```ts
-// Type-safe — payload type auto-inferred from AppEventMap
-import { listen, SESSION_MESSAGE, createListenerGroup } from "@/platform/tauri";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
-// In useEffect hooks, always use createListenerGroup for cleanup:
+// Subscribe to a resource — data pushed into React Query cache automatically
+useQuerySubscription("workspaces", {
+  queryKey: queryKeys.workspaces.byRepo(state),
+  params: { state },
+  mergeDelta: mergeWorkspaceDelta, // custom delta merge for RepoGroup[]
+});
+```
+
+**Domain constants** in `shared/events.ts`:
+
+- `QUERY_RESOURCES` — queryable data resources
+- `MUTATION_NAMES` — sync write actions (`archiveWorkspace`, `updateWorkspaceTitle`)
+- `COMMAND_NAMES` — async command actions (`sendMessage`, `stopSession`)
+- `PROTOCOL_EVENTS` — typed ephemeral event names
+- `SIDECAR_NOTIFY_EVENTS` — events the sidecar sends to POST /notify
+
+### Tauri Events (streaming/control only)
+
+Tauri events are used only for streaming I/O and control signals — NOT for data subscriptions:
+
+```ts
+import { listen, WORKSPACE_PROGRESS, createListenerGroup } from "@/platform/tauri";
+
 const listeners = createListenerGroup();
-listeners.register(listen(SESSION_MESSAGE, (e) => e.payload.id));
+listeners.register(listen(WORKSPACE_PROGRESS, (e) => e.payload.workspaceId));
 return () => listeners.cleanup();
 ```
 
-**Runtime validation:** The `listen()` wrapper in `platform/tauri/invoke.ts` validates every known event payload against its Zod schema. On failure it logs `console.error` but still delivers the original payload — the app doesn't crash, but Rust↔TS drift is surfaced during development.
-
-**Rules:**
-- Never use raw string event names in `listen()` or `emit()` — always import constants from the catalog
-- Session event schemas live in `shared/session-events.ts` (canonical Zod schemas), imported into `events.ts`
-- The barrel export `src/platform/tauri/index.ts` re-exports everything from `events.ts`, so `import { listen, SESSION_MESSAGE } from "@/platform/tauri"` works
+**Active Tauri events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `sidecar:request`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
 
 ## Database: Standalone OpenDevs Database
 
@@ -738,18 +773,21 @@ src/components/ui/              ← Shadcn base primitives only
 ### Animation Strategy: CSS + Framer Motion Hybrid
 
 **CSS/Tailwind** — use for:
+
 - Hover/focus transitions (`transition-colors duration-200 ease`)
 - Infinite loops (spinners, shimmers, loading indicators)
 - Tooltip/popover enter/exit
 - Simple opacity/transform keyframes that don't need mount/unmount awareness
 
 **Framer Motion** (`motion`, `AnimatePresence`) — use for:
+
 - **Presence animations**: mount/unmount transitions (`AnimatePresence` + `initial`/`animate`/`exit`)
 - **Layout animations**: items shifting position after reorder or sibling changes (`layout` prop)
 - **Staggered lists**: children animating in sequence (`staggerChildren` in variants)
 - **Height auto**: expanding/collapsing containers to `height: "auto"` (CSS can't animate to `auto`)
 
 **Rules:**
+
 - Co-locate animation config with the component, not in `global.css`
 - Keep `global.css` for design tokens, complex effects Tailwind can't do, and truly global styles
 - Never define a `@keyframes` in global.css for a single component — use Framer Motion inline
@@ -832,17 +870,18 @@ This app manages tens of repos and hundreds of workspaces with multiple concurre
 
 ### Request Volume at Scale (Example)
 
-At 50 repos / 200+ workspaces / 10 active sessions, steady-state load comes from a mix of event-driven refetches and conditional polling. Workspaces and stats are now push-invalidated (no polling), which eliminated the two heaviest pollers.
+At 50 repos / 200+ workspaces / 10 active sessions, steady-state load is minimal. All data resources use WebSocket push subscriptions — no HTTP polling for data that has a WS subscription.
 
-| Trigger | Source                                                | Estimated queries/sec |
-| ------- | ----------------------------------------------------- | --------------------- |
-| Event   | `useWorkspacesByRepo` (invalidated via `query:invalidate` event) | On-demand only |
-| Event   | `useStats` (invalidated via `query:invalidate` event) | On-demand only |
-| Event   | `useSession` (invalidated via `session:status-changed` event) | On-demand only |
-| 5s      | `useDiffStats` per working workspace                  | ~2/s                  |
-| 5s      | `useFileChanges` per working workspace                | ~2/s                  |
+| Trigger | Source                                           | Transport                             |
+| ------- | ------------------------------------------------ | ------------------------------------- |
+| WS push | `useWorkspacesByRepo` (q:delta on status change) | WebSocket (~800B per workspace delta) |
+| WS push | `useStats` (q:snapshot on any change)            | WebSocket                             |
+| WS push | `useSession` (q:snapshot on status change)       | WebSocket                             |
+| WS push | `useMessages` (q:delta cursor-based)             | WebSocket                             |
+| 5s      | `useDiffStats` per working workspace             | HTTP/Tauri IPC                        |
+| 5s      | `useFileChanges` per working workspace           | HTTP/Tauri IPC                        |
 
-The remaining pollers are conditional (only when sessions are "working"). The N+1 pattern in the workspace list query is still the main optimization target.
+The only pollers are conditional git diff queries (only when sessions are "working"). All other data arrives via WebSocket push with no polling.
 
 ### Database Rules
 
@@ -878,17 +917,25 @@ BEGIN UPDATE {table} SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
 ### Polling Discipline
 
-**Events over polling** — on desktop (Tauri), prefer event-driven invalidation over polling. The push-first invalidation pipeline (`invalidate()` → stdout → Rust → `query:invalidate` Tauri event → `useQueryInvalidation` hook → React Query cache) handles workspaces, stats, sessions, and messages. Only use polling for data without a dedicated event path.
+**WebSocket push over polling** — all data resources (workspaces, stats, sessions, messages) use WebSocket subscriptions. The backend pushes `q:snapshot` or `q:delta` frames directly to subscribers when data changes. No polling needed for subscribed resources.
 
-**Polling budget** — the app should stay under ~5 HTTP requests/second in steady state. With event-driven invalidation for workspaces/stats/sessions, the main pollers are conditional `useDiffStats` and `useFileChanges` (only when sessions are "working").
+**Polling budget** — the app should stay under ~5 HTTP requests/second in steady state. The only pollers are conditional git diff queries for working sessions.
 
 **Polling frequency rules:**
 
-- **2-5s polling**: Only for per-session hooks when status is "working" (diff stats, file changes)
+- **2-5s polling**: Only for git diff hooks when status is "working" (diff stats, file changes)
 - **30s+ / on-demand**: For everything else (settings, repos, config, PR status)
-- **Never poll**: Data that uses the `query:invalidate` event pipeline (workspaces, stats, sessions, messages)
+- **Never poll**: Data with a WS subscription (workspaces, stats, sessions, messages)
 
 **Conditional polling** — always gate polling on relevant state. `useDiffStats` already does this (only polls when session is "working"). Apply the same pattern everywhere: don't poll idle workspaces, don't poll settings, don't poll repos.
+
+**Adding a new data resource to WS:**
+
+1. Add the resource name to `QUERY_RESOURCES` in `shared/events.ts`
+2. Add a `runQuery` match arm in `backend/src/services/query-engine.ts`
+3. Add the resource to the `INVALIDATION_MAP` in `backend/src/routes/notify.ts`
+4. Use `useQuerySubscription(resource, { queryKey, params })` in the frontend hook
+5. Set `staleTime: Infinity` and `refetchOnWindowFocus: false` on the `useQuery` (WS handles freshness)
 
 ### Frontend Rendering Rules
 

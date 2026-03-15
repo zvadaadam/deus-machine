@@ -1,4 +1,4 @@
-import type { Workspace } from "@/shared/types";
+import type { Workspace, RepoGroup } from "@/shared/types";
 
 /**
  * Create an optimistic (placeholder) Workspace object for instant UI feedback
@@ -22,6 +22,8 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     current_session_id: null,
     session_status: null,
     model: null,
+    session_error_category: null,
+    session_error_message: null,
     latest_message_sent_at: null,
     init_stage: null,
     setup_status: "none",
@@ -31,4 +33,45 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     root_path: "",
     workspace_path: "",
   };
+}
+
+/**
+ * Merge a workspace delta (q:delta) into the existing RepoGroup[] cache.
+ * Replaces matching workspaces by ID within their repo group, or appends if new.
+ * Used by useQuerySubscription's mergeDelta option.
+ */
+export function mergeWorkspaceDelta(
+  old: unknown,
+  upserted?: unknown[],
+  removed?: string[]
+): unknown {
+  if (!Array.isArray(old)) return old;
+  const groups = old as RepoGroup[];
+  if (!upserted && !removed) return old;
+
+  let result = groups.map((g) => ({ ...g, workspaces: [...g.workspaces] }));
+
+  if (removed?.length) {
+    const removeSet = new Set(removed);
+    result = result.map((g) => ({
+      ...g,
+      workspaces: g.workspaces.filter((w) => !removeSet.has(w.id)),
+    }));
+  }
+
+  if (upserted?.length) {
+    for (const item of upserted) {
+      const ws = item as Workspace;
+      const group = result.find((g) => g.repo_id === ws.repository_id);
+      if (!group) continue;
+      const idx = group.workspaces.findIndex((w) => w.id === ws.id);
+      if (idx >= 0) {
+        group.workspaces[idx] = ws;
+      } else {
+        group.workspaces.push(ws);
+      }
+    }
+  }
+
+  return result;
 }

@@ -31,6 +31,8 @@ const WORKSPACE_DETAILS_SELECT = `
     w.updated_at,
     r.name as repo_name, r.root_path, r.git_default_branch,
     s.status as session_status, s.model,
+    s.error_category as session_error_category,
+    s.error_message as session_error_message,
     s.last_user_message_at as latest_message_sent_at
   FROM workspaces w
   LEFT JOIN repositories r ON w.repository_id = r.id
@@ -67,6 +69,8 @@ export function getWorkspacesByRepo(
       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
       r.git_default_branch,
       s.status as session_status, s.model,
+      s.error_category as session_error_category,
+      s.error_message as session_error_message,
       s.last_user_message_at as latest_message_sent_at
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
@@ -104,6 +108,37 @@ export function getWorkspaceRaw(
   id: string
 ): WorkspaceRow | undefined {
   return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined;
+}
+
+/**
+ * Look up workspaces by their current session IDs.
+ * Used by the query engine for delta pushes — when a session status changes,
+ * we only need the affected workspace(s) instead of re-querying everything.
+ */
+export function getWorkspacesBySessionIds(
+  db: Database.Database,
+  sessionIds: string[]
+): WorkspaceWithDetailsRow[] {
+  if (sessionIds.length === 0) return [];
+  const placeholders = sessionIds.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT
+      w.id, w.repository_id, w.slug, w.title, w.git_branch,
+      w.git_target_branch, w.state, w.current_session_id,
+      w.pr_url, w.pr_number,
+      w.setup_status, w.error_message, w.init_stage,
+      w.updated_at,
+      r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
+      r.git_default_branch,
+      s.status as session_status, s.model,
+      s.error_category as session_error_category,
+      s.error_message as session_error_message,
+      s.last_user_message_at as latest_message_sent_at
+    FROM workspaces w
+    LEFT JOIN repositories r ON w.repository_id = r.id
+    LEFT JOIN sessions s ON w.current_session_id = s.id
+    WHERE w.current_session_id IN (${placeholders})
+  `).all(...sessionIds) as WorkspaceWithDetailsRow[];
 }
 
 /**

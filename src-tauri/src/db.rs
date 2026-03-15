@@ -88,6 +88,8 @@ pub struct WorkspaceWithDetails {
     // From sessions JOIN (null when no active session)
     pub session_status: Option<String>,
     pub model: Option<String>,
+    pub session_error_category: Option<String>,
+    pub session_error_message: Option<String>,
     pub latest_message_sent_at: Option<String>,
     // Computed in Rust
     pub workspace_path: String,

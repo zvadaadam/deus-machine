@@ -1,14 +1,17 @@
 /**
  * Global Session Notifications
  *
- * Listens to ALL session events (not just the selected one) and sends
- * OS-level notifications when the app is in the background.
+ * Sends OS-level notifications when the app is in the background.
  *
  * Notification triggers:
- * - Agent finished working (working → idle)         → Glass sound
- * - Agent error (session:error event)                → Basso sound
- * - Agent needs input (→ needs_response)             → Ping sound
- * - Plan ready for review (session:enter-plan-mode)  → Ping sound
+ * - Agent finished working (working → idle)                → Glass sound
+ * - Agent error (→ error with error_category)              → Basso sound
+ * - Agent needs input (→ needs_response)                   → Ping sound
+ * - Plan ready for review (→ needs_plan_response)          → Ping sound
+ * - Setup failed/completed                                 → Basso/Glass sound
+ *
+ * All transitions are detected by observing the workspace React Query cache,
+ * which is kept fresh by the WS subscription. No Tauri event listeners needed.
  *
  * When the app is in the foreground, notifications are suppressed —
  * Sonner toasts handle in-app feedback.
@@ -17,18 +20,10 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
-import {
-  isTauriEnv,
-  listen,
-  createListenerGroup,
-  SESSION_ERROR,
-  SESSION_ENTER_PLAN_MODE,
-  SESSION_STATUS_CHANGED,
-} from "@/platform/tauri";
+import { isTauriEnv } from "@/platform/tauri";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
-import { applySessionStatusToRepoGroups } from "@/features/workspace/lib/dashboardRealtime";
 import type { SessionStatus } from "@shared/types/session";
 import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 
@@ -39,11 +34,8 @@ import type { RepoGroup, SetupStatus } from "@shared/types/workspace";
 const BATCH_WINDOW_MS = 1500;
 
 export function useGlobalSessionNotifications() {
-  // Track previous session statuses for transition detection
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
-  // Track previous workspace setup statuses for setup failure notifications
   const prevSetupStatusMap = useRef(new Map<string, SetupStatus>());
-  // Batch queue for "agent finished" notifications
   const finishedBatch = useRef<string[]>([]);
   const batchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -51,8 +43,6 @@ export function useGlobalSessionNotifications() {
 
   useEffect(() => {
     if (!isTauriEnv) return;
-
-    const listeners = createListenerGroup();
 
     function flushFinishedBatch() {
       const batch = finishedBatch.current;
@@ -83,106 +73,12 @@ export function useGlobalSessionNotifications() {
       }
     }
 
-    // --- Error notifications (instant, category-aware) ---
-    listeners.register(
-      listen(SESSION_ERROR, (event) => {
-        const { id, error, category } = event.payload;
-
-        // Analytics fires regardless of window focus — we always want error data
-        track("session_error_displayed", {
-          session_id: id,
-          error_category: category,
-        });
-
-        if (isWindowFocused()) return;
-
-        const title = match(category)
-          .with("auth", () => "Authentication Error")
-          .with("rate_limit", () => "Rate Limited")
-          .with("context_limit", () => "Context Limit Reached")
-          .with("network", () => "Network Error")
-          .with("db_write", () => "Database Error")
-          .with("process_exit", () => "Agent Process Crashed")
-          .otherwise(() => "Agent Error");
-        sendNotification({
-          title,
-          body: error || `Session ${id.substring(0, 8)} encountered an error`,
-          sound: "Basso",
-        });
-      })
-    );
-
-    // --- Plan mode notifications (instant) ---
-    listeners.register(
-      listen(SESSION_ENTER_PLAN_MODE, (event) => {
-        if (isWindowFocused()) return;
-
-        const { id } = event.payload;
-        sendNotification({
-          title: "Plan ready for review",
-          body: `Session ${id.substring(0, 8)} has a plan waiting for approval`,
-          sound: "Ping",
-        });
-      })
-    );
-
-    // --- Global status change → sidebar cache + transition notifications ---
-    // useSessionEvents only handles the *current* session. This global listener
-    // ensures sidebar status indicators update for ALL sessions instantly.
-    //
-    // Notification policy hangs off this authoritative domain event rather than
-    // React Query cache transitions (a derived view). This avoids timing issues
-    // if cache updates are batched, deferred, or arrive out of order.
-    listeners.register(
-      listen(SESSION_STATUS_CHANGED, (event) => {
-        const { id, status } = event.payload;
-
-        // 1. Patch sidebar cache directly (no HTTP round-trip)
-        queryClient.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
-          applySessionStatusToRepoGroups(old, event.payload)
-        );
-
-        // 2. Detect status transitions for analytics + notifications
-        const prevStatus = prevStatusMap.current.get(id);
-        prevStatusMap.current.set(id, status as SessionStatus);
-
-        if (!prevStatus || prevStatus === status) return;
-
-        // working → idle = agent finished — track regardless of window focus
-        if (prevStatus === "working" && status === "idle") {
-          track("ai_turn_completed", {
-            session_id: id,
-            agent_type: event.payload.agentType,
-          });
-        }
-
-        if (isWindowFocused()) return;
-
-        // working → idle = agent finished (notification only when backgrounded)
-        if (prevStatus === "working" && status === "idle") {
-          queueFinished(id);
-        }
-
-        // → needs_response = agent needs user input
-        if (status === "needs_response") {
-          sendNotification({
-            title: "Agent needs input",
-            body: `Session ${id.substring(0, 8)} is waiting for your response`,
-            sound: "Ping",
-          });
-        }
-
-        // Error and plan-mode notifications are handled by the direct Tauri
-        // event listeners above (session:error, session:enter-plan-mode) which
-        // fire immediately — no need to duplicate them here.
-      })
-    );
-
-    // --- Setup failure notifications via workspace cache ---
-    const unsubscribeWorkspaces = queryClient.getQueryCache().subscribe((event) => {
+    // Detect all session + setup transitions from the workspace cache.
+    // The WS subscription pushes updated workspace rows including
+    // session_status, session_error_category, and session_error_message.
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event.type !== "updated" || !event.query.queryKey[0]) return;
 
-      // Watch workspace list queries: ["workspaces", "by-repo", ...]
       const key = event.query.queryKey;
       if (key[0] !== "workspaces" || key[1] !== "by-repo") return;
 
@@ -191,15 +87,76 @@ export function useGlobalSessionNotifications() {
 
       for (const group of groups) {
         for (const ws of group.workspaces) {
-          const prev = prevSetupStatusMap.current.get(ws.id);
+          // --- Session status transitions ---
+          if (ws.current_session_id && ws.session_status) {
+            const sessionId = ws.current_session_id;
+            const status = ws.session_status as SessionStatus;
+            const prevStatus = prevStatusMap.current.get(sessionId);
+            prevStatusMap.current.set(sessionId, status);
+
+            if (prevStatus && prevStatus !== status) {
+              // working → idle = agent finished
+              if (prevStatus === "working" && status === "idle") {
+                track("ai_turn_completed", { session_id: sessionId });
+                if (!isWindowFocused()) queueFinished(sessionId);
+              }
+
+              // → needs_response = agent needs user input
+              if (status === "needs_response" && !isWindowFocused()) {
+                sendNotification({
+                  title: "Agent needs input",
+                  body: `Session ${sessionId.substring(0, 8)} is waiting for your response`,
+                  sound: "Ping",
+                });
+              }
+
+              // → needs_plan_response = plan ready for review
+              if (status === "needs_plan_response" && !isWindowFocused()) {
+                sendNotification({
+                  title: "Plan ready for review",
+                  body: `Session ${sessionId.substring(0, 8)} has a plan waiting for approval`,
+                  sound: "Ping",
+                });
+              }
+
+              // → error = agent errored (with category-aware title)
+              if (status === "error") {
+                const category = ws.session_error_category ?? undefined;
+                track("session_error_displayed", {
+                  session_id: sessionId,
+                  error_category: category,
+                });
+
+                if (!isWindowFocused()) {
+                  const title = match(category)
+                    .with("auth", () => "Authentication Error")
+                    .with("rate_limit", () => "Rate Limited")
+                    .with("context_limit", () => "Context Limit Reached")
+                    .with("network", () => "Network Error")
+                    .with("db_write", () => "Database Error")
+                    .with("process_exit", () => "Agent Process Crashed")
+                    .otherwise(() => "Agent Error");
+                  sendNotification({
+                    title,
+                    body:
+                      ws.session_error_message ||
+                      `Session ${sessionId.substring(0, 8)} encountered an error`,
+                    sound: "Basso",
+                  });
+                }
+              }
+            }
+          }
+
+          // --- Setup status transitions ---
+          const prevSetup = prevSetupStatusMap.current.get(ws.id);
           prevSetupStatusMap.current.set(ws.id, ws.setup_status);
 
-          if (!prev) continue; // First observation
-          if (prev === ws.setup_status) continue; // No transition
+          if (!prevSetup) continue;
+          if (prevSetup === ws.setup_status) continue;
 
-          // running → failed/completed = setup finished — track analytics always
           if (
-            prev === "running" &&
+            prevSetup === "running" &&
             (ws.setup_status === "failed" || ws.setup_status === "completed")
           ) {
             track("workspace_setup_completed", {
@@ -208,8 +165,7 @@ export function useGlobalSessionNotifications() {
             });
           }
 
-          // running → failed = setup failed
-          if (prev === "running" && ws.setup_status === "failed" && !isWindowFocused()) {
+          if (prevSetup === "running" && ws.setup_status === "failed" && !isWindowFocused()) {
             sendNotification({
               title: "Setup failed",
               body: `Workspace ${ws.title || ws.slug} setup failed${ws.error_message ? `: ${ws.error_message}` : ""}`,
@@ -217,11 +173,8 @@ export function useGlobalSessionNotifications() {
             });
           }
 
-          // running → completed = setup finished (success)
-          if (prev === "running" && ws.setup_status === "completed") {
-            // Invalidate manifest cache so task buttons appear
+          if (prevSetup === "running" && ws.setup_status === "completed") {
             queryClient.invalidateQueries({ queryKey: ["workspaces", "manifest", ws.id] });
-
             if (!isWindowFocused()) {
               sendNotification({
                 title: "Setup complete",
@@ -235,8 +188,7 @@ export function useGlobalSessionNotifications() {
     });
 
     return () => {
-      listeners.cleanup();
-      unsubscribeWorkspaces();
+      unsubscribe();
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
     };
   }, [queryClient]);

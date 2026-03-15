@@ -1,14 +1,11 @@
 /**
  * Message Cache Utilities
  *
- * Shared merge logic for incremental message updates.
- * Used by useSessionEvents (Tauri event → incremental fetch)
- * and useSendMessage (onSettled → incremental fetch).
+ * Shared merge logic for message cache updates.
+ * Used by mergeMessageDelta (WS q:delta -> cache merge).
  */
 
-import type { QueryClient } from "@tanstack/react-query";
 import type { PaginatedMessages } from "../api/session.service";
-import { SessionService } from "../api/session.service";
 import type { Message } from "../types";
 
 /** Initial load: larger page so tool-heavy turns (20-30 rows/turn) show enough context */
@@ -18,74 +15,33 @@ export const INITIAL_MESSAGE_PAGE_SIZE = 100;
 export const MESSAGE_PAGE_SIZE = 50;
 
 /**
- * Merge newer messages into existing cache.
- * - Removes optimistic placeholder messages (id starts with "optimistic-")
- * - Deduplicates by message id (handles race between event fetch and settle fetch)
- * - Preserves has_older from old cache, takes has_newer from new response
+ * Custom delta merge for PaginatedMessages cache.
+ * Used by useQuerySubscription's mergeDelta option so q:delta frames
+ * merge correctly into the { messages, has_older, has_newer } shape
+ * instead of treating the cache as a flat array.
+ *
+ * Strips optimistic placeholders and deduplicates by message ID.
  */
-export function mergeNewerMessages(
-  old: PaginatedMessages | undefined,
-  newer: PaginatedMessages
-): PaginatedMessages {
-  if (!old) return newer;
+export function mergeMessageDelta(
+  old: unknown,
+  upserted?: unknown[],
+  // Messages are append-only — removed is unused but kept for interface compatibility
+  _removed?: string[]
+): unknown {
+  if (!old || typeof old !== "object" || !("messages" in old)) return old;
+  const paginated = old as PaginatedMessages;
+  if (!upserted || upserted.length === 0) return old;
 
   // Remove optimistic placeholders — real messages replace them
-  const realMessages = old.messages.filter((m) => !m.id.startsWith("optimistic-"));
+  const realMessages = paginated.messages.filter((m) => !m.id.startsWith("optimistic-"));
 
-  // Deduplicate by id
+  // Deduplicate: don't add messages that already exist
   const existingIds = new Set(realMessages.map((m) => m.id));
-  const newMessages = newer.messages.filter((m) => !existingIds.has(m.id));
+  const newMessages = (upserted as Message[]).filter((m) => !existingIds.has(m.id));
 
   return {
     messages: [...realMessages, ...newMessages],
-    has_older: old.has_older,
-    has_newer: newer.has_newer,
+    has_older: paginated.has_older,
+    has_newer: false, // We just received the latest via delta
   };
-}
-
-/**
- * Get the seq of the last real (non-optimistic) message in the cache.
- * Returns 0 if no real messages exist (fetch everything).
- */
-export function getLastRealSeq(messages: Message[]): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (!messages[i].id.startsWith("optimistic-")) {
-      return messages[i].seq;
-    }
-  }
-  return 0;
-}
-
-/**
- * Incremental fetch+merge: fetch only messages newer than what's cached,
- * then merge into the React Query cache. Falls back to full invalidation
- * if no cache exists or the incremental fetch fails.
- *
- * Used by: useSessionEvents (on mount + on message event) and
- * useSendMessage (onSettled reconciliation).
- */
-export async function incrementalFetchAndMerge(
-  queryClient: QueryClient,
-  sessionId: string,
-  queryKey: readonly unknown[]
-): Promise<void> {
-  const cached = queryClient.getQueryData<PaginatedMessages>(queryKey);
-  if (cached) {
-    try {
-      const lastSeq = getLastRealSeq(cached.messages);
-      const newer = await SessionService.fetchMessages(sessionId, {
-        after: lastSeq || undefined,
-        limit: MESSAGE_PAGE_SIZE,
-      });
-      // Always merge — even when zero new messages arrive, metadata like
-      // has_newer may have changed and needs to be reflected in the cache.
-      queryClient.setQueryData<PaginatedMessages>(queryKey, (old) =>
-        mergeNewerMessages(old, newer)
-      );
-    } catch {
-      queryClient.invalidateQueries({ queryKey });
-    }
-  } else {
-    queryClient.invalidateQueries({ queryKey });
-  }
 }
