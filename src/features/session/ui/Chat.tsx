@@ -2,6 +2,7 @@ import { match } from "ts-pattern";
 import type { Message, SessionStatus } from "@/shared/types";
 import type { ContentBlock } from "@/features/session/types";
 import { isToolResultBlock } from "@/features/session/types";
+import { isCancelledMessage } from "../lib/contentParser";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
@@ -225,14 +226,15 @@ export function Chat({
       // Skip subagent messages — they render nested under Task tool blocks
       if (parentToolUseMap.has(message.id)) return false;
 
+      // Keep cancellation sentinels — they trigger "Response stopped" in AssistantTurn
+      if (isCancelledMessage(message.content)) return true;
+
       const contentBlocks = parseContent(message.content);
       const isArray = Array.isArray(contentBlocks);
       const onlyToolResults =
         isArray &&
         contentBlocks.length > 0 &&
-        contentBlocks.every(
-          (block: ContentBlock | string) => isToolResultBlock(block)
-        );
+        contentBlocks.every((block: ContentBlock | string) => isToolResultBlock(block));
       const isEmpty =
         (isArray && contentBlocks.length === 0) ||
         (!isArray && (contentBlocks == null || String(contentBlocks).trim() === ""));
