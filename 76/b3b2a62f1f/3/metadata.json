@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "76b3b2a62f1f",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T17:24:44.485547Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "backend/src/server.ts",
+    "backend/src/services/agent-event-handler.ts",
+    "backend/src/services/query-engine.ts",
+    "backend/src/services/tool-relay.ts",
+    "backend/test/unit/services/agent-event-handler.test.ts",
+    "backend/test/unit/services/tool-relay.test.ts",
+    "shared/types/query-protocol.ts",
+    "src/features/browser/automation/useBrowserRpcHandler.ts",
+    "src/features/session/hooks/useAgentRpcHandler.ts",
+    "src/features/session/ui/AgentOverlays.stories.tsx",
+    "src/platform/ws/index.ts",
+    "src/platform/ws/query-protocol-client.ts",
+    "src/shared/hooks/useWsToolRequest.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "216d97e1d4b1",
+  "token_usage": {
+    "input_tokens": 15875,
+    "cache_creation_tokens": 367174,
+    "cache_read_tokens": 30999070,
+    "output_tokens": 72013,
+    "api_call_count": 150
+  },
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T17:24:42.630925Z",
+    "agent_lines": 947,
+    "human_added": 30,
+    "human_modified": 19,
+    "human_removed": 0,
+    "total_committed": 996,
+    "agent_percentage": 95.08032128514057
+  }
+}
