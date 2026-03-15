@@ -14,7 +14,7 @@ import type { QueryOptions } from "../agent-handler";
  *
  * Lifecycle phases (fields set in each phase):
  *
- *   IDLE (freshly created via handleQuery → setSession):
+ *   IDLE (freshly created via query() → setSession):
  *     currentSettings, currentModel, currentMaxThinkingTokens, turnId, cwd
  *     generator/sendMessage/sendTerminate are undefined
  *
@@ -46,7 +46,7 @@ export interface SessionState {
   cwd?: string;
   /** One-shot flag: true after the first SDK message's session_id has been persisted to DB */
   agentSessionIdCaptured?: boolean;
-  /** Set by handleCancel before close() — checked by post-loop path to persist cancellation */
+  /** Set by cancel() before close() — checked by post-loop path to persist cancellation */
   cancelledByUser?: boolean;
 }
 

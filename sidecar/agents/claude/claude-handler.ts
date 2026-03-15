@@ -15,7 +15,7 @@ import {
   type ProcessMessageOptions,
 } from "./message-processor";
 import { lookupAgentSessionId } from "../../db/session-writer";
-import type { AgentHandler, QueryOptions } from "../agent-handler";
+import type { AgentCapabilities, AgentHandler, AuthParams, ContextUsageParams, InitWorkspaceParams, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
   initializeClaude,
@@ -37,27 +37,7 @@ import {
   type SessionState,
 } from "./claude-session";
 
-// ============================================================================
-// RPC parameter types
-// ============================================================================
-
-interface ClaudeAuthParams {
-  id: string;
-  cwd: string;
-}
-
-interface WorkspaceInitParams {
-  id: string;
-  cwd: string;
-  ghToken?: string;
-  claudeEnvVars?: string;
-}
-
-interface ContextUsageRequest {
-  id: string;
-  options: { cwd: string; claudeSessionId: string };
-}
-
+// Internal-only type for the private workspace init helper
 interface WorkspaceInitOptions {
   cwd: string;
   ghToken?: string;
@@ -104,14 +84,20 @@ function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
 
 export class ClaudeAgentHandler implements AgentHandler {
   readonly agentType = "claude" as const;
+  readonly capabilities: AgentCapabilities = {
+    auth: true,
+    workspaceInit: true,
+    contextUsage: true,
+    permissionMode: true,
+  };
 
   initialize(): { success: boolean; error?: string } {
     return initializeClaude();
   }
 
-  async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
-    const tHandleQuery = Date.now();
-    console.log(`[TIMING][handleQuery] START session=${sessionId} promptLength=${prompt.length}`);
+  async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
+    const tQueryStart = Date.now();
+    console.log(`[TIMING][query] START session=${sessionId} promptLength=${prompt.length}`);
     if (blockIfNotInitialized(sessionId)) return;
 
     const session = getSession(sessionId);
@@ -130,7 +116,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     if (canReuse) {
       console.log(
-        `[TIMING][handleQuery] REUSE session=${sessionId} decisionTime=${Date.now() - tHandleQuery}ms`
+        `[TIMING][query] REUSE session=${sessionId} decisionTime=${Date.now() - tQueryStart}ms`
       );
 
       // Hot-swap model if it changed
@@ -190,7 +176,7 @@ export class ClaudeAgentHandler implements AgentHandler {
             ? "should reset generator"
             : "settings changed";
       console.log(
-        `[TIMING][handleQuery] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tHandleQuery}ms`
+        `[TIMING][query] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tQueryStart}ms`
       );
 
       if (isSessionActive(session)) {
@@ -215,7 +201,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
   }
 
-  async handleCancel(sessionId: string): Promise<void> {
+  async cancel(sessionId: string): Promise<void> {
     console.log("Handling Claude cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
@@ -243,7 +229,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
   }
 
-  handleReset(sessionId: string): void {
+  reset(sessionId: string): void {
     console.log(`Handling reset generator request for session: ${sessionId}`);
     const session = getSession(sessionId);
     if (session) {
@@ -253,10 +239,10 @@ export class ClaudeAgentHandler implements AgentHandler {
   }
 
   // ==========================================================================
-  // Claude-specific RPC methods (not part of AgentHandler interface)
+  // Optional interface methods (provider-specific, guarded by capabilities)
   // ==========================================================================
 
-  async claudeAuth(params: ClaudeAuthParams) {
+  async auth(params: AuthParams) {
     const { accountInfo, error } = await this.getClaudeAccountInfo(params.cwd);
     return {
       id: params.id,
@@ -267,7 +253,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     };
   }
 
-  async workspaceInit(params: WorkspaceInitParams) {
+  async initWorkspace(params: InitWorkspaceParams) {
     const { slashCommands, mcpServers, error } = await this.getClaudeWorkspaceInitData({
       cwd: params.cwd,
       ghToken: params.ghToken,
@@ -305,7 +291,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
   }
 
-  async getContextUsage(request: ContextUsageRequest) {
+  async getContextUsage(request: ContextUsageParams) {
     const { id: sessionId, options } = request;
     const claudeSessionId = options.claudeSessionId;
 
