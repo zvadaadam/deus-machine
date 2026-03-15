@@ -10,7 +10,7 @@ import type { AgentType, QueryRequest } from "../protocol";
 // Type Definitions
 // ============================================================================
 
-/** Options passed to query(), validated by QueryRequestSchema in protocol.ts */
+/** Options passed to query(), derived from QueryRequest in shared/protocol.ts */
 export type QueryOptions = QueryRequest["options"];
 
 /**

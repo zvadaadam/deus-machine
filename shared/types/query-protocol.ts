@@ -1,7 +1,7 @@
 // Query protocol — WebSocket wire format for the cloud relay.
 // All frame types prefixed with "q:" so they route cleanly in the ws.service dispatcher.
 //
-// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, SIDECAR_NOTIFY_EVENTS)
+// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS)
 // live in shared/events.ts — the single source of truth for all app events
 // and resources. This file only defines the wire format that carries them.
 
@@ -9,14 +9,7 @@ import type { QueryResource, MutationName, CommandName, ProtocolEvent } from "..
 
 // Re-export so existing `import { QueryResource } from "query-protocol"` still works.
 export type { QueryResource, MutationName, CommandName, ProtocolEvent };
-export {
-  QUERY_RESOURCES,
-  MUTATION_NAMES,
-  COMMAND_NAMES,
-  PROTOCOL_EVENTS,
-  SIDECAR_NOTIFY_EVENTS,
-} from "../events";
-export type { SidecarNotifyEvent } from "../events";
+export { QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS } from "../events";
 
 // ---- Client → Server Frames ----
 

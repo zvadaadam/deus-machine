@@ -1,13 +1,10 @@
 // sidecar/protocol.ts
-// Zod-validated protocol definitions for JSON-RPC 2.0 communication
-// between the OpenDevs frontend/backend and the sidecar agent runtime.
+// Protocol definitions for JSON-RPC 2.0 communication between the
+// OpenDevs backend and the sidecar agent runtime.
 //
-// RPC request/response schemas (QueryRequest, CancelRequest, etc.) are
-// canonical in shared/protocol.ts. This file re-exports them and adds
-// sidecar-specific constants.
-//
-// MCP-facing RPC schemas (browser, simulator, diff, terminal, plan mode)
-// live in rpc-schemas.ts; re-exported here for backwards compatibility.
+// Query/options schemas (QueryRequest, QueryOptions) are canonical in
+// shared/protocol.ts. MCP-facing RPC schemas (browser, simulator, diff,
+// terminal, plan mode) live in rpc-schemas.ts; re-exported here.
 
 import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "../shared/enums";
 import {
@@ -17,33 +14,10 @@ import {
   StatusChangedNotificationSchema,
 } from "../shared/session-events";
 
-// Canonical RPC schemas — re-exported for backwards compatibility with
-// existing sidecar imports (e.g. `import { QueryRequest } from "../protocol"`).
-export {
-  CancelRequestSchema,
-  ClaudeAuthRequestSchema,
-  ContextUsageRequestSchema,
-  QueryAckResponseSchema,
-  QueryOptionsSchema,
-  QueryRequestSchema,
-  ResetGeneratorRequestSchema,
-  SIDECAR_METHODS,
-  SIDECAR_NOTIFICATIONS,
-  UpdatePermissionModeRequestSchema,
-  WorkspaceInitRequestSchema,
-} from "../shared/protocol";
+// Canonical schemas — re-exported for existing sidecar imports.
+export { QueryOptionsSchema, QueryRequestSchema } from "../shared/protocol";
 
-export type {
-  CancelRequest,
-  ClaudeAuthRequest,
-  ContextUsageRequest,
-  QueryAckResponse,
-  QueryOptions,
-  QueryRequest,
-  ResetGeneratorRequest,
-  UpdatePermissionModeRequest,
-  WorkspaceInitRequest,
-} from "../shared/protocol";
+export type { QueryOptions, QueryRequest } from "../shared/protocol";
 
 // ============================================================================
 // RPC Method & Notification Constants (sidecar-only)

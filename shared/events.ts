@@ -74,18 +74,6 @@ export const PROTOCOL_EVENTS = [
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
-/** Event names the sidecar sends to POST /notify on the backend.
- *  Must match the strings passed to notifyBackend() in sidecar/db/session-writer.ts. */
-export const NOTIFY_SESSION_MESSAGE = "session:message" as const;
-export const NOTIFY_SESSION_STATUS = "session:status" as const;
-export const NOTIFY_SESSION_UPDATED = "session:updated" as const;
-export const SIDECAR_NOTIFY_EVENTS = [
-  NOTIFY_SESSION_MESSAGE,
-  NOTIFY_SESSION_STATUS,
-  NOTIFY_SESSION_UPDATED,
-] as const;
-export type SidecarNotifyEvent = (typeof SIDECAR_NOTIFY_EVENTS)[number];
-
 // ============================================================================
 // Payload Schemas
 // ============================================================================
