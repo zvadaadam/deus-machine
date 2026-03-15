@@ -99,6 +99,12 @@
       "transcript": "/33/32f0dc5175/14/full.jsonl",
       "content_hash": "/33/32f0dc5175/14/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/33/32f0dc5175/15/metadata.json",
+      "transcript": "/33/32f0dc5175/15/full.jsonl",
+      "content_hash": "/33/32f0dc5175/15/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
