@@ -1,0 +1,394 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/.context/attachments/Review request.md (5.7 KB)
+</system_instruction>
+
+
+
+Please review the changes in this workspace
+
+---
+
+<task-notification>
+<task-id>ac0a9ced506291ba5</task-id>
+<tool-use-id>toolu_01DKeEe1d4gohtJ3cBmgAgVj</tool-use-id>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 2" completed</summary>
+<result>I now have comprehensive coverage of all the changed files. Let me compile the complete audit findings.
+
+---
+
+## Critical Issues
+
+**[sidecar/index.ts, line ~5977] Business logic (DB persistence responsibility) delegated away without a replacement path for user message saving**
+
+The old `index.ts` called `saveUserMessage()` synchronously inside the `onQuery` handler, atomically persisting the user message and setting `status='working'` before ACKing the frontend. The new code assumes the backend has already done this before forwarding `turn/start`. However in `query-engine.ts` at the `sendMessage` command handler (around line ~416), `writeUserMessage()` is called and the DB write succeeds, but then `forwardToAgent()` is called fire-and-forget (`.catch` only). If `forwardToAgent` fails (agent-server unreachable), the user message is persisted with `status='working'` but no turn is ever started — the session is stuck in `working` with no error recovery path.
+
+Fix: The `sendMessage` handler must transition `status` back to `error` if `forwardToAgent` rejects, rather than only logging the error.
+
+Rule: "If it needs to read/write DB or coordinate async workflows, it stays in Node.js" — the coordination between message persistence and agent dispatch is now partially in Node.js but the failure path is unhandled, violating the data-loss checklist item: "Missing error handling on DB writes, unhandled promise rejections."
+
+---
+
+**[src/shared/hooks/useWsToolRequest.ts, line 12803] Module-level mutable state violates React component isolation**
+
+`handledRequestIds` is a module-level `Set<string>` shared across all instances of `useWsToolRequest`. This is a global singleton that is never cleared on unmount, across HMR reloads in dev, or across component tree teardowns. In development with React StrictMode's double-invocation, or after HMR, requestIds from the previous lifecycle persist and silently block all responses for 60 seconds.
+
+Fix: Replace with a `useRef` initialized once per hook invocation, or accept that duplicate-response prevention is per-hook-instance (each of the three RPC handler hooks claims different methods, so duplicates across them are impossible by design).
+
+Rule: "Server data duplicated in Zustand stores" is the named anti-pattern category; more broadly CLAUDE.md's "Component Architecture — Encapsulate, Don't Scatter" requires self-contained concerns. A module-level singleton with a 60s leak timer is a side-effect that escapes component lifecycle.
+
+---
+
+**[src/features/session/hooks/useAgentRpcHandler.ts, lines 11623, 11632, 11639, 11645, 11650, 11671, 11692, 11699] `respond(null, result)` passes `null` as the first argument but `RespondFn` ignores it — the actual `respond` from `useWsToolRequest` sends the response using the `requestId` captured in the closure, not the first argument**
+
+The `RespondFn` type is `(_id: unknown, result: unknown) => Promise<void>`. In `useWsToolRequest`, the actual `respond` function created is `(result: unknown) => void` (single argument). The adapter `wsRespond` wraps it as `async (_id, result) => { respond(result); }` — so `respond(null, { diff: fileList })` calls `wsRespond(null, { diff: fileList })` which discards the first `null` and sends `result` correctly.
+
+This is technically correct but deeply confusing: `handleGetDiff` calls `respond(null, ...)` discarding what was previously the JSON-RPC id, but since the real routing uses `requestId` from closure, passing `null` as the first argument is a dead parameter. The `_id` parameter is vestigial dead code.
+
+Rule: Not a runtime bug given how the adapter works, but this falls under the Suggestions tier. However, if `handleGetDiff` is ever called from a non-WS path (e.g., a future Tauri fallback), passing `null` as `id` would produce a malformed JSON-RPC response. Flagging because it's an unambiguous dead-parameter design issue.
+
+---
+
+## Warnings
+
+**[src/shared/hooks/useSocket.ts, line 12703] `isConnected` hardcoded to `true`**
+
+`useSocket` now returns `{ isConnected: true }` unconditionally. Any consumer that uses `isConnected` to gate a UI element (e.g., disabling send button while disconnected) will always see "connected" even when the WS connection is down.
+
+Fix: Replace with `socketService.isConnected()` which now delegates to `isConnected()` from `@/platform/ws`, or remove `useSocket` entirely and update all consumers.
+
+Rule: CLAUDE.md explicitly states "**Desktop-only:** We only target the Tauri desktop app... Tauri IPC and events are the primary data transport." Hardcoding connection state defeats the purpose of the hook and breaks the contract with any callsite that depends on accurate connection state.
+
+---
+
+**[sidecar/index.ts, lines ~5977–6014] `turn/start` and legacy `onQuery` handlers both dispatch to `agent.query()` — dual dispatch path**
+
+The sidecar now has two separate entry points that both call `agent.query()`: the new `turn/start` JSON-RPC method (lines ~5977–6013) and the legacy `EventBroadcaster.onQuery` handler (lines ~6043–6112). If the backend sends both (e.g., during the transition period), a single user message will trigger two `agent.query()` calls for the same `sessionId`.
+
+Fix: Remove the legacy `onQuery` handler now that `turn/start` is the canonical path, or add a guard in `query()` that checks if the session is already active.
+
+Rule: "Data loss: Missing error handling on DB writes, unhandled promise rejections" — duplicate dispatch to the same session will corrupt session state.
+
+---
+
+**[sidecar/agents/claude/message-processor.ts, line ~3924] `agentSessionId` capture no longer persisted synchronously; backend event-based path introduces a time window where a crash loses the ID**
+
+Previously `saveAgentSessionId()` wrote to SQLite synchronously before setting `session.agentSessionIdCaptured = true`. Now `emitAgentSessionId()` is emitted over WS, which is fire-and-forget. If the sidecar crashes after setting `agentSessionIdCaptured = true` but before the backend receives and persists the event, the agent session ID is lost permanently (the flag prevents re-emission on restart). The `isResume` guard also skips emission even if the previous capture was never persisted.
+
+Rule: "Data loss: Missing error handling on DB writes" — the acknowledgment-free fire-and-forget emission introduces a durability gap for a critical field (resume support depends on it).
+
+---
+
+**[backend/src/services/agent-persistence.ts, lines ~956–965] `persistMessageCancelled` inserts a message with a `cancelled_at` column that is not in the schema**
+
+The `INSERT INTO messages` at line ~960 references a `cancelled_at` column:
+```
+INSERT INTO messages (id, session_id, role, content, sent_at, cancelled_at)
+```
+The `session_messages` table schema (as described in CLAUDE.md and the existing schema.ts) does not include a `cancelled_at` column. This INSERT will throw a SQLite error at runtime.
+
+Rule: "Missing indexes: New query patterns without corresponding indexes in `schema.ts`" — more critically, a column reference that does not exist in the schema is a hard runtime error. CLAUDE.md: "All indexes, triggers, and denormalized columns are created by our own schema — see `backend/src/lib/schema.ts`."
+
+---
+
+**[backend/src/services/query-engine.ts, lines ~1143–1168] `forwardToAgent` called fire-and-forget inside a synchronous command handler; errors are only logged**
+
+The `sendMessage` command handler calls `forwardToAgent(...).catch((err) => { console.error(...) })`. A failure to forward to the agent-server leaves the session in `status='working'` in the DB with no corrective action (no status rollback, no error notification to the frontend).
+
+Rule: "Data loss: unhandled promise rejections" — the session is stuck in `working` indefinitely with no recovery. CLAUDE.md: "Business logic, DB writes, config management" — the coordination between DB write and agent dispatch is business logic that must include the error path.
+
+---
+
+**[src/features/session/hooks/useAgentRpcHandler.ts, line ~11785] `useWsToolRequest` called at the top level of `useAgentRpcHandler` without being inside a `useEffect`**
+
+`useWsToolRequest` itself calls `useEffect` internally. The handler callback passed to it references `handleExitPlanMode`, `handleAskUserQuestion`, etc. — all defined with `useCallback`. However, since `useWsToolRequest` is called unconditionally at the hook body level, this is fine for the call itself. But the `handler` argument changes identity on every render (it is an inline arrow function), while inside `useWsToolRequest` it's stabilized via `handlerRef`. This is architecturally correct but requires trusting the `handlerRef` pattern works. No violation here — flagging as a suggestion to document the stability contract.
+
+Actually after re-reading, this is a `useLayoutEffect` updating the ref, which is correct. Not a violation.
+
+---
+
+## Suggestions
+
+**[sidecar/index.ts, line ~5977] `params: any` used in new RPC method handlers**
+
+`turn/start`, `turn/cancel`, and `session/reset` all use `params: any`. The rest of the codebase uses typed params. Since these are internal RPC methods from the trusted backend, this is low risk, but inconsistent with the project pattern.
+
+**[sidecar/agents/agent-handler.ts, line ~3498] Optional method return types use `Promise<any>`**
+
+`auth?`, `initWorkspace?`, `getContextUsage?` all return `Promise<any>`. These could be typed to their concrete return shapes from `ClaudeAgentHandler` since there is only one implementation of each.
+
+---
+
+## Summary
+
+3 critical, 4 warnings, 2 suggestions across 8 files.
+
+The two highest-severity issues are:
+1. **`backend/src/services/agent-persistence.ts`** — `cancelled_at` column does not exist in the schema; this is a guaranteed runtime crash on the cancellation path.
+2. **`backend/src/services/query-engine.ts`** — fire-and-forget `forwardToAgent` after a successful DB write leaves sessions permanently stuck in `working` on agent-server failure with no recovery.</result>
+<usage><total_tokens>113585</total_tokens><tool_uses>18</tool_uses><duration_ms>137439</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/ac0a9ced506291ba5.output
+
+---
+
+<task-notification>
+<task-id>aa5c7e6df037c563e</task-id>
+<tool-use-id>toolu_01TJtcutPVzgZTUKzvHHsxB8</tool-use-id>
+<status>completed</status>
+<summary>Agent "Introduced code problems" completed</summary>
+<result>Now I have all the context I need. Here are the issues I found:
+
+---
+
+**1. `sidecar/index.ts`, `turn/start` handler (~line 6010)**
+
+`EventBroadcaster.emitSessionStarted(sessionId, agentType)` is emitted unconditionally, **before** `agent.query()` completes (it's fire-and-forget). This means the backend immediately receives and persists `session.started`, setting the session to `status = 'working'`. If the `agent.query()` call itself throws synchronously before dispatching (e.g., during setup), no `session.error` or `session.idle` event is emitted afterward, leaving the session permanently stuck in `working` status.
+
+The old code handled this with a direct `updateSessionStatus` DB call in the catch path of the same code location, but now the `session.started` event fires before the `.catch()` can register that the agent errored immediately. The `.catch()` handler does emit `emitSessionError`, but only for async errors. If `agent.query()` throws synchronously, the `.catch()` on the returned promise still catches it — so that specific path is covered. However, the ordering is wrong: `emitSessionStarted` fires after the error handler is attached, meaning if the promise rejects in the same microtask, the backend sees `session.started` followed by `session.error` in correct order. This part is actually safe.
+
+But there's a real problem: the `options` object passed to `agent.query()` is the raw `params?.options || {}` from the wire protocol with no validation. The `TurnOptionsSchema` requires `cwd` to be a non-empty string. If `options.cwd` is missing or empty, the Claude handler will proceed with an undefined/empty `cwd`, potentially calling the Claude SDK against the wrong directory. The backend builds the `options` object from `params` in `query-engine.ts` (line 1148) with `cwd: readStringParam(params, "cwd") || ""` — so an empty string is possible — but the sidecar's `turn/start` handler accepts it without checking, bypassing the `TurnOptionsSchema` validation that exists in `shared/agent-events.ts`.
+
+---
+
+**2. `sidecar/index.ts`, `turn/cancel` handler (~line 6017–6026)**
+
+```ts
+rpcTunnel.addMethod("turn/cancel", async (params: any) => {
+  const sessionId = params?.sessionId;
+  if (!sessionId) return;
+
+  for (const agentType of ["claude", "codex"] as const) {
+    const agent = getAgent(agentType);
+    if (agent) void agent.cancel(sessionId);
+  }
+});
+```
+
+This blindly calls `cancel()` on **both** the Claude and Codex agents for the same `sessionId`. `cancel()` in `claude-handler.ts` calls `terminateSession()` which looks up the session by ID. If the session belongs to Claude, calling Codex's `cancel()` will be a no-op (session not found). However, there's a real problem: if the Codex cancel path calls `abortCodexSession(sessionId)` on a session that doesn't exist in the Codex session map, it will simply return without effect. This is benign today.
+
+The actual bug here is that the `turn/cancel` handler returns `undefined` (not a proper JSON-RPC response), while the method is `async`. This means the backend's `sendTurnCancel()` call at line 314–316 (`await this.request(AGENT_RPC_METHODS.TURN_CANCEL, params)`) will receive `undefined` as the result, which `json-rpc-2.0` may treat as a valid null result. This is fine for the cancel case, but the comment on the cancel path in `query-engine.ts` at line 1179 shows `.catch()` handling — so the fire-and-forget pattern is intentional. Not a real bug.
+
+---
+
+**3. `backend/src/services/agent-persistence.ts` — `persistMessageCancelled` double-writes session status, conflicting with `session.cancelled` event**
+
+When a cancellation happens in `query-lifecycle.ts`, `persistCancellation()` calls both:
+- `EventBroadcaster.emitSessionCancelled(sessionId, agentType)` — which triggers `persistSessionCancelled()` in the backend, setting `status = 'idle'`
+- `EventBroadcaster.emitMessageCancelled(sessionId, agentType)` — which triggers `persistMessageCancelled()` in the backend
+
+`persistMessageCancelled()` (lines 955–965) runs a transaction that **also** sets `status = 'idle'`:
+```sql
+UPDATE sessions SET status = 'idle' ... WHERE id = ?
+```
+
+So `status = 'idle'` is written twice to the DB in two separate transactions. The second write is harmless in outcome (idempotent), but it is an unnecessary double-write. However, there is a race condition: if `session.cancelled` and `message.cancelled` events arrive out of order or interleaved with a concurrent `session.started` event (from a rapid re-send), the `persistMessageCancelled` transaction could clobber a `working` status that was just set. Since `persistMessageCancelled` does an unconditional `UPDATE ... SET status = 'idle'` rather than a guarded `WHERE status != 'idle'`, it can overwrite a `working` status set by a concurrent `session.started` write.
+
+---
+
+**4. `backend/src/services/query-engine.ts` — `sendMessage` command fires `forwardToAgent` without awaiting, then immediately returns the `commandId`**
+
+At lines 1142–1169, when a `sendMessage` command is processed:
+```ts
+if (forwardToAgent) {
+  forwardToAgent({...}).catch((err) => {
+    console.error("[QueryEngine] Failed to forward to agent-server:", err);
+  });
+}
+return { commandId: result.messageId };
+```
+
+The user message is persisted and the command ACK is sent, but the agent turn start is fire-and-forget. If `forwardToAgent` rejects (agent-server is down, turn was rejected, etc.), the error is only logged — the frontend never learns that the agent didn't actually start working. The session status transitions to `working` (set by `persistSessionStarted` triggered by the `session.started` event from the sidecar), but if the forward fails, no `session.started` event ever arrives. The session stays in `idle` status (because `persistSessionStarted` only runs on `status != 'working'`), but the user message was already persisted and the frontend received an ACK. This creates a state where the user sees their message sent but the agent never responds and no error is shown.
+
+Wait — actually the session status is set to `working` by `writeUserMessage` in the backend's existing code path (checked against the original code), not by `persistSessionStarted`. Let me re-examine...
+
+Looking at `query-engine.ts` line 1140: `writeUserMessage(sessionId, content, model)` is called, and looking at the old sidecar code that was deleted (lines 5077–5091), `saveUserMessage` atomically set `status = 'working'`. Now that responsibility has moved to the backend's `writeUserMessage`. If `writeUserMessage` in the backend sets `status = 'working'`, then a failed `forwardToAgent` leaves the session permanently stuck in `working`. This is the actual bug: if the agent-server is unavailable or rejects the turn, the session is stuck in `working` with no recovery path.
+
+---
+
+**5. `backend/src/services/agent-client.ts` — Reconnect loop during handshake calls `closeConnection()` then `scheduleReconnect()` which calls `openConnection()` again, but `openConnection()` sets new event listeners on a new WebSocket without removing the old ones**
+
+At lines 501–506 (handshake failure path):
+```ts
+} catch (err) {
+  console.error("[AgentClient] Handshake failed:", err);
+  this.closeConnection();
+  if (!this.disposed) this.scheduleReconnect();
+}
+```
+
+`closeConnection()` calls `this.ws.removeAllListeners()` and then sets `this.ws = null`, so there is no listener leak from the old socket. This is actually handled correctly.
+
+---
+
+**6. `sidecar/index.ts` — `emitSessionStarted` is called from both `turn/start` handler AND `EventBroadcaster.onQuery` handler**
+
+When the old Unix socket path (`onQuery`) is used, `EventBroadcaster.emitSessionStarted(request.id, request.agentType)` is called at line 6107. When the new WebSocket path (`turn/start`) is used, `EventBroadcaster.emitSessionStarted(sessionId, agentType)` is called at line 6010.
+
+If both paths are wired on the same connection (unlikely by design, but possible in transition), the backend would receive two `session.started` events for one turn. This is not a problem in production since `persistSessionStarted` is guarded by `WHERE status != 'working'` (idempotent). Not a real bug in the runtime path as designed.
+
+---
+
+**7. `backend/src/services/tool-relay.ts` — No cleanup of pending relays on disconnect**
+
+The `pending` map is a module-level singleton. If the agent-server disconnects while tool relay requests are in flight (e.g., during a browser automation sequence), `teardownPeer()` in `agent-client.ts` calls `peer.rejectAllPendingRequests("Connection closed")` — but that only rejects *outbound RPC requests from the backend to the agent-server*. The pending tool relay promises are stored in `tool-relay.ts`'s `pending` map and are awaiting *inbound* responses from the frontend via `q:tool_response`. These will sit in `pending` until their individual timeouts fire (up to `timeoutMs` each, which could be tens of seconds).
+
+When the agent-server reconnects and sends a new `tool.request` event with the same `requestId` (theoretically possible after resume), the old promise is superseded correctly. But the more practical problem is: when the agent-server disconnects, `relayToolRequest()` in `agent-event-handler.ts` will eventually get its relay promise rejected by timeout, then try to call `respondToAgent()` — which goes through `agentClient.sendTurnRespond()`. But if the agent-client is reconnecting (`this.connected === false`), `sendTurnRespond` will immediately reject with "AgentClient is not connected". This rejection is caught by the outer try/catch in `relayToolRequest`, which tries to call `respondToAgent` again for the error response — and that will also reject. The second rejection is caught and logged. So there's no crash, but the frontend's tool relay promise remains pending until timeout, which could be 30+ seconds with no feedback.
+
+---
+
+**Summary of concrete bugs:**
+
+**Issue 1 — `backend/src/services/agent-persistence.ts`, `persistMessageCancelled` (~line 962)**
+
+`persistMessageCancelled` unconditionally updates `sessions SET status = 'idle'` inside its transaction. The `session.cancelled` event (processed by `persistSessionCancelled`) also sets `status = 'idle'`. Both events are emitted by `persistCancellation()` in `query-lifecycle.ts`. Since `persistMessageCancelled`'s UPDATE has no guard (`WHERE status != 'working'`), if a new turn starts between these two DB writes (e.g., rapid re-send), the `message.cancelled` handler can overwrite `status = 'working'` back to `idle`, causing the new turn to appear stuck at idle while the agent is actually processing it.
+
+**Issue 2 — `backend/src/services/query-engine.ts`, `sendMessage` command handler (~line 1143)**
+
+`forwardToAgent()` is fire-and-forget. If it fails (agent-server unavailable or rejects), the user message is already persisted with session status set to `working`, and no error is surfaced to the frontend. The session gets stuck in `working` permanently because no `session.idle` or `session.error` event will arrive from the agent-server to correct it.
+
+**Issue 3 — `sidecar/index.ts`, `turn/start` handler, `options` not validated (~line 5981)**
+
+The `options` object is passed directly from the wire protocol (`params?.options || {}`) to `agent.query()` without schema validation. `TurnOptionsSchema` requires `cwd: z.string().min(1)`, but the `turn/start` handler accepts `options: {}` (no `cwd`). The Claude SDK call will proceed with an empty string `cwd`, which resolves relative to the current working directory — a different directory than the intended workspace. This produces incorrect agent behavior: the Claude SDK's file tools and shell operations run in the wrong directory, and no error is surfaced.</result>
+<usage><total_tokens>155808</total_tokens><tool_uses>22</tool_uses><duration_ms>192449</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/aa5c7e6df037c563e.output
+
+---
+
+<task-notification>
+<task-id>aebbdd2fd3080cf03</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 1" completed</summary>
+<result>Now I have all the information I need. Let me compile the final list of CLAUDE.md violations.
+
+Here is the list of CLAUDE.md compliance violations found in the `backend/` and `shared/` directories of this diff:
+
+---
+
+**Issue 1 — `backend/src/services/agent-persistence.ts`, line 170 (persistSessionStarted): `last_user_message_at` is not updated**
+
+`writeUserMessage` in `message-writer.ts` (line 36) sets `last_user_message_at = ?` atomically with the message insert because CLAUDE.md mandates: *"When our code inserts a user message, it must also update this column."* and *"use it instead of correlated subqueries."*
+
+However, the new `persistSessionStarted` event handler sets `status = 'working'` but does NOT update `last_user_message_at`. The session status transition to `working` now happens in two separate DB writes — `writeUserMessage` (which does update `last_user_message_at`) and then `persistSessionStarted` (which only updates `status`). These remain correctly separated because `writeUserMessage` still sets `last_user_message_at` and `persistSessionStarted` does not overwrite it. 
+
+Actually, looking more carefully: `writeUserMessage` is still called first (in `query-engine.ts` line 416) and it sets `last_user_message_at` correctly. Then `persistSessionStarted` only fires `WHERE id = ? AND status != 'working'`, so it only runs if the row is not already `working`. The concern is: the `session.started` event also redundantly sets `status = 'working'` again, which could be fine. This is not a clear violation.
+
+Retracting Issue 1.
+
+---
+
+**Issue 1 — `backend/src/services/query-engine.ts`, lines 1116–1168: `forwardToAgent` casts params from `QueryParams` without validation, passing raw `as` casts for structured fields**
+
+The `sendMessage` command handler passes `params.maxThinkingTokens as number | undefined`, `params.maxTurns as number | undefined`, `params.opendevsEnv as Record<string, string> | undefined`, `params.additionalDirectories as string[] | undefined`, etc. directly to `forwardToAgent` without any schema validation. `QueryParams` is `Record<string, unknown>`, so these are unsafe casts. If a malicious or malformed client sends a string for `maxThinkingTokens`, it propagates into the agent-server's `TurnStartRequest`.
+
+CLAUDE.md rule: *"Security: Command injection, XSS, SQL injection, exposed secrets, OWASP top 10"* — this is an unvalidated user-controlled input flowing into downstream business logic. The `TurnStartRequestSchema` Zod schema exists in `shared/agent-events.ts` and should be used here to validate/parse the forwarded options before sending.
+
+Fix: Parse the options object through `TurnOptionsSchema.safeParse(...)` before forwarding to `forwardToAgent`, or at minimum validate the numeric fields are actually numbers.
+
+---
+
+**Issue 2 — `shared/enums.ts`, line 3306: Removing `"unknown"` from `AgentTypeSchema` is a breaking schema change**
+
+The diff removes `"unknown"` from `AgentTypeSchema = z.enum(["claude", "codex"])`. The old schema was `["claude", "codex", "unknown"]`. Any existing rows in the `sessions` table that have `agent_type = 'unknown'` (written by previous versions) will now fail Zod validation when read back. The sidecar test at `sidecar/test/protocol.test.ts:186` already tests that `agentType: "unknown"` fails — this is intentional — but any DB rows with `agent_type = 'unknown'` will silently break deserialization in any code path that validates session data through this schema.
+
+CLAUDE.md rule: *"Data loss: Missing error handling on DB writes, unhandled promise rejections"* — specifically the column deprecation rule: *"when removing a column, rename it with `DEPRECATED_` prefix… instead of dropping it. This preserves data safety."* The same principle applies here: removing an accepted enum value from a schema without a migration to rewrite existing `unknown` rows causes silent data corruption at the read layer.
+
+Fix: Either keep `"unknown"` in the enum (mark it deprecated via a comment) and add a migration `UPDATE sessions SET agent_type = 'claude' WHERE agent_type = 'unknown'`, or confirm no production rows have `agent_type = 'unknown'`.
+
+---
+
+**Issue 3 — `backend/src/services/query-engine.ts`, lines 1082–1084: New frame type `"q:tool_response"` is not registered in `QUERY_RESOURCES` / protocol domain constants**
+
+CLAUDE.md specifies a strict protocol for adding a new data resource to WebSocket: *"Add the resource name to `QUERY_RESOURCES` in `shared/events.ts`"*. While `q:tool_response` is not a data subscription resource, it is a new client frame type that is added to `QClientFrame` in `shared/types/query-protocol.ts` but is not reflected in any of the domain constant arrays (`COMMAND_NAMES`, `QUERY_RESOURCES`, `PROTOCOL_EVENTS`) in `shared/events.ts`. The `handleFrame` function in `query-engine.ts` matches on it via `ts-pattern` `.with("q:tool_response", ...)` but `"q:tool_response"` does not appear in any typed constant array that client code, tests, or type guards could reference.
+
+CLAUDE.md rule (system architecture section): *"Frame types: … All real-time data flows through a single WebSocket connection"* — new frame types should be consistently typed in the shared protocol constants so the frontend can reference `"q:tool_response"` as a typed constant rather than a bare string literal. This is confirmed as the pattern used for all other frame types.
+
+Fix: Add a `Q_FRAME_TYPES` constant or extend the existing constants in `shared/events.ts` / `shared/types/query-protocol.ts` to include `"q:tool_response"` as a named constant, and reference it from the frontend when sending tool responses.
+
+---
+
+**Summary: 2 issues (1 security-level, 1 data safety) + 1 protocol consistency warning, across 3 files.**</result>
+<usage><total_tokens>146549</total_tokens><tool_uses>49</tool_uses><duration_ms>229755</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/aebbdd2fd3080cf03.output
+
+---
+
+<task-notification>
+<task-id>afccca77a98a3a312</task-id>
+<tool-use-id>toolu_01XxnDnySGXvVgMFtQoRuiPd</tool-use-id>
+<status>completed</status>
+<summary>Agent "Bug scan - diff only" completed</summary>
+<result>Here are the bugs found in the diff:
+
+---
+
+**Bug 1 — `sidecar/agents/codex/codex-handler.ts`: `emitAssistantMessage` fires on every streaming delta**
+
+The `ts-pattern` match arm uses `P.union("item.delta", "item.completed")` and calls `EventBroadcaster.emitAssistantMessage(...)` inside that single branch. This means every streaming chunk from the Codex SDK — not just the final completed item — triggers a call to `emitAssistantMessage`. The backend's `persistAssistantMessage` in `agent-persistence.ts` performs an `INSERT` into `session_messages` on each call. A single Codex turn with 200 streaming deltas will insert 200 rows into the DB, most containing partial/intermediate text. The old code had a separate branch that only persisted `item.completed`. This is a data corruption bug.
+
+**Fix:** Split the `P.union` into two separate `.with()` arms. The `item.delta` arm handles streaming UI updates (if any); the `item.completed` arm calls `emitAssistantMessage`.
+
+---
+
+**Bug 2 — `backend/src/services/query-engine.ts` ~line 1165: Silent message drop on agent-server failure**
+
+In the `sendMessage` command handler, `forwardToAgent(...)` is called fire-and-forget after `writeUserMessage` succeeds:
+
+```typescript
+if (forwardToAgent) {
+  forwardToAgent({...}).catch((err) => {
+    console.error("[QueryEngine] Failed to forward to agent-server:", err);
+  });
+}
+return { commandId: result.messageId };
+```
+
+The command ACK (`{ commandId }`) is returned to the frontend immediately regardless of whether the forward succeeds. If the agent-server is disconnected or the RPC call rejects, the error is only logged. The user message is persisted in the DB, the frontend receives the ACK and renders the message as sent, but the agent-server never receives `turn/start`. Because `session.started` is emitted by the sidecar only upon receiving `turn/start`, the session status is never updated to `working`. The frontend shows the message as sent with no error and no agent response — the message is silently dropped.
+
+**Fix:** Either await `forwardToAgent` before returning the ACK and reject the command on failure, or — if fire-and-forget is intentional for latency reasons — emit a `session.error` event back to the frontend in the `.catch()` handler so the user sees the failure.
+
+---
+
+**Bug 3 — `sidecar/agents/query-lifecycle.ts`: `emitSessionCancelled` and `emitMessageCancelled` both called on cancellation**
+
+`persistCancellation` now emits:
+
+```typescript
+EventBroadcaster.emitSessionCancelled(sessionId, agentType);
+EventBroadcaster.emitMessageCancelled(sessionId, agentType);
+```
+
+In `agent-event-handler.ts`, the `session.cancelled` handler calls `persistSessionCancelled` (sets session status to `cancelled`) and then calls `invalidate("session", ...)`. The `message.cancelled` handler calls `persistMessageCancelled`, which is a transaction that does an `INSERT` into `session_messages` AND updates the session. Two separate events trigger two separate DB writes — the second `persistMessageCancelled` call updates the same session row that `persistSessionCancelled` just updated. Whether this causes a correctness bug depends on the order of writes and what each sets, but emitting two events from a single cancellation path creates redundant, potentially conflicting DB writes and two separate WS invalidations. The old code did this in a single atomic transaction. If `message.cancelled` already sets session status, the `session.cancelled` event is redundant and should be removed.
+
+---
+
+**Bug 4 — `backend/src/services/tool-relay.ts`: Timeout cleanup race on `reject`**
+
+In `tool-relay.ts`, `reject(requestId, error)` calls `pending.delete(requestId)` but does not call `clearTimeout(timer)` before deleting the entry. The timer still holds a reference to the `requestId` and will fire after the map entry is deleted. When the timeout fires it calls `pending.get(requestId)` which returns `undefined`, so the double-fire is silently swallowed — but the timer leak persists for the full timeout duration (likely 30s). Compare `resolve` which does clear the timer. The `reject` path should mirror `resolve`:
+
+```typescript
+// Missing in reject():
+clearTimeout(entry.timer);
+```
+
+This is not a crash bug but causes the timer to leak on every rejected tool request.</result>
+<usage><total_tokens>29721</total_tokens><tool_uses>24</tool_uses><duration_ms>298045</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/afccca77a98a3a312.output
