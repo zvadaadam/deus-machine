@@ -11,10 +11,8 @@
  * → UI updates instantly (<100ms latency)
  *
  * PROTOCOL: JSON-RPC 2.0 over newline-delimited JSON (NDJSON)
- * Notifications from sidecar-v2:
- * - "message": Agent message (streaming responses)
- * - "queryError": Query error notification
- * - "enterPlanModeNotification": Plan mode entry
+ * Notifications from sidecar-v2 are logged but no longer emitted as Tauri events.
+ * Session data now flows via the backend WS query protocol (q:snapshot/q:delta).
  *
  * DESIGN DECISION - Why Unix Socket vs HTTP SSE:
  * - Infrastructure already existed (sidecar uses Unix socket)
@@ -186,10 +184,8 @@ impl SocketManager {
      * data corruption from concurrent BufReaders on the same fd.
      *
      * Parses JSON-RPC 2.0 messages from sidecar-v2:
-     * - Notifications (no "id"): emitted as Tauri events
-     *   - {"jsonrpc":"2.0","method":"message","params":{...}} → "session:message" event
-     *   - {"jsonrpc":"2.0","method":"queryError","params":{...}} → "session:error" event
-     *   - {"jsonrpc":"2.0","method":"enterPlanModeNotification","params":{...}} → "session:enter-plan-mode" event
+     * - Notifications (no "id"): logged but no longer emitted as Tauri events
+     *   (session data flows via backend WS query protocol q:snapshot/q:delta)
      * - Responses (has "id"): dispatched to mpsc channel for receive()
      */
     pub fn start_event_listener(&self) {
@@ -263,63 +259,12 @@ impl SocketManager {
                                         let params = rpc_msg.get("params").cloned()
                                             .unwrap_or(Value::Null);
 
-                                        // Map JSON-RPC methods to app event names
-                                        // SYNC: Event names must match shared/events.ts (AppEventMap)
-                                        let event_name = match method {
-                                            "message" => "session:message",
-                                            "queryError" => "session:error",
-                                            "enterPlanModeNotification" => "session:enter-plan-mode",
-                                            "statusChanged" => "session:status-changed",
-                                            _ => {
-                                                println!("[SOCKET] Unknown RPC notification: {}", method);
-                                                continue;
-                                            }
-                                        };
-
-                                        // Log session ID and data type for debugging message flow
-                                        let session_id = params.get("id")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or("?");
-                                        let short_id = &session_id[..session_id.len().min(8)];
-
-                                        let detail = match method {
-                                            "message" => {
-                                                // Extract data.type to show what kind of message is flowing through
-                                                let data_type = params.get("data")
-                                                    .and_then(|d| d.get("type"))
-                                                    .and_then(|t| t.as_str())
-                                                    .unwrap_or("?");
-                                                let agent = params.get("agentType")
-                                                    .and_then(|v| v.as_str())
-                                                    .unwrap_or("?");
-                                                format!("session={} agent={} data.type={}", short_id, agent, data_type)
-                                            }
-                                            "queryError" => {
-                                                let error = params.get("error")
-                                                    .and_then(|v| v.as_str())
-                                                    .unwrap_or("?");
-                                                let category = params.get("category")
-                                                    .and_then(|v| v.as_str())
-                                                    .unwrap_or("?");
-                                                format!("session={} category={} error={}", short_id, category, error.chars().take(80).collect::<String>())
-                                            }
-                                            "statusChanged" => {
-                                                let status = params.get("status")
-                                                    .and_then(|v| v.as_str())
-                                                    .unwrap_or("?");
-                                                format!("session={} status={}", short_id, status)
-                                            }
-                                            _ => format!("session={}", short_id),
-                                        };
-
-                                        println!("[SOCKET] {} -> {} [{}]", method, event_name, detail);
-
-                                        // Emit to frontend via Tauri
-                                        if let Some(handle) = app_handle.lock().unwrap().as_ref() {
-                                            if let Err(e) = handle.emit(event_name, params) {
-                                                eprintln!("[SOCKET] Failed to emit event: {}", e);
-                                            }
-                                        }
+                                        // Session notifications (message, queryError, statusChanged,
+                                        // enterPlanModeNotification) are now handled by the backend
+                                        // query engine via WS q:snapshot/q:delta pushes. No Tauri
+                                        // event mapping needed — the frontend reads from React Query
+                                        // cache populated by the WS subscription.
+                                        println!("[SOCKET] Ignoring RPC notification: {} (handled by WS query protocol)", method);
                                     }
                                 }
                             }

@@ -223,7 +223,7 @@ afterAll(() => {
 // ============================================================================
 
 describe("q:request → q:response", () => {
-  it("fetches workspaces", async () => {
+  it("fetches workspaces as RepoGroup[]", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(ws, {
@@ -234,9 +234,12 @@ describe("q:request → q:response", () => {
 
       expect(res.id).toBe("req-1");
       expect(Array.isArray(res.data)).toBe(true);
-      const found = res.data.find((w: any) => w.id === WS_ID);
+      // Data is now RepoGroup[] — find workspace inside groups
+      const group = res.data.find((g: any) => g.repo_id === REPO_ID);
+      expect(group).toBeTruthy();
+      expect(group.repo_name).toBe("test-repo");
+      const found = group.workspaces.find((w: any) => w.id === WS_ID);
       expect(found).toBeTruthy();
-      expect(found.repo_name).toBe("test-repo");
     } finally {
       ws.close();
     }
@@ -276,6 +279,41 @@ describe("q:request → q:response", () => {
     }
   });
 
+  it("fetches a single session by sessionId", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:request",
+        id: "req-session",
+        resource: "session",
+        params: { sessionId: SESS_ID },
+      }, "q:response");
+
+      expect(res.id).toBe("req-session");
+      expect(res.data).toBeTruthy();
+      expect(res.data.id).toBe(SESS_ID);
+      expect(res.data.status).toBe("idle");
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("returns q:error for session without sessionId", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:request",
+        id: "req-session-missing",
+        resource: "session",
+      }, "q:error");
+
+      expect(res.id).toBe("req-session-missing");
+      expect(res.code).toBe("QUERY_ERROR");
+    } finally {
+      ws.close();
+    }
+  });
+
   it("fetches messages by sessionId", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -288,8 +326,8 @@ describe("q:request → q:response", () => {
 
       expect(res.id).toBe("req-4");
       expect(res.data.messages).toHaveLength(3);
-      expect(res.data.hasOlder).toBe(false);
-      expect(res.data.hasNewer).toBe(false);
+      expect(res.data.has_older).toBe(false);
+      expect(res.data.has_newer).toBe(false);
     } finally {
       ws.close();
     }
@@ -329,7 +367,7 @@ describe("q:request → q:response", () => {
 });
 
 describe("q:subscribe → initial q:snapshot", () => {
-  it("returns snapshot with subscription ID for workspaces", async () => {
+  it("returns snapshot with subscription ID for workspaces (RepoGroup[])", async () => {
     const { ws } = await connectAndAuth();
     try {
       const snap = await sendAndReceive(ws, {
@@ -340,7 +378,10 @@ describe("q:subscribe → initial q:snapshot", () => {
 
       expect(snap.id).toBe("sub_ws_1");
       expect(Array.isArray(snap.data)).toBe(true);
-      expect(snap.data.some((w: any) => w.id === WS_ID)).toBe(true);
+      // Data is now RepoGroup[] — find workspace inside groups
+      const group = snap.data.find((g: any) => g.repo_id === REPO_ID);
+      expect(group).toBeTruthy();
+      expect(group.workspaces.some((w: any) => w.id === WS_ID)).toBe(true);
     } finally {
       ws.close();
     }
@@ -358,8 +399,8 @@ describe("q:subscribe → initial q:snapshot", () => {
 
       expect(snap.id).toBe("sub_msg_1");
       expect(snap.data.messages).toHaveLength(3);
-      expect(snap.data.hasOlder).toBe(false);
-      expect(snap.data.hasNewer).toBe(false);
+      expect(snap.data.has_older).toBe(false);
+      expect(snap.data.has_newer).toBe(false);
     } finally {
       ws.close();
     }
@@ -370,13 +411,14 @@ describe("q:subscribe → live q:snapshot push", () => {
   it("pushes updated snapshot when invalidate() is called", async () => {
     const { ws } = await connectAndAuth();
     try {
-      // Subscribe and receive initial snapshot
+      // Subscribe and receive initial snapshot (RepoGroup[])
       const initial = await sendAndReceive(ws, {
         type: "q:subscribe",
         id: "sub_live_1",
         resource: "workspaces",
       }, "q:snapshot");
-      const initialCount = initial.data.length;
+      const initialGroup = initial.data.find((g: any) => g.repo_id === REPO_ID);
+      const initialWsCount = initialGroup.workspaces.length;
 
       // Insert a new workspace
       testDb.prepare(`
@@ -390,7 +432,8 @@ describe("q:subscribe → live q:snapshot push", () => {
       const pushed = await pushPromise;
 
       expect(pushed.id).toBe("sub_live_1");
-      expect(pushed.data.length).toBe(initialCount + 1);
+      const pushedGroup = pushed.data.find((g: any) => g.repo_id === REPO_ID);
+      expect(pushedGroup.workspaces.length).toBe(initialWsCount + 1);
 
       // Cleanup
       testDb.prepare("DELETE FROM workspaces WHERE id = 'ws-q-new'").run();
@@ -567,81 +610,6 @@ describe("q:mutate → q:mutate_result", () => {
     }
   });
 
-  it("sends a message and updates the session status", async () => {
-    const { ws } = await connectAndAuth();
-    try {
-      const res = await sendAndReceive(ws, {
-        type: "q:mutate",
-        id: "mut-3",
-        action: "sendMessage",
-        params: { sessionId: SESS_ID, content: "queued work", model: "sonnet" },
-      }, "q:mutate_result");
-
-      expect(res.id).toBe("mut-3");
-      expect(res.success).toBe(true);
-      expect(res.data).toEqual(
-        expect.objectContaining({
-          messageId: expect.any(String),
-          seq: expect.any(Number),
-        })
-      );
-
-      const messageRow = testDb.prepare(
-        "SELECT session_id, role, content, model FROM messages WHERE id = ?"
-      ).get(res.data.messageId) as
-        | { session_id: string; role: string; content: string; model: string }
-        | undefined;
-      expect(messageRow).toEqual({
-        session_id: SESS_ID,
-        role: "user",
-        content: "queued work",
-        model: "sonnet",
-      });
-
-      const sessionRow = testDb.prepare(
-        "SELECT status FROM sessions WHERE id = ?"
-      ).get(SESS_ID) as { status: string };
-      expect(sessionRow.status).toBe("working");
-    } finally {
-      ws.close();
-    }
-  });
-
-  it("pushes fresh stats snapshots after sendMessage", async () => {
-    const { ws } = await connectAndAuth();
-    try {
-      const initial = await sendAndReceive(ws, {
-        type: "q:subscribe",
-        id: "sub_stats_send",
-        resource: "stats",
-      }, "q:snapshot");
-      expect(initial.id).toBe("sub_stats_send");
-      expect(initial.data.messages).toBe(3);
-      expect(initial.data.sessions_working).toBe(0);
-
-      const pushedSnapshot = waitForMessage(ws, "q:snapshot");
-      ws.send(JSON.stringify({
-        type: "q:mutate",
-        id: "mut-4",
-        action: "sendMessage",
-        params: { sessionId: SESS_ID, content: "updates stats" },
-      }));
-
-      const [result, snapshot] = await Promise.all([
-        waitForMessage(ws, "q:mutate_result"),
-        pushedSnapshot,
-      ]);
-
-      expect(result.id).toBe("mut-4");
-      expect(result.success).toBe(true);
-      expect(snapshot.id).toBe("sub_stats_send");
-      expect(snapshot.data.messages).toBe(4);
-      expect(snapshot.data.sessions_working).toBe(1);
-    } finally {
-      ws.close();
-    }
-  });
-
   it("returns error for unknown mutation", async () => {
     const { ws } = await connectAndAuth();
     try {
@@ -655,6 +623,124 @@ describe("q:mutate → q:mutate_result", () => {
       expect(res.id).toBe("mut-err");
       expect(res.success).toBe(false);
       expect(res.error).toContain("Unknown mutation");
+    } finally {
+      ws.close();
+    }
+  });
+});
+
+describe("q:command → q:command_ack", () => {
+  it("sends a message via q:command and returns command_ack", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:command",
+        id: "cmd-1",
+        command: "sendMessage",
+        params: { sessionId: SESS_ID, content: "command test", model: "sonnet" },
+      }, "q:command_ack");
+
+      expect(res.id).toBe("cmd-1");
+      expect(res.accepted).toBe(true);
+      expect(res.commandId).toEqual(expect.any(String));
+
+      // Verify message was persisted
+      const messageRow = testDb.prepare(
+        "SELECT session_id, role, content, model FROM messages WHERE id = ?"
+      ).get(res.commandId) as
+        | { session_id: string; role: string; content: string; model: string }
+        | undefined;
+      expect(messageRow).toEqual({
+        session_id: SESS_ID,
+        role: "user",
+        content: "command test",
+        model: "sonnet",
+      });
+
+      // Verify session status changed to working
+      const sessionRow = testDb.prepare(
+        "SELECT status FROM sessions WHERE id = ?"
+      ).get(SESS_ID) as { status: string };
+      expect(sessionRow.status).toBe("working");
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("stops a session via q:command", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      // First set session to working
+      testDb.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESS_ID);
+
+      const res = await sendAndReceive(ws, {
+        type: "q:command",
+        id: "cmd-stop-1",
+        command: "stopSession",
+        params: { sessionId: SESS_ID },
+      }, "q:command_ack");
+
+      expect(res.id).toBe("cmd-stop-1");
+      expect(res.accepted).toBe(true);
+
+      // Verify session status changed to idle
+      const sessionRow = testDb.prepare(
+        "SELECT status FROM sessions WHERE id = ?"
+      ).get(SESS_ID) as { status: string };
+      expect(sessionRow.status).toBe("idle");
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("returns rejected ack for unknown command", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      const res = await sendAndReceive(ws, {
+        type: "q:command",
+        id: "cmd-err",
+        command: "destroyEverything",
+        params: {},
+      }, "q:command_ack");
+
+      expect(res.id).toBe("cmd-err");
+      expect(res.accepted).toBe(false);
+      expect(res.error).toContain("Unknown command");
+    } finally {
+      ws.close();
+    }
+  });
+
+  it("pushes workspace delta after sendMessage command", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      // Subscribe to workspaces
+      await sendAndReceive(ws, {
+        type: "q:subscribe",
+        id: "sub_ws_delta",
+        resource: "workspaces",
+      }, "q:snapshot");
+
+      // Send message via q:command — triggers invalidation with sessionId context
+      const deltaPromise = waitForMessage(ws, "q:delta");
+      ws.send(JSON.stringify({
+        type: "q:command",
+        id: "cmd-delta-1",
+        command: "sendMessage",
+        params: { sessionId: SESS_ID, content: "delta check" },
+      }));
+
+      // Wait for both the command ack and the delta push
+      const [ack, delta] = await Promise.all([
+        waitForMessage(ws, "q:command_ack"),
+        deltaPromise,
+      ]);
+
+      expect(ack.accepted).toBe(true);
+      expect(delta.id).toBe("sub_ws_delta");
+      expect(delta.upserted).toHaveLength(1);
+      expect(delta.upserted[0].id).toBe(WS_ID);
+      expect(delta.upserted[0].session_status).toBe("working");
     } finally {
       ws.close();
     }

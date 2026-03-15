@@ -10,7 +10,7 @@
  * 2. Rust backend.rs parses the prefix and emits Tauri event "workspace:progress"
  * 3. This hook receives the event and invalidates workspace queries
  *
- * Memory leak prevention: Stores promise (not unlisten fn) — same pattern as useSessionEvents.
+ * Memory leak prevention: Stores promise (not unlisten fn) — same pattern as other Tauri listeners.
  */
 
 import { useEffect } from "react";

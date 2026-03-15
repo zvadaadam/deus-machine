@@ -28,7 +28,7 @@ const TAURI_PORT_RETRY_DELAY_MS = 200;
  * failed invoke permanently caches port 3333, causing all API requests to
  * hit the wrong port and leaving the window hidden.
  */
-async function getBackendPort(): Promise<number> {
+export async function getBackendPort(): Promise<number> {
   if (cachedPort !== null) {
     return cachedPort;
   }
