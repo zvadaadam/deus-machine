@@ -2782,3 +2782,7 @@ wanna udnertandf we shoudl be starcure the code or have more clean menaibel saur
 ---
 
 yes do it
+
+---
+
+Commit and push all changes
