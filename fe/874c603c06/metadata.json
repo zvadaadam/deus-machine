@@ -133,6 +133,12 @@
       "transcript": "/fe/874c603c06/20/full.jsonl",
       "content_hash": "/fe/874c603c06/20/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/fe/874c603c06/21/metadata.json",
+      "transcript": "/fe/874c603c06/21/full.jsonl",
+      "content_hash": "/fe/874c603c06/21/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
