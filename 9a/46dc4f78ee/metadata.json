@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "9a46dc4f78ee",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "shared/events.ts",
+    "src/features/session/api/session.queries.ts",
+    "src/features/session/hooks/useSessionActions.ts",
+    "src/features/session/ui/SessionPanel.tsx",
+    "src/platform/index.ts",
+    "src/platform/socket/index.ts",
+    "src/platform/socket/socketService.ts",
+    "src/shared/hooks/index.ts",
+    "src/shared/hooks/useSocket.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9a/46dc4f78ee/0/metadata.json",
+      "transcript": "/9a/46dc4f78ee/0/full.jsonl",
+      "content_hash": "/9a/46dc4f78ee/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
