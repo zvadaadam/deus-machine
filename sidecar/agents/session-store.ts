@@ -53,7 +53,7 @@ export class SessionStore<T> {
    * different object — the caller's finally/catch block must NOT touch it.
    */
   owns(id: string, ref: T): boolean {
-    const current = this.sessions.get(id);
-    return !current || current === ref;
+    if (!this.sessions.has(id)) return true;
+    return this.sessions.get(id) === ref;
   }
 }
