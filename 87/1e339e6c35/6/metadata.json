@@ -1,7 +1,9 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "871e339e6c35",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
   "strategy": "manual-commit",
+  "created_at": "2026-03-15T21:47:23.913281Z",
   "branch": "zvadaadam/ws-protocol-v3",
   "checkpoints_count": 2,
   "files_touched": [
@@ -41,55 +43,26 @@
     "sidecar/test/query-lifecycle.test.ts",
     "sidecar/test/shell-env.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/87/1e339e6c35/0/metadata.json",
-      "transcript": "/87/1e339e6c35/0/full.jsonl",
-      "content_hash": "/87/1e339e6c35/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/1/metadata.json",
-      "transcript": "/87/1e339e6c35/1/full.jsonl",
-      "content_hash": "/87/1e339e6c35/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/2/metadata.json",
-      "transcript": "/87/1e339e6c35/2/full.jsonl",
-      "content_hash": "/87/1e339e6c35/2/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/3/metadata.json",
-      "transcript": "/87/1e339e6c35/3/full.jsonl",
-      "content_hash": "/87/1e339e6c35/3/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/4/metadata.json",
-      "transcript": "/87/1e339e6c35/4/full.jsonl",
-      "content_hash": "/87/1e339e6c35/4/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/5/metadata.json",
-      "transcript": "/87/1e339e6c35/5/full.jsonl",
-      "content_hash": "/87/1e339e6c35/5/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/87/1e339e6c35/6/metadata.json",
-      "transcript": "/87/1e339e6c35/6/full.jsonl",
-      "content_hash": "/87/1e339e6c35/6/content_hash.txt",
-      "prompt": "/87/1e339e6c35/6/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "667ca9b7ae92",
   "token_usage": {
     "input_tokens": 16217,
     "cache_creation_tokens": 1463297,
     "cache_read_tokens": 102693438,
     "output_tokens": 153197,
     "api_call_count": 394
+  },
+  "session_metrics": {
+    "turn_count": 54
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T21:47:19.695321Z",
+    "agent_lines": 900,
+    "human_added": 2,
+    "human_modified": 8,
+    "human_removed": 0,
+    "total_committed": 910,
+    "agent_percentage": 98.9010989010989
   }
 }
