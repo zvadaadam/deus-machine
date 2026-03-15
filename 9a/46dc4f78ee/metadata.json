@@ -105,6 +105,12 @@
       "transcript": "/9a/46dc4f78ee/14/full.jsonl",
       "content_hash": "/9a/46dc4f78ee/14/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/9a/46dc4f78ee/15/metadata.json",
+      "transcript": "/9a/46dc4f78ee/15/full.jsonl",
+      "content_hash": "/9a/46dc4f78ee/15/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
