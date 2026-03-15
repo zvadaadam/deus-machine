@@ -1,0 +1,61 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "0cb4efd2636b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/app.ts",
+    "backend/src/routes/notify.ts",
+    "backend/test/unit/routes/notify.test.ts",
+    "shared/events.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/claude/message-processor.ts",
+    "sidecar/agents/cli-discovery.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/agents/query-lifecycle.ts",
+    "sidecar/build.ts",
+    "sidecar/db/backend-notifier.ts",
+    "sidecar/db/index.ts",
+    "sidecar/db/schema.ts",
+    "sidecar/db/session-writer.ts",
+    "sidecar/index.ts",
+    "sidecar/test/claude-handler.test.ts",
+    "sidecar/test/cli-discovery.test.ts",
+    "sidecar/test/e2e.test.ts",
+    "sidecar/test/message-processor.test.ts",
+    "sidecar/test/query-lifecycle.test.ts",
+    "sidecar/test/session-writer.test.ts",
+    "src-tauri/src/commands/mod.rs",
+    "src-tauri/src/commands/socket.rs",
+    "src-tauri/src/lib.rs",
+    "src-tauri/src/main.rs",
+    "src-tauri/src/sidecar.rs",
+    "src-tauri/src/socket.rs",
+    "src/features/browser/automation/useBrowserRpcHandler.ts",
+    "src/features/session/hooks/useAgentRpcHandler.ts",
+    "src/features/session/ui/AgentOverlays.stories.tsx",
+    "src/features/session/ui/AgentQuestionOverlay.tsx",
+    "src/features/session/ui/SessionPanel.tsx",
+    "src/features/simulator/automation/useSimulatorRpcHandler.ts",
+    "src/platform/socket/socketService.ts",
+    "src/shared/hooks/useSocket.ts",
+    "src/shared/hooks/useWsToolRequest.ts",
+    "test/unit/shared/events.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0c/b4efd2636b/0/metadata.json",
+      "transcript": "/0c/b4efd2636b/0/full.jsonl",
+      "content_hash": "/0c/b4efd2636b/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
