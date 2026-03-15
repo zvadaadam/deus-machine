@@ -248,7 +248,8 @@ export class CodexAgentHandler implements AgentHandler {
             const blocks = mapItemToContentBlocks(e.item);
             if (blocks.length === 0) return;
 
-            const msgId = `codex-${e.item.id}-${e.type}`;
+            // Stable ID per item — same across started/updated/completed phases
+            const msgId = `codex-${e.item.id}`;
 
             // Send real-time update to frontend (every event, not just completed)
             EventBroadcaster.sendMessage({
@@ -265,20 +266,19 @@ export class CodexAgentHandler implements AgentHandler {
               },
             });
 
-            // Dual-write: emit canonical message.assistant event
-            EventBroadcaster.emitAssistantMessage(
-              sessionId,
-              "codex",
-              {
-                id: msgId,
-                role: "assistant",
-                content: blocks,
-              },
-              model
-            );
-
-            // No local DB writes — the backend persists completed items
-            // via canonical message.assistant events emitted above.
+            // Only emit canonical event on item.completed to avoid duplicate DB records
+            if (e.type === "item.completed") {
+              EventBroadcaster.emitAssistantMessage(
+                sessionId,
+                "codex",
+                {
+                  id: msgId,
+                  role: "assistant",
+                  content: blocks,
+                },
+                model
+              );
+            }
           })
           .with({ type: "turn.completed" }, (e) => {
             console.log(
@@ -328,10 +328,9 @@ export class CodexAgentHandler implements AgentHandler {
         if (abortController.signal.aborted) {
           // Abort break path: notify frontend + emit canonical events
           handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
-        } else if (session.isRunning) {
-          // Normal completion if turn.completed wasn't received
-          EventBroadcaster.emitSessionIdle(sessionId, "codex");
         }
+        // Note: no fallback idle emission here — turn.completed already emits it.
+        // Emitting again would give the backend duplicate terminal lifecycle events.
       }
 
       console.log(`[${queryId}] Codex session completed: ${sessionId}`);

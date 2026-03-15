@@ -78,9 +78,14 @@ impl SidecarManager {
                     // Parse agent-server URL from LISTEN_URL=ws://... format
                     if line.starts_with("LISTEN_URL=") {
                         if let Some(path_str) = line.strip_prefix("LISTEN_URL=") {
+                            let candidate = path_str.trim();
+                            if candidate.is_empty() {
+                                eprintln!("[SIDECAR] Ignoring empty LISTEN_URL");
+                                continue;
+                            }
                             let mut listen_url = listen_url_clone.lock().unwrap();
-                            *listen_url = Some(path_str.to_string());
-                            println!("[SIDECAR] Detected listen URL: {}", path_str);
+                            *listen_url = Some(candidate.to_string());
+                            println!("[SIDECAR] Detected listen URL: {}", candidate);
                         }
                     }
                 }
@@ -130,6 +135,8 @@ impl SidecarManager {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
+        // Timeout: tear down the stale child process before bailing
+        let _ = self.stop();
         anyhow::bail!(
             "Sidecar did not emit LISTEN_URL within 10 seconds. \
              Check /tmp/opendevs-*.log for details."

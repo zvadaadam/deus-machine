@@ -42,9 +42,9 @@ import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
  * output, or encoding issues can produce invalid JSON. This wrapper
  * throws a descriptive error instead of the raw SyntaxError.
  */
-function safeParseWebviewJson(raw: string): unknown {
+function safeParseWebviewJson<T = Record<string, unknown>>(raw: string): T {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as T;
   } catch {
     const preview = raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
     throw new Error(`Malformed JSON from webview: ${preview}`);
@@ -59,8 +59,9 @@ function safeParseWebviewJson(raw: string): unknown {
 async function playCursorEffect(label: string, effectJs: string): Promise<void> {
   try {
     const result = await evalWithResult(label, effectJs, 3000);
-    const { duration } = safeParseWebviewJson(result);
-    if (duration > 0) await new Promise((r) => setTimeout(r, duration));
+    const parsed = safeParseWebviewJson<{ duration?: number }>(result);
+    if (parsed.duration && parsed.duration > 0)
+      await new Promise((r) => setTimeout(r, parsed.duration));
   } catch {
     /* visual effects are non-critical */
   }

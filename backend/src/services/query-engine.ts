@@ -367,8 +367,9 @@ function handleToolResponse(msg: QueryParams): void {
     return;
   }
 
-  if (typeof msg.error === "string") {
-    const resolved = rejectToolRelay(requestId, msg.error);
+  if ("error" in msg && msg.error !== undefined) {
+    const errorStr = typeof msg.error === "string" ? msg.error : JSON.stringify(msg.error);
+    const resolved = rejectToolRelay(requestId, errorStr);
     if (!resolved) {
       console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId} (error)`);
     }
