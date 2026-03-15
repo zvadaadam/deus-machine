@@ -3,7 +3,7 @@
   "checkpoint_id": "d8d03cd94975",
   "strategy": "manual-commit",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 9,
+  "checkpoints_count": 10,
   "files_touched": [
     "backend/src/services/agent-client.ts",
     "backend/src/services/query-engine.ts",
@@ -95,13 +95,19 @@
       "transcript": "/d8/d03cd94975/12/full.jsonl",
       "content_hash": "/d8/d03cd94975/12/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/d8/d03cd94975/13/metadata.json",
+      "transcript": "/d8/d03cd94975/13/full.jsonl",
+      "content_hash": "/d8/d03cd94975/13/content_hash.txt",
+      "prompt": "/d8/d03cd94975/13/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 16109,
+    "input_tokens": 16112,
     "cache_creation_tokens": 1382722,
-    "cache_read_tokens": 86337209,
-    "output_tokens": 129986,
-    "api_call_count": 330
+    "cache_read_tokens": 86370944,
+    "output_tokens": 129992,
+    "api_call_count": 331
   }
 }
