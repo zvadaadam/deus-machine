@@ -1,24 +1,13 @@
 // src/features/browser/automation/useBrowserRpcHandler.ts
-// Handles browser automation RPC requests from the sidecar.
+// Handles browser automation RPC requests from the agent-server.
 //
-// Architecture (dual path during transition):
-//   Path 1 (Tauri): Sidecar → Rust socket relay → "sidecar:request" Tauri event → this handler
-//                    Handler executes JS in webview via evalWithResult → sends response back via socket
-//   Path 2 (WS):    Agent-server → Backend → q:event tool:request → this handler
-//                    Handler executes JS in webview → sends q:tool_response back via WS
-//
-// Both paths are active simultaneously during transition.
+// Architecture:
+//   Agent-server → Backend → q:event tool:request → this handler
+//   Handler executes JS in webview via evalWithResult → sends q:tool_response back via WS
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import {
-  invoke,
-  listen,
-  isTauriEnv,
-  SIDECAR_REQUEST,
-  BROWSER_PAGE_LOAD,
-  BROWSER_URL_CHANGE,
-} from "@/platform/tauri";
+import { invoke, listen, BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { evalWithResult } from "./eval-with-result";
 import {
@@ -45,11 +34,7 @@ import {
   KEY_FLASH_JS,
 } from "./visual-effects";
 import type { BrowserTabState } from "../types";
-import {
-  useWsToolRequest,
-  markRequestHandled,
-  isRequestHandled,
-} from "@/shared/hooks/useWsToolRequest";
+import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 
 /**
  * Safely parse JSON from webview evalWithResult responses.
@@ -204,20 +189,6 @@ export function useBrowserRpcHandler(
     autoCreatePendingRef.current = null;
     prevWorkspaceIdRef.current = workspaceId;
   }, [workspaceId]);
-
-  // Tauri-path response helper
-  const sendTauriResponse = useCallback(async (id: unknown, result: unknown) => {
-    const response = JSON.stringify({
-      jsonrpc: "2.0",
-      result,
-      id,
-    });
-    try {
-      await invoke("send_sidecar_message", { message: response });
-    } catch (err) {
-      console.error("[BrowserRPC] Failed to send response:", err);
-    }
-  }, []);
 
   const resolveWebviewLabel = useCallback(
     (requestedLabel?: string, sessionId?: string): string | null => {
@@ -957,35 +928,7 @@ export function useBrowserRpcHandler(
   );
 
   // ============================================================================
-  // Tauri event listener (Path 1: sidecar → Rust → Tauri event)
-  // ============================================================================
-
-  useEffect(() => {
-    if (!isTauriEnv) return;
-
-    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
-      const { id, method, params } = event.payload;
-
-      // Skip if WS path already handled this request
-      if (typeof id === "string" && isRequestHandled(id)) return;
-
-      if (import.meta.env.DEV) {
-        console.log("[BrowserRPC] Received request (Tauri):", method);
-      }
-
-      // Mark as handled to prevent WS path from also responding
-      if (typeof id === "string") markRequestHandled(id);
-
-      dispatchBrowserMethod(method, id, params, sendTauriResponse);
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [dispatchBrowserMethod, sendTauriResponse]);
-
-  // ============================================================================
-  // WS event listener (Path 2: agent-server → backend → q:event tool:request)
+  // WS event listener (agent-server → backend → q:event tool:request)
   // ============================================================================
 
   useWsToolRequest((method, requestId, params, respond, _respondError) => {

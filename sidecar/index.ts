@@ -33,8 +33,6 @@ import { WebSocketServer, WebSocket } from "ws";
 import { getErrorMessage } from "../shared/lib/errors";
 import { RpcConnection, wsTransport } from "./rpc-connection";
 import { FrontendClient } from "./frontend-client";
-import { closeDatabase } from "./db/index";
-import { reconcileStuckSessions, saveUserMessage, updateSessionStatus } from "./db/session-writer";
 import { classifyError } from "./agents/error-classifier";
 import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
@@ -180,29 +178,12 @@ class UnifiedSidecar {
         return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
       }
 
-      // Atomically persist user message + set status='working' before dispatching agent.
-      // If the DB write fails, nothing is persisted and the frontend gets a clean rejection.
-      const writeResult = saveUserMessage(
-        request.id,
-        request.prompt,
-        request.options.model || "opus"
-      );
-      if (!writeResult.ok) {
-        // Emit queryError notification so callers that sent a JSON-RPC notification
-        // (no id → return value is silently dropped) still receive the error.
-        FrontendClient.sendError({
-          id: request.id,
-          type: "error",
-          error: writeResult.error,
-          agentType: request.agentType,
-          category: "internal",
-        });
-        return { accepted: false, reason: `Failed to save message: ${writeResult.error}` };
-      }
-
+      // The backend saves the user message BEFORE forwarding turn/start to the
+      // agent-server. The agent-server just receives the query and starts the SDK.
       agent.query(request.id, request.prompt, request.options).catch((err) => {
         console.error(`[QUERY] Unhandled error in ${request.agentType} query:`, err);
-        // Recover: update session status so it doesn't stay stuck in "working".
+        // Recover: notify frontend of the error. The backend handles DB status updates
+        // via canonical events (session.error).
         const classified = classifyError(err);
         FrontendClient.sendError({
           id: request.id,
@@ -211,7 +192,12 @@ class UnifiedSidecar {
           agentType: request.agentType,
           category: classified.category,
         });
-        updateSessionStatus(request.id, "error", classified.message, classified.category);
+        FrontendClient.emitSessionError(
+          request.id,
+          request.agentType,
+          classified.message,
+          classified.category
+        );
       });
 
       // Dual-write: emit canonical session.started event after dispatch
@@ -395,11 +381,6 @@ class UnifiedSidecar {
 
   private async cleanup(): Promise<void> {
     await this.killRemainingChildProcesses();
-    try {
-      closeDatabase();
-    } catch (err) {
-      console.error("[CLEANUP] Failed to close database:", err);
-    }
 
     // Clean up Unix socket
     if (fs.existsSync(this.socketPath)) {
@@ -446,14 +427,6 @@ class UnifiedSidecar {
       } else {
         console.log(`${agentType} handler initialized successfully`);
       }
-    }
-
-    // Reset sessions stuck in "working" status from a previous sidecar lifecycle.
-    // Must run after DB is initialized (getDatabase auto-inits) but before
-    // accepting connections, so no race with incoming queries.
-    const reconcileResult = reconcileStuckSessions();
-    if (!reconcileResult.ok) {
-      console.error(`Failed to reconcile stuck sessions: ${reconcileResult.error}`);
     }
 
     if (this.transportMode === "ws") {

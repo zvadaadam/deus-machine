@@ -1,7 +1,8 @@
 // sidecar/agents/codex/codex-handler.ts
 // CodexAgentHandler — implements AgentHandler for the OpenAI Codex SDK.
-// Mirrors the Claude handler architecture: streaming events, DB persistence,
-// frontend notifications via FrontendClient.
+// Mirrors the Claude handler architecture: streaming events, canonical event
+// emission, and frontend notifications via FrontendClient.
+// The agent-server is stateless — all DB writes handled by the backend.
 
 // Type-only imports are erased at compile time — safe for CJS bundling.
 // The runtime Codex class is loaded via dynamic import() in processQuery()
@@ -12,7 +13,6 @@ import { match, P } from "ts-pattern";
 import { FrontendClient } from "../../frontend-client";
 import { classifyError } from "../error-classifier";
 import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
-import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
 import { buildWorkspaceContext } from "../workspace-context";
@@ -283,23 +283,8 @@ export class CodexAgentHandler implements AgentHandler {
               model
             );
 
-            // Persist completed items to database
-            if (e.type === "item.completed") {
-              const writeResult = saveAssistantMessage(
-                sessionId,
-                {
-                  id: `codex-${e.item.id}`,
-                  role: "assistant",
-                  content: blocks,
-                },
-                model
-              );
-              if (!writeResult.ok) {
-                console.error(
-                  `[${queryId}] DB write failed for assistant message: ${writeResult.error}`
-                );
-              }
-            }
+            // No local DB writes — the backend persists completed items
+            // via canonical message.assistant events emitted above.
           })
           .with({ type: "turn.completed" }, (e) => {
             console.log(
@@ -317,10 +302,9 @@ export class CodexAgentHandler implements AgentHandler {
               },
             });
 
-            // Dual-write: emit canonical message.result event
+            // Emit canonical events — backend handles DB status update
             FrontendClient.emitMessageResult(sessionId, "codex", "success", e.usage);
-
-            updateSessionStatus(sessionId, "idle");
+            FrontendClient.emitSessionIdle(sessionId, "codex");
           })
           .with({ type: "turn.failed" }, (e) => {
             const classified = classifyError(e.error);
@@ -349,11 +333,11 @@ export class CodexAgentHandler implements AgentHandler {
       const currentSession = getCodexSession(sessionId);
       if (currentSession === session) {
         if (abortController.signal.aborted) {
-          // Abort break path: record cancellation + notify frontend + set idle
+          // Abort break path: notify frontend + emit canonical events
           persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
         } else if (currentSession.isRunning) {
           // Normal completion if turn.completed wasn't received
-          updateSessionStatus(sessionId, "idle");
+          FrontendClient.emitSessionIdle(sessionId, "codex");
         }
       }
 

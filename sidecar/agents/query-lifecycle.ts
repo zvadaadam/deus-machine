@@ -1,25 +1,24 @@
 // sidecar/agents/query-lifecycle.ts
-// Shared query lifecycle side effects: cancellation persistence and error
+// Shared query lifecycle side effects: cancellation notification and error
 // reporting. These are the state-transition operations that every agent
 // handler needs at the edges of its streaming loop (cancel, error, cleanup).
 //
-// Extracted from duplicate code across claude-handler.ts (2 copies) and
-// codex-handler.ts (2 copies). Each handler calls these at the right point
-// in its own control flow — no base class, no template method.
+// The agent-server is stateless — no DB writes. The backend persists session
+// status changes by consuming canonical events via the WS tunnel.
 
 import { FrontendClient } from "../frontend-client";
-import { saveAssistantMessage, updateSessionStatus } from "../db/session-writer";
 import type { ClassifiedError } from "./error-classifier";
 import type { AgentType } from "../protocol";
 import type { ErrorCategory } from "../../shared/enums";
 
 // ============================================================================
-// Cancellation Persistence
+// Cancellation Notification
 // ============================================================================
 
 /**
- * Persists a cancellation event: saves a cancelled assistant message to DB,
- * notifies the frontend, and updates session status to idle.
+ * Notifies all connected tunnels of a cancellation event and emits canonical
+ * session lifecycle events. The backend handles DB persistence (saving the
+ * cancelled message and updating session status to idle).
  *
  * This identical sequence was duplicated 4 times across both handlers:
  * - claude-handler.ts post-loop cancel path
@@ -27,23 +26,7 @@ import type { ErrorCategory } from "../../shared/enums";
  * - codex-handler.ts post-loop abort path
  * - codex-handler.ts catch abort path
  */
-export function persistCancellation(sessionId: string, agentType: AgentType, model: string): void {
-  const writeResult = saveAssistantMessage(
-    sessionId,
-    {
-      role: "assistant",
-      content: [{ type: "text", text: "" }],
-      stop_reason: "cancelled",
-    },
-    model
-  );
-
-  if (!writeResult.ok) {
-    console.error(
-      `[persistCancellation] DB write failed for cancelled message: ${writeResult.error}`
-    );
-  }
-
+export function persistCancellation(sessionId: string, agentType: AgentType, _model: string): void {
   FrontendClient.sendMessage({
     id: sessionId,
     type: "message",
@@ -51,21 +34,9 @@ export function persistCancellation(sessionId: string, agentType: AgentType, mod
     data: { type: "cancelled" },
   });
 
-  // Dual-write: emit canonical session.cancelled + message.cancelled events
+  // Emit canonical session lifecycle events — backend handles DB writes
   FrontendClient.emitSessionCancelled(sessionId, agentType);
   FrontendClient.emitMessageCancelled(sessionId, agentType);
-
-  const statusResult = updateSessionStatus(sessionId, "idle");
-
-  if (!statusResult.ok) {
-    FrontendClient.sendError({
-      id: sessionId,
-      type: "error",
-      error: `Session status update failed: ${statusResult.error}`,
-      agentType,
-      category: "db_write",
-    });
-  }
 }
 
 // ============================================================================
@@ -73,7 +44,8 @@ export function persistCancellation(sessionId: string, agentType: AgentType, mod
 // ============================================================================
 
 /**
- * Reports a classified error to the frontend and updates session status.
+ * Reports a classified error to the frontend and emits canonical session.error.
+ * The backend handles persisting the error status to the DB.
  *
  * The optional `enrichMessage` callback allows handler-specific enrichment
  * without modifying this shared function (Open/Closed). Claude uses it
@@ -96,24 +68,11 @@ export function notifyAndRecordError(
     category: classified.category,
   });
 
-  // Dual-write: emit canonical session.error event
+  // Emit canonical session.error event — backend handles DB status update
   FrontendClient.emitSessionError(
     sessionId,
     agentType,
     errorMessage,
     classified.category as ErrorCategory
   );
-
-  const statusResult = updateSessionStatus(sessionId, "error", errorMessage, classified.category);
-
-  // If the status update itself fails, the session is stuck — notify frontend
-  if (!statusResult.ok) {
-    FrontendClient.sendError({
-      id: sessionId,
-      type: "error",
-      error: `Session status update failed: ${statusResult.error}`,
-      agentType,
-      category: "db_write",
-    });
-  }
 }

@@ -14,8 +14,14 @@ import {
   processMessage,
   type ProcessMessageOptions,
 } from "./message-processor";
-import { lookupAgentSessionId } from "../../db/session-writer";
-import type { AgentCapabilities, AgentHandler, AuthParams, ContextUsageParams, InitWorkspaceParams, QueryOptions } from "../agent-handler";
+import type {
+  AgentCapabilities,
+  AgentHandler,
+  AuthParams,
+  ContextUsageParams,
+  InitWorkspaceParams,
+  QueryOptions,
+} from "../agent-handler";
 import { buildAgentEnvironment, parseEnvString } from "../env-builder";
 import {
   initializeClaude,
@@ -133,9 +139,7 @@ export class ClaudeAgentHandler implements AgentHandler {
             const updatedSession = getSession(sessionId);
             if (updatedSession) updatedSession.currentModel = options.model;
           } catch (error) {
-            console.error(
-              `Failed to update model: ${getErrorMessage(error)}`
-            );
+            console.error(`Failed to update model: ${getErrorMessage(error)}`);
           }
         }
       }
@@ -147,9 +151,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
           session.currentMaxThinkingTokens = options.maxThinkingTokens;
         } catch (error) {
-          console.error(
-            `Failed to update maxThinkingTokens: ${getErrorMessage(error)}`
-          );
+          console.error(`Failed to update maxThinkingTokens: ${getErrorMessage(error)}`);
         }
       }
 
@@ -158,9 +160,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         try {
           await query.setPermissionMode(options.permissionMode as PermissionMode);
         } catch (error) {
-          console.error(
-            `Failed to update permission mode: ${getErrorMessage(error)}`
-          );
+          console.error(`Failed to update permission mode: ${getErrorMessage(error)}`);
         }
       }
 
@@ -284,9 +284,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         await existingQuery.setPermissionMode(permissionMode as PermissionMode);
         console.log(`Permission mode updated to ${permissionMode} for session ${sessionId}`);
       } catch (error) {
-        console.error(
-          `Failed to update permission mode: ${getErrorMessage(error)}`
-        );
+        console.error(`Failed to update permission mode: ${getErrorMessage(error)}`);
       }
     }
   }
@@ -439,24 +437,8 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[TIMING][${generatorId}] buildAgentEnvironment took ${Date.now() - tEnvStart}ms`
       );
 
-      // Auto-inject resume for session continuity after sidecar restart.
-      // If no explicit resume was provided and a previous agent_session_id
-      // exists in the DB, inject it so the SDK resumes the conversation
-      // with full context (message history, tool state).
-      // Skip when shouldResetGenerator is true — the user explicitly wants a clean start.
-      const tResumeStart = Date.now();
-      if (!options.resume && !options.shouldResetGenerator) {
-        const savedAgentSessionId = lookupAgentSessionId(sessionId);
-        if (savedAgentSessionId) {
-          console.log(
-            `[${generatorId}] Auto-resuming session with agent_session_id ${savedAgentSessionId}`
-          );
-          options = { ...options, resume: savedAgentSessionId };
-        }
-      }
-      console.log(
-        `[TIMING][${generatorId}] resumeLookup took ${Date.now() - tResumeStart}ms resume=${!!options.resume} resumeId=${options.resume ?? "none"}`
-      );
+      // Resume is now passed in turn/start params from the backend (which owns the DB
+      // and knows the agent_session_id). The agent-server is stateless — no DB lookups.
       if (options.resume) {
         console.log(
           `[RESUME-DEBUG][${generatorId}] Attempting resume with agent_session_id=${options.resume} for session=${sessionId}`
@@ -558,17 +540,20 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       const classified = classifyError(error);
       const errorName = error instanceof Error ? error.name : "non-Error";
-      const errorStack = error instanceof Error
-        ? error.stack?.split("\n").slice(0, 5).join("\n")
-        : "no stack";
-      const extraProps = error instanceof Error
-        ? Object.getOwnPropertyNames(error)
-            .filter((k) => !["message", "stack", "name"].includes(k))
-            .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
-            .join(" ")
-        : "";
+      const errorStack =
+        error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : "no stack";
+      const extraProps =
+        error instanceof Error
+          ? Object.getOwnPropertyNames(error)
+              .filter((k) => !["message", "stack", "name"].includes(k))
+              .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
+              .join(" ")
+          : "";
 
-      console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
+      console.error(
+        `[${generatorId}] Error in Claude query [${classified.category}]:`,
+        classified.message
+      );
       console.error(
         `[${generatorId}] Error details:`,
         `name=${errorName}`,
@@ -576,7 +561,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         `resumeId=${options.resume ?? "none"}`,
         `querySucceeded=${ctx.querySucceeded}`,
         `messageCount=${ctx.messageCount}`,
-        extraProps ? `extraProps={${extraProps}}` : "extraProps={}",
+        extraProps ? `extraProps={${extraProps}}` : "extraProps={}"
       );
       console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
 
