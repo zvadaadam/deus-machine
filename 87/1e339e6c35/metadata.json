@@ -1,0 +1,59 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "871e339e6c35",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/agent-handler.ts",
+    "sidecar/agents/agent-types.ts",
+    "sidecar/agents/claude/claude-discovery.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/claude/claude-sdk-options.ts",
+    "sidecar/agents/claude/claude-session.ts",
+    "sidecar/agents/claude/message-processor.ts",
+    "sidecar/agents/cli-discovery.ts",
+    "sidecar/agents/codex/codex-discovery.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/agents/env-builder.ts",
+    "sidecar/agents/environment/cli-discovery.ts",
+    "sidecar/agents/environment/env-builder.ts",
+    "sidecar/agents/environment/index.ts",
+    "sidecar/agents/environment/shell-env.ts",
+    "sidecar/agents/environment/workspace-context.ts",
+    "sidecar/agents/error-classifier.ts",
+    "sidecar/agents/lifecycle.ts",
+    "sidecar/agents/query-completion.ts",
+    "sidecar/agents/query-lifecycle.ts",
+    "sidecar/agents/registry.ts",
+    "sidecar/agents/shell-env.ts",
+    "sidecar/agents/workspace-context.ts",
+    "sidecar/health.ts",
+    "sidecar/index.ts",
+    "sidecar/test/agent-handler.test.ts",
+    "sidecar/test/claude-handler.test.ts",
+    "sidecar/test/cli-discovery.test.ts",
+    "sidecar/test/env-builder.test.ts",
+    "sidecar/test/error-classifier.test.ts",
+    "sidecar/test/health.test.ts",
+    "sidecar/test/message-processor.test.ts",
+    "sidecar/test/query-completion.test.ts",
+    "sidecar/test/query-lifecycle.test.ts",
+    "sidecar/test/shell-env.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/87/1e339e6c35/0/metadata.json",
+      "transcript": "/87/1e339e6c35/0/full.jsonl",
+      "content_hash": "/87/1e339e6c35/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
