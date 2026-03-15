@@ -1,0 +1,181 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/kyoto directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately, before using any skills or any other tools:
+
+Rename the branch using `git branch -m`. Do not check the current branch name.
+
+Only do this once per session. If the branch has already been renamed, leave it.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+if you look at the backend and the sidecar why we have it seprate why not to have it as singe thing togthr wdyt? epxlore
+
+also look with suagents hiw OpenDevs, Codex and T3 and if we shoudl leanr somethign to to beter tstcure it so we dont have unsecarity super compelxity here: 
+
+OpenDevs - /Applications/OpenDevs.app
+
+Codex - /Applications/Codex.app/
+
+OpenDevs - /Users/zvada/conductor/workspaces/t3code/doha-v3
+
+---
+
+can u explore this?
+
+2. WebSocket > HTTP for real-time (Codex + T3 pattern)
+
+Both Codex and T3 use WebSocket as primary transport, not HTTP + polling
+Our query:invalidate event pipeline is a workaround for not having WebSocket push
+WebSocket would simplify: no polling budget, no stale time management, instant updates
+
+4. Provider adapter registry (from T3)
+
+Clean pattern for multiple AI providers instead of scattered if/else
+Each provider implements a standard interface
+Makes adding new providers (Gemini, local models) straightforward
+5. Event sourcing for session state (from T3 + Codex)
+
+Both use append-only event logs instead of mutable DB rows
+Enables replay, audit, fork/resume
+Natural undo/redo for agent actions
+
+---
+
+and also epxlia it to them what wudl change. rember we also have teh remote push of teh data u know
+
+---
+
+i want you to think if we shoudl do these moves, we wana build roboust menaitabe and waswesm product for runing parrel multiepla egnst and eten ddo run swarms of agnets what do u thin shoudlw e do these moves epxlore if base don codeba sealso
+
+---
+
+let's now focus on the websocek tnow only, tell me what is teh protcol in the other apps t3 or codex, wdyt about our protocl?
+
+sit it good?
+
+---
+
+so explore the impemnation of the 2baockt on the frontend and do it
+
+---
+
+can can we reve some endpointd wdyt?
+
+---
+
+can we remove some stuff we now dont need?
+
+---
+
+but we always need the ws fro the the clodu replay u know? right we wana remove the suttf from frotnend (maybe abckend ) whcha re not need since w emove to the websocke tcomuncation
+
+---
+
+hiw can we dont need the queyr ivaldiate anyore?????
+
+---
+
+i just wana undertadn what wa chnaged and hwo t now work
+
+---
+
+and can we delete teh not needed HTTP call then which were used to be sued wdyt?
+
+we still use some https calls right wdyt? also how now send mesage works?
+
+---
+
+and aint taht anti pattern in our project now use the unix for teh senmesage epxore thes eprojetc: OpenDevs - /Applications/OpenDevs.app
+
+Codex - /Applications/Codex.app/
+
+OpenDevs - /Users/zvada/conductor/workspaces/t3code/doha-v3
+
+---
+
+yes, amke sense so let's explore and plan hwo to exactly do the way to replce teh tarui evenst with ws susbciton for the sessionand mesages sow e compelx the mingaion of ws
+
+---
+
+yes
+
+---
+
+it would be nice to drop the tauri vents form the whole system dow e use them smowehre else?
+
+---
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/kyoto/.context/attachments/pasted_text_2026-03-15_02-01-34.txt (19.6 KB)
+</system_instruction>
+
+
+
+okey and wdyt about the ws portocl i feel lie when send a mesage to big stuff very exlore flow throughr ir expore, aint hhta overnerning?
+
+---
+
+i think the delats makes more sense, and in this portocl if a new mesage is creatd how do we comnicate it liek anew ifled in the db or somethign and are there some nice eveny types ?
+
+---
+
+we designed the protocol primarly do the databse changes u know (probaly based on convex right?)
+
+but i feel like once we'll introduce some events maybe we'll miss the typed events?
+
+---
+
+i wana do it here but i wnat you to plan this and also think if the q:event make sense and if these thigs are not overly complex(i hope) not thin abotu this reserach explore Codex and T3 code, undertand taht we're budlign the backend/sidecar the way so it cna connect to the desktop app but also cloud web thoughr relay (cloud will also will send action stuff u know, liek send message which wil be exatucre - but this we dont code now just wana haveit in mind)
+
+---
+
+but to send a mesage it's not a mutation right, it's mor eliek an axtion simsialr to codex or t3 that tehy send tehre an action liek send mesage rught? epxlore
+
+---
+
+I just want to think again, like having a one web socket for all of these things, shouldn't we maybe split that we have a database web socket And another web socket for the advanced or the communication with the AI. I'm not sure, like, what do you think, Explorer? Like, we have some insights from the T3 code and the Codex. What do you think?
+
+---
+
+Maybe in order to design it for the future use case, we want this to get right for the future and the development. And I think in the future, this sidecar will become more standard low thing. And maybe the back end will own it, right? It's weird that it's connected like this, I feel, if you explore it. So maybe the one connection would make sense. So think about also like how we're going to, we don't want to like implement something and then like change it again. So think about the long term. Once the back end will become more complex and the sidecar will be more like about the coding agents, I feel like the sidecar should not do the data storage into the database. Now you'll push it into the abstraction to the back end. wdyt? think hard
+
+---
+
+OK, so create a markdown file where you're going to describe a very detailed implementation of this protocol, how it's going to work, everything in a super big detail. And think about it, like, why are we doing it, what needs to be changed, and the super detail. Then we're going to implement it. But first do the markdown so I can read it.
+
+---
+
+let's execute the plan
+
+---
+
+Okay, awesome. I want you to review now what we have changed if any that code wasn't deleted and like just like a review and these love some stuff like because we move to a new type of architecture with the web socket. So I think there's an opportunity to, to explore it if there are any like anti patterns that code with it are not needed, simplify the code structure or improve. So it's more maintainable and stuff like that. So explore the code base and everything that touches the web socket and stuff.
+
+---
+
+OK, so can you visualize us and describe and communicate the current flow and architecture and how the communication protocols are there and all of them and with all the different like backend site, carfront and React queries, database, everything so we can visualize it and see it better and basically we changed it so I want to see it if it's all good.
+
+---
+
+Since you have this, can you think about it if everything is all right? Or in the future, we should change some stuff, improve. So it's just amazing and working correctly. What do you think?
+
+Any like anti-patterns, bad code structure could be more standardized and feel better. And during this time, like, is everything like hooked up correctly.
+
+---
+
+Okay, so do you think this is like a mergeable to the production and we will tackle the moving sidecar DB and other stuff?

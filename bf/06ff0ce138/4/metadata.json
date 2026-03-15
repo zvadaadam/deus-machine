@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "bf06ff0ce138",
+  "session_id": "8d252aae-5a2c-4acc-bd1e-dcbc8440ed7c",
   "strategy": "manual-commit",
+  "created_at": "2026-03-15T13:47:18.28226Z",
   "branch": "zvadaadam/explore-backend-sidecar",
-  "checkpoints_count": 25,
+  "checkpoints_count": 22,
   "files_touched": [
     ".claude/agent-memory/deep-reviewer/MEMORY.md",
     "backend/src/db/queries.ts",
@@ -42,43 +44,25 @@
     "test/unit/shared/events.test.ts",
     "test/unit/workspace/useQueryInvalidation.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/bf/06ff0ce138/0/metadata.json",
-      "transcript": "/bf/06ff0ce138/0/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/0/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/0/prompt.txt"
-    },
-    {
-      "metadata": "/bf/06ff0ce138/1/metadata.json",
-      "transcript": "/bf/06ff0ce138/1/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/1/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/1/prompt.txt"
-    },
-    {
-      "metadata": "/bf/06ff0ce138/2/metadata.json",
-      "transcript": "/bf/06ff0ce138/2/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/2/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/2/prompt.txt"
-    },
-    {
-      "metadata": "/bf/06ff0ce138/3/metadata.json",
-      "transcript": "/bf/06ff0ce138/3/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/3/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/3/prompt.txt"
-    },
-    {
-      "metadata": "/bf/06ff0ce138/4/metadata.json",
-      "transcript": "/bf/06ff0ce138/4/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/4/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/4/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "0628f2c46d4b",
   "token_usage": {
-    "input_tokens": 13129,
-    "cache_creation_tokens": 1469350,
-    "cache_read_tokens": 45339154,
-    "output_tokens": 119606,
-    "api_call_count": 230
+    "input_tokens": 265,
+    "cache_creation_tokens": 1246653,
+    "cache_read_tokens": 44191554,
+    "output_tokens": 101755,
+    "api_call_count": 201
+  },
+  "session_metrics": {
+    "turn_count": 22
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T13:47:16.416842Z",
+    "agent_lines": 1156,
+    "human_added": 0,
+    "human_modified": 72,
+    "human_removed": 31,
+    "total_committed": 1228,
+    "agent_percentage": 94.13680781758957
   }
 }
