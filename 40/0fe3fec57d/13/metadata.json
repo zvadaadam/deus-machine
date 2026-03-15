@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "400fe3fec57d",
+  "session_id": "d2aa6525-a782-433a-8bcc-d9c95961b7c6",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T20:18:10.78782Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/claude/claude-sdk-options.ts",
+    "sidecar/agents/claude/claude-session.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/agents/query-completion.ts",
+    "sidecar/test/session-store.test.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/codex/codex-session.ts",
+    "sidecar/agents/session-store.ts",
+    "sidecar/test/query-completion.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2fcb687552b2",
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T20:18:10.786907Z",
+    "agent_lines": 380,
+    "human_added": 0,
+    "human_modified": 14,
+    "human_removed": 2,
+    "total_committed": 394,
+    "agent_percentage": 96.44670050761421
+  }
+}
