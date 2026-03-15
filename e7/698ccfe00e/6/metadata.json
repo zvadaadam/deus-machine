@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e7698ccfe00e",
+  "session_id": "5a7d6632-c301-44da-9bf0-2b8d578d78f1",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T18:31:32.000517Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "sidecar/agents/claude/claude-sdk-options.ts",
+    "sidecar/agents/claude/message-processor.ts",
+    "sidecar/agents/cli-discovery.ts",
+    "sidecar/agents/codex/codex-handler.ts",
+    "sidecar/agents/opendevs-tools/browser.ts",
+    "sidecar/agents/opendevs-tools/simulator.ts",
+    "sidecar/agents/opendevs-tools/workspace.ts",
+    "sidecar/agents/query-lifecycle.ts",
+    "sidecar/event-broadcaster.ts",
+    "sidecar/frontend-client.ts",
+    "sidecar/index.ts",
+    "sidecar/test/claude-handler.test.ts",
+    "sidecar/test/cli-discovery.test.ts",
+    "sidecar/test/event-broadcaster.test.ts",
+    "sidecar/test/frontend-client.test.ts",
+    "sidecar/test/message-processor.test.ts",
+    "sidecar/test/opendevs-tools.test.ts",
+    "sidecar/test/query-lifecycle.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f5684fc25124",
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 24276,
+    "cache_read_tokens": 8902,
+    "output_tokens": 6,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T18:31:31.99898Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 1473,
+    "human_removed": 10,
+    "total_committed": 0,
+    "agent_percentage": 0
+  }
+}
