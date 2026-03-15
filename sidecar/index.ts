@@ -302,6 +302,71 @@ class UnifiedSidecar {
       }
     });
 
+    // --- session/stop (stop a running session) ---
+    rpcTunnel.addMethod("session/stop", async (params: any) => {
+      const sessionId = params?.sessionId;
+      if (!sessionId) return;
+
+      for (const agentType of ["claude", "codex"] as const) {
+        const agent = getAgent(agentType);
+        if (agent) void agent.cancel(sessionId);
+      }
+    });
+
+    // --- provider/auth (check agent authentication) ---
+    rpcTunnel.addMethod("provider/auth", async (params: any) => {
+      const agentType = params?.agentType || "claude";
+      const agent = getAgent(agentType);
+      if (!agent?.auth) throw new Error(`Agent "${agentType}" does not support auth`);
+      return agent.auth({ id: params?.id, cwd: params?.cwd });
+    });
+
+    // --- provider/initWorkspace (slash commands, MCP servers) ---
+    rpcTunnel.addMethod("provider/initWorkspace", async (params: any) => {
+      const agentType = params?.agentType || "claude";
+      const agent = getAgent(agentType);
+      if (!agent?.initWorkspace)
+        throw new Error(`Agent "${agentType}" does not support workspace init`);
+      return agent.initWorkspace({
+        id: params?.id,
+        cwd: params?.cwd,
+        ghToken: params?.ghToken,
+        claudeEnvVars: params?.claudeEnvVars,
+      });
+    });
+
+    // --- provider/contextUsage (token usage stats) ---
+    rpcTunnel.addMethod("provider/contextUsage", async (params: any) => {
+      const agentType = params?.agentType || "claude";
+      const agent = getAgent(agentType);
+      if (!agent?.getContextUsage)
+        throw new Error(`Agent "${agentType}" does not support context usage`);
+      return agent.getContextUsage(params);
+    });
+
+    // --- provider/updateMode (runtime permission mode change) ---
+    rpcTunnel.addMethod("provider/updateMode", (params: any) => {
+      const agentType = params?.agentType || "claude";
+      const agent = getAgent(agentType);
+      if (agent?.updatePermissionMode) {
+        void agent.updatePermissionMode(params?.sessionId, params?.permissionMode);
+      }
+    });
+
+    // --- agent/list (introspection: list available agents) ---
+    rpcTunnel.addMethod("agent/list", () => {
+      const agents = [];
+      for (const [agentType, handler] of [
+        ["claude", getAgent("claude")],
+        ["codex", getAgent("codex")],
+      ] as const) {
+        if (handler && this.initializedAgents.has(agentType)) {
+          agents.push({ type: agentType, capabilities: handler.capabilities });
+        }
+      }
+      return { agents };
+    });
+
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
     // query() is NOT awaited — the ACK returns immediately after validation.
