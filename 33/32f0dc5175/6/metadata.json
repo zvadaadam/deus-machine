@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "3332f0dc5175",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T22:16:56.176106Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/codex/codex-handler.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "a933f23ec274",
+  "token_usage": {
+    "input_tokens": 16255,
+    "cache_creation_tokens": 1495339,
+    "cache_read_tokens": 113647298,
+    "output_tokens": 162970,
+    "api_call_count": 428
+  },
+  "session_metrics": {
+    "turn_count": 57
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T22:16:51.649232Z",
+    "agent_lines": 6,
+    "human_added": 6,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 12,
+    "agent_percentage": 50
+  }
+}
