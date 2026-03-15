@@ -1,4 +1,4 @@
-// sidecar/shell-env.ts
+// sidecar/agents/environment/shell-env.ts
 // Captures the user's login-shell environment so child processes (Claude SDK)
 // inherit PATH, NVM, pyenv, etc. without manual configuration.
 

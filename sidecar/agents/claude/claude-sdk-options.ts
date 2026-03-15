@@ -12,8 +12,8 @@ import { createNotebookMCPServer } from "../notebook-server";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
 import { claudeSessions } from "./claude-session";
-import type { QueryOptions } from "../agent-handler";
-import { buildWorkspaceContext } from "../workspace-context";
+import type { QueryOptions } from "../registry";
+import { buildWorkspaceContext } from "../environment";
 
 // ============================================================================
 // Constants

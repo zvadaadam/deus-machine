@@ -7,8 +7,7 @@ import { getErrorMessage } from "../../../shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
-import { classifyError } from "../error-classifier";
-import { handleCancellation, handleQueryError } from "../query-completion";
+import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
 import {
   deserializeMessage,
   processMessage,
@@ -21,8 +20,8 @@ import type {
   ContextUsageParams,
   InitWorkspaceParams,
   QueryOptions,
-} from "../agent-handler";
-import { buildAgentEnvironment, parseEnvString } from "../env-builder";
+} from "../registry";
+import { buildAgentEnvironment, parseEnvString } from "../environment";
 import {
   initializeClaude,
   blockIfNotInitialized,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyError, classifyStopReason, type ClassifiedError } from "../agents/error-classifier";
+import { classifyError, classifyStopReason, type ClassifiedError } from "../agents/lifecycle";
 
 describe("classifyError", () => {
   // ── Abort ──────────────────────────────────────────────────────────────
@@ -114,7 +114,9 @@ describe("classifyError", () => {
     });
 
     it("classifies readonly database", () => {
-      const result = classifyError(new Error("SQLITE_READONLY: attempt to write a readonly database"));
+      const result = classifyError(
+        new Error("SQLITE_READONLY: attempt to write a readonly database")
+      );
       expect(result.category).toBe("db_write");
     });
 

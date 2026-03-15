@@ -8,7 +8,7 @@ import {
   discoverExecutable,
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
-} from "../cli-discovery";
+} from "../environment/cli-discovery";
 
 // ============================================================================
 // State
@@ -35,9 +35,7 @@ export function initializeCodex(): { success: boolean; error?: string } {
       agentType: "codex",
       displayName: "Codex",
       envVar: "CODEX_CLI_PATH",
-      staticCandidates: [
-        "/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js",
-      ],
+      staticCandidates: ["/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js"],
       shellCommand: "codex",
       versionFlag: "--version",
       extraCandidates: () => {

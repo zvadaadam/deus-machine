@@ -1,4 +1,4 @@
-// sidecar/agents/cli-discovery.ts
+// sidecar/agents/environment/cli-discovery.ts
 // Generic CLI executable discovery for all agent handlers.
 // Each agent provides a DiscoveryConfig describing what to find;
 // this module handles the discovery algorithm (candidate gathering,
@@ -7,8 +7,8 @@
 import * as path from "path";
 import * as fs from "fs";
 import { execSync, execFileSync } from "child_process";
-import { EventBroadcaster } from "../event-broadcaster";
-import type { AgentType } from "../protocol";
+import { EventBroadcaster } from "../../event-broadcaster";
+import type { AgentType } from "../../protocol";
 
 // ============================================================================
 // Types
