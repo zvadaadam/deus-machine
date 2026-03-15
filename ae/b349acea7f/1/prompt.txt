@@ -214,3 +214,7 @@ Follow these steps to create a PR:
 - Use `gh pr create --base main` to create a PR onto the target branch. Keep the title under 80 characters. Keep the description under five sentences, unless the user instructed you otherwise. Describe not just changes made in this session but ALL changes in the workspace diff.
 
 If any of these steps fail, ask the user for help.
+
+---
+
+I think right now the clod.md file and some documentation of the architecture are now outdated, right? Should we change it? And can you explore? And also, but they're like the future of what we want to do and how we want to change it.
