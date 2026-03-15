@@ -7,8 +7,8 @@
  * Message Flow (sidecar-owns-send):
  * 1. User clicks send → useSendMessage routes through socket → sidecar
  * 2. Sidecar atomically: saves user message + sets status=working + dispatches agent
- * 3. Sidecar streams response → saves to DB → emits Tauri events
- * 4. useSessionEvents receives events → invalidates React Query cache → UI updates
+ * 3. Sidecar streams response → saves to DB → notifies backend
+ * 4. Backend pushes q:snapshot/q:delta to WS subscribers → React Query cache → UI updates
  */
 
 import { useCallback } from "react";

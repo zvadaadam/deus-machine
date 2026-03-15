@@ -47,7 +47,7 @@ export async function invoke<T = unknown>(
  * When called with a known event name from AppEventMap, the payload type
  * is inferred automatically — no manual generic needed:
  *
- *   listen(SESSION_MESSAGE, (e) => e.payload.id)  // payload is SessionMessageEvent
+ *   listen(WORKSPACE_PROGRESS, (e) => e.payload.workspaceId)  // payload is WorkspaceProgressEvent
  *
  * Also accepts arbitrary event names with an explicit generic for backwards
  * compat during incremental migration:
@@ -56,15 +56,15 @@ export async function invoke<T = unknown>(
  */
 export async function listen<K extends AppEventName>(
   event: K,
-  handler: (event: { payload: AppEventMap[K] }) => void,
+  handler: (event: { payload: AppEventMap[K] }) => void
 ): Promise<UnlistenFn>;
 export async function listen<T>(
   event: string,
-  handler: (event: { payload: T }) => void,
+  handler: (event: { payload: T }) => void
 ): Promise<UnlistenFn>;
 export async function listen(
   event: string,
-  handler: (event: { payload: unknown }) => void,
+  handler: (event: { payload: unknown }) => void
 ): Promise<UnlistenFn> {
   if (!isTauriEnv) {
     console.warn(`[Platform] Tauri listen called in non-Tauri environment: ${event}`);
@@ -82,7 +82,7 @@ export async function listen(
     if (!result.success) {
       console.error(
         `[Platform] Event "${event}" payload failed schema validation:`,
-        result.error.format(),
+        result.error.format()
       );
       // Still deliver the original payload so the app doesn't break —
       // the console.error is enough to surface Rust↔TS drift during dev.

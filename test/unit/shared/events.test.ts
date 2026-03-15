@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   // Event name constants
-  SESSION_MESSAGE,
-  SESSION_ERROR,
-  SESSION_ENTER_PLAN_MODE,
-  SESSION_STATUS_CHANGED,
   WORKSPACE_PROGRESS,
-  QUERY_INVALIDATE,
   SIDECAR_REQUEST,
   FS_CHANGED,
   PTY_DATA,
@@ -22,7 +17,6 @@ import {
   AppEventSchemaMap,
   // Individual schemas for targeted tests
   WorkspaceProgressSchema,
-  QueryInvalidateSchema,
   FileChangeSchema,
   PtyDataSchema,
   ChatInsertSchema,
@@ -31,18 +25,15 @@ import {
   // Domain constants
   QUERY_RESOURCES,
   MUTATION_NAMES,
+  COMMAND_NAMES,
+  PROTOCOL_EVENTS,
   SIDECAR_NOTIFY_EVENTS,
 } from "@shared/events";
 
 describe("shared/events", () => {
   describe("AppEventSchemaMap completeness", () => {
     const ALL_EVENT_NAMES = [
-      SESSION_MESSAGE,
-      SESSION_ERROR,
-      SESSION_ENTER_PLAN_MODE,
-      SESSION_STATUS_CHANGED,
       WORKSPACE_PROGRESS,
-      QUERY_INVALIDATE,
       SIDECAR_REQUEST,
       FS_CHANGED,
       PTY_DATA,
@@ -74,13 +65,6 @@ describe("shared/events", () => {
         workspaceId: "ws-1",
         step: "dependencies",
         label: "Installing deps...",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("QueryInvalidateSchema accepts valid payload", () => {
-      const result = QueryInvalidateSchema.safeParse({
-        resources: ["workspaces", "sessions"],
       });
       expect(result.success).toBe(true);
     });
@@ -166,13 +150,6 @@ describe("shared/events", () => {
       expect(result.success).toBe(false);
     });
 
-    it("QueryInvalidateSchema rejects non-array resources", () => {
-      const result = QueryInvalidateSchema.safeParse({
-        resources: "workspaces",
-      });
-      expect(result.success).toBe(false);
-    });
-
     it("FileChangeSchema rejects invalid change_type enum", () => {
       const result = FileChangeSchema.safeParse({
         workspace_path: "/repo",
@@ -209,15 +186,28 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("workspaces");
       expect(QUERY_RESOURCES).toContain("stats");
       expect(QUERY_RESOURCES).toContain("sessions");
+      expect(QUERY_RESOURCES).toContain("session");
       expect(QUERY_RESOURCES).toContain("messages");
-      expect(QUERY_RESOURCES).toHaveLength(4);
+      expect(QUERY_RESOURCES).toHaveLength(5);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
-      expect(MUTATION_NAMES).toContain("sendMessage");
       expect(MUTATION_NAMES).toContain("archiveWorkspace");
       expect(MUTATION_NAMES).toContain("updateWorkspaceTitle");
-      expect(MUTATION_NAMES).toHaveLength(3);
+      expect(MUTATION_NAMES).toHaveLength(2);
+    });
+
+    it("COMMAND_NAMES contains the expected commands", () => {
+      expect(COMMAND_NAMES).toContain("sendMessage");
+      expect(COMMAND_NAMES).toContain("stopSession");
+      expect(COMMAND_NAMES).toHaveLength(2);
+    });
+
+    it("PROTOCOL_EVENTS contains the expected events", () => {
+      expect(PROTOCOL_EVENTS).toContain("session:plan-mode");
+      expect(PROTOCOL_EVENTS).toContain("session:error");
+      expect(PROTOCOL_EVENTS).toContain("session:progress");
+      expect(PROTOCOL_EVENTS).toHaveLength(3);
     });
 
     it("SIDECAR_NOTIFY_EVENTS contains the expected events", () => {

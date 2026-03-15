@@ -6,44 +6,53 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { produce } from "immer";
-import {
-  WorkspaceService,
-  type WorkspaceGitInfo,
-  type ManifestResponse,
-} from "./workspace.service";
+import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Workspace, RepoGroup, DiffStats } from "../types";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
+import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
-import { createOptimisticWorkspace } from "../lib/workspace.utils";
+import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
 
 /**
  * Fetch workspaces grouped by repository.
  *
- * Event-driven invalidation handles freshness — no polling needed.
- * Refetches on mount and window focus for reconciliation.
+ * WS subscription pushes data directly into cache via q:snapshot.
+ * HTTP queryFn is fallback for initial load before WS connects.
+ * Event-driven invalidation via Tauri events also works (both paths coexist).
  */
 export function useWorkspacesByRepo(state: string = "ready,initializing") {
+  useQuerySubscription("workspaces", {
+    queryKey: queryKeys.workspaces.byRepo(state),
+    params: { state },
+    mergeDelta: mergeWorkspaceDelta,
+  });
+
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
     queryFn: () => WorkspaceService.fetchByRepo(state),
-    staleTime: 5000,
-    refetchOnWindowFocus: "always",
+    staleTime: Infinity, // WS subscription keeps data fresh
+    refetchOnWindowFocus: false, // Subscription handles freshness
   });
 }
 
 /**
  * Fetch global stats.
  *
- * Explicit invalidation + focus reconciliation — no polling.
+ * WS subscription pushes data directly into cache via q:snapshot.
+ * HTTP queryFn is fallback for initial load before WS connects.
  */
 export function useStats() {
+  useQuerySubscription("stats", {
+    queryKey: queryKeys.stats.all,
+  });
+
   return useQuery({
     queryKey: queryKeys.stats.all,
     queryFn: () => RepoService.fetchStats(),
-    staleTime: 15_000,
-    refetchOnWindowFocus: "always",
+    staleTime: Infinity, // WS subscription keeps data fresh
+    refetchOnWindowFocus: false, // Subscription handles freshness
   });
 }
 
@@ -279,8 +288,7 @@ export function useGhStatus() {
  * Gated on gh CLI being installed + authenticated (like Codex).
  * Polls every 30s while agent is working (to detect PR creation),
  * 60s while CI is pending post-session (CI runs 2-15min after push),
- * stops polling otherwise. Auto-refetched on session completion
- * via useSessionEvents invalidation.
+ * stops polling otherwise.
  */
 export function usePRStatus(
   workspaceId: string | null,
