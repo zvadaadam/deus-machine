@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "76b3b2a62f1f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/server.ts",
+    "backend/src/services/agent-event-handler.ts",
+    "backend/src/services/query-engine.ts",
+    "backend/src/services/tool-relay.ts",
+    "backend/test/unit/services/agent-event-handler.test.ts",
+    "backend/test/unit/services/tool-relay.test.ts",
+    "shared/types/query-protocol.ts",
+    "src/features/browser/automation/useBrowserRpcHandler.ts",
+    "src/features/session/hooks/useAgentRpcHandler.ts",
+    "src/features/session/ui/AgentOverlays.stories.tsx",
+    "src/platform/ws/index.ts",
+    "src/platform/ws/query-protocol-client.ts",
+    "src/shared/hooks/useWsToolRequest.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/76/b3b2a62f1f/0/metadata.json",
+      "transcript": "/76/b3b2a62f1f/0/full.jsonl",
+      "content_hash": "/76/b3b2a62f1f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
