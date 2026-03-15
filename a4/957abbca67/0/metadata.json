@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a4957abbca67",
+  "session_id": "79e364eb-462c-4664-9dd2-f8ecf71dae03",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T14:42:52.97433Z",
+  "branch": "zvadaadam/explore-backend-sidecar",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/db/queries.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "da351d117a5f",
+  "checkpoint_transcript_start": 830,
+  "transcript_lines_at_start": 830,
+  "token_usage": {
+    "input_tokens": 9,
+    "cache_creation_tokens": 4713,
+    "cache_read_tokens": 900157,
+    "output_tokens": 1633,
+    "api_call_count": 7
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T14:42:52.046369Z",
+    "agent_lines": 2,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2,
+    "agent_percentage": 100
+  }
+}

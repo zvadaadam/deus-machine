@@ -1,0 +1,70 @@
+<system-instruction>
+The user has added 1 comment to the diff for this workspace. Please review and address these comments as part of your response. When addressing comments on the "original" side or on specific commits, read the file from that version (not the current version). Below are the comments, including metadata about what git state they were left on:
+
+Comment #1:
+
+File: backend/src/db/queries.ts
+Line: 140
+User comment: "_⚠️ Potential issue_ | _🟠 Major_
+
+**Keep workspace snapshot and delta row shapes in sync.**
+
+Line 132 and Line 133 include `session_error_*` in `getWorkspacesBySessionIds`, but the snapshot path (`getWorkspacesByRepo`, used by `backend/src/services/query-engine.ts` Line 399) still omits those columns. That creates inconsistent payload shape between q:snapshot and q:delta for the same resource.
+
+
+
+<details>
+<summary>🐛 Proposed fix</summary>
+
+```diff
+ export function getWorkspacesByRepo(
+   db: Database.Database,
+   state?: string
+ ): WorkspaceWithDetailsRow[] {
+@@
+       r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
+       r.git_default_branch,
+       s.status as session_status, s.model,
++      s.error_category as session_error_category,
++      s.error_message as session_error_message,
+       s.last_user_message_at as latest_message_sent_at
+     FROM workspaces w
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@backend/src/db/queries.ts` around lines 116 - 140, The workspace snapshot
+query in getWorkspacesByRepo must include the same session-related columns as
+getWorkspacesBySessionIds to keep snapshot and delta shapes consistent; update
+the SELECT in getWorkspacesByRepo to add s.error_category AS
+session_error_category, s.error_message AS session_error_message (and ensure
+s.last_user_message_at is aliased as latest_message_sent_at if missing),
+matching the exact aliases used in getWorkspacesBySessionIds so downstream code
+in query-engine.ts receives identical payload shapes.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:hawk -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->"
+
+Comment metadata:
+This comment was left on the modified branch.
+This comment was left on GitHub by @coderabbitai.
+This comment is the start of thread PRRT_kwDOQEbULc50ajU-. 
+
+</system-instruction>
+
+I run AI code review, is it actionable? Wdyt? Explore in depth each problem.
+
+We want a clean, maintainable codebase, with proper best practices for the tech stack we use.
+
+Run subagents to verify, and if it should be fixed, try to merge some stuff together so it can be fixed together within one subagent. 
+
+If you can test something do it.
