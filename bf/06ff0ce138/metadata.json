@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "bf06ff0ce138",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-backend-sidecar",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "backend/src/services/query-engine.ts",
+    "backend/test/integration/query-protocol.test.ts",
+    "shared/events.ts",
+    "src-tauri/src/backend.rs",
+    "src/app/App.tsx",
+    "src/features/session/api/session.queries.ts",
+    "src/features/workspace/api/workspace.queries.ts",
+    "src/features/workspace/hooks/useQueryInvalidation.ts",
+    "src/shared/config/api.config.ts",
+    "test/unit/platform/invoke.test.ts",
+    "test/unit/shared/events.test.ts",
+    "test/unit/workspace/useQueryInvalidation.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bf/06ff0ce138/0/metadata.json",
+      "transcript": "/bf/06ff0ce138/0/full.jsonl",
+      "content_hash": "/bf/06ff0ce138/0/content_hash.txt",
+      "prompt": "/bf/06ff0ce138/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1909,
+    "cache_creation_tokens": 60193,
+    "cache_read_tokens": 383288,
+    "output_tokens": 2276,
+    "api_call_count": 8
+  }
+}

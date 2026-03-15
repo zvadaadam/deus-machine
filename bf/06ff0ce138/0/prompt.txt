@@ -1,0 +1,111 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/kyoto directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+i wana explore this: Move 2: Provider Adapter Registry
+Verdict: YES, but keep it simple — don’t copy T3’s Effect-TS approach.
+
+Your current AgentHandler interface is fine structurally. What’s missing is:
+
+Explicit capabilities — the frontend can’t ask “does this agent support model hot-swap?” It just… tries and hopes
+Provider-neutral message format — Codex events are force-mapped to Claude content blocks in codex-handler.ts lines 38-121. Adding Gemini or a local model means another 100-line mapper to Claude’s format
+What you actually need:
+
+interface AgentHandler {
+  readonly agentType: AgentType;
+  readonly capabilities: {
+    multiTurn: boolean;
+    modelHotSwap: boolean;
+    sessionResume: boolean;
+    toolApproval: boolean;
+  };
+  // ... existing methods unchanged
+}
+
+And longer-term, a provider-neutral ContentBlock union type that Claude, Codex, and future providers all emit — instead of mapping everything to Claude’s format.
+
+Why this matters for swarms: A swarm coordinator needs to know agent capabilities to assign tasks. “Send the code review to Claude (multi-turn), the test generation to Codex (fast, single-shot).” Without declared capabilities, this routing is guesswork.
+
+What you DON’T need: Effect-TS, dependency injection containers, or adapter registries with compile-time layers. T3 built that because they’re building an enterprise platform. You’re building a pro-consumer desktop app. A Map<AgentType, AgentHandler> with a richer interface is sufficient for 3-5 providers.
+
+Risk: very low. Additive change. Doesn’t break existing agents.
+
+2. Provider Adapter Registry
+
+What We Have Today
+Our agent handler interface is actually pretty clean:
+
+interface AgentHandler {
+  readonly agentType: AgentType;
+  initialize(): { success: boolean; error?: string };
+  handleQuery(sessionId, prompt, options): Promise<void>;
+  handleCancel(sessionId): Promise<void>;
+  handleReset(sessionId): void;
+}
+Registration is a simple Map<AgentType, AgentHandler>. Two implementations: ClaudeAgentHandler and CodexAgentHandler. Dispatch is getAgent(agentType) → O(1) lookup.
+
+What OpenDevs Does Differently
+T3’s ProviderAdapterShape is more granular:
+
+interface ProviderAdapterShape {
+  startSession(input): Effect<ProviderSession>;
+  sendTurn(input): Effect<TurnResult>;
+  interruptTurn(threadId, turnId?): Effect<void>;
+  respondToRequest(threadId, requestId, decision): Effect<void>;  // approval flow
+  respondToUserInput(threadId, requestId, answers): Effect<void>;  // user prompts
+  stopSession(threadId): Effect<void>;
+  readThread(threadId): Effect<ThreadSnapshot>;
+  rollbackThread(threadId, numTurns): Effect<ThreadSnapshot>;      // undo!
+  readonly capabilities: { sessionModelSwitch: boolean };           // explicit feature flags
+  readonly streamEvents: Stream<ProviderRuntimeEvent>;              // unified event stream
+}
+Key things they have that we don’t:
+
+Explicit capabilities — providers declare what they support at compile time
+Rollback/undo — rollbackThread(threadId, numTurns) is part of the contract
+Approval flow — respondToRequest for tool approvals is a first-class concept
+Unified event stream — all provider events flow through one typed stream
+What Would Change
+Our handler interface needs two additions:
+
+interface AgentHandler {
+  readonly agentType: AgentType;
+  readonly capabilities: AgentCapabilities;  // NEW: what can this agent do?
+  
+  initialize(): { success: boolean; error?: string };
+  handleQuery(sessionId, prompt, options): Promise<void>;
+  handleCancel(sessionId): Promise<void>;
+  handleReset(sessionId): void;
+  handleApproval?(sessionId, requestId, decision): Promise<void>;  // NEW: tool approval
+}
+
+interface AgentCapabilities {
+  multiTurn: boolean;        // Claude: yes, Codex: no
+  modelHotSwap: boolean;     // Claude: yes, Codex: no
+  sessionResume: boolean;    // Claude: yes (agent_session_id), Codex: no
+  toolApproval: boolean;     // both: yes
+  rollback: boolean;         // neither currently, but door is open
+}
+The bigger issue is message format. Right now Codex events are mapped to Claude content blocks in the Codex handler (lines 38-121 of codex-handler.ts). This means our message schema is Claude-shaped, not provider-neutral. If we add Gemini, we’d be mapping everything to Claude’s format — which is fragile.
+
+A cleaner approach: define a provider-neutral message envelope and let each handler emit that:
+
+type ProviderMessage = {
+  role: 'assistant' | 'tool_result';
+  blocks: ContentBlock[];  // our own union, not Claude's
+  model: string;
+  provider: AgentType;
+}
+Verdict: The registry pattern itself is fine — our Map<AgentType, AgentHandler> works. What we need is explicit capabilities and a provider-neutral message format. We don’t need Effect-TS or DI containers — that’s overkill for 2-3 providers. But the interface should be richer.
+
+-----
+
+basicly i dont wana do the naturalmesage schema yet, but i wanan dro the othe hting nd maybe rethin some naming of stuff wdyt explroe it
