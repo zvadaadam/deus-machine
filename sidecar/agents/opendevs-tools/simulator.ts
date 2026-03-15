@@ -1,7 +1,7 @@
 // sidecar/agents/opendevs-tools/simulator.ts
 // iOS Simulator automation tools: list devices, start, screenshot, tap, swipe, type text, press key, build & run.
-// These tools proxy through EventBroadcaster RPC → Rust socket relay → Tauri event →
-// frontend handler → existing sim-core Tauri IPC commands.
+// These tools proxy through EventBroadcaster over backend-routed WebSocket flow,
+// then reach the simulator control path used by existing sim-core commands.
 //
 // Named "iOSSimulator*" to distinguish from external xcode-mcp tools.
 // These tools control the in-app Simulator panel (MJPEG stream + HID input).

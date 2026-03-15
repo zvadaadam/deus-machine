@@ -200,7 +200,7 @@ export function onEvent(callback: EventCallback): () => void {
  * Used by frontend RPC handlers to respond to tool relay requests
  * received via q:event with event: "tool:request".
  */
-export function sendToolResponse(requestId: string, result?: unknown, error?: string): void {
+export function sendToolResponse(requestId: string, result?: unknown, error?: string): boolean {
   const frame: Record<string, unknown> = {
     type: "q:tool_response",
     requestId,
@@ -210,7 +210,7 @@ export function sendToolResponse(requestId: string, result?: unknown, error?: st
   } else {
     frame.result = result;
   }
-  sendFrame(frame);
+  return sendFrame(frame);
 }
 
 /**
@@ -357,14 +357,19 @@ function notifyConnectionChange(state: boolean): void {
   }
 }
 
-function sendFrame(frame: Record<string, unknown>): void {
+function sendFrame(frame: Record<string, unknown>): boolean {
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
       ws.send(JSON.stringify(frame));
+      return true;
     } catch {
       // Connection may have closed between readyState check and send
+      console.warn(`[WS] Failed to send ${frame.type} frame: connection closed during send`);
+      return false;
     }
   }
+  console.warn(`[WS] Dropped ${frame.type} frame: WebSocket not connected`);
+  return false;
 }
 
 /** Re-subscribe all active subscriptions after reconnect. */

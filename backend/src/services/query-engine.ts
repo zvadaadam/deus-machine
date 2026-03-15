@@ -28,6 +28,7 @@ import {
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { writeUserMessage } from "./message-writer";
+import { persistSessionError } from "./agent-persistence";
 import { getConnection } from "./ws.service";
 import { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
 import {
@@ -417,7 +418,9 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
       if (!result.success) throw new Error(result.error);
       invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
 
-      // Forward to agent-server to start the turn
+      // Forward to agent-server to start the turn (fire-and-forget for responsiveness).
+      // The ACK has already been sent, so handle rejection asynchronously by
+      // persisting a session error — the frontend learns via WS subscription.
       if (forwardToAgent) {
         const agentType = readStringParam(params, "agentType") || "claude";
         forwardToAgent({
@@ -441,8 +444,30 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
             resume: readStringParam(params, "resume"),
             resumeSessionAt: readStringParam(params, "resumeSessionAt"),
           },
+        }).then((response) => {
+          if (!response.accepted) {
+            const reason = response.reason || "Agent rejected the message";
+            console.error(`[QueryEngine] Agent rejected sendMessage for session=${sessionId}: ${reason}`);
+            persistSessionError({
+              type: "session.error",
+              sessionId,
+              agentType: agentType as "claude",
+              error: reason,
+              category: "agent",
+            });
+            invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+          }
         }).catch((err) => {
-          console.error("[QueryEngine] Failed to forward to agent-server:", err);
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          console.error("[QueryEngine] Failed to forward to agent-server:", errorMsg);
+          persistSessionError({
+            type: "session.error",
+            sessionId,
+            agentType: agentType as "claude",
+            error: `Agent server communication failed: ${errorMsg}`,
+            category: "agent",
+          });
+          invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
         });
       }
 

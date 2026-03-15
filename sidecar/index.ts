@@ -137,6 +137,7 @@ function parseTransportMode(): TransportMode {
 
 class UnifiedSidecar {
   private transportMode: TransportMode;
+  private initializedAgents = new Set<string>();
 
   // Unix socket transport
   private socketPath: string;
@@ -176,7 +177,7 @@ class UnifiedSidecar {
         console.log("[SHUTDOWN] All turns drained successfully");
       } else {
         console.log("[SHUTDOWN] Drain timeout reached, cancelling remaining sessions");
-        cancelRemainingSessions();
+        await cancelRemainingSessions();
       }
 
       // 4. Full cleanup (kill child processes, close WS clients)
@@ -207,7 +208,7 @@ class UnifiedSidecar {
         ["claude", getAgent("claude")],
         ["codex", getAgent("codex")],
       ] as const) {
-        if (handler) {
+        if (handler && this.initializedAgents.has(agentType)) {
           agents.push({
             type: agentType,
             capabilities: handler.capabilities,
@@ -570,17 +571,19 @@ class UnifiedSidecar {
 
     // Initialize all registered agents
     console.log("Initializing agent handlers...");
+    this.initializedAgents.clear();
     const initResults = initializeAllAgents();
     for (const [agentType, result] of initResults) {
       if (!result.success) {
         console.error(`${agentType} initialization failed:`, result.error);
       } else {
         console.log(`${agentType} handler initialized successfully`);
+        this.initializedAgents.add(agentType);
       }
     }
 
-    // Mark agents as initialized for the /readyz endpoint
-    setAgentsInitialized(true);
+    // Mark agents as initialized for the /readyz endpoint only if at least one succeeded
+    setAgentsInitialized(this.initializedAgents.size > 0);
 
     if (this.transportMode === "ws") {
       return this.startWebSocket();

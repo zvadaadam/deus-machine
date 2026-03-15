@@ -7,7 +7,8 @@
 
 import type { IncomingMessage, ServerResponse } from "http";
 import type { WebSocketServer } from "ws";
-import { getRegisteredAgentTypes } from "./agents/agent-handler";
+import { getRegisteredAgentTypes, getAgent } from "./agents/agent-handler";
+import type { AgentType } from "../shared/enums";
 import { EventBroadcaster } from "./event-broadcaster";
 
 // ============================================================================
@@ -184,13 +185,30 @@ export function waitForDrain(config: ShutdownConfig = DEFAULT_SHUTDOWN_CONFIG): 
 }
 
 /**
- * Cancels all remaining active sessions by emitting session.cancelled events.
- * Called after the drain timeout is reached and sessions are still running.
+ * Cancels all remaining active sessions using the proper cancellation flow.
+ * Tries agent.cancel() first (which sets cancelledByUser, creates checkpoints,
+ * and terminates subprocesses), then falls back to direct event emission.
  */
-export function cancelRemainingSessions(): void {
-  for (const [sessionId, agentType] of activeSessions) {
+export async function cancelRemainingSessions(): Promise<void> {
+  const entries = [...activeSessions];
+  for (const [sessionId, agentType] of entries) {
     console.log(`[SHUTDOWN] Force-cancelling session ${sessionId} (agent=${agentType})`);
-    EventBroadcaster.emitSessionCancelled(sessionId, agentType as any);
+    const agent = getAgent(agentType as AgentType);
+    if (agent) {
+      try {
+        await agent.cancel(sessionId);
+      } catch (err) {
+        console.error(
+          `[SHUTDOWN] agent.cancel() failed for ${sessionId}, emitting events directly:`,
+          err
+        );
+        EventBroadcaster.emitMessageCancelled(sessionId, agentType as any);
+        EventBroadcaster.emitSessionCancelled(sessionId, agentType as any);
+      }
+    } else {
+      EventBroadcaster.emitMessageCancelled(sessionId, agentType as any);
+      EventBroadcaster.emitSessionCancelled(sessionId, agentType as any);
+    }
   }
   activeSessions.clear();
 }
