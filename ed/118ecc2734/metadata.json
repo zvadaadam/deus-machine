@@ -31,6 +31,12 @@
       "transcript": "/ed/118ecc2734/3/full.jsonl",
       "content_hash": "/ed/118ecc2734/3/content_hash.txt",
       "prompt": "/ed/118ecc2734/3/prompt.txt"
+    },
+    {
+      "metadata": "/ed/118ecc2734/4/metadata.json",
+      "transcript": "/ed/118ecc2734/4/full.jsonl",
+      "content_hash": "/ed/118ecc2734/4/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
