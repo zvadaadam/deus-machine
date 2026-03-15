@@ -48,14 +48,18 @@ Frontend (React + Zustand + React Query)
     │                  │   Async actions: sendMessage, stopSession
     │                  ├── Mutations (q:mutate/q:mutate_result)
     │                  │   Sync writes: archiveWorkspace, updateTitle
-    │                  └── Events (q:event) — ephemeral push (future)
+    │                  ├── Events (q:event) — ephemeral push (tool relay, plan mode)
+    │                  └── Agent Client ──→ Agent-Server (sidecar/)
+    │                       ├── WebSocket (ws://127.0.0.1:{port}) — JSON-RPC 2.0
+    │                       ├── turn/start, turn/cancel, turn/respond
+    │                       ├── Receives canonical agent events → persists → pushes
+    │                       └── Tool relay: agent → backend → frontend → backend → agent
     │
     ├── Tauri IPC ──→ Rust Backend (src-tauri/)
     │                  ├── Git operations (libgit2 — fast, stateless)
     │                  ├── File scanning (.gitignore-aware, cached)
     │                  ├── Terminal / PTY sessions
-    │                  ├── Process lifecycle (Node.js backend, sidecar, dev-browser)
-    │                  └── Socket relay (sidecar ↔ frontend for agent commands)
+    │                  └── Process lifecycle (Node.js backend, agent-server, dev-browser)
     │
     ├── HTTP REST ──→ Node.js Backend (backend/)
     │                  ├── Fallback for initial load (before WS connects)
@@ -63,25 +67,33 @@ Frontend (React + Zustand + React Query)
     │                  ├── Config management (MCP servers, agents, hooks)
     │                  └── External services (GitHub PR status via gh CLI)
     │
-    └── Unix Socket → Sidecar (sidecar/)
-                       ├── Claude Agent SDK (streaming responses)
-                       ├── Message transformation (SDK → DB format)
-                       ├── Assistant message persistence (direct SQLite writes)
-                       └── Notifies backend via HTTP POST → WS push to frontend
+    └── Agent-Server (sidecar/) — Stateless, no DB access
+                       ├── Claude/Codex Agent SDKs (streaming responses)
+                       ├── WebSocket server (JSON-RPC 2.0 with initialize handshake)
+                       ├── Canonical event emission (12 event types → backend)
+                       ├── Health endpoints (GET /health, GET /readyz)
+                       └── Graceful shutdown with 30s turn draining
 ```
 
 ### Message Flow
 
 ```
 User sends message:
-  Frontend → socketService.sendQuery() → Rust socket relay → Sidecar
-  Sidecar: saves user message + sets status='working' atomically
-  Sidecar: returns ACK → Frontend shows optimistic message
+  Frontend → q:command(sendMessage) → Backend WebSocket
+  Backend: saves user message → forwards turn/start to agent-server (JSON-RPC)
+  Agent-server ACK → q:command_ack → Frontend shows optimistic message
 
-Sidecar processes:
-  Sidecar → Claude Agent SDK → streaming response
-         → saves assistant messages to SQLite
-         → POST /notify → Backend invalidate() → WS push
+Agent-server processes:
+  Agent SDK → agent-handler → canonical agent events (JSON-RPC notifications)
+  Events flow to backend agent-client → agent-event-handler:
+    → persist (agent-persistence.ts writes to SQLite)
+    → invalidate (query-engine pushes q:delta/q:snapshot via WS)
+
+Tool relay (bidirectional):
+  Agent requests tool → tool.request event → backend tool-relay
+  Backend pushes q:event { event: "tool:request" } to frontend
+  Frontend handles (browser, diff, terminal, plan, question)
+  Frontend sends q:tool_response → tool-relay resolves → agent-server receives result
 
 Frontend receives (all via WebSocket):
   q:delta  → new messages merged into cache (cursor-based)
@@ -107,7 +119,7 @@ COMMANDS (async actions, ACK only):
   q:command / q:command_ack     → sendMessage, stopSession
 
 EVENTS (ephemeral push, no subscription):
-  q:event                       → plan-mode, progress (future use)
+  q:event                       → tool relay requests, plan-mode, progress
 ```
 
 **Resources:** `workspaces`, `stats`, `sessions`, `session`, `messages` — defined in `QUERY_RESOURCES` array in `shared/events.ts`.
@@ -131,7 +143,7 @@ useQuerySubscription("workspaces", {
 - `MUTATION_NAMES` — sync write actions (`archiveWorkspace`, `updateWorkspaceTitle`)
 - `COMMAND_NAMES` — async command actions (`sendMessage`, `stopSession`)
 - `PROTOCOL_EVENTS` — typed ephemeral event names
-- `SIDECAR_NOTIFY_EVENTS` — events the sidecar sends to POST /notify
+- `AGENT_EVENT_NAMES` — canonical agent-server event types (12 events: session._, message._, tool._, interaction._)
 
 ### Tauri Events (streaming/control only)
 
@@ -145,7 +157,7 @@ listeners.register(listen(WORKSPACE_PROGRESS, (e) => e.payload.workspaceId));
 return () => listeners.cleanup();
 ```
 
-**Active Tauri events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `sidecar:request`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
+**Active Tauri events:** `workspace:progress`, `fs:changed`, `pty-data`, `pty-exit`, `browser:*`, `chat-insert`, `git-clone-progress`. All defined in `shared/events.ts` with Zod schemas for runtime validation.
 
 ## Database: Standalone OpenDevs Database
 
@@ -155,7 +167,7 @@ Our app owns its own SQLite database:
 ~/Library/Application Support/com.opendevs.app/opendevs.db
 ```
 
-`initDatabase()` (in both `backend/src/lib/database.ts` and `sidecar/db/index.ts`) creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in the corresponding `schema.ts` files. No external dependencies — the app is fully self-contained.
+`initDatabase()` in `backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `backend/src/lib/schema.ts`. No external dependencies — the app is fully self-contained.
 
 **Schema (5 tables):** `repos`, `workspaces`, `sessions`, `session_messages`, `settings`
 
@@ -164,15 +176,15 @@ Our app owns its own SQLite database:
 - All indexes, triggers, and denormalized columns are created by our own schema — see `backend/src/lib/schema.ts`
 - `sessions.last_user_message_at` is maintained by app code — use it instead of correlated subqueries
 - `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session support
-- Both backend and sidecar access the same DB file (WAL mode enabled)
-- Rust passes `DATABASE_PATH` env var to both Node.js processes
+- Only the backend writes to the DB — the agent-server is stateless (no DB access)
+- Rust passes `DATABASE_PATH` env var to the backend process only
 
 ## Rust vs Node.js Boundary
 
-- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O, socket relay.
-- **Node.js (Hono backend):** Business logic. Database reads/writes (repos, workspaces, user messages). Config management. External services (GitHub API via gh CLI).
-- **Node.js (Sidecar):** Claude Agent SDK integration. Message transformation. Assistant message persistence. Real-time streaming to frontend.
-- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js. If it involves Claude SDK streaming, it goes in the sidecar.
+- **Rust (Tauri commands):** Stateless pure functions. System-level ops. Performance-critical hot paths. File I/O, git operations, process management, terminal I/O.
+- **Node.js (Hono backend):** Business logic. Database reads/writes (repos, workspaces, all messages). Config management. External services (GitHub API via gh CLI). Agent event persistence and tool relay coordination.
+- **Node.js (Agent-Server / sidecar):** Stateless agent SDK wrapper. Claude/Codex SDK integration. Canonical event emission. No DB access — streams events to backend via WebSocket.
+- **Rule of thumb:** If it takes `(path, params) → data` with no database, it belongs in Rust. If it needs to read/write DB or coordinate async workflows, it stays in Node.js backend. If it wraps an agent SDK and emits events, it goes in the agent-server.
 
 ### Moving the Read Layer to Rust (Long-Term Direction)
 
@@ -194,7 +206,7 @@ Frontend → HTTP REST → Node.js → SQLite                ← writes + orches
 - Multi-step operations (create workspace = DB insert + git worktree + state transitions)
 - Operations that coordinate with external services (GitHub API)
 - Complex writes that involve business logic validation across multiple tables
-- User message saving (triggers sidecar query via frontend socket)
+- User message saving + forwarding turn/start to agent-server
 
 **Implementation rules:**
 
@@ -210,10 +222,10 @@ src-tauri/src/
 ├── main.rs           App init, plugin registration, lifecycle hooks
 ├── lib.rs            Module exports
 ├── commands/         Tauri IPC command handlers (one per domain — thin wrappers over core modules)
-└── *.rs              Core managers: process lifecycle, I/O, git, DB reads, file watching, PTY, socket relay
+└── *.rs              Core managers: process lifecycle, I/O, git, DB reads, file watching, PTY
 ```
 
-Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core module** (`src/{domain}.rs`) with the logic, and a **command module** (`src/commands/{domain}.rs`) that exposes it as Tauri IPC commands. The sidecar bundle lives at `src-tauri/resources/bin/index.bundled.cjs`.
+Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core module** (`src/{domain}.rs`) with the logic, and a **command module** (`src/commands/{domain}.rs`) that exposes it as Tauri IPC commands. The agent-server bundle lives at `src-tauri/resources/bin/index.bundled.cjs`. Rust manages the agent-server process lifecycle and passes `AGENT_SERVER_URL` to the backend.
 
 ### Git Diff Semantics (src-tauri/src/git.rs)
 
@@ -228,41 +240,61 @@ Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core 
 ```
 backend/src/
 ├── app.ts            Hono app factory, mounts all routes under /api
-├── server.ts         Entry point, starts Hono via @hono/node-server
+├── server.ts         Entry point, starts Hono + connects agent-client to agent-server
 ├── lib/              Database connection, error types, sanitizers
 ├── middleware/        Error handler, workspace loader
-├── services/         Business logic (git, config, settings, workspace naming)
+├── services/         Business logic + agent coordination:
+│   ├── agent-client.ts        WebSocket client → agent-server (JSON-RPC 2.0)
+│   ├── agent-event-handler.ts Dispatches canonical events → persist + invalidate
+│   ├── agent-persistence.ts   DB write functions for agent events
+│   ├── tool-relay.ts          Manages pending tool requests (agent ↔ frontend)
+│   └── ...                    git, config, settings, workspace naming
 └── routes/           REST endpoints (workspaces, sessions, repos, config, settings, stats, health)
 ```
 
-Pattern: each route file maps to a REST resource. Services contain reusable business logic. Middleware loads context (workspace by `:id`) and maps errors to JSON responses.
+Pattern: each route file maps to a REST resource. Services contain reusable business logic. Middleware loads context (workspace by `:id`) and maps errors to JSON responses. The agent-client connects to the agent-server on startup and dispatches all incoming canonical events through the agent-event-handler pipeline (persist → invalidate → WS push).
 
-## Sidecar Structure (sidecar/)
+## Agent-Server Structure (sidecar/)
 
-The sidecar runs as a separate Node.js process, managed by Rust. It handles Claude Agent SDK communication and streams responses back to the frontend via Tauri events.
+The agent-server runs as a separate Node.js process, managed by Rust. It wraps Claude/Codex SDKs and streams canonical events to the backend via WebSocket. It is **stateless** — no database access, no direct frontend communication.
 
-**Why a separate process?** The sidecar uses native modules (`better-sqlite3`) for direct DB writes and needs to run independently of the backend for clean separation of concerns.
+**Why a separate process?** Agent SDKs are long-running and need process isolation. If an agent crashes, the backend and frontend remain unaffected. The agent-server can be restarted independently.
 
-**Bundling approach:** Uses `bundle.resources` in `tauri.conf.json` (not `externalBin`) because Node.js scripts with native modules can't be compiled to standalone binaries. The bundle includes the pre-built `index.bundled.cjs` file.
+**Bundling approach:** Uses `bundle.resources` in `tauri.conf.json` (not `externalBin`). The bundle includes the pre-built `index.bundled.cjs` file.
+
+**Transport:** WebSocket server on `ws://127.0.0.1:{port}` (default). Also supports Unix socket (`--listen unix://`) for backward compat. JSON-RPC 2.0 wire protocol with `initialize`/`initialized` handshake.
 
 ```
 sidecar/
-├── index.ts              Entry point, JSON-RPC server over Unix socket
-├── rpc-connection.ts     Bidirectional JSON-RPC 2.0 peer
-├── frontend-client.ts    Typed notifications → Rust → Tauri events
-├── protocol.ts           Shared message type definitions
-├── agents/               Agent handler interface + Claude SDK integration
-│   └── claude/           Claude-specific: discovery, session, models, SDK options
-├── db/                   Direct SQLite writes (assistant messages, session status)
+├── index.ts              Entry point, WebSocket + Unix socket server (JSON-RPC 2.0)
+├── rpc-connection.ts     Bidirectional JSON-RPC 2.0 peer (WebSocket + net.Socket transport)
+├── event-broadcaster.ts  Singleton: broadcasts canonical events to all connected clients
+├── health.ts             Health endpoints (/health, /readyz) + graceful shutdown coordinator
+├── protocol.ts           Zod-validated protocol definitions, re-exports shared/protocol.ts
+├── agents/               Agent handler interface + SDK integrations
+│   ├── agent-handler.ts  AgentHandler interface and multi-agent registry
+│   ├── claude/           Claude SDK: discovery, session, models, SDK options
+│   └── codex/            Codex SDK integration
 └── test/                 Unit tests
 ```
+
+### Canonical Agent Events (`shared/agent-events.ts`)
+
+All agent output is normalized to 12 canonical event types that flow: Agent SDK → AgentHandler → EventBroadcaster → Backend agent-client → agent-event-handler → DB + WS push.
+
+**Event categories:**
+
+- **Session lifecycle:** `session.started`, `session.idle`, `session.error`, `session.cancelled`
+- **Messages:** `message.assistant`, `message.tool_result`, `message.result`, `message.cancelled`
+- **Interactions:** `interaction.opened`, `interaction.resolved`
+- **Tool relay:** `tool.request`, `tool.response`
 
 ### Key Bun Scripts
 
 ```bash
-bun run build:sidecar    # Build sidecar → src-tauri/resources/bin/index.bundled.cjs
-bun run test:sidecar     # Run sidecar tests (198 tests)
-bun run test:sidecar:watch  # Watch mode for sidecar tests
+bun run build:sidecar    # Build agent-server → src-tauri/resources/bin/index.bundled.cjs
+bun run test:sidecar     # Run agent-server tests (452 tests)
+bun run test:sidecar:watch  # Watch mode for agent-server tests
 ```
 
 # RUNNING THE APP
@@ -933,7 +965,7 @@ BEGIN UPDATE {table} SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
 1. Add the resource name to `QUERY_RESOURCES` in `shared/events.ts`
 2. Add a `runQuery` match arm in `backend/src/services/query-engine.ts`
-3. Add the resource to the `INVALIDATION_MAP` in `backend/src/routes/notify.ts`
+3. Add invalidation calls in `backend/src/services/agent-event-handler.ts` (for agent-driven data) or the relevant route handler
 4. Use `useQuerySubscription(resource, { queryKey, params })` in the frontend hook
 5. Set `staleTime: Infinity` and `refetchOnWindowFocus: false` on the `useQuery` (WS handles freshness)
 
