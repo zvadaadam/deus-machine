@@ -1,17 +1,18 @@
 // backend/src/services/agent-persistence.ts
-// Database write functions for persisting agent events.
+// Database write functions for persisting canonical agent events.
 //
-// STUB: PR 2 establishes the interface. PR 3 will implement the full
-// persistence layer (migrating writes from sidecar/db/session-writer.ts
-// to here in the backend).
+// Adapted from sidecar/db/session-writer.ts. Key differences:
+// - Uses backend's getDatabase() (not sidecar's)
+// - No notifyBackend() calls (backend handles WS push via invalidate())
+// - No FrontendClient calls (backend pushes via query-engine directly)
+// - Takes event objects instead of positional args
 //
-// Currently, the sidecar writes directly to SQLite via better-sqlite3.
-// The migration plan is:
-//   1. Agent-server emits canonical events (PR 1 ✓)
-//   2. Backend receives events via AgentClient (PR 2 — this file)
-//   3. Backend persists events to DB (PR 3)
-//   4. Remove direct DB writes from sidecar (PR 4)
+// All functions are synchronous (better-sqlite3 is synchronous).
+// Callers (agent-event-handler.ts) call invalidate() after persistence succeeds.
 
+import { getDatabase } from "../lib/database";
+import { uuidv7 } from "../../../shared/lib/uuid";
+import { getErrorMessage } from "../../../shared/lib/errors";
 import type {
   MessageAssistantEvent,
   MessageToolResultEvent,
@@ -25,54 +26,204 @@ import type {
 } from "../../../shared/agent-events";
 
 // ============================================================================
-// Session status writes
+// WriteResult type (mirrors sidecar's pattern)
 // ============================================================================
 
-/** Update session status to "working" when a turn starts. */
-export function persistSessionStarted(_event: SessionStartedEvent): void {
-  // TODO: UPDATE sessions SET status = 'working' WHERE id = event.sessionId
-}
-
-/** Update session status to "idle" when a turn completes. */
-export function persistSessionIdle(_event: SessionIdleEvent): void {
-  // TODO: UPDATE sessions SET status = 'idle' WHERE id = event.sessionId
-}
-
-/** Update session status to "error" with error details. */
-export function persistSessionError(_event: SessionErrorEvent): void {
-  // TODO: UPDATE sessions SET status = 'error', error_message = event.error,
-  //       error_category = event.category WHERE id = event.sessionId
-}
-
-/** Update session status after cancellation (back to idle). */
-export function persistSessionCancelled(_event: SessionCancelledEvent): void {
-  // TODO: UPDATE sessions SET status = 'idle' WHERE id = event.sessionId
-}
+export type WriteResult<T = string> = { ok: true; value: T } | { ok: false; error: string };
 
 // ============================================================================
 // Message writes
 // ============================================================================
 
-/** Save an assistant message to session_messages. */
-export function persistAssistantMessage(_event: MessageAssistantEvent): void {
-  // TODO: INSERT INTO session_messages (id, session_id, role, content, ...)
-  // Mirrors current sidecar/db/session-writer.ts saveAssistantMessage()
+/**
+ * Save an assistant message to the messages table.
+ * Mirrors sidecar saveAssistantMessage() logic:
+ * - Generates a local UUID7 message ID
+ * - Stores flat content array, except for cancelled messages which get an envelope
+ * - Records the agent_message_id and parent_tool_use_id for linking
+ */
+export function persistAssistantMessage(event: MessageAssistantEvent): WriteResult {
+  const db = getDatabase();
+  const messageId = uuidv7();
+  const sentAt = new Date().toISOString();
+
+  // Store flat content array for normal messages. For "cancelled" messages,
+  // write envelope so the frontend can detect cancellation from DB content.
+  const contentPayload =
+    event.message.stop_reason === "cancelled"
+      ? { message: { stop_reason: "cancelled" }, blocks: event.message.content ?? [] }
+      : (event.message.content ?? []);
+  const content = JSON.stringify(contentPayload);
+
+  try {
+    db.prepare(
+      `INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
+       VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`
+    ).run(
+      messageId,
+      event.sessionId,
+      content,
+      sentAt,
+      event.model || null,
+      event.message.id || null,
+      event.message.parent_tool_use_id || null
+    );
+    return { ok: true, value: messageId };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to save assistant message:`, msg);
+    return { ok: false, error: msg };
+  }
 }
 
-/** Save a tool result message to session_messages. */
-export function persistToolResultMessage(_event: MessageToolResultEvent): void {
-  // TODO: INSERT INTO session_messages (id, session_id, role, content, ...)
-  // Mirrors current sidecar/db/session-writer.ts saveToolResultMessage()
+/**
+ * Save a tool_result message (role='user') to the messages table.
+ * These contain tool execution results that link tool_use blocks to their outputs.
+ */
+export function persistToolResultMessage(event: MessageToolResultEvent): WriteResult {
+  const db = getDatabase();
+  const messageId = uuidv7();
+  const sentAt = new Date().toISOString();
+  const content = JSON.stringify(event.message.content ?? []);
+
+  try {
+    db.prepare(
+      `INSERT INTO messages (id, session_id, role, content, sent_at, agent_message_id, parent_tool_use_id)
+       VALUES (?, ?, 'user', ?, ?, ?, ?)`
+    ).run(
+      messageId,
+      event.sessionId,
+      content,
+      sentAt,
+      event.message.id || null,
+      event.message.parent_tool_use_id || null
+    );
+    return { ok: true, value: messageId };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to save tool_result message:`, msg);
+    return { ok: false, error: msg };
+  }
 }
 
-/** Handle message.result events (success, error_during_execution). */
+/**
+ * Handle message.result events. No DB write needed — this is informational
+ * (success/error_during_execution subtypes). Session status transitions are
+ * handled by separate session.idle / session.error events.
+ */
 export function persistMessageResult(_event: MessageResultEvent): void {
-  // TODO: Process usage stats, handle error_during_execution subtype
+  // No-op: message.result is informational only.
+  // Session status is managed by session.idle / session.error events.
 }
 
-/** Persist a cancellation marker message. */
-export function persistMessageCancelled(_event: MessageCancelledEvent): void {
-  // TODO: INSERT cancellation marker into session_messages
+/**
+ * Persist a cancellation: insert a cancelled assistant message marker
+ * and set session status to idle.
+ *
+ * The cancelled message uses the envelope format so the frontend can detect
+ * cancellation on reload (the "Turn interrupted" label in AssistantTurn).
+ */
+export function persistMessageCancelled(event: MessageCancelledEvent): WriteResult {
+  const db = getDatabase();
+  const messageId = uuidv7();
+  const sentAt = new Date().toISOString();
+
+  // Empty cancelled message with envelope so frontend detects cancellation
+  const content = JSON.stringify({
+    message: { stop_reason: "cancelled" },
+    blocks: [],
+  });
+
+  try {
+    db.transaction(() => {
+      db.prepare(
+        `INSERT INTO messages (id, session_id, role, content, sent_at, cancelled_at)
+         VALUES (?, ?, 'assistant', ?, ?, ?)`
+      ).run(messageId, event.sessionId, content, sentAt, sentAt);
+
+      db.prepare(
+        `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
+      ).run(event.sessionId);
+    })();
+
+    return { ok: true, value: messageId };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist message.cancelled:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+// ============================================================================
+// Session status writes
+// ============================================================================
+
+/**
+ * Update session status to "working" when a turn starts.
+ * Only updates if the session is not already working (idempotent).
+ */
+export function persistSessionStarted(event: SessionStartedEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'working', error_message = NULL, error_category = NULL, updated_at = datetime('now')
+       WHERE id = ? AND status != 'working'`
+    ).run(event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.started:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Update session status to "idle" when a turn completes. */
+export function persistSessionIdle(event: SessionIdleEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
+    ).run(event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.idle:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Update session status to "error" with error details. */
+export function persistSessionError(event: SessionErrorEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'error', error_message = ?, error_category = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(event.error, event.category, event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.error:`, msg);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Update session status after cancellation (back to idle). */
+export function persistSessionCancelled(event: SessionCancelledEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET status = 'idle', error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?`
+    ).run(event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist session.cancelled:`, msg);
+    return { ok: false, error: msg };
+  }
 }
 
 // ============================================================================
@@ -80,7 +231,17 @@ export function persistMessageCancelled(_event: MessageCancelledEvent): void {
 // ============================================================================
 
 /** Store the agent-provider session ID for resume support. */
-export function persistAgentSessionId(_event: AgentSessionIdEvent): void {
-  // TODO: UPDATE sessions SET agent_session_id = event.agentSessionId
-  //       WHERE id = event.sessionId
+export function persistAgentSessionId(event: AgentSessionIdEvent): WriteResult<void> {
+  const db = getDatabase();
+
+  try {
+    db.prepare(
+      `UPDATE sessions SET agent_session_id = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(event.agentSessionId, event.sessionId);
+    return { ok: true, value: undefined };
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    console.error(`[AgentPersistence] Failed to persist agent.session_id:`, msg);
+    return { ok: false, error: msg };
+  }
 }
