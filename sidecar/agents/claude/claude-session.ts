@@ -4,6 +4,7 @@
 
 import type { Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { QueryOptions } from "../agent-handler";
+import { SessionStore } from "../session-store";
 
 // ============================================================================
 // Types
@@ -14,7 +15,7 @@ import type { QueryOptions } from "../agent-handler";
  *
  * Lifecycle phases (fields set in each phase):
  *
- *   IDLE (freshly created via query() → setSession):
+ *   IDLE (freshly created via query() → claudeSessions.set):
  *     currentSettings, currentModel, currentMaxThinkingTokens, turnId, cwd
  *     generator/sendMessage/sendTerminate are undefined
  *
@@ -51,39 +52,18 @@ export interface SessionState {
 }
 
 // ============================================================================
-// State
+// Session Stores
 // ============================================================================
 
-const activeSessions = new Map<string, SessionState>();
-const queries = new Map<string, Query>();
+/** Active Claude sessions keyed by sessionId. */
+export const claudeSessions = new SessionStore<SessionState>();
+
+/** Active Claude SDK Query objects keyed by sessionId. */
+export const claudeQueries = new SessionStore<Query>();
 
 // ============================================================================
 // Public API
 // ============================================================================
-
-export function getSession(sessionId: string): SessionState | undefined {
-  return activeSessions.get(sessionId);
-}
-
-export function setSession(sessionId: string, session: SessionState): void {
-  activeSessions.set(sessionId, session);
-}
-
-export function deleteSession(sessionId: string): void {
-  activeSessions.delete(sessionId);
-}
-
-export function getQuery(sessionId: string): Query | undefined {
-  return queries.get(sessionId);
-}
-
-export function setQuery(sessionId: string, query: Query): void {
-  queries.set(sessionId, query);
-}
-
-export function deleteQuery(sessionId: string): void {
-  queries.delete(sessionId);
-}
 
 /**
  * Check if a session is in the ACTIVE phase (generator running, can send messages).
@@ -133,12 +113,12 @@ export function settingsChanged(
  * cleans up generator and sendMessage references).
  */
 export function terminateSession(sessionId: string): void {
-  const session = activeSessions.get(sessionId);
+  const session = claudeSessions.get(sessionId);
   if (session && session.sendTerminate) {
     session.sendTerminate();
     delete session.generator;
     delete session.sendMessage;
   }
   // Note: queries cleanup is owned by processWithGenerator's finally block.
-  // We only signal termination here — the finally block calls deleteQuery + deleteSession.
+  // We only signal termination here — the finally block calls claudeQueries.delete + claudeSessions.delete.
 }

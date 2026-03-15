@@ -11,7 +11,7 @@ import { createOpenDevsMCPServer } from "../opendevs-tools";
 import { createNotebookMCPServer } from "../notebook-server";
 import { getClaudeExecutablePath } from "./claude-discovery";
 import { mapModelForProvider } from "./claude-models";
-import { getSession } from "./claude-session";
+import { claudeSessions } from "./claude-session";
 import type { QueryOptions } from "../agent-handler";
 import { buildWorkspaceContext } from "../workspace-context";
 
@@ -57,7 +57,7 @@ export function createCanUseTool(sessionId: string, workingDirectory: string | u
   return async (toolName: string, input: any, _toolOptions: any) => {
     // Handle plan mode exit approval
     if (toolName === "ExitPlanMode") {
-      const currentSession = getSession(sessionId);
+      const currentSession = claudeSessions.get(sessionId);
 
       let response: { approved: boolean; turnId?: string };
       try {
@@ -127,7 +127,7 @@ export function createCanUseTool(sessionId: string, workingDirectory: string | u
             normalizedFilePath = path.resolve(filePath);
           }
           const additionalDirectories =
-            getSession(sessionId)?.currentSettings?.additionalDirectories ?? [];
+            claudeSessions.get(sessionId)?.currentSettings?.additionalDirectories ?? [];
           const allAllowedDirs = [workingDirectory, ...additionalDirectories].map((dir) => {
             try {
               return fs.realpathSync(dir);
@@ -171,7 +171,7 @@ export function createHooks(sessionId: string) {
       {
         hooks: [
           (_input: any) => {
-            const currentSession = getSession(sessionId);
+            const currentSession = claudeSessions.get(sessionId);
             const turnId = currentSession?.turnId;
             if (!turnId) return Promise.resolve({});
             createCheckpoint(sessionId, turnId, "start", _input.cwd, "claudeHandler");
@@ -184,7 +184,7 @@ export function createHooks(sessionId: string) {
       {
         hooks: [
           (_input: any) => {
-            const currentSession = getSession(sessionId);
+            const currentSession = claudeSessions.get(sessionId);
             const turnId = currentSession?.turnId;
             if (!turnId) return Promise.resolve({});
             createCheckpoint(sessionId, turnId, "end", _input.cwd, "claudeHandler");

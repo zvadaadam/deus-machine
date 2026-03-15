@@ -3,6 +3,8 @@
 // Simpler than Claude's session state since Codex SDK exec mode is non-interactive
 // (no mid-turn user messaging, no generator queue pattern).
 
+import { SessionStore } from "../session-store";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -21,32 +23,21 @@ export interface CodexSessionState {
 }
 
 // ============================================================================
-// State
+// Session Store
 // ============================================================================
 
-const activeSessions = new Map<string, CodexSessionState>();
+/** Active Codex sessions keyed by sessionId. */
+export const codexSessions = new SessionStore<CodexSessionState>();
 
 // ============================================================================
 // Public API
 // ============================================================================
 
-export function getCodexSession(sessionId: string): CodexSessionState | undefined {
-  return activeSessions.get(sessionId);
-}
-
-export function setCodexSession(sessionId: string, session: CodexSessionState): void {
-  activeSessions.set(sessionId, session);
-}
-
-export function deleteCodexSession(sessionId: string): void {
-  activeSessions.delete(sessionId);
-}
-
 /**
  * Aborts the current run for a session and marks it as not running.
  */
 export function abortCodexSession(sessionId: string): void {
-  const session = activeSessions.get(sessionId);
+  const session = codexSessions.get(sessionId);
   if (session) {
     session.abortController?.abort();
     session.isRunning = false;
