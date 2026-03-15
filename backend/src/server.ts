@@ -6,7 +6,7 @@ import { closeAll as closeAllWsConnections } from './services/ws.service';
 import { ensureRelayConnected, disconnectFromRelay } from './services/relay.service';
 import { getSetting } from './services/settings.service';
 import { AgentClient } from './services/agent-client';
-import { handleAgentEvent } from './services/agent-event-handler';
+import { handleAgentEvent, setRespondToAgent } from './services/agent-event-handler';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -84,6 +84,10 @@ if (agentServerUrl) {
       console.log('[AgentClient] Disconnected from agent-server');
     },
   });
+
+  // Register the respond callback so tool relay can send results back to the agent-server
+  setRespondToAgent((params) => agentClient!.sendTurnRespond(params));
+
   agentClient.connect();
 }
 

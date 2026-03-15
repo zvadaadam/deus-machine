@@ -2,12 +2,14 @@
 //
 // Handles agent-initiated RPC requests that require frontend interaction or data access.
 //
-// Architecture:
-//   Sidecar → Rust socket relay → "sidecar:request" Tauri event → this handler
-//   Handler responds via: invoke("send_sidecar_message", { message: JSON.stringify(...) })
+// Architecture (dual path during transition):
+//   Path 1 (Tauri): Sidecar → Rust socket relay → "sidecar:request" Tauri event → this handler
+//                    Handler responds via: invoke("send_sidecar_message", ...)
+//   Path 2 (WS):    Agent-server → Backend → q:event tool:request → this handler
+//                    Handler responds via: sendToolResponse (q:tool_response frame)
 //
-// Multiple listeners on "sidecar:request" are fine — browser automation uses the same event.
-// This hook only claims the 5 agent-UI methods; everything else falls through.
+// Both paths are active simultaneously. A shared deduplication Set prevents
+// double-responding to the same requestId.
 //
 // Handled methods:
 //   exitPlanMode         — user must approve/reject an agent plan (UI interaction needed)
@@ -24,6 +26,11 @@ import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react
 import { invoke, listen, isTauriEnv, SIDECAR_REQUEST } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { gitDiffFiles, gitDiffFile } from "@/platform/tauri/git";
+import {
+  useWsToolRequest,
+  markRequestHandled,
+  isRequestHandled,
+} from "@/shared/hooks/useWsToolRequest";
 
 // ============================================================================
 // Types
@@ -34,6 +41,10 @@ export interface PlanModeRequest {
   rpcId: unknown;
   sessionId: string;
   toolInput: unknown;
+  /** How to respond: "tauri" sends via Rust socket, "ws" sends via q:tool_response */
+  channel: "tauri" | "ws";
+  /** For WS channel: the requestId used for q:tool_response routing */
+  wsRequestId?: string;
 }
 
 export interface AskQuestionRequest {
@@ -45,6 +56,10 @@ export interface AskQuestionRequest {
     options: string[];
     multiSelect?: boolean;
   }>;
+  /** How to respond: "tauri" sends via Rust socket, "ws" sends via q:tool_response */
+  channel: "tauri" | "ws";
+  /** For WS channel: the requestId used for q:tool_response routing */
+  wsRequestId?: string;
 }
 
 export type PendingAgentRequest = PlanModeRequest | AskQuestionRequest;
@@ -124,7 +139,7 @@ export function useAgentRpcHandler(
   );
 
   // ============================================================================
-  // Shared RPC response helpers
+  // Shared RPC response helpers (Tauri path)
   // ============================================================================
 
   const sendResponse = useCallback(async (id: unknown, result: unknown) => {
@@ -154,15 +169,20 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleExitPlanMode = useCallback(
-    (id: unknown, params: Record<string, unknown>) => {
+    (
+      id: unknown,
+      params: Record<string, unknown>,
+      channel: "tauri" | "ws" = "tauri",
+      wsRequestId?: string
+    ) => {
       const sessionId = params.sessionId as string;
       if (!sessionId) {
-        sendError(id, "exitPlanMode: missing sessionId");
+        if (channel === "tauri") sendError(id, "exitPlanMode: missing sessionId");
         return;
       }
 
       if (import.meta.env.DEV) {
-        console.log("[AgentRPC] exitPlanMode pending for session:", sessionId);
+        console.log("[AgentRPC] exitPlanMode pending for session:", sessionId, `(${channel})`);
       }
 
       setPendingAndNotify((prev) => {
@@ -172,6 +192,8 @@ export function useAgentRpcHandler(
           rpcId: id,
           sessionId,
           toolInput: params.toolInput,
+          channel,
+          wsRequestId,
         } satisfies PlanModeRequest);
         return next;
       });
@@ -184,11 +206,16 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleAskUserQuestion = useCallback(
-    (id: unknown, params: Record<string, unknown>) => {
+    (
+      id: unknown,
+      params: Record<string, unknown>,
+      channel: "tauri" | "ws" = "tauri",
+      wsRequestId?: string
+    ) => {
       const sessionId = params.sessionId as string;
       const questions = params.questions as AskQuestionRequest["questions"];
       if (!sessionId || !Array.isArray(questions)) {
-        sendError(id, "askUserQuestion: missing sessionId or questions");
+        if (channel === "tauri") sendError(id, "askUserQuestion: missing sessionId or questions");
         return;
       }
 
@@ -197,7 +224,7 @@ export function useAgentRpcHandler(
           "[AgentRPC] askUserQuestion pending for session:",
           sessionId,
           questions.length,
-          "questions"
+          `questions (${channel})`
         );
       }
 
@@ -208,6 +235,8 @@ export function useAgentRpcHandler(
           rpcId: id,
           sessionId,
           questions,
+          channel,
+          wsRequestId,
         } satisfies AskQuestionRequest);
         return next;
       });
@@ -220,7 +249,11 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleGetDiff = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (
+      id: unknown,
+      params: Record<string, unknown>,
+      respond: (id: unknown, result: unknown) => Promise<void> = sendResponse
+    ) => {
       const sessionId = params.sessionId as string;
       const file = params.file as string | undefined;
       const stat = params.stat as boolean | undefined;
@@ -228,7 +261,7 @@ export function useAgentRpcHandler(
       const ws = contextRef.current.sessionWorkspaces.get(sessionId);
       if (!ws) {
         // No workspace context for this session — respond with a descriptive error
-        await sendResponse(id, { error: `No workspace context for session ${sessionId}` });
+        await respond(id, { error: `No workspace context for session ${sessionId}` });
         return;
       }
 
@@ -241,23 +274,23 @@ export function useAgentRpcHandler(
             ws.defaultBranch,
             file
           );
-          await sendResponse(id, { diff: result.diff });
+          await respond(id, { diff: result.diff });
         } else if (stat) {
           // File list with stats
           const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
           const statText = result.files
             .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
             .join("\n");
-          await sendResponse(id, { diff: statText });
+          await respond(id, { diff: statText });
         } else {
           // All changed files list (summary, not full patch — patches can be huge)
           const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
           const fileList = result.files.map((f) => f.file).join("\n");
-          await sendResponse(id, { diff: fileList });
+          await respond(id, { diff: fileList });
         }
       } catch (err: unknown) {
         console.error("[AgentRPC] getDiff failed:", err);
-        await sendResponse(id, { error: getErrorMessage(err) });
+        await respond(id, { error: getErrorMessage(err) });
       }
     },
     [sendResponse]
@@ -268,13 +301,17 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleDiffComment = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (
+      id: unknown,
+      params: Record<string, unknown>,
+      respond: (id: unknown, result: unknown) => Promise<void> = sendResponse
+    ) => {
       // Comments from the agent are logged but not yet surfaced in the UI.
       // Respond with success so the agent can continue; a future PR adds the UI.
       if (import.meta.env.DEV) {
         console.log("[AgentRPC] diffComment received:", params.comments);
       }
-      await sendResponse(id, { success: true });
+      await respond(id, { success: true });
     },
     [sendResponse]
   );
@@ -284,7 +321,11 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleGetTerminalOutput = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (
+      id: unknown,
+      params: Record<string, unknown>,
+      respond: (id: unknown, result: unknown) => Promise<void> = sendResponse
+    ) => {
       // Terminal output reading via Tauri IPC.
       // The Rust side exposes get_terminal_output (if implemented) or we fall back
       // to a "no terminal output available" response so the agent can continue.
@@ -297,14 +338,14 @@ export function useAgentRpcHandler(
           maxLines,
         });
 
-        await sendResponse(id, {
+        await respond(id, {
           output: output ?? "",
           source: "terminal",
           isRunning: false,
         });
       } catch {
         // Rust command not yet implemented or PTY not active — degrade gracefully
-        await sendResponse(id, {
+        await respond(id, {
           output: "",
           source: "none",
           isRunning: false,
@@ -333,7 +374,16 @@ export function useAgentRpcHandler(
         return next;
       });
 
-      await sendResponse(pending.rpcId, { approved, turnId });
+      const result = { approved, turnId };
+
+      if (pending.channel === "ws" && pending.wsRequestId) {
+        // Respond via WS q:tool_response
+        const { sendToolResponse } = await import("@/platform/ws");
+        sendToolResponse(pending.wsRequestId, result);
+      } else {
+        // Respond via Tauri socket relay
+        await sendResponse(pending.rpcId, result);
+      }
     },
     [sendResponse, setPendingAndNotify]
   );
@@ -353,13 +403,22 @@ export function useAgentRpcHandler(
         return next;
       });
 
-      await sendResponse(pending.rpcId, { answers });
+      const result = { answers };
+
+      if (pending.channel === "ws" && pending.wsRequestId) {
+        // Respond via WS q:tool_response
+        const { sendToolResponse } = await import("@/platform/ws");
+        sendToolResponse(pending.wsRequestId, result);
+      } else {
+        // Respond via Tauri socket relay
+        await sendResponse(pending.rpcId, result);
+      }
     },
     [sendResponse, setPendingAndNotify]
   );
 
   // ============================================================================
-  // Event listener
+  // Tauri event listener (Path 1: sidecar → Rust → Tauri event)
   // ============================================================================
 
   useEffect(() => {
@@ -368,13 +427,19 @@ export function useAgentRpcHandler(
     const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
       const { id, method, params } = event.payload;
 
+      // Skip if WS path already handled this request
+      if (typeof id === "string" && isRequestHandled(id)) return;
+
       if (import.meta.env.DEV) {
-        console.log("[AgentRPC] Received request:", method, "id:", id);
+        console.log("[AgentRPC] Received request (Tauri):", method, "id:", id);
       }
 
+      // Mark as handled to prevent WS path from also responding
+      if (typeof id === "string") markRequestHandled(id);
+
       match(method)
-        .with("exitPlanMode", () => handleExitPlanMode(id, params))
-        .with("askUserQuestion", () => handleAskUserQuestion(id, params))
+        .with("exitPlanMode", () => handleExitPlanMode(id, params, "tauri"))
+        .with("askUserQuestion", () => handleAskUserQuestion(id, params, "tauri"))
         .with("getDiff", () => handleGetDiff(id, params))
         .with("diffComment", () => handleDiffComment(id, params))
         .with("getTerminalOutput", () => handleGetTerminalOutput(id, params))
@@ -393,6 +458,31 @@ export function useAgentRpcHandler(
     handleDiffComment,
     handleGetTerminalOutput,
   ]);
+
+  // ============================================================================
+  // WS event listener (Path 2: agent-server → backend → q:event tool:request)
+  // ============================================================================
+
+  useWsToolRequest((method, requestId, params, respond, _respondError) => {
+    if (import.meta.env.DEV) {
+      console.log("[AgentRPC] Received request (WS):", method, "requestId:", requestId);
+    }
+
+    // Wrap respond into the (id, result) => Promise<void> shape that handlers expect
+    const wsRespond = async (_id: unknown, result: unknown) => {
+      respond(result);
+    };
+
+    match(method)
+      .with("exitPlanMode", () => handleExitPlanMode(requestId, params, "ws", requestId))
+      .with("askUserQuestion", () => handleAskUserQuestion(requestId, params, "ws", requestId))
+      .with("getDiff", () => handleGetDiff(requestId, params, wsRespond))
+      .with("diffComment", () => handleDiffComment(requestId, params, wsRespond))
+      .with("getTerminalOutput", () => handleGetTerminalOutput(requestId, params, wsRespond))
+      .otherwise(() => {
+        // Not an agent-UI method — browser RPC handler will claim it
+      });
+  });
 
   return {
     pendingRequests,

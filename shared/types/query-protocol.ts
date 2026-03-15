@@ -58,13 +58,22 @@ export interface QCommandFrame {
   params: Record<string, unknown>;
 }
 
+/** Client responds to a tool relay request (q:event tool:request → q:tool_response). */
+export interface QToolResponseFrame {
+  type: "q:tool_response";
+  requestId: string;
+  result?: unknown;
+  error?: string;
+}
+
 /** All frames a client can send. */
 export type QClientFrame =
   | QRequestFrame
   | QSubscribeFrame
   | QUnsubscribeFrame
   | QMutateFrame
-  | QCommandFrame;
+  | QCommandFrame
+  | QToolResponseFrame;
 
 // ---- Server → Client Frames ----
 
@@ -141,3 +150,15 @@ export type QServerFrame =
   | QEventFrame
   | QInvalidateFrame
   | QErrorFrame;
+
+// ---- Tool Relay Event Payload ----
+
+/** Payload shape for q:event with event: "tool:request".
+ *  Sent by the backend when relaying a tool request from the agent to the frontend. */
+export interface ToolRequestEventData {
+  requestId: string;
+  sessionId: string;
+  method: string;
+  params: Record<string, unknown>;
+  timeoutMs: number;
+}

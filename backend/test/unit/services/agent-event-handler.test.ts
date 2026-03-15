@@ -15,6 +15,7 @@ const {
   mockPersistSessionCancelled,
   mockPersistAgentSessionId,
   mockInvalidate,
+  mockRelay,
 } = vi.hoisted(() => ({
   mockPersistAssistantMessage: vi.fn(() => ({ ok: true, value: 'msg-id' })),
   mockPersistToolResultMessage: vi.fn(() => ({ ok: true, value: 'msg-id' })),
@@ -26,6 +27,7 @@ const {
   mockPersistSessionCancelled: vi.fn(() => ({ ok: true, value: undefined })),
   mockPersistAgentSessionId: vi.fn(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn(),
+  mockRelay: vi.fn(() => Promise.resolve({ diff: 'ok' })),
 }));
 
 vi.mock('../../../src/services/agent-persistence', () => ({
@@ -44,11 +46,15 @@ vi.mock('../../../src/services/query-engine', () => ({
   invalidate: mockInvalidate,
 }));
 
+vi.mock('../../../src/services/tool-relay', () => ({
+  relay: mockRelay,
+}));
+
 // ============================================================================
 // Import after mocks
 // ============================================================================
 
-import { handleAgentEvent } from '../../../src/services/agent-event-handler';
+import { handleAgentEvent, setRespondToAgent } from '../../../src/services/agent-event-handler';
 import type { AgentEvent } from '../../../../shared/agent-events';
 
 // ============================================================================
@@ -287,23 +293,72 @@ describe('handleAgentEvent', () => {
   });
 
   // ==========================================================================
-  // Tool relay (no DB write)
+  // Tool relay
   // ==========================================================================
 
   describe('tool.request', () => {
-    it('does not persist or invalidate', () => {
-      const event: AgentEvent = {
-        type: 'tool.request',
-        requestId: 'treq-1',
-        sessionId: 'sess-1',
-        method: 'browser/screenshot',
-        params: {},
-        timeoutMs: 30000,
-      };
+    const event: AgentEvent = {
+      type: 'tool.request',
+      requestId: 'treq-1',
+      sessionId: 'sess-1',
+      method: 'getDiff',
+      params: { stat: true },
+      timeoutMs: 30000,
+    };
 
+    it('calls relay() with the event when respondToAgent is registered', () => {
+      setRespondToAgent(vi.fn().mockResolvedValue(undefined));
+      handleAgentEvent(event);
+
+      expect(mockRelay).toHaveBeenCalledWith(event);
+    });
+
+    it('does not persist or invalidate', () => {
+      setRespondToAgent(vi.fn().mockResolvedValue(undefined));
       handleAgentEvent(event);
 
       expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockPersistAssistantMessage).not.toHaveBeenCalled();
+    });
+
+    it('sends result back to agent-server via respondToAgent when relay resolves', async () => {
+      const mockRespond = vi.fn().mockResolvedValue(undefined);
+      setRespondToAgent(mockRespond);
+      mockRelay.mockResolvedValue({ diff: 'file.ts: +10 -5' });
+
+      handleAgentEvent(event);
+
+      // Let the async relay complete
+      await vi.waitFor(() => {
+        expect(mockRespond).toHaveBeenCalledWith({
+          sessionId: 'sess-1',
+          requestId: 'treq-1',
+          result: { diff: 'file.ts: +10 -5' },
+        });
+      });
+    });
+
+    it('sends error result back to agent-server when relay rejects', async () => {
+      const mockRespond = vi.fn().mockResolvedValue(undefined);
+      setRespondToAgent(mockRespond);
+      mockRelay.mockRejectedValue(new Error('Tool relay timed out'));
+
+      handleAgentEvent(event);
+
+      // Let the async relay complete
+      await vi.waitFor(() => {
+        expect(mockRespond).toHaveBeenCalledWith({
+          sessionId: 'sess-1',
+          requestId: 'treq-1',
+          result: { error: 'Tool relay timed out' },
+        });
+      });
+    });
+
+    it('does not throw when respondToAgent is not registered', () => {
+      setRespondToAgent(null as any);
+      // Should not throw — just logs an error
+      expect(() => handleAgentEvent(event)).not.toThrow();
     });
   });
 
