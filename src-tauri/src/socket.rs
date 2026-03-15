@@ -7,8 +7,9 @@
  * ARCHITECTURE (Event Flow):
  * Frontend → Tauri IPC → Rust socket relay → Sidecar-v2 → Claude SDK
  * Claude responds → Sidecar-v2 saves to DB → Sidecar-v2 JSON-RPC notify
- * → Rust listener (here) reads → Rust emits Tauri event → Frontend
- * → UI updates instantly (<100ms latency)
+ * → Rust listener (here) reads → logs and ignores (not emitted as Tauri events)
+ * Session data now flows via the backend WS query protocol (q:snapshot/q:delta)
+ * → Frontend subscribes to WS → React Query cache updated → UI renders
  *
  * PROTOCOL: JSON-RPC 2.0 over newline-delimited JSON (NDJSON)
  * Notifications from sidecar-v2 are logged but no longer emitted as Tauri events.
@@ -31,7 +32,8 @@
  *   getClaudeAuth(), workspaceInit() while streaming was active.
  * - Now: ALL reads go through the single event listener thread. JSON-RPC responses
  *   (messages with an "id" field) are dispatched via mpsc channel to receive().
- *   Notifications (no "id") are emitted as Tauri events as before.
+ *   Notifications (no "id") are logged but not emitted as Tauri events
+ *   (session data is handled by the backend WS query protocol).
  */
 
 use std::io::{BufRead, BufReader, Write};
@@ -51,7 +53,8 @@ use serde_json::Value;
  * All reads are funneled through the event listener thread to prevent
  * data corruption from concurrent BufReaders on the same fd.
  * JSON-RPC responses (with "id") are dispatched to response_rx for receive().
- * JSON-RPC notifications (without "id") are emitted as Tauri events.
+ * JSON-RPC notifications (without "id") are logged but not emitted as Tauri
+ * events (session data is handled by the backend WS query protocol).
  */
 pub struct SocketManager {
     socket_path: Mutex<Option<PathBuf>>,
@@ -178,7 +181,7 @@ impl SocketManager {
 
     /**
      * Start listening for broadcast events from sidecar-v2
-     * Runs in background thread and emits Tauri events to frontend
+     * Runs in background thread, routing JSON-RPC responses to receive()
      *
      * ALL socket reads are funneled through this single thread to prevent
      * data corruption from concurrent BufReaders on the same fd.
@@ -224,7 +227,7 @@ impl SocketManager {
                                     // Dispatch based on message shape:
                                     // 1. Has "method" + "id" = sidecar→frontend REQUEST → emit Tauri event
                                     // 2. Has "id" but no "method" = response to frontend request → mpsc
-                                    // 3. Has "method" but no "id" = notification → emit Tauri event
+                                    // 3. Has "method" but no "id" = notification → log and ignore (handled by WS)
                                     let has_method = rpc_msg.get("method").and_then(|v| v.as_str()).is_some();
                                     let has_id = rpc_msg.get("id").is_some();
 
@@ -251,7 +254,7 @@ impl SocketManager {
                                         // Response to frontend-initiated request → route to receive()
                                         let _ = response_tx.send(line);
                                     } else if has_method {
-                                        // Notification — emit as Tauri event
+                                        // Notification — log and ignore (handled by WS query protocol)
                                         let method = rpc_msg.get("method")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("unknown");

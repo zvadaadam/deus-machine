@@ -119,7 +119,7 @@ export interface QCommandAckFrame {
 /** Server pushes an ephemeral event (no subscription needed). */
 export interface QEventFrame {
   type: "q:event";
-  event: string;
+  event: ProtocolEvent;
   data: unknown;
 }
 
