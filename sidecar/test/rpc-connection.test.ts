@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RpcConnection } from "../rpc-connection";
+import { RpcConnection, type RpcTransport } from "../rpc-connection";
 import { buildJsonRpcNotification, buildJsonRpcRequest, buildJsonRpcResponse } from "./builders";
 
 /**
@@ -18,6 +18,28 @@ function createMockSocket() {
       destroy: vi.fn(),
     } as any,
     written,
+  };
+}
+
+/**
+ * Creates a mock RpcTransport (simulates WebSocket transport).
+ * Captures sent data for assertions.
+ */
+function createMockWsTransport() {
+  const sent: string[] = [];
+  let closed = false;
+  const transport: RpcTransport = {
+    send: vi.fn((data: string) => {
+      sent.push(data);
+    }),
+    isClosed: vi.fn(() => closed),
+  };
+  return {
+    transport,
+    sent,
+    setClosed: (value: boolean) => {
+      closed = value;
+    },
   };
 }
 
@@ -175,6 +197,119 @@ describe("RpcConnection", () => {
     it("can be called multiple times safely", () => {
       tunnel.stop();
       expect(() => tunnel.stop()).not.toThrow();
+    });
+  });
+});
+
+// ============================================================================
+// RpcConnection with WebSocket transport (RpcTransport interface)
+// ============================================================================
+
+describe("RpcConnection (WebSocket transport)", () => {
+  let tunnel: RpcConnection;
+  let mockWs: ReturnType<typeof createMockWsTransport>;
+
+  beforeEach(() => {
+    mockWs = createMockWsTransport();
+    tunnel = new RpcConnection(mockWs.transport);
+  });
+
+  // ==========================================================================
+  // handleMessage (alias for handleLine, clearer for WS)
+  // ==========================================================================
+
+  describe("handleMessage", () => {
+    it("returns false for invalid JSON", () => {
+      const result = tunnel.handleMessage("{not valid json");
+      expect(result).toBe(false);
+    });
+
+    it("returns true for valid JSON-RPC notification", () => {
+      const notification = buildJsonRpcNotification("test", { key: "value" });
+      const result = tunnel.handleMessage(JSON.stringify(notification));
+      expect(result).toBe(true);
+    });
+
+    it("dispatches a request to a registered method handler", async () => {
+      const handler = vi.fn().mockResolvedValue({ ok: true });
+      tunnel.addMethod("testMethod", handler);
+
+      const request = buildJsonRpcRequest("testMethod", { data: "hello" });
+      tunnel.handleMessage(JSON.stringify(request));
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(handler).toHaveBeenCalledWith({ data: "hello" });
+    });
+  });
+
+  // ==========================================================================
+  // notify (WebSocket — no newline framing)
+  // ==========================================================================
+
+  describe("notify", () => {
+    it("sends a JSON-RPC notification via transport.send()", () => {
+      tunnel.notify("eventName", { key: "value" });
+
+      expect(mockWs.transport.send).toHaveBeenCalled();
+      const sent = mockWs.sent[0];
+      // WS transport does NOT append newlines — messages are complete frames
+      expect(sent).not.toMatch(/\n$/);
+      const parsed = JSON.parse(sent);
+      expect(parsed.jsonrpc).toBe("2.0");
+      expect(parsed.method).toBe("eventName");
+      expect(parsed.params).toEqual({ key: "value" });
+      expect(parsed.id).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // request
+  // ==========================================================================
+
+  describe("request", () => {
+    it("sends a JSON-RPC request via transport.send()", () => {
+      void tunnel.request("getData", { query: "test" });
+
+      expect(mockWs.transport.send).toHaveBeenCalled();
+      const sent = mockWs.sent[0];
+      const parsed = JSON.parse(sent);
+      expect(parsed.jsonrpc).toBe("2.0");
+      expect(parsed.method).toBe("getData");
+      expect(parsed.params).toEqual({ query: "test" });
+      expect(parsed.id).toBeDefined();
+    });
+
+    it("rejects when transport is closed", async () => {
+      mockWs.setClosed(true);
+      const promise = tunnel.request("getData", {});
+      await expect(promise).rejects.toThrow("Transport is closed");
+    });
+
+    it("resolves when a matching response is received", async () => {
+      const promise = tunnel.request("getInfo", { key: "val" });
+
+      const sent = mockWs.sent[0];
+      const parsed = JSON.parse(sent);
+      const requestId = parsed.id;
+
+      const response = buildJsonRpcResponse(requestId, { info: "result" });
+      tunnel.handleMessage(JSON.stringify(response));
+
+      const result = await promise;
+      expect(result).toEqual({ info: "result" });
+    });
+  });
+
+  // ==========================================================================
+  // stop
+  // ==========================================================================
+
+  describe("stop", () => {
+    it("rejects pending requests", async () => {
+      const promise = tunnel.request("slowMethod", {});
+      tunnel.stop();
+
+      await expect(promise).rejects.toThrow("RPC connection stopped");
     });
   });
 });

@@ -1,7 +1,11 @@
 // sidecar/index.ts
-// Entry point for the OpenDevs sidecar v2 process.
-// Creates a Unix domain socket server that the OpenDevs frontend connects to
-// via newline-delimited JSON-RPC 2.0.
+// Entry point for the OpenDevs agent-server process.
+//
+// Supports two transport modes (selected via --listen flag):
+//   --listen ws://    → WebSocket server on 127.0.0.1 (default, dynamic port)
+//   --listen unix://  → Unix domain socket (legacy, for backward compat)
+//
+// Both transports use JSON-RPC 2.0 over text frames/lines.
 
 import * as Sentry from "@sentry/node";
 
@@ -23,9 +27,11 @@ import * as os from "os";
 import * as util from "util";
 import { exec } from "child_process";
 import { StringDecoder } from "string_decoder";
+import { createServer as createHttpServer } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 
 import { getErrorMessage } from "../shared/lib/errors";
-import { RpcConnection } from "./rpc-connection";
+import { RpcConnection, wsTransport } from "./rpc-connection";
 import { FrontendClient } from "./frontend-client";
 import { closeDatabase } from "./db/index";
 import { reconcileStuckSessions, saveUserMessage, updateSessionStatus } from "./db/session-writer";
@@ -101,22 +107,42 @@ console.debug = (...args: any[]) => {
 };
 
 // ============================================================================
+// CLI flag parsing
+// ============================================================================
+
+type TransportMode = "ws" | "unix";
+
+function parseTransportMode(): TransportMode {
+  const listenIdx = process.argv.indexOf("--listen");
+  if (listenIdx === -1) return "ws"; // Default: WebSocket
+  const value = process.argv[listenIdx + 1] || "";
+  if (value.startsWith("unix://")) return "unix";
+  if (value.startsWith("ws://") || value === "") return "ws";
+  // Unknown scheme — default to ws
+  console.error(`[CLI] Unknown --listen scheme "${value}", defaulting to ws://`);
+  return "ws";
+}
+
+// ============================================================================
 // UnifiedSidecar
 // ============================================================================
 
 class UnifiedSidecar {
+  private transportMode: TransportMode;
+
+  // Unix socket transport
   private socketPath: string;
-  private server: net.Server;
+  private unixServer: net.Server | null = null;
 
-  constructor() {
-    console.log("UnifiedSidecar: Initializing...");
+  // WebSocket transport
+  private httpServer: ReturnType<typeof createHttpServer> | null = null;
+  private wss: WebSocketServer | null = null;
 
+  constructor(mode: TransportMode) {
+    this.transportMode = mode;
     this.socketPath = path.join(os.tmpdir(), `opendevs-sidecar-${process.pid}.sock`);
 
-    this.server = net.createServer((socket) => {
-      console.log("Server: New connection accepted");
-      this.handleConnection(socket);
-    });
+    console.log(`UnifiedSidecar: Initializing (transport=${mode})...`);
 
     // Graceful shutdown handlers
     const gracefulShutdown = async (signal: string) => {
@@ -136,8 +162,9 @@ class UnifiedSidecar {
 
   /**
    * Wires up all JSON-RPC methods and notifications on a new connection.
+   * Transport-agnostic — works with both Unix socket and WebSocket tunnels.
    */
-  private setupJsonRpc(rpcTunnel: RpcConnection, socket: net.Socket): void {
+  private setupJsonRpc(rpcTunnel: RpcConnection): void {
     FrontendClient.attachTunnel(rpcTunnel);
 
     // --- Query (dispatch to agent by agentType) ---
@@ -145,7 +172,9 @@ class UnifiedSidecar {
     // query() is NOT awaited — the ACK returns immediately after validation.
     FrontendClient.onQuery(rpcTunnel, async (request) => {
       const tQueryReceived = Date.now();
-      console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`);
+      console.log(
+        `[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`
+      );
       const agent = getAgent(request.agentType);
       if (!agent) {
         return { accepted: false, reason: `No agent registered for type: ${request.agentType}` };
@@ -174,9 +203,6 @@ class UnifiedSidecar {
       agent.query(request.id, request.prompt, request.options).catch((err) => {
         console.error(`[QUERY] Unhandled error in ${request.agentType} query:`, err);
         // Recover: update session status so it doesn't stay stuck in "working".
-        // processWithGenerator has its own try/catch that handles most errors,
-        // but if query() itself rejects (before or outside the generator),
-        // this is the last line of defense.
         const classified = classifyError(err);
         FrontendClient.sendError({
           id: request.id,
@@ -187,7 +213,9 @@ class UnifiedSidecar {
         });
         updateSessionStatus(request.id, "error", classified.message, classified.category);
       });
-      console.log(`[TIMING][QUERY] DISPATCHED session=${request.id} dispatchTime=${Date.now() - tQueryReceived}ms`);
+      console.log(
+        `[TIMING][QUERY] DISPATCHED session=${request.id} dispatchTime=${Date.now() - tQueryReceived}ms`
+      );
       return { accepted: true };
     });
 
@@ -210,7 +238,9 @@ class UnifiedSidecar {
     FrontendClient.onWorkspaceInit(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (!agent?.initWorkspace) {
-        return Promise.reject(new Error(`Agent "${request.agentType}" does not support workspace init`));
+        return Promise.reject(
+          new Error(`Agent "${request.agentType}" does not support workspace init`)
+        );
       }
       return agent.initWorkspace({
         id: request.id,
@@ -224,7 +254,9 @@ class UnifiedSidecar {
     FrontendClient.onContextUsage(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
       if (!agent?.getContextUsage) {
-        return Promise.reject(new Error(`Agent "${request.agentType}" does not support context usage`));
+        return Promise.reject(
+          new Error(`Agent "${request.agentType}" does not support context usage`)
+        );
       }
       return agent.getContextUsage(request);
     });
@@ -243,20 +275,20 @@ class UnifiedSidecar {
       const agent = getAgent(request.agentType);
       if (agent) agent.reset(request.id);
     });
-
-    // Note: socket "close" handler is in handleConnection() which also calls
-    // rpcTunnel.stop() and FrontendClient.detachTunnel(). No need for a
-    // duplicate handler here.
   }
+
+  // ==========================================================================
+  // Unix socket transport
+  // ==========================================================================
 
   /**
    * Handles a new TCP/Unix socket connection.
    * Sets up line-based JSON-RPC message framing.
    */
-  private handleConnection(socket: net.Socket): void {
-    console.log("Client connected");
+  private handleUnixConnection(socket: net.Socket): void {
+    console.log("Client connected (unix)");
     const rpcTunnel = new RpcConnection(socket);
-    this.setupJsonRpc(rpcTunnel, socket);
+    this.setupJsonRpc(rpcTunnel);
 
     let buffer = "";
     const decoder = new StringDecoder("utf8");
@@ -280,11 +312,46 @@ class UnifiedSidecar {
     });
 
     socket.on("close", (hadError) => {
-      console.log(`Client disconnected, hadError: ${hadError}`);
+      console.log(`Client disconnected (unix), hadError: ${hadError}`);
       rpcTunnel.stop();
       FrontendClient.detachTunnel(rpcTunnel);
     });
   }
+
+  // ==========================================================================
+  // WebSocket transport
+  // ==========================================================================
+
+  /**
+   * Handles a new WebSocket connection.
+   * Each WS text frame is a complete JSON-RPC message (no line splitting needed).
+   */
+  private handleWsConnection(ws: WebSocket): void {
+    console.log("Client connected (ws)");
+    const transport = wsTransport(ws);
+    const rpcTunnel = new RpcConnection(transport);
+    this.setupJsonRpc(rpcTunnel);
+
+    ws.on("message", (data: Buffer | string) => {
+      const message = typeof data === "string" ? data : data.toString("utf8");
+      console.debug("Received WS message with length", message.length);
+      rpcTunnel.handleMessage(message);
+    });
+
+    ws.on("error", (error: Error) => {
+      console.error("WebSocket error:", error);
+    });
+
+    ws.on("close", (code: number, reason: Buffer) => {
+      console.log(`Client disconnected (ws), code=${code} reason=${reason.toString()}`);
+      rpcTunnel.stop();
+      FrontendClient.detachTunnel(rpcTunnel);
+    });
+  }
+
+  // ==========================================================================
+  // Lifecycle
+  // ==========================================================================
 
   /**
    * Kills any remaining Claude child processes spawned by this sidecar.
@@ -329,19 +396,35 @@ class UnifiedSidecar {
     } catch (err) {
       console.error("[CLEANUP] Failed to close database:", err);
     }
+
+    // Clean up Unix socket
     if (fs.existsSync(this.socketPath)) {
       fs.unlinkSync(this.socketPath);
       console.log("[CLEANUP] Removed socket file");
     }
-    this.server.close();
+    if (this.unixServer) {
+      this.unixServer.close();
+    }
+
+    // Clean up WebSocket server
+    if (this.wss) {
+      // Close all connected clients
+      for (const client of this.wss.clients) {
+        client.close(1001, "Server shutting down");
+      }
+      this.wss.close();
+    }
+    if (this.httpServer) {
+      this.httpServer.close();
+    }
   }
 
   /**
-   * Starts the sidecar:
-   * 1. Clean up stale socket
-   * 2. Initialize the Claude handler (verify executable)
-   * 3. Listen on Unix domain socket
-   * 4. Print SOCKET_PATH=<path> to stdout (consumed by the OpenDevs app)
+   * Starts the agent-server:
+   * 1. Clean up stale resources
+   * 2. Initialize agent handlers
+   * 3. Listen on the selected transport
+   * 4. Print connection info to stdout (consumed by the Rust process manager)
    */
   async start(): Promise<void> {
     await this.cleanup();
@@ -369,8 +452,63 @@ class UnifiedSidecar {
       console.error(`Failed to reconcile stuck sessions: ${reconcileResult.error}`);
     }
 
+    if (this.transportMode === "ws") {
+      return this.startWebSocket();
+    } else {
+      return this.startUnixSocket();
+    }
+  }
+
+  private startWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.server.listen(this.socketPath, () => {
+      // Create a minimal HTTP server just for the WS upgrade.
+      // Binding to 127.0.0.1 — agent-server only accepts local connections.
+      this.httpServer = createHttpServer((_req, res) => {
+        // Reject plain HTTP requests — this server only does WebSocket upgrades.
+        res.writeHead(426, { "Content-Type": "text/plain" });
+        res.end("Upgrade Required");
+      });
+
+      this.wss = new WebSocketServer({ server: this.httpServer });
+
+      this.wss.on("connection", (ws) => {
+        console.log("Server: New WebSocket connection accepted");
+        this.handleWsConnection(ws);
+      });
+
+      this.wss.on("error", (error: Error) => {
+        console.error("WebSocketServer error:", error);
+      });
+
+      // Port 0 = OS-assigned dynamic port
+      this.httpServer.listen(0, "127.0.0.1", () => {
+        const addr = this.httpServer!.address();
+        const port = typeof addr === "object" && addr ? addr.port : 0;
+
+        console.log(`Agent-server listening on ws://127.0.0.1:${port}`);
+        console.log(`Sidecar PID: ${process.pid}`);
+
+        // Machine-readable output for the Rust process manager.
+        // LISTEN_URL is the new canonical output; SOCKET_PATH kept for transition.
+        originalLog(`LISTEN_URL=ws://127.0.0.1:${port}`);
+        resolve();
+      });
+
+      this.httpServer.on("error", (error: Error) => {
+        console.error("HTTP server error:", error);
+        reject(error);
+      });
+    });
+  }
+
+  private startUnixSocket(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.unixServer = net.createServer((socket) => {
+        console.log("Server: New connection accepted");
+        this.handleUnixConnection(socket);
+      });
+
+      this.unixServer.listen(this.socketPath, () => {
         console.log(`Unified sidecar listening on ${this.socketPath}`);
         console.log(`Sidecar PID: ${process.pid}`);
 
@@ -379,7 +517,7 @@ class UnifiedSidecar {
         resolve();
       });
 
-      this.server.on("error", (error: any) => {
+      this.unixServer.on("error", (error: any) => {
         console.error("Server error:", error);
         reject(error);
       });
@@ -412,7 +550,8 @@ process.on("unhandledRejection", (reason, _promise) => {
 // Bootstrap
 // ============================================================================
 
-const sidecar = new UnifiedSidecar();
+const mode = parseTransportMode();
+const sidecar = new UnifiedSidecar(mode);
 sidecar.start().catch((error) => {
   console.error("Startup failed:", error);
   process.exit(1);
