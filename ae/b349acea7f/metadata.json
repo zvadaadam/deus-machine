@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "aeb349acea7f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-backend-sidecar",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "CLAUDE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ae/b349acea7f/0/metadata.json",
+      "transcript": "/ae/b349acea7f/0/full.jsonl",
+      "content_hash": "/ae/b349acea7f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 3,
+    "cache_creation_tokens": 2734,
+    "cache_read_tokens": 59837,
+    "output_tokens": 483,
+    "api_call_count": 1
+  }
+}
