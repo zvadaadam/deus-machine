@@ -308,11 +308,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   });
 
   it("responds to valid JSON-RPC requests on registered methods", async () => {
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-session",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-session",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -330,11 +329,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
     client.write("this is not valid json\n");
     client.write("{ incomplete\n");
 
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-after-garbage",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-after-garbage",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -350,11 +348,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   it("handles non-JSON-RPC JSON gracefully", async () => {
     client.write(JSON.stringify({ foo: "bar", not: "jsonrpc" }) + "\n");
 
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-after-nonjsonrpc",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-after-nonjsonrpc",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -407,11 +404,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // ------------------------------------------------------------------
 
   it("returns real account info via claudeAuth", async () => {
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-auth-real",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: WORKSPACE_ROOT },
+      id: "test-auth-real",
+      cwd: WORKSPACE_ROOT,
     });
 
     const response = await waitForMessage(
@@ -437,11 +433,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // ------------------------------------------------------------------
 
   it("returns slash commands and MCP servers via workspaceInit", async () => {
-    const id = sendRequest(client, "workspaceInit", {
-      type: "workspace_init",
-      id: "test-workspace-init",
+    const id = sendRequest(client, "provider/initWorkspace", {
       agentType: "claude",
-      options: { cwd: WORKSPACE_ROOT },
+      id: "test-workspace-init",
+      cwd: WORKSPACE_ROOT,
     });
 
     const response = await waitForMessage(
@@ -477,9 +472,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     const messageCollector = collectMessages(client);
 
     // Send a minimal query (short prompt to get a quick response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "claude",
       prompt: "Reply with exactly: PONG",
       options: {
@@ -543,9 +537,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     const sessionId = `test-cancel-${Date.now()}`;
 
     // Start a query that will take a while (ask for a long response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "claude",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
@@ -561,10 +554,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Send cancel request
-    const cancelId = sendRequest(client, "cancel", {
-      type: "cancel",
-      id: sessionId,
-      agentType: "claude",
+    const cancelId = sendRequest(client, "turn/cancel", {
+      sessionId,
     });
 
     // Should receive either:
@@ -648,9 +639,8 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     const messageCollector = collectMessages(client);
 
     // Send a minimal query (short prompt for a quick response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "codex",
       prompt: "Reply with exactly: PONG",
       options: {
@@ -709,9 +699,8 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     const sessionId = `test-codex-cancel-${Date.now()}`;
 
     // Start a query that will take a while
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "codex",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
@@ -727,10 +716,8 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Send cancel request
-    const cancelId = sendRequest(client, "cancel", {
-      type: "cancel",
-      id: sessionId,
-      agentType: "codex",
+    const cancelId = sendRequest(client, "turn/cancel", {
+      sessionId,
     });
 
     // Should receive either:
