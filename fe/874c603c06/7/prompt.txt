@@ -1,0 +1,3 @@
+explore how wwe now do it?
+
+2. Permission as JSON-RPC request/response — Cleaner than our notification + separate channel. The correlation is automatic. But would require changing our WS protocol, so it’s a bigger lift.
