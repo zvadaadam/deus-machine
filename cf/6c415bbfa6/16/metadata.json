@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "cf6c415bbfa6",
+  "session_id": "f28d3e92-22e8-4c66-9035-d359972063b6",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T20:53:27.407724Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/agent-handler.ts",
+    "sidecar/agents/agent-types.ts",
+    "sidecar/protocol.ts",
+    "sidecar/rpc-schemas.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "942a5f1cff02",
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T20:53:27.406741Z",
+    "agent_lines": 584,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 584,
+    "agent_percentage": 100
+  }
+}
