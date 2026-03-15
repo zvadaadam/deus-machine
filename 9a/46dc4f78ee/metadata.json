@@ -93,6 +93,12 @@
       "transcript": "/9a/46dc4f78ee/12/full.jsonl",
       "content_hash": "/9a/46dc4f78ee/12/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/9a/46dc4f78ee/13/metadata.json",
+      "transcript": "/9a/46dc4f78ee/13/full.jsonl",
+      "content_hash": "/9a/46dc4f78ee/13/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
