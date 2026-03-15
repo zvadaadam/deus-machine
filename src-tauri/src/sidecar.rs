@@ -11,17 +11,17 @@ use anyhow::{Result, Context};
 /// integration and emits canonical events. No direct database access.
 ///
 /// The sidecar uses Unix domain sockets for IPC. The socket path
-/// is discovered by parsing `SOCKET_PATH=<path>` from stdout.
+/// is discovered by parsing `LISTEN_URL=<path>` from stdout.
 pub struct SidecarManager {
     process: Mutex<Option<Child>>,
-    socket_path: Arc<Mutex<Option<String>>>,
+    listen_url: Arc<Mutex<Option<String>>>,
 }
 
 impl SidecarManager {
     pub fn new() -> Self {
         Self {
             process: Mutex::new(None),
-            socket_path: Arc::new(Mutex::new(None)),
+            listen_url: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -65,7 +65,7 @@ impl SidecarManager {
             .context("Failed to capture sidecar stdout")?;
 
         // Clone Arc for thread
-        let socket_path_clone = Arc::clone(&self.socket_path);
+        let listen_url_clone = Arc::clone(&self.listen_url);
 
         // Spawn thread to read stdout and find socket path
         std::thread::spawn(move || {
@@ -75,12 +75,12 @@ impl SidecarManager {
                     // Print all output for debugging (sidecar logs go to file, but some may come through)
                     println!("[SIDECAR] {}", line);
 
-                    // Parse socket path from SOCKET_PATH=/path/to/socket format
-                    if line.starts_with("SOCKET_PATH=") {
-                        if let Some(path_str) = line.strip_prefix("SOCKET_PATH=") {
-                            let mut socket_path = socket_path_clone.lock().unwrap();
-                            *socket_path = Some(path_str.to_string());
-                            println!("[SIDECAR] Detected socket path: {}", path_str);
+                    // Parse agent-server URL from LISTEN_URL=ws://... format
+                    if line.starts_with("LISTEN_URL=") {
+                        if let Some(path_str) = line.strip_prefix("LISTEN_URL=") {
+                            let mut listen_url = listen_url_clone.lock().unwrap();
+                            *listen_url = Some(path_str.to_string());
+                            println!("[SIDECAR] Detected listen URL: {}", path_str);
                         }
                     }
                 }
@@ -96,22 +96,22 @@ impl SidecarManager {
         // Wait for socket path to be detected (with timeout)
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_secs(10) {
-            if self.socket_path.lock().unwrap().is_some() {
+            if self.listen_url.lock().unwrap().is_some() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        if self.socket_path.lock().unwrap().is_none() {
-            eprintln!("[SIDECAR] Warning: Could not detect socket path within 10 seconds");
+        if self.listen_url.lock().unwrap().is_none() {
+            eprintln!("[SIDECAR] Warning: Could not detect listen URL within 10 seconds");
         }
 
         Ok(())
     }
 
     /// Get the socket path the sidecar is listening on
-    pub fn get_socket_path(&self) -> Option<String> {
-        self.socket_path.lock().unwrap().clone()
+    pub fn get_listen_url(&self) -> Option<String> {
+        self.listen_url.lock().unwrap().clone()
     }
 
     /// Check if sidecar is running
@@ -127,14 +127,14 @@ impl SidecarManager {
                     // Process has exited — clean up both handles
                     eprintln!("[SIDECAR] Process exited unexpectedly (exit: {})", status);
                     *process = None;
-                    *self.socket_path.lock().unwrap() = None;
+                    *self.listen_url.lock().unwrap() = None;
                     false
                 }
                 Ok(None) => true,    // Still running
                 Err(e) => {
                     eprintln!("[SIDECAR] Failed to check process status: {}", e);
                     *process = None;
-                    *self.socket_path.lock().unwrap() = None;
+                    *self.listen_url.lock().unwrap() = None;
                     false
                 }
             }
@@ -196,7 +196,7 @@ impl SidecarManager {
         }
 
         // Clear the socket path
-        *self.socket_path.lock().unwrap() = None;
+        *self.listen_url.lock().unwrap() = None;
 
         Ok(())
     }
@@ -218,22 +218,22 @@ mod tests {
     fn test_sidecar_manager_creation() {
         let manager = SidecarManager::new();
         assert!(!manager.is_running());
-        assert_eq!(manager.get_socket_path(), None);
+        assert_eq!(manager.get_listen_url(), None);
     }
 
     #[test]
-    fn test_socket_path_parsing() {
+    fn test_listen_url_parsing() {
         // Test the socket path detection logic by simulating stdout
-        let test_output = "Some initialization output\nSOCKET_PATH=/tmp/opendevs-sidecar-12345.sock\nMore output\n";
+        let test_output = "Some initialization output\nLISTEN_URL=/tmp/opendevs-sidecar-12345.sock\nMore output\n";
 
         // Find the SOCKET_PATH line
-        let socket_path = test_output
+        let listen_url = test_output
             .lines()
-            .find(|line| line.starts_with("SOCKET_PATH="))
-            .and_then(|line| line.strip_prefix("SOCKET_PATH="))
+            .find(|line| line.starts_with("LISTEN_URL="))
+            .and_then(|line| line.strip_prefix("LISTEN_URL="))
             .map(|s| s.to_string());
 
-        assert_eq!(socket_path, Some("/tmp/opendevs-sidecar-12345.sock".to_string()));
+        assert_eq!(listen_url, Some("/tmp/opendevs-sidecar-12345.sock".to_string()));
     }
 
     #[test]
@@ -244,7 +244,7 @@ mod tests {
 
         let script_content = r#"
 console.log('Initializing mock sidecar...');
-console.log('SOCKET_PATH=/tmp/mock-sidecar-test.sock');
+console.log('LISTEN_URL=/tmp/mock-sidecar-test.sock');
 console.log('Mock sidecar ready');
 
 // Keep the process alive for a moment
@@ -267,7 +267,7 @@ setTimeout(() => {
                 std::thread::sleep(std::time::Duration::from_millis(500));
 
                 // Check if socket path was detected
-                if let Some(path) = manager.get_socket_path() {
+                if let Some(path) = manager.get_listen_url() {
                     println!("✅ Socket path detected: {}", path);
                     assert_eq!(path, "/tmp/mock-sidecar-test.sock");
                 } else {

@@ -7,6 +7,7 @@ import { ensureRelayConnected, disconnectFromRelay } from './services/relay.serv
 import { getSetting } from './services/settings.service';
 import { AgentClient } from './services/agent-client';
 import { handleAgentEvent, setRespondToAgent } from './services/agent-event-handler';
+import { setAgentForwarder } from './services/query-engine';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -87,6 +88,12 @@ if (agentServerUrl) {
 
   // Register the respond callback so tool relay can send results back to the agent-server
   setRespondToAgent((params) => agentClient!.sendTurnRespond(params));
+
+  // Register agent forwarding so sendMessage commands are forwarded to the agent-server
+  setAgentForwarder(
+    (params) => agentClient!.sendTurnStart(params),
+    (params) => agentClient!.sendTurnCancel(params),
+  );
 
   agentClient.connect();
 }

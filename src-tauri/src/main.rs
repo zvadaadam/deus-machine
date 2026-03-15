@@ -115,24 +115,8 @@ fn main() {
                     .map_err(|e| format!("Failed to get resource dir: {e}"))?
             };
 
-            let backend_path = resource_base.join("backend/server.cjs");
-            println!("[TAURI] Starting backend from: {}", backend_path.display());
-
-            match backend_manager.start(backend_path.clone(), &db_path) {
-                Ok(_) => {
-                    if let Some(port) = backend_manager.get_port() {
-                        println!("[TAURI] Backend started successfully on port {}", port);
-                    } else {
-                        println!("[TAURI] Backend started (port detection pending)");
-                    }
-                },
-                Err(e) => {
-                    eprintln!("[TAURI] Failed to start backend: {}", e);
-                    eprintln!("[TAURI] App will continue but backend features will not work");
-                }
-            }
-
-            // Start sidecar-v2 (agent runtime)
+            // Start agent-server FIRST so we can get its LISTEN_URL
+            // and pass it to the backend as AGENT_SERVER_URL env var.
             let sidecar_manager: tauri::State<SidecarManager> = app.state();
 
             let sidecar_path = if cfg!(dev) {
@@ -143,13 +127,38 @@ fn main() {
 
             println!("[TAURI] Starting agent-server from: {}", sidecar_path.display());
 
-            match sidecar_manager.start(sidecar_path) {
+            let agent_server_url: Option<String> = match sidecar_manager.start(sidecar_path) {
                 Ok(_) => {
-                    println!("[TAURI] ✅ Sidecar started");
+                    let url = sidecar_manager.get_listen_url();
+                    if let Some(ref u) = url {
+                        println!("[TAURI] ✅ Agent-server started at {}", u);
+                    } else {
+                        println!("[TAURI] ✅ Agent-server started (URL detection pending)");
+                    }
+                    url
                 },
                 Err(e) => {
-                    eprintln!("[TAURI] Failed to start sidecar: {}", e);
+                    eprintln!("[TAURI] Failed to start agent-server: {}", e);
                     eprintln!("[TAURI] App will continue but agent features will not work");
+                    None
+                }
+            };
+
+            // Start backend with agent-server URL so it can connect
+            let backend_path = resource_base.join("backend/server.cjs");
+            println!("[TAURI] Starting backend from: {}", backend_path.display());
+
+            match backend_manager.start(backend_path.clone(), &db_path, agent_server_url.as_deref()) {
+                Ok(_) => {
+                    if let Some(port) = backend_manager.get_port() {
+                        println!("[TAURI] Backend started successfully on port {}", port);
+                    } else {
+                        println!("[TAURI] Backend started (port detection pending)");
+                    }
+                },
+                Err(e) => {
+                    eprintln!("[TAURI] Failed to start backend: {}", e);
+                    eprintln!("[TAURI] App will continue but backend features will not work");
                 }
             }
 
