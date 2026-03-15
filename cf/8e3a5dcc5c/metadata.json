@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "cf8e3a5dcc5c",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/agent-handler.ts",
+    "sidecar/health.ts",
+    "sidecar/index.ts",
+    "sidecar/test/health.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cf/8e3a5dcc5c/0/metadata.json",
+      "transcript": "/cf/8e3a5dcc5c/0/full.jsonl",
+      "content_hash": "/cf/8e3a5dcc5c/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
