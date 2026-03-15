@@ -127,6 +127,12 @@
       "transcript": "/fe/874c603c06/19/full.jsonl",
       "content_hash": "/fe/874c603c06/19/content_hash.txt",
       "prompt": "/fe/874c603c06/19/prompt.txt"
+    },
+    {
+      "metadata": "/fe/874c603c06/20/metadata.json",
+      "transcript": "/fe/874c603c06/20/full.jsonl",
+      "content_hash": "/fe/874c603c06/20/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
