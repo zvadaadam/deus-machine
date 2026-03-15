@@ -29,6 +29,7 @@ import {
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { writeUserMessage } from "./message-writer";
 import { getConnection } from "./ws.service";
+import { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,
@@ -103,6 +104,9 @@ export function handleFrame(connectionId: string, msg: QueryParams): void {
       })
       .with("q:command", () => {
         handleCommand(connectionId, parseCommandFrame(msg));
+      })
+      .with("q:tool_response", () => {
+        handleToolResponse(msg);
       })
       .otherwise(() => {
         sendFrame(connectionId, {
@@ -350,6 +354,28 @@ function handleCommand(connectionId: string, msg: CommandFrameInput): void {
       accepted: false,
       error: err instanceof Error ? err.message : "Command failed",
     } satisfies QServerFrame);
+  }
+}
+
+// ---- Tool Response Handler ----
+
+function handleToolResponse(msg: QueryParams): void {
+  const requestId = typeof msg.requestId === "string" ? msg.requestId : undefined;
+  if (!requestId) {
+    console.error("[QueryEngine] q:tool_response missing requestId");
+    return;
+  }
+
+  if (typeof msg.error === "string") {
+    const resolved = rejectToolRelay(requestId, msg.error);
+    if (!resolved) {
+      console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId} (error)`);
+    }
+  } else {
+    const resolved = resolveToolRelay(requestId, msg.result);
+    if (!resolved) {
+      console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId} (result)`);
+    }
   }
 }
 

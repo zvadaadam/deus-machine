@@ -186,7 +186,6 @@ export function sendCommand(
 
 /**
  * Register a callback for q:event broadcasts.
- * Used by upcoming cloud/relay feature -- no desktop consumer yet.
  * Returns an unregister function.
  */
 export function onEvent(callback: EventCallback): () => void {
@@ -194,6 +193,24 @@ export function onEvent(callback: EventCallback): () => void {
   return () => {
     eventListeners.delete(callback);
   };
+}
+
+/**
+ * Send a tool response back to the backend (q:tool_response frame).
+ * Used by frontend RPC handlers to respond to tool relay requests
+ * received via q:event with event: "tool:request".
+ */
+export function sendToolResponse(requestId: string, result?: unknown, error?: string): void {
+  const frame: Record<string, unknown> = {
+    type: "q:tool_response",
+    requestId,
+  };
+  if (error !== undefined) {
+    frame.error = error;
+  } else {
+    frame.result = result;
+  }
+  sendFrame(frame);
 }
 
 /**

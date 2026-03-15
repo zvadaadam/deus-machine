@@ -8,6 +8,7 @@ export {
   subscribe,
   isConnected,
   sendCommand,
+  sendToolResponse,
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";

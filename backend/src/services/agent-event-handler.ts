@@ -4,11 +4,16 @@
 //
 // This is the single entry point for all agent -> backend data flow.
 // Each event is handled: persist first, then invalidate (ordering matters).
+//
+// Tool relay: tool.request events are relayed to the frontend via WS.
+// When the frontend responds, the result is sent back to the agent-server
+// via the registered respondToAgent callback.
 
 import { match } from "ts-pattern";
 import type { AgentEvent } from "../../../shared/agent-events";
 import type { QueryResource } from "../../../shared/types/query-protocol";
 import { invalidate } from "./query-engine";
+import { relay } from "./tool-relay";
 import {
   persistAssistantMessage,
   persistToolResultMessage,
@@ -20,6 +25,25 @@ import {
   persistSessionCancelled,
   persistAgentSessionId,
 } from "./agent-persistence";
+
+// ---- Tool relay callback ----
+
+/**
+ * Callback to send a tool response back to the agent-server.
+ * Registered by server.ts after the AgentClient is created.
+ * Signature matches agentClient.sendTurnRespond().
+ */
+type RespondToAgentFn = (params: { sessionId: string; requestId: string; result: unknown }) => Promise<void>;
+
+let respondToAgent: RespondToAgentFn | null = null;
+
+/**
+ * Register the callback used to send tool relay results back to the agent-server.
+ * Called once at startup from server.ts.
+ */
+export function setRespondToAgent(fn: RespondToAgentFn): void {
+  respondToAgent = fn;
+}
 
 /**
  * Process a single canonical agent event.
@@ -122,7 +146,9 @@ export function handleAgentEvent(event: AgentEvent): void {
     // ── Tool relay ────────────────────────────────────────────────────
     .with({ type: "tool.request" }, (e) => {
       console.log(`[AgentEvent] tool.request: session=${e.sessionId} method=${e.method} requestId=${e.requestId}`);
-      // No DB write — relay to frontend (future: dedicated tool relay channel)
+      // Fire-and-forget: relay to frontend, then send response back to agent-server.
+      // Errors are logged but don't crash the event handler.
+      void relayToolRequest(e);
     })
 
     // ── Metadata ──────────────────────────────────────────────────────
@@ -133,4 +159,42 @@ export function handleAgentEvent(event: AgentEvent): void {
     })
 
     .exhaustive();
+}
+
+// ---- Tool relay internal ----
+
+/**
+ * Relay a tool request to the frontend and send the result back to the agent-server.
+ *
+ * This is async (fire-and-forget from handleAgentEvent). The relay() promise
+ * resolves when the frontend sends q:tool_response, then we forward the result
+ * to the agent via turn/respond.
+ */
+async function relayToolRequest(event: AgentEvent & { type: "tool.request" }): Promise<void> {
+  const { sessionId, requestId, method } = event;
+
+  if (!respondToAgent) {
+    console.error(`[AgentEvent] tool.request: no respondToAgent callback registered (requestId=${requestId})`);
+    return;
+  }
+
+  try {
+    const result = await relay(event);
+
+    // Send the frontend's result back to the agent-server
+    await respondToAgent({ sessionId, requestId, result });
+    console.log(`[AgentEvent] tool.request resolved: requestId=${requestId} method=${method}`);
+  } catch (err) {
+    console.error(`[AgentEvent] tool.request failed: requestId=${requestId} method=${method}`, err);
+    // Send an error result back so the agent doesn't hang waiting
+    try {
+      await respondToAgent({
+        sessionId,
+        requestId,
+        result: { error: err instanceof Error ? err.message : "Tool relay failed" },
+      });
+    } catch (respondErr) {
+      console.error(`[AgentEvent] Failed to send error response to agent: requestId=${requestId}`, respondErr);
+    }
+  }
 }
