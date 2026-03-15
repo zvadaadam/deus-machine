@@ -27,9 +27,6 @@ import { z } from "zod";
 /** Workspace events — backend → Rust → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
 
-/** Sidecar RPC — sidecar → Rust → frontend (bidirectional requests) */
-export const SIDECAR_REQUEST = "sidecar:request" as const;
-
 /** File system events — Rust watcher → frontend */
 export const FS_CHANGED = "fs:changed" as const;
 
@@ -71,7 +68,12 @@ export const COMMAND_NAMES = ["sendMessage", "stopSession"] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
-export const PROTOCOL_EVENTS = ["session:plan-mode", "session:error", "session:progress", "tool:request"] as const;
+export const PROTOCOL_EVENTS = [
+  "session:plan-mode",
+  "session:error",
+  "session:progress",
+  "tool:request",
+] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 /** Event names the sidecar sends to POST /notify on the backend.
@@ -96,13 +98,6 @@ export const WorkspaceProgressSchema = z.object({
   label: z.string(),
 });
 export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
-
-export const SidecarRpcRequestSchema = z.object({
-  id: z.unknown(),
-  method: z.string(),
-  params: z.record(z.string(), z.unknown()),
-});
-export type SidecarRpcRequest = z.infer<typeof SidecarRpcRequestSchema>;
 
 export const FileChangeSchema = z.object({
   workspace_path: z.string(),
@@ -221,7 +216,6 @@ export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
  */
 export const AppEventSchemaMap = {
   [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
-  [SIDECAR_REQUEST]: SidecarRpcRequestSchema,
   [FS_CHANGED]: FileChangeSchema,
   [PTY_DATA]: PtyDataSchema,
   [PTY_EXIT]: PtyExitSchema,
@@ -246,9 +240,6 @@ export const AppEventSchemaMap = {
 export interface AppEventMap {
   // Workspace
   [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
-
-  // Sidecar RPC
-  [SIDECAR_REQUEST]: SidecarRpcRequest;
 
   // File system
   [FS_CHANGED]: FileChangeEvent;

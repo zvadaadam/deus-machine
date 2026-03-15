@@ -11,11 +11,9 @@ const {
   mockEmitToolResultMessage,
   mockEmitMessageResult,
   mockEmitAgentSessionId,
+  mockEmitSessionIdle,
+  mockEmitSessionError,
   mockClassifyStopReason,
-  mockSaveAssistantMessage,
-  mockSaveToolResultMessage,
-  mockSaveAgentSessionId,
-  mockUpdateSessionStatus,
 } = vi.hoisted(() => ({
   mockSendMessage: vi.fn(),
   mockSendError: vi.fn(),
@@ -23,23 +21,9 @@ const {
   mockEmitToolResultMessage: vi.fn(),
   mockEmitMessageResult: vi.fn(),
   mockEmitAgentSessionId: vi.fn(),
+  mockEmitSessionIdle: vi.fn(),
+  mockEmitSessionError: vi.fn(),
   mockClassifyStopReason: vi.fn(),
-  mockSaveAssistantMessage: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
-    ok: true,
-    value: "msg-id",
-  })),
-  mockSaveToolResultMessage: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
-    ok: true,
-    value: "msg-id",
-  })),
-  mockSaveAgentSessionId: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
-    ok: true,
-    value: "sess-id",
-  })),
-  mockUpdateSessionStatus: vi.fn((): { ok: boolean; value?: string; error?: string } => ({
-    ok: true,
-    value: "sess-id",
-  })),
 }));
 
 vi.mock("../frontend-client", () => ({
@@ -50,18 +34,13 @@ vi.mock("../frontend-client", () => ({
     emitToolResultMessage: mockEmitToolResultMessage,
     emitMessageResult: mockEmitMessageResult,
     emitAgentSessionId: mockEmitAgentSessionId,
+    emitSessionIdle: mockEmitSessionIdle,
+    emitSessionError: mockEmitSessionError,
   },
 }));
 
 vi.mock("../agents/error-classifier", () => ({
   classifyStopReason: mockClassifyStopReason,
-}));
-
-vi.mock("../db/session-writer", () => ({
-  saveAssistantMessage: mockSaveAssistantMessage,
-  saveToolResultMessage: mockSaveToolResultMessage,
-  saveAgentSessionId: mockSaveAgentSessionId,
-  updateSessionStatus: mockUpdateSessionStatus,
 }));
 
 // ============================================================================
@@ -149,22 +128,19 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("side effect ordering", () => {
-    it("assistant message: saves to DB then sends to frontend (call order)", () => {
+    it("assistant message: emits canonical event then sends to frontend (call order)", () => {
       const msg = {
         type: "assistant",
         message: { role: "assistant", content: "hello", stop_reason: "end_turn" },
         session_id: "sdk-sess-1",
       };
       const callOrder: string[] = [];
-      mockSaveAssistantMessage.mockImplementation(() => {
-        callOrder.push("db");
-        return { ok: true, value: "id" };
-      });
+      mockEmitAssistantMessage.mockImplementation(() => callOrder.push("emit"));
       mockSendMessage.mockImplementation(() => callOrder.push("frontend"));
 
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
 
-      expect(callOrder.indexOf("db")).toBeLessThan(callOrder.indexOf("frontend"));
+      expect(callOrder.indexOf("emit")).toBeLessThan(callOrder.indexOf("frontend"));
     });
 
     it("stop_reason error sent AFTER sendMessage", () => {
@@ -188,45 +164,50 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("assistant messages", () => {
-    it("saves assistant message to DB with correct args", () => {
+    it("emits canonical message.assistant event with correct args", () => {
       const msg = {
         type: "assistant",
-        message: { role: "assistant", content: "response" },
+        message: { id: "msg-1", role: "assistant", content: "response" },
         parent_tool_use_id: "parent-1",
       };
       processMessage(msg, makeCtx(), makeSession(), makeOpts({ model: "opus" }));
 
-      expect(mockSaveAssistantMessage).toHaveBeenCalledWith(
+      expect(mockEmitAssistantMessage).toHaveBeenCalledWith(
         "sess-1",
-        { role: "assistant", content: "response" },
-        "opus",
-        "parent-1"
+        "claude",
+        expect.objectContaining({
+          id: "msg-1",
+          role: "assistant",
+          content: "response",
+          parent_tool_use_id: "parent-1",
+        }),
+        "opus"
       );
     });
 
-    it("logs but continues on DB write failure", () => {
-      mockSaveAssistantMessage.mockReturnValueOnce({ ok: false, error: "disk full" });
+    it("sends message to frontend", () => {
       const msg = {
         type: "assistant",
         message: { role: "assistant", content: "response" },
       };
-      // Should not throw
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
-      expect(mockSendMessage).toHaveBeenCalled(); // frontend still notified
+      expect(mockSendMessage).toHaveBeenCalled();
     });
 
     it("extracts parent_tool_use_id as null when missing", () => {
       const msg = {
         type: "assistant",
-        message: { role: "assistant", content: "response" },
+        message: { id: "msg-1", role: "assistant", content: "response" },
       };
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
 
-      expect(mockSaveAssistantMessage).toHaveBeenCalledWith(
+      expect(mockEmitAssistantMessage).toHaveBeenCalledWith(
         "sess-1",
-        expect.anything(),
-        "sonnet",
-        null
+        "claude",
+        expect.objectContaining({
+          parent_tool_use_id: null,
+        }),
+        "sonnet"
       );
     });
   });
@@ -236,10 +217,11 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("user messages with tool_result", () => {
-    it("saves tool_result to DB when content has tool_result block", () => {
+    it("emits canonical message.tool_result event when content has tool_result block", () => {
       const msg = {
         type: "user",
         message: {
+          id: "sdk-msg-2",
           role: "user",
           content: [{ type: "tool_result", tool_use_id: "t1", content: "output" }],
         },
@@ -247,21 +229,27 @@ describe("processMessage", () => {
       };
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
 
-      expect(mockSaveToolResultMessage).toHaveBeenCalledWith(
+      expect(mockEmitToolResultMessage).toHaveBeenCalledWith(
         "sess-1",
-        { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "output" }] },
-        "parent-1"
+        "claude",
+        expect.objectContaining({
+          id: "sdk-msg-2",
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "t1", content: "output" }],
+          parent_tool_use_id: "parent-1",
+        }),
+        "sonnet"
       );
     });
 
-    it("skips DB write for user messages without tool_result", () => {
+    it("does not emit message.tool_result for user messages without tool_result", () => {
       const msg = {
         type: "user",
         message: { role: "user", content: "hello" },
       };
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
 
-      expect(mockSaveToolResultMessage).not.toHaveBeenCalled();
+      expect(mockEmitToolResultMessage).not.toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalled(); // still sent to frontend
     });
   });
@@ -299,7 +287,7 @@ describe("processMessage", () => {
 
       processMessage(msg, makeCtx(), session, makeOpts());
 
-      expect(mockSaveAgentSessionId).toHaveBeenCalledWith("sess-1", "sdk-sess-1");
+      expect(mockEmitAgentSessionId).toHaveBeenCalledWith("sess-1", "sdk-sess-1");
       expect(session.agentSessionIdCaptured).toBe(true);
     });
 
@@ -313,7 +301,7 @@ describe("processMessage", () => {
 
       processMessage(msg, makeCtx(), session, makeOpts());
 
-      expect(mockSaveAgentSessionId).not.toHaveBeenCalled();
+      expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
     });
 
     it("skips capture in resume mode", () => {
@@ -326,22 +314,8 @@ describe("processMessage", () => {
 
       processMessage(msg, makeCtx(), session, makeOpts({ isResume: true }));
 
-      expect(mockSaveAgentSessionId).not.toHaveBeenCalled();
+      expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
       expect(session.agentSessionIdCaptured).toBeUndefined();
-    });
-
-    it("handles saveAgentSessionId failure gracefully", () => {
-      mockSaveAgentSessionId.mockReturnValueOnce({ ok: false, error: "db error" });
-      const msg = {
-        type: "assistant",
-        message: { role: "assistant", content: "" },
-        session_id: "sdk-sess-1",
-      };
-      const session = makeSession();
-
-      processMessage(msg, makeCtx(), session, makeOpts());
-
-      expect(session.agentSessionIdCaptured).toBeUndefined(); // not set on failure
     });
   });
 
@@ -350,7 +324,7 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("stop_reason classification", () => {
-    it("sends error when classifyStopReason returns an error", () => {
+    it("sends error and emits session.error when classifyStopReason returns an error", () => {
       mockClassifyStopReason.mockReturnValue({ message: "max tokens", category: "max_tokens" });
       const msg = {
         type: "assistant",
@@ -367,9 +341,9 @@ describe("processMessage", () => {
         agentType: "claude",
         category: "max_tokens",
       });
-      expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+      expect(mockEmitSessionError).toHaveBeenCalledWith(
         "sess-1",
-        "error",
+        "claude",
         "max tokens",
         "max_tokens"
       );
@@ -396,24 +370,24 @@ describe("processMessage", () => {
   // --------------------------------------------------------------------------
 
   describe("result/success", () => {
-    it("sets querySucceeded and updates status to idle", () => {
+    it("sets querySucceeded and emits session.idle", () => {
       const msg = { type: "result", subtype: "success" };
       const ctx = makeCtx();
 
       processMessage(msg, ctx, makeSession(), makeOpts());
 
       expect(ctx.querySucceeded).toBe(true);
-      expect(mockUpdateSessionStatus).toHaveBeenCalledWith("sess-1", "idle");
+      expect(mockEmitSessionIdle).toHaveBeenCalledWith("sess-1", "claude");
     });
 
-    it("skips idle update when stopReasonError is already set", () => {
+    it("skips idle emit when stopReasonError is already set", () => {
       const msg = { type: "result", subtype: "success" };
       const ctx = makeCtx({ stopReasonError: true });
 
       processMessage(msg, ctx, makeSession(), makeOpts());
 
       expect(ctx.querySucceeded).toBe(true);
-      expect(mockUpdateSessionStatus).not.toHaveBeenCalled();
+      expect(mockEmitSessionIdle).not.toHaveBeenCalled();
     });
   });
 
@@ -476,11 +450,11 @@ describe("processMessage", () => {
   });
 
   // --------------------------------------------------------------------------
-  // Canonical event dual-write
+  // Canonical event emission
   // --------------------------------------------------------------------------
 
-  describe("canonical event dual-write", () => {
-    it("emits message.assistant alongside sendMessage for assistant messages", () => {
+  describe("canonical event emission", () => {
+    it("emits message.assistant for assistant messages", () => {
       const msg = {
         type: "assistant",
         message: { id: "sdk-msg-1", role: "assistant", content: "hello", stop_reason: "end_turn" },
@@ -500,7 +474,7 @@ describe("processMessage", () => {
       );
     });
 
-    it("emits message.tool_result alongside sendMessage for tool_result messages", () => {
+    it("emits message.tool_result for tool_result messages", () => {
       const msg = {
         type: "user",
         message: {
@@ -525,16 +499,6 @@ describe("processMessage", () => {
       );
     });
 
-    it("does not emit message.tool_result for user messages without tool_result", () => {
-      const msg = {
-        type: "user",
-        message: { role: "user", content: "hello" },
-      };
-      processMessage(msg, makeCtx(), makeSession(), makeOpts());
-
-      expect(mockEmitToolResultMessage).not.toHaveBeenCalled();
-    });
-
     it("emits message.result on result/success", () => {
       const msg = { type: "result", subtype: "success" };
       processMessage(msg, makeCtx(), makeSession(), makeOpts());
@@ -552,18 +516,6 @@ describe("processMessage", () => {
       processMessage(msg, makeCtx(), session, makeOpts());
 
       expect(mockEmitAgentSessionId).toHaveBeenCalledWith("sess-1", "sdk-sess-1");
-    });
-
-    it("does not emit agent.session_id when saveAgentSessionId fails", () => {
-      mockSaveAgentSessionId.mockReturnValueOnce({ ok: false, error: "db error" });
-      const msg = {
-        type: "assistant",
-        message: { role: "assistant", content: "" },
-        session_id: "sdk-sess-1",
-      };
-      processMessage(msg, makeCtx(), makeSession(), makeOpts());
-
-      expect(mockEmitAgentSessionId).not.toHaveBeenCalled();
     });
 
     it("does not emit agent.session_id during resume", () => {

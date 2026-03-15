@@ -10,7 +10,6 @@ use opendevs_lib::{
     db::DbManager,
     pty::PtyManager,
     sidecar::SidecarManager,
-    socket::SocketManager,
     watcher::WatcherManager,
 };
 #[cfg(target_os = "macos")]
@@ -58,7 +57,6 @@ fn main() {
         .manage(DbManager::new())
         .manage(PtyManager::new())
         .manage(SidecarManager::new())
-        .manage(SocketManager::new())
         .manage(WatcherManager::new());
 
     #[cfg(target_os = "macos")]
@@ -73,12 +71,6 @@ fn main() {
             // Set app handle for PTY manager so it can emit events
             let pty_manager: tauri::State<PtyManager> = app.state();
             pty_manager.set_app_handle(app.handle().clone());
-
-            // Set app handle for Socket manager so it can emit events
-            let socket_manager: tauri::State<SocketManager> = app.state();
-            socket_manager.set_app_handle(app.handle().clone());
-            socket_manager.start_event_listener();
-            println!("[TAURI] ✅ Socket event listener started");
 
             // Set app handle for Watcher manager so it can emit fs:changed events
             let watcher_manager: tauri::State<WatcherManager> = app.state();
@@ -149,41 +141,11 @@ fn main() {
                 resource_base.join("bin/index.bundled.cjs")
             };
 
-            println!("[TAURI] Starting sidecar from: {}", sidecar_path.display());
+            println!("[TAURI] Starting agent-server from: {}", sidecar_path.display());
 
-            let notify_url = backend_manager.get_port()
-                .map(|port| format!("http://localhost:{}/api/notify", port));
-
-            match sidecar_manager.start(sidecar_path, &db_path, notify_url.as_deref()) {
+            match sidecar_manager.start(sidecar_path) {
                 Ok(_) => {
-                    if let Some(socket_path) = sidecar_manager.get_socket_path() {
-                        println!("[TAURI] ✅ Sidecar started, socket: {}", socket_path);
-
-                        // Retry connection with backoff — sidecar may not be accepting connections yet
-                        let mut connected = false;
-                        for attempt in 1..=5 {
-                            match socket_manager.connect(socket_path.clone()) {
-                                Ok(_) => {
-                                    println!("[TAURI] ✅ Socket connected to sidecar (attempt {})", attempt);
-                                    connected = true;
-                                    break;
-                                }
-                                Err(e) => {
-                                    if attempt < 5 {
-                                        println!("[TAURI] Socket connect attempt {} failed: {}, retrying...", attempt, e);
-                                        std::thread::sleep(std::time::Duration::from_millis(200 * attempt as u64));
-                                    } else {
-                                        eprintln!("[TAURI] Failed to connect socket after {} attempts: {}", attempt, e);
-                                    }
-                                }
-                            }
-                        }
-                        if !connected {
-                            eprintln!("[TAURI] ⚠️ Could not connect to sidecar socket — agent features may not work");
-                        }
-                    } else {
-                        println!("[TAURI] Sidecar started (socket path detection pending)");
-                    }
+                    println!("[TAURI] ✅ Sidecar started");
                 },
                 Err(e) => {
                     eprintln!("[TAURI] Failed to start sidecar: {}", e);
@@ -249,11 +211,6 @@ fn main() {
                         commands::resize_pty,
                         commands::write_to_pty,
                         commands::kill_pty,
-                        commands::connect_to_sidecar,
-                        commands::send_sidecar_message,
-                        commands::receive_sidecar_message,
-                        commands::is_sidecar_connected,
-                        commands::get_sidecar_socket_path,
                         commands::get_backend_port,
                         commands::get_installed_apps,
                         commands::open_in_app,

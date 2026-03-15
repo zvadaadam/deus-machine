@@ -5,7 +5,6 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StringDecoder } from "string_decoder";
-import Database from "better-sqlite3";
 
 /**
  * End-to-end tests: Spawn a real sidecar process, connect via
@@ -189,20 +188,12 @@ async function spawnSidecar(): Promise<{
   socketPath: string;
   client: net.Socket;
   logPath: string;
-  dbPath: string;
 }> {
-  // Use a temp DB so E2E tests don't touch the production database
-  // and can seed session rows for FK-constrained inserts.
-  const dbPath = path.join(
-    os.tmpdir(),
-    `opendevs-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
-  );
-
+  // The agent-server is stateless — no DATABASE_PATH needed.
   const proc = spawn("node", [BUNDLE_PATH, "--listen", "unix://"], {
     env: {
       ...process.env,
       LOG_LEVEL: "debug",
-      DATABASE_PATH: dbPath,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -249,7 +240,7 @@ async function spawnSidecar(): Promise<{
 
   const logPath = `/tmp/opendevs-${proc.pid}.log`;
 
-  return { process: proc, socketPath, client, logPath, dbPath };
+  return { process: proc, socketPath, client, logPath };
 }
 
 /** Kill a sidecar process and clean up */
@@ -257,7 +248,6 @@ async function killSidecar(sidecar: {
   process: ChildProcess;
   socketPath: string;
   client: net.Socket;
-  dbPath?: string;
 }): Promise<void> {
   if (sidecar.client) {
     sidecar.client.destroy();
@@ -275,56 +265,6 @@ async function killSidecar(sidecar: {
     } catch {
       // ignore
     }
-  }
-  // Clean up temp DB files (main + WAL + SHM)
-  if (sidecar.dbPath) {
-    for (const suffix of ["", "-wal", "-shm"]) {
-      try {
-        fs.unlinkSync(sidecar.dbPath + suffix);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-}
-
-/**
- * Seed a session row (plus required repo + workspace parents) into the
- * sidecar's temp DB so that saveUserMessage() can INSERT messages without
- * hitting FK constraint violations. Uses WAL mode + busy_timeout to avoid
- * conflicts with the running sidecar process.
- */
-function seedSession(dbPath: string, sessionId: string, agentType: string = "claude"): void {
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("busy_timeout = 5000");
-  db.pragma("foreign_keys = ON");
-
-  // Use unique IDs per call to avoid collision across test cases sharing the same DB
-  const repoId = `e2e-repo-${sessionId}`;
-  const workspaceId = `e2e-ws-${sessionId}`;
-  const rootPath = `/tmp/e2e-${sessionId}`;
-
-  const seed = db.transaction(() => {
-    db.prepare("INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)").run(
-      repoId,
-      "e2e-test",
-      rootPath
-    );
-    db.prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES (?, ?, ?)").run(
-      workspaceId,
-      repoId,
-      "e2e-test"
-    );
-    db.prepare(
-      "INSERT INTO sessions (id, workspace_id, agent_type, status) VALUES (?, ?, ?, ?)"
-    ).run(sessionId, workspaceId, agentType, "idle");
-  });
-
-  try {
-    seed();
-  } finally {
-    db.close();
   }
 }
 
@@ -436,7 +376,6 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   let socketPath: string;
   let client: net.Socket;
   let logPath: string;
-  let dbPath: string;
 
   beforeAll(async () => {
     const sidecar = await spawnSidecar();
@@ -444,11 +383,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     socketPath = sidecar.socketPath;
     client = sidecar.client;
     logPath = sidecar.logPath;
-    dbPath = sidecar.dbPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killSidecar({ process: sidecarProcess, socketPath, client, dbPath });
+    await killSidecar({ process: sidecarProcess, socketPath, client });
   });
 
   // ------------------------------------------------------------------
@@ -532,8 +470,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   it("sends a query and receives streamed response messages", async () => {
     const sessionId = `test-query-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "claude");
+    // The agent-server is stateless — no DB seeding needed.
+    // The backend saves the user message BEFORE forwarding turn/start to the sidecar.
 
     // Set up a collector for all incoming messages
     const messageCollector = collectMessages(client);
@@ -603,9 +541,6 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
 
   it("cancels an active query and receives abort notification", async () => {
     const sessionId = `test-cancel-${Date.now()}`;
-
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "claude");
 
     // Start a query that will take a while (ask for a long response)
     sendNotification(client, "query", {
@@ -687,7 +622,6 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
   let socketPath: string;
   let client: net.Socket;
   let logPath: string;
-  let dbPath: string;
 
   beforeAll(async () => {
     const sidecar = await spawnSidecar();
@@ -695,11 +629,10 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     socketPath = sidecar.socketPath;
     client = sidecar.client;
     logPath = sidecar.logPath;
-    dbPath = sidecar.dbPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killSidecar({ process: sidecarProcess, socketPath, client, dbPath });
+    await killSidecar({ process: sidecarProcess, socketPath, client });
   });
 
   // ------------------------------------------------------------------
@@ -709,8 +642,7 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
   it("sends a query and receives streamed response messages", async () => {
     const sessionId = `test-codex-query-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "codex");
+    // The agent-server is stateless — no DB seeding needed.
 
     // Collect all incoming messages
     const messageCollector = collectMessages(client);
@@ -775,9 +707,6 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
 
   it("cancels an active query and receives abort notification", async () => {
     const sessionId = `test-codex-cancel-${Date.now()}`;
-
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "codex");
 
     // Start a query that will take a while
     sendNotification(client, "query", {

@@ -6,9 +6,9 @@ use anyhow::{Result, Context};
 
 /// Sidecar Manager
 ///
-/// Manages the Node.js sidecar-v2 process (agent runtime).
-/// The sidecar handles Claude SDK integration, message persistence,
-/// and real-time communication with the frontend.
+/// Manages the Node.js agent-server process (agent runtime).
+/// The agent-server is a stateless SDK wrapper: it handles Claude/Codex SDK
+/// integration and emits canonical events. No direct database access.
 ///
 /// The sidecar uses Unix domain sockets for IPC. The socket path
 /// is discovered by parsing `SOCKET_PATH=<path>` from stdout.
@@ -25,12 +25,11 @@ impl SidecarManager {
         }
     }
 
-    /// Start the sidecar-v2 process
+    /// Start the agent-server process
     ///
     /// # Arguments
-    /// * `sidecar_path` - Path to the sidecar-v2 entry point (index.bundled.cjs)
-    /// * `db_path` - Path to the SQLite database file
-    pub fn start(&self, sidecar_path: PathBuf, db_path: &str, notify_url: Option<&str>) -> Result<()> {
+    /// * `sidecar_path` - Path to the agent-server entry point (index.bundled.cjs)
+    pub fn start(&self, sidecar_path: PathBuf) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
         if process.is_some() {
@@ -38,21 +37,16 @@ impl SidecarManager {
             return Ok(());
         }
 
-        println!("[SIDECAR] Starting sidecar-v2 at {}", sidecar_path.display());
+        println!("[SIDECAR] Starting agent-server at {}", sidecar_path.display());
 
         // Runtime dependency: Node.js must be installed and available in PATH.
-        // The sidecar is a Node.js script (not a compiled binary) because it uses
-        // native modules (better-sqlite3) that can't be bundled into a standalone
-        // executable. Node.js is NOT bundled with the app.
+        // The agent-server is a stateless Node.js script that wraps the Claude/Codex
+        // SDKs. No native modules required (better-sqlite3 removed in PR 6).
         let mut cmd = Command::new("node");
         cmd.arg(&sidecar_path)
-            .env("DATABASE_PATH", db_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        if let Some(url) = notify_url {
-            cmd.env("BACKEND_NOTIFY_URL", url);
-        }
-        // Forward Sentry DSN to Node.js sidecar (set at build time, not hardcoded)
+        // Forward Sentry DSN to Node.js agent-server (set at build time, not hardcoded)
         if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
             cmd.env("SENTRY_DSN", dsn);
         }
@@ -265,7 +259,7 @@ setTimeout(() => {
         let manager = SidecarManager::new();
 
         // Start the mock sidecar
-        match manager.start(script_path.clone(), "/tmp/test.db", None) {
+        match manager.start(script_path.clone()) {
             Ok(_) => {
                 println!("✅ Mock sidecar started successfully");
 

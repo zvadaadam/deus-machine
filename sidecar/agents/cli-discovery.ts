@@ -8,7 +8,6 @@ import * as path from "path";
 import * as fs from "fs";
 import { execSync, execFileSync } from "child_process";
 import { FrontendClient } from "../frontend-client";
-import { updateSessionStatus } from "../db/session-writer";
 import type { AgentType } from "../protocol";
 
 // ============================================================================
@@ -189,9 +188,9 @@ export function blockIfNotInitialized(
     } catch (error) {
       console.warn(`[CLI-DISCOVERY] Failed to emit init error to frontend:`, error);
     }
-    // Update session status so it doesn't stay stuck in "working"
-    // (saveUserMessage already set status='working' before handleQuery was called)
-    updateSessionStatus(sessionId, "error", errorMsg, "internal");
+    // Emit canonical error event so the backend updates session status.
+    // The backend set status='working' before forwarding turn/start to the sidecar.
+    FrontendClient.emitSessionError(sessionId, agentType, errorMsg, "internal");
     console.log(`Blocked ${agentType} request due to initialization failure`);
     return true;
   }

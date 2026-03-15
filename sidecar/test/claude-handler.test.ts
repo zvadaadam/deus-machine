@@ -5,38 +5,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // vi.hoisted() ensures variables are available when vi.mock factories run.
 // ============================================================================
 
-const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync, mockSessionWriter } =
-  vi.hoisted(() => ({
-    mockClaudeSDK: vi.fn(),
-    mockFrontendAPI: {
-      sendMessage: vi.fn(),
-      sendError: vi.fn(),
-      sendEnterPlanModeNotification: vi.fn(),
-      requestExitPlanMode: vi.fn(),
-      attachTunnel: vi.fn(),
-      detachTunnel: vi.fn(),
-      emitEvent: vi.fn(),
-      emitSessionStarted: vi.fn(),
-      emitSessionIdle: vi.fn(),
-      emitSessionError: vi.fn(),
-      emitSessionCancelled: vi.fn(),
-      emitAssistantMessage: vi.fn(),
-      emitToolResultMessage: vi.fn(),
-      emitMessageResult: vi.fn(),
-      emitMessageCancelled: vi.fn(),
-      emitAgentSessionId: vi.fn(),
-    },
-    mockExecSync: vi.fn(),
-    mockExecFileSync: vi.fn(),
-    mockSessionWriter: {
-      saveAssistantMessage: vi.fn((..._args: unknown[]) => ({ ok: true, value: "msg-id" })),
-      saveToolResultMessage: vi.fn((..._args: unknown[]) => ({ ok: true, value: "msg-id" })),
-      saveAgentSessionId: vi.fn((..._args: unknown[]) => ({ ok: true, value: "sess-id" })),
-      lookupAgentSessionId: vi.fn((..._args: unknown[]): string | null => null),
-      updateSessionStatus: vi.fn((..._args: unknown[]) => ({ ok: true, value: "sess-id" })),
-      reconcileStuckSessions: vi.fn((..._args: unknown[]) => ({ ok: true, value: 0 })),
-    },
-  }));
+const { mockClaudeSDK, mockFrontendAPI, mockExecSync, mockExecFileSync } = vi.hoisted(() => ({
+  mockClaudeSDK: vi.fn(),
+  mockFrontendAPI: {
+    sendMessage: vi.fn(),
+    sendError: vi.fn(),
+    sendEnterPlanModeNotification: vi.fn(),
+    requestExitPlanMode: vi.fn(),
+    attachTunnel: vi.fn(),
+    detachTunnel: vi.fn(),
+    emitEvent: vi.fn(),
+    emitSessionStarted: vi.fn(),
+    emitSessionIdle: vi.fn(),
+    emitSessionError: vi.fn(),
+    emitSessionCancelled: vi.fn(),
+    emitAssistantMessage: vi.fn(),
+    emitToolResultMessage: vi.fn(),
+    emitMessageResult: vi.fn(),
+    emitMessageCancelled: vi.fn(),
+    emitAgentSessionId: vi.fn(),
+  },
+  mockExecSync: vi.fn(),
+  mockExecFileSync: vi.fn(),
+}));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
   const actual = (await importOriginal()) as any;
@@ -57,8 +48,6 @@ vi.mock("../agents/shell-env", () => ({
 vi.mock("../agents/claude/checkpoint", () => ({
   createCheckpoint: vi.fn(),
 }));
-
-vi.mock("../db/session-writer", () => mockSessionWriter);
 
 vi.mock("../agents/opendevs-tools", () => ({
   createOpenDevsMCPServer: vi.fn(() => ({ type: "sdk", name: "opendevs" })),
@@ -503,21 +492,17 @@ describe("claude-handler", () => {
         })
       );
 
-      // updateSessionStatus should have been called with "error" for max_tokens
-      expect(mockSessionWriter.updateSessionStatus).toHaveBeenCalledWith(
+      // emitSessionError should have been called for stop_reason error
+      expect(mockFrontendAPI.emitSessionError).toHaveBeenCalledWith(
         "sess-max-tokens",
-        "error",
+        "claude",
         expect.stringContaining("output token limit"),
         "context_limit"
       );
 
-      // Crucially: updateSessionStatus should NOT have been called with "idle"
-      // after being called with "error" — the stopReasonError flag must prevent it
-      const statusCalls = mockSessionWriter.updateSessionStatus.mock.calls.filter(
-        (call: unknown[]) => call[0] === "sess-max-tokens"
-      );
-      const lastStatusCall = statusCalls[statusCalls.length - 1];
-      expect(lastStatusCall[1]).toBe("error");
+      // Crucially: emitSessionIdle should NOT have been called after
+      // emitSessionError — the stopReasonError flag must prevent it
+      expect(mockFrontendAPI.emitSessionIdle).not.toHaveBeenCalled();
     });
   });
 
@@ -568,31 +553,7 @@ describe("claude-handler", () => {
 
       // When resuming, we must NOT capture the new session_id — it would
       // overwrite the original working agent_session_id
-      expect(mockSessionWriter.saveAgentSessionId).not.toHaveBeenCalled();
-    });
-
-    it("auto-injects resume when lookupAgentSessionId returns a saved ID", async () => {
-      mockSessionWriter.lookupAgentSessionId.mockReturnValueOnce("saved-agent-sess-123");
-      const mockQuery = {
-        [Symbol.asyncIterator]: () => ({
-          next: async () => ({ value: undefined, done: true }),
-        }),
-        interrupt: vi.fn().mockResolvedValue(undefined),
-        setPermissionMode: vi.fn().mockResolvedValue(undefined),
-        setModel: vi.fn().mockResolvedValue(undefined),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
-      mockClaudeSDK.mockReturnValue(mockQuery);
-
-      await handler.query("sess-auto-resume", "hello", {
-        cwd: "/test",
-        turnId: "turn-1",
-      });
-
-      await new Promise((r) => setTimeout(r, 200));
-
-      const sdkCall = mockClaudeSDK.mock.calls[0][0];
-      expect(sdkCall.options.resume).toBe("saved-agent-sess-123");
+      expect(mockFrontendAPI.emitAgentSessionId).not.toHaveBeenCalled();
     });
 
     it("captures agent_session_id on first message for new sessions", async () => {
@@ -628,13 +589,13 @@ describe("claude-handler", () => {
 
       await new Promise((r) => setTimeout(r, 200));
 
-      expect(mockSessionWriter.saveAgentSessionId).toHaveBeenCalledWith(
+      expect(mockFrontendAPI.emitAgentSessionId).toHaveBeenCalledWith(
         "sess-capture",
         "sdk-sess-new"
       );
     });
 
-    it("result/error_during_execution is logged and does not send idle", async () => {
+    it("result/error_during_execution is logged and does not emit idle", async () => {
       const mockMessages = [
         {
           type: "result",
@@ -668,11 +629,8 @@ describe("claude-handler", () => {
 
       await new Promise((r) => setTimeout(r, 200));
 
-      // Should NOT have set status to "idle" — there was an error
-      const idleCalls = mockSessionWriter.updateSessionStatus.mock.calls.filter(
-        (call: unknown[]) => call[0] === "sess-exec-err" && call[1] === "idle"
-      );
-      expect(idleCalls).toHaveLength(0);
+      // Should NOT have emitted session.idle — there was an error
+      expect(mockFrontendAPI.emitSessionIdle).not.toHaveBeenCalled();
 
       // Should have sent an error notification
       expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(

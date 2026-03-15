@@ -1,5 +1,4 @@
 mod pty;
-mod socket;
 mod backend;
 mod browser;
 mod webview;
@@ -14,7 +13,6 @@ mod watcher;
 mod simulator;
 
 pub use pty::*;
-pub use socket::*;
 pub use backend::*;
 pub use browser::*;
 pub use webview::*;

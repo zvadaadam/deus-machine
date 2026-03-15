@@ -7,8 +7,6 @@ const mockSendError = vi.fn();
 const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
 const mockEmitSessionError = vi.fn();
-const mockSaveAssistantMessage = vi.fn();
-const mockUpdateSessionStatus = vi.fn();
 
 vi.mock("../frontend-client", () => ({
   FrontendClient: {
@@ -20,11 +18,6 @@ vi.mock("../frontend-client", () => ({
   },
 }));
 
-vi.mock("../db/session-writer", () => ({
-  saveAssistantMessage: (...args: unknown[]) => mockSaveAssistantMessage(...args),
-  updateSessionStatus: (...args: unknown[]) => mockUpdateSessionStatus(...args),
-}));
-
 import { persistCancellation, notifyAndRecordError } from "../agents/query-lifecycle";
 import type { ClassifiedError } from "../agents/error-classifier";
 
@@ -33,22 +26,6 @@ import type { ClassifiedError } from "../agents/error-classifier";
 describe("persistCancellation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSaveAssistantMessage.mockReturnValue({ ok: true });
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
-  });
-
-  it("saves a cancelled assistant message to DB", () => {
-    persistCancellation("session-1", "claude", "opus");
-
-    expect(mockSaveAssistantMessage).toHaveBeenCalledWith(
-      "session-1",
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "" }],
-        stop_reason: "cancelled",
-      },
-      "opus"
-    );
   });
 
   it("sends a cancelled notification to the frontend", () => {
@@ -62,58 +39,31 @@ describe("persistCancellation", () => {
     });
   });
 
-  it("updates session status to idle", () => {
+  it("emits canonical session.cancelled and message.cancelled events", () => {
     persistCancellation("session-1", "claude", "opus");
 
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith("session-1", "idle");
+    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-1", "claude");
+    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-1", "claude");
   });
 
   it("works with codex agent type", () => {
     persistCancellation("session-2", "codex", "o3-mini");
 
-    expect(mockSaveAssistantMessage).toHaveBeenCalledWith(
-      "session-2",
-      expect.objectContaining({ stop_reason: "cancelled" }),
-      "o3-mini"
-    );
     expect(mockSendMessage).toHaveBeenCalledWith(expect.objectContaining({ agentType: "codex" }));
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith("session-2", "idle");
+    expect(mockEmitSessionCancelled).toHaveBeenCalledWith("session-2", "codex");
+    expect(mockEmitMessageCancelled).toHaveBeenCalledWith("session-2", "codex");
   });
 
-  it("sends db_write error when status update fails", () => {
-    mockUpdateSessionStatus.mockReturnValue({ ok: false, error: "DB locked" });
-
-    persistCancellation("session-1", "claude", "opus");
-
-    expect(mockSendError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: "db_write",
-        error: expect.stringContaining("Session status update failed"),
-      })
-    );
-  });
-
-  it("does not send error when all DB writes succeed", () => {
+  it("does not send any error notifications", () => {
     persistCancellation("session-1", "claude", "opus");
 
     expect(mockSendError).not.toHaveBeenCalled();
-  });
-
-  it("logs but continues when saveAssistantMessage fails", () => {
-    mockSaveAssistantMessage.mockReturnValue({ ok: false, error: "Disk full" });
-
-    persistCancellation("session-1", "claude", "opus");
-
-    // Still sends notification and updates status
-    expect(mockSendMessage).toHaveBeenCalled();
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith("session-1", "idle");
   });
 });
 
 describe("notifyAndRecordError", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
   });
 
   it("sends error to frontend", () => {
@@ -129,13 +79,13 @@ describe("notifyAndRecordError", () => {
     });
   });
 
-  it("updates session status to error", () => {
+  it("emits canonical session.error event", () => {
     const classified: ClassifiedError = { category: "network", message: "Connection failed" };
     notifyAndRecordError("session-1", "claude", classified);
 
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
-      "error",
+      "claude",
       "Connection failed",
       "network"
     );
@@ -150,9 +100,9 @@ describe("notifyAndRecordError", () => {
     expect(mockSendError).toHaveBeenCalledWith(
       expect.objectContaining({ error: "Process exited (enriched)" })
     );
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
-      "error",
+      "claude",
       "Process exited (enriched)",
       "process_exit"
     );
@@ -167,70 +117,20 @@ describe("notifyAndRecordError", () => {
     );
   });
 
-  it("sends secondary db_write error when status update fails", () => {
-    mockUpdateSessionStatus.mockReturnValue({ ok: false, error: "DB locked" });
-
+  it("only sends one error notification (no secondary db_write error)", () => {
     const classified: ClassifiedError = { category: "internal", message: "Something broke" };
     notifyAndRecordError("session-1", "claude", classified);
 
-    // First call: the original error
-    expect(mockSendError).toHaveBeenCalledTimes(2);
-
-    // Second call: the db_write fallback error
-    expect(mockSendError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category: "db_write",
-        error: expect.stringContaining("Session status update failed"),
-      })
-    );
-  });
-
-  it("does not send secondary error when status update succeeds", () => {
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
-
-    const classified: ClassifiedError = { category: "internal", message: "Something broke" };
-    notifyAndRecordError("session-1", "claude", classified);
-
-    // Only one error call (the original)
+    // Only one error call — no DB writes means no DB failure path
     expect(mockSendError).toHaveBeenCalledTimes(1);
-  });
-
-  it("emits canonical session.error event alongside sendError", () => {
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
-
-    const classified: ClassifiedError = { category: "auth", message: "Unauthorized" };
-    notifyAndRecordError("session-1", "claude", classified);
-
-    expect(mockEmitSessionError).toHaveBeenCalledWith(
-      "session-1",
-      "claude",
-      "Unauthorized",
-      "auth"
-    );
-  });
-
-  it("emits canonical session.error with enriched message when enrichMessage provided", () => {
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
-
-    const classified: ClassifiedError = { category: "process_exit", message: "Process exited" };
-    notifyAndRecordError("session-1", "claude", classified, (c) => `${c.message} (enriched)`);
-
-    expect(mockEmitSessionError).toHaveBeenCalledWith(
-      "session-1",
-      "claude",
-      "Process exited (enriched)",
-      "process_exit"
-    );
   });
 });
 
-// ── Canonical event dual-write ────────────────────────────────────────────
+// ── Canonical event emission ────────────────────────────────────────────
 
 describe("persistCancellation canonical events", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSaveAssistantMessage.mockReturnValue({ ok: true });
-    mockUpdateSessionStatus.mockReturnValue({ ok: true });
   });
 
   it("emits session.cancelled event", () => {

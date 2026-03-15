@@ -447,7 +447,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onReject={handlePlanReject}
             />
             <AgentQuestionOverlay
-              key={pendingQuestion?.rpcId as string}
+              key={pendingQuestion?.wsRequestId}
               request={pendingQuestion}
               agentType={session?.agent_type}
               onSubmit={handleQuestionSubmit}
@@ -552,7 +552,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onReject={handlePlanReject}
                   />
                   <AgentQuestionOverlay
-                    key={pendingQuestion?.rpcId as string}
+                    key={pendingQuestion?.wsRequestId}
                     request={pendingQuestion}
                     agentType={session?.agent_type}
                     onSubmit={handleQuestionSubmit}

@@ -1,17 +1,17 @@
 // src/shared/hooks/useWsToolRequest.ts
 //
 // Shared hook that listens for tool:request events arriving via the WebSocket
-// q:event channel (backend relay path). Dispatches to a handler callback and
-// sends responses back via q:tool_response.
+// q:event channel. Dispatches to a handler callback and sends responses back
+// via q:tool_response.
 //
-// This runs in PARALLEL with the Tauri "sidecar:request" listener during the
-// transition period. Both paths are active simultaneously — the first responder
-// to a given requestId wins. A Set of handled IDs prevents duplicate responses.
+// Multiple hook instances (useAgentRpcHandler, useBrowserRpcHandler,
+// useSimulatorRpcHandler) may be mounted simultaneously. A module-level Set
+// prevents duplicate responses to the same requestId.
 //
 // Usage in RPC handler hooks:
-//   useWsToolRequest((method, id, params) => {
+//   useWsToolRequest((method, id, params, respond) => {
 //     match(method)
-//       .with("getDiff", () => handleGetDiff(id, params))
+//       .with("getDiff", () => handleGetDiff(id, params, respond))
 //       .otherwise(() => {}); // not mine, skip
 //   });
 
@@ -48,8 +48,8 @@ export function useWsToolRequest(handler: WsToolRequestHandler): void {
     handlerRef.current = handler;
   });
 
-  // Track handled requestIds to prevent duplicate responses across Tauri + WS paths.
-  // Using a module-level Set so it's shared across hook instances within the same page.
+  // Track handled requestIds to prevent duplicate responses across hook instances.
+  // Using a module-level Set so it's shared across all instances within the same page.
   const handledRef = useRef(handledRequestIds);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function useWsToolRequest(handler: WsToolRequestHandler): void {
 
       const { requestId, method, params } = payload;
 
-      // Check if already handled (by Tauri path or another WS hook instance)
+      // Check if already handled by another hook instance
       if (handledRef.current.has(requestId)) return;
 
       const respond = (result: unknown) => {
@@ -96,22 +96,4 @@ function scheduleCleanup(requestId: string): void {
   setTimeout(() => {
     handledRequestIds.delete(requestId);
   }, 60_000);
-}
-
-/**
- * Mark a requestId as handled (called by Tauri path to prevent WS path
- * from also responding). Exported for use by the Tauri listener in
- * useAgentRpcHandler and useBrowserRpcHandler.
- */
-export function markRequestHandled(requestId: string): void {
-  handledRequestIds.add(requestId);
-  scheduleCleanup(requestId);
-}
-
-/**
- * Check if a requestId has already been handled.
- * Used by Tauri path to skip if WS path already responded.
- */
-export function isRequestHandled(requestId: string): boolean {
-  return handledRequestIds.has(requestId);
 }
