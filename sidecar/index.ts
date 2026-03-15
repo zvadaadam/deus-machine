@@ -189,6 +189,69 @@ class UnifiedSidecar {
       return undefined;
     });
 
+    // --- turn/start (new wire protocol method, maps to query dispatch) ---
+    rpcTunnel.addMethod("turn/start", async (params: any) => {
+      const sessionId = params?.sessionId;
+      const agentType = params?.agentType || "claude";
+      const prompt = params?.prompt;
+      const options = params?.options || {};
+
+      if (!sessionId || !prompt) {
+        return { accepted: false, reason: "turn/start requires sessionId and prompt" };
+      }
+
+      const agent = getAgent(agentType);
+      if (!agent) {
+        return { accepted: false, reason: `No agent registered for type: ${agentType}` };
+      }
+
+      agent.query(sessionId, prompt, options).catch((err) => {
+        console.error(`[turn/start] Unhandled error in ${agentType} query:`, err);
+        const classified = classifyError(err);
+        FrontendClient.sendError({
+          id: sessionId,
+          type: "error",
+          error: classified.message,
+          agentType,
+          category: classified.category,
+        });
+        FrontendClient.emitSessionError(
+          sessionId,
+          agentType,
+          classified.message,
+          classified.category
+        );
+      });
+
+      FrontendClient.emitSessionStarted(sessionId, agentType);
+
+      console.log(`[TIMING][turn/start] DISPATCHED session=${sessionId}`);
+      return { accepted: true };
+    });
+
+    // --- turn/cancel (new wire protocol method, maps to cancel dispatch) ---
+    rpcTunnel.addMethod("turn/cancel", async (params: any) => {
+      const sessionId = params?.sessionId;
+      if (!sessionId) return;
+
+      // Try all registered agents — the backend may not send agentType for cancel
+      for (const agentType of ["claude", "codex"] as const) {
+        const agent = getAgent(agentType);
+        if (agent) void agent.cancel(sessionId);
+      }
+    });
+
+    // --- session/reset (new wire protocol method) ---
+    rpcTunnel.addMethod("session/reset", (params: any) => {
+      const sessionId = params?.sessionId;
+      if (!sessionId) return;
+
+      for (const agentType of ["claude", "codex"] as const) {
+        const agent = getAgent(agentType);
+        if (agent) agent.reset(sessionId);
+      }
+    });
+
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
     // query() is NOT awaited — the ACK returns immediately after validation.
