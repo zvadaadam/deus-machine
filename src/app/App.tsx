@@ -17,7 +17,7 @@ import { invoke } from "@/platform/tauri";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
-import { useQueryInvalidation } from "@/features/workspace/hooks/useQueryInvalidation";
+import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
 import { useAnalyticsConsent } from "@/platform/analytics";
 
@@ -61,8 +61,8 @@ function AppContent({ reset }: { reset: () => void }) {
   // Global listener: workspace init progress → invalidate queries on completion
   useWorkspaceInitEvents();
 
-  // Global listener: backend → Rust → Tauri event → invalidate React Query caches
-  useQueryInvalidation();
+  // Global listener: WS query protocol → direct cache updates + invalidation dispatch
+  useQueryProtocol();
 
   // Sync PostHog opt-in/out state with analytics_enabled setting
   useAnalyticsConsent();
@@ -205,7 +205,11 @@ function App() {
     </QueryClientProvider>
   );
 
-  return <LazyMotion features={domAnimation} strict>{content}</LazyMotion>;
+  return (
+    <LazyMotion features={domAnimation} strict>
+      {content}
+    </LazyMotion>
+  );
 }
 
 export default App;

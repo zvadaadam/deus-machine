@@ -13,6 +13,8 @@ const BASE_WORKSPACE: Workspace = {
   current_session_id: "session-1",
   session_status: "idle",
   model: "sonnet",
+  session_error_category: null,
+  session_error_message: null,
   latest_message_sent_at: new Date(Date.now() - 120_000).toISOString(),
   updated_at: new Date(Date.now() - 120_000).toISOString(),
   repo_name: "sample-backend",

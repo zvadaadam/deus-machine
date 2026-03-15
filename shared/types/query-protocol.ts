@@ -5,11 +5,17 @@
 // live in shared/events.ts — the single source of truth for all app events
 // and resources. This file only defines the wire format that carries them.
 
-import type { QueryResource, MutationName } from "../events";
+import type { QueryResource, MutationName, CommandName, ProtocolEvent } from "../events";
 
 // Re-export so existing `import { QueryResource } from "query-protocol"` still works.
-export type { QueryResource, MutationName };
-export { QUERY_RESOURCES, MUTATION_NAMES, SIDECAR_NOTIFY_EVENTS } from "../events";
+export type { QueryResource, MutationName, CommandName, ProtocolEvent };
+export {
+  QUERY_RESOURCES,
+  MUTATION_NAMES,
+  COMMAND_NAMES,
+  PROTOCOL_EVENTS,
+  SIDECAR_NOTIFY_EVENTS,
+} from "../events";
 export type { SidecarNotifyEvent } from "../events";
 
 // ---- Client → Server Frames ----
@@ -44,8 +50,21 @@ export interface QMutateFrame {
   params: Record<string, unknown>;
 }
 
+/** Client sends an async command (e.g. sendMessage, stopSession). */
+export interface QCommandFrame {
+  type: "q:command";
+  id: string;
+  command: CommandName;
+  params: Record<string, unknown>;
+}
+
 /** All frames a client can send. */
-export type QClientFrame = QRequestFrame | QSubscribeFrame | QUnsubscribeFrame | QMutateFrame;
+export type QClientFrame =
+  | QRequestFrame
+  | QSubscribeFrame
+  | QUnsubscribeFrame
+  | QMutateFrame
+  | QCommandFrame;
 
 // ---- Server → Client Frames ----
 
@@ -88,6 +107,22 @@ export interface QInvalidateFrame {
   resources: QueryResource[];
 }
 
+/** Server acknowledges an async command. */
+export interface QCommandAckFrame {
+  type: "q:command_ack";
+  id: string;
+  accepted: boolean;
+  commandId?: string;
+  error?: string;
+}
+
+/** Server pushes an ephemeral event (no subscription needed). */
+export interface QEventFrame {
+  type: "q:event";
+  event: ProtocolEvent;
+  data: unknown;
+}
+
 /** Server error for a specific request. */
 export interface QErrorFrame {
   type: "q:error";
@@ -102,5 +137,7 @@ export type QServerFrame =
   | QSnapshotFrame
   | QDeltaFrame
   | QMutateResultFrame
+  | QCommandAckFrame
+  | QEventFrame
   | QInvalidateFrame
   | QErrorFrame;

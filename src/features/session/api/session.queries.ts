@@ -8,12 +8,13 @@ import { produce } from "immer";
 import { SessionService } from "./session.service";
 import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import {
   MESSAGE_PAGE_SIZE,
   INITIAL_MESSAGE_PAGE_SIZE,
-  incrementalFetchAndMerge,
+  mergeMessageDelta,
 } from "../lib/messageCache";
-import type { ContentBlock, Message, Session, SessionStatus, ToolResultBlock } from "../types";
+import type { ContentBlock, Message, Session, SessionStatus } from "../types";
 import { isToolResultBlock } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
 import { useMemo, useCallback } from "react";
@@ -27,30 +28,41 @@ import type { RuntimeAgentType } from "../lib/agentRuntime";
  * Stale time is high — tabs only hydrate on mount and after creating new sessions.
  */
 export function useWorkspaceSessions(workspaceId: string | null) {
+  useQuerySubscription("sessions", {
+    queryKey: queryKeys.sessions.byWorkspace(workspaceId || ""),
+    params: { workspaceId: workspaceId || "" },
+    enabled: !!workspaceId,
+  });
+
   return useQuery({
     queryKey: queryKeys.sessions.byWorkspace(workspaceId || ""),
     queryFn: () => SessionService.fetchByWorkspace(workspaceId!),
     enabled: !!workspaceId,
-    staleTime: 30_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 
 /**
- * Fetch session details — fully event-driven, no polling.
+ * Fetch session details — fully WS-driven, no polling.
  *
- * Updates come from Tauri events handled by useSessionEvents:
- * - session:status-changed → setQueryData (direct cache write)
- * - session:error → setQueryData (direct cache write)
- *
- * On mount, useSessionEvents does a catch-up fetch + invalidateQueries
- * to reconcile any changes missed while unmounted (navigation, app reopen).
+ * Updates come from WS subscription: backend pushes q:snapshot on
+ * session:status, session:updated, and session:message notifications.
+ * HTTP queryFn is fallback for initial load before WS connects.
  */
 export function useSession(sessionId: string | null) {
+  useQuerySubscription("session", {
+    queryKey: queryKeys.sessions.detail(sessionId || ""),
+    params: { sessionId: sessionId || "" },
+    enabled: !!sessionId,
+  });
+
   return useQuery({
     queryKey: queryKeys.sessions.detail(sessionId || ""),
     queryFn: () => SessionService.fetchById(sessionId!),
     enabled: !!sessionId,
-    staleTime: 10_000,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -64,7 +76,7 @@ export function useSession(sessionId: string | null) {
  * reflect each session's actual status.
  *
  * No extra HTTP fetches when data is already in cache (populated by
- * useSessionEvents via setQueryData on status changes).
+ * the "session" WS subscription via q:snapshot on status changes).
  */
 export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
   const queries = useQueries({
@@ -76,37 +88,41 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
     })),
   });
 
-  // Derive a stable string key from statuses to avoid creating a new Set
-  // on every render — only re-compute when a status actually changes.
-  const statusKey = queries.map((q) => q.data ?? "unknown").join(",");
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Derive working IDs from query results. useMemo deps use `queries`
+  // directly — React Compiler requires it. The select: data.status
+  // ensures queries only change identity when a status actually changes.
   return useMemo(() => {
     const ids = new Set<string>();
     sessionIds.forEach((id, i) => {
       if (queries[i]?.data === "working") ids.add(id);
     });
     return ids;
-  }, [statusKey, sessionIds]);
+  }, [queries, sessionIds]);
 }
 
 /**
- * Fetch messages for a session with smart fallback
- * - Desktop (Tauri): Real-time events, no polling
- * - Web (Browser): Smart polling when session is working
+ * Fetch messages for a session — fully WS-driven.
  *
- * Returns Message[] via `select` so downstream consumers are unchanged.
- * Raw cache holds PaginatedMessages for optimistic updates.
+ * WS subscription pushes q:delta frames with new messages since last cursor.
+ * mergeMessageDelta handles the PaginatedMessages shape, deduplication,
+ * and optimistic placeholder cleanup.
+ * HTTP queryFn is fallback for initial load before WS connects.
  */
 export function useMessages(sessionId: string | null) {
+  useQuerySubscription("messages", {
+    queryKey: queryKeys.sessions.messages(sessionId || ""),
+    params: { sessionId: sessionId || "" },
+    enabled: !!sessionId,
+    mergeDelta: mergeMessageDelta,
+  });
+
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     queryFn: () => SessionService.fetchMessages(sessionId!, { limit: INITIAL_MESSAGE_PAGE_SIZE }),
     enabled: !!sessionId,
-    // No select — expose full PaginatedMessages for has_older/has_newer.
-    // All updates are manual: Tauri events do incremental fetch, web mode uses polling hook.
     refetchInterval: false,
     staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   return query;
@@ -258,8 +274,7 @@ export function useSendMessage() {
         if (!ack.accepted) {
           throw new Error(ack.reason || "Agent rejected the query");
         }
-        // No return value needed — onSettled ignores the mutationFn result.
-        // The real message is in the DB; incremental fetch in onSettled picks it up.
+        // No return value needed — WS q:delta handles message reconciliation.
         return;
       }
       // Gateway/web fallback: HTTP POST to backend
@@ -267,10 +282,9 @@ export function useSendMessage() {
     },
 
     // Optimistic update: show user message immediately.
-    // Status indicators (tab spinner, sidebar) are event-driven — the sidecar
-    // emits session:status-changed which arrives within ~50ms via Tauri events.
-    // Both useSessionEvents and useGlobalSessionNotifications write directly
-    // to their respective caches via setQueryData (no HTTP round-trip).
+    // Status indicators (tab spinner, sidebar) are updated by the workspaces
+    // WS subscription — the sidecar notifies the backend, which pushes fresh
+    // workspace snapshots within ~50ms.
     onMutate: async ({ sessionId, content, model }) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.sessions.messages(sessionId),
@@ -387,15 +401,8 @@ export function useSendMessage() {
           context_used_percent: session?.context_used_percent,
         });
       }
-
-      // Reconcile optimistic placeholder with real DB record.
-      // Session detail is NOT invalidated here — status updates arrive via
-      // session:status-changed Tauri events handled by useSessionEvents.
-      await incrementalFetchAndMerge(
-        queryClient,
-        variables.sessionId,
-        queryKeys.sessions.messages(variables.sessionId)
-      );
+      // No incrementalFetchAndMerge needed — WS q:delta handles reconciliation.
+      // The optimistic message stays visible until the delta arrives with the real message.
     },
   });
 }
@@ -414,9 +421,8 @@ export function useStopSession() {
         session_id: sessionId,
         agent_type: session?.agent_type,
       });
-      // Immediate invalidation for snappy UI feedback (~50ms faster than event path).
-      // Backend also calls invalidate(["workspaces","sessions","stats"]) which flows
-      // through Tauri events → useQueryInvalidation. React Query deduplicates.
+      // Immediate invalidation for snappy UI feedback.
+      // Backend also pushes via WS q:invalidate. React Query deduplicates.
       queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.detail(sessionId),
       });
@@ -443,9 +449,8 @@ export function useCreateSession() {
         agent_type: newSession?.agent_type,
         model: newSession?.model,
       });
-      // Immediate invalidation for snappy UI feedback (~50ms faster than event path).
-      // Backend also calls invalidate(["workspaces","sessions","stats"]) which flows
-      // through Tauri events → useQueryInvalidation. React Query deduplicates.
+      // Immediate invalidation for snappy UI feedback.
+      // Backend also pushes via WS q:invalidate. React Query deduplicates.
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });

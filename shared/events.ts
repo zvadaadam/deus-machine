@@ -20,36 +20,12 @@
 
 import { z } from "zod";
 
-// Session event schemas and their inferred types live in session-events.ts.
-// Import the schemas (not just types) so we can build the runtime validation map.
-import {
-  MessageResponseSchema,
-  ErrorResponseSchema,
-  EnterPlanModeNotificationSchema,
-  StatusChangedNotificationSchema,
-} from "./session-events";
-import type {
-  SessionMessageEvent,
-  SessionErrorEvent,
-  SessionEnterPlanModeEvent,
-  SessionStatusEvent,
-} from "./types/session";
-
 // ============================================================================
 // Event Name Constants
 // ============================================================================
 
-/** Session events — sidecar → Rust → frontend */
-export const SESSION_MESSAGE = "session:message" as const;
-export const SESSION_ERROR = "session:error" as const;
-export const SESSION_ENTER_PLAN_MODE = "session:enter-plan-mode" as const;
-export const SESSION_STATUS_CHANGED = "session:status-changed" as const;
-
 /** Workspace events — backend → Rust → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
-
-/** Query cache events — backend → Rust → frontend */
-export const QUERY_INVALIDATE = "query:invalidate" as const;
 
 /** Sidecar RPC — sidecar → Rust → frontend (bidirectional requests) */
 export const SIDECAR_REQUEST = "sidecar:request" as const;
@@ -83,27 +59,36 @@ export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
 /** Queryable resources — single source of truth.
  *  Derive the type from the const array so runtime validators and
  *  compile-time checks always stay in sync. */
-export const QUERY_RESOURCES = ["workspaces", "stats", "sessions", "messages"] as const;
+export const QUERY_RESOURCES = ["workspaces", "stats", "sessions", "session", "messages"] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
-/** Mutation action names for the WebSocket relay protocol. */
-export const MUTATION_NAMES = ["sendMessage", "archiveWorkspace", "updateWorkspaceTitle"] as const;
+/** Mutation action names for the WebSocket relay protocol (sync data writes). */
+export const MUTATION_NAMES = ["archiveWorkspace", "updateWorkspaceTitle"] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
+
+/** Command names for the WebSocket relay protocol (async actions). */
+export const COMMAND_NAMES = ["sendMessage", "stopSession"] as const;
+export type CommandName = (typeof COMMAND_NAMES)[number];
+
+/** Protocol events — ephemeral notifications pushed to all connected clients. */
+export const PROTOCOL_EVENTS = ["session:plan-mode", "session:error", "session:progress"] as const;
+export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 /** Event names the sidecar sends to POST /notify on the backend.
  *  Must match the strings passed to notifyBackend() in sidecar/db/session-writer.ts. */
 export const NOTIFY_SESSION_MESSAGE = "session:message" as const;
 export const NOTIFY_SESSION_STATUS = "session:status" as const;
 export const NOTIFY_SESSION_UPDATED = "session:updated" as const;
-export const SIDECAR_NOTIFY_EVENTS = [NOTIFY_SESSION_MESSAGE, NOTIFY_SESSION_STATUS, NOTIFY_SESSION_UPDATED] as const;
+export const SIDECAR_NOTIFY_EVENTS = [
+  NOTIFY_SESSION_MESSAGE,
+  NOTIFY_SESSION_STATUS,
+  NOTIFY_SESSION_UPDATED,
+] as const;
 export type SidecarNotifyEvent = (typeof SIDECAR_NOTIFY_EVENTS)[number];
 
 // ============================================================================
 // Payload Schemas
 // ============================================================================
-
-// Session event schemas live in shared/session-events.ts (MessageResponseSchema,
-// ErrorResponseSchema, etc.). Only non-session schemas are defined here.
 
 export const WorkspaceProgressSchema = z.object({
   workspaceId: z.string(),
@@ -111,11 +96,6 @@ export const WorkspaceProgressSchema = z.object({
   label: z.string(),
 });
 export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
-
-export const QueryInvalidateSchema = z.object({
-  resources: z.array(z.enum(QUERY_RESOURCES)),
-});
-export type QueryInvalidateEvent = z.infer<typeof QueryInvalidateSchema>;
 
 export const SidecarRpcRequestSchema = z.object({
   id: z.unknown(),
@@ -218,12 +198,14 @@ export const ChatInsertSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("files"),
     workspaceId: z.string(),
-    files: z.array(z.object({
-      name: z.string(),
-      type: z.string(),
-      lastModified: z.number(),
-      base64: z.string(),
-    })),
+    files: z.array(
+      z.object({
+        name: z.string(),
+        type: z.string(),
+        lastModified: z.number(),
+        base64: z.string(),
+      })
+    ),
   }),
 ]);
 export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
@@ -238,12 +220,7 @@ export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
  * the Rust → TypeScript boundary — catches payload drift at runtime.
  */
 export const AppEventSchemaMap = {
-  [SESSION_MESSAGE]: MessageResponseSchema,
-  [SESSION_ERROR]: ErrorResponseSchema,
-  [SESSION_ENTER_PLAN_MODE]: EnterPlanModeNotificationSchema,
-  [SESSION_STATUS_CHANGED]: StatusChangedNotificationSchema,
   [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
-  [QUERY_INVALIDATE]: QueryInvalidateSchema,
   [SIDECAR_REQUEST]: SidecarRpcRequestSchema,
   [FS_CHANGED]: FileChangeSchema,
   [PTY_DATA]: PtyDataSchema,
@@ -267,17 +244,8 @@ export const AppEventSchemaMap = {
  * autocomplete on event names and auto-inferred payload types.
  */
 export interface AppEventMap {
-  // Session (schemas in shared/session-events.ts)
-  [SESSION_MESSAGE]: SessionMessageEvent;
-  [SESSION_ERROR]: SessionErrorEvent;
-  [SESSION_ENTER_PLAN_MODE]: SessionEnterPlanModeEvent;
-  [SESSION_STATUS_CHANGED]: SessionStatusEvent;
-
   // Workspace
   [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
-
-  // Query cache
-  [QUERY_INVALIDATE]: QueryInvalidateEvent;
 
   // Sidecar RPC
   [SIDECAR_REQUEST]: SidecarRpcRequest;

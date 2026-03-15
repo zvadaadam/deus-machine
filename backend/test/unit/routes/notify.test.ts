@@ -33,6 +33,7 @@ describe('POST /notify', () => {
     });
     expect(mockInvalidate).toHaveBeenCalledWith(
       expect.arrayContaining(['messages']),
+      { sessionIds: ['s-1'] },
     );
   });
 
@@ -44,6 +45,8 @@ describe('POST /notify', () => {
     expect(resources).toContain('workspaces');
     expect(resources).toContain('sessions');
     expect(resources).toContain('stats');
+    // Context should include the sessionId
+    expect(mockInvalidate.mock.calls[0][1]).toEqual({ sessionIds: ['s-1'] });
   });
 
   it('invalidates workspaces, sessions for session:updated', async () => {
@@ -54,6 +57,7 @@ describe('POST /notify', () => {
     expect(resources).toContain('workspaces');
     expect(resources).toContain('sessions');
     expect(resources).not.toContain('stats');
+    expect(mockInvalidate.mock.calls[0][1]).toEqual({ sessionIds: ['s-1'] });
   });
 
   it('deduplicates resources across multiple notifications', async () => {

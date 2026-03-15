@@ -13,6 +13,7 @@ import {
   getDashboardWorkspaces,
   getStats,
   getSessionsByWorkspaceId,
+  getSessionById,
   getMessages,
   hasOlderMessages,
   hasNewerMessages,
@@ -20,13 +21,20 @@ import {
   getMaxMessageSeq,
   getMessagesDelta,
   resetStatsCache,
+  getWorkspacesByRepo,
+  getWorkspacesBySessionIds,
+  getAllRepositorySummaries,
+  getSessionRaw,
 } from "../db";
+import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { writeUserMessage } from "./message-writer";
-import { getConnection, broadcast } from "./ws.service";
+import { getConnection } from "./ws.service";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,
+  COMMAND_NAMES,
   type MutationName,
+  type CommandName,
   type QueryResource,
   type QServerFrame,
 } from "../../../shared/types/query-protocol";
@@ -48,6 +56,12 @@ interface UnsubscribeFrameInput {
 interface MutateFrameInput {
   id: string;
   action: string;
+  params: QueryParams;
+}
+
+interface CommandFrameInput {
+  id: string;
+  command: string;
   params: QueryParams;
 }
 
@@ -87,6 +101,9 @@ export function handleFrame(connectionId: string, msg: QueryParams): void {
       .with("q:mutate", () => {
         handleMutate(connectionId, parseMutateFrame(msg));
       })
+      .with("q:command", () => {
+        handleCommand(connectionId, parseCommandFrame(msg));
+      })
       .otherwise(() => {
         sendFrame(connectionId, {
           type: "q:error",
@@ -118,14 +135,20 @@ export function removeSubs(connectionId: string): void {
   }
 }
 
+/** Optional context for targeted invalidation (e.g., which sessions changed). */
+interface InvalidateContext {
+  sessionIds?: string[];
+}
+
 /**
  * Push-first invalidation: re-run queries for active subscribers and push
- * fresh snapshots, then broadcast q:invalidate as fallback for unmounted caches.
+ * fresh snapshots or deltas.
  *
- * Messages are special: they use q:delta (cursor-based) instead of full snapshots,
- * and are excluded from the q:invalidate broadcast.
+ * Messages use q:delta (cursor-based) instead of full snapshots.
+ * When `ctx.sessionIds` is provided, workspace subscribers receive a targeted
+ * q:delta (only the changed workspaces) instead of a full q:snapshot.
  */
-export function invalidate(resources: QueryResource[]): void {
+export function invalidate(resources: QueryResource[], ctx?: InvalidateContext): void {
   if (resources.includes("stats")) {
     resetStatsCache();
   }
@@ -143,6 +166,51 @@ export function invalidate(resources: QueryResource[]): void {
       if (sub.resource === "messages") {
         // Messages: push delta (new messages since last cursor)
         pushMessageDelta(connectionId, subId, sub.params);
+      } else if (sub.resource === "workspaces" && ctx?.sessionIds?.length) {
+        // Workspaces with session context: try targeted delta
+        try {
+          const db = getDatabase();
+          const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
+          const allowedStates = new Set(stateFilter.split(",").map(s => s.trim()));
+          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds)
+            .filter(ws => allowedStates.has(ws.state));
+          if (changedWorkspaces.length > 0) {
+            const withPaths = changedWorkspaces.map(ws => ({
+              ...ws,
+              workspace_path: computeWorkspacePath(ws),
+            }));
+            sendFrame(connectionId, {
+              type: "q:delta",
+              id: subId,
+              upserted: withPaths,
+            });
+          } else {
+            // Session IDs didn't match any workspaces — fall back to full snapshot
+            const data = runQuery(sub.resource, sub.params);
+            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+          }
+        } catch (err) {
+          // Delta lookup failed — fall back to full snapshot
+          console.error(`[QueryEngine] Workspace delta failed, falling back to snapshot:`, err);
+          try {
+            const data = runQuery(sub.resource, sub.params);
+            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+          } catch (snapErr) {
+            console.error(`[QueryEngine] Snapshot fallback also failed:`, snapErr);
+          }
+        }
+      } else if (sub.resource === "session" && ctx?.sessionIds?.length) {
+        // Session with context: only push if this subscription's session is in the changed set
+        const subscribedSessionId = readStringParam(sub.params, "sessionId");
+        if (subscribedSessionId && ctx.sessionIds.includes(subscribedSessionId)) {
+          try {
+            const data = runQuery(sub.resource, sub.params);
+            sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
+          } catch (err) {
+            console.error(`[QueryEngine] Session snapshot push failed:`, err);
+          }
+        }
+        // If session not in changed set, skip the push
       } else {
         // Other resources: push full snapshot
         try {
@@ -159,26 +227,6 @@ export function invalidate(resources: QueryResource[]): void {
     }
   }
 
-  // Phase 2: Broadcast q:invalidate for unmounted caches (exclude messages)
-  const broadcastResources = resources.filter(r => r !== "messages");
-  if (broadcastResources.length > 0) {
-    broadcast(
-      JSON.stringify({
-        type: "q:invalidate",
-        resources: broadcastResources,
-      } satisfies QServerFrame)
-    );
-  }
-
-  // Phase 3: Emit stdout signal for Rust → Tauri event relay (desktop only).
-  // Messages excluded: desktop gets session:message Tauri events directly from sidecar.
-  // Suppressed in test environments to avoid polluting test output.
-  if (process.env.NODE_ENV !== "test") {
-    const tauriResources = resources.filter(r => r !== "messages");
-    if (tauriResources.length > 0) {
-      process.stdout.write(`OPENDEVS_INVALIDATE:${JSON.stringify({ resources: tauriResources })}\n`);
-    }
-  }
 }
 
 // ---- Frame Handlers ----
@@ -284,18 +332,111 @@ function handleMutate(connectionId: string, msg: MutateFrameInput): void {
   }
 }
 
+function handleCommand(connectionId: string, msg: CommandFrameInput): void {
+  const { id, command, params } = msg;
+
+  try {
+    const result = runCommand(command, params);
+    sendFrame(connectionId, {
+      type: "q:command_ack",
+      id,
+      accepted: true,
+      ...result,
+    } satisfies QServerFrame);
+  } catch (err) {
+    sendFrame(connectionId, {
+      type: "q:command_ack",
+      id,
+      accepted: false,
+      error: err instanceof Error ? err.message : "Command failed",
+    } satisfies QServerFrame);
+  }
+}
+
+// ---- Command Dispatch ----
+
+function runCommand(command: string, params: QueryParams): { commandId?: string } {
+  const typedCommand = toCommandName(command);
+
+  return match(typedCommand)
+    .with("sendMessage", () => {
+      const sessionId = readStringParam(params, "sessionId");
+      const content = readStringParam(params, "content");
+      const model = readStringParam(params, "model");
+      if (!sessionId || !content) {
+        throw new Error("sendMessage requires sessionId and content");
+      }
+
+      const result = writeUserMessage(sessionId, content, model);
+      if (!result.success) throw new Error(result.error);
+      invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
+      return { commandId: result.messageId };
+    })
+    .with("stopSession", () => {
+      const sessionId = readStringParam(params, "sessionId");
+      if (!sessionId) throw new Error("stopSession requires sessionId");
+
+      const db = getDatabase();
+      const session = getSessionRaw(db, sessionId);
+      if (!session) throw new Error("Session not found");
+
+      db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
+      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+      return {};
+    })
+    .exhaustive();
+}
+
 // ---- Query Dispatch ----
 
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
   return match(resource)
-    .with("workspaces", () => getDashboardWorkspaces(db))
+    .with("workspaces", () => {
+      // Return RepoGroup[] shape matching GET /workspaces/by-repo
+      const state = readStringParam(params, "state") ?? "ready,initializing";
+      const workspaces = getWorkspacesByRepo(db, state);
+
+      const grouped: Record<string, { repo_id: string; repo_name: string; sort_order: number; workspaces: unknown[] }> = {};
+      workspaces.forEach(workspace => {
+        const repoId = workspace.repository_id || "unknown";
+        if (!grouped[repoId]) {
+          grouped[repoId] = {
+            repo_id: repoId,
+            repo_name: workspace.repo_name || "Unknown",
+            sort_order: workspace.repo_sort_order ?? 999,
+            workspaces: [],
+          };
+        }
+        grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+      });
+
+      // Backfill repos that have no matching workspaces (e.g. all archived)
+      const allRepos = getAllRepositorySummaries(db);
+      for (const repo of allRepos) {
+        if (!grouped[repo.id]) {
+          grouped[repo.id] = {
+            repo_id: repo.id,
+            repo_name: repo.name,
+            sort_order: repo.sort_order ?? 999,
+            workspaces: [],
+          };
+        }
+      }
+
+      return Object.values(grouped).sort((a, b) => a.sort_order - b.sort_order);
+    })
     .with("stats", () => getStats(db))
     .with("sessions", () => {
       const workspaceId = readStringParam(params, "workspaceId");
       if (!workspaceId) throw new Error("sessions requires workspaceId param");
       return getSessionsByWorkspaceId(db, workspaceId);
+    })
+    .with("session", () => {
+      const sessionId = readStringParam(params, "sessionId");
+      if (!sessionId) throw new Error("session requires sessionId param");
+      return getSessionById(db, sessionId);
     })
     .with("messages", () => {
       const sessionId = readStringParam(params, "sessionId");
@@ -312,7 +453,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
         ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq)
         : false;
 
-      return { messages: rows, hasOlder, hasNewer };
+      return { messages: rows, has_older: hasOlder, has_newer: hasNewer };
     })
     .exhaustive();
 }
@@ -323,24 +464,6 @@ function runMutation(action: string, params: QueryParams): unknown {
   const typedAction = toMutationName(action);
 
   return match(typedAction)
-    .with("sendMessage", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      const content = readStringParam(params, "content");
-      const model = readStringParam(params, "model");
-      if (!sessionId || !content) {
-        throw new Error("sendMessage requires sessionId and content");
-      }
-
-      const result = writeUserMessage(sessionId, content, model);
-      if (!result.success) throw new Error(result.error);
-      invalidate(["workspaces", "sessions", "messages", "stats"]);
-      // Client expects { messageId, seq } — get seq from the inserted message
-      const db = getDatabase();
-      const row = db.prepare("SELECT seq FROM messages WHERE id = ?").get(result.messageId) as
-        | { seq: number }
-        | undefined;
-      return { messageId: result.messageId, seq: row?.seq ?? 0 };
-    })
     .with("archiveWorkspace", () => {
       const db = getDatabase();
       const workspaceId = readStringParam(params, "workspaceId");
@@ -480,5 +603,22 @@ function isMutationName(value: string): value is MutationName {
 
 function toMutationName(value: string): MutationName {
   if (!isMutationName(value)) throw new Error(`Unknown mutation: ${value}`);
+  return value;
+}
+
+function parseCommandFrame(msg: QueryParams): CommandFrameInput {
+  return {
+    id: requireString(msg.id, "id"),
+    command: requireString(msg.command, "command"),
+    params: getParams(msg.params),
+  };
+}
+
+function isCommandName(value: string): value is CommandName {
+  return (COMMAND_NAMES as readonly string[]).includes(value);
+}
+
+function toCommandName(value: string): CommandName {
+  if (!isCommandName(value)) throw new Error(`Unknown command: ${value}`);
   return value;
 }

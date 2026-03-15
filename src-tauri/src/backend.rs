@@ -106,17 +106,6 @@ impl BackendManager {
                         }
                     }
 
-                    // Parse query invalidation events and relay as Tauri events.
-                    // Backend emits: OPENDEVS_INVALIDATE:{"resources":["workspaces","stats"]}
-                    if let Some(json_str) = line.strip_prefix("OPENDEVS_INVALIDATE:") {
-                        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json_str) {
-                            if let Some(handle) = app_handle_clone.lock().unwrap().as_ref() {
-                                if let Err(e) = handle.emit("query:invalidate", &payload) {
-                                    eprintln!("[BACKEND] Failed to emit query:invalidate: {}", e);
-                                }
-                            }
-                        }
-                    }
                 }
             }
         });

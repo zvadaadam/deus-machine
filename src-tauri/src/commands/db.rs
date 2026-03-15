@@ -37,6 +37,8 @@ fn read_workspace_row(row: &rusqlite::Row) -> Result<WorkspaceWithDetails, rusql
     let repo_sort_order: Option<i64> = row.get("repo_sort_order")?;
     let session_status: Option<String> = row.get("session_status")?;
     let model: Option<String> = row.get("model")?;
+    let session_error_category: Option<String> = row.get("session_error_category")?;
+    let session_error_message: Option<String> = row.get("session_error_message")?;
     let latest_message_sent_at: Option<String> = row.get("latest_message_sent_at")?;
 
     let workspace_path = compute_workspace_path(
@@ -63,6 +65,8 @@ fn read_workspace_row(row: &rusqlite::Row) -> Result<WorkspaceWithDetails, rusql
         repo_sort_order,
         session_status,
         model,
+        session_error_category,
+        session_error_message,
         latest_message_sent_at,
         workspace_path,
     })
@@ -111,6 +115,8 @@ pub fn db_get_workspaces_by_repo(
                 r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
                 r.git_default_branch,
                 s.status as session_status, s.model,
+                s.error_category as session_error_category,
+                s.error_message as session_error_message,
                 s.last_user_message_at as latest_message_sent_at
             FROM workspaces w
             LEFT JOIN repositories r ON w.repository_id = r.id
