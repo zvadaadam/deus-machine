@@ -165,6 +165,30 @@ class UnifiedSidecar {
   private setupJsonRpc(rpcTunnel: RpcConnection): void {
     FrontendClient.attachTunnel(rpcTunnel);
 
+    // --- Initialize handshake (backend agent-client sends this) ---
+    rpcTunnel.addMethod("initialize", () => {
+      const agents = [];
+      for (const [agentType, handler] of [
+        ["claude", getAgent("claude")],
+        ["codex", getAgent("codex")],
+      ] as const) {
+        if (handler) {
+          agents.push({
+            type: agentType,
+            capabilities: handler.capabilities,
+            initialized: true,
+          });
+        }
+      }
+      return { version: "1.0", agents };
+    });
+
+    // --- Initialized notification (backend confirms handshake) ---
+    rpcTunnel.addMethod("initialized", () => {
+      console.log("[RPC] Backend handshake complete (initialized)");
+      return undefined;
+    });
+
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
     // query() is NOT awaited — the ACK returns immediately after validation.
