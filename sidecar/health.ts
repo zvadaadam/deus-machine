@@ -7,7 +7,7 @@
 
 import type { IncomingMessage, ServerResponse } from "http";
 import type { WebSocketServer } from "ws";
-import { getRegisteredAgentTypes, getAgent } from "./agents/agent-handler";
+import { getRegisteredAgentTypes, getAgent } from "./agents/registry";
 import type { AgentType } from "../shared/enums";
 import { EventBroadcaster } from "./event-broadcaster";
 

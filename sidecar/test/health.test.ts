@@ -9,7 +9,7 @@ const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
 const mockGetAgent = vi.fn(() => undefined);
 
-vi.mock("../agents/agent-handler", () => ({
+vi.mock("../agents/registry", () => ({
   getRegisteredAgentTypes: () => mockGetRegisteredAgentTypes(),
   getAgent: (...args: unknown[]) => mockGetAgent(...args),
 }));

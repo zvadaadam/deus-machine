@@ -39,7 +39,7 @@ vi.mock("../event-broadcaster", () => ({
   },
 }));
 
-vi.mock("../agents/error-classifier", () => ({
+vi.mock("../agents/lifecycle", () => ({
   classifyStopReason: mockClassifyStopReason,
 }));
 

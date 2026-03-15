@@ -1,4 +1,4 @@
-// sidecar/agents/workspace-context.ts
+// sidecar/agents/environment/workspace-context.ts
 // Shared workspace context for agent system prompts.
 // Both Claude and Codex handlers use this to tell agents about the
 // OpenDevs orchestrator, worktree location, and actual project name.

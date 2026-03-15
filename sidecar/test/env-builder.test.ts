@@ -7,11 +7,11 @@ const { mockGetShellEnvironment } = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("../agents/shell-env", () => ({
+vi.mock("../agents/environment/shell-env", () => ({
   getShellEnvironment: mockGetShellEnvironment,
 }));
 
-import { parseEnvString, buildAgentEnvironment } from "../agents/env-builder";
+import { parseEnvString, buildAgentEnvironment } from "../agents/environment";
 
 // ============================================================================
 // parseEnvString

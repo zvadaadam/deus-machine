@@ -1,4 +1,4 @@
-// sidecar/agents/env-builder.ts
+// sidecar/agents/environment/env-builder.ts
 // Shared environment construction for all agent handlers.
 // Builds the 6-layer environment: shell env → process.env → extra env →
 // opendevsEnv → claudeEnvVars → ghToken.

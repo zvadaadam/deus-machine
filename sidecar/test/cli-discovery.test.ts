@@ -30,7 +30,7 @@ import {
   blockIfNotInitialized,
   type DiscoveryConfig,
   type DiscoveryState,
-} from "../agents/cli-discovery";
+} from "../agents/environment/cli-discovery";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

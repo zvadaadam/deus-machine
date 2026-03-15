@@ -5,7 +5,7 @@ import {
   initializeAllAgents,
   clearAgentRegistry,
   type AgentHandler,
-} from "../agents/agent-handler";
+} from "../agents/registry";
 
 function createMockHandler(agentType: "claude" | "codex" = "claude"): AgentHandler {
   return {

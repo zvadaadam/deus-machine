@@ -33,8 +33,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { getErrorMessage } from "../shared/lib/errors";
 import { RpcConnection, wsTransport } from "./rpc-connection";
 import { EventBroadcaster } from "./event-broadcaster";
-import { classifyError } from "./agents/error-classifier";
-import { registerAgent, getAgent, initializeAllAgents } from "./agents/agent-handler";
+import { classifyError } from "./agents/lifecycle";
+import { registerAgent, getAgent, initializeAllAgents } from "./agents/registry";
 import { ClaudeAgentHandler } from "./agents/claude/claude-handler";
 import { CodexAgentHandler } from "./agents/codex/codex-handler";
 import {

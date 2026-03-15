@@ -5,7 +5,7 @@
 
 import { getErrorMessage } from "../../../shared/lib/errors";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { classifyStopReason } from "../error-classifier";
+import { classifyStopReason } from "../lifecycle";
 import type { StreamContext } from "./stream-context";
 import type { SessionState } from "./claude-session";
 

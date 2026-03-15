@@ -3,7 +3,7 @@
 // settings comparison, termination, and session reuse logic.
 
 import type { Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { QueryOptions } from "../agent-handler";
+import type { QueryOptions } from "../registry";
 import { SessionStore } from "../session-store";
 
 // ============================================================================

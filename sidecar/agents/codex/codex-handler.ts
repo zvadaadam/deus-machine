@@ -11,11 +11,9 @@
 import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { classifyError } from "../error-classifier";
-import { handleCancellation, handleQueryError } from "../query-completion";
-import type { AgentCapabilities, AgentHandler, QueryOptions } from "../agent-handler";
-import { buildAgentEnvironment } from "../env-builder";
-import { buildWorkspaceContext } from "../workspace-context";
+import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
+import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
+import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { resolveCodexModel } from "./codex-models";
 import { codexSessions, abortCodexSession, type CodexSessionState } from "./codex-session";

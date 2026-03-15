@@ -41,7 +41,7 @@ vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: mockFrontendAPI,
 }));
 
-vi.mock("../agents/shell-env", () => ({
+vi.mock("../agents/environment/shell-env", () => ({
   getShellEnvironment: vi.fn(() => ({ PATH: "/usr/bin", HOME: "/home/test" })),
 }));
 
@@ -71,7 +71,7 @@ vi.mock("fs", async (importOriginal) => {
 // Import module under test (after mocks)
 // ============================================================================
 
-import { parseEnvString } from "../agents/env-builder";
+import { parseEnvString } from "../agents/environment";
 import { initializeClaude } from "../agents/claude/claude-discovery";
 import { ClaudeAgentHandler } from "../agents/claude/claude-handler";
 import { createCheckpoint } from "../agents/claude/checkpoint";

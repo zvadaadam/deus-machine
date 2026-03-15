@@ -10,20 +10,41 @@ const { mockPersistCancellation, mockNotifyAndRecordError, mockClassifyError } =
   mockClassifyError: vi.fn(),
 }));
 
-vi.mock("../agents/query-lifecycle", () => ({
+// All functions now live in the same lifecycle module. Since handleCancellation
+// and handleQueryError are thin wrappers that call persistCancellation,
+// classifyError, and notifyAndRecordError (same-module siblings), we must
+// mock the entire module and provide wrapper implementations that delegate
+// to the mocked sub-functions — matching the real behavior exactly.
+vi.mock("../agents/lifecycle", () => ({
   persistCancellation: mockPersistCancellation,
   notifyAndRecordError: mockNotifyAndRecordError,
-}));
-
-vi.mock("../agents/error-classifier", () => ({
   classifyError: mockClassifyError,
+  handleCancellation: (
+    sessionId: string,
+    agentType: string,
+    model: string,
+    wasCancelled: boolean
+  ) => {
+    if (!wasCancelled) return false;
+    mockPersistCancellation(sessionId, agentType, model);
+    return true;
+  },
+  handleQueryError: (
+    sessionId: string,
+    agentType: string,
+    error: unknown,
+    enrichMessage?: (classified: { message: string }) => string
+  ) => {
+    const classified = mockClassifyError(error);
+    mockNotifyAndRecordError(sessionId, agentType, classified, enrichMessage);
+  },
 }));
 
 // ============================================================================
 // Import module under test (after mocks)
 // ============================================================================
 
-import { handleCancellation, handleQueryError } from "../agents/query-completion";
+import { handleCancellation, handleQueryError } from "../agents/lifecycle";
 
 // ============================================================================
 // Tests

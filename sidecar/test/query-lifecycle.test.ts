@@ -18,8 +18,11 @@ vi.mock("../event-broadcaster", () => ({
   },
 }));
 
-import { persistCancellation, notifyAndRecordError } from "../agents/query-lifecycle";
-import type { ClassifiedError } from "../agents/error-classifier";
+import {
+  persistCancellation,
+  notifyAndRecordError,
+  type ClassifiedError,
+} from "../agents/lifecycle";
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
