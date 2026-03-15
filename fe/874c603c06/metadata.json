@@ -139,6 +139,12 @@
       "transcript": "/fe/874c603c06/21/full.jsonl",
       "content_hash": "/fe/874c603c06/21/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/fe/874c603c06/22/metadata.json",
+      "transcript": "/fe/874c603c06/22/full.jsonl",
+      "content_hash": "/fe/874c603c06/22/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
