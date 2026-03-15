@@ -1,9 +1,11 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "bf06ff0ce138",
+  "session_id": "79e364eb-462c-4664-9dd2-f8ecf71dae03",
   "strategy": "manual-commit",
+  "created_at": "2026-03-15T13:47:13.034051Z",
   "branch": "zvadaadam/explore-backend-sidecar",
-  "checkpoints_count": 1,
+  "checkpoints_count": 0,
   "files_touched": [
     ".claude/agent-memory/deep-reviewer/MEMORY.md",
     "backend/src/db/queries.ts",
@@ -42,25 +44,22 @@
     "test/unit/shared/events.test.ts",
     "test/unit/workspace/useQueryInvalidation.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/bf/06ff0ce138/0/metadata.json",
-      "transcript": "/bf/06ff0ce138/0/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/0/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/0/prompt.txt"
-    },
-    {
-      "metadata": "/bf/06ff0ce138/1/metadata.json",
-      "transcript": "/bf/06ff0ce138/1/full.jsonl",
-      "content_hash": "/bf/06ff0ce138/1/content_hash.txt",
-      "prompt": "/bf/06ff0ce138/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "4a12ea973620",
   "token_usage": {
-    "input_tokens": 1926,
-    "cache_creation_tokens": 127464,
-    "cache_read_tokens": 971570,
-    "output_tokens": 4892,
-    "api_call_count": 23
+    "input_tokens": 17,
+    "cache_creation_tokens": 67271,
+    "cache_read_tokens": 588282,
+    "output_tokens": 2616,
+    "api_call_count": 15
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T13:47:12.904556Z",
+    "agent_lines": 1229,
+    "human_added": 20,
+    "human_modified": 41,
+    "human_removed": 0,
+    "total_committed": 1290,
+    "agent_percentage": 95.27131782945737
   }
 }
