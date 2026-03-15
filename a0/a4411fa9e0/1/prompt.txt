@@ -1,0 +1,121 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system-instruction>
+To do immediately, before using any skills or any other tools:
+
+Rename the branch using `git branch -m`. Do not check the current branch name.
+
+Only do this once per session. If the branch has already been renamed, leave it.
+
+Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). Use the prefix "zvadaadam/" before the name.
+
+</system-instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/.context/attachments/pasted_text_2026-03-15_15-43-56.txt (9.2 KB)
+</system_instruction>
+
+---
+
+OK, so what should we do? What would be the plan or what we would change and show me the task of everything what we want to do, but like what should be the plan structure based on the dependencies and stuff that needs to be done.
+
+---
+
+Okay, so let's go and do the phase one. I think this is pretty good. can u do the full plan.
+
+---
+
+Okay, I want you to do more research. I feel like we are still missing some stuff and it's not quite there yet. I want you to explore how Codex and T3 code are doing these things. And also the Codex App Server implements a lot of things that should be inside the sidecar or how we want to call it agent server. Because the agent server should be light to aggregate all the agents like Cloudcode, Codex, many things. And most of them don't have the servers. They have CLI and some agent SDK around it. So that's the reason. And we need to think about how to design it the best. The backend, the web sockets, the communication between the backend and the server.
+
+Explore i give beedback what to imprve in our project to make it better
+
+
+Codex-app-server - /Users/zvada/conductor/workspaces/codex/indianapolis-v4
+Codex - /Applications/Codex.app/
+OpenDevs - /Users/zvada/conductor/workspaces/t3code/jakarta-v2
+
+---
+
+<task-notification>
+<task-id>bnf17aoj4</task-id>
+<tool-use-id>toolu_01TNWoWfzHuCTYbHsGL47e1i</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/bnf17aoj4.output</output-file>
+<status>completed</status>
+<summary>Background command "find /Users/zvada -type d -name "codex" 2>/dev/null | grep -E "(conductor|workspace)" | head -10" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/tasks/bnf17aoj4.output
+
+---
+
+okey create a plan
+
+also we build somethgin sismalr but runing in cloud maybe it coudl be good imspriation fro somhting? /Users/zvada/conductor/workspaces/agnt/chicago-v4
+
+----
+
+plan the work before impentign go in pdeth
+
+---
+
+Okay, but why do you want between the backend Hono and the agent server, the Unix socket? I feel like the others, they use web sockets and we actually want this to make work for other apps and have the agent server more generic. We would go to also web socket between the backend and the agent server, what do you think? Or should we support like the stdo and the web socket like codex app server, what do you think? Update it based on the best thinking of yours th eplan
+
+---
+
+great also we have done othe rreserahc on the anmes and stuff wdyt is tehre somehtin u woudl change in the plan abase dont hsi anslys?
+
+If we would be designing this like this like the something like a codex app server, what kind of and this agent handler, what kind of like methods we should implement. We already have the agent handler, but like I want to explore based on the other apps, how actually this methods could be called, what are the parameters, what would be the functions. And And I think all three can give you these projects, give you some ideas.
+
+What we want to build is an agent server, something like Codex App Server, but it's going to be aggregating all the coding agents that are like Cloud Code, like agent CLI products, into one very easy communication style interface. I think already Codex App Server showed the direction, but we want to do an abstraction, like have a Cloud Code, but the Cloud Code has the agent SDK. I think something similar inside has the D3 code, so explore.
+
+Codex-app-server - /Users/zvada/conductor/workspaces/codex/indianapolis-v4
+Codex - /Applications/Codex.app/
+OpenDevs - /Users/zvada/conductor/workspaces/t3code/jakarta-v2
+
+38 tool calls, 35 messages, 10 subagents
+That last agent failed but I already explored OpenDevs directly and included it in the synthesis. The full design doc is ready at .context/agent-server-design.md — see my summary above.
+6m, 58s
+·
+
+
+
+can u also ad this from it /Users/zvada/conductor/workspaces/agnt/chicago-v4
+
+it;s our impenntion of cloud vrison of it we wnan a mek the umtiel rop thing u kkw
+
+27 tool calls, 7 messages
+Done. Here’s what the Agnt cloud codebase adds to the picture:
+
+Key New Patterns from Agnt
+
+1. Raw Event Passthrough — The biggest insight. Your cloud sidecar is a dumb pipe: BaseAgent.execute() yields raw SDK events unchanged. The backend (AgentSession DO) runs them through an Adapter<TEvent> + EventTransformer pipeline that maps Claude SDK events → typed Parts (TEXT, REASONING, TOOL, STEP_FINISH). This means the sidecar stays thin and stable while the transformation logic evolves in the backend.
+
+2. GeneratorSession + EventTap — Cleaner than your desktop sidecar’s session management. The GeneratorSession keeps a long-lived SDK query alive. Each sendMessage() returns an EventTap { events, detach() }. Detach ≠ terminate — the session stays idle for reuse. waitForIdle() with a FIFO waiter queue prevents concurrent turns naturally.
+
+3. Permission Bridge via PendingRequestStore — Your cloud version already solved external tool approval: canUseTool callback → sidecar emits permission:request → WS → DO → client → user decides → permission.response → WS → sidecar resolves PendingRequestStore<T>. Same pattern for MCP questions and hooks.
+
+4. Turn Lifecycle in Server — The AgentSession DO owns turn creation, state machine, and message persistence — not the sidecar. The sidecar just sends agent:status (running/completed/failed).
+
+5. Session Channel Protocol — Clean bidirectional typed WS protocol: events flow sidecar→DO, commands flow DO→sidecar.
+
+The updated design doc is at .context/agent-server-design.md with all four codebases compared side-by-sid
+
+---
+
+do all in here
+
+---
+
+do the phase 2
