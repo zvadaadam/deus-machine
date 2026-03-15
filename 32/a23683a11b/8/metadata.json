@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "32a23683a11b",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-15T22:59:54.663589Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "sidecar/index.ts",
+    "src/features/session/ui/Chat.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "ecc0e9d57f1d",
+  "token_usage": {
+    "input_tokens": 16301,
+    "cache_creation_tokens": 1685008,
+    "cache_read_tokens": 122092220,
+    "output_tokens": 171904,
+    "api_call_count": 473
+  },
+  "session_metrics": {
+    "turn_count": 58
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T22:59:50.094561Z",
+    "agent_lines": 62,
+    "human_added": 0,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 67,
+    "agent_percentage": 92.53731343283582
+  }
+}
