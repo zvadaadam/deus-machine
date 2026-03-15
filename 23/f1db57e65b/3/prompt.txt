@@ -111,3 +111,7 @@ Key New Patterns from Agnt
 5. Session Channel Protocol — Clean bidirectional typed WS protocol: events flow sidecar→DO, commands flow DO→sidecar.
 
 The updated design doc is at .context/agent-server-design.md with all four codebases compared side-by-sid
+
+---
+
+do all in here
