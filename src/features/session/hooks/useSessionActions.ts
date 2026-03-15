@@ -14,7 +14,7 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useSendMessage, useStopSession } from "../api/session.queries";
-import { socketService } from "@/platform/socket";
+import { sendCommand, connect, isConnected } from "@/platform/ws";
 import { track } from "@/platform/analytics";
 import { type RuntimeAgentType } from "../lib/agentRuntime";
 import { COMPACT_CONVERSATION, createPRPrompt } from "../lib/sessionPrompts";
@@ -91,7 +91,8 @@ export function useSessionActions({
     try {
       // Cancel the sidecar agent first so it stops consuming API tokens
       try {
-        await socketService.cancelQuery(sessionId, agentType);
+        if (!isConnected()) await connect();
+        await sendCommand("stopSession", { sessionId });
       } catch (cancelError) {
         console.error("[useSessionActions] Cancel query failed:", cancelError);
       }
