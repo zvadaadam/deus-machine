@@ -111,6 +111,12 @@
       "transcript": "/33/32f0dc5175/16/full.jsonl",
       "content_hash": "/33/32f0dc5175/16/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/33/32f0dc5175/17/metadata.json",
+      "transcript": "/33/32f0dc5175/17/full.jsonl",
+      "content_hash": "/33/32f0dc5175/17/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
