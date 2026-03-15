@@ -71,7 +71,7 @@ export const COMMAND_NAMES = ["sendMessage", "stopSession"] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
-export const PROTOCOL_EVENTS = ["session:plan-mode", "session:error", "session:progress"] as const;
+export const PROTOCOL_EVENTS = ["session:plan-mode", "session:error", "session:progress", "tool:request"] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 /** Event names the sidecar sends to POST /notify on the backend.
