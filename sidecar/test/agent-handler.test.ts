@@ -7,13 +7,19 @@ import {
   type AgentHandler,
 } from "../agents/agent-handler";
 
-function createMockHandler(agentType: "claude" | "codex" | "unknown" = "claude"): AgentHandler {
+function createMockHandler(agentType: "claude" | "codex" = "claude"): AgentHandler {
   return {
     agentType,
+    capabilities: {
+      auth: false,
+      workspaceInit: false,
+      contextUsage: false,
+      permissionMode: false,
+    },
     initialize: vi.fn(() => ({ success: true })),
-    handleQuery: vi.fn(async () => {}),
-    handleCancel: vi.fn(async () => {}),
-    handleReset: vi.fn(),
+    query: vi.fn(async () => {}),
+    cancel: vi.fn(async () => {}),
+    reset: vi.fn(),
   };
 }
 
@@ -136,20 +142,31 @@ describe("AgentRegistry", () => {
   // ==========================================================================
 
   describe("handler interface contract", () => {
+    it("exposes capabilities on the handler", () => {
+      const handler = createMockHandler("claude");
+      registerAgent(handler);
+      const agent = getAgent("claude")!;
+      expect(agent.capabilities).toBeDefined();
+      expect(typeof agent.capabilities.auth).toBe("boolean");
+      expect(typeof agent.capabilities.workspaceInit).toBe("boolean");
+      expect(typeof agent.capabilities.contextUsage).toBe("boolean");
+      expect(typeof agent.capabilities.permissionMode).toBe("boolean");
+    });
+
     it("handler methods can be called through registry", async () => {
       const handler = createMockHandler("claude");
       registerAgent(handler);
 
       const agent = getAgent("claude")!;
       agent.initialize();
-      await agent.handleQuery("sess-1", "hello", { cwd: "/test" });
-      await agent.handleCancel("sess-1");
-      agent.handleReset("sess-1");
+      await agent.query("sess-1", "hello", { cwd: "/test" });
+      await agent.cancel("sess-1");
+      agent.reset("sess-1");
 
       expect(handler.initialize).toHaveBeenCalled();
-      expect(handler.handleQuery).toHaveBeenCalledWith("sess-1", "hello", { cwd: "/test" });
-      expect(handler.handleCancel).toHaveBeenCalledWith("sess-1");
-      expect(handler.handleReset).toHaveBeenCalledWith("sess-1");
+      expect(handler.query).toHaveBeenCalledWith("sess-1", "hello", { cwd: "/test" });
+      expect(handler.cancel).toHaveBeenCalledWith("sess-1");
+      expect(handler.reset).toHaveBeenCalledWith("sess-1");
     });
   });
 });

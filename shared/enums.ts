@@ -35,7 +35,7 @@ export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 
 // ── Agent ────────────────────────────────────────────────────────────────
 
-export const AgentTypeSchema = z.enum(["claude", "codex", "unknown"]);
+export const AgentTypeSchema = z.enum(["claude", "codex"]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
 /** Structured error categories for agent error responses. */

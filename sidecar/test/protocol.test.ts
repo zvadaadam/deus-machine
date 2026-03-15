@@ -72,10 +72,10 @@ describe("AgentTypeSchema", () => {
   it("accepts valid agent types", () => {
     expect(AgentTypeSchema.parse("claude")).toBe("claude");
     expect(AgentTypeSchema.parse("codex")).toBe("codex");
-    expect(AgentTypeSchema.parse("unknown")).toBe("unknown");
   });
 
   it("rejects invalid agent types", () => {
+    expect(() => AgentTypeSchema.parse("unknown")).toThrow();
     expect(() => AgentTypeSchema.parse("gpt")).toThrow();
     expect(() => AgentTypeSchema.parse("")).toThrow();
     expect(() => AgentTypeSchema.parse(123)).toThrow();
@@ -179,9 +179,12 @@ describe("ClaudeAuthRequestSchema", () => {
     expect(
       ClaudeAuthRequestSchema.safeParse(buildClaudeAuthRequest({ agentType: "codex" })).success
     ).toBe(true);
+  });
+
+  it("rejects removed agent type", () => {
     expect(
       ClaudeAuthRequestSchema.safeParse(buildClaudeAuthRequest({ agentType: "unknown" })).success
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects invalid agent type", () => {

@@ -142,7 +142,7 @@ class UnifiedSidecar {
 
     // --- Query (dispatch to agent by agentType) ---
     // Returns synchronous ACK/reject before async streaming begins.
-    // handleQuery is NOT awaited — the ACK returns immediately after validation.
+    // query() is NOT awaited — the ACK returns immediately after validation.
     FrontendClient.onQuery(rpcTunnel, async (request) => {
       const tQueryReceived = Date.now();
       console.log(`[TIMING][QUERY] RECEIVED session=${request.id} agent=${request.agentType} promptLength=${request.prompt?.length ?? 0}`);
@@ -171,11 +171,11 @@ class UnifiedSidecar {
         return { accepted: false, reason: `Failed to save message: ${writeResult.error}` };
       }
 
-      agent.handleQuery(request.id, request.prompt, request.options).catch((err) => {
-        console.error(`[QUERY] Unhandled error in ${request.agentType} handleQuery:`, err);
+      agent.query(request.id, request.prompt, request.options).catch((err) => {
+        console.error(`[QUERY] Unhandled error in ${request.agentType} query:`, err);
         // Recover: update session status so it doesn't stay stuck in "working".
         // processWithGenerator has its own try/catch that handles most errors,
-        // but if handleQuery itself rejects (before or outside the generator),
+        // but if query() itself rejects (before or outside the generator),
         // this is the last line of defense.
         const classified = classifyError(err);
         FrontendClient.sendError({
@@ -194,19 +194,25 @@ class UnifiedSidecar {
     // --- Cancel (dispatch to agent by agentType) ---
     FrontendClient.onCancel(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
-      if (agent) void agent.handleCancel(request.id);
+      if (agent) void agent.cancel(request.id);
     });
 
-    // --- Auth check (Claude-specific RPC) ---
+    // --- Auth check (dispatched by agentType) ---
     FrontendClient.onClaudeAuth(rpcTunnel, (request) => {
-      const claude = getAgent("claude") as ClaudeAgentHandler;
-      return claude.claudeAuth({ id: request.id, cwd: request.options.cwd });
+      const agent = getAgent(request.agentType);
+      if (!agent?.auth) {
+        return Promise.reject(new Error(`Agent "${request.agentType}" does not support auth`));
+      }
+      return agent.auth({ id: request.id, cwd: request.options.cwd });
     });
 
-    // --- Workspace init (Claude-specific RPC) ---
+    // --- Workspace init (dispatched by agentType) ---
     FrontendClient.onWorkspaceInit(rpcTunnel, (request) => {
-      const claude = getAgent("claude") as ClaudeAgentHandler;
-      return claude.workspaceInit({
+      const agent = getAgent(request.agentType);
+      if (!agent?.initWorkspace) {
+        return Promise.reject(new Error(`Agent "${request.agentType}" does not support workspace init`));
+      }
+      return agent.initWorkspace({
         id: request.id,
         cwd: request.options.cwd,
         ghToken: request.options.ghToken,
@@ -214,22 +220,28 @@ class UnifiedSidecar {
       });
     });
 
-    // --- Context usage (Claude-specific RPC) ---
+    // --- Context usage (dispatched by agentType) ---
     FrontendClient.onContextUsage(rpcTunnel, (request) => {
-      const claude = getAgent("claude") as ClaudeAgentHandler;
-      return claude.getContextUsage(request);
+      const agent = getAgent(request.agentType);
+      if (!agent?.getContextUsage) {
+        return Promise.reject(new Error(`Agent "${request.agentType}" does not support context usage`));
+      }
+      return agent.getContextUsage(request);
     });
 
-    // --- Permission mode updates (Claude-specific) ---
+    // --- Permission mode updates (dispatched by agentType) ---
+    // Fire-and-forget notification — no error if the agent doesn't support it
     FrontendClient.onUpdatePermissionMode(rpcTunnel, (request) => {
-      const claude = getAgent("claude") as ClaudeAgentHandler;
-      if (claude) void claude.updatePermissionMode(request.id, request.permissionMode);
+      const agent = getAgent(request.agentType);
+      if (agent?.updatePermissionMode) {
+        void agent.updatePermissionMode(request.id, request.permissionMode);
+      }
     });
 
     // --- Reset generator (dispatch to agent by agentType) ---
     FrontendClient.onResetGenerator(rpcTunnel, (request) => {
       const agent = getAgent(request.agentType);
-      if (agent) agent.handleReset(request.id);
+      if (agent) agent.reset(request.id);
     });
 
     // Note: socket "close" handler is in handleConnection() which also calls

@@ -128,12 +128,12 @@ describe("claude-handler", () => {
   });
 
   // ==========================================================================
-  // handleResetGenerator
+  // reset
   // ==========================================================================
 
-  describe("handleResetGenerator", () => {
+  describe("reset", () => {
     it("does nothing when session does not exist", () => {
-      expect(() => handler.handleReset("nonexistent")).not.toThrow();
+      expect(() => handler.reset("nonexistent")).not.toThrow();
     });
   });
 
@@ -141,7 +141,7 @@ describe("claude-handler", () => {
   // handleClaudeQuery (requires successful init)
   // ==========================================================================
 
-  describe("handleClaudeQuery", () => {
+  describe("query", () => {
     beforeEach(() => {
       // Initialize successfully first
       mockExecSync.mockReturnValue("1.0.0\n");
@@ -159,7 +159,7 @@ describe("claude-handler", () => {
       });
       initializeClaude();
 
-      await handler.handleQuery("sess-1", "hello", { cwd: "/test" });
+      await handler.query("sess-1", "hello", { cwd: "/test" });
 
       expect(mockFrontendAPI.sendError).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -192,7 +192,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-new", "hello", {
+      await handler.query("sess-new", "hello", {
         cwd: "/test",
         model: "sonnet",
         turnId: "turn-1",
@@ -222,7 +222,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-opts", "hello", {
+      await handler.query("sess-opts", "hello", {
         cwd: "/test",
         model: "sonnet",
         permissionMode: "plan",
@@ -252,7 +252,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-mcp", "hello", {
+      await handler.query("sess-mcp", "hello", {
         cwd: "/test",
         strictDataPrivacy: false,
         turnId: "turn-1",
@@ -277,7 +277,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-privacy", "hello", {
+      await handler.query("sess-privacy", "hello", {
         cwd: "/test",
         strictDataPrivacy: true,
         turnId: "turn-1",
@@ -313,7 +313,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-stream", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-stream", "hello", { cwd: "/test", turnId: "turn-1" });
 
       // Wait for the generator to complete
       await new Promise((r) => setTimeout(r, 200));
@@ -332,7 +332,7 @@ describe("claude-handler", () => {
         throw new Error("SDK initialization failed");
       });
 
-      await handler.handleQuery("sess-err", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-err", "hello", { cwd: "/test", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -364,7 +364,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-sigint", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-sigint", "hello", { cwd: "/test", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -385,7 +385,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-sigint-err", "hello", { cwd: "/test", turnId: "turn-1" });
+      await handler.query("sess-sigint-err", "hello", { cwd: "/test", turnId: "turn-1" });
 
       await new Promise((r) => setTimeout(r, 100));
 
@@ -410,7 +410,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-env", "hello", {
+      await handler.query("sess-env", "hello", {
         cwd: "/test",
         claudeEnvVars: "CUSTOM_VAR=custom_value\nANOTHER=123",
         turnId: "turn-1",
@@ -435,7 +435,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-gh", "hello", {
+      await handler.query("sess-gh", "hello", {
         cwd: "/test",
         ghToken: "my-gh-token",
         turnId: "turn-1",
@@ -477,7 +477,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-max-tokens", "hello", {
+      await handler.query("sess-max-tokens", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -548,7 +548,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-resume", "hello", {
+      await handler.query("sess-resume", "hello", {
         cwd: "/test",
         resume: "original-agent-sess-id",
         turnId: "turn-1",
@@ -574,7 +574,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-auto-resume", "hello", {
+      await handler.query("sess-auto-resume", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -611,7 +611,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-capture", "hello", {
+      await handler.query("sess-capture", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -651,7 +651,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-exec-err", "hello", {
+      await handler.query("sess-exec-err", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -690,7 +690,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-cancel-throw", "hello", {
+      await handler.query("sess-cancel-throw", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -699,7 +699,7 @@ describe("claude-handler", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       // Cancel the session — this sets cancelledByUser and terminates
-      await handler.handleCancel("sess-cancel-throw");
+      await handler.cancel("sess-cancel-throw");
 
       // Let the cancellation propagate
       await new Promise((r) => setTimeout(r, 100));
@@ -733,7 +733,7 @@ describe("claude-handler", () => {
       };
       mockClaudeSDK.mockReturnValue(mockQuery);
 
-      await handler.handleQuery("sess-push-closed", "hello", {
+      await handler.query("sess-push-closed", "hello", {
         cwd: "/test",
         turnId: "turn-1",
       });
@@ -742,7 +742,7 @@ describe("claude-handler", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       // Cancel (closes the queue via terminateSession → sendTerminate → promptQueue.close())
-      await handler.handleCancel("sess-push-closed");
+      await handler.cancel("sess-push-closed");
 
       // Let the cancellation propagate
       await new Promise((r) => setTimeout(r, 100));
@@ -765,7 +765,7 @@ describe("claude-handler", () => {
   // handleClaudeCancel
   // ==========================================================================
 
-  describe("handleClaudeCancel", () => {
+  describe("cancel", () => {
     beforeEach(() => {
       mockExecSync.mockReturnValue("1.0.0\n");
       mockExecFileSync.mockReturnValue("1.0.0\n");
@@ -773,7 +773,7 @@ describe("claude-handler", () => {
     });
 
     it("does nothing when session does not exist", async () => {
-      await handler.handleCancel("nonexistent");
+      await handler.cancel("nonexistent");
       expect(mockFrontendAPI.sendError).not.toHaveBeenCalled();
     });
 
@@ -786,7 +786,7 @@ describe("claude-handler", () => {
       });
       initializeClaude();
 
-      await handler.handleCancel("sess-1");
+      await handler.cancel("sess-1");
       expect(mockFrontendAPI.sendError).toHaveBeenCalled();
     });
   });
@@ -795,7 +795,7 @@ describe("claude-handler", () => {
   // handleClaudeUpdatePermissionMode
   // ==========================================================================
 
-  describe("handleClaudeUpdatePermissionMode", () => {
+  describe("updatePermissionMode", () => {
     it("does nothing when session does not exist", async () => {
       await handler.updatePermissionMode("nonexistent", "plan");
       // Should not throw

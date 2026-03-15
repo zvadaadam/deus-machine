@@ -13,7 +13,7 @@ import { FrontendClient } from "../../frontend-client";
 import { classifyError } from "../error-classifier";
 import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
 import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
-import type { AgentHandler, QueryOptions } from "../agent-handler";
+import type { AgentCapabilities, AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
 import { buildWorkspaceContext } from "../workspace-context";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
@@ -126,12 +126,18 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
 
 export class CodexAgentHandler implements AgentHandler {
   readonly agentType = "codex" as const;
+  readonly capabilities: AgentCapabilities = {
+    auth: false,
+    workspaceInit: false,
+    contextUsage: false,
+    permissionMode: false,
+  };
 
   initialize(): { success: boolean; error?: string } {
     return initializeCodex();
   }
 
-  async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
+  async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
     console.log("Handling Codex query request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
@@ -146,7 +152,7 @@ export class CodexAgentHandler implements AgentHandler {
     void this.processQuery(sessionId, prompt, options, existingSession?.threadId);
   }
 
-  async handleCancel(sessionId: string): Promise<void> {
+  async cancel(sessionId: string): Promise<void> {
     console.log("Handling Codex cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
@@ -155,7 +161,7 @@ export class CodexAgentHandler implements AgentHandler {
     abortCodexSession(sessionId);
   }
 
-  handleReset(sessionId: string): void {
+  reset(sessionId: string): void {
     console.log(`Handling reset generator request for Codex session: ${sessionId}`);
     abortCodexSession(sessionId);
     deleteCodexSession(sessionId);
