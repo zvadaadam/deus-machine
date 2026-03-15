@@ -4,7 +4,7 @@
 // writes are handled by the backend via canonical event consumption.
 
 import { getErrorMessage } from "../../../shared/lib/errors";
-import { FrontendClient } from "../../frontend-client";
+import { EventBroadcaster } from "../../event-broadcaster";
 import { classifyStopReason } from "../error-classifier";
 import type { StreamContext } from "./stream-context";
 import type { SessionState } from "./claude-session";
@@ -97,13 +97,13 @@ export function processMessage(
     console.log(`[${opts.generatorId}] Captured agent_session_id: ${agentSessionId}`);
 
     // Emit canonical agent.session_id event — backend persists to DB
-    FrontendClient.emitAgentSessionId(opts.sessionId, agentSessionId);
+    EventBroadcaster.emitAgentSessionId(opts.sessionId, agentSessionId);
   }
 
   // 2. Emit canonical message events for assistant and tool_result messages
   if (cleanMessage.type === "assistant" && msg) {
     const assistantMsgId = msg.id || "unknown";
-    FrontendClient.emitAssistantMessage(
+    EventBroadcaster.emitAssistantMessage(
       opts.sessionId,
       "claude",
       {
@@ -123,7 +123,7 @@ export function processMessage(
       Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
     if (hasToolResult) {
       const toolResultMsgId = msg.id || "unknown";
-      FrontendClient.emitToolResultMessage(
+      EventBroadcaster.emitToolResultMessage(
         opts.sessionId,
         "claude",
         {
@@ -139,7 +139,7 @@ export function processMessage(
 
   // 3. Send to frontend via JSON-RPC notification
   const tSend = Date.now();
-  FrontendClient.sendMessage({
+  EventBroadcaster.sendMessage({
     id: opts.sessionId,
     type: "message",
     agentType: "claude",
@@ -154,7 +154,7 @@ export function processMessage(
   if (cleanMessage.type === "assistant" && msg) {
     const stopError = classifyStopReason(msg.stop_reason);
     if (stopError) {
-      FrontendClient.sendError({
+      EventBroadcaster.sendError({
         id: opts.sessionId,
         type: "error",
         error: stopError.message,
@@ -162,7 +162,7 @@ export function processMessage(
         category: stopError.category,
       });
       // Emit canonical session.error — backend handles DB status update
-      FrontendClient.emitSessionError(
+      EventBroadcaster.emitSessionError(
         opts.sessionId,
         "claude",
         stopError.message,
@@ -181,11 +181,11 @@ export function processMessage(
     ctx.querySucceeded = true;
 
     // Emit canonical message.result event
-    FrontendClient.emitMessageResult(opts.sessionId, "claude", "success");
+    EventBroadcaster.emitMessageResult(opts.sessionId, "claude", "success");
 
     if (!ctx.stopReasonError) {
       // Emit canonical session.idle — backend handles DB status update
-      FrontendClient.emitSessionIdle(opts.sessionId, "claude");
+      EventBroadcaster.emitSessionIdle(opts.sessionId, "claude");
     }
   }
 

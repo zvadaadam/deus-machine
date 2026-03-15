@@ -1,6 +1,8 @@
-// sidecar/frontend-client.ts
-// Singleton facade over the RPC connection that exposes typed methods
-// for every message the sidecar exchanges with the OpenDevs frontend.
+// sidecar/event-broadcaster.ts
+// Singleton facade that broadcasts JSON-RPC notifications to all connected
+// clients (backend, monitoring tools, etc.) via the WebSocket transport.
+// Manages connection lifecycle (attach/detach tunnels) and exposes typed
+// methods for canonical agent events and legacy notification formats.
 
 import type { RpcConnection } from "./rpc-connection";
 import {
@@ -146,17 +148,17 @@ const SIMULATOR_BOOT_TIMEOUT_MS = 30_000;
 const SIMULATOR_BUILD_TIMEOUT_MS = 600_000;
 
 // ============================================================================
-// FrontendClient class
+// EventBroadcaster class
 // ============================================================================
 
-class FrontendClientClass {
+class EventBroadcasterClass {
   // Multi-tunnel: all connected clients receive notifications.
   // The relay and desktop app can be connected simultaneously.
   private tunnels = new Set<RpcConnection>();
 
   attachTunnel(tunnel: RpcConnection): void {
     this.tunnels.add(tunnel);
-    console.log(`[FrontendClient] Tunnel attached (${this.tunnels.size} active)`);
+    console.log(`[EventBroadcaster] Tunnel attached (${this.tunnels.size} active)`);
   }
 
   /**
@@ -166,10 +168,10 @@ class FrontendClientClass {
   detachTunnel(tunnel?: RpcConnection): void {
     if (tunnel) {
       this.tunnels.delete(tunnel);
-      console.log(`[FrontendClient] Tunnel detached (${this.tunnels.size} remaining)`);
+      console.log(`[EventBroadcaster] Tunnel detached (${this.tunnels.size} remaining)`);
     } else {
       this.tunnels.clear();
-      console.log("[FrontendClient] All tunnels cleared");
+      console.log("[EventBroadcaster] All tunnels cleared");
     }
   }
 
@@ -670,7 +672,7 @@ class FrontendClientClass {
   private requireTunnel(): RpcConnection {
     const first = this.tunnels.values().next().value;
     if (!first) {
-      throw new Error("FrontendClient tunnel not attached.");
+      throw new Error("EventBroadcaster tunnel not attached.");
     }
     return first;
   }
@@ -685,14 +687,14 @@ class FrontendClientClass {
       try {
         tunnel.notify(method, params);
       } catch (err) {
-        console.error(`[FrontendClient] ${label} failed, removing dead tunnel:`, err);
+        console.error(`[EventBroadcaster] ${label} failed, removing dead tunnel:`, err);
         this.tunnels.delete(tunnel);
       }
     }
     const elapsed = Date.now() - t0;
     if (elapsed > 5) {
       console.log(
-        `[TIMING][FrontendClient] ${label} broadcast took ${elapsed}ms (${this.tunnels.size} tunnels)`
+        `[TIMING][EventBroadcaster] ${label} broadcast took ${elapsed}ms (${this.tunnels.size} tunnels)`
       );
     }
   }
@@ -707,7 +709,9 @@ class FrontendClientClass {
     const timeout = new Promise<never>((_, reject) => {
       timerId = setTimeout(() => {
         reject(
-          new Error(`[FrontendClient] ${label} timed out after ${ms}ms -- frontend did not respond`)
+          new Error(
+            `[EventBroadcaster] ${label} timed out after ${ms}ms -- frontend did not respond`
+          )
         );
       }, ms);
     });
@@ -719,4 +723,4 @@ class FrontendClientClass {
 }
 
 /** Singleton instance shared across the entire sidecar process */
-export const FrontendClient = new FrontendClientClass();
+export const EventBroadcaster = new EventBroadcasterClass();

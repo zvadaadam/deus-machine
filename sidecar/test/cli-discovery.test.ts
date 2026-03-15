@@ -18,8 +18,8 @@ vi.mock("fs", async (importOriginal) => {
   return { ...original, existsSync: (...args: unknown[]) => mockExistsSync(...args) };
 });
 
-vi.mock("../frontend-client", () => ({
-  FrontendClient: {
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: {
     sendError: (...args: unknown[]) => mockSendError(...args),
     emitSessionError: (...args: unknown[]) => mockEmitSessionError(...args),
   },

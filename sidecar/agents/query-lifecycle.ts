@@ -6,7 +6,7 @@
 // The agent-server is stateless — no DB writes. The backend persists session
 // status changes by consuming canonical events via the WS tunnel.
 
-import { FrontendClient } from "../frontend-client";
+import { EventBroadcaster } from "../event-broadcaster";
 import type { ClassifiedError } from "./error-classifier";
 import type { AgentType } from "../protocol";
 import type { ErrorCategory } from "../../shared/enums";
@@ -27,7 +27,7 @@ import type { ErrorCategory } from "../../shared/enums";
  * - codex-handler.ts catch abort path
  */
 export function persistCancellation(sessionId: string, agentType: AgentType, _model: string): void {
-  FrontendClient.sendMessage({
+  EventBroadcaster.sendMessage({
     id: sessionId,
     type: "message",
     agentType,
@@ -35,8 +35,8 @@ export function persistCancellation(sessionId: string, agentType: AgentType, _mo
   });
 
   // Emit canonical session lifecycle events — backend handles DB writes
-  FrontendClient.emitSessionCancelled(sessionId, agentType);
-  FrontendClient.emitMessageCancelled(sessionId, agentType);
+  EventBroadcaster.emitSessionCancelled(sessionId, agentType);
+  EventBroadcaster.emitMessageCancelled(sessionId, agentType);
 }
 
 // ============================================================================
@@ -60,7 +60,7 @@ export function notifyAndRecordError(
 ): void {
   const errorMessage = enrichMessage ? enrichMessage(classified) : classified.message;
 
-  FrontendClient.sendError({
+  EventBroadcaster.sendError({
     id: sessionId,
     type: "error",
     error: errorMessage,
@@ -69,7 +69,7 @@ export function notifyAndRecordError(
   });
 
   // Emit canonical session.error event — backend handles DB status update
-  FrontendClient.emitSessionError(
+  EventBroadcaster.emitSessionError(
     sessionId,
     agentType,
     errorMessage,

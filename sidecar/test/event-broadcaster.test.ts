@@ -7,10 +7,10 @@ import {
   buildEnterPlanModeNotification,
 } from "./builders";
 
-// We need to test FrontendClient which is a singleton. To get a fresh instance
+// We need to test EventBroadcaster which is a singleton. To get a fresh instance
 // per test we re-import the module.
-let FrontendClient: any;
-let FrontendClientModule: any;
+let EventBroadcaster: any;
+let EventBroadcasterModule: any;
 
 function createMockTunnel() {
   return {
@@ -22,15 +22,15 @@ function createMockTunnel() {
   };
 }
 
-describe("FrontendClient", () => {
+describe("EventBroadcaster", () => {
   let mockTunnel: ReturnType<typeof createMockTunnel>;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     // Fresh import to reset singleton state
     vi.resetModules();
-    FrontendClientModule = await import("../frontend-client");
-    FrontendClient = FrontendClientModule.FrontendClient;
+    EventBroadcasterModule = await import("../event-broadcaster");
+    EventBroadcaster = EventBroadcasterModule.EventBroadcaster;
     mockTunnel = createMockTunnel();
   });
 
@@ -44,36 +44,36 @@ describe("FrontendClient", () => {
 
   describe("attachTunnel / detachTunnel", () => {
     it("sendMessage does not throw when no tunnel (broadcasts to empty set)", () => {
-      expect(() => FrontendClient.sendMessage(buildMessageResponse())).not.toThrow();
+      expect(() => EventBroadcaster.sendMessage(buildMessageResponse())).not.toThrow();
     });
 
     it("requestExitPlanMode rejects when no tunnel is attached", async () => {
       await expect(
-        FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("FrontendClient tunnel not attached");
+        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
+      ).rejects.toThrow("EventBroadcaster tunnel not attached");
     });
 
     it("works after attaching a tunnel", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.sendMessage(buildMessageResponse());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.sendMessage(buildMessageResponse());
       expect(mockTunnel.notify).toHaveBeenCalled();
     });
 
     it("request rejects after detaching the tunnel", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.detachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.detachTunnel(mockTunnel);
       // sendMessage won't throw (broadcasts to empty set), but requests will reject
       await expect(
-        FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })
-      ).rejects.toThrow("FrontendClient tunnel not attached");
+        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
+      ).rejects.toThrow("EventBroadcaster tunnel not attached");
     });
 
     it("broadcasts notifications to all attached tunnels", () => {
       const tunnel2 = createMockTunnel();
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.attachTunnel(tunnel2);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(tunnel2);
       const msg = buildMessageResponse();
-      FrontendClient.sendMessage(msg);
+      EventBroadcaster.sendMessage(msg);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
       expect(tunnel2.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
@@ -81,42 +81,42 @@ describe("FrontendClient", () => {
 
     it("removes dead tunnels that throw on notify", () => {
       const tunnel2 = createMockTunnel();
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.attachTunnel(tunnel2);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(tunnel2);
 
       // First tunnel throws (dead connection)
       mockTunnel.notify.mockImplementation(() => {
         throw new Error("Socket closed");
       });
 
-      FrontendClient.sendMessage(buildMessageResponse());
+      EventBroadcaster.sendMessage(buildMessageResponse());
 
       // tunnel2 should still work, mockTunnel removed
       tunnel2.notify.mockClear();
-      FrontendClient.sendMessage(buildMessageResponse());
+      EventBroadcaster.sendMessage(buildMessageResponse());
       expect(tunnel2.notify).toHaveBeenCalledTimes(1);
       expect(mockTunnel.notify).toHaveBeenCalledTimes(1); // only the first call
     });
 
     it("detachTunnel without args clears all tunnels", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.attachTunnel(createMockTunnel());
-      FrontendClient.detachTunnel();
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(createMockTunnel());
+      EventBroadcaster.detachTunnel();
       // No tunnels left, request should reject
-      expect(FrontendClient.requestExitPlanMode({ sessionId: "s", toolInput: {} })).rejects.toThrow(
-        "FrontendClient tunnel not attached"
-      );
+      expect(
+        EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
+      ).rejects.toThrow("EventBroadcaster tunnel not attached");
     });
 
     it("detachTunnel with specific tunnel only removes that one", async () => {
       const tunnel2 = createMockTunnel();
       tunnel2.request.mockResolvedValue({ approved: true });
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.attachTunnel(tunnel2);
-      FrontendClient.detachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(tunnel2);
+      EventBroadcaster.detachTunnel(mockTunnel);
 
       // tunnel2 still available
-      const result = await FrontendClient.requestExitPlanMode({
+      const result = await EventBroadcaster.requestExitPlanMode({
         sessionId: "s",
         toolInput: {},
       });
@@ -130,28 +130,28 @@ describe("FrontendClient", () => {
 
   describe("sendMessage", () => {
     it("sends a message notification", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const msg = buildMessageResponse();
-      FrontendClient.sendMessage(msg);
+      EventBroadcaster.sendMessage(msg);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.MESSAGE, msg);
     });
 
     it("does not throw when tunnel.notify fails (frontend disconnected)", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.notify.mockImplementation(() => {
         throw new Error("Socket closed");
       });
 
-      expect(() => FrontendClient.sendMessage(buildMessageResponse())).not.toThrow();
+      expect(() => EventBroadcaster.sendMessage(buildMessageResponse())).not.toThrow();
     });
   });
 
   describe("sendError", () => {
     it("sends an error notification", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const err = buildErrorResponse();
-      FrontendClient.sendError(err);
+      EventBroadcaster.sendError(err);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.QUERY_ERROR, err);
     });
@@ -159,9 +159,9 @@ describe("FrontendClient", () => {
 
   describe("sendEnterPlanModeNotification", () => {
     it("sends enter plan mode notification", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const notif = buildEnterPlanModeNotification();
-      FrontendClient.sendEnterPlanModeNotification(notif);
+      EventBroadcaster.sendEnterPlanModeNotification(notif);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(FRONTEND_NOTIFICATIONS.ENTER_PLAN_MODE, notif);
     });
@@ -173,10 +173,10 @@ describe("FrontendClient", () => {
 
   describe("requestExitPlanMode", () => {
     it("sends request to frontend and returns response", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockResolvedValue({ approved: true, turnId: "turn-1" });
 
-      const result = await FrontendClient.requestExitPlanMode({
+      const result = await EventBroadcaster.requestExitPlanMode({
         sessionId: "sess-1",
         toolInput: {},
       });
@@ -189,10 +189,10 @@ describe("FrontendClient", () => {
     });
 
     it("rejects on timeout (120s)", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockReturnValue(new Promise(() => {})); // never resolves
 
-      const promise = FrontendClient.requestExitPlanMode({
+      const promise = EventBroadcaster.requestExitPlanMode({
         sessionId: "sess-1",
         toolInput: {},
       });
@@ -204,10 +204,10 @@ describe("FrontendClient", () => {
 
   describe("requestAskUserQuestion", () => {
     it("sends question request and returns answers", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockResolvedValue({ answers: ["Yes"] });
 
-      const result = await FrontendClient.requestAskUserQuestion({
+      const result = await EventBroadcaster.requestAskUserQuestion({
         sessionId: "sess-1",
         questions: [{ question: "Continue?", options: ["Yes", "No"] }],
       });
@@ -218,10 +218,10 @@ describe("FrontendClient", () => {
 
   describe("requestGetDiff", () => {
     it("sends diff request with 10s timeout", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockReturnValue(new Promise(() => {}));
 
-      const promise = FrontendClient.requestGetDiff({ sessionId: "sess-1" });
+      const promise = EventBroadcaster.requestGetDiff({ sessionId: "sess-1" });
       vi.advanceTimersByTime(10_001);
       await expect(promise).rejects.toThrow("timed out after 10000ms");
     });
@@ -229,10 +229,10 @@ describe("FrontendClient", () => {
 
   describe("requestDiffComment", () => {
     it("sends diff comment request", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockResolvedValue({ success: true });
 
-      const result = await FrontendClient.requestDiffComment({
+      const result = await EventBroadcaster.requestDiffComment({
         sessionId: "sess-1",
         comments: [{ file: "test.ts", lineNumber: 10, body: "Fix this" }],
       });
@@ -243,14 +243,14 @@ describe("FrontendClient", () => {
 
   describe("requestGetTerminalOutput", () => {
     it("sends terminal output request", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       mockTunnel.request.mockResolvedValue({
         output: "test output",
         source: "terminal",
         isRunning: true,
       });
 
-      const result = await FrontendClient.requestGetTerminalOutput({ sessionId: "sess-1" });
+      const result = await EventBroadcaster.requestGetTerminalOutput({ sessionId: "sess-1" });
       expect(result.output).toBe("test output");
       expect(result.source).toBe("terminal");
     });
@@ -262,16 +262,16 @@ describe("FrontendClient", () => {
 
   describe("onQuery", () => {
     it("registers a handler for query notifications on the given tunnel", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onQuery(mockTunnel, vi.fn());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.onQuery(mockTunnel, vi.fn());
 
       expect(mockTunnel.addMethod).toHaveBeenCalledWith("query", expect.any(Function));
     });
 
     it("calls handler with parsed request (type stripped)", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const handler = vi.fn().mockResolvedValue(undefined);
-      FrontendClient.onQuery(mockTunnel, handler);
+      EventBroadcaster.onQuery(mockTunnel, handler);
 
       // Get the registered handler and call it
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
@@ -292,9 +292,9 @@ describe("FrontendClient", () => {
     });
 
     it("ignores invalid requests", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onQuery(mockTunnel, handler);
+      EventBroadcaster.onQuery(mockTunnel, handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await registeredHandler({ invalid: true });
@@ -305,8 +305,8 @@ describe("FrontendClient", () => {
 
   describe("onCancel", () => {
     it("registers a handler for cancel requests on the given tunnel", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onCancel(mockTunnel, vi.fn());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.onCancel(mockTunnel, vi.fn());
 
       expect(mockTunnel.addMethod).toHaveBeenCalledWith("cancel", expect.any(Function));
     });
@@ -314,8 +314,8 @@ describe("FrontendClient", () => {
 
   describe("onClaudeAuth", () => {
     it("rejects invalid requests", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onClaudeAuth(mockTunnel, vi.fn());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.onClaudeAuth(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -326,8 +326,8 @@ describe("FrontendClient", () => {
 
   describe("onWorkspaceInit", () => {
     it("rejects invalid requests", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onWorkspaceInit(mockTunnel, vi.fn());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.onWorkspaceInit(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -338,8 +338,8 @@ describe("FrontendClient", () => {
 
   describe("onContextUsage", () => {
     it("rejects invalid requests", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.onContextUsage(mockTunnel, vi.fn());
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.onContextUsage(mockTunnel, vi.fn());
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       await expect(registeredHandler({ invalid: true })).rejects.toThrow(
@@ -350,9 +350,9 @@ describe("FrontendClient", () => {
 
   describe("onUpdatePermissionMode", () => {
     it("ignores invalid requests without throwing", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onUpdatePermissionMode(mockTunnel, handler);
+      EventBroadcaster.onUpdatePermissionMode(mockTunnel, handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       const result = await registeredHandler({ invalid: true });
@@ -364,9 +364,9 @@ describe("FrontendClient", () => {
 
   describe("onResetGenerator", () => {
     it("ignores invalid requests without throwing", async () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const handler = vi.fn();
-      FrontendClient.onResetGenerator(mockTunnel, handler);
+      EventBroadcaster.onResetGenerator(mockTunnel, handler);
 
       const registeredHandler = mockTunnel.addMethod.mock.calls[0][1];
       const result = await registeredHandler({ invalid: true });
@@ -382,20 +382,20 @@ describe("FrontendClient", () => {
 
   describe("emitEvent", () => {
     it("broadcasts event using event.type as the JSON-RPC method", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const event = {
         type: AGENT_EVENT_NAMES.SESSION_STARTED,
         sessionId: "sess-1",
         agentType: "claude",
       };
-      FrontendClient.emitEvent(event);
+      EventBroadcaster.emitEvent(event);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_STARTED, event);
     });
 
     it("does not throw when no tunnels are attached", () => {
       expect(() =>
-        FrontendClient.emitEvent({
+        EventBroadcaster.emitEvent({
           type: AGENT_EVENT_NAMES.SESSION_IDLE,
           sessionId: "sess-1",
           agentType: "claude",
@@ -405,8 +405,8 @@ describe("FrontendClient", () => {
 
     it("broadcasts to all connected tunnels", () => {
       const tunnel2 = createMockTunnel();
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.attachTunnel(tunnel2);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(tunnel2);
 
       const event = {
         type: AGENT_EVENT_NAMES.SESSION_ERROR,
@@ -415,7 +415,7 @@ describe("FrontendClient", () => {
         error: "something broke",
         category: "internal",
       };
-      FrontendClient.emitEvent(event);
+      EventBroadcaster.emitEvent(event);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_ERROR, event);
       expect(tunnel2.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_ERROR, event);
@@ -424,8 +424,8 @@ describe("FrontendClient", () => {
 
   describe("emitSessionStarted", () => {
     it("broadcasts session.started event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitSessionStarted("sess-1", "claude");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitSessionStarted("sess-1", "claude");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.SESSION_STARTED,
@@ -440,8 +440,8 @@ describe("FrontendClient", () => {
 
   describe("emitSessionIdle", () => {
     it("broadcasts session.idle event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitSessionIdle("sess-1", "codex");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitSessionIdle("sess-1", "codex");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.SESSION_IDLE,
@@ -456,8 +456,8 @@ describe("FrontendClient", () => {
 
   describe("emitSessionError", () => {
     it("broadcasts session.error event with error details", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitSessionError("sess-1", "claude", "API key invalid", "auth");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitSessionError("sess-1", "claude", "API key invalid", "auth");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.SESSION_ERROR,
@@ -474,8 +474,8 @@ describe("FrontendClient", () => {
 
   describe("emitSessionCancelled", () => {
     it("broadcasts session.cancelled event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitSessionCancelled("sess-1", "claude");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitSessionCancelled("sess-1", "claude");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.SESSION_CANCELLED,
@@ -490,13 +490,13 @@ describe("FrontendClient", () => {
 
   describe("emitAssistantMessage", () => {
     it("broadcasts message.assistant event with message payload", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const message = {
         id: "msg-1",
         role: "assistant" as const,
         content: [{ type: "text", text: "Hello" }],
       };
-      FrontendClient.emitAssistantMessage("sess-1", "claude", message, "sonnet");
+      EventBroadcaster.emitAssistantMessage("sess-1", "claude", message, "sonnet");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
@@ -511,8 +511,8 @@ describe("FrontendClient", () => {
     });
 
     it("omits model when not provided", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitAssistantMessage("sess-1", "claude", {
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitAssistantMessage("sess-1", "claude", {
         id: "msg-1",
         role: "assistant",
         content: [],
@@ -525,13 +525,13 @@ describe("FrontendClient", () => {
 
   describe("emitToolResultMessage", () => {
     it("broadcasts message.tool_result event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const message = {
         id: "msg-2",
         role: "user" as const,
         content: [{ type: "tool_result", tool_use_id: "t1" }],
       };
-      FrontendClient.emitToolResultMessage("sess-1", "claude", message, "opus");
+      EventBroadcaster.emitToolResultMessage("sess-1", "claude", message, "opus");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
@@ -547,9 +547,9 @@ describe("FrontendClient", () => {
 
   describe("emitMessageResult", () => {
     it("broadcasts message.result event with subtype and usage", () => {
-      FrontendClient.attachTunnel(mockTunnel);
+      EventBroadcaster.attachTunnel(mockTunnel);
       const usage = { input_tokens: 100, output_tokens: 50 };
-      FrontendClient.emitMessageResult("sess-1", "claude", "success", usage);
+      EventBroadcaster.emitMessageResult("sess-1", "claude", "success", usage);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.MESSAGE_RESULT,
@@ -563,8 +563,8 @@ describe("FrontendClient", () => {
     });
 
     it("omits usage when not provided", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitMessageResult("sess-1", "claude", "success");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitMessageResult("sess-1", "claude", "success");
 
       const payload = mockTunnel.notify.mock.calls[0][1];
       expect(payload.usage).toBeUndefined();
@@ -573,8 +573,8 @@ describe("FrontendClient", () => {
 
   describe("emitMessageCancelled", () => {
     it("broadcasts message.cancelled event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitMessageCancelled("sess-1", "claude");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitMessageCancelled("sess-1", "claude");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
@@ -589,8 +589,8 @@ describe("FrontendClient", () => {
 
   describe("emitAgentSessionId", () => {
     it("broadcasts agent.session_id event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitAgentSessionId("sess-1", "sdk-abc-123");
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitAgentSessionId("sess-1", "sdk-abc-123");
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.AGENT_SESSION_ID,
@@ -605,8 +605,8 @@ describe("FrontendClient", () => {
 
   describe("emitRequestOpened", () => {
     it("broadcasts request.opened event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitRequestOpened("req-1", "sess-1", "claude", "tool_approval", {
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitRequestOpened("req-1", "sess-1", "claude", "tool_approval", {
         tool: "bash",
       });
 
@@ -626,8 +626,8 @@ describe("FrontendClient", () => {
 
   describe("emitToolRequest", () => {
     it("broadcasts tool.request event", () => {
-      FrontendClient.attachTunnel(mockTunnel);
-      FrontendClient.emitToolRequest("req-1", "sess-1", "getDiff", { file: "test.ts" }, 10000);
+      EventBroadcaster.attachTunnel(mockTunnel);
+      EventBroadcaster.emitToolRequest("req-1", "sess-1", "getDiff", { file: "test.ts" }, 10000);
 
       expect(mockTunnel.notify).toHaveBeenCalledWith(
         AGENT_EVENT_NAMES.TOOL_REQUEST,

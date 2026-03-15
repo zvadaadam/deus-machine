@@ -8,8 +8,8 @@ const mockEmitSessionCancelled = vi.fn();
 const mockEmitMessageCancelled = vi.fn();
 const mockEmitSessionError = vi.fn();
 
-vi.mock("../frontend-client", () => ({
-  FrontendClient: {
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: {
     sendMessage: (...args: unknown[]) => mockSendMessage(...args),
     sendError: (...args: unknown[]) => mockSendError(...args),
     emitSessionCancelled: (...args: unknown[]) => mockEmitSessionCancelled(...args),

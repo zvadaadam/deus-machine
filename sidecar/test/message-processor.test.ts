@@ -26,8 +26,8 @@ const {
   mockClassifyStopReason: vi.fn(),
 }));
 
-vi.mock("../frontend-client", () => ({
-  FrontendClient: {
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: {
     sendMessage: mockSendMessage,
     sendError: mockSendError,
     emitAssistantMessage: mockEmitAssistantMessage,
