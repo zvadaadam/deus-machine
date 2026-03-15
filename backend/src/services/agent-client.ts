@@ -23,6 +23,7 @@ import {
   AGENT_RPC_METHODS,
   AGENT_EVENT_NAMES,
   AgentEventSchema,
+  InitializeResultSchema,
   type InitializeResult,
   type TurnStartRequest,
   type TurnStartResponse,
@@ -98,6 +99,10 @@ export class AgentClient {
   /** Initiate connection to the agent-server. Auto-reconnects on drop. */
   connect(): void {
     if (this.disposed) return;
+    if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+      return;
+    }
+    this.cancelReconnect();
     this.openConnection();
   }
 
@@ -292,18 +297,24 @@ export class AgentClient {
     if (!this.peer) return;
 
     try {
-      const result = await this.withTimeout(
+      const rawResult = await this.withTimeout(
         this.peer.request(AGENT_RPC_METHODS.INITIALIZE, {
           version: PROTOCOL_VERSION,
           capabilities: {},
-        }) as Promise<InitializeResult>,
+        }),
         HANDSHAKE_TIMEOUT_MS,
         "initialize"
       );
 
-      this.agents = result?.agents ?? [];
+      const parsed = InitializeResultSchema.safeParse(rawResult);
+      if (!parsed.success) {
+        throw new Error(`Invalid initialize response: ${parsed.error.message}`);
+      }
+      const result: InitializeResult = parsed.data;
+
+      this.agents = result.agents;
       console.log(
-        `[AgentClient] Handshake complete: version=${result?.version} agents=[${this.agents.map((a) => a.type).join(", ")}]`
+        `[AgentClient] Handshake complete: version=${result.version} agents=[${this.agents.map((a) => a.type).join(", ")}]`
       );
 
       // Send "initialized" notification (fire-and-forget)

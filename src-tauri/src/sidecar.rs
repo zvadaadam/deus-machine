@@ -93,20 +93,47 @@ impl SidecarManager {
         // Other threads (is_running, stop) need the lock during this period.
         drop(process);
 
-        // Wait for socket path to be detected (with timeout)
+        // Wait for listen URL, checking for child process crash each iteration
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_secs(10) {
             if self.listen_url.lock().unwrap().is_some() {
-                break;
+                return Ok(());
             }
+
+            // Check if the child process has exited (crashed before printing LISTEN_URL)
+            {
+                let mut proc = self.process.lock().unwrap();
+                if let Some(ref mut child) = *proc {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            *proc = None;
+                            anyhow::bail!(
+                                "Sidecar process exited during startup (exit: {}). \
+                                 Check /tmp/opendevs-*.log for details.",
+                                status
+                            );
+                        }
+                        Ok(None) => {} // still running, keep waiting
+                        Err(e) => {
+                            *proc = None;
+                            anyhow::bail!(
+                                "Failed to check sidecar process status during startup: {}",
+                                e
+                            );
+                        }
+                    }
+                } else {
+                    anyhow::bail!("Sidecar process handle lost during startup");
+                }
+            }
+
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        if self.listen_url.lock().unwrap().is_none() {
-            eprintln!("[SIDECAR] Warning: Could not detect listen URL within 10 seconds");
-        }
-
-        Ok(())
+        anyhow::bail!(
+            "Sidecar did not emit LISTEN_URL within 10 seconds. \
+             Check /tmp/opendevs-*.log for details."
+        )
     }
 
     /// Get the socket path the sidecar is listening on

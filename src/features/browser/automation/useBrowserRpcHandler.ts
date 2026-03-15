@@ -887,7 +887,13 @@ export function useBrowserRpcHandler(
   // ============================================================================
 
   const dispatchBrowserMethod = useCallback(
-    (method: string, id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    (
+      method: string,
+      id: unknown,
+      params: Record<string, unknown>,
+      respond: RespondFn,
+      respondError?: (error: string) => void
+    ) => {
       match(method)
         .with("browserSnapshot", () => handleBrowserSnapshot(id, params, respond))
         .with("browserClick", () => handleBrowserClick(id, params, respond))
@@ -905,7 +911,9 @@ export function useBrowserRpcHandler(
         .with("browserScreenshot", () => handleBrowserScreenshot(id, params, respond))
         .with("browserScroll", () => handleBrowserScroll(id, params, respond))
         .otherwise(() => {
-          // Not a browser method — ignore (other handlers may pick it up)
+          if (method.startsWith("browser") && respondError) {
+            respondError(`Unknown browser method: ${method}`);
+          }
         });
     },
     [
@@ -931,7 +939,7 @@ export function useBrowserRpcHandler(
   // WS event listener (agent-server → backend → q:event tool:request)
   // ============================================================================
 
-  useWsToolRequest((method, requestId, params, respond, _respondError) => {
+  useWsToolRequest((method, requestId, params, respond, respondError) => {
     if (import.meta.env.DEV) {
       console.log("[BrowserRPC] Received request (WS):", method, "requestId:", requestId);
     }
@@ -941,6 +949,6 @@ export function useBrowserRpcHandler(
       respond(result);
     };
 
-    dispatchBrowserMethod(method, requestId, params, wsRespond);
+    dispatchBrowserMethod(method, requestId, params, wsRespond, respondError);
   });
 }

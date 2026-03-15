@@ -30,7 +30,7 @@ class SocketService {
    * Send agent query via WS q:command sendMessage.
    *
    * The backend receives the command, saves the user message, and forwards
-   * to the agent-server. Returns an ACK with { accepted, commandId }.
+   * to the agent-server. Returns an ACK with { accepted, reason? }.
    */
   async sendQuery(
     sessionId: string,

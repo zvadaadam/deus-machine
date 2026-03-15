@@ -6,15 +6,20 @@ import { WebSocketServer } from "ws";
 
 const mockGetRegisteredAgentTypes = vi.fn((): string[] => ["claude", "codex"]);
 const mockEmitSessionCancelled = vi.fn();
+const mockEmitMessageCancelled = vi.fn();
+const mockGetAgent = vi.fn(() => undefined);
 
 vi.mock("../agents/agent-handler", () => ({
   getRegisteredAgentTypes: () => mockGetRegisteredAgentTypes(),
+  getAgent: (...args: unknown[]) => mockGetAgent(...args),
 }));
 
 vi.mock("../event-broadcaster", () => ({
   EventBroadcaster: {
     emitSessionCancelled: (sessionId: string, agentType: string) =>
       mockEmitSessionCancelled(sessionId, agentType),
+    emitMessageCancelled: (sessionId: string, agentType: string) =>
+      mockEmitMessageCancelled(sessionId, agentType),
   },
 }));
 
@@ -324,25 +329,49 @@ describe("health module", () => {
   // ==========================================================================
 
   describe("cancelRemainingSessions", () => {
-    it("emits session.cancelled for all active sessions", () => {
+    it("emits both message.cancelled and session.cancelled when no agent handler", async () => {
       trackSession("sess-1", "claude");
       trackSession("sess-2", "codex");
 
-      cancelRemainingSessions();
+      await cancelRemainingSessions();
 
+      expect(mockEmitMessageCancelled).toHaveBeenCalledTimes(2);
       expect(mockEmitSessionCancelled).toHaveBeenCalledTimes(2);
       expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-1", "claude");
       expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-2", "codex");
     });
 
-    it("clears active sessions after cancellation", () => {
+    it("calls agent.cancel() when agent handler is available", async () => {
+      const mockCancel = vi.fn().mockResolvedValue(undefined);
+      mockGetAgent.mockReturnValue({ cancel: mockCancel } as any);
+
       trackSession("sess-1", "claude");
-      cancelRemainingSessions();
+      await cancelRemainingSessions();
+
+      expect(mockCancel).toHaveBeenCalledWith("sess-1");
+      expect(mockEmitSessionCancelled).not.toHaveBeenCalled();
+    });
+
+    it("falls back to direct events when agent.cancel() throws", async () => {
+      const mockCancel = vi.fn().mockRejectedValue(new Error("cancel failed"));
+      mockGetAgent.mockReturnValue({ cancel: mockCancel } as any);
+
+      trackSession("sess-1", "claude");
+      await cancelRemainingSessions();
+
+      expect(mockCancel).toHaveBeenCalledWith("sess-1");
+      expect(mockEmitMessageCancelled).toHaveBeenCalledWith("sess-1", "claude");
+      expect(mockEmitSessionCancelled).toHaveBeenCalledWith("sess-1", "claude");
+    });
+
+    it("clears active sessions after cancellation", async () => {
+      trackSession("sess-1", "claude");
+      await cancelRemainingSessions();
       expect(getActiveSessionCount()).toBe(0);
     });
 
-    it("does nothing when no active sessions", () => {
-      cancelRemainingSessions();
+    it("does nothing when no active sessions", async () => {
+      await cancelRemainingSessions();
       expect(mockEmitSessionCancelled).not.toHaveBeenCalled();
     });
   });
