@@ -3,7 +3,7 @@
   "checkpoint_id": "32a23683a11b",
   "strategy": "manual-commit",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "sidecar/index.ts",
     "src/features/session/ui/Chat.tsx"
@@ -14,13 +14,19 @@
       "transcript": "/32/a23683a11b/0/full.jsonl",
       "content_hash": "/32/a23683a11b/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/32/a23683a11b/1/metadata.json",
+      "transcript": "/32/a23683a11b/1/full.jsonl",
+      "content_hash": "/32/a23683a11b/1/content_hash.txt",
+      "prompt": "/32/a23683a11b/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 0
+    "input_tokens": 3,
+    "cache_creation_tokens": 24850,
+    "cache_read_tokens": 8902,
+    "output_tokens": 6,
+    "api_call_count": 1
   }
 }
