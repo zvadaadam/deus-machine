@@ -8,7 +8,7 @@ import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
 import { classifyError } from "../error-classifier";
-import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
+import { handleCancellation, handleQueryError } from "../query-completion";
 import {
   deserializeMessage,
   processMessage,
@@ -31,12 +31,8 @@ import {
 import { mapModelForProvider } from "./claude-models";
 import { buildSdkOptions, DEFAULT_PROMPT, DEFAULT_SETTING_SOURCES } from "./claude-sdk-options";
 import {
-  getSession,
-  setSession,
-  deleteSession,
-  getQuery,
-  setQuery,
-  deleteQuery,
+  claudeSessions,
+  claudeQueries,
   settingsChanged,
   terminateSession,
   isSessionActive,
@@ -106,7 +102,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     console.log(`[TIMING][query] START session=${sessionId} promptLength=${prompt.length}`);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
     const maxThinkingTokensChanged =
       session?.currentMaxThinkingTokens !== options.maxThinkingTokens;
@@ -127,7 +123,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       // Hot-swap model if it changed
       if (modelChanged && session) {
-        const query = getQuery(sessionId);
+        const query = claudeQueries.get(sessionId);
         if (query) {
           const envVars = options.claudeEnvVars ? parseEnvString(options.claudeEnvVars) : {};
           const mappedModel = mapModelForProvider(options.model, envVars);
@@ -136,7 +132,7 @@ export class ClaudeAgentHandler implements AgentHandler {
           );
           try {
             await query.setModel(mappedModel);
-            const updatedSession = getSession(sessionId);
+            const updatedSession = claudeSessions.get(sessionId);
             if (updatedSession) updatedSession.currentModel = options.model;
           } catch (error) {
             console.error(`Failed to update model: ${getErrorMessage(error)}`);
@@ -145,7 +141,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       // Hot-swap maxThinkingTokens if it changed
-      const query = getQuery(sessionId);
+      const query = claudeQueries.get(sessionId);
       if (maxThinkingTokensChanged && session && query) {
         try {
           await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
@@ -195,7 +191,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         turnId: options.turnId,
         cwd: options.cwd,
       };
-      setSession(sessionId, newSession);
+      claudeSessions.set(sessionId, newSession);
 
       void this.processWithGenerator(sessionId, prompt, options);
     }
@@ -205,10 +201,10 @@ export class ClaudeAgentHandler implements AgentHandler {
     console.log("Handling Claude cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const query = getQuery(sessionId);
-    const session = getSession(sessionId);
+    const existingQuery = claudeQueries.get(sessionId);
+    const session = claudeSessions.get(sessionId);
 
-    if (isSessionActive(session) && query) {
+    if (isSessionActive(session) && existingQuery) {
       console.log(`Force-closing query for session ${sessionId}`);
 
       // 1. Flag cancellation so the post-loop path persists the cancelled message
@@ -220,7 +216,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       // 3. Force kill: close() terminates CLI subprocess + all children + MCP transports
-      query.close();
+      existingQuery.close();
 
       // 4. Signal prompt generator to stop — finally block owns cleanup
       terminateSession(sessionId);
@@ -231,7 +227,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   reset(sessionId: string): void {
     console.log(`Handling reset generator request for session: ${sessionId}`);
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     if (session) {
       console.log(`Terminating generator for session ${sessionId} on reset request`);
       terminateSession(sessionId);
@@ -271,8 +267,8 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   async updatePermissionMode(sessionId: string, permissionMode: string): Promise<void> {
     console.log(`Handling permission mode update for session ${sessionId}: ${permissionMode}`);
-    const session = getSession(sessionId);
-    const existingQuery = getQuery(sessionId);
+    const session = claudeSessions.get(sessionId);
+    const existingQuery = claudeQueries.get(sessionId);
 
     if (!session) {
       console.log(`No active session found for ${sessionId}, ignoring permission mode update`);
@@ -401,7 +397,7 @@ export class ClaudeAgentHandler implements AgentHandler {
   ): Promise<void> {
     const tProcessStart = Date.now();
     const generatorId = `${sessionId}/${tProcessStart}`;
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     if (!session) {
       console.error(`[${generatorId}] Session ${sessionId} not found`);
       return;
@@ -465,7 +461,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`
       );
 
-      setQuery(sessionId, queryResult);
+      claudeQueries.set(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
 
       // Per-message options (constant for the lifetime of this generator)
@@ -512,16 +508,18 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Post-loop: stream ended cleanly (prompt queue closed or SDK finished).
       // Turn-level idle is already set by processMessage on result/success.
       // This handles conversation-end: cancel persistence only.
-      if (session.cancelledByUser) {
-        persistCancellation(sessionId, "claude", options.model || "opus");
+      if (
+        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
+      ) {
         console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
         return;
       }
       console.log(`[${generatorId}] Stream completed: ${sessionId}`);
     } catch (error) {
       // Cancel takes priority — abort signal can surface as a thrown error.
-      if (session.cancelledByUser) {
-        persistCancellation(sessionId, "claude", options.model || "opus");
+      if (
+        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
+      ) {
         console.log(`[${generatorId}] Session cancelled by user (catch): ${sessionId}`);
         return;
       }
@@ -535,10 +533,6 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       // Genuine error — check if this generator still owns the session.
       // A rapid re-query can replace the session before the catch runs.
-      const currentSession = getSession(sessionId);
-      const ownsSession = !currentSession || currentSession === session;
-
-      const classified = classifyError(error);
       const errorName = error instanceof Error ? error.name : "non-Error";
       const errorStack =
         error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : "no stack";
@@ -549,6 +543,8 @@ export class ClaudeAgentHandler implements AgentHandler {
               .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
               .join(" ")
           : "";
+
+      const classified = classifyError(error);
 
       console.error(
         `[${generatorId}] Error in Claude query [${classified.category}]:`,
@@ -565,8 +561,8 @@ export class ClaudeAgentHandler implements AgentHandler {
       );
       console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
 
-      if (ownsSession) {
-        notifyAndRecordError(sessionId, "claude", classified, (c) => {
+      if (claudeSessions.owns(sessionId, session)) {
+        handleQueryError(sessionId, "claude", error, (c) => {
           if (c.category !== "process_exit") return c.message;
           const parts: string[] = [c.message];
           if (options.resume) parts.push("(resumed session)");
@@ -584,10 +580,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;
       // blindly deleting would wipe the new session's state.
-      const currentSession = getSession(sessionId);
-      if (!currentSession || currentSession === session) {
-        deleteQuery(sessionId);
-        deleteSession(sessionId);
+      if (claudeSessions.owns(sessionId, session)) {
+        claudeQueries.delete(sessionId);
+        claudeSessions.delete(sessionId);
       }
     }
   }

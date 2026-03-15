@@ -1,0 +1,112 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ============================================================================
+// Mock setup — must come before importing the module under test
+// ============================================================================
+
+const { mockPersistCancellation, mockNotifyAndRecordError, mockClassifyError } = vi.hoisted(() => ({
+  mockPersistCancellation: vi.fn(),
+  mockNotifyAndRecordError: vi.fn(),
+  mockClassifyError: vi.fn(),
+}));
+
+vi.mock("../agents/query-lifecycle", () => ({
+  persistCancellation: mockPersistCancellation,
+  notifyAndRecordError: mockNotifyAndRecordError,
+}));
+
+vi.mock("../agents/error-classifier", () => ({
+  classifyError: mockClassifyError,
+}));
+
+// ============================================================================
+// Import module under test (after mocks)
+// ============================================================================
+
+import { handleCancellation, handleQueryError } from "../agents/query-completion";
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe("query-completion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // --------------------------------------------------------------------------
+  // handleCancellation
+  // --------------------------------------------------------------------------
+
+  describe("handleCancellation", () => {
+    it("returns false and does nothing when wasCancelled is false", () => {
+      const result = handleCancellation("sess-1", "claude", "sonnet", false);
+      expect(result).toBe(false);
+      expect(mockPersistCancellation).not.toHaveBeenCalled();
+    });
+
+    it("returns true and calls persistCancellation when wasCancelled is true", () => {
+      const result = handleCancellation("sess-1", "claude", "opus", true);
+      expect(result).toBe(true);
+      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-1", "claude", "opus");
+    });
+
+    it("passes correct agentType for codex", () => {
+      handleCancellation("sess-2", "codex", "codex-mini", true);
+      expect(mockPersistCancellation).toHaveBeenCalledWith("sess-2", "codex", "codex-mini");
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // handleQueryError
+  // --------------------------------------------------------------------------
+
+  describe("handleQueryError", () => {
+    it("classifies the error and calls notifyAndRecordError", () => {
+      const error = new Error("test error");
+      const classified = { category: "internal" as const, message: "test error" };
+      mockClassifyError.mockReturnValue(classified);
+
+      handleQueryError("sess-1", "claude", error);
+
+      expect(mockClassifyError).toHaveBeenCalledWith(error);
+      expect(mockNotifyAndRecordError).toHaveBeenCalledWith(
+        "sess-1",
+        "claude",
+        classified,
+        undefined
+      );
+    });
+
+    it("passes enrichMessage callback to notifyAndRecordError", () => {
+      const error = new Error("process exit");
+      const classified = { category: "process_exit" as const, message: "process exit" };
+      mockClassifyError.mockReturnValue(classified);
+      const enrichFn = (c: { message: string }) => `${c.message} (enriched)`;
+
+      handleQueryError("sess-1", "claude", error, enrichFn);
+
+      expect(mockNotifyAndRecordError).toHaveBeenCalledWith(
+        "sess-1",
+        "claude",
+        classified,
+        enrichFn
+      );
+    });
+
+    it("works with codex agent type", () => {
+      const error = new Error("codex error");
+      const classified = { category: "network" as const, message: "codex error" };
+      mockClassifyError.mockReturnValue(classified);
+
+      handleQueryError("sess-2", "codex", error);
+
+      expect(mockNotifyAndRecordError).toHaveBeenCalledWith(
+        "sess-2",
+        "codex",
+        classified,
+        undefined
+      );
+    });
+  });
+});

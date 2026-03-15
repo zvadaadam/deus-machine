@@ -12,19 +12,13 @@ import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { classifyError } from "../error-classifier";
-import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
+import { handleCancellation, handleQueryError } from "../query-completion";
 import type { AgentCapabilities, AgentHandler, QueryOptions } from "../agent-handler";
 import { buildAgentEnvironment } from "../env-builder";
 import { buildWorkspaceContext } from "../workspace-context";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { resolveCodexModel } from "./codex-models";
-import {
-  getCodexSession,
-  setCodexSession,
-  deleteCodexSession,
-  abortCodexSession,
-  type CodexSessionState,
-} from "./codex-session";
+import { codexSessions, abortCodexSession, type CodexSessionState } from "./codex-session";
 
 // ============================================================================
 // Message Format Mapping
@@ -141,7 +135,7 @@ export class CodexAgentHandler implements AgentHandler {
     console.log("Handling Codex query request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const existingSession = getCodexSession(sessionId);
+    const existingSession = codexSessions.get(sessionId);
 
     // If a query is already running, we can't send a new one (Codex exec is not multi-turn streaming)
     if (existingSession?.isRunning) {
@@ -164,7 +158,7 @@ export class CodexAgentHandler implements AgentHandler {
   reset(sessionId: string): void {
     console.log(`Handling reset generator request for Codex session: ${sessionId}`);
     abortCodexSession(sessionId);
-    deleteCodexSession(sessionId);
+    codexSessions.delete(sessionId);
   }
 
   // ==========================================================================
@@ -187,7 +181,7 @@ export class CodexAgentHandler implements AgentHandler {
       cwd: options.cwd,
       isRunning: true,
     };
-    setCodexSession(sessionId, session);
+    codexSessions.set(sessionId, session);
 
     try {
       // Build environment (reuse shared env builder)
@@ -309,7 +303,7 @@ export class CodexAgentHandler implements AgentHandler {
           .with({ type: "turn.failed" }, (e) => {
             const classified = classifyError(e.error);
             console.error(`[${queryId}] Turn failed [${classified.category}]:`, classified.message);
-            notifyAndRecordError(sessionId, "codex", classified);
+            handleQueryError(sessionId, "codex", e.error);
           })
           .with({ type: "error" }, (e) => {
             const classified = classifyError(e);
@@ -317,7 +311,7 @@ export class CodexAgentHandler implements AgentHandler {
               `[${queryId}] Stream error [${classified.category}]:`,
               classified.message
             );
-            notifyAndRecordError(sessionId, "codex", classified);
+            handleQueryError(sessionId, "codex", e);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -330,12 +324,11 @@ export class CodexAgentHandler implements AgentHandler {
 
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
-      const currentSession = getCodexSession(sessionId);
-      if (currentSession === session) {
+      if (codexSessions.owns(sessionId, session)) {
         if (abortController.signal.aborted) {
           // Abort break path: notify frontend + emit canonical events
-          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
-        } else if (currentSession.isRunning) {
+          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
+        } else if (session.isRunning) {
           // Normal completion if turn.completed wasn't received
           EventBroadcaster.emitSessionIdle(sessionId, "codex");
         }
@@ -346,33 +339,26 @@ export class CodexAgentHandler implements AgentHandler {
       const raw = classifyError(error);
       // Also treat abortController.signal.aborted as abort (codex-specific:
       // the error itself might not say "abort" but the signal was triggered)
-      const classified =
-        raw.category !== "abort" && abortController.signal.aborted
-          ? { ...raw, category: "abort" as const }
-          : raw;
+      const isAbort = raw.category === "abort" || abortController.signal.aborted;
       console.error(
-        `[${queryId}] Error in Codex query [${classified.category}]:`,
-        classified.message
+        `[${queryId}] Error in Codex query [${isAbort ? "abort" : raw.category}]:`,
+        raw.message
       );
 
       // Only update status if this processQuery still owns the session.
-      const ownsSession = getCodexSession(sessionId) === session;
-      const isAbort = classified.category === "abort";
-
-      if (ownsSession) {
+      if (codexSessions.owns(sessionId, session)) {
         if (isAbort) {
-          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
+          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
         } else {
-          notifyAndRecordError(sessionId, "codex", classified);
+          handleQueryError(sessionId, "codex", error);
         }
       }
     } finally {
       // Only clean up if this processQuery still owns the session.
       // A rapid re-query can replace the session before this finally runs;
       // blindly mutating would corrupt the new session's state.
-      const currentSession = getCodexSession(sessionId);
-      if (currentSession === session) {
-        currentSession.isRunning = false;
+      if (codexSessions.owns(sessionId, session)) {
+        session.isRunning = false;
       }
     }
   }
