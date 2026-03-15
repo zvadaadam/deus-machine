@@ -151,6 +151,12 @@
       "transcript": "/fe/874c603c06/23/full.jsonl",
       "content_hash": "/fe/874c603c06/23/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/fe/874c603c06/24/metadata.json",
+      "transcript": "/fe/874c603c06/24/full.jsonl",
+      "content_hash": "/fe/874c603c06/24/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
