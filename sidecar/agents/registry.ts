@@ -27,6 +27,12 @@ export interface AgentCapabilities {
   contextUsage: boolean;
   /** Supports runtime permission mode changes */
   permissionMode: boolean;
+  /** Model switching behavior: can change model mid-session, requires restart, or unsupported */
+  modelSwitch: "in-session" | "restart-session" | "unsupported";
+  /** Supports multi-turn conversations (prompt queue between turns) */
+  multiTurn: boolean;
+  /** Supports resuming from a previous session checkpoint */
+  sessionResume: boolean;
 }
 
 // ============================================================================

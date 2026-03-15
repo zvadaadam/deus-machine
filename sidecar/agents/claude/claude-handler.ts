@@ -90,6 +90,9 @@ export class ClaudeAgentHandler implements AgentHandler {
     workspaceInit: true,
     contextUsage: true,
     permissionMode: true,
+    modelSwitch: "in-session",
+    multiTurn: true,
+    sessionResume: true,
   };
 
   initialize(): { success: boolean; error?: string } {

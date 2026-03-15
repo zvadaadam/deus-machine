@@ -123,6 +123,9 @@ export class CodexAgentHandler implements AgentHandler {
     workspaceInit: false,
     contextUsage: false,
     permissionMode: false,
+    modelSwitch: "unsupported",
+    multiTurn: false,
+    sessionResume: false,
   };
 
   initialize(): { success: boolean; error?: string } {
