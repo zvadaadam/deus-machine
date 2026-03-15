@@ -1,14 +1,15 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "23f1db57e65b",
+  "session_id": "209d4290-efe8-4e26-a88d-7dbebf94b65a",
   "strategy": "manual-commit",
+  "created_at": "2026-03-15T16:02:57.827397Z",
   "branch": "zvadaadam/ws-protocol-v3",
   "checkpoints_count": 1,
   "files_touched": [
     "shared/enums.ts",
     "sidecar/agents/agent-handler.ts",
     "sidecar/agents/claude/claude-handler.ts",
-    "sidecar/agents/claude/claude-session.ts",
     "sidecar/agents/codex/codex-handler.ts",
     "sidecar/index.ts",
     "sidecar/test/agent-handler.test.ts",
@@ -16,25 +17,25 @@
     "sidecar/test/protocol.test.ts",
     "src/features/session/lib/agentRuntime.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/23/f1db57e65b/0/metadata.json",
-      "transcript": "/23/f1db57e65b/0/full.jsonl",
-      "content_hash": "/23/f1db57e65b/0/content_hash.txt",
-      "prompt": "/23/f1db57e65b/0/prompt.txt"
-    },
-    {
-      "metadata": "/23/f1db57e65b/1/metadata.json",
-      "transcript": "/23/f1db57e65b/1/full.jsonl",
-      "content_hash": "/23/f1db57e65b/1/content_hash.txt",
-      "prompt": "/23/f1db57e65b/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "953e3a0d6a13",
   "token_usage": {
     "input_tokens": 3,
     "cache_creation_tokens": 33025,
     "cache_read_tokens": 0,
     "output_tokens": 6,
     "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-15T16:02:57.82606Z",
+    "agent_lines": 0,
+    "human_added": 68,
+    "human_modified": 107,
+    "human_removed": 0,
+    "total_committed": 77,
+    "agent_percentage": 0
   }
 }
