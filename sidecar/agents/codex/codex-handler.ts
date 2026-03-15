@@ -242,7 +242,6 @@ export class CodexAgentHandler implements AgentHandler {
         signal: abortController.signal,
       });
 
-
       for await (const event of events) {
         if (abortController.signal.aborted) break;
 
@@ -255,6 +254,8 @@ export class CodexAgentHandler implements AgentHandler {
             const blocks = mapItemToContentBlocks(e.item);
             if (blocks.length === 0) return;
 
+            const msgId = `codex-${e.item.id}-${e.type}`;
+
             // Send real-time update to frontend (every event, not just completed)
             FrontendClient.sendMessage({
               id: sessionId,
@@ -263,12 +264,24 @@ export class CodexAgentHandler implements AgentHandler {
               data: {
                 type: "assistant" as const,
                 message: {
-                  id: `codex-${e.item.id}-${e.type}`,
+                  id: msgId,
                   role: "assistant" as const,
                   content: blocks,
                 },
               },
             });
+
+            // Dual-write: emit canonical message.assistant event
+            FrontendClient.emitAssistantMessage(
+              sessionId,
+              "codex",
+              {
+                id: msgId,
+                role: "assistant",
+                content: blocks,
+              },
+              model
+            );
 
             // Persist completed items to database
             if (e.type === "item.completed") {
@@ -303,6 +316,9 @@ export class CodexAgentHandler implements AgentHandler {
                 usage: e.usage,
               },
             });
+
+            // Dual-write: emit canonical message.result event
+            FrontendClient.emitMessageResult(sessionId, "codex", "success", e.usage);
 
             updateSessionStatus(sessionId, "idle");
           })

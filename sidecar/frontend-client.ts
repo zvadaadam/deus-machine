@@ -16,6 +16,9 @@ import {
   UpdatePermissionModeRequestSchema,
   WorkspaceInitRequestSchema,
 } from "./protocol";
+import { AGENT_EVENT_NAMES } from "../shared/agent-events";
+import type { AgentEvent, InteractionRequestType } from "../shared/agent-events";
+import type { AgentType, ErrorCategory } from "../shared/enums";
 import type {
   QueryRequest,
   QueryAckResponse,
@@ -199,50 +202,377 @@ class FrontendClientClass {
   }
 
   // ==========================================================================
+  // CANONICAL EVENT EMISSION (agent-server protocol — dual-write period)
+  //
+  // These methods emit provider-neutral events defined in shared/agent-events.ts
+  // as JSON-RPC notifications to all connected tunnels. During the dual-write
+  // period, both the old notifications (sendMessage/sendError/etc.) and these
+  // canonical events are emitted simultaneously.
+  // ==========================================================================
+
+  /** Generic emit: broadcasts a canonical AgentEvent as a JSON-RPC notification. */
+  emitEvent(event: AgentEvent): void {
+    this.broadcastNotification(event.type, event, `emitEvent(${event.type})`);
+  }
+
+  // --- Session lifecycle ---
+
+  emitSessionStarted(sessionId: string, agentType: AgentType): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_STARTED,
+      sessionId,
+      agentType,
+    });
+  }
+
+  emitSessionIdle(sessionId: string, agentType: AgentType): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_IDLE,
+      sessionId,
+      agentType,
+    });
+  }
+
+  emitSessionError(
+    sessionId: string,
+    agentType: AgentType,
+    error: string,
+    category: ErrorCategory
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_ERROR,
+      sessionId,
+      agentType,
+      error,
+      category,
+    });
+  }
+
+  emitSessionCancelled(sessionId: string, agentType: AgentType): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.SESSION_CANCELLED,
+      sessionId,
+      agentType,
+    });
+  }
+
+  // --- Messages ---
+
+  emitAssistantMessage(
+    sessionId: string,
+    agentType: AgentType,
+    message: {
+      id: string;
+      role: "assistant";
+      content: unknown;
+      stop_reason?: string | null;
+      parent_tool_use_id?: string | null;
+    },
+    model?: string
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
+      sessionId,
+      agentType,
+      message,
+      ...(model ? { model } : {}),
+    });
+  }
+
+  emitToolResultMessage(
+    sessionId: string,
+    agentType: AgentType,
+    message: { id: string; role: "user"; content: unknown; parent_tool_use_id?: string | null },
+    model?: string
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
+      sessionId,
+      agentType,
+      message,
+      ...(model ? { model } : {}),
+    });
+  }
+
+  emitMessageResult(
+    sessionId: string,
+    agentType: AgentType,
+    subtype: string,
+    usage?: unknown
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_RESULT,
+      sessionId,
+      agentType,
+      subtype,
+      ...(usage !== undefined ? { usage } : {}),
+    });
+  }
+
+  emitMessageCancelled(sessionId: string, agentType: AgentType): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
+      sessionId,
+      agentType,
+    });
+  }
+
+  // --- Interaction requests ---
+
+  emitRequestOpened(
+    requestId: string,
+    sessionId: string,
+    agentType: AgentType,
+    requestType: InteractionRequestType,
+    data: unknown
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.REQUEST_OPENED,
+      requestId,
+      sessionId,
+      agentType,
+      requestType,
+      data,
+    });
+  }
+
+  // --- Tool relay ---
+
+  emitToolRequest(
+    requestId: string,
+    sessionId: string,
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs: number
+  ): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.TOOL_REQUEST,
+      requestId,
+      sessionId,
+      method,
+      params,
+      timeoutMs,
+    });
+  }
+
+  // --- Metadata ---
+
+  emitAgentSessionId(sessionId: string, agentSessionId: string): void {
+    this.emitEvent({
+      type: AGENT_EVENT_NAMES.AGENT_SESSION_ID,
+      sessionId,
+      agentSessionId,
+    });
+  }
+
+  // ==========================================================================
   // OUTGOING REQUESTS (sidecar -> frontend, with timeout)
   // All request methods delegate to rpc() — a typed wrapper over
   // requireTunnel().request() + withTimeout().
   // ==========================================================================
 
   // --- Core workspace RPCs ---
-  requestExitPlanMode(r: ExitPlanModeRequest) { return this.rpc<ExitPlanModeResponse>(FRONTEND_RPC_METHODS.EXIT_PLAN_MODE, r, USER_FACING_TIMEOUT_MS); }
-  requestAskUserQuestion(r: AskUserQuestionRequest) { return this.rpc<AskUserQuestionResponse>(FRONTEND_RPC_METHODS.ASK_USER_QUESTION, r, USER_FACING_TIMEOUT_MS); }
-  requestGetDiff(r: GetDiffRequest) { return this.rpc<GetDiffResponse>(FRONTEND_RPC_METHODS.GET_DIFF, r, DATA_QUERY_TIMEOUT_MS); }
-  requestDiffComment(r: DiffCommentRequest) { return this.rpc<DiffCommentResponse>(FRONTEND_RPC_METHODS.DIFF_COMMENT, r, DATA_QUERY_TIMEOUT_MS); }
-  requestGetTerminalOutput(r: GetTerminalOutputRequest) { return this.rpc<GetTerminalOutputResponse>(FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT, r, DATA_QUERY_TIMEOUT_MS); }
+  requestExitPlanMode(r: ExitPlanModeRequest) {
+    return this.rpc<ExitPlanModeResponse>(
+      FRONTEND_RPC_METHODS.EXIT_PLAN_MODE,
+      r,
+      USER_FACING_TIMEOUT_MS
+    );
+  }
+  requestAskUserQuestion(r: AskUserQuestionRequest) {
+    return this.rpc<AskUserQuestionResponse>(
+      FRONTEND_RPC_METHODS.ASK_USER_QUESTION,
+      r,
+      USER_FACING_TIMEOUT_MS
+    );
+  }
+  requestGetDiff(r: GetDiffRequest) {
+    return this.rpc<GetDiffResponse>(FRONTEND_RPC_METHODS.GET_DIFF, r, DATA_QUERY_TIMEOUT_MS);
+  }
+  requestDiffComment(r: DiffCommentRequest) {
+    return this.rpc<DiffCommentResponse>(
+      FRONTEND_RPC_METHODS.DIFF_COMMENT,
+      r,
+      DATA_QUERY_TIMEOUT_MS
+    );
+  }
+  requestGetTerminalOutput(r: GetTerminalOutputRequest) {
+    return this.rpc<GetTerminalOutputResponse>(
+      FRONTEND_RPC_METHODS.GET_TERMINAL_OUTPUT,
+      r,
+      DATA_QUERY_TIMEOUT_MS
+    );
+  }
 
   // --- Browser automation RPCs ---
-  requestBrowserSnapshot(r: BrowserSnapshotRequest) { return this.rpc<BrowserSnapshotResponse>(FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT, r, BROWSER_SNAPSHOT_TIMEOUT_MS); }
-  requestBrowserClick(r: BrowserClickRequest) { return this.rpc<BrowserClickResponse>(FRONTEND_RPC_METHODS.BROWSER_CLICK, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserType(r: BrowserTypeRequest) { return this.rpc<BrowserTypeResponse>(FRONTEND_RPC_METHODS.BROWSER_TYPE, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserNavigate(r: BrowserNavigateRequest) { return this.rpc<BrowserNavigateResponse>(FRONTEND_RPC_METHODS.BROWSER_NAVIGATE, r, BROWSER_NAVIGATE_TIMEOUT_MS); }
-  requestBrowserGetState(r: BrowserGetStateRequest) { return this.rpc<BrowserGetStateResponse>(FRONTEND_RPC_METHODS.BROWSER_GET_STATE, r, DATA_QUERY_TIMEOUT_MS); }
-  requestBrowserWaitFor(r: BrowserWaitForRequest) { return this.rpc<BrowserWaitForResponse>(FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR, r, BROWSER_WAIT_FOR_TIMEOUT_MS); }
-  requestBrowserEvaluate(r: BrowserEvaluateRequest) { return this.rpc<BrowserEvaluateResponse>(FRONTEND_RPC_METHODS.BROWSER_EVALUATE, r, BROWSER_EVALUATE_TIMEOUT_MS); }
-  requestBrowserPressKey(r: BrowserPressKeyRequest) { return this.rpc<BrowserPressKeyResponse>(FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserHover(r: BrowserHoverRequest) { return this.rpc<BrowserHoverResponse>(FRONTEND_RPC_METHODS.BROWSER_HOVER, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserSelectOption(r: BrowserSelectOptionRequest) { return this.rpc<BrowserSelectOptionResponse>(FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserNavigateBack(r: BrowserNavigateBackRequest) { return this.rpc<BrowserNavigateBackResponse>(FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK, r, BROWSER_NAVIGATE_BACK_TIMEOUT_MS); }
-  requestBrowserConsoleMessages(r: BrowserConsoleMessagesRequest) { return this.rpc<BrowserConsoleMessagesResponse>(FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserNetworkRequests(r: BrowserNetworkRequestsRequest) { return this.rpc<BrowserNetworkRequestsResponse>(FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS, r, BROWSER_INTERACTION_TIMEOUT_MS); }
-  requestBrowserScreenshot(r: BrowserScreenshotRequest) { return this.rpc<BrowserScreenshotResponse>(FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT, r, BROWSER_SCREENSHOT_TIMEOUT_MS); }
-  requestBrowserScroll(r: BrowserScrollRequest) { return this.rpc<BrowserScrollResponse>(FRONTEND_RPC_METHODS.BROWSER_SCROLL, r, BROWSER_INTERACTION_TIMEOUT_MS); }
+  requestBrowserSnapshot(r: BrowserSnapshotRequest) {
+    return this.rpc<BrowserSnapshotResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_SNAPSHOT,
+      r,
+      BROWSER_SNAPSHOT_TIMEOUT_MS
+    );
+  }
+  requestBrowserClick(r: BrowserClickRequest) {
+    return this.rpc<BrowserClickResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_CLICK,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserType(r: BrowserTypeRequest) {
+    return this.rpc<BrowserTypeResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_TYPE,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserNavigate(r: BrowserNavigateRequest) {
+    return this.rpc<BrowserNavigateResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_NAVIGATE,
+      r,
+      BROWSER_NAVIGATE_TIMEOUT_MS
+    );
+  }
+  requestBrowserGetState(r: BrowserGetStateRequest) {
+    return this.rpc<BrowserGetStateResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_GET_STATE,
+      r,
+      DATA_QUERY_TIMEOUT_MS
+    );
+  }
+  requestBrowserWaitFor(r: BrowserWaitForRequest) {
+    return this.rpc<BrowserWaitForResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_WAIT_FOR,
+      r,
+      BROWSER_WAIT_FOR_TIMEOUT_MS
+    );
+  }
+  requestBrowserEvaluate(r: BrowserEvaluateRequest) {
+    return this.rpc<BrowserEvaluateResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_EVALUATE,
+      r,
+      BROWSER_EVALUATE_TIMEOUT_MS
+    );
+  }
+  requestBrowserPressKey(r: BrowserPressKeyRequest) {
+    return this.rpc<BrowserPressKeyResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_PRESS_KEY,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserHover(r: BrowserHoverRequest) {
+    return this.rpc<BrowserHoverResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_HOVER,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserSelectOption(r: BrowserSelectOptionRequest) {
+    return this.rpc<BrowserSelectOptionResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_SELECT_OPTION,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserNavigateBack(r: BrowserNavigateBackRequest) {
+    return this.rpc<BrowserNavigateBackResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_NAVIGATE_BACK,
+      r,
+      BROWSER_NAVIGATE_BACK_TIMEOUT_MS
+    );
+  }
+  requestBrowserConsoleMessages(r: BrowserConsoleMessagesRequest) {
+    return this.rpc<BrowserConsoleMessagesResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_CONSOLE_MESSAGES,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserNetworkRequests(r: BrowserNetworkRequestsRequest) {
+    return this.rpc<BrowserNetworkRequestsResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_NETWORK_REQUESTS,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestBrowserScreenshot(r: BrowserScreenshotRequest) {
+    return this.rpc<BrowserScreenshotResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_SCREENSHOT,
+      r,
+      BROWSER_SCREENSHOT_TIMEOUT_MS
+    );
+  }
+  requestBrowserScroll(r: BrowserScrollRequest) {
+    return this.rpc<BrowserScrollResponse>(
+      FRONTEND_RPC_METHODS.BROWSER_SCROLL,
+      r,
+      BROWSER_INTERACTION_TIMEOUT_MS
+    );
+  }
 
   // --- Simulator automation RPCs ---
-  requestSimScreenshot(r: SimScreenshotRequest) { return this.rpc<SimScreenshotResponse>(FRONTEND_RPC_METHODS.SIM_SCREENSHOT, r, SIMULATOR_SCREENSHOT_TIMEOUT_MS); }
-  requestSimTap(r: SimTapRequest) { return this.rpc<SimTapResponse>(FRONTEND_RPC_METHODS.SIM_TAP, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
-  requestSimSwipe(r: SimSwipeRequest) { return this.rpc<SimSwipeResponse>(FRONTEND_RPC_METHODS.SIM_SWIPE, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
-  requestSimTypeText(r: SimTypeTextRequest) { return this.rpc<SimTypeTextResponse>(FRONTEND_RPC_METHODS.SIM_TYPE_TEXT, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
-  requestSimPressKey(r: SimPressKeyRequest) { return this.rpc<SimPressKeyResponse>(FRONTEND_RPC_METHODS.SIM_PRESS_KEY, r, SIMULATOR_INTERACTION_TIMEOUT_MS); }
-  requestSimBuildAndRun(r: SimBuildAndRunRequest) { return this.rpc<SimBuildAndRunResponse>(FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN, r, SIMULATOR_BUILD_TIMEOUT_MS); }
-  requestSimListDevices(r: SimListDevicesRequest) { return this.rpc<SimListDevicesResponse>(FRONTEND_RPC_METHODS.SIM_LIST_DEVICES, r, DATA_QUERY_TIMEOUT_MS); }
-  requestSimStart(r: SimStartRequest) { return this.rpc<SimStartResponse>(FRONTEND_RPC_METHODS.SIM_START, r, SIMULATOR_BOOT_TIMEOUT_MS); }
+  requestSimScreenshot(r: SimScreenshotRequest) {
+    return this.rpc<SimScreenshotResponse>(
+      FRONTEND_RPC_METHODS.SIM_SCREENSHOT,
+      r,
+      SIMULATOR_SCREENSHOT_TIMEOUT_MS
+    );
+  }
+  requestSimTap(r: SimTapRequest) {
+    return this.rpc<SimTapResponse>(
+      FRONTEND_RPC_METHODS.SIM_TAP,
+      r,
+      SIMULATOR_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestSimSwipe(r: SimSwipeRequest) {
+    return this.rpc<SimSwipeResponse>(
+      FRONTEND_RPC_METHODS.SIM_SWIPE,
+      r,
+      SIMULATOR_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestSimTypeText(r: SimTypeTextRequest) {
+    return this.rpc<SimTypeTextResponse>(
+      FRONTEND_RPC_METHODS.SIM_TYPE_TEXT,
+      r,
+      SIMULATOR_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestSimPressKey(r: SimPressKeyRequest) {
+    return this.rpc<SimPressKeyResponse>(
+      FRONTEND_RPC_METHODS.SIM_PRESS_KEY,
+      r,
+      SIMULATOR_INTERACTION_TIMEOUT_MS
+    );
+  }
+  requestSimBuildAndRun(r: SimBuildAndRunRequest) {
+    return this.rpc<SimBuildAndRunResponse>(
+      FRONTEND_RPC_METHODS.SIM_BUILD_AND_RUN,
+      r,
+      SIMULATOR_BUILD_TIMEOUT_MS
+    );
+  }
+  requestSimListDevices(r: SimListDevicesRequest) {
+    return this.rpc<SimListDevicesResponse>(
+      FRONTEND_RPC_METHODS.SIM_LIST_DEVICES,
+      r,
+      DATA_QUERY_TIMEOUT_MS
+    );
+  }
+  requestSimStart(r: SimStartRequest) {
+    return this.rpc<SimStartResponse>(FRONTEND_RPC_METHODS.SIM_START, r, SIMULATOR_BOOT_TIMEOUT_MS);
+  }
 
   // ==========================================================================
   // INCOMING EVENTS (frontend -> sidecar)
   // ==========================================================================
 
-  onQuery(tunnel: RpcConnection, handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>): void {
+  onQuery(
+    tunnel: RpcConnection,
+    handler: (request: Omit<QueryRequest, "type">) => Promise<QueryAckResponse>
+  ): void {
     tunnel.addMethod(SIDECAR_METHODS.QUERY, async (params) => {
       const parsed = QueryRequestSchema.safeParse(params);
       if (!parsed.success) return { accepted: false, reason: "Invalid query request" };

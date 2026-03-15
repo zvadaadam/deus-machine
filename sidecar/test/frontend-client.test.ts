@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "../protocol";
+import { AGENT_EVENT_NAMES } from "../../shared/agent-events";
 import {
   buildMessageResponse,
   buildErrorResponse,
@@ -372,6 +373,273 @@ describe("FrontendClient", () => {
 
       expect(handler).not.toHaveBeenCalled();
       expect(result).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // Canonical event emission (agent-server protocol)
+  // ==========================================================================
+
+  describe("emitEvent", () => {
+    it("broadcasts event using event.type as the JSON-RPC method", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      const event = {
+        type: AGENT_EVENT_NAMES.SESSION_STARTED,
+        sessionId: "sess-1",
+        agentType: "claude",
+      };
+      FrontendClient.emitEvent(event);
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_STARTED, event);
+    });
+
+    it("does not throw when no tunnels are attached", () => {
+      expect(() =>
+        FrontendClient.emitEvent({
+          type: AGENT_EVENT_NAMES.SESSION_IDLE,
+          sessionId: "sess-1",
+          agentType: "claude",
+        })
+      ).not.toThrow();
+    });
+
+    it("broadcasts to all connected tunnels", () => {
+      const tunnel2 = createMockTunnel();
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.attachTunnel(tunnel2);
+
+      const event = {
+        type: AGENT_EVENT_NAMES.SESSION_ERROR,
+        sessionId: "sess-1",
+        agentType: "claude",
+        error: "something broke",
+        category: "internal",
+      };
+      FrontendClient.emitEvent(event);
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_ERROR, event);
+      expect(tunnel2.notify).toHaveBeenCalledWith(AGENT_EVENT_NAMES.SESSION_ERROR, event);
+    });
+  });
+
+  describe("emitSessionStarted", () => {
+    it("broadcasts session.started event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitSessionStarted("sess-1", "claude");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.SESSION_STARTED,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.SESSION_STARTED,
+          sessionId: "sess-1",
+          agentType: "claude",
+        })
+      );
+    });
+  });
+
+  describe("emitSessionIdle", () => {
+    it("broadcasts session.idle event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitSessionIdle("sess-1", "codex");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.SESSION_IDLE,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.SESSION_IDLE,
+          sessionId: "sess-1",
+          agentType: "codex",
+        })
+      );
+    });
+  });
+
+  describe("emitSessionError", () => {
+    it("broadcasts session.error event with error details", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitSessionError("sess-1", "claude", "API key invalid", "auth");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.SESSION_ERROR,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.SESSION_ERROR,
+          sessionId: "sess-1",
+          agentType: "claude",
+          error: "API key invalid",
+          category: "auth",
+        })
+      );
+    });
+  });
+
+  describe("emitSessionCancelled", () => {
+    it("broadcasts session.cancelled event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitSessionCancelled("sess-1", "claude");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.SESSION_CANCELLED,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.SESSION_CANCELLED,
+          sessionId: "sess-1",
+          agentType: "claude",
+        })
+      );
+    });
+  });
+
+  describe("emitAssistantMessage", () => {
+    it("broadcasts message.assistant event with message payload", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      const message = {
+        id: "msg-1",
+        role: "assistant" as const,
+        content: [{ type: "text", text: "Hello" }],
+      };
+      FrontendClient.emitAssistantMessage("sess-1", "claude", message, "sonnet");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.MESSAGE_ASSISTANT,
+          sessionId: "sess-1",
+          agentType: "claude",
+          message,
+          model: "sonnet",
+        })
+      );
+    });
+
+    it("omits model when not provided", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitAssistantMessage("sess-1", "claude", {
+        id: "msg-1",
+        role: "assistant",
+        content: [],
+      });
+
+      const payload = mockTunnel.notify.mock.calls[0][1];
+      expect(payload.model).toBeUndefined();
+    });
+  });
+
+  describe("emitToolResultMessage", () => {
+    it("broadcasts message.tool_result event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      const message = {
+        id: "msg-2",
+        role: "user" as const,
+        content: [{ type: "tool_result", tool_use_id: "t1" }],
+      };
+      FrontendClient.emitToolResultMessage("sess-1", "claude", message, "opus");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.MESSAGE_TOOL_RESULT,
+          sessionId: "sess-1",
+          message,
+          model: "opus",
+        })
+      );
+    });
+  });
+
+  describe("emitMessageResult", () => {
+    it("broadcasts message.result event with subtype and usage", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      const usage = { input_tokens: 100, output_tokens: 50 };
+      FrontendClient.emitMessageResult("sess-1", "claude", "success", usage);
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.MESSAGE_RESULT,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.MESSAGE_RESULT,
+          sessionId: "sess-1",
+          subtype: "success",
+          usage,
+        })
+      );
+    });
+
+    it("omits usage when not provided", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitMessageResult("sess-1", "claude", "success");
+
+      const payload = mockTunnel.notify.mock.calls[0][1];
+      expect(payload.usage).toBeUndefined();
+    });
+  });
+
+  describe("emitMessageCancelled", () => {
+    it("broadcasts message.cancelled event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitMessageCancelled("sess-1", "claude");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.MESSAGE_CANCELLED,
+          sessionId: "sess-1",
+          agentType: "claude",
+        })
+      );
+    });
+  });
+
+  describe("emitAgentSessionId", () => {
+    it("broadcasts agent.session_id event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitAgentSessionId("sess-1", "sdk-abc-123");
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.AGENT_SESSION_ID,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.AGENT_SESSION_ID,
+          sessionId: "sess-1",
+          agentSessionId: "sdk-abc-123",
+        })
+      );
+    });
+  });
+
+  describe("emitRequestOpened", () => {
+    it("broadcasts request.opened event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitRequestOpened("req-1", "sess-1", "claude", "tool_approval", {
+        tool: "bash",
+      });
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.REQUEST_OPENED,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.REQUEST_OPENED,
+          requestId: "req-1",
+          sessionId: "sess-1",
+          agentType: "claude",
+          requestType: "tool_approval",
+          data: { tool: "bash" },
+        })
+      );
+    });
+  });
+
+  describe("emitToolRequest", () => {
+    it("broadcasts tool.request event", () => {
+      FrontendClient.attachTunnel(mockTunnel);
+      FrontendClient.emitToolRequest("req-1", "sess-1", "getDiff", { file: "test.ts" }, 10000);
+
+      expect(mockTunnel.notify).toHaveBeenCalledWith(
+        AGENT_EVENT_NAMES.TOOL_REQUEST,
+        expect.objectContaining({
+          type: AGENT_EVENT_NAMES.TOOL_REQUEST,
+          requestId: "req-1",
+          sessionId: "sess-1",
+          method: "getDiff",
+          params: { file: "test.ts" },
+          timeoutMs: 10000,
+        })
+      );
     });
   });
 });

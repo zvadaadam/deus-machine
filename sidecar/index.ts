@@ -213,6 +213,10 @@ class UnifiedSidecar {
         });
         updateSessionStatus(request.id, "error", classified.message, classified.category);
       });
+
+      // Dual-write: emit canonical session.started event after dispatch
+      FrontendClient.emitSessionStarted(request.id, request.agentType);
+
       console.log(
         `[TIMING][QUERY] DISPATCHED session=${request.id} dispatchTime=${Date.now() - tQueryReceived}ms`
       );
