@@ -379,6 +379,26 @@ function handleToolResponse(msg: QueryParams): void {
   }
 }
 
+// ---- Agent Forwarding ----
+
+type ForwardToAgentFn = (params: {
+  sessionId: string;
+  agentType: string;
+  prompt: string;
+  options: Record<string, unknown>;
+}) => Promise<{ accepted: boolean; reason?: string }>;
+
+type CancelAgentFn = (params: { sessionId: string }) => Promise<void>;
+
+let forwardToAgent: ForwardToAgentFn | null = null;
+let cancelAgent: CancelAgentFn | null = null;
+
+/** Register the agent client forwarding callbacks (called from server.ts) */
+export function setAgentForwarder(forward: ForwardToAgentFn, cancel: CancelAgentFn): void {
+  forwardToAgent = forward;
+  cancelAgent = cancel;
+}
+
 // ---- Command Dispatch ----
 
 function runCommand(command: string, params: QueryParams): { commandId?: string } {
@@ -396,11 +416,48 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
       const result = writeUserMessage(sessionId, content, model);
       if (!result.success) throw new Error(result.error);
       invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
+
+      // Forward to agent-server to start the turn
+      if (forwardToAgent) {
+        const agentType = readStringParam(params, "agentType") || "claude";
+        forwardToAgent({
+          sessionId,
+          agentType,
+          prompt: content,
+          options: {
+            cwd: readStringParam(params, "cwd") || "",
+            model,
+            maxThinkingTokens: params.maxThinkingTokens as number | undefined,
+            maxTurns: params.maxTurns as number | undefined,
+            turnId: readStringParam(params, "turnId"),
+            permissionMode: readStringParam(params, "permissionMode"),
+            claudeEnvVars: readStringParam(params, "claudeEnvVars"),
+            ghToken: readStringParam(params, "ghToken"),
+            opendevsEnv: params.opendevsEnv as Record<string, string> | undefined,
+            additionalDirectories: params.additionalDirectories as string[] | undefined,
+            chromeEnabled: params.chromeEnabled as boolean | undefined,
+            strictDataPrivacy: params.strictDataPrivacy as boolean | undefined,
+            shouldResetGenerator: params.shouldResetGenerator as boolean | undefined,
+            resume: readStringParam(params, "resume"),
+            resumeSessionAt: readStringParam(params, "resumeSessionAt"),
+          },
+        }).catch((err) => {
+          console.error("[QueryEngine] Failed to forward to agent-server:", err);
+        });
+      }
+
       return { commandId: result.messageId };
     })
     .with("stopSession", () => {
       const sessionId = readStringParam(params, "sessionId");
       if (!sessionId) throw new Error("stopSession requires sessionId");
+
+      // Forward cancel to agent-server
+      if (cancelAgent) {
+        cancelAgent({ sessionId }).catch((err) => {
+          console.error("[QueryEngine] Failed to cancel on agent-server:", err);
+        });
+      }
 
       const db = getDatabase();
       const session = getSessionRaw(db, sessionId);

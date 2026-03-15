@@ -40,7 +40,7 @@ impl BackendManager {
     }
 
     /// Start the backend server with dynamic port allocation
-    pub fn start(&self, backend_path: PathBuf, db_path: &str) -> Result<()> {
+    pub fn start(&self, backend_path: PathBuf, db_path: &str, agent_server_url: Option<&str>) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
         if process.is_some() {
@@ -56,6 +56,10 @@ impl BackendManager {
             .env("DATABASE_PATH", db_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        // Pass agent-server URL so the backend can connect
+        if let Some(url) = agent_server_url {
+            cmd.env("AGENT_SERVER_URL", url);
+        }
         // Forward Sentry DSN to Node.js backend (set at build time, not hardcoded)
         if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
             cmd.env("SENTRY_DSN", dsn);
