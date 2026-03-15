@@ -13,6 +13,30 @@ import { notifyBackend } from "./backend-notifier";
 import { FrontendClient } from "../frontend-client";
 import type { AgentType, ErrorCategory, SessionStatus } from "../../shared/enums";
 
+// ── Backend Persistence Flag ─────────────────────────────────────────────
+
+/**
+ * When true, the backend is consuming canonical events and handling DB writes.
+ * Sidecar write functions (saveAssistantMessage, saveToolResultMessage,
+ * updateSessionStatus, saveAgentSessionId) will early-return as no-ops.
+ *
+ * NOT affected: saveUserMessage (sidecar-owns-send path, separate from events),
+ * reconcileStuckSessions (startup-only), lookup functions (reads).
+ *
+ * Set by sidecar index.ts when the backend agent-client connects and sends
+ * the "initialized" notification, indicating it's ready to handle persistence.
+ */
+let backendPersistenceActive = false;
+
+export function setBackendPersistenceActive(active: boolean): void {
+  console.log(`[SESSION-WRITER] Backend persistence ${active ? "activated" : "deactivated"}`);
+  backendPersistenceActive = active;
+}
+
+export function isBackendPersistenceActive(): boolean {
+  return backendPersistenceActive;
+}
+
 // ── WriteResult ──────────────────────────────────────────────────────────
 
 /**
@@ -33,6 +57,10 @@ export function saveAssistantMessage(
   model: string = "opus",
   parentToolUseId: string | null = null
 ): WriteResult {
+  // Skip local write when backend is handling persistence via canonical events
+  if (backendPersistenceActive) {
+    return { ok: true, value: "skipped-backend-persistence" };
+  }
   const t0 = Date.now();
   const db = getDatabase();
   const messageId = uuidv7();
@@ -91,6 +119,10 @@ export function saveToolResultMessage(
   message: { id?: string; role?: string; content?: unknown },
   parentToolUseId: string | null = null
 ): WriteResult {
+  // Skip local write when backend is handling persistence via canonical events
+  if (backendPersistenceActive) {
+    return { ok: true, value: "skipped-backend-persistence" };
+  }
   const db = getDatabase();
   const messageId = uuidv7();
   const sentAt = new Date().toISOString();
@@ -228,6 +260,10 @@ export function updateSessionStatus(
   errorMessage?: string | null,
   errorCategory?: string | null
 ): WriteResult<void> {
+  // Skip local write when backend is handling persistence via canonical events
+  if (backendPersistenceActive) {
+    return { ok: true, value: undefined };
+  }
   const t0 = Date.now();
   const db = getDatabase();
 
@@ -311,6 +347,10 @@ export function saveAgentSessionId(
   sessionId: string,
   agentSessionId: string | null
 ): WriteResult<void> {
+  // Skip local write when backend is handling persistence via canonical events
+  if (backendPersistenceActive) {
+    return { ok: true, value: undefined };
+  }
   const db = getDatabase();
 
   try {
