@@ -1,0 +1,19 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "c346aa9e3b09",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/services/command-handlers.ts",
+    "backend/src/services/query-engine.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c3/46aa9e3b09/0/metadata.json",
+      "transcript": "/c3/46aa9e3b09/0/full.jsonl",
+      "content_hash": "/c3/46aa9e3b09/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
