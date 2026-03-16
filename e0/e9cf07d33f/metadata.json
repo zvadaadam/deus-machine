@@ -158,6 +158,12 @@
       "transcript": "/e0/e9cf07d33f/24/full.jsonl",
       "content_hash": "/e0/e9cf07d33f/24/content_hash.txt",
       "prompt": "/e0/e9cf07d33f/24/prompt.txt"
+    },
+    {
+      "metadata": "/e0/e9cf07d33f/25/metadata.json",
+      "transcript": "/e0/e9cf07d33f/25/full.jsonl",
+      "content_hash": "/e0/e9cf07d33f/25/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
