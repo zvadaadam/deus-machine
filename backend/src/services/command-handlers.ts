@@ -16,6 +16,7 @@ import { getSessionRaw } from "../db";
 import { writeUserMessage } from "./message-writer";
 import { persistSessionError } from "./agent-persistence";
 import { invalidate } from "./query-engine";
+import * as agentService from "./agent-service";
 import type { CommandName } from "../../../shared/types/query-protocol";
 
 // ---- Types ----
@@ -24,25 +25,6 @@ type QueryParams = Record<string, unknown>;
 
 interface CommandResult {
   commandId?: string;
-}
-
-type ForwardToAgentFn = (params: {
-  sessionId: string;
-  agentType: string;
-  prompt: string;
-  options: Record<string, unknown>;
-}) => Promise<{ accepted: boolean; reason?: string }>;
-
-type CancelAgentFn = (params: { sessionId: string }) => Promise<void>;
-
-// ---- Agent Forwarding (set from server.ts) ----
-
-let forwardToAgent: ForwardToAgentFn | null = null;
-let cancelAgent: CancelAgentFn | null = null;
-
-export function setAgentForwarder(forward: ForwardToAgentFn, cancel: CancelAgentFn): void {
-  forwardToAgent = forward;
-  cancelAgent = cancel;
 }
 
 // ---- Command Dispatch ----
@@ -70,16 +52,16 @@ function handleSendMessage(params: QueryParams): CommandResult {
   invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
 
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
-  if (forwardToAgent) {
-    const agentType = readString(params, "agentType") || "claude";
+  const agentType = readString(params, "agentType") || "claude";
 
-    // Look up the existing agent_session_id so the SDK resumes the same
-    // conversation rather than starting a new one.
-    const db = getDatabase();
-    const session = getSessionRaw(db, sessionId);
-    const existingAgentSessionId = session?.agent_session_id ?? null;
+  // Look up the existing agent_session_id so the SDK resumes the same
+  // conversation rather than starting a new one.
+  const db = getDatabase();
+  const session = getSessionRaw(db, sessionId);
+  const existingAgentSessionId = session?.agent_session_id ?? null;
 
-    forwardToAgent({
+  if (agentService.isConnected()) {
+    agentService.forwardTurn({
       sessionId,
       agentType,
       prompt: content,
@@ -102,8 +84,8 @@ function handleStopSession(params: QueryParams): CommandResult {
   const sessionId = readString(params, "sessionId");
   if (!sessionId) throw new Error("stopSession requires sessionId");
 
-  if (cancelAgent) {
-    cancelAgent({ sessionId }).catch((err) => {
+  if (agentService.isConnected()) {
+    agentService.stopSession({ sessionId }).catch((err) => {
       console.error("[CommandHandler] Failed to cancel on agent-server:", err);
     });
   }

@@ -28,7 +28,7 @@ import {
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
 import { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
-import { runCommand, setAgentForwarder } from "./command-handlers";
+import { runCommand } from "./command-handlers";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,
@@ -379,9 +379,6 @@ function handleToolResponse(msg: QueryParams): void {
   }
 }
 
-// Re-export setAgentForwarder so server.ts can register callbacks via query-engine
-// (preserves existing import paths — server.ts imports from query-engine)
-export { setAgentForwarder } from "./command-handlers";
 
 // ---- Query Dispatch ----
 
