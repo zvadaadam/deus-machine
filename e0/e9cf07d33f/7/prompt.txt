@@ -3764,3 +3764,7 @@ epxloe in dpeth, we did big rwrite here
 ---
 
 and how does the swicth model and the thinking token, does it work proeprly?
+
+---
+
+please reviw ful comuncation with teh agent alll tehh send mesagge canclation needs pemrsmision and plan stuff if these flow work and have proper comunciater pattern good code stratcure and if we still not leaving n=some dead code from previous verison
