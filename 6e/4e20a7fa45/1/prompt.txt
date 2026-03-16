@@ -1,0 +1,242 @@
+<system_instruction>
+You are working inside OpenDevs, a Mac app that lets the user run many coding agents in parallel.
+Your work should take place in the /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6 directory (unless otherwise directed), which has been set up for you to work in.
+Each workspace has a .context directory (gitignored) where you can save files to collaborate with other agents.
+DO NOT EVER read or write files at /Users/zvada/Developer/agent/box-ide.
+The target branch for this workspace is main. Use this for actions like creating new PRs, bisecting, etc., unless you're told otherwise.
+
+If the user asks you to work on several unrelated tasks in parallel, you can suggest they start new workspaces.
+If the user asks for help with OpenDevs, ask them to email [humans@conductor.build](mailto:humans@conductor.build) or
+click on the comment icon in the bottom left to send feedback.
+</system_instruction>
+
+
+<system_instruction>
+The user has attached these files. Read them before proceeding.
+- /Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/.context/attachments/Review request-v1.md (5.7 KB)
+</system_instruction>
+
+
+
+Please review the changes in this workspace
+
+---
+
+<task-notification>
+<task-id>aac85cba46043251a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/aac85cba46043251a.output</output-file>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 2" completed</summary>
+<result>Now I have enough context. Let me compile the final findings.
+
+Here are the high-signal CLAUDE.md violations found in the second half of changed files:
+
+---
+
+**Issue 1: `switch` on a discriminated string field instead of ts-pattern**
+
+- **File:** `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/sidecar/agents/lifecycle.ts`, lines 147–158
+- **Description:** `classifyStopReason` uses a plain `switch(stopReason)` dispatching on a string value. This is precisely the pattern CLAUDE.md mandates replacing with ts-pattern.
+- **CLAUDE.md rule violated:** "Use `ts-pattern` for switch/case and if/else chains on discriminated unions." — "**When to use:** Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."
+
+The code:
+```ts
+switch (stopReason) {
+  case "end_turn":
+  case "stop_sequence":
+    return null;
+  case "max_tokens":
+    return { category: "context_limit", message: "..." };
+  default:
+    return null;
+}
+```
+Should be rewritten with `match(stopReason).with("end_turn", ...).with("max_tokens", ...).otherwise(() => null)`.
+
+---
+
+**Issue 2: `schema.ts` table name mismatch with CLAUDE.md documentation**
+
+- **File:** `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/shared/schema.ts`, lines 80–92 (table `messages`)
+- **Description:** CLAUDE.md's "Schema (5 tables)" section lists the table as `session_messages`, and the database rules section references `idx_session_messages_session_id`, `idx_session_messages_sent_at`, `idx_session_messages_session_role`. The schema created in this PR names the table `messages`, and `agent-persistence.ts` inserts into `messages`. The indexes in the schema also use `idx_messages_*` prefixes. This creates a contradiction between CLAUDE.md's documented table name and the actual schema.
+- **CLAUDE.md rule violated:** "Schema (5 tables): `repos`, `workspaces`, `sessions`, `session_messages`, `settings`" and the explicitly listed indexes `idx_session_messages_session_id`, `idx_session_messages_sent_at`, `idx_session_messages_session_role`.
+
+---
+
+**Issue 3: `agent-persistence.ts` writes to `messages` without updating `last_user_message_at`**
+
+- **File:** `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/backend/src/services/agent-persistence.ts`, lines 59–76 and 89–106
+- **Description:** CLAUDE.md states: "sessions.`last_user_message_at` is maintained by app code — use it instead of correlated subqueries" and "When our code inserts a user message, it must also update this column." `persistToolResultMessage` inserts `role='user'` messages (tool results) without updating `sessions.last_user_message_at`. Note: `message-writer.ts` does correctly update `last_user_message_at` for human user messages, but tool result messages (role='user') inserted by `persistToolResultMessage` do not.
+- **CLAUDE.md rule violated:** "When our code inserts a user message, it must also update this column."</result>
+<usage><total_tokens>114272</total_tokens><tool_uses>45</tool_uses><duration_ms>136367</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/aac85cba46043251a.output
+
+---
+
+<task-notification>
+<task-id>a7f5b9140039011d9</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/a7f5b9140039011d9.output</output-file>
+<status>completed</status>
+<summary>Agent "CLAUDE.md compliance review 1" completed</summary>
+<result>Now I have a comprehensive picture. Let me compile all findings.
+
+Here are the high-signal CLAUDE.md violations found in the PR:
+
+---
+
+**Issue 1: `switch` statement on a discriminator field — must use `ts-pattern`**
+
+- **File:** `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/sidecar/agents/lifecycle.ts`
+- **Line:** 147
+- **Code:** `switch (stopReason) { case "end_turn": ... case "max_tokens": ... default: ... }`
+- **Rule violated:** CLAUDE.md › ts-pattern section: "Use `ts-pattern` for switch/case and if/else chains on discriminated unions. Prefer `.exhaustive()` to catch missing cases at compile time." and "When to use: Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."
+
+`classifyStopReason` dispatches on `stopReason` (a discriminator string) using a plain `switch`. This should be `match(stopReason).with("end_turn", ...).with("max_tokens", ...).otherwise(...)` using `ts-pattern`. The same file uses no `ts-pattern` import, while the sibling `codex-handler.ts` does import and use it correctly.
+
+---
+
+**Issue 2: if/else chain dispatching on `.type` — must use `ts-pattern`**
+
+- **File:** `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/sidecar/agents/claude/message-processor.ts`
+- **Lines:** 104–205
+- **Code:** Six sequential `if (cleanMessage.type === "assistant")`, `if (cleanMessage.type === "user")`, `if (cleanMessage.type === "result" && cleanMessage.subtype === "success")`, `if (cleanMessage.type === "result" && cleanMessage.subtype === "error_during_execution")` checks.
+- **Rule violated:** CLAUDE.md › ts-pattern section: "Use `ts-pattern` for switch/case and if/else chains on discriminated unions" and "When to use: Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."
+
+The entire `processMessage` function dispatches on `cleanMessage.type` (and `.subtype`) using repeated `if` chains on discriminators. This should be a single `match(cleanMessage).with({ type: "assistant" }, ...).with({ type: "user" }, ...).with({ type: "result", subtype: "success" }, ...).otherwise(...)` pattern.
+
+---
+
+**Issue 3: Test co-location check (passes — no violation)**
+
+Tests in `sidecar/test/` are correctly outside `sidecar/agents/` and `sidecar/` source. Not a violation.
+
+---
+
+**Issue 4: `PRAGMA optimize` on startup (passes — no violation)**
+
+`backend/src/lib/database.ts` line 34 calls `dbInstance.pragma('optimize')` inside `initDatabase()` (on startup) and line 68 in `closeDatabase()` (on shutdown). Compliant.
+
+---
+
+**Summary of real violations:**
+
+1. `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/sidecar/agents/lifecycle.ts` line 147 — `switch` on a discriminator string (`stopReason`) instead of `ts-pattern`. Rule: "Use `ts-pattern` for switch/case and if/else chains on discriminated unions."
+
+2. `/Users/zvada/Developer/agent/box-ide/.conductor/dhaka-v6/sidecar/agents/claude/message-processor.ts` lines 104–205 — sequential `if` chains dispatching on `cleanMessage.type` (a discriminator field) instead of `ts-pattern`. Rule: "Use `ts-pattern` for switch/case and if/else chains on discriminated unions... When to use: Any switch/case or if/else chain dispatching on `.type`, `.status`, `.state`, or similar discriminator fields."</result>
+<usage><total_tokens>115759</total_tokens><tool_uses>48</tool_uses><duration_ms>141273</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/a7f5b9140039011d9.output
+
+---
+
+<task-notification>
+<task-id>aa853c6c9fe0a4d97</task-id>
+<tool-use-id>toolu_015cRsQPjSJnd53haJtR8mE5</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/aa853c6c9fe0a4d97.output</output-file>
+<status>completed</status>
+<summary>Agent "Bug scan - diff only" completed</summary>
+<result>OK, the table is actually called `messages` in the code (not `session_messages` as the CLAUDE.md says). The `agent-persistence.ts` INSERT statements use the correct table name. No bug here.
+
+Let me check one more thing - I noticed the `persistAssistantMessage` SQL has 7 `?` placeholders but 7 `.run()` arguments. Let me count carefully:
+
+```sql
+INSERT INTO messages (id, session_id, role, content, sent_at, model, agent_message_id, parent_tool_use_id)
+VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)
+```
+
+Columns: id, session_id, role (literal), content, sent_at, model, agent_message_id, parent_tool_use_id = 7 placeholders (role is hardcoded)
+
+`.run(messageId, event.sessionId, content, sentAt, event.model || null, event.message.id || null, event.message.parent_tool_use_id || null)` = 7 arguments
+
+That matches. Good.
+
+Now let me check `persistToolResultMessage`:
+
+```sql
+INSERT INTO messages (id, session_id, role, content, sent_at, agent_message_id, parent_tool_use_id)
+VALUES (?, ?, 'user', ?, ?, ?, ?)
+```
+
+6 placeholders, `.run()` has 6 arguments. Correct.
+
+Let me look for one more potential issue - the `handleAgentEvent` function uses `.exhaustive()` pattern matching but I want to verify all event types are handled:
+
+From `AgentEventSchema`:
+- session.started
+- session.idle
+- session.error
+- session.cancelled
+- message.assistant
+- message.tool_result
+- message.result
+- message.cancelled
+- request.opened
+- request.resolved
+- tool.request
+- agent.session_id
+
+From `handleAgentEvent`:
+- session.started ✓
+- session.idle ✓
+- session.error ✓
+- session.cancelled ✓
+- message.assistant ✓
+- message.tool_result ✓
+- message.result ✓
+- message.cancelled ✓
+- request.opened ✓
+- request.resolved ✓
+- tool.request ✓
+- agent.session_id ✓
+- .exhaustive() ✓
+
+All 12 types are handled. Good.
+
+Let me do a final check on the `handleAgentEvent` for `request.opened` and `request.resolved` - the event schema has `type: "request.opened"` and `type: "request.resolved"`, but the CLAUDE.md docs say `interaction.opened` and `interaction.resolved`. Let me verify the match arms:
+
+Looking at the handler:
+```ts
+.with({ type: "request.opened" }, ...)
+.with({ type: "request.resolved" }, ...)
+```
+
+And the schema:
+```ts
+RequestOpenedEventSchema = z.object({ type: z.literal("request.opened"), ... })
+RequestResolvedEventSchema = z.object({ type: z.literal("request.resolved"), ... })
+```
+
+These match. The CLAUDE.md mentions `interaction.*` which is inconsistent with the actual event names `request.*`, but that's a documentation issue, not a code bug.
+
+Now let me compile my findings.
+
+---
+
+Here are the significant bugs found in the diff:
+
+## Bug 1: Missing `turn/respond` RPC handler in agent-server (CRITICAL)
+
+**File:** `sidecar/index.ts`
+**Description:** The `setupJsonRpc` method registers handlers for `turn/start`, `turn/cancel`, `session/reset`, `session/stop`, and various `provider/*` methods, but does NOT register a handler for `turn/respond`. However, the backend's `AgentClient.sendTurnRespond()` (in `backend/src/services/agent-client.ts`, line ~119) sends JSON-RPC requests with method `turn/respond` (defined as `AGENT_RPC_METHODS.TURN_RESPOND` in `shared/agent-events.ts`). The tool relay flow in `backend/src/services/agent-event-handler.ts` (line 183) calls `respondToAgent({ sessionId, requestId, result })` which invokes `agentClient.sendTurnRespond()`.
+
+**Why it's a bug:** When a tool request is relayed from agent to frontend and the frontend responds, the backend attempts to forward the result back to the agent-server via `turn/respond`. Since no handler exists, the `json-rpc-2.0` library returns a "method not found" error. The tool relay result never reaches the agent, causing the agent to hang waiting for a tool response (or timeout). All tool relay operations (browser automation, diff, terminal, plan mode, user questions) will fail.
+
+## Bug 2: Invalid `ErrorCategory` value `"agent"` in query-engine.ts
+
+**File:** `backend/src/services/query-engine.ts`, lines 457 and 469
+**Description:** When the agent-server rejects a `sendMessage` command or fails to communicate, the code calls `persistSessionError()` with `category: "agent"`. However, `"agent"` is not a valid value in the `ErrorCategorySchema` enum (defined in `shared/enums.ts`), which only allows: `"auth"`, `"rate_limit"`, `"context_limit"`, `"network"`, `"abort"`, `"invalid_request"`, `"db_write"`, `"process_exit"`, `"internal"`.
+
+**Why it's a bug:** The `persistSessionError` function takes `event: SessionErrorEvent` where the `category` field is typed as `ErrorCategory`. TypeScript should reject `"agent"` at compile time. If it compiles (perhaps through a `tsconfig` leniency), the invalid category `"agent"` is written to the database's `error_category` column. Any downstream code that pattern-matches on `ErrorCategory` values will not match `"agent"`, potentially causing incorrect error display or silent failures in error handling. The correct value should likely be `"internal"`.
+
+## Bug 3: MCP tool RPC requests have no handler in the backend (CRITICAL)
+
+**File:** `sidecar/event-broadcaster.ts` (lines 355-460) and `backend/src/services/agent-client.ts` (lines 205-225)
+**Description:** The `EventBroadcaster.rpc()` method sends JSON-RPC **requests** (with `id`, expecting a response) through the tunnel for methods like `exitPlanMode`, `askUserQuestion`, `getDiff`, `diffComment`, `getTerminalOutput`, `browserSnapshot`, `browserClick`, `browserType`, `browserNavigate`, and all simulator methods. In the new architecture, the tunnel connects to the backend's `AgentClient`. However, the `AgentClient` only registers handlers for `AGENT_EVENT_NAMES` (12 canonical event notifications). It has no handlers for any of the `FRONTEND_RPC_METHODS` (approximately 25 methods).
+
+**Why it's a bug:** When the Claude SDK calls an MCP tool (e.g., browser snapshot, getDiff, exitPlanMode), the sidecar sends a JSON-RPC request through the tunnel to the backend. The backend's `json-rpc-2.0` server returns a "method not found" error because no handler is registered. The sidecar then throws an error to the Claude SDK, which causes the agent to report a tool failure. All MCP tool interactions (browser automation, simulator, diff viewing, plan mode approval, user questions) are broken.</result>
+<usage><total_tokens>127894</total_tokens><tool_uses>71</tool_uses><duration_ms>327140</duration_ms></usage>
+</task-notification>
+Full transcript available at: /private/tmp/claude-501/-Users-zvada-Developer-agent-box-ide--conductor-dhaka-v6/20378687-6555-426e-ae15-84e4795a9390/tasks/aa853c6c9fe0a4d97.output
