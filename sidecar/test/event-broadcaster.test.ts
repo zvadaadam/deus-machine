@@ -98,12 +98,12 @@ describe("EventBroadcaster", () => {
       expect(mockTunnel.notify).toHaveBeenCalledTimes(1); // only the first call
     });
 
-    it("detachTunnel without args clears all tunnels", () => {
+    it("detachTunnel without args clears all tunnels", async () => {
       EventBroadcaster.attachTunnel(mockTunnel);
       EventBroadcaster.attachTunnel(createMockTunnel());
       EventBroadcaster.detachTunnel();
       // No tunnels left, request should reject
-      expect(
+      await expect(
         EventBroadcaster.requestExitPlanMode({ sessionId: "s", toolInput: {} })
       ).rejects.toThrow("EventBroadcaster tunnel not attached");
     });

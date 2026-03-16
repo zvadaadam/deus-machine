@@ -279,6 +279,16 @@ class UnifiedSidecar {
       return { accepted: true };
     });
 
+    // --- turn/respond (tool relay response from backend) ---
+    // Currently a stub: the sidecar tools use direct JSON-RPC requests
+    // (EventBroadcaster.requestBrowserXxx) rather than the canonical
+    // tool.request notification path. When tools migrate to the canonical
+    // path, this handler will resolve pending promises by requestId.
+    rpcTunnel.addMethod("turn/respond", (params: any) => {
+      const { requestId } = params ?? {};
+      console.log(`[Sidecar] turn/respond received (requestId=${requestId})`);
+    });
+
     // --- turn/cancel (new wire protocol method, maps to cancel dispatch) ---
     rpcTunnel.addMethod("turn/cancel", async (params: any) => {
       const sessionId = params?.sessionId;
@@ -318,7 +328,7 @@ class UnifiedSidecar {
       const agentType = params?.agentType || "claude";
       const agent = getAgent(agentType);
       if (!agent?.auth) throw new Error(`Agent "${agentType}" does not support auth`);
-      return agent.auth({ id: params?.id, cwd: params?.cwd });
+      return agent.auth({ cwd: params?.cwd });
     });
 
     // --- provider/initWorkspace (slash commands, MCP servers) ---
@@ -328,7 +338,6 @@ class UnifiedSidecar {
       if (!agent?.initWorkspace)
         throw new Error(`Agent "${agentType}" does not support workspace init`);
       return agent.initWorkspace({
-        id: params?.id,
         cwd: params?.cwd,
         ghToken: params?.ghToken,
         providerEnvVars: params?.providerEnvVars,
@@ -341,7 +350,12 @@ class UnifiedSidecar {
       const agent = getAgent(agentType);
       if (!agent?.getContextUsage)
         throw new Error(`Agent "${agentType}" does not support context usage`);
-      return agent.getContextUsage(params);
+      return agent.getContextUsage({
+        options: {
+          cwd: params?.cwd ?? "",
+          claudeSessionId: params?.agentSessionId ?? "",
+        },
+      });
     });
 
     // --- provider/updateMode (runtime permission mode change) ---

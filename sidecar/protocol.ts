@@ -31,39 +31,9 @@ export const FRONTEND_NOTIFICATIONS = {
   STATUS_CHANGED: "statusChanged",
 } as const;
 
-/** RPC methods the sidecar can call on the frontend (request/response) */
-export const FRONTEND_RPC_METHODS = {
-  EXIT_PLAN_MODE: "exitPlanMode",
-  ASK_USER_QUESTION: "askUserQuestion",
-  GET_DIFF: "getDiff",
-  DIFF_COMMENT: "diffComment",
-  GET_TERMINAL_OUTPUT: "getTerminalOutput",
-  // Browser automation — sidecar asks frontend to eval JS in the webview
-  BROWSER_SNAPSHOT: "browserSnapshot",
-  BROWSER_CLICK: "browserClick",
-  BROWSER_TYPE: "browserType",
-  BROWSER_NAVIGATE: "browserNavigate",
-  BROWSER_GET_STATE: "browserGetState",
-  BROWSER_WAIT_FOR: "browserWaitFor",
-  BROWSER_EVALUATE: "browserEvaluate",
-  BROWSER_PRESS_KEY: "browserPressKey",
-  BROWSER_HOVER: "browserHover",
-  BROWSER_SELECT_OPTION: "browserSelectOption",
-  BROWSER_NAVIGATE_BACK: "browserNavigateBack",
-  BROWSER_CONSOLE_MESSAGES: "browserConsoleMessages",
-  BROWSER_NETWORK_REQUESTS: "browserNetworkRequests",
-  BROWSER_SCREENSHOT: "browserScreenshot",
-  BROWSER_SCROLL: "browserScroll",
-  // Simulator automation — sidecar asks frontend to interact with the iOS simulator
-  SIM_SCREENSHOT: "simScreenshot",
-  SIM_TAP: "simTap",
-  SIM_SWIPE: "simSwipe",
-  SIM_TYPE_TEXT: "simTypeText",
-  SIM_PRESS_KEY: "simPressKey",
-  SIM_BUILD_AND_RUN: "simBuildAndRun",
-  SIM_LIST_DEVICES: "simListDevices",
-  SIM_START: "simStart",
-} as const;
+/** RPC methods the sidecar can call on the frontend (request/response).
+ *  Canonical definition in shared/agent-events.ts; re-exported here. */
+export { FRONTEND_RPC_METHODS } from "../shared/agent-events";
 
 // ============================================================================
 // Zod Schemas (shared — re-exported for backwards compatibility)

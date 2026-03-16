@@ -243,7 +243,6 @@ export class ClaudeAgentHandler implements AgentHandler {
   async auth(params: AuthParams) {
     const { accountInfo, error } = await this.getClaudeAccountInfo(params.cwd);
     return {
-      id: params.id,
       type: "claude_auth_output",
       agentType: "claude",
       accountInfo,
@@ -258,7 +257,6 @@ export class ClaudeAgentHandler implements AgentHandler {
       providerEnvVars: params.providerEnvVars,
     });
     return {
-      id: params.id,
       type: "workspace_init_output",
       agentType: "claude",
       slashCommands,

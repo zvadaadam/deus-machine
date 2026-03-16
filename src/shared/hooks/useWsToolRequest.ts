@@ -66,16 +66,16 @@ export function useWsToolRequest(handler: WsToolRequestHandler): void {
 
       const respond = (result: unknown) => {
         if (handledRef.current.has(requestId)) return; // guard double-response
+        if (!sendToolResponse(requestId, result)) return; // WS send failed — let other handlers try
         handledRef.current.add(requestId);
         scheduleCleanup(requestId);
-        sendToolResponse(requestId, result);
       };
 
       const respondError = (error: string) => {
         if (handledRef.current.has(requestId)) return;
+        if (!sendToolResponse(requestId, undefined, error)) return;
         handledRef.current.add(requestId);
         scheduleCleanup(requestId);
-        sendToolResponse(requestId, undefined, error);
       };
 
       handlerRef.current(method, requestId, params, respond, respondError);

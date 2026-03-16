@@ -52,12 +52,21 @@ export interface QCommandFrame {
 }
 
 /** Client responds to a tool relay request (q:event tool:request → q:tool_response). */
-export interface QToolResponseFrame {
+export interface QToolResponseSuccessFrame {
   type: "q:tool_response";
   requestId: string;
-  result?: unknown;
-  error?: string;
+  result: unknown;
+  error?: never;
 }
+
+export interface QToolResponseErrorFrame {
+  type: "q:tool_response";
+  requestId: string;
+  error: string;
+  result?: never;
+}
+
+export type QToolResponseFrame = QToolResponseSuccessFrame | QToolResponseErrorFrame;
 
 /** All frames a client can send. */
 export type QClientFrame =

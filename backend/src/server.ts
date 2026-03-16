@@ -8,6 +8,7 @@ import { getSetting } from './services/settings.service';
 import { AgentClient } from './services/agent-client';
 import { handleAgentEvent, setRespondToAgent } from './services/agent-event-handler';
 import { setAgentForwarder } from './services/query-engine';
+import { relay as relayToolRequest } from './services/tool-relay';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -83,6 +84,18 @@ if (agentServerUrl) {
     },
     onDisconnected: () => {
       console.log('[AgentClient] Disconnected from agent-server');
+    },
+    // Relay sidecar's frontend-facing RPC requests (browser, sim, diff, plan)
+    // to the frontend via the tool-relay pipeline.
+    onFrontendRpc: async (requestId, sessionId, method, params) => {
+      return relayToolRequest({
+        type: "tool.request",
+        requestId,
+        sessionId,
+        method,
+        params,
+        timeoutMs: 120_000,
+      });
     },
   });
 
