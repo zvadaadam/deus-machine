@@ -5299,3 +5299,7 @@ This comment was left on the modified branch.
 ---
 
 I want to explore and we need to make this VR like a final and clean, so that's the reason why we are doing the changes. And this change was created here, so we can focus on improving it. What do you see, what we should do and how we should refactor it and what should be the cost structure. If you look at it like these are websites at communication right. We are sending the commands. So what do you think how we should improve it?
+
+---
+
+do it
