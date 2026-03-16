@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "8b8a30804e0f",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/server.ts",
+    "backend/src/services/agent-event-handler.ts",
+    "backend/src/services/agent-service.ts",
+    "backend/src/services/command-handlers.ts",
+    "backend/src/services/query-engine.ts",
+    "backend/test/unit/services/agent-event-handler.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8b/8a30804e0f/0/metadata.json",
+      "transcript": "/8b/8a30804e0f/0/full.jsonl",
+      "content_hash": "/8b/8a30804e0f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
