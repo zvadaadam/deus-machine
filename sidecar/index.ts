@@ -353,7 +353,7 @@ class UnifiedSidecar {
       return agent.getContextUsage({
         options: {
           cwd: params?.cwd ?? "",
-          claudeSessionId: params?.agentSessionId ?? "",
+          agentSessionId: params?.agentSessionId ?? "",
         },
       });
     });

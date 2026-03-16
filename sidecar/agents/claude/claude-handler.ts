@@ -287,13 +287,13 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   async getContextUsage(request: ContextUsageParams) {
     const { id: sessionId, options } = request;
-    const claudeSessionId = options.claudeSessionId;
+    const agentSessionId = options.agentSessionId;
 
     console.log(
-      `[getContextUsage] Getting context usage for session: ${sessionId}, claudeSessionId: ${claudeSessionId}`
+      `[getContextUsage] Getting context usage for session: ${sessionId}, agentSessionId: ${agentSessionId}`
     );
 
-    if (!claudeSessionId) throw new Error("No claudeSessionId provided");
+    if (!agentSessionId) throw new Error("No agentSessionId provided");
     if (blockIfNotInitialized(sessionId)) throw new Error("Initialization failure");
 
     const sdkOptions = {
@@ -301,7 +301,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       pathToClaudeCodeExecutable: getClaudeExecutablePath(),
       systemPrompt: DEFAULT_PROMPT,
       settingSources: DEFAULT_SETTING_SOURCES,
-      resume: claudeSessionId,
+      resume: agentSessionId,
     };
 
     const contextUsageQuery = claudeSDK({ prompt: "/context", options: sdkOptions });
