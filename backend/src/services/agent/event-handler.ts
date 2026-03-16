@@ -127,7 +127,7 @@ export function createAgentEventHandler(deps: {
       // ── Metadata ──────────────────────────────────────────────────────
       .with({ type: "agent.session_id" }, (e) => {
         console.log(`[AgentEvent] agent.session_id: session=${e.sessionId} agentSessionId=${e.agentSessionId}`);
-        persistAgentSessionId(e);
+        persistAndInvalidate(persistAgentSessionId(e), SESSION_RESOURCES, e.sessionId);
       })
 
       .exhaustive();
