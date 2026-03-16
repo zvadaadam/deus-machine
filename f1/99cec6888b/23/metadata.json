@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "f199cec6888b",
+  "session_id": "e67f8384-f438-49a0-9c4a-e96d3d9dbf6a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-16T15:28:34.294023Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/src/server.ts",
+    "sidecar/agents/registry.ts",
+    "src-tauri/src/backend.rs",
+    "backend/src/services/agent-client.ts",
+    "backend/src/services/query-engine.ts",
+    "shared/agent-events.ts",
+    "shared/types/query-protocol.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/protocol.ts",
+    "sidecar/rpc-schemas.ts",
+    "src/shared/hooks/useWsToolRequest.ts",
+    "sidecar/index.ts",
+    "src/features/simulator/automation/useSimulatorRpcHandler.ts",
+    "CLAUDE.md",
+    "sidecar/test/event-broadcaster.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "68467cc56182",
+  "initial_attribution": {
+    "calculated_at": "2026-03-16T15:28:34.292504Z",
+    "agent_lines": 119,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 2,
+    "total_committed": 120,
+    "agent_percentage": 99.16666666666667
+  }
+}
