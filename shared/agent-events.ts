@@ -96,7 +96,7 @@ export const TurnOptionsSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   turnId: z.string().min(1).optional(),
   permissionMode: z.string().optional(),
-  envVars: z.string().optional(),
+  claudeEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
   opendevsEnv: z.record(z.string(), z.string()).optional(),
   additionalDirectories: z.array(z.string()).optional(),
@@ -162,7 +162,7 @@ export const ProviderInitWorkspaceRequestSchema = z.object({
   agentType: AgentTypeSchema,
   cwd: z.string().min(1),
   ghToken: z.string().optional(),
-  envVars: z.string().optional(),
+  claudeEnvVars: z.string().optional(),
 });
 export type ProviderInitWorkspaceRequest = z.infer<typeof ProviderInitWorkspaceRequestSchema>;
 
