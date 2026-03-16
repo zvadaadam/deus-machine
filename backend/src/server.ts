@@ -5,7 +5,7 @@ import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 import { closeAll as closeAllWsConnections } from './services/ws.service';
 import { ensureRelayConnected, disconnectFromRelay } from './services/relay.service';
 import { getSetting } from './services/settings.service';
-import * as agentService from './services/agent-service';
+import * as agentService from './services/agent';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -96,7 +96,7 @@ process.on('unhandledRejection', (reason) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\nShutting down...');
-  agentClient?.disconnect();
+  agentService.shutdown();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();

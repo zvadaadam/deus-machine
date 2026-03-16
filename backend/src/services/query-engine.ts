@@ -27,8 +27,7 @@ import {
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
-import { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
-import { runCommand } from "./command-handlers";
+import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,

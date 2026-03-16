@@ -1,4 +1,4 @@
-// backend/src/services/agent-service.ts
+// backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
 // Creates the AgentClient, wires the event handler with injected dependencies,
@@ -7,22 +7,22 @@
 //
 // Dependency graph (all arrows point down, no cycles):
 //
-//   agent-service (this file)
-//       ├── agent-client        (WebSocket transport)
-//       ├── agent-event-handler (factory: createAgentEventHandler)
+//   service (this file)
+//       ├── client              (WebSocket transport)
+//       ├── event-handler       (factory: createAgentEventHandler)
 //       └── tool-relay          (frontend RPC relay)
 //
 // Initialized once at startup in server.ts via agentService.init().
 
-import { AgentClient } from "./agent-client";
-import { createAgentEventHandler } from "./agent-event-handler";
+import { AgentClient } from "./client";
+import { createAgentEventHandler } from "./event-handler";
 import { relay } from "./tool-relay";
 import type {
   TurnStartRequest,
   TurnStartResponse,
   TurnRespondRequest,
   SessionStopRequest,
-} from "../../../shared/agent-events";
+} from "../../../../shared/agent-events";
 
 // ---- Singleton ----
 

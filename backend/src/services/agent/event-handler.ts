@@ -1,4 +1,4 @@
-// backend/src/services/agent-event-handler.ts
+// backend/src/services/agent/event-handler.ts
 // Receives canonical AgentEvent notifications from the agent-client and
 // dispatches them to persistence (DB writes) and WS push (query invalidation).
 //
@@ -6,12 +6,12 @@
 // Each event is handled: persist first, then invalidate (ordering matters).
 //
 // Created via createAgentEventHandler() — a factory that injects the
-// respondToAgent dependency, breaking the circular import with agent-service.
+// respondToAgent dependency, breaking the circular import with service.ts.
 
 import { match } from "ts-pattern";
-import type { AgentEvent } from "../../../shared/agent-events";
-import type { QueryResource } from "../../../shared/types/query-protocol";
-import { invalidate } from "./query-engine";
+import type { AgentEvent } from "../../../../shared/agent-events";
+import type { QueryResource } from "../../../../shared/types/query-protocol";
+import { invalidate } from "../query-engine";
 import { relay } from "./tool-relay";
 import {
   persistAssistantMessage,
@@ -23,7 +23,8 @@ import {
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
-} from "./agent-persistence";
+  type WriteResult,
+} from "./persistence";
 
 // ---- Types ----
 
@@ -35,13 +36,31 @@ type RespondToAgentFn = (params: {
 
 export type AgentEventHandler = (event: AgentEvent) => void;
 
+// ---- Resource groups for invalidation ----
+
+const SESSION_RESOURCES: QueryResource[] = ["workspaces", "sessions", "session", "stats"];
+const MESSAGE_RESOURCES: QueryResource[] = ["messages", "session"];
+
+// ---- Helpers ----
+
+/** Persist an event and invalidate subscriptions if the write succeeded. */
+function persistAndInvalidate(
+  result: WriteResult<unknown>,
+  resources: QueryResource[],
+  sessionId: string,
+): void {
+  if (result.ok) {
+    invalidate(resources, { sessionIds: [sessionId] });
+  }
+}
+
 // ---- Factory ----
 
 /**
  * Create an agent event handler with injected dependencies.
  *
  * The respondToAgent function is injected to break the circular dependency
- * between this module and agent-service.ts. The composition root (agent-service)
+ * between this module and service.ts. The composition root (service.ts)
  * provides the concrete implementation: client.sendTurnRespond().
  */
 export function createAgentEventHandler(deps: {
@@ -54,65 +73,29 @@ export function createAgentEventHandler(deps: {
       // ── Session lifecycle ─────────────────────────────────────────────
       .with({ type: "session.started" }, (e) => {
         console.log(`[AgentEvent] session.started: session=${e.sessionId} agent=${e.agentType}`);
-        const result = persistSessionStarted(e);
-        if (result.ok) {
-          invalidate(
-            ["workspaces", "sessions", "session", "stats"],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistSessionStarted(e), SESSION_RESOURCES, e.sessionId);
       })
       .with({ type: "session.idle" }, (e) => {
         console.log(`[AgentEvent] session.idle: session=${e.sessionId}`);
-        const result = persistSessionIdle(e);
-        if (result.ok) {
-          invalidate(
-            ["workspaces", "sessions", "session", "stats"],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistSessionIdle(e), SESSION_RESOURCES, e.sessionId);
       })
       .with({ type: "session.error" }, (e) => {
         console.log(`[AgentEvent] session.error: session=${e.sessionId} error=${e.error}`);
-        const result = persistSessionError(e);
-        if (result.ok) {
-          invalidate(
-            ["workspaces", "sessions", "session", "stats"],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistSessionError(e), SESSION_RESOURCES, e.sessionId);
       })
       .with({ type: "session.cancelled" }, (e) => {
         console.log(`[AgentEvent] session.cancelled: session=${e.sessionId}`);
-        const result = persistSessionCancelled(e);
-        if (result.ok) {
-          invalidate(
-            ["workspaces", "sessions", "session", "stats"],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistSessionCancelled(e), SESSION_RESOURCES, e.sessionId);
       })
 
       // ── Messages ──────────────────────────────────────────────────────
       .with({ type: "message.assistant" }, (e) => {
         console.log(`[AgentEvent] message.assistant: session=${e.sessionId} msgId=${e.message.id}`);
-        const result = persistAssistantMessage(e);
-        if (result.ok) {
-          invalidate(
-            ["messages", "session"] satisfies QueryResource[],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistAssistantMessage(e), MESSAGE_RESOURCES, e.sessionId);
       })
       .with({ type: "message.tool_result" }, (e) => {
         console.log(`[AgentEvent] message.tool_result: session=${e.sessionId} msgId=${e.message.id}`);
-        const result = persistToolResultMessage(e);
-        if (result.ok) {
-          invalidate(
-            ["messages", "session"] satisfies QueryResource[],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(persistToolResultMessage(e), MESSAGE_RESOURCES, e.sessionId);
       })
       .with({ type: "message.result" }, (e) => {
         console.log(`[AgentEvent] message.result: session=${e.sessionId} subtype=${e.subtype}`);
@@ -120,13 +103,11 @@ export function createAgentEventHandler(deps: {
       })
       .with({ type: "message.cancelled" }, (e) => {
         console.log(`[AgentEvent] message.cancelled: session=${e.sessionId}`);
-        const result = persistMessageCancelled(e);
-        if (result.ok) {
-          invalidate(
-            ["messages", "sessions", "session", "stats"],
-            { sessionIds: [e.sessionId] }
-          );
-        }
+        persistAndInvalidate(
+          persistMessageCancelled(e),
+          ["messages", "sessions", "session", "stats"],
+          e.sessionId,
+        );
       })
 
       // ── Interaction requests ──────────────────────────────────────────

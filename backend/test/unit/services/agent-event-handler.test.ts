@@ -32,7 +32,7 @@ const {
   mockRespondToAgent: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('../../../src/services/agent-persistence', () => ({
+vi.mock('../../../src/services/agent/persistence', () => ({
   persistAssistantMessage: mockPersistAssistantMessage,
   persistToolResultMessage: mockPersistToolResultMessage,
   persistMessageResult: mockPersistMessageResult,
@@ -48,7 +48,7 @@ vi.mock('../../../src/services/query-engine', () => ({
   invalidate: mockInvalidate,
 }));
 
-vi.mock('../../../src/services/tool-relay', () => ({
+vi.mock('../../../src/services/agent/tool-relay', () => ({
   relay: mockRelay,
 }));
 
@@ -56,7 +56,7 @@ vi.mock('../../../src/services/tool-relay', () => ({
 // Import after mocks
 // ============================================================================
 
-import { createAgentEventHandler } from '../../../src/services/agent-event-handler';
+import { createAgentEventHandler } from '../../../src/services/agent/event-handler';
 import type { AgentEvent } from '../../../../shared/agent-events';
 
 // Create event handler with injected mock (same pattern as production)

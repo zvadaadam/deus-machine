@@ -16,7 +16,7 @@ vi.mock('../../../src/services/ws.service', () => ({
 // Import after mocks
 // ============================================================================
 
-import { relay, resolve, reject, getPendingCount, clearAll } from '../../../src/services/tool-relay';
+import { relay, resolve, reject, getPendingCount, clearAll } from '../../../src/services/agent/tool-relay';
 import type { ToolRequestEvent } from '../../../../shared/agent-events';
 
 // ============================================================================

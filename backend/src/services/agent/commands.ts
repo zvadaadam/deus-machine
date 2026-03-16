@@ -1,4 +1,4 @@
-// backend/src/services/command-handlers.ts
+// backend/src/services/agent/commands.ts
 // Business logic for q:command dispatch.
 //
 // Each command handler is a focused function that:
@@ -11,13 +11,13 @@
 // contain business logic directly.
 
 import { match } from "ts-pattern";
-import { getDatabase } from "../lib/database";
-import { getSessionRaw } from "../db";
-import { writeUserMessage } from "./message-writer";
-import { persistSessionError } from "./agent-persistence";
-import { invalidate } from "./query-engine";
-import * as agentService from "./agent-service";
-import type { CommandName } from "../../../shared/types/query-protocol";
+import { getDatabase } from "../../lib/database";
+import { getSessionRaw } from "../../db";
+import { writeUserMessage } from "../message-writer";
+import { persistSessionError } from "./persistence";
+import { invalidate } from "../query-engine";
+import * as agentService from "./service";
+import type { CommandName } from "../../../../shared/types/query-protocol";
 
 // ---- Types ----
 
