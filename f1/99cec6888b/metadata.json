@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "f199cec6888b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "CLAUDE.md",
+    "backend/src/server.ts",
+    "backend/src/services/agent-client.ts",
+    "backend/src/services/query-engine.ts",
+    "shared/agent-events.ts",
+    "shared/types/query-protocol.ts",
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/registry.ts",
+    "sidecar/index.ts",
+    "sidecar/protocol.ts",
+    "sidecar/rpc-schemas.ts",
+    "sidecar/test/event-broadcaster.test.ts",
+    "src-tauri/src/backend.rs",
+    "src/features/simulator/automation/useSimulatorRpcHandler.ts",
+    "src/shared/hooks/useWsToolRequest.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f1/99cec6888b/0/metadata.json",
+      "transcript": "/f1/99cec6888b/0/full.jsonl",
+      "content_hash": "/f1/99cec6888b/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
