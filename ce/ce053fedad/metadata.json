@@ -16,6 +16,12 @@
       "transcript": "/ce/ce053fedad/0/full.jsonl",
       "content_hash": "/ce/ce053fedad/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/ce/ce053fedad/1/metadata.json",
+      "transcript": "/ce/ce053fedad/1/full.jsonl",
+      "content_hash": "/ce/ce053fedad/1/content_hash.txt",
+      "prompt": ""
     }
   ]
 }
