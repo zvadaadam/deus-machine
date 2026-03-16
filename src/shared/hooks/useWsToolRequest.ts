@@ -9,9 +9,9 @@
 // prevents duplicate responses to the same requestId.
 //
 // Usage in RPC handler hooks:
-//   useWsToolRequest((method, id, params, respond) => {
+//   useWsToolRequest((method, requestId, params, respond) => {
 //     match(method)
-//       .with("getDiff", () => handleGetDiff(id, params, respond))
+//       .with("getDiff", () => handleGetDiff(params, respond))
 //       .otherwise(() => {}); // not mine, skip
 //   });
 
