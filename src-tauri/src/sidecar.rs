@@ -6,12 +6,13 @@ use anyhow::{Result, Context};
 
 /// Sidecar Manager
 ///
-/// Manages the Node.js agent-server process (agent runtime).
+/// Manages the Node.js agent-server process lifecycle.
 /// The agent-server is a stateless SDK wrapper: it handles Claude/Codex SDK
-/// integration and emits canonical events. No direct database access.
+/// integration and emits canonical events via WebSocket. No database access.
 ///
-/// The sidecar uses Unix domain sockets for IPC. The socket path
-/// is discovered by parsing `LISTEN_URL=<path>` from stdout.
+/// Rust spawns the process, captures `LISTEN_URL=ws://...` from stdout,
+/// and passes the URL to the backend via `AGENT_SERVER_URL` env var.
+/// The backend then connects as a WebSocket client (JSON-RPC 2.0).
 pub struct SidecarManager {
     process: Mutex<Option<Child>>,
     listen_url: Arc<Mutex<Option<String>>>,
