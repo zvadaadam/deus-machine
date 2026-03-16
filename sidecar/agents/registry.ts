@@ -40,19 +40,16 @@ export interface AgentCapabilities {
 // ============================================================================
 
 export interface AuthParams {
-  id: string;
   cwd: string;
 }
 
 export interface InitWorkspaceParams {
-  id: string;
   cwd: string;
   ghToken?: string;
   providerEnvVars?: string;
 }
 
 export interface ContextUsageParams {
-  id: string;
   options: { cwd: string; claudeSessionId: string };
 }
 

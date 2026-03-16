@@ -206,6 +206,42 @@ export const AGENT_RPC_METHODS = {
   AGENT_LIST: "agent/list",
 } as const;
 
+/**
+ * Frontend-facing RPC methods. The sidecar's tools call these as JSON-RPC
+ * requests through the tunnel. The backend relays them to the frontend via
+ * q:event tool:request, the frontend handles them, and the result flows back.
+ */
+export const FRONTEND_RPC_METHODS = {
+  EXIT_PLAN_MODE: "exitPlanMode",
+  ASK_USER_QUESTION: "askUserQuestion",
+  GET_DIFF: "getDiff",
+  DIFF_COMMENT: "diffComment",
+  GET_TERMINAL_OUTPUT: "getTerminalOutput",
+  BROWSER_SNAPSHOT: "browserSnapshot",
+  BROWSER_CLICK: "browserClick",
+  BROWSER_TYPE: "browserType",
+  BROWSER_NAVIGATE: "browserNavigate",
+  BROWSER_GET_STATE: "browserGetState",
+  BROWSER_WAIT_FOR: "browserWaitFor",
+  BROWSER_EVALUATE: "browserEvaluate",
+  BROWSER_PRESS_KEY: "browserPressKey",
+  BROWSER_HOVER: "browserHover",
+  BROWSER_SELECT_OPTION: "browserSelectOption",
+  BROWSER_NAVIGATE_BACK: "browserNavigateBack",
+  BROWSER_CONSOLE_MESSAGES: "browserConsoleMessages",
+  BROWSER_NETWORK_REQUESTS: "browserNetworkRequests",
+  BROWSER_SCREENSHOT: "browserScreenshot",
+  BROWSER_SCROLL: "browserScroll",
+  SIM_SCREENSHOT: "simScreenshot",
+  SIM_TAP: "simTap",
+  SIM_SWIPE: "simSwipe",
+  SIM_TYPE_TEXT: "simTypeText",
+  SIM_PRESS_KEY: "simPressKey",
+  SIM_BUILD_AND_RUN: "simBuildAndRun",
+  SIM_LIST_DEVICES: "simListDevices",
+  SIM_START: "simStart",
+} as const;
+
 // ============================================================================
 // Notification Payloads (agent-server → client)
 // ============================================================================

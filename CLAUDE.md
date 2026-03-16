@@ -167,9 +167,9 @@ Our app owns its own SQLite database:
 ~/Library/Application Support/com.opendevs.app/opendevs.db
 ```
 
-`initDatabase()` in `backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `backend/src/lib/schema.ts`. No external dependencies — the app is fully self-contained.
+`initDatabase()` in `backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `shared/schema.ts`. No external dependencies — the app is fully self-contained.
 
-**Schema (5 tables):** `repos`, `workspaces`, `sessions`, `session_messages`, `settings`
+**Schema (5 tables):** `repositories`, `workspaces`, `sessions`, `messages`, `paired_devices`
 
 **What this means for development:**
 
@@ -925,9 +925,12 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository
 CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
 CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id);
-CREATE INDEX IF NOT EXISTS idx_session_messages_sent_at ON session_messages(sent_at);
-CREATE INDEX IF NOT EXISTS idx_session_messages_session_role ON session_messages(session_id, role, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id);
+CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_use ON messages(parent_tool_use_id);
+CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash ON paired_devices(token_hash);
 ```
 
 **No N+1 queries** — never run a subquery per row in a list endpoint. Use `sessions.last_user_message_at` directly instead of correlated subqueries: `s.last_user_message_at as latest_message_sent_at`. When our code inserts a user message, it must also update this column. Prefer denormalization for frequently-JOINed aggregates over CTEs or window functions — it's simpler and proven at scale. When adding new list endpoints, always fetch related data in a single query or a batched second query, never in a loop.

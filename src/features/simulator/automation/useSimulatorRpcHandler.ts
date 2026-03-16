@@ -345,7 +345,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         // Unknown "sim*" method → tell the agent-server it doesn't exist.
         // Non-sim methods are silently ignored (other handlers pick them up).
         if (method.startsWith("sim")) {
-          respondError(`Unknown simulator method: ${method}`);
+          respond({ success: false, error: `Unknown simulator method: ${method}` });
         }
       });
   });

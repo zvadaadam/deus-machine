@@ -454,7 +454,7 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
               sessionId,
               agentType: agentType as "claude",
               error: reason,
-              category: "agent",
+              category: "internal",
             });
             invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
           }
@@ -466,7 +466,7 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
             sessionId,
             agentType: agentType as "claude",
             error: `Agent server communication failed: ${errorMsg}`,
-            category: "agent",
+            category: "internal",
           });
           invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
         });

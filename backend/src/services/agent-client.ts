@@ -22,6 +22,7 @@ import {
 import {
   AGENT_RPC_METHODS,
   AGENT_EVENT_NAMES,
+  FRONTEND_RPC_METHODS,
   AgentEventSchema,
   InitializeResultSchema,
   type InitializeResult,
@@ -54,6 +55,9 @@ export interface AgentClientOptions {
   onConnected?: (agents: AgentInfo[]) => void;
   /** Called when the connection drops */
   onDisconnected?: () => void;
+  /** Called when the sidecar sends a frontend-facing RPC (browser, sim, diff, plan).
+   *  Must relay to the frontend and return the result. */
+  onFrontendRpc?: (requestId: string, sessionId: string, method: string, params: Record<string, unknown>) => Promise<unknown>;
 }
 
 // ============================================================================
@@ -76,6 +80,7 @@ export class AgentClient {
   private onEvent: AgentEventHandler;
   private onConnected?: (agents: AgentInfo[]) => void;
   private onDisconnected?: () => void;
+  private onFrontendRpc: (requestId: string, sessionId: string, method: string, params: Record<string, unknown>) => Promise<unknown>;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -90,6 +95,7 @@ export class AgentClient {
     this.onEvent = options.onEvent ?? (() => {});
     this.onConnected = options.onConnected;
     this.onDisconnected = options.onDisconnected;
+    this.onFrontendRpc = options.onFrontendRpc ?? (() => Promise.reject(new Error("No frontend RPC handler registered")));
   }
 
   // ==========================================================================
@@ -258,6 +264,20 @@ export class AgentClient {
       this.peer.addMethod(eventName, async (params) => {
         this.dispatchEvent(eventName, params);
         return undefined; // notifications don't return a value
+      });
+    }
+
+    // Register handlers for frontend-facing RPC methods.
+    // The sidecar's tools (browser, simulator, workspace) call these as
+    // JSON-RPC requests through the tunnel. We relay them to the frontend
+    // via tool-relay, which broadcasts a q:event tool:request and waits
+    // for the frontend's q:tool_response.
+    for (const method of Object.values(FRONTEND_RPC_METHODS)) {
+      this.peer.addMethod(method, async (params: any) => {
+        const requestId = crypto.randomUUID();
+        const sessionId = params?.sessionId ?? "unknown";
+        const result = await this.onFrontendRpc(requestId, sessionId, method, params ?? {});
+        return result;
       });
     }
   }

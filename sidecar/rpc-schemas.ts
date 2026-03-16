@@ -393,7 +393,7 @@ export const SimListDevicesResponseSchema = z.object({
     z.object({
       name: z.string(),
       udid: z.string(),
-      state: z.string().describe("Booted | Shutdown"),
+      state: z.enum(["Booted", "Shutdown", "Unknown"]),
       runtime: z.string(),
       deviceType: z.string(),
       isAvailable: z.boolean(),

@@ -57,8 +57,9 @@ impl BackendManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
         // Pass agent-server URL so the backend can connect
-        if let Some(url) = agent_server_url {
-            cmd.env("AGENT_SERVER_URL", url);
+        match agent_server_url {
+            Some(url) => { cmd.env("AGENT_SERVER_URL", url); }
+            None => { cmd.env_remove("AGENT_SERVER_URL"); }
         }
         // Forward Sentry DSN to Node.js backend (set at build time, not hardcoded)
         if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
