@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "6e4e20a7fa45",
+  "session_id": "883b6691-78bc-4601-90af-ee6ad481f8fe",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-16T00:34:45.491462Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "src-tauri/src/sidecar.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "dac3485aeec6",
+  "initial_attribution": {
+    "calculated_at": "2026-03-16T00:34:45.490409Z",
+    "agent_lines": 5,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 5,
+    "agent_percentage": 100
+  }
+}
