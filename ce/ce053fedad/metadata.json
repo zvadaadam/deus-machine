@@ -40,6 +40,12 @@
       "transcript": "/ce/ce053fedad/4/full.jsonl",
       "content_hash": "/ce/ce053fedad/4/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/ce/ce053fedad/5/metadata.json",
+      "transcript": "/ce/ce053fedad/5/full.jsonl",
+      "content_hash": "/ce/ce053fedad/5/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
