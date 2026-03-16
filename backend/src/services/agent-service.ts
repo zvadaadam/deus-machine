@@ -1,14 +1,21 @@
 // backend/src/services/agent-service.ts
-// Singleton service for agent-server communication.
+// Composition root for agent-server communication.
 //
-// Replaces the 3x "let fn = null; setFn()" callback wiring pattern with a
-// single import point. Other services call agentService.forwardTurn() etc.
-// directly — no callback registration needed.
+// Creates the AgentClient, wires the event handler with injected dependencies,
+// and exposes typed methods for other services to call. No circular imports —
+// this module imports from its dependencies, none of them import back.
+//
+// Dependency graph (all arrows point down, no cycles):
+//
+//   agent-service (this file)
+//       ├── agent-client        (WebSocket transport)
+//       ├── agent-event-handler (factory: createAgentEventHandler)
+//       └── tool-relay          (frontend RPC relay)
 //
 // Initialized once at startup in server.ts via agentService.init().
 
 import { AgentClient } from "./agent-client";
-import { handleAgentEvent } from "./agent-event-handler";
+import { createAgentEventHandler } from "./agent-event-handler";
 import { relay } from "./tool-relay";
 import type {
   TurnStartRequest,
@@ -30,7 +37,13 @@ export function init(agentServerUrl: string): void {
 
   client = new AgentClient({
     url: agentServerUrl,
-    onEvent: handleAgentEvent,
+
+    // Wire the event handler with respondToAgent injected — breaks the
+    // circular dependency that previously existed between these modules.
+    onEvent: createAgentEventHandler({
+      respondToAgent: (params) => respondToAgent(params),
+    }),
+
     onConnected: (agents) => {
       console.log(
         `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
@@ -39,6 +52,8 @@ export function init(agentServerUrl: string): void {
     onDisconnected: () => {
       console.log("[AgentService] Disconnected from agent-server");
     },
+
+    // Relay sidecar's frontend-facing RPC requests (browser, sim, diff, plan)
     onFrontendRpc: async (requestId, sessionId, method, params) => {
       return relay({
         type: "tool.request",
