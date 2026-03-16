@@ -1,7 +1,9 @@
 {
   "cli_version": "0.5.0",
   "checkpoint_id": "3b1013a2638f",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
   "strategy": "manual-commit",
+  "created_at": "2026-03-16T21:57:38.346688Z",
   "branch": "zvadaadam/ws-protocol-v3",
   "checkpoints_count": 1,
   "files_touched": [
@@ -25,31 +27,26 @@
     "backend/test/unit/services/agent-persistence.test.ts",
     "backend/test/unit/services/tool-relay.test.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/3b/1013a2638f/0/metadata.json",
-      "transcript": "/3b/1013a2638f/0/full.jsonl",
-      "content_hash": "/3b/1013a2638f/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/3b/1013a2638f/1/metadata.json",
-      "transcript": "/3b/1013a2638f/1/full.jsonl",
-      "content_hash": "/3b/1013a2638f/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/3b/1013a2638f/2/metadata.json",
-      "transcript": "/3b/1013a2638f/2/full.jsonl",
-      "content_hash": "/3b/1013a2638f/2/content_hash.txt",
-      "prompt": "/3b/1013a2638f/2/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "be505aa81f1f",
   "token_usage": {
     "input_tokens": 16647,
     "cache_creation_tokens": 3042306,
     "cache_read_tokens": 188482168,
     "output_tokens": 260698,
     "api_call_count": 755
+  },
+  "session_metrics": {
+    "turn_count": 90
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-16T21:57:32.79097Z",
+    "agent_lines": 1276,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1276,
+    "agent_percentage": 100
   }
 }
