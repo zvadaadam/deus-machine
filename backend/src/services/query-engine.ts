@@ -435,7 +435,7 @@ function runCommand(command: string, params: QueryParams): { commandId?: string 
             maxTurns: params.maxTurns as number | undefined,
             turnId: readStringParam(params, "turnId"),
             permissionMode: readStringParam(params, "permissionMode"),
-            claudeEnvVars: readStringParam(params, "claudeEnvVars"),
+            providerEnvVars: readStringParam(params, "providerEnvVars"),
             ghToken: readStringParam(params, "ghToken"),
             opendevsEnv: params.opendevsEnv as Record<string, string> | undefined,
             additionalDirectories: params.additionalDirectories as string[] | undefined,

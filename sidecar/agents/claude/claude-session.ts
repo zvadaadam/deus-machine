@@ -36,7 +36,7 @@ export interface SessionState {
   sendMessage?: (message: string) => void;
   sendTerminate?: () => void;
   currentSettings?: {
-    claudeEnvVars?: string;
+    providerEnvVars?: string;
     additionalDirectories?: string[];
     chromeEnabled?: boolean;
     strictDataPrivacy?: boolean;
@@ -86,7 +86,7 @@ export function settingsChanged(
 ): boolean {
   if (!oldSettings) return true;
 
-  if (oldSettings.claudeEnvVars !== newSettings?.claudeEnvVars) {
+  if (oldSettings.providerEnvVars !== newSettings?.providerEnvVars) {
     return true;
   }
 

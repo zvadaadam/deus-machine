@@ -37,7 +37,7 @@ export const QueryOptionsSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   turnId: z.string().min(1).optional(),
   permissionMode: PermissionModeSchema.optional(),
-  claudeEnvVars: z.string().optional(),
+  providerEnvVars: z.string().optional(),
   ghToken: z.string().optional(),
   opendevsEnv: z.record(z.string(), z.string()).optional(),
   additionalDirectories: z.array(z.string()).optional(),

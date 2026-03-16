@@ -42,7 +42,7 @@ import {
 interface WorkspaceInitOptions {
   cwd: string;
   ghToken?: string;
-  claudeEnvVars?: string;
+  providerEnvVars?: string;
 }
 
 // ============================================================================
@@ -127,7 +127,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       if (modelChanged && session) {
         const query = claudeQueries.get(sessionId);
         if (query) {
-          const envVars = options.claudeEnvVars ? parseEnvString(options.claudeEnvVars) : {};
+          const envVars = options.providerEnvVars ? parseEnvString(options.providerEnvVars) : {};
           const mappedModel = mapModelForProvider(options.model, envVars);
           console.log(
             `Model changed from ${session.currentModel} to ${options.model}, using setModel callback`
@@ -183,7 +183,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       const newSession: SessionState = {
         currentSettings: {
-          claudeEnvVars: options.claudeEnvVars,
+          providerEnvVars: options.providerEnvVars,
           additionalDirectories: options.additionalDirectories,
           chromeEnabled: options.chromeEnabled,
           strictDataPrivacy: options.strictDataPrivacy,
@@ -255,7 +255,7 @@ export class ClaudeAgentHandler implements AgentHandler {
     const { slashCommands, mcpServers, error } = await this.getClaudeWorkspaceInitData({
       cwd: params.cwd,
       ghToken: params.ghToken,
-      claudeEnvVars: params.claudeEnvVars,
+      providerEnvVars: params.providerEnvVars,
     });
     return {
       id: params.id,
@@ -358,7 +358,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   private async getClaudeWorkspaceInitData(options: WorkspaceInitOptions) {
     const envForClaude = buildAgentEnvironment({
-      claudeEnvVars: options.claudeEnvVars,
+      providerEnvVars: options.providerEnvVars,
       ghToken: options.ghToken,
     });
 
@@ -426,7 +426,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Build environment using shared env-builder
       const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
-        claudeEnvVars: options?.claudeEnvVars,
+        providerEnvVars: options?.providerEnvVars,
         opendevsEnv: options?.opendevsEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },

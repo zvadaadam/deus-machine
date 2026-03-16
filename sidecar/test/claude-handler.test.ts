@@ -397,7 +397,7 @@ describe("claude-handler", () => {
       );
     });
 
-    it("applies claudeEnvVars to SDK environment", async () => {
+    it("applies providerEnvVars to SDK environment", async () => {
       const mockQuery = {
         [Symbol.asyncIterator]: () => ({
           next: async () => ({ value: undefined, done: true }),
@@ -411,7 +411,7 @@ describe("claude-handler", () => {
 
       await handler.query("sess-env", "hello", {
         cwd: "/test",
-        claudeEnvVars: "CUSTOM_VAR=custom_value\nANOTHER=123",
+        providerEnvVars: "CUSTOM_VAR=custom_value\nANOTHER=123",
         turnId: "turn-1",
       });
 

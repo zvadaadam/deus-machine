@@ -331,7 +331,7 @@ class UnifiedSidecar {
         id: params?.id,
         cwd: params?.cwd,
         ghToken: params?.ghToken,
-        claudeEnvVars: params?.claudeEnvVars,
+        providerEnvVars: params?.providerEnvVars,
       });
     });
 
