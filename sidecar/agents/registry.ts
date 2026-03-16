@@ -4,36 +4,13 @@
 // registers itself in the registry during sidecar startup.
 
 import { getErrorMessage } from "../../shared/lib/errors";
-import type { AgentType, QueryRequest } from "../protocol";
+import type { AgentType } from "../protocol";
+import type { AgentCapabilities } from "../../shared/agent-events";
+import type { QueryOptions } from "../../shared/protocol";
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-/** Options passed to query(), derived from QueryRequest in shared/protocol.ts */
-export type QueryOptions = QueryRequest["options"];
-
-/**
- * Declares which optional features an agent handler supports.
- * Used for capability-based dispatch — call sites check capabilities
- * instead of checking agentType strings or casting to concrete classes.
- */
-export interface AgentCapabilities {
-  /** Supports auth check (e.g., Claude account info) */
-  auth: boolean;
-  /** Supports workspace initialization (slash commands, MCP servers) */
-  workspaceInit: boolean;
-  /** Supports context usage queries */
-  contextUsage: boolean;
-  /** Supports runtime permission mode changes */
-  permissionMode: boolean;
-  /** Model switching behavior: can change model mid-session, requires restart, or unsupported */
-  modelSwitch: "in-session" | "restart-session" | "unsupported";
-  /** Supports multi-turn conversations (prompt queue between turns) */
-  multiTurn: boolean;
-  /** Supports resuming from a previous session checkpoint */
-  sessionResume: boolean;
-}
+// Re-export so existing imports from registry still work
+export type { AgentCapabilities } from "../../shared/agent-events";
+export type { QueryOptions } from "../../shared/protocol";
 
 // ============================================================================
 // Optional method parameter types (provider-neutral names)
