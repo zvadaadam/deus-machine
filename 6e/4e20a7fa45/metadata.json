@@ -3,7 +3,7 @@
   "checkpoint_id": "6e4e20a7fa45",
   "strategy": "manual-commit",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "src-tauri/src/sidecar.rs"
   ],
@@ -13,13 +13,19 @@
       "transcript": "/6e/4e20a7fa45/0/full.jsonl",
       "content_hash": "/6e/4e20a7fa45/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/6e/4e20a7fa45/1/metadata.json",
+      "transcript": "/6e/4e20a7fa45/1/full.jsonl",
+      "content_hash": "/6e/4e20a7fa45/1/content_hash.txt",
+      "prompt": "/6e/4e20a7fa45/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 0
+    "input_tokens": 20,
+    "cache_creation_tokens": 40726,
+    "cache_read_tokens": 390655,
+    "output_tokens": 1395,
+    "api_call_count": 10
   }
 }
