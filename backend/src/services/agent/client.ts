@@ -272,14 +272,17 @@ export class AgentClient {
     // JSON-RPC requests through the tunnel. We relay them to the frontend
     // via tool-relay, which broadcasts a q:event tool:request and waits
     // for the frontend's q:tool_response.
-    for (const method of Object.values(FRONTEND_RPC_METHODS)) {
+    const frontendMethods = Object.values(FRONTEND_RPC_METHODS);
+    for (const method of frontendMethods) {
       this.peer.addMethod(method, async (params: any) => {
         const requestId = crypto.randomUUID();
         const sessionId = params?.sessionId ?? "unknown";
+        console.log(`[AgentClient] Frontend RPC: method=${method} requestId=${requestId} session=${sessionId}`);
         const result = await this.onFrontendRpc(requestId, sessionId, method, params ?? {});
         return result;
       });
     }
+    console.log(`[AgentClient] Registered ${frontendMethods.length} frontend RPC methods`);
   }
 
   private teardownPeer(): void {

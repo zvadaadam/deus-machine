@@ -358,7 +358,7 @@ describe('handleAgentEvent', () => {
   // ==========================================================================
 
   describe('agent.session_id', () => {
-    it('persists agent session ID without invalidation', () => {
+    it('persists agent session ID and invalidates session resources', () => {
       const event: AgentEvent = {
         type: 'agent.session_id',
         sessionId: 'sess-1',
@@ -368,7 +368,10 @@ describe('handleAgentEvent', () => {
       handleAgentEvent(event);
 
       expect(mockPersistAgentSessionId).toHaveBeenCalledWith(event);
-      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockInvalidate).toHaveBeenCalledWith(
+        ["workspaces", "sessions", "session", "stats"],
+        { sessionIds: ['sess-1'] }
+      );
     });
   });
 
