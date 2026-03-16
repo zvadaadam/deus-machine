@@ -3,7 +3,7 @@
   "checkpoint_id": "d1315760a4d7",
   "strategy": "manual-commit",
   "branch": "zvadaadam/ws-protocol-v3",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "src/features/browser/automation/useBrowserRpcHandler.ts",
     "src/features/session/hooks/useAgentRpcHandler.ts",
@@ -22,6 +22,19 @@
       "transcript": "/d1/315760a4d7/1/full.jsonl",
       "content_hash": "/d1/315760a4d7/1/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/d1/315760a4d7/2/metadata.json",
+      "transcript": "/d1/315760a4d7/2/full.jsonl",
+      "content_hash": "/d1/315760a4d7/2/content_hash.txt",
+      "prompt": "/d1/315760a4d7/2/prompt.txt"
     }
-  ]
+  ],
+  "token_usage": {
+    "input_tokens": 16725,
+    "cache_creation_tokens": 3114780,
+    "cache_read_tokens": 211333826,
+    "output_tokens": 278789,
+    "api_call_count": 819
+  }
 }
