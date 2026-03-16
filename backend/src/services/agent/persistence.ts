@@ -1,4 +1,4 @@
-// backend/src/services/agent-persistence.ts
+// backend/src/services/agent/persistence.ts
 // Database write functions for persisting canonical agent events.
 //
 // Adapted from sidecar/db/session-writer.ts. Key differences:
@@ -8,11 +8,11 @@
 // - Takes event objects instead of positional args
 //
 // All functions are synchronous (better-sqlite3 is synchronous).
-// Callers (agent-event-handler.ts) call invalidate() after persistence succeeds.
+// Callers (event-handler.ts) call invalidate() after persistence succeeds.
 
-import { getDatabase } from "../lib/database";
-import { uuidv7 } from "../../../shared/lib/uuid";
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getDatabase } from "../../lib/database";
+import { uuidv7 } from "../../../../shared/lib/uuid";
+import { getErrorMessage } from "../../../../shared/lib/errors";
 import type {
   MessageAssistantEvent,
   MessageToolResultEvent,
@@ -23,7 +23,7 @@ import type {
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
-} from "../../../shared/agent-events";
+} from "../../../../shared/agent-events";
 
 // ============================================================================
 // WriteResult type (mirrors sidecar's pattern)

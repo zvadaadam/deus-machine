@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createServer as createHttpServer, type Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AgentClient, type AgentClientOptions } from '../../../src/services/agent-client';
+import { AgentClient, type AgentClientOptions } from '../../../src/services/agent/client';
 import { AGENT_RPC_METHODS, AGENT_EVENT_NAMES } from '../../../../shared/agent-events';
 
 // ============================================================================

@@ -33,7 +33,7 @@ import {
   persistSessionError,
   persistSessionCancelled,
   persistAgentSessionId,
-} from '../../../src/services/agent-persistence';
+} from '../../../src/services/agent/persistence';
 import type {
   MessageAssistantEvent,
   MessageToolResultEvent,

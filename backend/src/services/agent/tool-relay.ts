@@ -1,4 +1,4 @@
-// backend/src/services/tool-relay.ts
+// backend/src/services/agent/tool-relay.ts
 // Manages pending tool requests being relayed from the agent-server to the frontend.
 //
 // Flow:
@@ -13,9 +13,9 @@
 // Timeout handling: each tool request has a timeout (set by the agent-server).
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
-import type { ToolRequestEvent } from "../../../shared/agent-events";
-import type { ToolRequestEventData, QServerFrame } from "../../../shared/types/query-protocol";
-import { broadcast } from "./ws.service";
+import type { ToolRequestEvent } from "../../../../shared/agent-events";
+import type { ToolRequestEventData, QServerFrame } from "../../../../shared/types/query-protocol";
+import { broadcast } from "../ws.service";
 
 // ---- Types ----
 

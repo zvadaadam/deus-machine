@@ -1,4 +1,4 @@
-// backend/src/services/agent-client.ts
+// backend/src/services/agent/client.ts
 // WebSocket client that connects to the agent-server (sidecar).
 //
 // Implements the JSON-RPC 2.0 handshake protocol:
@@ -38,7 +38,7 @@ import {
   type ProviderUpdateModeRequest,
   type AgentEvent,
   type AgentInfo,
-} from "../../../shared/agent-events";
+} from "../../../../shared/agent-events";
 
 // ============================================================================
 // Types
