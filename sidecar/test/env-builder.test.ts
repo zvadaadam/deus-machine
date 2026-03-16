@@ -125,25 +125,25 @@ describe("buildAgentEnvironment", () => {
     expect(env.MY_KEY).toBe("opendevs");
   });
 
-  it("claudeEnvVars overrides opendevsEnv", () => {
+  it("providerEnvVars overrides opendevsEnv", () => {
     const env = buildAgentEnvironment({
       opendevsEnv: { MY_KEY: "opendevs" },
-      claudeEnvVars: "MY_KEY=from-user",
+      providerEnvVars: "MY_KEY=from-user",
     });
     expect(env.MY_KEY).toBe("from-user");
   });
 
-  it("claudeEnvVars with empty value deletes key", () => {
+  it("providerEnvVars with empty value deletes key", () => {
     const env = buildAgentEnvironment({
       extraEnv: { DELETE_ME: "exists" },
-      claudeEnvVars: "DELETE_ME=",
+      providerEnvVars: "DELETE_ME=",
     });
     expect(env.DELETE_ME).toBeUndefined();
   });
 
   it("ghToken sets GH_TOKEN as final layer", () => {
     const env = buildAgentEnvironment({
-      claudeEnvVars: "GH_TOKEN=from-env-string",
+      providerEnvVars: "GH_TOKEN=from-env-string",
       ghToken: "from-option",
     });
     expect(env.GH_TOKEN).toBe("from-option");
@@ -167,7 +167,7 @@ describe("buildAgentEnvironment", () => {
     const env = buildAgentEnvironment({
       extraEnv: { TASKS: "true", AGENT: "claude" },
       opendevsEnv: { WORKSPACE: "/my/project" },
-      claudeEnvVars: "CUSTOM=value\nANOTHER=123",
+      providerEnvVars: "CUSTOM=value\nANOTHER=123",
       ghToken: "gh-token-123",
     });
     expect(env.TASKS).toBe("true");

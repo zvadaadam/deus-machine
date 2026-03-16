@@ -48,7 +48,7 @@ export interface InitWorkspaceParams {
   id: string;
   cwd: string;
   ghToken?: string;
-  claudeEnvVars?: string;
+  providerEnvVars?: string;
 }
 
 export interface ContextUsageParams {
