@@ -1,0 +1,21 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "cece053fedad",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/claude/claude-handler.ts",
+    "sidecar/agents/registry.ts",
+    "sidecar/index.ts",
+    "src/features/sidebar/model/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ce/ce053fedad/0/metadata.json",
+      "transcript": "/ce/ce053fedad/0/full.jsonl",
+      "content_hash": "/ce/ce053fedad/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
