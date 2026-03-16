@@ -70,8 +70,8 @@ export interface AgentRpcContext {
   >;
 }
 
-/** Unified response function shape used by handlers. */
-type RespondFn = (_id: unknown, result: unknown) => Promise<void>;
+/** Response function shape used by handlers. */
+type RespondFn = (result: unknown) => void;
 
 /**
  * Hook that handles agent-initiated RPC requests from the agent-server.
@@ -132,7 +132,7 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleExitPlanMode = useCallback(
-    (_id: unknown, params: Record<string, unknown>, wsRequestId: string) => {
+    (params: Record<string, unknown>, wsRequestId: string) => {
       const sessionId = params.sessionId as string;
       if (!sessionId) return;
 
@@ -159,7 +159,7 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleAskUserQuestion = useCallback(
-    (_id: unknown, params: Record<string, unknown>, wsRequestId: string) => {
+    (params: Record<string, unknown>, wsRequestId: string) => {
       const sessionId = params.sessionId as string;
       const questions = params.questions as AskQuestionRequest["questions"];
       if (!sessionId || !Array.isArray(questions)) return;
@@ -191,62 +191,54 @@ export function useAgentRpcHandler(
   // getDiff: auto-respond using Tauri git IPC
   // ============================================================================
 
-  const handleGetDiff = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
-      const sessionId = params.sessionId as string;
-      const file = params.file as string | undefined;
-      const stat = params.stat as boolean | undefined;
+  const handleGetDiff = useCallback(async (params: Record<string, unknown>, respond: RespondFn) => {
+    const sessionId = params.sessionId as string;
+    const file = params.file as string | undefined;
+    const stat = params.stat as boolean | undefined;
 
-      const ws = contextRef.current.sessionWorkspaces.get(sessionId);
-      if (!ws) {
-        // No workspace context for this session — respond with a descriptive error
-        await respond(null, { error: `No workspace context for session ${sessionId}` });
-        return;
-      }
+    const ws = contextRef.current.sessionWorkspaces.get(sessionId);
+    if (!ws) {
+      // No workspace context for this session — respond with a descriptive error
+      respond({ error: `No workspace context for session ${sessionId}` });
+      return;
+    }
 
-      try {
-        if (file) {
-          // Single-file diff
-          const result = await gitDiffFile(
-            ws.workspacePath,
-            ws.parentBranch,
-            ws.defaultBranch,
-            file
-          );
-          await respond(null, { diff: result.diff });
-        } else if (stat) {
-          // File list with stats
-          const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
-          const statText = result.files
-            .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
-            .join("\n");
-          await respond(null, { diff: statText });
-        } else {
-          // All changed files list (summary, not full patch — patches can be huge)
-          const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
-          const fileList = result.files.map((f) => f.file).join("\n");
-          await respond(null, { diff: fileList });
-        }
-      } catch (err: unknown) {
-        console.error("[AgentRPC] getDiff failed:", err);
-        await respond(null, { error: getErrorMessage(err) });
+    try {
+      if (file) {
+        // Single-file diff
+        const result = await gitDiffFile(ws.workspacePath, ws.parentBranch, ws.defaultBranch, file);
+        respond({ diff: result.diff });
+      } else if (stat) {
+        // File list with stats
+        const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
+        const statText = result.files
+          .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
+          .join("\n");
+        respond({ diff: statText });
+      } else {
+        // All changed files list (summary, not full patch — patches can be huge)
+        const result = await gitDiffFiles(ws.workspacePath, ws.parentBranch, ws.defaultBranch);
+        const fileList = result.files.map((f) => f.file).join("\n");
+        respond({ diff: fileList });
       }
-    },
-    []
-  );
+    } catch (err: unknown) {
+      console.error("[AgentRPC] getDiff failed:", err);
+      respond({ error: getErrorMessage(err) });
+    }
+  }, []);
 
   // ============================================================================
   // diffComment: auto-respond with success (comments stored for future UI)
   // ============================================================================
 
   const handleDiffComment = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       // Comments from the agent are logged but not yet surfaced in the UI.
       // Respond with success so the agent can continue; a future PR adds the UI.
       if (import.meta.env.DEV) {
         console.log("[AgentRPC] diffComment received:", params.comments);
       }
-      await respond(null, { success: true });
+      respond({ success: true });
     },
     []
   );
@@ -256,7 +248,7 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleGetTerminalOutput = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       // Terminal output reading via Tauri IPC.
       // The Rust side exposes get_terminal_output (if implemented) or we fall back
       // to a "no terminal output available" response so the agent can continue.
@@ -269,14 +261,14 @@ export function useAgentRpcHandler(
           maxLines,
         });
 
-        await respond(null, {
+        respond({
           output: output ?? "",
           source: "terminal",
           isRunning: false,
         });
       } catch {
         // Rust command not yet implemented or PTY not active — degrade gracefully
-        await respond(null, {
+        respond({
           output: "",
           source: "none",
           isRunning: false,
@@ -339,17 +331,12 @@ export function useAgentRpcHandler(
       console.log("[AgentRPC] Received request (WS):", method, "requestId:", requestId);
     }
 
-    // Wrap respond into the RespondFn shape that handlers expect
-    const wsRespond: RespondFn = async (_id: unknown, result: unknown) => {
-      respond(result);
-    };
-
     match(method)
-      .with("exitPlanMode", () => handleExitPlanMode(requestId, params, requestId))
-      .with("askUserQuestion", () => handleAskUserQuestion(requestId, params, requestId))
-      .with("getDiff", () => handleGetDiff(requestId, params, wsRespond))
-      .with("diffComment", () => handleDiffComment(requestId, params, wsRespond))
-      .with("getTerminalOutput", () => handleGetTerminalOutput(requestId, params, wsRespond))
+      .with("exitPlanMode", () => handleExitPlanMode(params, requestId))
+      .with("askUserQuestion", () => handleAskUserQuestion(params, requestId))
+      .with("getDiff", () => handleGetDiff(params, respond))
+      .with("diffComment", () => handleDiffComment(params, respond))
+      .with("getTerminalOutput", () => handleGetTerminalOutput(params, respond))
       .otherwise(() => {
         // Not an agent-UI method — browser RPC handler or other handler will claim it
       });

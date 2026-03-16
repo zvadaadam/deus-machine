@@ -29,8 +29,8 @@ export interface SimulatorRpcCallbacks {
   getSimulators: () => SimulatorInfo[] | null;
 }
 
-/** Unified response function shape used by handlers. */
-type RespondFn = (id: unknown, result: unknown) => Promise<void>;
+/** Response function for tool request handlers. */
+type RespondFn = (result: unknown) => void;
 
 /**
  * Listens for tool:request events via WebSocket with simulator method names,
@@ -54,7 +54,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- Screenshot: capture JPEG from ObjC bridge, return as base64 -----------
 
   const handleSimScreenshot = useCallback(
-    async (_id: unknown, _params: Record<string, unknown>, respond: RespondFn) => {
+    async (_params: Record<string, unknown>, respond: RespondFn) => {
       // Pin workspaceId at handler entry to prevent cross-workspace leakage
       // if the ref changes between awaits.
       const workspaceId = workspaceIdRef.current;
@@ -71,9 +71,9 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         }
         const base64 = btoa(binary);
 
-        await respond(null, { image: base64 });
+        respond({ image: base64 });
       } catch (err: unknown) {
-        await respond(null, {
+        respond({
           image: "",
           error: getErrorMessage(err),
         });
@@ -84,29 +84,26 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   // -- Tap: single touch began + ended at coordinates -----------------------
 
-  const handleSimTap = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
-      const workspaceId = workspaceIdRef.current;
-      try {
-        const x = params.x as number;
-        const y = params.y as number;
+  const handleSimTap = useCallback(async (params: Record<string, unknown>, respond: RespondFn) => {
+    const workspaceId = workspaceIdRef.current;
+    try {
+      const x = params.x as number;
+      const y = params.y as number;
 
-        // Simulate a full tap: began → ended
-        await simulatorService.sendTouch(workspaceId, x, y, "began");
-        await simulatorService.sendTouch(workspaceId, x, y, "ended");
+      // Simulate a full tap: began → ended
+      await simulatorService.sendTouch(workspaceId, x, y, "began");
+      await simulatorService.sendTouch(workspaceId, x, y, "ended");
 
-        await respond(null, { success: true });
-      } catch (err: unknown) {
-        await respond(null, { success: false, error: getErrorMessage(err) });
-      }
-    },
-    []
-  );
+      respond({ success: true });
+    } catch (err: unknown) {
+      respond({ success: false, error: getErrorMessage(err) });
+    }
+  }, []);
 
   // -- Swipe: touch began → sequence of moved → ended ----------------------
 
   const handleSimSwipe = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const startX = params.startX as number;
@@ -131,9 +128,9 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
         await simulatorService.sendTouch(workspaceId, endX, endY, "ended");
 
-        await respond(null, { success: true });
+        respond({ success: true });
       } catch (err: unknown) {
-        await respond(null, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
     []
@@ -142,7 +139,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- Type text: send each character as a key press ------------------------
 
   const handleSimTypeText = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const text = params.text as string;
@@ -174,15 +171,15 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         }
 
         if (unsupported.length > 0) {
-          await respond(null, {
+          respond({
             success: true,
             error: `Unsupported characters skipped: ${[...new Set(unsupported)].join("")}`,
           });
         } else {
-          await respond(null, { success: true });
+          respond({ success: true });
         }
       } catch (err: unknown) {
-        await respond(null, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
     []
@@ -191,7 +188,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- Press key: single key down + up -------------------------------------
 
   const handleSimPressKey = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const keycode = params.keycode as number;
@@ -206,9 +203,9 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           await simulatorService.sendKey(workspaceId, keycode, "up");
         }
 
-        await respond(null, { success: true });
+        respond({ success: true });
       } catch (err: unknown) {
-        await respond(null, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
@@ -220,19 +217,19 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- Build & Run: xcodebuild + install + launch --------------------------
 
   const handleSimBuildAndRun = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const workspacePath = params.workspacePath as string;
         const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
 
-        await respond(null, {
+        respond({
           success: true,
           bundleId: app.bundle_id,
           appName: app.name,
         });
       } catch (err: unknown) {
-        await respond(null, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
@@ -244,7 +241,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- List devices: return cached simulator list --------------------------
 
   const handleSimListDevices = useCallback(
-    async (_id: unknown, _params: Record<string, unknown>, respond: RespondFn) => {
+    async (_params: Record<string, unknown>, respond: RespondFn) => {
       try {
         const sims = getSimulatorsRef.current();
         if (!sims) {
@@ -258,7 +255,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             deviceType: s.device_type,
             isAvailable: s.is_available,
           }));
-          await respond(null, { devices });
+          respond({ devices });
           return;
         }
 
@@ -270,9 +267,9 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           deviceType: s.device_type,
           isAvailable: s.is_available,
         }));
-        await respond(null, { devices });
+        respond({ devices });
       } catch (err: unknown) {
-        await respond(null, {
+        respond({
           devices: [],
           error: getErrorMessage(err),
         });
@@ -284,11 +281,11 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // -- Start simulator: boot + stream via panel callback ------------------
 
   const handleSimStart = useCallback(
-    async (_id: unknown, params: Record<string, unknown>, respond: RespondFn) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       try {
         const udid = params.udid as string;
         if (!udid) {
-          await respond(null, {
+          respond({
             success: false,
             error: "Missing udid parameter. Use SimulatorListDevices to find available simulators.",
           });
@@ -297,21 +294,21 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
         const stream = await onBootSimulatorRef.current(udid);
         if (!stream) {
-          await respond(null, {
+          respond({
             success: false,
             error: "Failed to boot simulator. Check that the UDID is valid.",
           });
           return;
         }
 
-        await respond(null, {
+        respond({
           success: true,
           url: stream.url,
           port: stream.port,
           hidAvailable: stream.hid_available,
         });
       } catch (err: unknown) {
-        await respond(null, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
@@ -322,25 +319,20 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   // -- WS event listener (agent-server → backend → q:event tool:request) --
 
-  useWsToolRequest((method, requestId, params, respond, respondError) => {
+  useWsToolRequest((method, requestId, params, respond, _respondError) => {
     if (import.meta.env.DEV) {
       console.log("[SimulatorRPC] Received request (WS):", method, "requestId:", requestId);
     }
 
-    // Wrap respond into the RespondFn shape that handlers expect
-    const wsRespond: RespondFn = async (_id: unknown, result: unknown) => {
-      respond(result);
-    };
-
     match(method)
-      .with("simListDevices", () => handleSimListDevices(requestId, params, wsRespond))
-      .with("simStart", () => handleSimStart(requestId, params, wsRespond))
-      .with("simScreenshot", () => handleSimScreenshot(requestId, params, wsRespond))
-      .with("simTap", () => handleSimTap(requestId, params, wsRespond))
-      .with("simSwipe", () => handleSimSwipe(requestId, params, wsRespond))
-      .with("simTypeText", () => handleSimTypeText(requestId, params, wsRespond))
-      .with("simPressKey", () => handleSimPressKey(requestId, params, wsRespond))
-      .with("simBuildAndRun", () => handleSimBuildAndRun(requestId, params, wsRespond))
+      .with("simListDevices", () => handleSimListDevices(params, respond))
+      .with("simStart", () => handleSimStart(params, respond))
+      .with("simScreenshot", () => handleSimScreenshot(params, respond))
+      .with("simTap", () => handleSimTap(params, respond))
+      .with("simSwipe", () => handleSimSwipe(params, respond))
+      .with("simTypeText", () => handleSimTypeText(params, respond))
+      .with("simPressKey", () => handleSimPressKey(params, respond))
+      .with("simBuildAndRun", () => handleSimBuildAndRun(params, respond))
       .otherwise(() => {
         // Unknown "sim*" method → tell the agent-server it doesn't exist.
         // Non-sim methods are silently ignored (other handlers pick them up).
