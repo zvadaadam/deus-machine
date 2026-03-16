@@ -1,0 +1,1 @@
+can u please explore now how the storing tot he dtaabse works in the backend and howw e enfore teh mesage straction that is tored who does the transformation?
