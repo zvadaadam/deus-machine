@@ -24,13 +24,11 @@ import {
   getWorkspacesByRepo,
   getWorkspacesBySessionIds,
   getAllRepositorySummaries,
-  getSessionRaw,
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { writeUserMessage } from "./message-writer";
-import { persistSessionError } from "./agent-persistence";
 import { getConnection } from "./ws.service";
 import { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";
+import { runCommand, setAgentForwarder } from "./command-handlers";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,
@@ -341,7 +339,7 @@ function handleCommand(connectionId: string, msg: CommandFrameInput): void {
   const { id, command, params } = msg;
 
   try {
-    const result = runCommand(command, params);
+    const result = runCommand(toCommandName(command), params);
     sendFrame(connectionId, {
       type: "q:command_ack",
       id,
@@ -381,120 +379,9 @@ function handleToolResponse(msg: QueryParams): void {
   }
 }
 
-// ---- Agent Forwarding ----
-
-type ForwardToAgentFn = (params: {
-  sessionId: string;
-  agentType: string;
-  prompt: string;
-  options: Record<string, unknown>;
-}) => Promise<{ accepted: boolean; reason?: string }>;
-
-type CancelAgentFn = (params: { sessionId: string }) => Promise<void>;
-
-let forwardToAgent: ForwardToAgentFn | null = null;
-let cancelAgent: CancelAgentFn | null = null;
-
-/** Register the agent client forwarding callbacks (called from server.ts) */
-export function setAgentForwarder(forward: ForwardToAgentFn, cancel: CancelAgentFn): void {
-  forwardToAgent = forward;
-  cancelAgent = cancel;
-}
-
-// ---- Command Dispatch ----
-
-function runCommand(command: string, params: QueryParams): { commandId?: string } {
-  const typedCommand = toCommandName(command);
-
-  return match(typedCommand)
-    .with("sendMessage", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      const content = readStringParam(params, "content");
-      const model = readStringParam(params, "model");
-      if (!sessionId || !content) {
-        throw new Error("sendMessage requires sessionId and content");
-      }
-
-      const result = writeUserMessage(sessionId, content, model);
-      if (!result.success) throw new Error(result.error);
-      invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
-
-      // Forward to agent-server to start the turn (fire-and-forget for responsiveness).
-      // The ACK has already been sent, so handle rejection asynchronously by
-      // persisting a session error — the frontend learns via WS subscription.
-      if (forwardToAgent) {
-        const agentType = readStringParam(params, "agentType") || "claude";
-        forwardToAgent({
-          sessionId,
-          agentType,
-          prompt: content,
-          options: {
-            cwd: readStringParam(params, "cwd") || "",
-            model,
-            maxThinkingTokens: params.maxThinkingTokens as number | undefined,
-            maxTurns: params.maxTurns as number | undefined,
-            turnId: readStringParam(params, "turnId"),
-            permissionMode: readStringParam(params, "permissionMode"),
-            providerEnvVars: readStringParam(params, "providerEnvVars"),
-            ghToken: readStringParam(params, "ghToken"),
-            opendevsEnv: params.opendevsEnv as Record<string, string> | undefined,
-            additionalDirectories: params.additionalDirectories as string[] | undefined,
-            chromeEnabled: params.chromeEnabled as boolean | undefined,
-            strictDataPrivacy: params.strictDataPrivacy as boolean | undefined,
-            shouldResetGenerator: params.shouldResetGenerator as boolean | undefined,
-            resume: readStringParam(params, "resume"),
-            resumeSessionAt: readStringParam(params, "resumeSessionAt"),
-          },
-        }).then((response) => {
-          if (!response.accepted) {
-            const reason = response.reason || "Agent rejected the message";
-            console.error(`[QueryEngine] Agent rejected sendMessage for session=${sessionId}: ${reason}`);
-            persistSessionError({
-              type: "session.error",
-              sessionId,
-              agentType: agentType as "claude",
-              error: reason,
-              category: "internal",
-            });
-            invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-          }
-        }).catch((err) => {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          console.error("[QueryEngine] Failed to forward to agent-server:", errorMsg);
-          persistSessionError({
-            type: "session.error",
-            sessionId,
-            agentType: agentType as "claude",
-            error: `Agent server communication failed: ${errorMsg}`,
-            category: "internal",
-          });
-          invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-        });
-      }
-
-      return { commandId: result.messageId };
-    })
-    .with("stopSession", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      if (!sessionId) throw new Error("stopSession requires sessionId");
-
-      // Forward cancel to agent-server
-      if (cancelAgent) {
-        cancelAgent({ sessionId }).catch((err) => {
-          console.error("[QueryEngine] Failed to cancel on agent-server:", err);
-        });
-      }
-
-      const db = getDatabase();
-      const session = getSessionRaw(db, sessionId);
-      if (!session) throw new Error("Session not found");
-
-      db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
-      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-      return {};
-    })
-    .exhaustive();
-}
+// Re-export setAgentForwarder so server.ts can register callbacks via query-engine
+// (preserves existing import paths — server.ts imports from query-engine)
+export { setAgentForwarder } from "./command-handlers";
 
 // ---- Query Dispatch ----
 
