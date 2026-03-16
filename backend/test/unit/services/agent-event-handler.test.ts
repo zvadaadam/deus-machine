@@ -52,16 +52,17 @@ vi.mock('../../../src/services/tool-relay', () => ({
   relay: mockRelay,
 }));
 
-vi.mock('../../../src/services/agent-service', () => ({
-  respondToAgent: (...args: any[]) => mockRespondToAgent(...args),
-}));
-
 // ============================================================================
 // Import after mocks
 // ============================================================================
 
-import { handleAgentEvent } from '../../../src/services/agent-event-handler';
+import { createAgentEventHandler } from '../../../src/services/agent-event-handler';
 import type { AgentEvent } from '../../../../shared/agent-events';
+
+// Create event handler with injected mock (same pattern as production)
+const handleAgentEvent = createAgentEventHandler({
+  respondToAgent: mockRespondToAgent,
+});
 
 // ============================================================================
 // Tests
