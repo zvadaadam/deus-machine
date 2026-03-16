@@ -92,7 +92,7 @@ if (agentServerUrl) {
   // Register agent forwarding so sendMessage commands are forwarded to the agent-server
   setAgentForwarder(
     (params) => agentClient!.sendTurnStart(params),
-    (params) => agentClient!.sendTurnCancel(params),
+    (params) => agentClient!.sendSessionStop(params),
   );
 
   agentClient.connect();
