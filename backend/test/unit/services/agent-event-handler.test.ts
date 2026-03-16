@@ -16,6 +16,7 @@ const {
   mockPersistAgentSessionId,
   mockInvalidate,
   mockRelay,
+  mockRespondToAgent,
 } = vi.hoisted(() => ({
   mockPersistAssistantMessage: vi.fn(() => ({ ok: true, value: 'msg-id' })),
   mockPersistToolResultMessage: vi.fn(() => ({ ok: true, value: 'msg-id' })),
@@ -28,6 +29,7 @@ const {
   mockPersistAgentSessionId: vi.fn(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn(),
   mockRelay: vi.fn(() => Promise.resolve({ diff: 'ok' })),
+  mockRespondToAgent: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../../../src/services/agent-persistence', () => ({
@@ -50,11 +52,15 @@ vi.mock('../../../src/services/tool-relay', () => ({
   relay: mockRelay,
 }));
 
+vi.mock('../../../src/services/agent-service', () => ({
+  respondToAgent: (...args: any[]) => mockRespondToAgent(...args),
+}));
+
 // ============================================================================
 // Import after mocks
 // ============================================================================
 
-import { handleAgentEvent, setRespondToAgent } from '../../../src/services/agent-event-handler';
+import { handleAgentEvent } from '../../../src/services/agent-event-handler';
 import type { AgentEvent } from '../../../../shared/agent-events';
 
 // ============================================================================
@@ -306,31 +312,24 @@ describe('handleAgentEvent', () => {
       timeoutMs: 30000,
     };
 
-    it('calls relay() with the event when respondToAgent is registered', () => {
-      setRespondToAgent(vi.fn().mockResolvedValue(undefined));
+    it('calls relay() with the event', () => {
       handleAgentEvent(event);
-
       expect(mockRelay).toHaveBeenCalledWith(event);
     });
 
     it('does not persist or invalidate', () => {
-      setRespondToAgent(vi.fn().mockResolvedValue(undefined));
       handleAgentEvent(event);
-
       expect(mockInvalidate).not.toHaveBeenCalled();
       expect(mockPersistAssistantMessage).not.toHaveBeenCalled();
     });
 
-    it('sends result back to agent-server via respondToAgent when relay resolves', async () => {
-      const mockRespond = vi.fn().mockResolvedValue(undefined);
-      setRespondToAgent(mockRespond);
+    it('sends result back to agent-server via agentService.respondToAgent when relay resolves', async () => {
       mockRelay.mockResolvedValue({ diff: 'file.ts: +10 -5' });
 
       handleAgentEvent(event);
 
-      // Let the async relay complete
       await vi.waitFor(() => {
-        expect(mockRespond).toHaveBeenCalledWith({
+        expect(mockRespondToAgent).toHaveBeenCalledWith({
           sessionId: 'sess-1',
           requestId: 'treq-1',
           result: { diff: 'file.ts: +10 -5' },
@@ -339,26 +338,17 @@ describe('handleAgentEvent', () => {
     });
 
     it('sends error result back to agent-server when relay rejects', async () => {
-      const mockRespond = vi.fn().mockResolvedValue(undefined);
-      setRespondToAgent(mockRespond);
       mockRelay.mockRejectedValue(new Error('Tool relay timed out'));
 
       handleAgentEvent(event);
 
-      // Let the async relay complete
       await vi.waitFor(() => {
-        expect(mockRespond).toHaveBeenCalledWith({
+        expect(mockRespondToAgent).toHaveBeenCalledWith({
           sessionId: 'sess-1',
           requestId: 'treq-1',
           result: { error: 'Tool relay timed out' },
         });
       });
-    });
-
-    it('does not throw when respondToAgent is not registered', () => {
-      setRespondToAgent(null as any);
-      // Should not throw — just logs an error
-      expect(() => handleAgentEvent(event)).not.toThrow();
     });
   });
 

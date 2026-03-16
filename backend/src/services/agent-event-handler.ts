@@ -14,6 +14,7 @@ import type { AgentEvent } from "../../../shared/agent-events";
 import type { QueryResource } from "../../../shared/types/query-protocol";
 import { invalidate } from "./query-engine";
 import { relay } from "./tool-relay";
+import * as agentService from "./agent-service";
 import {
   persistAssistantMessage,
   persistToolResultMessage,
@@ -25,25 +26,6 @@ import {
   persistSessionCancelled,
   persistAgentSessionId,
 } from "./agent-persistence";
-
-// ---- Tool relay callback ----
-
-/**
- * Callback to send a tool response back to the agent-server.
- * Registered by server.ts after the AgentClient is created.
- * Signature matches agentClient.sendTurnRespond().
- */
-type RespondToAgentFn = (params: { sessionId: string; requestId: string; result: unknown }) => Promise<void>;
-
-let respondToAgent: RespondToAgentFn | null = null;
-
-/**
- * Register the callback used to send tool relay results back to the agent-server.
- * Called once at startup from server.ts.
- */
-export function setRespondToAgent(fn: RespondToAgentFn): void {
-  respondToAgent = fn;
-}
 
 /**
  * Process a single canonical agent event.
@@ -173,22 +155,17 @@ export function handleAgentEvent(event: AgentEvent): void {
 async function relayToolRequest(event: AgentEvent & { type: "tool.request" }): Promise<void> {
   const { sessionId, requestId, method } = event;
 
-  if (!respondToAgent) {
-    console.error(`[AgentEvent] tool.request: no respondToAgent callback registered (requestId=${requestId})`);
-    return;
-  }
-
   try {
     const result = await relay(event);
 
     // Send the frontend's result back to the agent-server
-    await respondToAgent({ sessionId, requestId, result });
+    await agentService.respondToAgent({ sessionId, requestId, result });
     console.log(`[AgentEvent] tool.request resolved: requestId=${requestId} method=${method}`);
   } catch (err) {
     console.error(`[AgentEvent] tool.request failed: requestId=${requestId} method=${method}`, err);
     // Send an error result back so the agent doesn't hang waiting
     try {
-      await respondToAgent({
+      await agentService.respondToAgent({
         sessionId,
         requestId,
         result: { error: err instanceof Error ? err.message : "Tool relay failed" },

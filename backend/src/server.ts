@@ -5,10 +5,7 @@ import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 import { closeAll as closeAllWsConnections } from './services/ws.service';
 import { ensureRelayConnected, disconnectFromRelay } from './services/relay.service';
 import { getSetting } from './services/settings.service';
-import { AgentClient } from './services/agent-client';
-import { handleAgentEvent, setRespondToAgent } from './services/agent-event-handler';
-import { setAgentForwarder } from './services/query-engine';
-import { relay as relayToolRequest } from './services/tool-relay';
+import * as agentService from './services/agent-service';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -73,42 +70,11 @@ if (remoteEnabled === true) {
 // Connect to agent-server (sidecar) if AGENT_SERVER_URL is set.
 // The Rust process manager sets this env var after spawning the agent-server
 // and parsing its LISTEN_URL=ws://... stdout line.
-let agentClient: AgentClient | null = null;
+// Initialize the agent service if the agent-server URL is available.
+// The Rust process manager sets AGENT_SERVER_URL after spawning the sidecar.
 const agentServerUrl = process.env.AGENT_SERVER_URL;
 if (agentServerUrl) {
-  agentClient = new AgentClient({
-    url: agentServerUrl,
-    onEvent: handleAgentEvent,
-    onConnected: (agents) => {
-      console.log(`[AgentClient] Connected to agent-server, agents: [${agents.map((a) => a.type).join(', ')}]`);
-    },
-    onDisconnected: () => {
-      console.log('[AgentClient] Disconnected from agent-server');
-    },
-    // Relay sidecar's frontend-facing RPC requests (browser, sim, diff, plan)
-    // to the frontend via the tool-relay pipeline.
-    onFrontendRpc: async (requestId, sessionId, method, params) => {
-      return relayToolRequest({
-        type: "tool.request",
-        requestId,
-        sessionId,
-        method,
-        params,
-        timeoutMs: 120_000,
-      });
-    },
-  });
-
-  // Register the respond callback so tool relay can send results back to the agent-server
-  setRespondToAgent((params) => agentClient!.sendTurnRespond(params));
-
-  // Register agent forwarding so sendMessage commands are forwarded to the agent-server
-  setAgentForwarder(
-    (params) => agentClient!.sendTurnStart(params),
-    (params) => agentClient!.sendSessionStop(params),
-  );
-
-  agentClient.connect();
+  agentService.init(agentServerUrl);
 }
 
 // Global error handlers
