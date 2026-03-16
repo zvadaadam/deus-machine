@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d1315760a4d7",
+  "session_id": "19b63c4a-9036-4a36-b94a-fcf82bfafc7a",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-16T23:21:53.821844Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "src/features/browser/automation/useBrowserRpcHandler.ts",
+    "src/features/session/hooks/useAgentRpcHandler.ts",
+    "src/features/simulator/automation/useSimulatorRpcHandler.ts",
+    "src/shared/hooks/useWsToolRequest.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4c1e05bf0ce3",
+  "initial_attribution": {
+    "calculated_at": "2026-03-16T23:21:53.821377Z",
+    "agent_lines": 101,
+    "human_added": 0,
+    "human_modified": 45,
+    "human_removed": 11,
+    "total_committed": 146,
+    "agent_percentage": 69.17808219178082
+  }
+}
