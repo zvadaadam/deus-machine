@@ -1,0 +1,23 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "5c9b3dcb20a1",
+  "session_id": "39c8bfe1-81d2-4861-a58b-bdedeba88f88",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-16T21:15:06.147655Z",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "164fde1e0718",
+  "token_usage": {
+    "input_tokens": 16612,
+    "cache_creation_tokens": 2994947,
+    "cache_read_tokens": 183751645,
+    "output_tokens": 249987,
+    "api_call_count": 739
+  },
+  "session_metrics": {
+    "turn_count": 82
+  }
+}
