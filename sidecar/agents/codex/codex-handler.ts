@@ -1,7 +1,8 @@
 // sidecar/agents/codex/codex-handler.ts
 // CodexAgentHandler — implements AgentHandler for the OpenAI Codex SDK.
-// Mirrors the Claude handler architecture: streaming events, DB persistence,
-// frontend notifications via FrontendClient.
+// Mirrors the Claude handler architecture: streaming events, canonical event
+// emission, and frontend notifications via EventBroadcaster.
+// The agent-server is stateless — all DB writes handled by the backend.
 
 // Type-only imports are erased at compile time — safe for CJS bundling.
 // The runtime Codex class is loaded via dynamic import() in processQuery()
@@ -9,22 +10,13 @@
 // init, which can't be shimmed in esbuild's CJS output.
 import type { ThreadItem, ThreadOptions } from "@openai/codex-sdk";
 import { match, P } from "ts-pattern";
-import { FrontendClient } from "../../frontend-client";
-import { classifyError } from "../error-classifier";
-import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
-import { saveAssistantMessage, updateSessionStatus } from "../../db/session-writer";
-import type { AgentHandler, QueryOptions } from "../agent-handler";
-import { buildAgentEnvironment } from "../env-builder";
-import { buildWorkspaceContext } from "../workspace-context";
+import { EventBroadcaster } from "../../event-broadcaster";
+import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
+import type { AgentCapabilities, AgentHandler, QueryOptions } from "../registry";
+import { buildAgentEnvironment, buildWorkspaceContext } from "../environment";
 import { initializeCodex, blockIfNotInitialized, getCodexExecutablePath } from "./codex-discovery";
 import { resolveCodexModel } from "./codex-models";
-import {
-  getCodexSession,
-  setCodexSession,
-  deleteCodexSession,
-  abortCodexSession,
-  type CodexSessionState,
-} from "./codex-session";
+import { codexSessions, abortCodexSession, type CodexSessionState } from "./codex-session";
 
 // ============================================================================
 // Message Format Mapping
@@ -126,16 +118,25 @@ function mapItemToContentBlocks(item: ThreadItem): unknown[] {
 
 export class CodexAgentHandler implements AgentHandler {
   readonly agentType = "codex" as const;
+  readonly capabilities: AgentCapabilities = {
+    auth: false,
+    workspaceInit: false,
+    contextUsage: false,
+    permissionMode: false,
+    modelSwitch: "unsupported",
+    multiTurn: false,
+    sessionResume: false,
+  };
 
   initialize(): { success: boolean; error?: string } {
     return initializeCodex();
   }
 
-  async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
+  async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
     console.log("Handling Codex query request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const existingSession = getCodexSession(sessionId);
+    const existingSession = codexSessions.get(sessionId);
 
     // If a query is already running, we can't send a new one (Codex exec is not multi-turn streaming)
     if (existingSession?.isRunning) {
@@ -146,7 +147,7 @@ export class CodexAgentHandler implements AgentHandler {
     void this.processQuery(sessionId, prompt, options, existingSession?.threadId);
   }
 
-  async handleCancel(sessionId: string): Promise<void> {
+  async cancel(sessionId: string): Promise<void> {
     console.log("Handling Codex cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
@@ -155,10 +156,10 @@ export class CodexAgentHandler implements AgentHandler {
     abortCodexSession(sessionId);
   }
 
-  handleReset(sessionId: string): void {
+  reset(sessionId: string): void {
     console.log(`Handling reset generator request for Codex session: ${sessionId}`);
     abortCodexSession(sessionId);
-    deleteCodexSession(sessionId);
+    codexSessions.delete(sessionId);
   }
 
   // ==========================================================================
@@ -181,12 +182,12 @@ export class CodexAgentHandler implements AgentHandler {
       cwd: options.cwd,
       isRunning: true,
     };
-    setCodexSession(sessionId, session);
+    codexSessions.set(sessionId, session);
 
     try {
       // Build environment (reuse shared env builder)
       const env = buildAgentEnvironment({
-        claudeEnvVars: options?.claudeEnvVars,
+        providerEnvVars: options?.providerEnvVars,
         opendevsEnv: options?.opendevsEnv,
         ghToken: options?.ghToken,
       });
@@ -236,7 +237,6 @@ export class CodexAgentHandler implements AgentHandler {
         signal: abortController.signal,
       });
 
-
       for await (const event of events) {
         if (abortController.signal.aborted) break;
 
@@ -249,37 +249,36 @@ export class CodexAgentHandler implements AgentHandler {
             const blocks = mapItemToContentBlocks(e.item);
             if (blocks.length === 0) return;
 
+            // Stable ID per item — same across started/updated/completed phases
+            const msgId = `codex-${e.item.id}`;
+
             // Send real-time update to frontend (every event, not just completed)
-            FrontendClient.sendMessage({
+            EventBroadcaster.sendMessage({
               id: sessionId,
               type: "message",
               agentType: "codex",
               data: {
                 type: "assistant" as const,
                 message: {
-                  id: `codex-${e.item.id}-${e.type}`,
+                  id: msgId,
                   role: "assistant" as const,
                   content: blocks,
                 },
               },
             });
 
-            // Persist completed items to database
+            // Only emit canonical event on item.completed to avoid duplicate DB records
             if (e.type === "item.completed") {
-              const writeResult = saveAssistantMessage(
+              EventBroadcaster.emitAssistantMessage(
                 sessionId,
+                "codex",
                 {
-                  id: `codex-${e.item.id}`,
+                  id: msgId,
                   role: "assistant",
                   content: blocks,
                 },
                 model
               );
-              if (!writeResult.ok) {
-                console.error(
-                  `[${queryId}] DB write failed for assistant message: ${writeResult.error}`
-                );
-              }
             }
           })
           .with({ type: "turn.completed" }, (e) => {
@@ -287,7 +286,7 @@ export class CodexAgentHandler implements AgentHandler {
               `[${queryId}] Turn completed. Tokens: in=${e.usage.input_tokens}, out=${e.usage.output_tokens}`
             );
 
-            FrontendClient.sendMessage({
+            EventBroadcaster.sendMessage({
               id: sessionId,
               type: "message",
               agentType: "codex",
@@ -298,12 +297,14 @@ export class CodexAgentHandler implements AgentHandler {
               },
             });
 
-            updateSessionStatus(sessionId, "idle");
+            // Emit canonical events — backend handles DB status update
+            EventBroadcaster.emitMessageResult(sessionId, "codex", "success", e.usage);
+            EventBroadcaster.emitSessionIdle(sessionId, "codex");
           })
           .with({ type: "turn.failed" }, (e) => {
             const classified = classifyError(e.error);
             console.error(`[${queryId}] Turn failed [${classified.category}]:`, classified.message);
-            notifyAndRecordError(sessionId, "codex", classified);
+            handleQueryError(sessionId, "codex", e.error);
           })
           .with({ type: "error" }, (e) => {
             const classified = classifyError(e);
@@ -311,7 +312,7 @@ export class CodexAgentHandler implements AgentHandler {
               `[${queryId}] Stream error [${classified.category}]:`,
               classified.message
             );
-            notifyAndRecordError(sessionId, "codex", classified);
+            handleQueryError(sessionId, "codex", e);
           })
           .with({ type: "turn.started" }, () => {
             // Informational — no action needed
@@ -324,15 +325,13 @@ export class CodexAgentHandler implements AgentHandler {
 
       // Only update status if this processQuery still owns the session —
       // a rapid re-query can replace the session before we reach this point.
-      const currentSession = getCodexSession(sessionId);
-      if (currentSession === session) {
+      if (codexSessions.owns(sessionId, session)) {
         if (abortController.signal.aborted) {
-          // Abort break path: record cancellation + notify frontend + set idle
-          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
-        } else if (currentSession.isRunning) {
-          // Normal completion if turn.completed wasn't received
-          updateSessionStatus(sessionId, "idle");
+          // Abort break path: notify frontend + emit canonical events
+          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
         }
+        // Note: no fallback idle emission here — turn.completed already emits it.
+        // Emitting again would give the backend duplicate terminal lifecycle events.
       }
 
       console.log(`[${queryId}] Codex session completed: ${sessionId}`);
@@ -340,33 +339,26 @@ export class CodexAgentHandler implements AgentHandler {
       const raw = classifyError(error);
       // Also treat abortController.signal.aborted as abort (codex-specific:
       // the error itself might not say "abort" but the signal was triggered)
-      const classified =
-        raw.category !== "abort" && abortController.signal.aborted
-          ? { ...raw, category: "abort" as const }
-          : raw;
+      const isAbort = raw.category === "abort" || abortController.signal.aborted;
       console.error(
-        `[${queryId}] Error in Codex query [${classified.category}]:`,
-        classified.message
+        `[${queryId}] Error in Codex query [${isAbort ? "abort" : raw.category}]:`,
+        raw.message
       );
 
       // Only update status if this processQuery still owns the session.
-      const ownsSession = getCodexSession(sessionId) === session;
-      const isAbort = classified.category === "abort";
-
-      if (ownsSession) {
+      if (codexSessions.owns(sessionId, session)) {
         if (isAbort) {
-          persistCancellation(sessionId, "codex", resolveCodexModel(options?.model));
+          handleCancellation(sessionId, "codex", resolveCodexModel(options?.model), true);
         } else {
-          notifyAndRecordError(sessionId, "codex", classified);
+          handleQueryError(sessionId, "codex", error);
         }
       }
     } finally {
       // Only clean up if this processQuery still owns the session.
       // A rapid re-query can replace the session before this finally runs;
       // blindly mutating would corrupt the new session's state.
-      const currentSession = getCodexSession(sessionId);
-      if (currentSession === session) {
-        currentSession.isRunning = false;
+      if (codexSessions.owns(sessionId, session)) {
+        session.isRunning = false;
       }
     }
   }

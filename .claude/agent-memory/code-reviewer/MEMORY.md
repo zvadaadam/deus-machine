@@ -161,7 +161,7 @@
   `offsetParent` null in most cases, but it is fragile; the `offsetWidth/offsetHeight === 0` check is more reliable).
 - `partialize` in the layout store strips terminal tab state (tabs/activeId/nextNum) — PTY processes
   don't survive app restarts; zombie tab metadata would reference dead processes.
-- The `updateTabs` helper in TerminalPanel captures `nextTerminalNum` from the *render* snapshot —
+- The `updateTabs` helper in TerminalPanel captures `nextTerminalNum` from the _render_ snapshot —
   stale-closure risk exists in the `pendingTask`/`pendingCommand` useEffect callbacks because
   `tabs` and `nextTerminalNum` are excluded from their deps arrays (suppressed with eslint-disable).
 
@@ -179,6 +179,27 @@
 - Terminal.tsx `initialCommand` is in the main effect dep array but only consumed once at mount.
   Safe in practice because `id` is globally unique (`crypto.randomUUID()`), so effect runs once per terminal.
   Cleaner to exclude `initialCommand` from deps and snapshot it inside the effect.
+
+## AgentHandler Interface Patterns (Confirmed)
+
+- Renamed methods: `handleQuery→query`, `handleCancel→cancel`, `handleReset→reset` (completed in #179)
+- `AgentCapabilities` struct added to `AgentHandler` interface — all 4 booleans required
+- Optional Claude-specific methods on `AgentHandler`: `auth?`, `initWorkspace?`, `getContextUsage?`,
+  `updatePermissionMode?` — guarded by optional-chaining at dispatch in `index.ts`
+- `ContextUsageParams` in `agent-handler.ts` has shape `{id, options: {cwd, claudeSessionId}}`.
+  The call site in `index.ts` passes `request` (type `Omit<ContextUsageRequest, "type">`) which has an
+  extra `agentType` field — TypeScript accepts this as structural subtyping, but it means
+  `ContextUsageParams` is effectively a subset alias of `ContextUsageRequest`.
+- `capabilities` field is declared but never read at dispatch sites — all dispatch guards use optional
+  chaining on the method itself (`agent?.auth`), not `agent.capabilities.auth`. The `capabilities`
+  object currently serves documentation purposes only (no runtime enforcement).
+- `updatePermissionMode` dispatch in `index.ts` silently no-ops when method is absent (no rejection),
+  while `auth` and `initWorkspace` reject with an error. Intentionally asymmetric: permission mode
+  is fire-and-forget; auth/workspaceInit are request-response.
+- Old method name stale references remain in: `claude-session.ts` JSDoc comments (lines 17, 49) and
+  three `console.log` strings in `claude-handler.ts` (lines 100, 119, 179). Not runtime bugs.
+- Test describe blocks in `claude-handler.test.ts` still use old names: `handleClaudeQuery` (line 144),
+  `handleClaudeCancel` (line 768), `handleClaudeUpdatePermissionMode` (line 798).
 
 ## See Also
 

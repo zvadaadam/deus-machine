@@ -7,16 +7,21 @@ import { getErrorMessage } from "../../../shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";
-import { classifyError } from "../error-classifier";
-import { persistCancellation, notifyAndRecordError } from "../query-lifecycle";
+import { classifyError, handleCancellation, handleQueryError } from "../lifecycle";
 import {
   deserializeMessage,
   processMessage,
   type ProcessMessageOptions,
 } from "./message-processor";
-import { lookupAgentSessionId } from "../../db/session-writer";
-import type { AgentHandler, QueryOptions } from "../agent-handler";
-import { buildAgentEnvironment, parseEnvString } from "../env-builder";
+import type {
+  AgentCapabilities,
+  AgentHandler,
+  AuthParams,
+  ContextUsageParams,
+  InitWorkspaceParams,
+  QueryOptions,
+} from "../registry";
+import { buildAgentEnvironment, parseEnvString } from "../environment";
 import {
   initializeClaude,
   blockIfNotInitialized,
@@ -25,43 +30,19 @@ import {
 import { mapModelForProvider } from "./claude-models";
 import { buildSdkOptions, DEFAULT_PROMPT, DEFAULT_SETTING_SOURCES } from "./claude-sdk-options";
 import {
-  getSession,
-  setSession,
-  deleteSession,
-  getQuery,
-  setQuery,
-  deleteQuery,
+  claudeSessions,
+  claudeQueries,
   settingsChanged,
   terminateSession,
   isSessionActive,
   type SessionState,
 } from "./claude-session";
 
-// ============================================================================
-// RPC parameter types
-// ============================================================================
-
-interface ClaudeAuthParams {
-  id: string;
-  cwd: string;
-}
-
-interface WorkspaceInitParams {
-  id: string;
-  cwd: string;
-  ghToken?: string;
-  claudeEnvVars?: string;
-}
-
-interface ContextUsageRequest {
-  id: string;
-  options: { cwd: string; claudeSessionId: string };
-}
-
+// Internal-only type for the private workspace init helper
 interface WorkspaceInitOptions {
   cwd: string;
   ghToken?: string;
-  claudeEnvVars?: string;
+  providerEnvVars?: string;
 }
 
 // ============================================================================
@@ -104,17 +85,26 @@ function buildPromptIterable(queue: AsyncQueue<string>, sessionId: string) {
 
 export class ClaudeAgentHandler implements AgentHandler {
   readonly agentType = "claude" as const;
+  readonly capabilities: AgentCapabilities = {
+    auth: true,
+    workspaceInit: true,
+    contextUsage: true,
+    permissionMode: true,
+    modelSwitch: "in-session",
+    multiTurn: true,
+    sessionResume: true,
+  };
 
   initialize(): { success: boolean; error?: string } {
     return initializeClaude();
   }
 
-  async handleQuery(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
-    const tHandleQuery = Date.now();
-    console.log(`[TIMING][handleQuery] START session=${sessionId} promptLength=${prompt.length}`);
+  async query(sessionId: string, prompt: string, options: QueryOptions): Promise<void> {
+    const tQueryStart = Date.now();
+    console.log(`[TIMING][query] START session=${sessionId} promptLength=${prompt.length}`);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     const modelChanged = session?.currentModel !== options.model;
     const maxThinkingTokensChanged =
       session?.currentMaxThinkingTokens !== options.maxThinkingTokens;
@@ -130,40 +120,36 @@ export class ClaudeAgentHandler implements AgentHandler {
 
     if (canReuse) {
       console.log(
-        `[TIMING][handleQuery] REUSE session=${sessionId} decisionTime=${Date.now() - tHandleQuery}ms`
+        `[TIMING][query] REUSE session=${sessionId} decisionTime=${Date.now() - tQueryStart}ms`
       );
 
       // Hot-swap model if it changed
       if (modelChanged && session) {
-        const query = getQuery(sessionId);
+        const query = claudeQueries.get(sessionId);
         if (query) {
-          const envVars = options.claudeEnvVars ? parseEnvString(options.claudeEnvVars) : {};
+          const envVars = options.providerEnvVars ? parseEnvString(options.providerEnvVars) : {};
           const mappedModel = mapModelForProvider(options.model, envVars);
           console.log(
             `Model changed from ${session.currentModel} to ${options.model}, using setModel callback`
           );
           try {
             await query.setModel(mappedModel);
-            const updatedSession = getSession(sessionId);
+            const updatedSession = claudeSessions.get(sessionId);
             if (updatedSession) updatedSession.currentModel = options.model;
           } catch (error) {
-            console.error(
-              `Failed to update model: ${getErrorMessage(error)}`
-            );
+            console.error(`Failed to update model: ${getErrorMessage(error)}`);
           }
         }
       }
 
       // Hot-swap maxThinkingTokens if it changed
-      const query = getQuery(sessionId);
+      const query = claudeQueries.get(sessionId);
       if (maxThinkingTokensChanged && session && query) {
         try {
           await query.setMaxThinkingTokens(options.maxThinkingTokens ?? null);
           session.currentMaxThinkingTokens = options.maxThinkingTokens;
         } catch (error) {
-          console.error(
-            `Failed to update maxThinkingTokens: ${getErrorMessage(error)}`
-          );
+          console.error(`Failed to update maxThinkingTokens: ${getErrorMessage(error)}`);
         }
       }
 
@@ -172,9 +158,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         try {
           await query.setPermissionMode(options.permissionMode as PermissionMode);
         } catch (error) {
-          console.error(
-            `Failed to update permission mode: ${getErrorMessage(error)}`
-          );
+          console.error(`Failed to update permission mode: ${getErrorMessage(error)}`);
         }
       }
 
@@ -190,7 +174,7 @@ export class ClaudeAgentHandler implements AgentHandler {
             ? "should reset generator"
             : "settings changed";
       console.log(
-        `[TIMING][handleQuery] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tHandleQuery}ms`
+        `[TIMING][query] NEW_GENERATOR session=${sessionId} reason="${reason}" decisionTime=${Date.now() - tQueryStart}ms`
       );
 
       if (isSessionActive(session)) {
@@ -199,7 +183,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       const newSession: SessionState = {
         currentSettings: {
-          claudeEnvVars: options.claudeEnvVars,
+          providerEnvVars: options.providerEnvVars,
           additionalDirectories: options.additionalDirectories,
           chromeEnabled: options.chromeEnabled,
           strictDataPrivacy: options.strictDataPrivacy,
@@ -209,20 +193,20 @@ export class ClaudeAgentHandler implements AgentHandler {
         turnId: options.turnId,
         cwd: options.cwd,
       };
-      setSession(sessionId, newSession);
+      claudeSessions.set(sessionId, newSession);
 
       void this.processWithGenerator(sessionId, prompt, options);
     }
   }
 
-  async handleCancel(sessionId: string): Promise<void> {
+  async cancel(sessionId: string): Promise<void> {
     console.log("Handling Claude cancel request for session:", sessionId);
     if (blockIfNotInitialized(sessionId)) return;
 
-    const query = getQuery(sessionId);
-    const session = getSession(sessionId);
+    const existingQuery = claudeQueries.get(sessionId);
+    const session = claudeSessions.get(sessionId);
 
-    if (isSessionActive(session) && query) {
+    if (isSessionActive(session) && existingQuery) {
       console.log(`Force-closing query for session ${sessionId}`);
 
       // 1. Flag cancellation so the post-loop path persists the cancelled message
@@ -234,7 +218,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       }
 
       // 3. Force kill: close() terminates CLI subprocess + all children + MCP transports
-      query.close();
+      existingQuery.close();
 
       // 4. Signal prompt generator to stop — finally block owns cleanup
       terminateSession(sessionId);
@@ -243,9 +227,9 @@ export class ClaudeAgentHandler implements AgentHandler {
     }
   }
 
-  handleReset(sessionId: string): void {
+  reset(sessionId: string): void {
     console.log(`Handling reset generator request for session: ${sessionId}`);
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     if (session) {
       console.log(`Terminating generator for session ${sessionId} on reset request`);
       terminateSession(sessionId);
@@ -253,13 +237,12 @@ export class ClaudeAgentHandler implements AgentHandler {
   }
 
   // ==========================================================================
-  // Claude-specific RPC methods (not part of AgentHandler interface)
+  // Optional interface methods (provider-specific, guarded by capabilities)
   // ==========================================================================
 
-  async claudeAuth(params: ClaudeAuthParams) {
+  async auth(params: AuthParams) {
     const { accountInfo, error } = await this.getClaudeAccountInfo(params.cwd);
     return {
-      id: params.id,
       type: "claude_auth_output",
       agentType: "claude",
       accountInfo,
@@ -267,14 +250,13 @@ export class ClaudeAgentHandler implements AgentHandler {
     };
   }
 
-  async workspaceInit(params: WorkspaceInitParams) {
+  async initWorkspace(params: InitWorkspaceParams) {
     const { slashCommands, mcpServers, error } = await this.getClaudeWorkspaceInitData({
       cwd: params.cwd,
       ghToken: params.ghToken,
-      claudeEnvVars: params.claudeEnvVars,
+      providerEnvVars: params.providerEnvVars,
     });
     return {
-      id: params.id,
       type: "workspace_init_output",
       agentType: "claude",
       slashCommands,
@@ -285,8 +267,8 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   async updatePermissionMode(sessionId: string, permissionMode: string): Promise<void> {
     console.log(`Handling permission mode update for session ${sessionId}: ${permissionMode}`);
-    const session = getSession(sessionId);
-    const existingQuery = getQuery(sessionId);
+    const session = claudeSessions.get(sessionId);
+    const existingQuery = claudeQueries.get(sessionId);
 
     if (!session) {
       console.log(`No active session found for ${sessionId}, ignoring permission mode update`);
@@ -298,22 +280,20 @@ export class ClaudeAgentHandler implements AgentHandler {
         await existingQuery.setPermissionMode(permissionMode as PermissionMode);
         console.log(`Permission mode updated to ${permissionMode} for session ${sessionId}`);
       } catch (error) {
-        console.error(
-          `Failed to update permission mode: ${getErrorMessage(error)}`
-        );
+        console.error(`Failed to update permission mode: ${getErrorMessage(error)}`);
       }
     }
   }
 
-  async getContextUsage(request: ContextUsageRequest) {
+  async getContextUsage(request: ContextUsageParams) {
     const { id: sessionId, options } = request;
-    const claudeSessionId = options.claudeSessionId;
+    const agentSessionId = options.agentSessionId;
 
     console.log(
-      `[getContextUsage] Getting context usage for session: ${sessionId}, claudeSessionId: ${claudeSessionId}`
+      `[getContextUsage] Getting context usage for session: ${sessionId}, agentSessionId: ${agentSessionId}`
     );
 
-    if (!claudeSessionId) throw new Error("No claudeSessionId provided");
+    if (!agentSessionId) throw new Error("No agentSessionId provided");
     if (blockIfNotInitialized(sessionId)) throw new Error("Initialization failure");
 
     const sdkOptions = {
@@ -321,7 +301,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       pathToClaudeCodeExecutable: getClaudeExecutablePath(),
       systemPrompt: DEFAULT_PROMPT,
       settingSources: DEFAULT_SETTING_SOURCES,
-      resume: claudeSessionId,
+      resume: agentSessionId,
     };
 
     const contextUsageQuery = claudeSDK({ prompt: "/context", options: sdkOptions });
@@ -376,7 +356,7 @@ export class ClaudeAgentHandler implements AgentHandler {
 
   private async getClaudeWorkspaceInitData(options: WorkspaceInitOptions) {
     const envForClaude = buildAgentEnvironment({
-      claudeEnvVars: options.claudeEnvVars,
+      providerEnvVars: options.providerEnvVars,
       ghToken: options.ghToken,
     });
 
@@ -417,7 +397,7 @@ export class ClaudeAgentHandler implements AgentHandler {
   ): Promise<void> {
     const tProcessStart = Date.now();
     const generatorId = `${sessionId}/${tProcessStart}`;
-    const session = getSession(sessionId);
+    const session = claudeSessions.get(sessionId);
     if (!session) {
       console.error(`[${generatorId}] Session ${sessionId} not found`);
       return;
@@ -444,7 +424,7 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Build environment using shared env-builder
       const tEnvStart = Date.now();
       const envForClaude = buildAgentEnvironment({
-        claudeEnvVars: options?.claudeEnvVars,
+        providerEnvVars: options?.providerEnvVars,
         opendevsEnv: options?.opendevsEnv,
         ghToken: options?.ghToken,
         extraEnv: { CLAUDE_CODE_ENABLE_TASKS: "true" },
@@ -453,24 +433,8 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[TIMING][${generatorId}] buildAgentEnvironment took ${Date.now() - tEnvStart}ms`
       );
 
-      // Auto-inject resume for session continuity after sidecar restart.
-      // If no explicit resume was provided and a previous agent_session_id
-      // exists in the DB, inject it so the SDK resumes the conversation
-      // with full context (message history, tool state).
-      // Skip when shouldResetGenerator is true — the user explicitly wants a clean start.
-      const tResumeStart = Date.now();
-      if (!options.resume && !options.shouldResetGenerator) {
-        const savedAgentSessionId = lookupAgentSessionId(sessionId);
-        if (savedAgentSessionId) {
-          console.log(
-            `[${generatorId}] Auto-resuming session with agent_session_id ${savedAgentSessionId}`
-          );
-          options = { ...options, resume: savedAgentSessionId };
-        }
-      }
-      console.log(
-        `[TIMING][${generatorId}] resumeLookup took ${Date.now() - tResumeStart}ms resume=${!!options.resume} resumeId=${options.resume ?? "none"}`
-      );
+      // Resume is now passed in turn/start params from the backend (which owns the DB
+      // and knows the agent_session_id). The agent-server is stateless — no DB lookups.
       if (options.resume) {
         console.log(
           `[RESUME-DEBUG][${generatorId}] Attempting resume with agent_session_id=${options.resume} for session=${sessionId}`
@@ -497,7 +461,7 @@ export class ClaudeAgentHandler implements AgentHandler {
         `[TIMING][${generatorId}] claudeSDK() constructor returned in ${Date.now() - tSdkSpawn}ms`
       );
 
-      setQuery(sessionId, queryResult);
+      claudeQueries.set(sessionId, queryResult);
       session.generator = queryResult[Symbol.asyncIterator]();
 
       // Per-message options (constant for the lifetime of this generator)
@@ -544,16 +508,18 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Post-loop: stream ended cleanly (prompt queue closed or SDK finished).
       // Turn-level idle is already set by processMessage on result/success.
       // This handles conversation-end: cancel persistence only.
-      if (session.cancelledByUser) {
-        persistCancellation(sessionId, "claude", options.model || "opus");
+      if (
+        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
+      ) {
         console.log(`[${generatorId}] Session cancelled by user: ${sessionId}`);
         return;
       }
       console.log(`[${generatorId}] Stream completed: ${sessionId}`);
     } catch (error) {
       // Cancel takes priority — abort signal can surface as a thrown error.
-      if (session.cancelledByUser) {
-        persistCancellation(sessionId, "claude", options.model || "opus");
+      if (
+        handleCancellation(sessionId, "claude", options.model || "opus", !!session.cancelledByUser)
+      ) {
         console.log(`[${generatorId}] Session cancelled by user (catch): ${sessionId}`);
         return;
       }
@@ -567,22 +533,23 @@ export class ClaudeAgentHandler implements AgentHandler {
 
       // Genuine error — check if this generator still owns the session.
       // A rapid re-query can replace the session before the catch runs.
-      const currentSession = getSession(sessionId);
-      const ownsSession = !currentSession || currentSession === session;
+      const errorName = error instanceof Error ? error.name : "non-Error";
+      const errorStack =
+        error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : "no stack";
+      const extraProps =
+        error instanceof Error
+          ? Object.getOwnPropertyNames(error)
+              .filter((k) => !["message", "stack", "name"].includes(k))
+              .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
+              .join(" ")
+          : "";
 
       const classified = classifyError(error);
-      const errorName = error instanceof Error ? error.name : "non-Error";
-      const errorStack = error instanceof Error
-        ? error.stack?.split("\n").slice(0, 5).join("\n")
-        : "no stack";
-      const extraProps = error instanceof Error
-        ? Object.getOwnPropertyNames(error)
-            .filter((k) => !["message", "stack", "name"].includes(k))
-            .map((k) => `${k}=${JSON.stringify((error as any)[k])}`)
-            .join(" ")
-        : "";
 
-      console.error(`[${generatorId}] Error in Claude query [${classified.category}]:`, classified.message);
+      console.error(
+        `[${generatorId}] Error in Claude query [${classified.category}]:`,
+        classified.message
+      );
       console.error(
         `[${generatorId}] Error details:`,
         `name=${errorName}`,
@@ -590,12 +557,12 @@ export class ClaudeAgentHandler implements AgentHandler {
         `resumeId=${options.resume ?? "none"}`,
         `querySucceeded=${ctx.querySucceeded}`,
         `messageCount=${ctx.messageCount}`,
-        extraProps ? `extraProps={${extraProps}}` : "extraProps={}",
+        extraProps ? `extraProps={${extraProps}}` : "extraProps={}"
       );
       console.error(`[${generatorId}] Stack (top 5):\n${errorStack}`);
 
-      if (ownsSession) {
-        notifyAndRecordError(sessionId, "claude", classified, (c) => {
+      if (claudeSessions.owns(sessionId, session)) {
+        handleQueryError(sessionId, "claude", error, (c) => {
           if (c.category !== "process_exit") return c.message;
           const parts: string[] = [c.message];
           if (options.resume) parts.push("(resumed session)");
@@ -613,10 +580,9 @@ export class ClaudeAgentHandler implements AgentHandler {
       // Only clean up if this generator still owns the session.
       // A rapid re-query can replace the session before this finally runs;
       // blindly deleting would wipe the new session's state.
-      const currentSession = getSession(sessionId);
-      if (!currentSession || currentSession === session) {
-        deleteQuery(sessionId);
-        deleteSession(sessionId);
+      if (claudeSessions.owns(sessionId, session)) {
+        claudeQueries.delete(sessionId);
+        claudeSessions.delete(sessionId);
       }
     }
   }

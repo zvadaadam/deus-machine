@@ -1,9 +1,14 @@
-// sidecar/agents/error-classifier.ts
-// Pure error classification function. Converts opaque error objects
-// into machine-readable categories so the frontend can render
-// category-specific UI (auth → "Log in", rate_limit → "Retry", etc.).
+// sidecar/agents/lifecycle.ts
+// Error classification, cancellation, and error reporting for agent query
+// lifecycle. Consolidates error-classifier.ts, query-lifecycle.ts, and
+// query-completion.ts into a single module.
 
-import { type ErrorCategory } from "../protocol";
+import { EventBroadcaster } from "../event-broadcaster";
+import type { AgentType, ErrorCategory } from "../protocol";
+
+// ============================================================================
+// Error Classification
+// ============================================================================
 
 export interface ClassifiedError {
   category: ErrorCategory;
@@ -136,9 +141,7 @@ export function classifyError(error: unknown): ClassifiedError {
  * "max_tokens" is a context_limit error — user needs a new session.
  * "cancelled" is handled separately in the abort path.
  */
-export function classifyStopReason(
-  stopReason: string | undefined
-): ClassifiedError | null {
+export function classifyStopReason(stopReason: string | undefined): ClassifiedError | null {
   if (!stopReason) return null;
 
   switch (stopReason) {
@@ -153,4 +156,117 @@ export function classifyStopReason(
     default:
       return null; // Unknown stop_reason — treat as normal
   }
+}
+
+// ============================================================================
+// Cancellation Notification
+// ============================================================================
+
+/**
+ * Notifies all connected tunnels of a cancellation event and emits canonical
+ * session lifecycle events. The backend handles DB persistence (saving the
+ * cancelled message and updating session status to idle).
+ *
+ * This identical sequence was duplicated 4 times across both handlers:
+ * - claude-handler.ts post-loop cancel path
+ * - claude-handler.ts catch cancel path
+ * - codex-handler.ts post-loop abort path
+ * - codex-handler.ts catch abort path
+ */
+export function persistCancellation(sessionId: string, agentType: AgentType, _model: string): void {
+  EventBroadcaster.sendMessage({
+    id: sessionId,
+    type: "message",
+    agentType,
+    data: { type: "cancelled" },
+  });
+
+  // Emit canonical session lifecycle events — backend handles DB writes
+  EventBroadcaster.emitSessionCancelled(sessionId, agentType);
+  EventBroadcaster.emitMessageCancelled(sessionId, agentType);
+}
+
+// ============================================================================
+// Error Reporting
+// ============================================================================
+
+/**
+ * Reports a classified error to the frontend and emits canonical session.error.
+ * The backend handles persisting the error status to the DB.
+ *
+ * The optional `enrichMessage` callback allows handler-specific enrichment
+ * without modifying this shared function (Open/Closed). Claude uses it
+ * to append process_exit diagnostics (resume state, message count, etc.).
+ * Codex passes nothing and gets the classified message as-is.
+ */
+export function notifyAndRecordError(
+  sessionId: string,
+  agentType: AgentType,
+  classified: ClassifiedError,
+  enrichMessage?: (classified: ClassifiedError) => string
+): void {
+  const errorMessage = enrichMessage ? enrichMessage(classified) : classified.message;
+
+  EventBroadcaster.sendError({
+    id: sessionId,
+    type: "error",
+    error: errorMessage,
+    agentType,
+    category: classified.category,
+  });
+
+  // Emit canonical session.error event — backend handles DB status update
+  EventBroadcaster.emitSessionError(
+    sessionId,
+    agentType,
+    errorMessage,
+    classified.category as ErrorCategory
+  );
+}
+
+// ============================================================================
+// Query Completion Helpers
+// ============================================================================
+
+/**
+ * Handles the cancellation post-loop pattern.
+ *
+ * If `wasCancelled` is true, persists the cancellation event and returns
+ * true to signal the caller should return early. Otherwise returns false.
+ *
+ * Replaces the duplicated pattern:
+ *   if (session.cancelledByUser) {
+ *     persistCancellation(sessionId, agentType, model);
+ *     return;
+ *   }
+ */
+export function handleCancellation(
+  sessionId: string,
+  agentType: AgentType,
+  model: string,
+  wasCancelled: boolean
+): boolean {
+  if (!wasCancelled) return false;
+  persistCancellation(sessionId, agentType, model);
+  return true; // signals early exit
+}
+
+/**
+ * Handles the error post-loop pattern.
+ *
+ * Classifies the error and calls notifyAndRecordError with optional
+ * handler-specific message enrichment.
+ *
+ * Replaces the duplicated pattern:
+ *   const classified = classifyError(error);
+ *   notifyAndRecordError(sessionId, agentType, classified, enrichFn);
+ */
+export function handleQueryError(
+  sessionId: string,
+  agentType: AgentType,
+  error: unknown,
+  enrichMessage?: (classified: ClassifiedError) => string
+): void {
+  const classified = classifyError(error);
+  notifyAndRecordError(sessionId, agentType, classified, enrichMessage);
 }

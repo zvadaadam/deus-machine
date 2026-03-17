@@ -183,7 +183,7 @@ export function AgentQuestionOverlay({
     <AnimatePresence>
       {request && currentQuestion && (
         <motion.div
-          key={`agent-question-${request.rpcId as string}-${currentIndex}`}
+          key={`agent-question-${request.wsRequestId}-${currentIndex}`}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 6 }}

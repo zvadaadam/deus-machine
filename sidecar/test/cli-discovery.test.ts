@@ -6,7 +6,7 @@ const mockExecSync = vi.fn();
 const mockExecFileSync = vi.fn();
 const mockExistsSync = vi.fn();
 const mockSendError = vi.fn();
-const mockUpdateSessionStatus = vi.fn().mockReturnValue({ ok: true, value: undefined });
+const mockEmitSessionError = vi.fn();
 
 vi.mock("child_process", () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
@@ -18,14 +18,11 @@ vi.mock("fs", async (importOriginal) => {
   return { ...original, existsSync: (...args: unknown[]) => mockExistsSync(...args) };
 });
 
-vi.mock("../frontend-client", () => ({
-  FrontendClient: {
+vi.mock("../event-broadcaster", () => ({
+  EventBroadcaster: {
     sendError: (...args: unknown[]) => mockSendError(...args),
+    emitSessionError: (...args: unknown[]) => mockEmitSessionError(...args),
   },
-}));
-
-vi.mock("../db/session-writer", () => ({
-  updateSessionStatus: (...args: unknown[]) => mockUpdateSessionStatus(...args),
 }));
 
 import {
@@ -33,7 +30,7 @@ import {
   blockIfNotInitialized,
   type DiscoveryConfig,
   type DiscoveryState,
-} from "../agents/cli-discovery";
+} from "../agents/environment/cli-discovery";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +71,9 @@ describe("discoverExecutable", () => {
 
     mockExistsSync.mockReturnValue(true);
     // Shell discovery uses execSync — fail it so we fall through to static candidates
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery failed"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery failed");
+    });
     // Verification uses execFileSync
     mockExecFileSync.mockReturnValueOnce("1.0.0");
 
@@ -92,12 +91,16 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync
-      .mockReturnValueOnce(true)   // /bad/path exists
-      .mockReturnValueOnce(true);  // /good/path exists
+      .mockReturnValueOnce(true) // /bad/path exists
+      .mockReturnValueOnce(true); // /good/path exists
 
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery failed"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery failed");
+    });
     mockExecFileSync
-      .mockImplementationOnce(() => { throw new Error("version check failed"); }) // /bad/path
+      .mockImplementationOnce(() => {
+        throw new Error("version check failed");
+      }) // /bad/path
       .mockReturnValueOnce("2.0.0"); // /good/path
 
     const result = discoverExecutable(config, state);
@@ -113,8 +116,12 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(false);
-    mockExecSync.mockImplementation(() => { throw new Error("not found"); });
-    mockExecFileSync.mockImplementation(() => { throw new Error("not found"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not found");
+    });
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error("not found");
+    });
 
     const result = discoverExecutable(config, state);
 
@@ -130,7 +137,9 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(false);
-    mockExecSync.mockImplementation(() => { throw new Error("not found"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not found");
+    });
 
     const result = discoverExecutable(config, state);
 
@@ -146,7 +155,9 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
     mockExecFileSync.mockReturnValueOnce("3.0.0"); // env override succeeds
 
     const result = discoverExecutable(config, state);
@@ -161,7 +172,9 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
     mockExecFileSync.mockReturnValueOnce("4.0.0");
 
     const result = discoverExecutable(config, state);
@@ -174,12 +187,16 @@ describe("discoverExecutable", () => {
   it("continues when extraCandidates throws", () => {
     const config = makeConfig({
       staticCandidates: ["/fallback/cli"],
-      extraCandidates: () => { throw new Error("resolve failed"); },
+      extraCandidates: () => {
+        throw new Error("resolve failed");
+      },
     });
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
     mockExecFileSync.mockReturnValueOnce("5.0.0");
 
     const result = discoverExecutable(config, state);
@@ -195,7 +212,9 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
     mockExecFileSync.mockReturnValueOnce("6.0.0");
 
     discoverExecutable(config, state);
@@ -215,7 +234,9 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
     mockExecFileSync.mockReturnValueOnce("7.0.0");
 
     discoverExecutable(config, state);
@@ -236,8 +257,12 @@ describe("discoverExecutable", () => {
     const state = makeState();
 
     mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => { throw new Error("shell discovery"); });
-    mockExecFileSync.mockImplementation(() => { throw new Error("verify failed"); });
+    mockExecSync.mockImplementation(() => {
+      throw new Error("shell discovery");
+    });
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error("verify failed");
+    });
 
     discoverExecutable(config, state);
 
@@ -274,7 +299,7 @@ describe("blockIfNotInitialized", () => {
     );
   });
 
-  it("updates session status to error when blocked", () => {
+  it("emits canonical session error event when blocked", () => {
     const state: DiscoveryState = {
       executablePath: "",
       result: { success: false, error: "Not found" },
@@ -282,9 +307,9 @@ describe("blockIfNotInitialized", () => {
 
     blockIfNotInitialized(state, "claude", "session-1");
 
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
-      "error",
+      "claude",
       expect.stringContaining("Not found"),
       "internal"
     );
@@ -299,7 +324,7 @@ describe("blockIfNotInitialized", () => {
     expect(mockSendError).toHaveBeenCalled();
   });
 
-  it("still updates session status when sendError throws", () => {
+  it("still emits session error event when sendError throws", () => {
     const state: DiscoveryState = {
       executablePath: "",
       result: { success: false, error: "Not found" },
@@ -312,10 +337,10 @@ describe("blockIfNotInitialized", () => {
     const blocked = blockIfNotInitialized(state, "claude", "session-1");
 
     expect(blocked).toBe(true);
-    // updateSessionStatus must still be called despite sendError throwing
-    expect(mockUpdateSessionStatus).toHaveBeenCalledWith(
+    // emitSessionError must still be called despite sendError throwing
+    expect(mockEmitSessionError).toHaveBeenCalledWith(
       "session-1",
-      "error",
+      "claude",
       expect.stringContaining("Not found"),
       "internal"
     );

@@ -1,7 +1,7 @@
 // Query protocol — WebSocket wire format for the cloud relay.
 // All frame types prefixed with "q:" so they route cleanly in the ws.service dispatcher.
 //
-// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, SIDECAR_NOTIFY_EVENTS)
+// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS)
 // live in shared/events.ts — the single source of truth for all app events
 // and resources. This file only defines the wire format that carries them.
 
@@ -9,14 +9,7 @@ import type { QueryResource, MutationName, CommandName, ProtocolEvent } from "..
 
 // Re-export so existing `import { QueryResource } from "query-protocol"` still works.
 export type { QueryResource, MutationName, CommandName, ProtocolEvent };
-export {
-  QUERY_RESOURCES,
-  MUTATION_NAMES,
-  COMMAND_NAMES,
-  PROTOCOL_EVENTS,
-  SIDECAR_NOTIFY_EVENTS,
-} from "../events";
-export type { SidecarNotifyEvent } from "../events";
+export { QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS } from "../events";
 
 // ---- Client → Server Frames ----
 
@@ -58,13 +51,31 @@ export interface QCommandFrame {
   params: Record<string, unknown>;
 }
 
+/** Client responds to a tool relay request (q:event tool:request → q:tool_response). */
+export interface QToolResponseSuccessFrame {
+  type: "q:tool_response";
+  requestId: string;
+  result: unknown;
+  error?: never;
+}
+
+export interface QToolResponseErrorFrame {
+  type: "q:tool_response";
+  requestId: string;
+  error: string;
+  result?: never;
+}
+
+export type QToolResponseFrame = QToolResponseSuccessFrame | QToolResponseErrorFrame;
+
 /** All frames a client can send. */
 export type QClientFrame =
   | QRequestFrame
   | QSubscribeFrame
   | QUnsubscribeFrame
   | QMutateFrame
-  | QCommandFrame;
+  | QCommandFrame
+  | QToolResponseFrame;
 
 // ---- Server → Client Frames ----
 
@@ -141,3 +152,11 @@ export type QServerFrame =
   | QEventFrame
   | QInvalidateFrame
   | QErrorFrame;
+
+// ---- Tool Relay Event Payload ----
+
+/** Payload shape for q:event with event: "tool:request".
+ *  Sent by the backend when relaying a tool request from the agent to the frontend.
+ *  Derived from the canonical ToolRequestEvent (shared/agent-events.ts) minus the
+ *  discriminator field — the WS frame wraps this in q:event, not as a standalone event. */
+export type ToolRequestEventData = Omit<import("../agent-events").ToolRequestEvent, "type">;

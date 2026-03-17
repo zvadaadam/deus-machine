@@ -3,22 +3,13 @@
  * Extracted from AppSidebar.tsx for better organization
  */
 
-import type { Workspace, DiffStats } from "@/shared/types";
-
-/**
- * Repository with its workspaces
- */
-export interface Repository {
-  repo_id: string;
-  repo_name: string;
-  workspaces: Workspace[];
-}
+import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 
 /**
  * Main AppSidebar component props
  */
 export interface AppSidebarProps {
-  repositories: Repository[];
+  repositories: RepoGroup[];
   selectedWorkspaceId: string | null;
   diffStatsMap?: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
@@ -36,7 +27,7 @@ export interface AppSidebarProps {
  * RepositoryItem component props
  */
 export interface RepositoryItemProps {
-  repository: Repository;
+  repository: RepoGroup;
   isCollapsed: boolean;
   selectedWorkspaceId: string | null;
   diffStatsMap?: Record<string, DiffStats>;

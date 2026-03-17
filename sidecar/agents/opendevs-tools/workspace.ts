@@ -4,7 +4,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { FrontendClient } from "../../frontend-client";
+import { EventBroadcaster } from "../../event-broadcaster";
 
 /**
  * Creates the workspace tool definitions for a given session.
@@ -44,7 +44,7 @@ export function createWorkspaceTools(sessionId: string): SdkMcpToolDefinition<an
 
         let answers: (string | string[])[];
         try {
-          const response = await FrontendClient.requestAskUserQuestion({
+          const response = await EventBroadcaster.requestAskUserQuestion({
             sessionId,
             questions: args.questions,
           });
@@ -115,7 +115,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
       async (args) => {
         console.log(`[opendevsMCPServer] getDiff invoked for session ${sessionId}`);
 
-        const response = await FrontendClient.requestGetDiff({
+        const response = await EventBroadcaster.requestGetDiff({
           sessionId,
           file: args.file,
           stat: args.stat,
@@ -151,7 +151,7 @@ With stat: true, returns git diff --stat style output showing per-file statistic
       async (args) => {
         console.log(`[opendevsMCPServer] DiffComment invoked for session ${sessionId}`);
 
-        const { success } = await FrontendClient.requestDiffComment({
+        const { success } = await EventBroadcaster.requestDiffComment({
           sessionId,
           comments: args.comments,
         });
@@ -196,7 +196,7 @@ Returns the terminal output along with information about what type of terminal i
       async (args) => {
         console.log(`[opendevsMCPServer] GetTerminalOutput invoked for session ${sessionId}`);
 
-        const response = await FrontendClient.requestGetTerminalOutput({
+        const response = await EventBroadcaster.requestGetTerminalOutput({
           sessionId,
           source: args.source,
           maxLines: args.maxLines,

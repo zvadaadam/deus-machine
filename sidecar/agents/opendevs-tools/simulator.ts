@@ -1,7 +1,7 @@
 // sidecar/agents/opendevs-tools/simulator.ts
 // iOS Simulator automation tools: list devices, start, screenshot, tap, swipe, type text, press key, build & run.
-// These tools proxy through FrontendClient RPC → Rust socket relay → Tauri event →
-// frontend handler → existing sim-core Tauri IPC commands.
+// These tools proxy through EventBroadcaster over backend-routed WebSocket flow,
+// then reach the simulator control path used by existing sim-core commands.
 //
 // Named "iOSSimulator*" to distinguish from external xcode-mcp tools.
 // These tools control the in-app Simulator panel (MJPEG stream + HID input).
@@ -9,7 +9,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { FrontendClient } from "../../frontend-client";
+import { EventBroadcaster } from "../../event-broadcaster";
 import { getErrorMessage } from "../../../shared/lib/errors";
 
 /**
@@ -36,13 +36,11 @@ Example output:
         console.log(`[opendevsMCPServer] iOSSimulatorListDevices invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestSimListDevices({ sessionId });
+          const response = await EventBroadcaster.requestSimListDevices({ sessionId });
 
           if (response.error) {
             return {
-              content: [
-                { type: "text", text: `Failed to list devices: ${response.error}` },
-              ],
+              content: [{ type: "text", text: `Failed to list devices: ${response.error}` }],
             };
           }
 
@@ -72,9 +70,7 @@ Example output:
           };
         } catch (err: unknown) {
           return {
-            content: [
-              { type: "text", text: `Failed to list simulators: ${getErrorMessage(err)}` },
-            ],
+            content: [{ type: "text", text: `Failed to list simulators: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -103,16 +99,14 @@ After starting, the simulator stream will appear in the app's Simulator panel. U
         );
 
         try {
-          const response = await FrontendClient.requestSimStart({
+          const response = await EventBroadcaster.requestSimStart({
             sessionId,
             udid: args.udid,
           });
 
           if (response.error) {
             return {
-              content: [
-                { type: "text", text: `Failed to start simulator: ${response.error}` },
-              ],
+              content: [{ type: "text", text: `Failed to start simulator: ${response.error}` }],
             };
           }
 
@@ -158,7 +152,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first).`,
         console.log(`[opendevsMCPServer] iOSSimulatorScreenshot invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestSimScreenshot({ sessionId });
+          const response = await EventBroadcaster.requestSimScreenshot({ sessionId });
 
           if (response.error) {
             return {
@@ -211,7 +205,7 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
         );
 
         try {
-          const response = await FrontendClient.requestSimTap({
+          const response = await EventBroadcaster.requestSimTap({
             sessionId,
             x: args.x,
             y: args.y,
@@ -233,9 +227,7 @@ Use iOSSimulatorScreenshot first to see the current screen, then estimate the co
           };
         } catch (err: unknown) {
           return {
-            content: [
-              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
-            ],
+            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -270,7 +262,7 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
         );
 
         try {
-          const response = await FrontendClient.requestSimSwipe({
+          const response = await EventBroadcaster.requestSimSwipe({
             sessionId,
             startX: args.startX,
             startY: args.startY,
@@ -295,9 +287,7 @@ Coordinates are normalized (0.0 to 1.0). Common swipe patterns:
           };
         } catch (err: unknown) {
           return {
-            content: [
-              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
-            ],
+            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -321,7 +311,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
         );
 
         try {
-          const response = await FrontendClient.requestSimTypeText({
+          const response = await EventBroadcaster.requestSimTypeText({
             sessionId,
             text: args.text,
           });
@@ -348,9 +338,7 @@ Make sure an input field is focused first (tap on it using iOSSimulatorTap). The
           };
         } catch (err: unknown) {
           return {
-            content: [
-              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
-            ],
+            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -386,7 +374,7 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
         );
 
         try {
-          const response = await FrontendClient.requestSimPressKey({
+          const response = await EventBroadcaster.requestSimPressKey({
             sessionId,
             keycode: args.keycode,
             direction: args.direction,
@@ -408,9 +396,7 @@ By default, sends both key-down and key-up. Use direction to send only one.`,
           };
         } catch (err: unknown) {
           return {
-            content: [
-              { type: "text", text: `Simulator not available: ${getErrorMessage(err)}` },
-            ],
+            content: [{ type: "text", text: `Simulator not available: ${getErrorMessage(err)}` }],
           };
         }
       }
@@ -441,7 +427,7 @@ The simulator must be booted and streaming (use iOSSimulatorStart first). The bu
         );
 
         try {
-          const response = await FrontendClient.requestSimBuildAndRun({
+          const response = await EventBroadcaster.requestSimBuildAndRun({
             sessionId,
             workspacePath: args.workspacePath,
           });

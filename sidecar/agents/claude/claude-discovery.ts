@@ -8,7 +8,7 @@ import {
   discoverExecutable,
   blockIfNotInitialized as sharedBlock,
   type DiscoveryState,
-} from "../cli-discovery";
+} from "../environment/cli-discovery";
 
 // ============================================================================
 // State

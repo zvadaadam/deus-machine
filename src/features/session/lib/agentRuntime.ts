@@ -1,4 +1,4 @@
-export type RuntimeAgentType = "claude" | "codex" | "unknown";
+export type RuntimeAgentType = "claude" | "codex";
 
 export type ThinkingLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
 
@@ -74,22 +74,15 @@ const AGENT_CONFIGS = {
       { model: "gpt-5.3-codex-spark", label: "Codex Spark" },
     ],
   },
-  unknown: {
-    id: "unknown" as const,
-    label: "Agent",
-    groupLabel: "Agent",
-    thinkingLevels: ["LOW", "HIGH"] as const,
-    models: [] as AgentModelOption[],
-  },
 } satisfies Record<RuntimeAgentType, AgentConfig>;
 
-/** Get the config for an agent type. Falls back to "unknown" for unrecognized types. */
+/** Get the config for an agent type. Falls back to "claude" for unrecognized types. */
 export function getAgentConfig(agentType: string): AgentConfig {
   const normalized = agentType.toLowerCase() as RuntimeAgentType;
-  return AGENT_CONFIGS[normalized] ?? AGENT_CONFIGS.unknown;
+  return AGENT_CONFIGS[normalized] ?? AGENT_CONFIGS.claude;
 }
 
-/** Agent types that appear in the model picker (excludes "unknown"). */
+/** Agent types that appear in the model picker. */
 export const MODEL_PICKER_GROUPS: readonly AgentConfig[] = [
   AGENT_CONFIGS.claude,
   AGENT_CONFIGS.codex,
