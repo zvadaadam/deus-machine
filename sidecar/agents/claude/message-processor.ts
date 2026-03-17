@@ -93,11 +93,19 @@ export function processMessage(
   // the original working agent_session_id — permanently lost.
   if (!session.agentSessionIdCaptured && cleanMessage.session_id && !opts.isResume) {
     const agentSessionId = String(cleanMessage.session_id);
-    session.agentSessionIdCaptured = true;
-    console.log(`[${opts.generatorId}] Captured agent_session_id: ${agentSessionId}`);
 
-    // Emit canonical agent.session_id event — backend persists to DB
-    EventBroadcaster.emitAgentSessionId(opts.sessionId, agentSessionId);
+    try {
+      // Emit canonical agent.session_id event — backend persists to DB.
+      // Set captured flag AFTER emission so a failed send allows retry on next message.
+      EventBroadcaster.emitAgentSessionId(opts.sessionId, agentSessionId);
+      session.agentSessionIdCaptured = true;
+      console.log(`[${opts.generatorId}] Captured agent_session_id: ${agentSessionId}`);
+    } catch (error) {
+      console.error(
+        `[${opts.generatorId}] Failed to emit agent_session_id:`,
+        getErrorMessage(error)
+      );
+    }
   }
 
   // 2. Emit canonical message events for assistant and tool_result messages
@@ -154,20 +162,29 @@ export function processMessage(
   if (cleanMessage.type === "assistant" && msg) {
     const stopError = classifyStopReason(msg.stop_reason);
     if (stopError) {
-      EventBroadcaster.sendError({
-        id: opts.sessionId,
-        type: "error",
-        error: stopError.message,
-        agentType: "claude",
-        category: stopError.category,
-      });
-      // Emit canonical session.error — backend handles DB status update
+      // Emit canonical session.error FIRST — backend handles DB status update.
+      // This must succeed even if the frontend tunnel is down.
       EventBroadcaster.emitSessionError(
         opts.sessionId,
         "claude",
         stopError.message,
         stopError.category
       );
+      // Then notify frontend (best-effort — don't let this block the canonical event)
+      try {
+        EventBroadcaster.sendError({
+          id: opts.sessionId,
+          type: "error",
+          error: stopError.message,
+          agentType: "claude",
+          category: stopError.category,
+        });
+      } catch (error) {
+        console.warn(
+          `[${opts.generatorId}] Failed to send frontend error:`,
+          getErrorMessage(error)
+        );
+      }
       ctx.stopReasonError = true;
     }
   }

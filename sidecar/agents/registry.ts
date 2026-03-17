@@ -27,6 +27,7 @@ export interface InitWorkspaceParams {
 }
 
 export interface ContextUsageParams {
+  id?: string;
   options: { cwd: string; agentSessionId: string };
 }
 

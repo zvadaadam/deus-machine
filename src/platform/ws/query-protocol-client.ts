@@ -167,12 +167,19 @@ export function sendCommand(
   return new Promise((resolve, reject) => {
     pendingCommands.set(id, { resolve, reject });
 
-    sendFrame({
+    const sent = sendFrame({
       type: "q:command",
       id,
       command,
       params,
     });
+
+    // Reject immediately if the frame couldn't be sent (WS disconnected)
+    if (!sent) {
+      pendingCommands.delete(id);
+      reject(new Error("WebSocket not connected"));
+      return;
+    }
 
     // Timeout after 30s to prevent leaked promises
     setTimeout(() => {
