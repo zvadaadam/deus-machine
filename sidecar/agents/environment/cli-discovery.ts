@@ -190,7 +190,11 @@ export function blockIfNotInitialized(
     }
     // Emit canonical error event so the backend updates session status.
     // The backend set status='working' before forwarding turn/start to the sidecar.
-    EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
+    try {
+      EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
+    } catch (error) {
+      console.warn(`[CLI-DISCOVERY] Failed to emit session error:`, error);
+    }
     console.log(`Blocked ${agentType} request due to initialization failure`);
     return true;
   }
