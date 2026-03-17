@@ -1,0 +1,21 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "06ca8ff8109b",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/ws-protocol-v3",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "sidecar/agents/claude/message-processor.ts",
+    "sidecar/agents/environment/cli-discovery.ts",
+    "sidecar/agents/registry.ts",
+    "src/platform/ws/query-protocol-client.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/06/ca8ff8109b/0/metadata.json",
+      "transcript": "/06/ca8ff8109b/0/full.jsonl",
+      "content_hash": "/06/ca8ff8109b/0/content_hash.txt",
+      "prompt": ""
+    }
+  ]
+}
