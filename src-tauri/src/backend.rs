@@ -40,7 +40,7 @@ impl BackendManager {
     }
 
     /// Start the backend server with dynamic port allocation
-    pub fn start(&self, backend_path: PathBuf, db_path: &str) -> Result<()> {
+    pub fn start(&self, backend_path: PathBuf, db_path: &str, agent_server_url: Option<&str>) -> Result<()> {
         let mut process = self.process.lock().unwrap();
 
         if process.is_some() {
@@ -56,6 +56,11 @@ impl BackendManager {
             .env("DATABASE_PATH", db_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        // Pass agent-server URL so the backend can connect
+        match agent_server_url {
+            Some(url) => { cmd.env("AGENT_SERVER_URL", url); }
+            None => { cmd.env_remove("AGENT_SERVER_URL"); }
+        }
         // Forward Sentry DSN to Node.js backend (set at build time, not hardcoded)
         if let Some(dsn) = option_env!("SENTRY_DSN_NODE") {
             cmd.env("SENTRY_DSN", dsn);
@@ -236,7 +241,7 @@ setTimeout(() => {
         let manager = BackendManager::new();
 
         // Start the mock backend
-        match manager.start(script_path.clone(), "/tmp/test-opendevs.db") {
+        match manager.start(script_path.clone(), "/tmp/test-opendevs.db", None) {
             Ok(_) => {
                 println!("✅ Mock backend started successfully");
 
@@ -282,7 +287,7 @@ setTimeout(() => process.exit(0), 1000);
 
         let manager = BackendManager::new();
 
-        match manager.start(script_path.clone(), "/tmp/test-opendevs.db") {
+        match manager.start(script_path.clone(), "/tmp/test-opendevs.db", None) {
             Ok(_) => {
                 // Port should be None since we didn't output it
                 // (or might still be None if detection hasn't completed)
@@ -312,11 +317,11 @@ setTimeout(() => process.exit(0), 3000);
 
         let manager = BackendManager::new();
 
-        if manager.start(script_path.clone(), "/tmp/test-opendevs.db").is_ok() {
+        if manager.start(script_path.clone(), "/tmp/test-opendevs.db", None).is_ok() {
             assert!(manager.is_running());
 
             // Try to start again - should return Ok but not actually start
-            let result = manager.start(script_path.clone(), "/tmp/test-opendevs.db");
+            let result = manager.start(script_path.clone(), "/tmp/test-opendevs.db", None);
             assert!(result.is_ok());
 
             manager.stop().ok();

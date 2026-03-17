@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   // Event name constants
   WORKSPACE_PROGRESS,
-  SIDECAR_REQUEST,
   FS_CHANGED,
   PTY_DATA,
   PTY_EXIT,
@@ -27,14 +26,12 @@ import {
   MUTATION_NAMES,
   COMMAND_NAMES,
   PROTOCOL_EVENTS,
-  SIDECAR_NOTIFY_EVENTS,
 } from "@shared/events";
 
 describe("shared/events", () => {
   describe("AppEventSchemaMap completeness", () => {
     const ALL_EVENT_NAMES = [
       WORKSPACE_PROGRESS,
-      SIDECAR_REQUEST,
       FS_CHANGED,
       PTY_DATA,
       PTY_EXIT,
@@ -207,14 +204,8 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("session:plan-mode");
       expect(PROTOCOL_EVENTS).toContain("session:error");
       expect(PROTOCOL_EVENTS).toContain("session:progress");
-      expect(PROTOCOL_EVENTS).toHaveLength(3);
-    });
-
-    it("SIDECAR_NOTIFY_EVENTS contains the expected events", () => {
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:message");
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:status");
-      expect(SIDECAR_NOTIFY_EVENTS).toContain("session:updated");
-      expect(SIDECAR_NOTIFY_EVENTS).toHaveLength(3);
+      expect(PROTOCOL_EVENTS).toContain("tool:request");
+      expect(PROTOCOL_EVENTS).toHaveLength(4);
     });
   });
 });

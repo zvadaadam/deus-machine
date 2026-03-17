@@ -5,6 +5,7 @@ import { initDatabase, closeDatabase, DB_PATH } from './lib/database';
 import { closeAll as closeAllWsConnections } from './services/ws.service';
 import { ensureRelayConnected, disconnectFromRelay } from './services/relay.service';
 import { getSetting } from './services/settings.service';
+import * as agentService from './services/agent';
 
 // Initialize Sentry before anything else.
 // DSN passed as env var from Rust process manager (not hardcoded — open source repo).
@@ -66,6 +67,16 @@ if (remoteEnabled === true) {
   ensureRelayConnected();
 }
 
+// Connect to agent-server (sidecar) if AGENT_SERVER_URL is set.
+// The Rust process manager sets this env var after spawning the agent-server
+// and parsing its LISTEN_URL=ws://... stdout line.
+// Initialize the agent service if the agent-server URL is available.
+// The Rust process manager sets AGENT_SERVER_URL after spawning the sidecar.
+const agentServerUrl = process.env.AGENT_SERVER_URL;
+if (agentServerUrl) {
+  agentService.init(agentServerUrl);
+}
+
 // Global error handlers
 process.on('uncaughtException', (error, origin) => {
   console.error('[FATAL] Uncaught Exception:', origin, error);
@@ -85,6 +96,7 @@ process.on('unhandledRejection', (reason) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\nShutting down...');
+  agentService.shutdown();
   disconnectFromRelay();
   closeAllWsConnections();
   closeDatabase();

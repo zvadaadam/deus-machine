@@ -1,23 +1,13 @@
 // src/features/browser/automation/useBrowserRpcHandler.ts
-// Handles browser automation RPC requests from the sidecar.
+// Handles browser automation RPC requests from the agent-server.
 //
 // Architecture:
-// Sidecar → Rust socket relay → "sidecar:request" Tauri event → this handler
-// Handler executes JS in webview via evalWithResult → sends response back via socket
-//
-// This hook should be mounted in BrowserPanel (or a parent component)
-// so it's active whenever the browser is visible.
+//   Agent-server → Backend → q:event tool:request → this handler
+//   Handler executes JS in webview via evalWithResult → sends q:tool_response back via WS
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import {
-  invoke,
-  listen,
-  isTauriEnv,
-  SIDECAR_REQUEST,
-  BROWSER_PAGE_LOAD,
-  BROWSER_URL_CHANGE,
-} from "@/platform/tauri";
+import { invoke, listen, BROWSER_PAGE_LOAD, BROWSER_URL_CHANGE } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { evalWithResult } from "./eval-with-result";
 import {
@@ -44,6 +34,7 @@ import {
   KEY_FLASH_JS,
 } from "./visual-effects";
 import type { BrowserTabState } from "../types";
+import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 
 /**
  * Safely parse JSON from webview evalWithResult responses.
@@ -51,9 +42,9 @@ import type { BrowserTabState } from "../types";
  * output, or encoding issues can produce invalid JSON. This wrapper
  * throws a descriptive error instead of the raw SyntaxError.
  */
-function safeParseWebviewJson(raw: string): any {
+function safeParseWebviewJson<T = Record<string, unknown>>(raw: string): T {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as T;
   } catch {
     const preview = raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
     throw new Error(`Malformed JSON from webview: ${preview}`);
@@ -68,8 +59,9 @@ function safeParseWebviewJson(raw: string): any {
 async function playCursorEffect(label: string, effectJs: string): Promise<void> {
   try {
     const result = await evalWithResult(label, effectJs, 3000);
-    const { duration } = safeParseWebviewJson(result);
-    if (duration > 0) await new Promise((r) => setTimeout(r, duration));
+    const parsed = safeParseWebviewJson<{ duration?: number }>(result);
+    if (parsed.duration && parsed.duration > 0)
+      await new Promise((r) => setTimeout(r, parsed.duration));
   } catch {
     /* visual effects are non-critical */
   }
@@ -143,6 +135,11 @@ async function waitForPageLoad(
   });
 }
 
+// ---- Response helper type ----
+
+/** Response function for tool request handlers. */
+type RespondFn = (result: unknown) => void;
+
 /**
  * Hook that handles browser automation RPC requests from the sidecar.
  *
@@ -194,19 +191,6 @@ export function useBrowserRpcHandler(
     prevWorkspaceIdRef.current = workspaceId;
   }, [workspaceId]);
 
-  const sendResponse = useCallback(async (id: unknown, result: unknown) => {
-    const response = JSON.stringify({
-      jsonrpc: "2.0",
-      result,
-      id,
-    });
-    try {
-      await invoke("send_sidecar_message", { message: response });
-    } catch (err) {
-      console.error("[BrowserRPC] Failed to send response:", err);
-    }
-  }, []);
-
   const resolveWebviewLabel = useCallback(
     (requestedLabel?: string, sessionId?: string): string | null => {
       if (requestedLabel) return requestedLabel;
@@ -222,13 +206,13 @@ export function useBrowserRpcHandler(
   );
 
   const handleBrowserSnapshot = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { error: "No active browser tab" });
+        respond({ error: "No active browser tab" });
         return;
       }
 
@@ -242,7 +226,7 @@ export function useBrowserRpcHandler(
         const resultStr = await evalWithResult(label, SNAPSHOT_JS, 15_000);
         const result = safeParseWebviewJson(resultStr);
         console.log(`[BrowserRPC] Snapshot completed in ${Date.now() - t0}ms`);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
         // Clear stale session mapping so next BrowserNavigate triggers auto-create
         const msg = getErrorMessage(err);
@@ -250,31 +234,31 @@ export function useBrowserRpcHandler(
           sessionTabMapRef.current.delete(params.sessionId as string);
         }
         console.error(`[BrowserRPC] Snapshot failed:`, msg);
-        await sendResponse(id, {
+        respond({
           error: msg.includes("not found")
             ? "Browser tab not found. Use BrowserNavigate to open a page first."
             : msg,
         });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserClick = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
       const ref = params.ref as string;
       const doubleClick = params.doubleClick as boolean | undefined;
       if (!ref) {
-        await sendResponse(id, { success: false, error: "Missing ref parameter" });
+        respond({ success: false, error: "Missing ref parameter" });
         return;
       }
 
@@ -288,22 +272,22 @@ export function useBrowserRpcHandler(
         // Fade cursor out gracefully after click (dwell 600ms then fade)
         invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
 
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserType = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
@@ -312,7 +296,7 @@ export function useBrowserRpcHandler(
       const submit = params.submit as boolean | undefined;
       const slowly = params.slowly as boolean | undefined;
       if (!ref || text === undefined) {
-        await sendResponse(id, { success: false, error: "Missing ref or text parameter" });
+        respond({ success: false, error: "Missing ref or text parameter" });
         return;
       }
 
@@ -326,22 +310,22 @@ export function useBrowserRpcHandler(
         // Unpin cursor after typing completes (best-effort)
         invoke("eval_browser_webview", { label, js: HIDE_CURSOR_JS }).catch(() => {});
 
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserNavigate = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const sessionId = params.sessionId as string | undefined;
       let label = resolveWebviewLabel(params.webviewLabel as string | undefined, sessionId);
 
       const url = params.url as string;
       if (!url) {
-        await sendResponse(id, { success: false, error: "Missing url parameter" });
+        respond({ success: false, error: "Missing url parameter" });
         return;
       }
 
@@ -360,7 +344,7 @@ export function useBrowserRpcHandler(
       if (!label) {
         const autoCreate = onAutoCreateTabRef.current;
         if (!autoCreate) {
-          await sendResponse(id, { success: false, error: "No active browser tab" });
+          respond({ success: false, error: "No active browser tab" });
           return;
         }
 
@@ -370,7 +354,7 @@ export function useBrowserRpcHandler(
         } else {
           const newLabel = autoCreate(url);
           if (!newLabel) {
-            await sendResponse(id, { success: false, error: "Failed to create browser tab" });
+            respond({ success: false, error: "Failed to create browser tab" });
             return;
           }
           autoCreatePendingRef.current = newLabel;
@@ -398,11 +382,11 @@ export function useBrowserRpcHandler(
           try {
             const resultStr = await evalWithResult(label, SNAPSHOT_JS, 12_000);
             const result = safeParseWebviewJson(resultStr);
-            await sendResponse(id, { success: true, webviewLabel: label, ...result });
+            respond({ success: true, webviewLabel: label, ...result });
           } catch (snapErr: unknown) {
             const snapMsg = getErrorMessage(snapErr);
             console.warn(`[BrowserRPC] Post-navigate snapshot failed: ${snapMsg}`);
-            await sendResponse(id, {
+            respond({
               success: true,
               webviewLabel: label,
               snapshot: `Page loaded but snapshot failed: ${snapMsg}. Use BrowserSnapshot to retry.`,
@@ -412,7 +396,7 @@ export function useBrowserRpcHandler(
           autoCreatePendingRef.current = null;
           const msg = getErrorMessage(err);
           console.error(`[BrowserRPC] Auto-create navigation failed:`, msg);
-          await sendResponse(id, {
+          respond({
             success: false,
             error: msg,
           });
@@ -437,11 +421,11 @@ export function useBrowserRpcHandler(
         try {
           const resultStr = await evalWithResult(label, SNAPSHOT_JS, 12_000);
           const result = safeParseWebviewJson(resultStr);
-          await sendResponse(id, { success: true, webviewLabel: label, ...result });
+          respond({ success: true, webviewLabel: label, ...result });
         } catch (snapErr: unknown) {
           const snapMsg = getErrorMessage(snapErr);
           console.warn(`[BrowserRPC] Post-navigate snapshot failed: ${snapMsg}`);
-          await sendResponse(id, {
+          respond({
             success: true,
             webviewLabel: label,
             snapshot: `Page loaded but snapshot failed: ${snapMsg}. Use BrowserSnapshot to retry.`,
@@ -469,9 +453,9 @@ export function useBrowserRpcHandler(
                 try {
                   const resultStr = await evalWithResult(newLabel, SNAPSHOT_JS, 12_000);
                   const result = safeParseWebviewJson(resultStr);
-                  await sendResponse(id, { success: true, webviewLabel: newLabel, ...result });
+                  respond({ success: true, webviewLabel: newLabel, ...result });
                 } catch {
-                  await sendResponse(id, {
+                  respond({
                     success: true,
                     webviewLabel: newLabel,
                     snapshot: "Page loaded. Use BrowserSnapshot to inspect.",
@@ -489,17 +473,17 @@ export function useBrowserRpcHandler(
         }
 
         console.error(`[BrowserRPC] Navigation failed:`, msg);
-        await sendResponse(id, { success: false, error: msg });
+        respond({ success: false, error: msg });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserGetState = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const tab = getActiveTabRef.current();
       if (!tab) {
-        await sendResponse(id, {
+        respond({
           available: false,
           hint: "Use BrowserNavigate to auto-create a tab",
         });
@@ -520,7 +504,7 @@ export function useBrowserRpcHandler(
         }
       }
 
-      await sendResponse(id, {
+      respond({
         available: true,
         activeTab: {
           webviewLabel: targetTab.webviewLabel,
@@ -529,17 +513,17 @@ export function useBrowserRpcHandler(
         },
       });
     },
-    [sendResponse]
+    []
   );
 
   const handleBrowserWaitFor = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
@@ -552,14 +536,14 @@ export function useBrowserRpcHandler(
       // Validate: exactly one of text, textGone, or time must be provided
       const modeCount = [text, textGone, time].filter((v) => v !== undefined).length;
       if (modeCount === 0) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: "Provide one of: text, textGone, or time",
         });
         return;
       }
       if (modeCount > 1) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: "Provide only one of: text, textGone, or time",
         });
@@ -572,7 +556,7 @@ export function useBrowserRpcHandler(
           await new Promise((r) => setTimeout(r, time * 1000));
           const resultStr = await evalWithResult(label, SNAPSHOT_JS, 15_000);
           const result = safeParseWebviewJson(resultStr);
-          await sendResponse(id, { success: true, ...result });
+          respond({ success: true, ...result });
         } else {
           // Text polling — evalWithResult timeout = page timeout + 5s buffer
           const evalTimeout = timeoutMs + 5000;
@@ -582,33 +566,33 @@ export function useBrowserRpcHandler(
               : buildWaitForTextGoneJs(textGone!, timeoutMs);
           const resultStr = await evalWithResult(label, js, evalTimeout);
           const result = safeParseWebviewJson(resultStr);
-          await sendResponse(id, result);
+          respond(result);
         }
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserEvaluate = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { error: "No active browser tab" });
+        respond({ error: "No active browser tab" });
         return;
       }
 
       const code = params.code as string;
       const ref = params.ref as string | undefined;
       if (!code) {
-        await sendResponse(id, { error: "Missing code parameter" });
+        respond({ error: "Missing code parameter" });
         return;
       }
 
@@ -617,28 +601,28 @@ export function useBrowserRpcHandler(
         // User code may run expensive operations — 15s timeout (same as snapshot)
         const resultStr = await evalWithResult(label, js, 15_000);
         const result = safeParseWebviewJson(resultStr);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { error: getErrorMessage(err) });
+        respond({ error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserPressKey = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
       const key = params.key as string;
       if (!key) {
-        await sendResponse(id, { success: false, error: "Missing key parameter" });
+        respond({ success: false, error: "Missing key parameter" });
         return;
       }
 
@@ -655,28 +639,28 @@ export function useBrowserRpcHandler(
         const js = buildPressKeyJs(key, modifiers);
         const resultStr = await evalWithResult(label, js);
         const result = safeParseWebviewJson(resultStr);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserHover = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
       const ref = params.ref as string;
       if (!ref) {
-        await sendResponse(id, { success: false, error: "Missing ref parameter" });
+        respond({ success: false, error: "Missing ref parameter" });
         return;
       }
 
@@ -690,29 +674,29 @@ export function useBrowserRpcHandler(
         // Fade cursor out gracefully after hover (dwell 600ms then fade)
         invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
 
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserSelectOption = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
       const ref = params.ref as string;
       const values = params.values as string[];
       if (!ref || !values) {
-        await sendResponse(id, { success: false, error: "Missing ref or values parameter" });
+        respond({ success: false, error: "Missing ref or values parameter" });
         return;
       }
 
@@ -726,22 +710,22 @@ export function useBrowserRpcHandler(
         // Fade cursor out gracefully after select (dwell 600ms then fade)
         invoke("eval_browser_webview", { label, js: buildFadeCursorJs() }).catch(() => {});
 
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserNavigateBack = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
@@ -758,11 +742,11 @@ export function useBrowserRpcHandler(
         try {
           const resultStr = await evalWithResult(label, SNAPSHOT_JS, 12_000);
           const result = safeParseWebviewJson(resultStr);
-          await sendResponse(id, { success: true, ...result });
+          respond({ success: true, ...result });
         } catch (snapErr: unknown) {
           const snapMsg = getErrorMessage(snapErr);
           console.warn(`[BrowserRPC] Post-navigateBack snapshot failed: ${snapMsg}`);
-          await sendResponse(id, {
+          respond({
             success: true,
             snapshot: `Navigated back but snapshot failed: ${snapMsg}. Use BrowserSnapshot to retry.`,
           });
@@ -770,42 +754,42 @@ export function useBrowserRpcHandler(
       } catch (err: unknown) {
         const msg = getErrorMessage(err);
         console.error(`[BrowserRPC] NavigateBack failed:`, msg);
-        await sendResponse(id, { success: false, error: msg });
+        respond({ success: false, error: msg });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserConsoleMessages = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { logs: "", count: 0, error: "No active browser tab" });
+        respond({ logs: "", count: 0, error: "No active browser tab" });
         return;
       }
 
       try {
         const resultStr = await evalWithResult(label, CONSOLE_MESSAGES_JS);
         const result = safeParseWebviewJson(resultStr);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { logs: "", count: 0, error: getErrorMessage(err) });
+        respond({ logs: "", count: 0, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserScreenshot = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { image: "", error: "No active browser tab" });
+        respond({ image: "", error: "No active browser tab" });
         return;
       }
 
@@ -832,14 +816,14 @@ export function useBrowserRpcHandler(
         }).catch(() => {});
         // Best-effort URL + title for context
         const url = await invoke<string>("get_browser_webview_url", { label }).catch(() => "");
-        await sendResponse(id, { image: base64, url, title: "" });
+        respond({ image: base64, url, title: "" });
       } catch (err: unknown) {
         // Clear stale session mapping so next BrowserNavigate triggers auto-create
         const msg = getErrorMessage(err);
         if (msg.includes("not found") && params.sessionId) {
           sessionTabMapRef.current.delete(params.sessionId as string);
         }
-        await sendResponse(id, {
+        respond({
           image: "",
           error: msg.includes("not found")
             ? "Browser tab not found. Use BrowserNavigate to open a page first."
@@ -847,39 +831,39 @@ export function useBrowserRpcHandler(
         });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserNetworkRequests = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { requests: "", count: 0, error: "No active browser tab" });
+        respond({ requests: "", count: 0, error: "No active browser tab" });
         return;
       }
 
       try {
         const resultStr = await evalWithResult(label, NETWORK_REQUESTS_JS);
         const result = safeParseWebviewJson(resultStr);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { requests: "", count: 0, error: getErrorMessage(err) });
+        respond({ requests: "", count: 0, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
   const handleBrowserScroll = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const label = resolveWebviewLabel(
         params.webviewLabel as string | undefined,
         params.sessionId as string | undefined
       );
       if (!label) {
-        await sendResponse(id, { success: false, error: "No active browser tab" });
+        respond({ success: false, error: "No active browser tab" });
         return;
       }
 
@@ -891,62 +875,75 @@ export function useBrowserRpcHandler(
         const js = buildScrollJs(direction, amount, ref);
         const resultStr = await evalWithResult(label, js);
         const result = safeParseWebviewJson(resultStr);
-        await sendResponse(id, result);
+        respond(result);
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [resolveWebviewLabel, sendResponse]
+    [resolveWebviewLabel]
   );
 
-  useEffect(() => {
-    if (!isTauriEnv) return;
+  // ============================================================================
+  // Dispatch helper
+  // ============================================================================
 
-    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
-      const { id, method, params } = event.payload;
-      if (import.meta.env.DEV) {
-        console.log("[BrowserRPC] Received request:", method);
-      }
-
+  const dispatchBrowserMethod = useCallback(
+    (
+      method: string,
+      params: Record<string, unknown>,
+      respond: RespondFn,
+      respondError?: (error: string) => void
+    ) => {
       match(method)
-        .with("browserSnapshot", () => handleBrowserSnapshot(id, params))
-        .with("browserClick", () => handleBrowserClick(id, params))
-        .with("browserType", () => handleBrowserType(id, params))
-        .with("browserNavigate", () => handleBrowserNavigate(id, params))
-        .with("browserGetState", () => handleBrowserGetState(id, params))
-        .with("browserWaitFor", () => handleBrowserWaitFor(id, params))
-        .with("browserEvaluate", () => handleBrowserEvaluate(id, params))
-        .with("browserPressKey", () => handleBrowserPressKey(id, params))
-        .with("browserHover", () => handleBrowserHover(id, params))
-        .with("browserSelectOption", () => handleBrowserSelectOption(id, params))
-        .with("browserNavigateBack", () => handleBrowserNavigateBack(id, params))
-        .with("browserConsoleMessages", () => handleBrowserConsoleMessages(id, params))
-        .with("browserNetworkRequests", () => handleBrowserNetworkRequests(id, params))
-        .with("browserScreenshot", () => handleBrowserScreenshot(id, params))
-        .with("browserScroll", () => handleBrowserScroll(id, params))
+        .with("browserSnapshot", () => handleBrowserSnapshot(params, respond))
+        .with("browserClick", () => handleBrowserClick(params, respond))
+        .with("browserType", () => handleBrowserType(params, respond))
+        .with("browserNavigate", () => handleBrowserNavigate(params, respond))
+        .with("browserGetState", () => handleBrowserGetState(params, respond))
+        .with("browserWaitFor", () => handleBrowserWaitFor(params, respond))
+        .with("browserEvaluate", () => handleBrowserEvaluate(params, respond))
+        .with("browserPressKey", () => handleBrowserPressKey(params, respond))
+        .with("browserHover", () => handleBrowserHover(params, respond))
+        .with("browserSelectOption", () => handleBrowserSelectOption(params, respond))
+        .with("browserNavigateBack", () => handleBrowserNavigateBack(params, respond))
+        .with("browserConsoleMessages", () => handleBrowserConsoleMessages(params, respond))
+        .with("browserNetworkRequests", () => handleBrowserNetworkRequests(params, respond))
+        .with("browserScreenshot", () => handleBrowserScreenshot(params, respond))
+        .with("browserScroll", () => handleBrowserScroll(params, respond))
         .otherwise(() => {
-          // Not a browser method — ignore (other handlers may pick it up)
+          if (method.startsWith("browser") && respondError) {
+            respondError(`Unknown browser method: ${method}`);
+          }
         });
-    });
+    },
+    [
+      handleBrowserSnapshot,
+      handleBrowserClick,
+      handleBrowserType,
+      handleBrowserNavigate,
+      handleBrowserGetState,
+      handleBrowserWaitFor,
+      handleBrowserEvaluate,
+      handleBrowserPressKey,
+      handleBrowserHover,
+      handleBrowserSelectOption,
+      handleBrowserNavigateBack,
+      handleBrowserConsoleMessages,
+      handleBrowserNetworkRequests,
+      handleBrowserScreenshot,
+      handleBrowserScroll,
+    ]
+  );
 
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [
-    handleBrowserSnapshot,
-    handleBrowserClick,
-    handleBrowserType,
-    handleBrowserNavigate,
-    handleBrowserGetState,
-    handleBrowserWaitFor,
-    handleBrowserEvaluate,
-    handleBrowserPressKey,
-    handleBrowserHover,
-    handleBrowserSelectOption,
-    handleBrowserNavigateBack,
-    handleBrowserConsoleMessages,
-    handleBrowserNetworkRequests,
-    handleBrowserScreenshot,
-    handleBrowserScroll,
-  ]);
+  // ============================================================================
+  // WS event listener (agent-server → backend → q:event tool:request)
+  // ============================================================================
+
+  useWsToolRequest((method, requestId, params, respond, respondError) => {
+    if (import.meta.env.DEV) {
+      console.log("[BrowserRPC] Received request (WS):", method, "requestId:", requestId);
+    }
+
+    dispatchBrowserMethod(method, params, respond, respondError);
+  });
 }

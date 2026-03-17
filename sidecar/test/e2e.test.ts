@@ -5,7 +5,6 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StringDecoder } from "string_decoder";
-import Database from "better-sqlite3";
 
 /**
  * End-to-end tests: Spawn a real sidecar process, connect via
@@ -189,17 +188,12 @@ async function spawnSidecar(): Promise<{
   socketPath: string;
   client: net.Socket;
   logPath: string;
-  dbPath: string;
 }> {
-  // Use a temp DB so E2E tests don't touch the production database
-  // and can seed session rows for FK-constrained inserts.
-  const dbPath = path.join(os.tmpdir(), `opendevs-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-
-  const proc = spawn("node", [BUNDLE_PATH], {
+  // The agent-server is stateless — no DATABASE_PATH needed.
+  const proc = spawn("node", [BUNDLE_PATH, "--listen", "unix://"], {
     env: {
       ...process.env,
       LOG_LEVEL: "debug",
-      DATABASE_PATH: dbPath,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -246,7 +240,7 @@ async function spawnSidecar(): Promise<{
 
   const logPath = `/tmp/opendevs-${proc.pid}.log`;
 
-  return { process: proc, socketPath, client, logPath, dbPath };
+  return { process: proc, socketPath, client, logPath };
 }
 
 /** Kill a sidecar process and clean up */
@@ -254,7 +248,6 @@ async function killSidecar(sidecar: {
   process: ChildProcess;
   socketPath: string;
   client: net.Socket;
-  dbPath?: string;
 }): Promise<void> {
   if (sidecar.client) {
     sidecar.client.destroy();
@@ -272,45 +265,6 @@ async function killSidecar(sidecar: {
     } catch {
       // ignore
     }
-  }
-  // Clean up temp DB files (main + WAL + SHM)
-  if (sidecar.dbPath) {
-    for (const suffix of ["", "-wal", "-shm"]) {
-      try { fs.unlinkSync(sidecar.dbPath + suffix); } catch { /* ignore */ }
-    }
-  }
-}
-
-/**
- * Seed a session row (plus required repo + workspace parents) into the
- * sidecar's temp DB so that saveUserMessage() can INSERT messages without
- * hitting FK constraint violations. Uses WAL mode + busy_timeout to avoid
- * conflicts with the running sidecar process.
- */
-function seedSession(dbPath: string, sessionId: string, agentType: string = "claude"): void {
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("busy_timeout = 5000");
-  db.pragma("foreign_keys = ON");
-
-  // Use unique IDs per call to avoid collision across test cases sharing the same DB
-  const repoId = `e2e-repo-${sessionId}`;
-  const workspaceId = `e2e-ws-${sessionId}`;
-  const rootPath = `/tmp/e2e-${sessionId}`;
-
-  const seed = db.transaction(() => {
-    db.prepare("INSERT INTO repositories (id, name, root_path) VALUES (?, ?, ?)")
-      .run(repoId, "e2e-test", rootPath);
-    db.prepare("INSERT INTO workspaces (id, repository_id, slug) VALUES (?, ?, ?)")
-      .run(workspaceId, repoId, "e2e-test");
-    db.prepare("INSERT INTO sessions (id, workspace_id, agent_type, status) VALUES (?, ?, ?, ?)")
-      .run(sessionId, workspaceId, agentType, "idle");
-  });
-
-  try {
-    seed();
-  } finally {
-    db.close();
   }
 }
 
@@ -354,11 +308,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   });
 
   it("responds to valid JSON-RPC requests on registered methods", async () => {
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-session",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-session",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -376,11 +329,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
     client.write("this is not valid json\n");
     client.write("{ incomplete\n");
 
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-after-garbage",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-after-garbage",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -396,11 +348,10 @@ describe.skipIf(!bundleExists)("E2E: Sidecar Process", () => {
   it("handles non-JSON-RPC JSON gracefully", async () => {
     client.write(JSON.stringify({ foo: "bar", not: "jsonrpc" }) + "\n");
 
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-after-nonjsonrpc",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: "/tmp" },
+      id: "test-after-nonjsonrpc",
+      cwd: "/tmp",
     });
 
     const response = await waitForMessage(
@@ -422,7 +373,6 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   let socketPath: string;
   let client: net.Socket;
   let logPath: string;
-  let dbPath: string;
 
   beforeAll(async () => {
     const sidecar = await spawnSidecar();
@@ -430,11 +380,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     socketPath = sidecar.socketPath;
     client = sidecar.client;
     logPath = sidecar.logPath;
-    dbPath = sidecar.dbPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killSidecar({ process: sidecarProcess, socketPath, client, dbPath });
+    await killSidecar({ process: sidecarProcess, socketPath, client });
   });
 
   // ------------------------------------------------------------------
@@ -455,11 +404,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // ------------------------------------------------------------------
 
   it("returns real account info via claudeAuth", async () => {
-    const id = sendRequest(client, "claudeAuth", {
-      type: "claude_auth",
-      id: "test-auth-real",
+    const id = sendRequest(client, "provider/auth", {
       agentType: "claude",
-      options: { cwd: WORKSPACE_ROOT },
+      id: "test-auth-real",
+      cwd: WORKSPACE_ROOT,
     });
 
     const response = await waitForMessage(
@@ -485,11 +433,10 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   // ------------------------------------------------------------------
 
   it("returns slash commands and MCP servers via workspaceInit", async () => {
-    const id = sendRequest(client, "workspaceInit", {
-      type: "workspace_init",
-      id: "test-workspace-init",
+    const id = sendRequest(client, "provider/initWorkspace", {
       agentType: "claude",
-      options: { cwd: WORKSPACE_ROOT },
+      id: "test-workspace-init",
+      cwd: WORKSPACE_ROOT,
     });
 
     const response = await waitForMessage(
@@ -518,16 +465,15 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   it("sends a query and receives streamed response messages", async () => {
     const sessionId = `test-query-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "claude");
+    // The agent-server is stateless — no DB seeding needed.
+    // The backend saves the user message BEFORE forwarding turn/start to the sidecar.
 
     // Set up a collector for all incoming messages
     const messageCollector = collectMessages(client);
 
     // Send a minimal query (short prompt to get a quick response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "claude",
       prompt: "Reply with exactly: PONG",
       options: {
@@ -590,13 +536,9 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   it("cancels an active query and receives abort notification", async () => {
     const sessionId = `test-cancel-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "claude");
-
     // Start a query that will take a while (ask for a long response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "claude",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
@@ -612,10 +554,8 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Send cancel request
-    const cancelId = sendRequest(client, "cancel", {
-      type: "cancel",
-      id: sessionId,
-      agentType: "claude",
+    const cancelId = sendRequest(client, "turn/cancel", {
+      sessionId,
     });
 
     // Should receive either:
@@ -673,7 +613,6 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
   let socketPath: string;
   let client: net.Socket;
   let logPath: string;
-  let dbPath: string;
 
   beforeAll(async () => {
     const sidecar = await spawnSidecar();
@@ -681,11 +620,10 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     socketPath = sidecar.socketPath;
     client = sidecar.client;
     logPath = sidecar.logPath;
-    dbPath = sidecar.dbPath;
   }, 30_000);
 
   afterAll(async () => {
-    await killSidecar({ process: sidecarProcess, socketPath, client, dbPath });
+    await killSidecar({ process: sidecarProcess, socketPath, client });
   });
 
   // ------------------------------------------------------------------
@@ -695,16 +633,14 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
   it("sends a query and receives streamed response messages", async () => {
     const sessionId = `test-codex-query-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "codex");
+    // The agent-server is stateless — no DB seeding needed.
 
     // Collect all incoming messages
     const messageCollector = collectMessages(client);
 
     // Send a minimal query (short prompt for a quick response)
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "codex",
       prompt: "Reply with exactly: PONG",
       options: {
@@ -762,13 +698,9 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
   it("cancels an active query and receives abort notification", async () => {
     const sessionId = `test-codex-cancel-${Date.now()}`;
 
-    // Seed a session row so saveUserMessage() can INSERT without FK violation
-    seedSession(dbPath, sessionId, "codex");
-
     // Start a query that will take a while
-    sendNotification(client, "query", {
-      type: "query",
-      id: sessionId,
+    sendNotification(client, "turn/start", {
+      sessionId,
       agentType: "codex",
       prompt:
         "Write a 500-word essay about the history of computing. Be very thorough and detailed.",
@@ -784,10 +716,8 @@ describe.skipIf(!bundleExists || !hasOpenAIKey)("E2E: Real Codex Integration", (
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Send cancel request
-    const cancelId = sendRequest(client, "cancel", {
-      type: "cancel",
-      id: sessionId,
-      agentType: "codex",
+    const cancelId = sendRequest(client, "turn/cancel", {
+      sessionId,
     });
 
     // Should receive either:

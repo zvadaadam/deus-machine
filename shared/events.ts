@@ -2,13 +2,11 @@
  * App Event Catalog
  *
  * Single source of truth for ALL real-time event names and their payload schemas.
- * These events flow through the app via different transports (Tauri IPC, stdout
- * relay, Unix socket) but the contracts are defined here regardless of how
- * they're delivered.
+ * These events flow through the app via Tauri IPC and WebSocket, but the
+ * contracts are defined here regardless of transport.
  *
  * Every `listen()` call in the frontend MUST use an event name from this file.
- * The Rust layer (socket.rs, backend.rs) must be kept in sync manually — see
- * the `SYNC:` comments in those files pointing back here.
+ * The Rust layer (backend.rs, sidecar.rs) must be kept in sync manually.
  *
  * Adding a new event:
  *   1. Add the event name constant below
@@ -26,9 +24,6 @@ import { z } from "zod";
 
 /** Workspace events — backend → Rust → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
-
-/** Sidecar RPC — sidecar → Rust → frontend (bidirectional requests) */
-export const SIDECAR_REQUEST = "sidecar:request" as const;
 
 /** File system events — Rust watcher → frontend */
 export const FS_CHANGED = "fs:changed" as const;
@@ -71,20 +66,13 @@ export const COMMAND_NAMES = ["sendMessage", "stopSession"] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
-export const PROTOCOL_EVENTS = ["session:plan-mode", "session:error", "session:progress"] as const;
-export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
-
-/** Event names the sidecar sends to POST /notify on the backend.
- *  Must match the strings passed to notifyBackend() in sidecar/db/session-writer.ts. */
-export const NOTIFY_SESSION_MESSAGE = "session:message" as const;
-export const NOTIFY_SESSION_STATUS = "session:status" as const;
-export const NOTIFY_SESSION_UPDATED = "session:updated" as const;
-export const SIDECAR_NOTIFY_EVENTS = [
-  NOTIFY_SESSION_MESSAGE,
-  NOTIFY_SESSION_STATUS,
-  NOTIFY_SESSION_UPDATED,
+export const PROTOCOL_EVENTS = [
+  "session:plan-mode",
+  "session:error",
+  "session:progress",
+  "tool:request",
 ] as const;
-export type SidecarNotifyEvent = (typeof SIDECAR_NOTIFY_EVENTS)[number];
+export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 // ============================================================================
 // Payload Schemas
@@ -96,13 +84,6 @@ export const WorkspaceProgressSchema = z.object({
   label: z.string(),
 });
 export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
-
-export const SidecarRpcRequestSchema = z.object({
-  id: z.unknown(),
-  method: z.string(),
-  params: z.record(z.string(), z.unknown()),
-});
-export type SidecarRpcRequest = z.infer<typeof SidecarRpcRequestSchema>;
 
 export const FileChangeSchema = z.object({
   workspace_path: z.string(),
@@ -221,7 +202,6 @@ export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
  */
 export const AppEventSchemaMap = {
   [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
-  [SIDECAR_REQUEST]: SidecarRpcRequestSchema,
   [FS_CHANGED]: FileChangeSchema,
   [PTY_DATA]: PtyDataSchema,
   [PTY_EXIT]: PtyExitSchema,
@@ -246,9 +226,6 @@ export const AppEventSchemaMap = {
 export interface AppEventMap {
   // Workspace
   [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
-
-  // Sidecar RPC
-  [SIDECAR_REQUEST]: SidecarRpcRequest;
 
   // File system
   [FS_CHANGED]: FileChangeEvent;

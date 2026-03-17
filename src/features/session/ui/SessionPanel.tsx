@@ -10,7 +10,6 @@ import {
 import { Chat } from "./Chat";
 import { MessageInput } from "./MessageInput";
 import type { MessageInputRef } from "./MessageInput";
-import { useSocket } from "@/shared/hooks";
 import { useSessionActions } from "../hooks";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { SessionProvider } from "../context";
@@ -95,9 +94,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     },
     ref
   ) => {
-    // Custom hooks (useSocket manages socket connection lifecycle)
-    useSocket();
-
     // Agent RPC handler — listens for sidecar:request events and manages pending UI state.
     // sessionWorkspaces maps this session's ID to its workspace git info so getDiff can
     // auto-respond without round-tripping through Node.js.
@@ -447,7 +443,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onReject={handlePlanReject}
             />
             <AgentQuestionOverlay
-              key={pendingQuestion?.rpcId as string}
+              key={pendingQuestion?.wsRequestId}
               request={pendingQuestion}
               agentType={session?.agent_type}
               onSubmit={handleQuestionSubmit}
@@ -552,7 +548,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onReject={handlePlanReject}
                   />
                   <AgentQuestionOverlay
-                    key={pendingQuestion?.rpcId as string}
+                    key={pendingQuestion?.wsRequestId}
                     request={pendingQuestion}
                     agentType={session?.agent_type}
                     onSubmit={handleQuestionSubmit}

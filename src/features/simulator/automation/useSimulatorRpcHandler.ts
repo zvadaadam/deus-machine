@@ -1,19 +1,19 @@
 // src/features/simulator/automation/useSimulatorRpcHandler.ts
-// Handles simulator automation RPC requests from the sidecar.
+// Handles simulator automation RPC requests from the agent-server.
 //
 // Architecture:
-// Sidecar → Rust socket relay → "sidecar:request" Tauri event → this handler
-// Handler calls existing Tauri IPC simulator commands → sends response back via socket
+//   Agent-server → Backend → q:event tool:request → this handler
+//   Handler calls existing Tauri IPC simulator commands → sends q:tool_response back via WS
 //
 // This hook should be mounted in SimulatorPanel so it's active whenever
 // the simulator is visible.
 
 import { match } from "ts-pattern";
 import { useEffect, useCallback, useRef } from "react";
-import { invoke, listen, isTauriEnv, SIDECAR_REQUEST } from "@/platform/tauri";
 import { getErrorMessage } from "@shared/lib/errors";
 import { simulatorService } from "../api/simulator.service";
 import type { SimulatorInfo, StreamInfo } from "../types";
+import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 
 /**
  * Callbacks from SimulatorPanel that let the RPC handler trigger
@@ -29,10 +29,13 @@ export interface SimulatorRpcCallbacks {
   getSimulators: () => SimulatorInfo[] | null;
 }
 
+/** Response function for tool request handlers. */
+type RespondFn = (result: unknown) => void;
+
 /**
- * Listens for "sidecar:request" Tauri events with simulator method names,
- * dispatches to the appropriate simulator service call, and sends JSON-RPC
- * responses back to the sidecar.
+ * Listens for tool:request events via WebSocket with simulator method names,
+ * dispatches to the appropriate simulator service call, and sends responses
+ * back via q:tool_response.
  */
 export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
   // Store callbacks in refs for stable closures in the event listener
@@ -44,36 +47,14 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
   const getSimulatorsRef = useRef(callbacks.getSimulators);
   getSimulatorsRef.current = callbacks.getSimulators;
-  const sendResponse = useCallback(async (id: unknown, result: unknown) => {
-    const response = JSON.stringify({
-      jsonrpc: "2.0",
-      result,
-      id,
-    });
-    try {
-      await invoke("send_sidecar_message", { message: response });
-    } catch (err) {
-      console.error("[SimulatorRPC] Failed to send response:", err);
-    }
-  }, []);
 
-  const sendError = useCallback(async (id: unknown, message: string) => {
-    const response = JSON.stringify({
-      jsonrpc: "2.0",
-      error: { code: -32000, message },
-      id,
-    });
-    try {
-      await invoke("send_sidecar_message", { message: response });
-    } catch (err) {
-      console.error("[SimulatorRPC] Failed to send error:", err);
-    }
-  }, []);
+  // Guard against rapid duplicate auto-create calls
+  // (not needed now but kept for consistency with browser handler)
 
   // -- Screenshot: capture JPEG from ObjC bridge, return as base64 -----------
 
   const handleSimScreenshot = useCallback(
-    async (id: unknown, _params: Record<string, unknown>) => {
+    async (_params: Record<string, unknown>, respond: RespondFn) => {
       // Pin workspaceId at handler entry to prevent cross-workspace leakage
       // if the ref changes between awaits.
       const workspaceId = workspaceIdRef.current;
@@ -90,42 +71,39 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         }
         const base64 = btoa(binary);
 
-        await sendResponse(id, { image: base64 });
+        respond({ image: base64 });
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           image: "",
           error: getErrorMessage(err),
         });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- Tap: single touch began + ended at coordinates -----------------------
 
-  const handleSimTap = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
-      const workspaceId = workspaceIdRef.current;
-      try {
-        const x = params.x as number;
-        const y = params.y as number;
+  const handleSimTap = useCallback(async (params: Record<string, unknown>, respond: RespondFn) => {
+    const workspaceId = workspaceIdRef.current;
+    try {
+      const x = params.x as number;
+      const y = params.y as number;
 
-        // Simulate a full tap: began → ended
-        await simulatorService.sendTouch(workspaceId, x, y, "began");
-        await simulatorService.sendTouch(workspaceId, x, y, "ended");
+      // Simulate a full tap: began → ended
+      await simulatorService.sendTouch(workspaceId, x, y, "began");
+      await simulatorService.sendTouch(workspaceId, x, y, "ended");
 
-        await sendResponse(id, { success: true });
-      } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
-      }
-    },
-    [sendResponse]
-  );
+      respond({ success: true });
+    } catch (err: unknown) {
+      respond({ success: false, error: getErrorMessage(err) });
+    }
+  }, []);
 
   // -- Swipe: touch began → sequence of moved → ended ----------------------
 
   const handleSimSwipe = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const startX = params.startX as number;
@@ -150,18 +128,18 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
         await simulatorService.sendTouch(workspaceId, endX, endY, "ended");
 
-        await sendResponse(id, { success: true });
+        respond({ success: true });
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- Type text: send each character as a key press ------------------------
 
   const handleSimTypeText = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const text = params.text as string;
@@ -193,24 +171,24 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
         }
 
         if (unsupported.length > 0) {
-          await sendResponse(id, {
+          respond({
             success: true,
             error: `Unsupported characters skipped: ${[...new Set(unsupported)].join("")}`,
           });
         } else {
-          await sendResponse(id, { success: true });
+          respond({ success: true });
         }
       } catch (err: unknown) {
-        await sendResponse(id, { success: false, error: getErrorMessage(err) });
+        respond({ success: false, error: getErrorMessage(err) });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- Press key: single key down + up -------------------------------------
 
   const handleSimPressKey = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const keycode = params.keycode as number;
@@ -225,45 +203,45 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           await simulatorService.sendKey(workspaceId, keycode, "up");
         }
 
-        await sendResponse(id, { success: true });
+        respond({ success: true });
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- Build & Run: xcodebuild + install + launch --------------------------
 
   const handleSimBuildAndRun = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       const workspaceId = workspaceIdRef.current;
       try {
         const workspacePath = params.workspacePath as string;
         const app = await simulatorService.buildAndRun(workspaceId, workspacePath);
 
-        await sendResponse(id, {
+        respond({
           success: true,
           bundleId: app.bundle_id,
           appName: app.name,
         });
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- List devices: return cached simulator list --------------------------
 
   const handleSimListDevices = useCallback(
-    async (id: unknown, _params: Record<string, unknown>) => {
+    async (_params: Record<string, unknown>, respond: RespondFn) => {
       try {
         const sims = getSimulatorsRef.current();
         if (!sims) {
@@ -277,7 +255,7 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
             deviceType: s.device_type,
             isAvailable: s.is_available,
           }));
-          await sendResponse(id, { devices });
+          respond({ devices });
           return;
         }
 
@@ -289,25 +267,25 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
           deviceType: s.device_type,
           isAvailable: s.is_available,
         }));
-        await sendResponse(id, { devices });
+        respond({ devices });
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           devices: [],
           error: getErrorMessage(err),
         });
       }
     },
-    [sendResponse]
+    []
   );
 
   // -- Start simulator: boot + stream via panel callback ------------------
 
   const handleSimStart = useCallback(
-    async (id: unknown, params: Record<string, unknown>) => {
+    async (params: Record<string, unknown>, respond: RespondFn) => {
       try {
         const udid = params.udid as string;
         if (!udid) {
-          await sendResponse(id, {
+          respond({
             success: false,
             error: "Missing udid parameter. Use SimulatorListDevices to find available simulators.",
           });
@@ -316,72 +294,53 @@ export function useSimulatorRpcHandler(callbacks: SimulatorRpcCallbacks) {
 
         const stream = await onBootSimulatorRef.current(udid);
         if (!stream) {
-          await sendResponse(id, {
+          respond({
             success: false,
             error: "Failed to boot simulator. Check that the UDID is valid.",
           });
           return;
         }
 
-        await sendResponse(id, {
+        respond({
           success: true,
           url: stream.url,
           port: stream.port,
           hidAvailable: stream.hid_available,
         });
       } catch (err: unknown) {
-        await sendResponse(id, {
+        respond({
           success: false,
           error: getErrorMessage(err),
         });
       }
     },
-    [sendResponse]
+    []
   );
 
-  // -- Listen for sidecar:request events and dispatch ----------------------
+  // -- WS event listener (agent-server → backend → q:event tool:request) --
 
-  useEffect(() => {
-    if (!isTauriEnv) return;
+  useWsToolRequest((method, requestId, params, respond, _respondError) => {
+    if (import.meta.env.DEV) {
+      console.log("[SimulatorRPC] Received request (WS):", method, "requestId:", requestId);
+    }
 
-    const unlistenPromise = listen(SIDECAR_REQUEST, (event) => {
-      const { id, method, params } = event.payload;
-      if (import.meta.env.DEV) {
-        console.log("[SimulatorRPC] Received request:", method);
-      }
-
-      match(method)
-        .with("simListDevices", () => handleSimListDevices(id, params))
-        .with("simStart", () => handleSimStart(id, params))
-        .with("simScreenshot", () => handleSimScreenshot(id, params))
-        .with("simTap", () => handleSimTap(id, params))
-        .with("simSwipe", () => handleSimSwipe(id, params))
-        .with("simTypeText", () => handleSimTypeText(id, params))
-        .with("simPressKey", () => handleSimPressKey(id, params))
-        .with("simBuildAndRun", () => handleSimBuildAndRun(id, params))
-        .otherwise(() => {
-          // Unknown "sim*" method → tell the sidecar it doesn't exist.
-          // Non-sim methods are silently ignored (other handlers pick them up).
-          if (method.startsWith("sim")) {
-            sendError(id, `Unknown simulator method: ${method}`);
-          }
-        });
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [
-    handleSimListDevices,
-    handleSimStart,
-    handleSimScreenshot,
-    handleSimTap,
-    handleSimSwipe,
-    handleSimTypeText,
-    handleSimPressKey,
-    handleSimBuildAndRun,
-    sendError,
-  ]);
+    match(method)
+      .with("simListDevices", () => handleSimListDevices(params, respond))
+      .with("simStart", () => handleSimStart(params, respond))
+      .with("simScreenshot", () => handleSimScreenshot(params, respond))
+      .with("simTap", () => handleSimTap(params, respond))
+      .with("simSwipe", () => handleSimSwipe(params, respond))
+      .with("simTypeText", () => handleSimTypeText(params, respond))
+      .with("simPressKey", () => handleSimPressKey(params, respond))
+      .with("simBuildAndRun", () => handleSimBuildAndRun(params, respond))
+      .otherwise(() => {
+        // Unknown "sim*" method → tell the agent-server it doesn't exist.
+        // Non-sim methods are silently ignored (other handlers pick them up).
+        if (method.startsWith("sim")) {
+          respond({ success: false, error: `Unknown simulator method: ${method}` });
+        }
+      });
+  });
 }
 
 // ---------------------------------------------------------------------------

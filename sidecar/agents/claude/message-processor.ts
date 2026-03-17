@@ -1,17 +1,11 @@
 // sidecar/agents/claude/message-processor.ts
-// Processes a single deserialized SDK message: persists to DB, sends to
-// frontend, updates stream context. Extracted from the for-await loop body
-// in processWithGenerator.
+// Processes a single deserialized SDK message: emits canonical events, sends to
+// frontend, updates stream context. The agent-server is stateless — all DB
+// writes are handled by the backend via canonical event consumption.
 
 import { getErrorMessage } from "../../../shared/lib/errors";
-import { FrontendClient } from "../../frontend-client";
-import { classifyStopReason } from "../error-classifier";
-import {
-  saveAssistantMessage,
-  saveToolResultMessage,
-  saveAgentSessionId,
-  updateSessionStatus,
-} from "../../db/session-writer";
+import { EventBroadcaster } from "../../event-broadcaster";
+import { classifyStopReason } from "../lifecycle";
 import type { StreamContext } from "./stream-context";
 import type { SessionState } from "./claude-session";
 
@@ -42,16 +36,13 @@ export function deserializeMessage(
 ): Record<string, unknown> | null {
   try {
     const seen = new WeakSet();
-    const messageStr = JSON.stringify(
-      message,
-      (_key, value) => {
-        if (typeof value === "object" && value !== null) {
-          if (seen.has(value)) return "[Circular]";
-          seen.add(value);
-        }
-        return value;
+    const messageStr = JSON.stringify(message, (_key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
       }
-    );
+      return value;
+    });
     return JSON.parse(messageStr);
   } catch (parseError) {
     console.error(
@@ -71,12 +62,14 @@ export function deserializeMessage(
  *
  * Side effects (in critical order):
  * 1. Capture agent_session_id (one-shot, first message only, skip on resume)
- * 2. Save assistant message to DB
- * 3. Save tool_result message to DB
- * 4. Send to frontend (AFTER DB writes — ordering is critical)
- * 5. Classify stop_reason and send error (AFTER sendMessage — content before error banner)
- * 6. Detect result/success → set ctx.querySucceeded
- * 7. Detect result/error_during_execution → set ctx.lastResultError
+ * 2. Emit canonical message events (assistant, tool_result)
+ * 3. Send to frontend via JSON-RPC notification
+ * 4. Classify stop_reason and send error (AFTER sendMessage — content before error banner)
+ * 5. Detect result/success → set ctx.querySucceeded, emit session.idle
+ * 6. Detect result/error_during_execution → set ctx.lastResultError
+ *
+ * The agent-server is stateless — no DB writes. The backend persists messages
+ * and updates session status by consuming canonical events via the WS tunnel.
  */
 export function processMessage(
   cleanMessage: Record<string, unknown>,
@@ -91,9 +84,7 @@ export function processMessage(
     | { id?: string; role?: string; content?: unknown; stop_reason?: string }
     | undefined;
   const parentToolUseId =
-    typeof cleanMessage.parent_tool_use_id === "string"
-      ? cleanMessage.parent_tool_use_id
-      : null;
+    typeof cleanMessage.parent_tool_use_id === "string" ? cleanMessage.parent_tool_use_id : null;
 
   // 1. One-shot: capture SDK session_id on the first message.
   // CRITICAL: Skip capture during resume attempts. When a resume
@@ -102,55 +93,61 @@ export function processMessage(
   // the original working agent_session_id — permanently lost.
   if (!session.agentSessionIdCaptured && cleanMessage.session_id && !opts.isResume) {
     const agentSessionId = String(cleanMessage.session_id);
-    const saveResult = saveAgentSessionId(opts.sessionId, agentSessionId);
-    if (saveResult.ok) {
+
+    try {
+      // Emit canonical agent.session_id event — backend persists to DB.
+      // Set captured flag AFTER emission so a failed send allows retry on next message.
+      EventBroadcaster.emitAgentSessionId(opts.sessionId, agentSessionId);
       session.agentSessionIdCaptured = true;
       console.log(`[${opts.generatorId}] Captured agent_session_id: ${agentSessionId}`);
-    } else {
+    } catch (error) {
       console.error(
-        `[${opts.generatorId}] Failed to persist agent_session_id: ${saveResult.error}`
+        `[${opts.generatorId}] Failed to emit agent_session_id:`,
+        getErrorMessage(error)
       );
     }
   }
 
-  // 2. Persist assistant messages to database (before frontend notification)
+  // 2. Emit canonical message events for assistant and tool_result messages
   if (cleanMessage.type === "assistant" && msg) {
-    const tDbWrite = Date.now();
-    const writeResult = saveAssistantMessage(opts.sessionId, msg, opts.model, parentToolUseId);
-    const dbWriteMs = Date.now() - tDbWrite;
-    if (!writeResult.ok) {
-      console.error(
-        `[${opts.generatorId}] DB write failed for assistant message: ${writeResult.error}`
-      );
-    }
-    if (dbWriteMs > 10) {
-      console.log(`[TIMING][${opts.generatorId}] saveAssistantMessage took ${dbWriteMs}ms`);
-    }
+    const assistantMsgId = msg.id || "unknown";
+    EventBroadcaster.emitAssistantMessage(
+      opts.sessionId,
+      "claude",
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: msg.content,
+        stop_reason: msg.stop_reason ?? null,
+        parent_tool_use_id: parentToolUseId,
+      },
+      opts.model
+    );
   }
 
-  // 3. Persist user messages with tool_result blocks
   if (cleanMessage.type === "user" && msg) {
     const content = msg.content;
     const hasToolResult =
       Array.isArray(content) && content.some((b: any) => b?.type === "tool_result");
     if (hasToolResult) {
-      const tDbWrite = Date.now();
-      const writeResult = saveToolResultMessage(opts.sessionId, msg, parentToolUseId);
-      const dbWriteMs = Date.now() - tDbWrite;
-      if (!writeResult.ok) {
-        console.error(
-          `[${opts.generatorId}] DB write failed for tool_result message: ${writeResult.error}`
-        );
-      }
-      if (dbWriteMs > 10) {
-        console.log(`[TIMING][${opts.generatorId}] saveToolResultMessage took ${dbWriteMs}ms`);
-      }
+      const toolResultMsgId = msg.id || "unknown";
+      EventBroadcaster.emitToolResultMessage(
+        opts.sessionId,
+        "claude",
+        {
+          id: toolResultMsgId,
+          role: "user",
+          content: msg.content,
+          parent_tool_use_id: parentToolUseId,
+        },
+        opts.model
+      );
     }
   }
 
-  // 4. Send to frontend via JSON-RPC notification (after DB writes)
+  // 3. Send to frontend via JSON-RPC notification
   const tSend = Date.now();
-  FrontendClient.sendMessage({
+  EventBroadcaster.sendMessage({
     id: opts.sessionId,
     type: "message",
     agentType: "claude",
@@ -161,44 +158,65 @@ export function processMessage(
     console.log(`[TIMING][${opts.generatorId}] sendMessage took ${sendMs}ms`);
   }
 
-  // 5. Classify stop_reason (after sendMessage — content before error banner)
+  // 4. Classify stop_reason (after sendMessage — content before error banner)
   if (cleanMessage.type === "assistant" && msg) {
     const stopError = classifyStopReason(msg.stop_reason);
     if (stopError) {
-      FrontendClient.sendError({
-        id: opts.sessionId,
-        type: "error",
-        error: stopError.message,
-        agentType: "claude",
-        category: stopError.category,
-      });
-      updateSessionStatus(opts.sessionId, "error", stopError.message, stopError.category);
+      // Emit canonical session.error FIRST — backend handles DB status update.
+      // This must succeed even if the frontend tunnel is down.
+      EventBroadcaster.emitSessionError(
+        opts.sessionId,
+        "claude",
+        stopError.message,
+        stopError.category
+      );
+      // Then notify frontend (best-effort — don't let this block the canonical event)
+      try {
+        EventBroadcaster.sendError({
+          id: opts.sessionId,
+          type: "error",
+          error: stopError.message,
+          agentType: "claude",
+          category: stopError.category,
+        });
+      } catch (error) {
+        console.warn(
+          `[${opts.generatorId}] Failed to send frontend error:`,
+          getErrorMessage(error)
+        );
+      }
       ctx.stopReasonError = true;
     }
   }
 
-  // 6. result/success → mark query as succeeded and transition to idle.
+  // 5. result/success → mark query as succeeded and emit session.idle.
   // Must happen HERE (inside the loop), not in executeOutcome (post-loop),
   // because the streaming loop stays alive between turns — the prompt queue
   // blocks waiting for the next user message, so the post-loop never runs
   // until the entire conversation ends.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "success") {
     ctx.querySucceeded = true;
+
+    // Emit canonical message.result event
+    EventBroadcaster.emitMessageResult(opts.sessionId, "claude", "success");
+
     if (!ctx.stopReasonError) {
-      updateSessionStatus(opts.sessionId, "idle");
+      // Emit canonical session.idle — backend handles DB status update
+      EventBroadcaster.emitSessionIdle(opts.sessionId, "claude");
     }
   }
 
-  // 7. result/error_during_execution → capture for error diagnostics
+  // 6. result/error_during_execution → capture for error diagnostics
   // NOTE: We intentionally do NOT clear the agent_session_id here.
   // Even if the resume failed, the original ID must be preserved.
   if (cleanMessage.type === "result" && cleanMessage.subtype === "error_during_execution") {
     const errors = cleanMessage.errors as string[] | undefined;
-    const resultError = Array.isArray(errors) && errors.length > 0
-      ? errors.join("; ")
-      : typeof cleanMessage.error === "string"
-        ? cleanMessage.error
-        : "unknown";
+    const resultError =
+      Array.isArray(errors) && errors.length > 0
+        ? errors.join("; ")
+        : typeof cleanMessage.error === "string"
+          ? cleanMessage.error
+          : "unknown";
     ctx.lastResultError = resultError;
     console.error(`[${opts.generatorId}] result/error_during_execution: ${resultError}`);
   }

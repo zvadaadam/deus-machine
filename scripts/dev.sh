@@ -18,7 +18,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Trap to kill background processes on exit
-trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt' EXIT
+trap 'kill $(jobs -p) 2>/dev/null; rm -f /tmp/backend_port.txt /tmp/sidecar.log' EXIT
 
 # Kill any stale Vite process on port 1420 to prevent Tauri from
 # connecting to an outdated dev server from a previous session.
@@ -35,9 +35,31 @@ bun run build:inject
 echo -e "${GREEN}✓ Inject scripts built${NC}"
 echo ""
 
-# Start backend server with dynamic port
+# Start agent-server (sidecar) first to get its LISTEN_URL
+echo -e "${BLUE}Starting agent-server...${NC}"
+node src-tauri/resources/bin/index.bundled.cjs > /tmp/sidecar.log 2>&1 &
+SIDECAR_PID=$!
+
+# Wait and capture the listen URL
+AGENT_SERVER_URL=""
+for i in {1..20}; do
+    if grep -q 'LISTEN_URL=' /tmp/sidecar.log 2>/dev/null; then
+        AGENT_SERVER_URL=$(grep 'LISTEN_URL=' /tmp/sidecar.log | head -1 | sed 's/.*LISTEN_URL=//')
+        break
+    fi
+    sleep 0.3
+done
+
+if [ -n "$AGENT_SERVER_URL" ]; then
+    echo -e "${GREEN}✓ Agent-server started at $AGENT_SERVER_URL (PID: $SIDECAR_PID)${NC}"
+else
+    echo -e "${YELLOW}⚠ Agent-server URL not detected, backend will run without agent connection${NC}"
+fi
+echo ""
+
+# Start backend server with dynamic port + agent-server URL
 echo -e "${BLUE}Starting backend server with dynamic port...${NC}"
-PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
+AGENT_SERVER_URL=$AGENT_SERVER_URL PORT=0 node backend/server.cjs > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Wait and capture the dynamic port

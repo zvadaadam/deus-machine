@@ -25,7 +25,6 @@ import settingsRoutes from './routes/settings';
 import statsRoutes from './routes/stats';
 import onboardingRoutes from './routes/onboarding';
 import authRoutes from './routes/remote-auth';
-import notifyRoutes from './routes/notify';
 
 export function createApp() {
   const app = new Hono();
@@ -52,7 +51,6 @@ export function createApp() {
   app.route('/api', agentConfigRoutes);
   app.route('/api', settingsRoutes);
   app.route('/api', statsRoutes);
-  app.route('/api', notifyRoutes);
   app.route('/api', onboardingRoutes);
 
   // Relay status endpoint

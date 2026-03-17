@@ -20,9 +20,9 @@ export default planMeta;
 
 const mockPlanRequest: PlanModeRequest = {
   type: "exitPlanMode",
-  rpcId: "rpc-123",
   sessionId: "sess-1",
   toolInput: { plan: "Refactor the auth module into separate files" },
+  wsRequestId: "rpc-123",
 };
 
 export const Visible: StoryObj<typeof PlanApprovalOverlay> = {
@@ -81,12 +81,19 @@ export const Interactive: StoryObj<typeof PlanApprovalOverlay> = {
             Simulate Plan Request
           </Button>
         </div>
-        <PlanApprovalOverlay request={request} agentType="claude" onApprove={approve} onReject={reject} />
+        <PlanApprovalOverlay
+          request={request}
+          agentType="claude"
+          onApprove={approve}
+          onReject={reject}
+        />
         {log.length > 0 && (
           <div className="bg-muted/30 rounded-lg p-3">
             <p className="text-muted-foreground mb-1 text-xs font-medium">Event log:</p>
             {log.map((entry, i) => (
-              <p key={i} className="text-muted-foreground text-xs">{entry}</p>
+              <p key={i} className="text-muted-foreground text-xs">
+                {entry}
+              </p>
             ))}
           </div>
         )}
@@ -99,14 +106,13 @@ export const Interactive: StoryObj<typeof PlanApprovalOverlay> = {
 // AgentQuestionOverlay
 // ============================================================================
 
-const questionMeta: Meta<typeof AgentQuestionOverlay> = {
+const _questionMeta: Meta<typeof AgentQuestionOverlay> = {
   title: "Chat/AgentOverlays/AgentQuestion",
   component: AgentQuestionOverlay,
 };
 
 const mockSingleQuestion: AskQuestionRequest = {
   type: "askUserQuestion",
-  rpcId: "rpc-456",
   sessionId: "sess-1",
   questions: [
     {
@@ -114,11 +120,11 @@ const mockSingleQuestion: AskQuestionRequest = {
       options: ["Vitest", "Jest", "Mocha", "Playwright"],
     },
   ],
+  wsRequestId: "rpc-456",
 };
 
 const mockMultiQuestion: AskQuestionRequest = {
   type: "askUserQuestion",
-  rpcId: "rpc-789",
   sessionId: "sess-1",
   questions: [
     {
@@ -134,11 +140,11 @@ const mockMultiQuestion: AskQuestionRequest = {
       options: ["Redis", "In-memory", "No caching"],
     },
   ],
+  wsRequestId: "rpc-789",
 };
 
 const mockMultiSelect: AskQuestionRequest = {
   type: "askUserQuestion",
-  rpcId: "rpc-multi",
   sessionId: "sess-1",
   questions: [
     {
@@ -147,11 +153,11 @@ const mockMultiSelect: AskQuestionRequest = {
       multiSelect: true,
     },
   ],
+  wsRequestId: "rpc-multi",
 };
 
 const mockMixedQuestions: AskQuestionRequest = {
   type: "askUserQuestion",
-  rpcId: "rpc-mixed",
   sessionId: "sess-1",
   questions: [
     {
@@ -168,6 +174,7 @@ const mockMixedQuestions: AskQuestionRequest = {
       options: ["Vercel", "AWS", "Self-hosted"],
     },
   ],
+  wsRequestId: "rpc-mixed",
 };
 
 export const SingleQuestion: StoryObj<typeof AgentQuestionOverlay> = {
@@ -266,12 +273,19 @@ export const QuestionInteractive: StoryObj<typeof AgentQuestionOverlay> = {
             Multi-Select
           </Button>
         </div>
-        <AgentQuestionOverlay request={request} agentType="claude" onSubmit={onSubmit} onDismiss={onDismiss} />
+        <AgentQuestionOverlay
+          request={request}
+          agentType="claude"
+          onSubmit={onSubmit}
+          onDismiss={onDismiss}
+        />
         {log.length > 0 && (
           <div className="bg-muted/30 rounded-lg p-3">
             <p className="text-muted-foreground mb-1 text-xs font-medium">Event log:</p>
             {log.map((entry, i) => (
-              <p key={i} className="text-muted-foreground text-xs">{entry}</p>
+              <p key={i} className="text-muted-foreground text-xs">
+                {entry}
+              </p>
             ))}
           </div>
         )}

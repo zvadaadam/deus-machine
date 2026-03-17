@@ -12,7 +12,7 @@ import { z } from "zod";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { FrontendClient } from "../../frontend-client";
+import { EventBroadcaster } from "../../event-broadcaster";
 import { getErrorMessage } from "../../../shared/lib/errors";
 
 // ============================================================================
@@ -160,7 +160,7 @@ For large pages, the snapshot is saved to a file and a preview is returned. Read
         console.log(`[opendevsMCPServer] BrowserSnapshot invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestBrowserSnapshot({
+          const response = await EventBroadcaster.requestBrowserSnapshot({
             sessionId,
             webviewLabel: args.webviewLabel,
           });
@@ -220,7 +220,7 @@ The element is scrolled into view, focused, and clicked with proper mouse event 
         );
 
         try {
-          const response = await FrontendClient.requestBrowserClick({
+          const response = await EventBroadcaster.requestBrowserClick({
             sessionId,
             ref: args.ref,
             doubleClick: args.doubleClick,
@@ -284,7 +284,7 @@ The element is focused and text is entered. Use submit: true to press Enter afte
         );
 
         try {
-          const response = await FrontendClient.requestBrowserType({
+          const response = await EventBroadcaster.requestBrowserType({
             sessionId,
             ref: args.ref,
             text: args.text,
@@ -341,7 +341,7 @@ The element is focused and text is entered. Use submit: true to press Enter afte
         );
 
         try {
-          const response = await FrontendClient.requestBrowserNavigate({
+          const response = await EventBroadcaster.requestBrowserNavigate({
             sessionId,
             url: args.url,
             webviewLabel: args.webviewLabel,
@@ -422,7 +422,7 @@ Provide exactly one of: text, textGone, or time. Returns a page snapshot after t
         );
 
         try {
-          const response = await FrontendClient.requestBrowserWaitFor({
+          const response = await EventBroadcaster.requestBrowserWaitFor({
             sessionId,
             text: args.text,
             textGone: args.textGone,
@@ -493,7 +493,7 @@ If a ref is provided, the matching element is passed as the 'element' argument. 
         console.log(`[opendevsMCPServer] BrowserEvaluate invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestBrowserEvaluate({
+          const response = await EventBroadcaster.requestBrowserEvaluate({
             sessionId,
             code: args.code,
             ref: args.ref,
@@ -555,7 +555,7 @@ scrolling (ArrowDown, PageDown, Space), and text editing (Backspace, Delete).`,
         );
 
         try {
-          const response = await FrontendClient.requestBrowserPressKey({
+          const response = await EventBroadcaster.requestBrowserPressKey({
             sessionId,
             key: args.key,
             ctrl: args.ctrl,
@@ -607,7 +607,7 @@ hover states, or any UI that appears on mouse hover. Returns a page snapshot aft
         );
 
         try {
-          const response = await FrontendClient.requestBrowserHover({
+          const response = await EventBroadcaster.requestBrowserHover({
             sessionId,
             ref: args.ref,
             webviewLabel: args.webviewLabel,
@@ -666,7 +666,7 @@ to select by option value or visible text. Returns a page snapshot after selecti
         );
 
         try {
-          const response = await FrontendClient.requestBrowserSelectOption({
+          const response = await EventBroadcaster.requestBrowserSelectOption({
             sessionId,
             ref: args.ref,
             values: args.values,
@@ -716,7 +716,7 @@ to select by option value or visible text. Returns a page snapshot after selecti
         console.log(`[opendevsMCPServer] BrowserNavigateBack invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestBrowserNavigateBack({
+          const response = await EventBroadcaster.requestBrowserNavigateBack({
             sessionId,
             webviewLabel: args.webviewLabel,
           });
@@ -761,7 +761,7 @@ Messages are formatted as [LEVEL] message.`,
         console.log(`[opendevsMCPServer] BrowserConsoleMessages invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestBrowserConsoleMessages({
+          const response = await EventBroadcaster.requestBrowserConsoleMessages({
             sessionId,
             webviewLabel: args.webviewLabel,
           });
@@ -843,7 +843,7 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
           // If ref is provided (and no explicit rect), resolve element bounding rect
           if (!cropRect && args.ref) {
             try {
-              const evalResponse = await FrontendClient.requestBrowserEvaluate({
+              const evalResponse = await EventBroadcaster.requestBrowserEvaluate({
                 sessionId,
                 webviewLabel: args.webviewLabel,
                 code: `
@@ -873,7 +873,7 @@ For structural/interactive page analysis, prefer BrowserSnapshot (accessibility 
             }
           }
 
-          const response = await FrontendClient.requestBrowserScreenshot({
+          const response = await EventBroadcaster.requestBrowserScreenshot({
             sessionId,
             webviewLabel: args.webviewLabel,
             rect: cropRect,
@@ -941,7 +941,7 @@ Requests are formatted as [TYPE] URL (duration, size).`,
         console.log(`[opendevsMCPServer] BrowserNetworkRequests invoked for session ${sessionId}`);
 
         try {
-          const response = await FrontendClient.requestBrowserNetworkRequests({
+          const response = await EventBroadcaster.requestBrowserNetworkRequests({
             sessionId,
             webviewLabel: args.webviewLabel,
           });
@@ -1017,7 +1017,7 @@ Two modes:
         );
 
         try {
-          const response = await FrontendClient.requestBrowserScroll({
+          const response = await EventBroadcaster.requestBrowserScroll({
             sessionId,
             direction: args.direction,
             amount: args.amount,

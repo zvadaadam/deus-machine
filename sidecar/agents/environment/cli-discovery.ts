@@ -1,4 +1,4 @@
-// sidecar/agents/cli-discovery.ts
+// sidecar/agents/environment/cli-discovery.ts
 // Generic CLI executable discovery for all agent handlers.
 // Each agent provides a DiscoveryConfig describing what to find;
 // this module handles the discovery algorithm (candidate gathering,
@@ -7,9 +7,8 @@
 import * as path from "path";
 import * as fs from "fs";
 import { execSync, execFileSync } from "child_process";
-import { FrontendClient } from "../frontend-client";
-import { updateSessionStatus } from "../db/session-writer";
-import type { AgentType } from "../protocol";
+import { EventBroadcaster } from "../../event-broadcaster";
+import type { AgentType } from "../../protocol";
 
 // ============================================================================
 // Types
@@ -179,7 +178,7 @@ export function blockIfNotInitialized(
   if (!state.result?.success) {
     const errorMsg = `Cannot process request: ${state.result?.error || "Initialization failed"}`;
     try {
-      FrontendClient.sendError({
+      EventBroadcaster.sendError({
         id: sessionId,
         type: "error",
         error: errorMsg,
@@ -189,9 +188,13 @@ export function blockIfNotInitialized(
     } catch (error) {
       console.warn(`[CLI-DISCOVERY] Failed to emit init error to frontend:`, error);
     }
-    // Update session status so it doesn't stay stuck in "working"
-    // (saveUserMessage already set status='working' before handleQuery was called)
-    updateSessionStatus(sessionId, "error", errorMsg, "internal");
+    // Emit canonical error event so the backend updates session status.
+    // The backend set status='working' before forwarding turn/start to the sidecar.
+    try {
+      EventBroadcaster.emitSessionError(sessionId, agentType, errorMsg, "internal");
+    } catch (error) {
+      console.warn(`[CLI-DISCOVERY] Failed to emit session error:`, error);
+    }
     console.log(`Blocked ${agentType} request due to initialization failure`);
     return true;
   }

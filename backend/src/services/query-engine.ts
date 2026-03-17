@@ -24,11 +24,10 @@ import {
   getWorkspacesByRepo,
   getWorkspacesBySessionIds,
   getAllRepositorySummaries,
-  getSessionRaw,
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
-import { writeUserMessage } from "./message-writer";
 import { getConnection } from "./ws.service";
+import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import {
   QUERY_RESOURCES,
   MUTATION_NAMES,
@@ -103,6 +102,9 @@ export function handleFrame(connectionId: string, msg: QueryParams): void {
       })
       .with("q:command", () => {
         handleCommand(connectionId, parseCommandFrame(msg));
+      })
+      .with("q:tool_response", () => {
+        handleToolResponse(msg);
       })
       .otherwise(() => {
         sendFrame(connectionId, {
@@ -336,7 +338,7 @@ function handleCommand(connectionId: string, msg: CommandFrameInput): void {
   const { id, command, params } = msg;
 
   try {
-    const result = runCommand(command, params);
+    const result = runCommand(toCommandName(command), params);
     sendFrame(connectionId, {
       type: "q:command_ack",
       id,
@@ -353,39 +355,29 @@ function handleCommand(connectionId: string, msg: CommandFrameInput): void {
   }
 }
 
-// ---- Command Dispatch ----
+// ---- Tool Response Handler ----
 
-function runCommand(command: string, params: QueryParams): { commandId?: string } {
-  const typedCommand = toCommandName(command);
+function handleToolResponse(msg: QueryParams): void {
+  const requestId = typeof msg.requestId === "string" ? msg.requestId : undefined;
+  if (!requestId) {
+    console.error("[QueryEngine] q:tool_response missing requestId");
+    return;
+  }
 
-  return match(typedCommand)
-    .with("sendMessage", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      const content = readStringParam(params, "content");
-      const model = readStringParam(params, "model");
-      if (!sessionId || !content) {
-        throw new Error("sendMessage requires sessionId and content");
-      }
-
-      const result = writeUserMessage(sessionId, content, model);
-      if (!result.success) throw new Error(result.error);
-      invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
-      return { commandId: result.messageId };
-    })
-    .with("stopSession", () => {
-      const sessionId = readStringParam(params, "sessionId");
-      if (!sessionId) throw new Error("stopSession requires sessionId");
-
-      const db = getDatabase();
-      const session = getSessionRaw(db, sessionId);
-      if (!session) throw new Error("Session not found");
-
-      db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
-      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-      return {};
-    })
-    .exhaustive();
+  if ("error" in msg && msg.error !== undefined) {
+    const errorStr = typeof msg.error === "string" ? msg.error : JSON.stringify(msg.error);
+    const resolved = rejectToolRelay(requestId, errorStr);
+    if (!resolved) {
+      console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId} (error)`);
+    }
+  } else {
+    const resolved = resolveToolRelay(requestId, msg.result);
+    if (!resolved) {
+      console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId} (result)`);
+    }
+  }
 }
+
 
 // ---- Query Dispatch ----
 

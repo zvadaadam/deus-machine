@@ -14,7 +14,7 @@ describe("getShellEnvironment", () => {
   });
 
   async function importFresh() {
-    return import("../agents/shell-env");
+    return import("../agents/environment/shell-env");
   }
 
   it("parses environment variables from shell output", async () => {
