@@ -1,2 +1,2 @@
 export { AIStatusIndicator } from "./ui/AIStatusIndicator";
-export { useProviderStatus } from "./api/ai-status.queries";
+export { useProviderStatuses } from "./api/ai-status.queries";

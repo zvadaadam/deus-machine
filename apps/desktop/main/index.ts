@@ -82,7 +82,8 @@ async function createWindow(): Promise<void> {
 
   // Forward renderer console to main process stdout (for debugging)
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    const prefix = level === 2 ? "[renderer:warn]" : level === 3 ? "[renderer:error]" : "[renderer]";
+    const prefix =
+      level === 2 ? "[renderer:warn]" : level === 3 ? "[renderer:error]" : "[renderer]";
     const source = sourceId ? ` (${sourceId.split("/").pop()}:${line})` : "";
     console.log(`${prefix} ${message}${source}`);
   });
@@ -115,7 +116,7 @@ async function createWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   // Debug logging to file (Electron swallows stdout/stderr in dev mode)
-  const fs = require("fs");
+  const fs = await import("fs");
   const debugLog = (msg: string) => {
     fs.appendFileSync("/tmp/opendevs-debug.log", `${new Date().toISOString()} ${msg}\n`);
     console.error(msg);
@@ -138,6 +139,13 @@ app.whenReady().then(async () => {
     process.env.OPENDEVS_AUTH_TOKEN = authToken;
   } catch (err) {
     debugLog("[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err)));
+    const { dialog } = await import("electron");
+    dialog.showErrorBox(
+      "Failed to Start",
+      `The application backend failed to start.\n\n${err instanceof Error ? err.message : String(err)}`
+    );
+    app.quit();
+    return;
   }
 
   // Sidecar is now spawned by the backend process (sidecar.service.ts)
