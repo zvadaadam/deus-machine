@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "aefd34b7a781",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    ".github/workflows/test.yml",
+    "README.md",
+    "RELEASE.md",
+    "apps/backend/src/services/browser-server.service.ts",
+    "apps/backend/src/services/fs-watcher.service.ts",
+    "apps/desktop/main/browser-views.ts",
+    "apps/desktop/main/index.ts",
+    "apps/desktop/main/native-handlers.ts",
+    "apps/desktop/preload/index.ts",
+    "apps/web/src/features/browser/automation/useBrowserRpcHandler.ts",
+    "apps/web/src/features/browser/hooks/useBrowser.ts",
+    "packages/agent-dots/package-lock.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ae/fd34b7a781/0/metadata.json",
+      "transcript": "/ae/fd34b7a781/0/full.jsonl",
+      "content_hash": "/ae/fd34b7a781/0/content_hash.txt",
+      "prompt": "/ae/fd34b7a781/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12709,
+    "cache_creation_tokens": 2734445,
+    "cache_read_tokens": 153899015,
+    "output_tokens": 239716,
+    "api_call_count": 773
+  }
+}
