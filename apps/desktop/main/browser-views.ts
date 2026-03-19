@@ -15,7 +15,7 @@
  * for its own methods, but generic invoke() calls use snake_case.
  */
 
-import { BrowserView, BrowserWindow, ipcMain } from "electron";
+import { BrowserView, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
@@ -141,10 +141,16 @@ export function registerBrowserViewHandlers(): void {
         });
       });
 
-      // Open external links in system browser
+      // Open external links in system browser (only allow http/https)
       view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
-        const { shell } = require("electron");
-        shell.openExternal(linkUrl);
+        try {
+          const parsed = new URL(linkUrl);
+          if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            shell.openExternal(linkUrl);
+          }
+        } catch {
+          // Ignore malformed URLs
+        }
         return { action: "deny" };
       });
     }
@@ -155,9 +161,12 @@ export function registerBrowserViewHandlers(): void {
   // Renderer calls: invoke("navigate_browser_webview", { label, url })
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("navigate_browser_webview", (_e, { label, url }: { label: string; url: string }) => {
-    views.get(label)?.webContents.loadURL(url);
-  });
+  ipcMain.handle(
+    "navigate_browser_webview",
+    (_e, { label, url }: { label: string; url: string }) => {
+      views.get(label)?.webContents.loadURL(url);
+    }
+  );
 
   // -------------------------------------------------------------------------
   // JavaScript evaluation
@@ -165,16 +174,19 @@ export function registerBrowserViewHandlers(): void {
   // Returns the result of the JS execution (used by eval-with-result.ts)
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("eval_browser_webview", async (_e, { label, js }: { label: string; js: string }) => {
-    const view = views.get(label);
-    if (!view) return null;
-    try {
-      return await view.webContents.executeJavaScript(js);
-    } catch (err) {
-      console.error(`[browser:eval] Error in view "${label}":`, err);
-      return null;
+  ipcMain.handle(
+    "eval_browser_webview",
+    async (_e, { label, js }: { label: string; js: string }) => {
+      const view = views.get(label);
+      if (!view) return null;
+      try {
+        return await view.webContents.executeJavaScript(js);
+      } catch (err) {
+        console.error(`[browser:eval] Error in view "${label}":`, err);
+        return null;
+      }
     }
-  });
+  );
 
   // -------------------------------------------------------------------------
   // Screenshot
