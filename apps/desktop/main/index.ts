@@ -88,9 +88,16 @@ async function createWindow(): Promise<void> {
     console.log(`${prefix} ${message}${source}`);
   });
 
-  // External links open in system browser (not in the Electron window)
+  // External links open in system browser (only allow http/https)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        shell.openExternal(url);
+      }
+    } catch {
+      // Ignore malformed URLs
+    }
     return { action: "deny" };
   });
 
