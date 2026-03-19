@@ -17,6 +17,7 @@ import crypto from "crypto";
 let backendProcess: ChildProcess | null = null;
 let isQuitting = false;
 let restartAttempt = 0;
+let restartTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_RESTART_ATTEMPTS = 5;
 const STARTUP_TIMEOUT_MS = 30_000;
 
@@ -60,10 +61,13 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     });
 
     let resolved = false;
+    let stdoutBuffer = "";
 
     // Parse port from stdout (same pattern as current Rust BackendManager)
     backendProcess.stdout?.on("data", (data: Buffer) => {
-      const lines = data.toString().split("\n");
+      stdoutBuffer += data.toString();
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -122,7 +126,8 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
         restartAttempt++;
         const delay = Math.min(1000 * Math.pow(2, restartAttempt - 1), 30_000);
         console.log(`[backend] Restart attempt ${restartAttempt} in ${delay}ms`);
-        setTimeout(() => {
+        restartTimer = setTimeout(() => {
+          restartTimer = null;
           spawnBackend()
             .then(({ port, authToken: newAuthToken }) => {
               // Update env vars so IPC handlers (native:getBackendPort) return the new port
@@ -163,6 +168,10 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
 
 export function stopBackend(): void {
   isQuitting = true;
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
   if (backendProcess) {
     backendProcess.kill("SIGTERM");
     // Force kill after 5s if graceful shutdown fails

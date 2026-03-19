@@ -209,7 +209,6 @@ export class AgentClient {
 
     this.ws.on("open", () => {
       console.log("[AgentClient] WebSocket connected, starting handshake...");
-      this.reconnectAttempt = 0;
       this.setupPeer();
       void this.performHandshake();
     });
@@ -352,6 +351,12 @@ export class AgentClient {
       }
       const result: InitializeResult = parsed.data;
 
+      if (result.version !== PROTOCOL_VERSION) {
+        throw new Error(
+          `Unsupported protocol version "${result.version}" (expected "${PROTOCOL_VERSION}")`
+        );
+      }
+
       this.agents = result.agents;
       console.log(
         `[AgentClient] Handshake complete: version=${result.version} agents=[${this.agents.map((a) => a.type).join(", ")}]`
@@ -361,6 +366,7 @@ export class AgentClient {
       this.peer.notify(AGENT_RPC_METHODS.INITIALIZED, {}, undefined);
 
       this.connected = true;
+      this.reconnectAttempt = 0;
       this.onConnected?.(this.agents);
     } catch (err) {
       console.error("[AgentClient] Handshake failed:", err);

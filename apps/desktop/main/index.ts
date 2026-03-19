@@ -117,8 +117,13 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   // Debug logging to file (Electron swallows stdout/stderr in dev mode)
   const fs = await import("fs");
+  const debugLogPath = join(app.getPath("temp"), "opendevs-debug.log");
   const debugLog = (msg: string) => {
-    fs.appendFileSync("/tmp/opendevs-debug.log", `${new Date().toISOString()} ${msg}\n`);
+    try {
+      fs.appendFileSync(debugLogPath, `${new Date().toISOString()} ${msg}\n`);
+    } catch {
+      // Never block boot on diagnostics
+    }
     console.error(msg);
   };
   debugLog("[main] App ready, starting initialization...");

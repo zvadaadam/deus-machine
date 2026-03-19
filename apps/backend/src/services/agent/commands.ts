@@ -143,42 +143,48 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const session = getSessionRaw(db, sessionId);
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
-  if (agentService.isConnected()) {
-    agentService
-      .forwardTurn({
-        sessionId,
-        agentType,
-        prompt: content,
-        options: buildTurnOptions(params, model, existingAgentSessionId),
-      })
-      .then((response) => {
-        if (!response.accepted) {
-          handleAgentRejection(sessionId, agentType, response.reason);
-        }
-      })
-      .catch((err) => {
-        handleAgentError(sessionId, agentType, err);
-      });
+  if (!agentService.isConnected()) {
+    handleAgentError(sessionId, agentType, new Error("Agent server is disconnected"));
+    return { commandId: result.messageId };
   }
+
+  agentService
+    .forwardTurn({
+      sessionId,
+      agentType,
+      prompt: content,
+      options: buildTurnOptions(params, model, existingAgentSessionId),
+    })
+    .then((response) => {
+      if (!response.accepted) {
+        handleAgentRejection(sessionId, agentType, response.reason);
+      }
+    })
+    .catch((err) => {
+      handleAgentError(sessionId, agentType, err);
+    });
 
   return { commandId: result.messageId };
 }
 
 // ---- stopSession ----
 
-function handleStopSession(params: QueryParams): CommandResult {
+async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = readString(params, "sessionId");
   if (!sessionId) throw new Error("stopSession requires sessionId");
-
-  if (agentService.isConnected()) {
-    agentService.stopSession({ sessionId }).catch((err) => {
-      console.error("[CommandHandler] Failed to cancel on agent-server:", err);
-    });
-  }
 
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
+
+  if (agentService.isConnected()) {
+    try {
+      await agentService.stopSession({ sessionId });
+    } catch (err) {
+      console.error("[CommandHandler] Failed to stop on agent-server:", err);
+      // Still mark idle locally — best effort
+    }
+  }
 
   db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
     sessionId
