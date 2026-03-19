@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a6c6b0fb4f73",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/workflows/test.yml",
+    "apps/backend/src/services/agent/client.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/agent/event-handler.ts",
+    "apps/backend/src/services/agent/persistence.ts",
+    "apps/backend/src/services/agent/service.ts",
+    "apps/backend/src/services/agent/tool-relay.ts",
+    "apps/backend/src/services/message-writer.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/src/services/relay.service.ts",
+    "apps/backend/test/unit/services/agent-client.test.ts",
+    "apps/backend/tsconfig.json",
+    "apps/sidecar/agents/claude/checkpoint.ts",
+    "apps/sidecar/agents/claude/claude-handler.ts",
+    "apps/sidecar/agents/claude/message-processor.ts",
+    "apps/sidecar/agents/opendevs-tools/browser.ts",
+    "apps/sidecar/agents/opendevs-tools/simulator.ts",
+    "apps/sidecar/agents/registry.ts",
+    "apps/sidecar/event-broadcaster.ts",
+    "apps/sidecar/health.ts",
+    "apps/sidecar/index.ts",
+    "apps/sidecar/protocol.ts",
+    "apps/sidecar/test/browser-templates.test.ts",
+    "apps/sidecar/test/event-broadcaster.test.ts",
+    "apps/sidecar/tsconfig.json",
+    "apps/sidecar/vitest.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a6/c6b0fb4f73/0/metadata.json",
+      "transcript": "/a6/c6b0fb4f73/0/full.jsonl",
+      "content_hash": "/a6/c6b0fb4f73/0/content_hash.txt",
+      "prompt": "/a6/c6b0fb4f73/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12621,
+    "cache_creation_tokens": 2338201,
+    "cache_read_tokens": 130369109,
+    "output_tokens": 219827,
+    "api_call_count": 700
+  }
+}

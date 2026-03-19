@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "a6c6b0fb4f73",
+  "session_id": "8aa0f1c1-b25d-47c5-aab7-bbbe2fb1fd94",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-19T14:47:18.973471Z",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/workflows/test.yml",
+    "apps/backend/src/services/agent/client.ts",
+    "apps/backend/src/services/agent/commands.ts",
+    "apps/backend/src/services/agent/event-handler.ts",
+    "apps/backend/src/services/agent/persistence.ts",
+    "apps/backend/src/services/agent/service.ts",
+    "apps/backend/src/services/agent/tool-relay.ts",
+    "apps/backend/src/services/message-writer.ts",
+    "apps/backend/src/services/query-engine.ts",
+    "apps/backend/src/services/relay.service.ts",
+    "apps/backend/test/unit/services/agent-client.test.ts",
+    "apps/backend/tsconfig.json",
+    "apps/sidecar/agents/claude/checkpoint.ts",
+    "apps/sidecar/agents/claude/claude-handler.ts",
+    "apps/sidecar/agents/claude/message-processor.ts",
+    "apps/sidecar/agents/opendevs-tools/browser.ts",
+    "apps/sidecar/agents/opendevs-tools/simulator.ts",
+    "apps/sidecar/agents/registry.ts",
+    "apps/sidecar/event-broadcaster.ts",
+    "apps/sidecar/health.ts",
+    "apps/sidecar/index.ts",
+    "apps/sidecar/protocol.ts",
+    "apps/sidecar/test/browser-templates.test.ts",
+    "apps/sidecar/test/event-broadcaster.test.ts",
+    "apps/sidecar/tsconfig.json",
+    "apps/sidecar/vitest.config.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9182e2b7ce86",
+  "token_usage": {
+    "input_tokens": 12621,
+    "cache_creation_tokens": 2338201,
+    "cache_read_tokens": 130369109,
+    "output_tokens": 219827,
+    "api_call_count": 700
+  },
+  "session_metrics": {
+    "turn_count": 54
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-19T14:47:15.961454Z",
+    "agent_lines": 0,
+    "human_added": 77,
+    "human_modified": 193,
+    "human_removed": 0,
+    "total_committed": 131,
+    "agent_percentage": 0
+  }
+}
