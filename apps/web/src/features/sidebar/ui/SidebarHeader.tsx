@@ -28,10 +28,10 @@ export function SidebarHeader({
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-200 hover:bg-foreground/[0.04]"
+        className="hover:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-200"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
-          <AvatarFallback shape="square" className="rounded-md text-2xs font-semibold">
+          <AvatarFallback shape="square" className="text-2xs rounded-md font-semibold">
             {initials}
           </AvatarFallback>
         </Avatar>
@@ -46,7 +46,7 @@ export function SidebarHeader({
         aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
         title={!isMobile ? toggleTitle : undefined}
         className={cn(
-          "text-text-muted hover:text-text-tertiary flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150 hover:bg-foreground/[0.04]",
+          "text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
           !isExpanded && "opacity-60"
         )}
       >

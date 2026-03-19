@@ -14,14 +14,7 @@
  * React.memo per section, rAF-throttled scroll spy.
  */
 
-import {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useCallback,
-  useState,
-  useEffect,
-} from "react";
+import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react";
 import { X, ChevronsUpDown } from "lucide-react";
 import { AllDiffFileSection } from "./AllDiffFileSection";
 import { workspaceLayoutActions } from "../store";
@@ -50,7 +43,16 @@ interface AllFilesDiffViewerProps {
 
 export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiffViewerProps>(
   function AllFilesDiffViewer(
-    { workspaceId, fileChanges, workspaceGitInfo, onClose, hideHeader, onActiveFileChange, initialScrollTarget, onOpenFile },
+    {
+      workspaceId,
+      fileChanges,
+      workspaceGitInfo,
+      onClose,
+      hideHeader,
+      onActiveFileChange,
+      initialScrollTarget,
+      onOpenFile,
+    },
     ref
   ) {
     const sectionRefsMap = useRef(new Map<string, HTMLDivElement>());
@@ -81,9 +83,9 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
       const el = sectionRefsMap.current.get(path);
       if (el) return el;
       // Fallback: query the scroll container by data attribute
-      return scrollContainerRef.current?.querySelector(
-        `[data-diff-path="${CSS.escape(path)}"]`
-      ) ?? null;
+      return (
+        scrollContainerRef.current?.querySelector(`[data-diff-path="${CSS.escape(path)}"]`) ?? null
+      );
     }, []);
 
     // --- Scroll-spy: centralized scroll event listener ---
@@ -191,15 +193,19 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
 
     // Expose scrollToFile to parent — immediately updates active file
     // so the tree highlight changes without waiting for the scroll event.
-    useImperativeHandle(ref, () => ({
-      scrollToFile(path: string) {
-        setActiveFilePath(path);
-        const el = resolveSection(path);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      },
-    }), [workspaceId, resolveSection]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        scrollToFile(path: string) {
+          setActiveFilePath(path);
+          const el = resolveSection(path);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        },
+      }),
+      [workspaceId, resolveSection]
+    );
 
     // Section ref callback — populates the ref map
     const sectionRefCallback = useCallback((filePath: string, el: HTMLDivElement | null) => {
@@ -226,7 +232,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
               <button
                 type="button"
                 onClick={handleCollapseExpandAll}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
                 title="Reset expand/collapse"
               >
                 <ChevronsUpDown className="h-3.5 w-3.5" />
@@ -234,7 +240,7 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
               <button
                 type="button"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200 ease"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
                 title="Close all diffs"
               >
                 <X className="h-3.5 w-3.5" />
@@ -244,7 +250,10 @@ export const AllFilesDiffViewer = forwardRef<AllFilesDiffViewerRef, AllFilesDiff
         )}
 
         {/* Scrollable file sections */}
-        <div ref={scrollContainerRef} className="scrollbar-vibrancy flex flex-1 flex-col gap-3 overflow-y-auto pb-3">
+        <div
+          ref={scrollContainerRef}
+          className="scrollbar-vibrancy flex flex-1 flex-col gap-3 overflow-y-auto pb-3"
+        >
           {fileChanges.map((fc) => {
             const path = fc.file || fc.file_path || "";
             return (

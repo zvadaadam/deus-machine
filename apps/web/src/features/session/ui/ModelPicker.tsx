@@ -86,9 +86,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
                   <DropdownMenuItem
                     key={option.value}
                     onClick={() =>
-                      isLockedGroup
-                        ? onOpenNewTab?.(option.value)
-                        : onModelChange?.(option.value)
+                      isLockedGroup ? onOpenNewTab?.(option.value) : onModelChange?.(option.value)
                     }
                     className={cn(
                       "text-text-secondary focus:bg-bg-raised/45 focus:text-text-primary",

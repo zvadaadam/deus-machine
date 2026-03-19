@@ -39,7 +39,7 @@ export function CollapsedChatStrip({
           className={cn(
             "border-border-subtle flex h-full w-full cursor-pointer flex-col items-center gap-3 border-r pt-4",
             "text-text-muted hover:text-text-secondary",
-            "transition-colors duration-200 ease",
+            "ease transition-colors duration-200"
           )}
         >
           {/* Icon -- identity, not action. Breathes when agent is working. */}
@@ -55,8 +55,8 @@ export function CollapsedChatStrip({
           <span
             className={cn(
               "text-xs font-medium tracking-wide uppercase",
-              "[writing-mode:vertical-rl] rotate-180",
-              "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]",
+              "rotate-180 [writing-mode:vertical-rl]",
+              "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]"
             )}
           >
             Chat
@@ -82,11 +82,7 @@ export function CollapsedChatStrip({
  *
  * Width controlled by parent ResizablePanel's collapsedSize (36px).
  */
-export function CollapsedContentStrip({
-  onExpand,
-}: {
-  onExpand: () => void;
-}) {
+export function CollapsedContentStrip({ onExpand }: { onExpand: () => void }) {
   return (
     <Tooltip delayDuration={400}>
       <TooltipTrigger asChild>
@@ -97,19 +93,17 @@ export function CollapsedContentStrip({
           className={cn(
             "border-border-subtle flex h-full w-full cursor-pointer flex-col items-center gap-3 border-l pt-4",
             "text-text-muted hover:text-text-secondary",
-            "transition-colors duration-200 ease",
+            "ease transition-colors duration-200"
           )}
         >
           {/* Icon -- identity, not action */}
-          <Code
-            className="animate-[strip-settle_0.15s_0.12s_cubic-bezier(0.165,0.84,0.44,1)] h-[14px] w-[14px] flex-shrink-0 [animation-fill-mode:backwards]"
-          />
+          <Code className="h-[14px] w-[14px] flex-shrink-0 animate-[strip-settle_0.15s_0.12s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]" />
           {/* Rotated label -- reads bottom-to-top like a book spine */}
           <span
             className={cn(
               "text-xs font-medium tracking-wide uppercase",
-              "[writing-mode:vertical-rl] rotate-180",
-              "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]",
+              "rotate-180 [writing-mode:vertical-rl]",
+              "animate-[strip-settle_0.15s_0.18s_cubic-bezier(0.165,0.84,0.44,1)] [animation-fill-mode:backwards]"
             )}
           >
             Content

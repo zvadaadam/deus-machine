@@ -11,8 +11,7 @@ import { normalizeError, reportError } from "@/shared/utils/errorReporting";
 import { AppEventSchemaMap, type AppEventMap, type AppEventName } from "@shared/events";
 
 // Check if running in Electron environment (preload script exposes electronAPI)
-export const isElectronEnv =
-  typeof window !== "undefined" && "electronAPI" in window;
+export const isElectronEnv = typeof window !== "undefined" && "electronAPI" in window;
 
 /**
  * Invoke an Electron IPC command via the preload bridge.
@@ -28,7 +27,7 @@ export async function invoke<T = unknown>(
   }
 
   try {
-    return (await window.electronAPI.invoke(command, args)) as T;
+    return (await window.electronAPI!.invoke(command, args)) as T;
   } catch (error) {
     const normalized = normalizeError(error);
     reportError(normalized, {
@@ -75,7 +74,7 @@ export async function listen(
 
   // Register via preload bridge — electronAPI.on returns a sync unsubscribe fn.
   // We wrap the callback to match the { payload } shape expected by consumers.
-  const unlisten = window.electronAPI.on(event, (...args: unknown[]) => {
+  const unlisten = window.electronAPI!.on(event, (...args: unknown[]) => {
     // Electron IPC sends payload as the first arg after the stripped IpcRendererEvent
     const payload = args[0];
 
@@ -111,7 +110,7 @@ export async function emit<T>(event: string, payload?: T): Promise<void> {
     return;
   }
 
-  window.electronAPI.send(event, payload);
+  window.electronAPI!.send(event, payload);
 }
 
 /**
@@ -120,4 +119,3 @@ export async function emit<T>(event: string, payload?: T): Promise<void> {
 export function isElectronAvailable(): boolean {
   return isElectronEnv;
 }
-

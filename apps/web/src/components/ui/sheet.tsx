@@ -54,13 +54,13 @@ function SheetContent({
         className={cn(
           "bg-background fixed z-50 flex flex-col gap-4 shadow-lg will-change-[transform]",
           side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm data-[state=open]:animate-[sheet-enter-right_250ms_cubic-bezier(.215,.61,.355,1)] data-[state=closed]:animate-[sheet-exit-right_200ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:animate-[sheet-exit-right_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-right_250ms_cubic-bezier(.215,.61,.355,1)] sm:max-w-sm",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm data-[state=open]:animate-[sheet-enter-left_250ms_cubic-bezier(.215,.61,.355,1)] data-[state=closed]:animate-[sheet-exit-left_200ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:animate-[sheet-exit-left_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-left_250ms_cubic-bezier(.215,.61,.355,1)] sm:max-w-sm",
           side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=open]:animate-[sheet-enter-top_250ms_cubic-bezier(.215,.61,.355,1)] data-[state=closed]:animate-[sheet-exit-top_200ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-x-0 top-0 h-auto border-b data-[state=closed]:animate-[sheet-exit-top_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-top_250ms_cubic-bezier(.215,.61,.355,1)]",
           side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=open]:animate-[sheet-enter-bottom_250ms_cubic-bezier(.215,.61,.355,1)] data-[state=closed]:animate-[sheet-exit-bottom_200ms_cubic-bezier(.215,.61,.355,1)]",
+            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:animate-[sheet-exit-bottom_200ms_cubic-bezier(.215,.61,.355,1)] data-[state=open]:animate-[sheet-enter-bottom_250ms_cubic-bezier(.215,.61,.355,1)]",
           className
         )}
         {...props}

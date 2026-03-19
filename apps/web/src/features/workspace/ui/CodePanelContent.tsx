@@ -119,7 +119,7 @@ export function CodePanelContent({
             type="button"
             onClick={() => onFilterModeChange?.("changes")}
             className={cn(
-              "h-7 rounded-sm px-3 text-sm transition-colors duration-200 ease",
+              "ease h-7 rounded-sm px-3 text-sm transition-colors duration-200",
               filterMode === "changes"
                 ? "bg-bg-elevated text-text-primary font-medium"
                 : "text-text-muted hover:text-text-secondary"
@@ -131,7 +131,7 @@ export function CodePanelContent({
             type="button"
             onClick={() => onFilterModeChange?.("all")}
             className={cn(
-              "h-7 rounded-sm px-3 text-sm transition-colors duration-200 ease",
+              "ease h-7 rounded-sm px-3 text-sm transition-colors duration-200",
               filterMode === "all"
                 ? "bg-bg-elevated text-text-primary font-medium"
                 : "text-text-muted hover:text-text-secondary"
@@ -145,7 +145,10 @@ export function CodePanelContent({
         {filterMode === "changes" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className="text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition-colors duration-200 ease">
+              <button
+                type="button"
+                className="text-text-muted hover:text-text-secondary ease flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition-colors duration-200"
+              >
                 <SlidersHorizontal className="h-[11px] w-[11px]" />
                 <span>{activeFilterLabel}</span>
                 <ChevronDown className="h-[10px] w-[10px]" />
@@ -159,10 +162,7 @@ export function CodePanelContent({
                   className="gap-2 text-xs"
                 >
                   <Check
-                    className={cn(
-                      "h-3 w-3",
-                      changesFilter === value ? "opacity-100" : "opacity-0"
-                    )}
+                    className={cn("h-3 w-3", changesFilter === value ? "opacity-100" : "opacity-0")}
                   />
                   {label}
                 </DropdownMenuItem>

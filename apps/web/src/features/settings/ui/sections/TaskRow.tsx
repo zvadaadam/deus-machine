@@ -26,8 +26,13 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
   const [expanded, setExpanded] = useState(false);
 
   // Show a dot indicator when task has advanced config (visible when collapsed)
-  const hasAdvanced = task.description || task.icon !== DEFAULT_TASK_ICON || task.persistent ||
-    task.mode !== "concurrent" || task.depends.length > 0 || task.env.some((e) => e.key.trim());
+  const hasAdvanced =
+    task.description ||
+    task.icon !== DEFAULT_TASK_ICON ||
+    task.persistent ||
+    task.mode !== "concurrent" ||
+    task.depends.length > 0 ||
+    task.env.some((e) => e.key.trim());
 
   const IconComponent = TASK_ICON_MAP[task.icon];
 
@@ -43,7 +48,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
         >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           {!expanded && hasAdvanced && (
-            <span className="bg-primary absolute -right-0.5 -top-0.5 size-1.5 rounded-full" />
+            <span className="bg-primary absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
           )}
         </button>
         {IconComponent && <IconComponent className="text-muted-foreground size-3.5 shrink-0" />}
@@ -108,19 +113,27 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
             <Label className="w-20 shrink-0 text-xs">Mode</Label>
             <Select
               value={task.mode}
-              onValueChange={(v) => onChange({ ...task, mode: v as "concurrent" | "nonconcurrent" })}
+              onValueChange={(v) =>
+                onChange({ ...task, mode: v as "concurrent" | "nonconcurrent" })
+              }
             >
               <SelectTrigger className="w-48 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="concurrent" className="text-xs">Concurrent</SelectItem>
-                <SelectItem value="nonconcurrent" className="text-xs">Non-concurrent</SelectItem>
+                <SelectItem value="concurrent" className="text-xs">
+                  Concurrent
+                </SelectItem>
+                <SelectItem value="nonconcurrent" className="text-xs">
+                  Non-concurrent
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Label htmlFor={`persistent-${rowId}`} className="w-20 shrink-0 text-xs">Persistent</Label>
+            <Label htmlFor={`persistent-${rowId}`} className="w-20 shrink-0 text-xs">
+              Persistent
+            </Label>
             <Switch
               id={`persistent-${rowId}`}
               checked={task.persistent}
@@ -147,7 +160,9 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                   {allTaskNames
                     .filter((n) => n !== task.name && !task.depends.includes(n))
                     .map((n) => (
-                      <SelectItem key={n} value={n} className="text-xs">{n}</SelectItem>
+                      <SelectItem key={n} value={n} className="text-xs">
+                        {n}
+                      </SelectItem>
                     ))}
                 </SelectContent>
               </Select>
@@ -162,7 +177,9 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                     {dep}
                     <button
                       type="button"
-                      onClick={() => onChange({ ...task, depends: task.depends.filter((d) => d !== dep) })}
+                      onClick={() =>
+                        onChange({ ...task, depends: task.depends.filter((d) => d !== dep) })
+                      }
                       aria-label={`Remove dependency ${dep}`}
                       className="text-muted-foreground hover:text-destructive"
                     >
@@ -182,7 +199,12 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => onChange({ ...task, env: [...task.env, { id: crypto.randomUUID(), key: "", value: "" }] })}
+                onClick={() =>
+                  onChange({
+                    ...task,
+                    env: [...task.env, { id: crypto.randomUUID(), key: "", value: "" }],
+                  })
+                }
                 className="h-6 gap-1 px-1.5 text-xs"
               >
                 <Plus className="size-2.5" />
@@ -197,7 +219,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                     onChange({
                       ...task,
                       env: task.env.map((ev) =>
-                        ev.id === envVar.id ? { ...ev, key: e.target.value } : ev,
+                        ev.id === envVar.id ? { ...ev, key: e.target.value } : ev
                       ),
                     });
                   }}
@@ -210,7 +232,7 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                     onChange({
                       ...task,
                       env: task.env.map((ev) =>
-                        ev.id === envVar.id ? { ...ev, value: e.target.value } : ev,
+                        ev.id === envVar.id ? { ...ev, value: e.target.value } : ev
                       ),
                     });
                   }}
@@ -221,7 +243,9 @@ export function TaskRow({ task, allTaskNames, onChange, onRemove }: TaskRowProps
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => onChange({ ...task, env: task.env.filter((ev) => ev.id !== envVar.id) })}
+                  onClick={() =>
+                    onChange({ ...task, env: task.env.filter((ev) => ev.id !== envVar.id) })
+                  }
                   aria-label={`Remove env var ${envVar.key || "unnamed"}`}
                   className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
                 >

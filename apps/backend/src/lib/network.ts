@@ -2,12 +2,7 @@ export const DEFAULT_RELAY_URL = "wss://relay.rundeus.com";
 
 export function isLocalhost(ip: string | undefined): boolean {
   if (!ip) return false;
-  return (
-    ip === "127.0.0.1" ||
-    ip === "::1" ||
-    ip === "::ffff:127.0.0.1" ||
-    ip === "localhost"
-  );
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip === "localhost";
 }
 
 export function getClientIp(c: any): string | undefined {

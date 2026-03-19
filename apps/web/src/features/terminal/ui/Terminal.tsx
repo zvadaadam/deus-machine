@@ -105,7 +105,9 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 11,
-      fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || 'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontFamily:
+        getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() ||
+        'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       letterSpacing: 0,
       theme: getTerminalTheme(),
       allowProposedApi: true,
@@ -215,12 +217,11 @@ export function Terminal({ id, workspacePath, initialCommand, visible = true }: 
 
   // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {
-    if (visible && fitAddonRef.current && xtermRef.current) {
-      const frame = requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-      return () => cancelAnimationFrame(frame);
-    }
+    if (!visible || !fitAddonRef.current || !xtermRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      fitAddonRef.current?.fit();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [visible]);
 
   return (

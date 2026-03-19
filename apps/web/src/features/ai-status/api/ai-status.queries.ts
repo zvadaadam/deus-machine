@@ -9,11 +9,7 @@
 
 import { useQueries } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import {
-  ALL_PROVIDER_IDS,
-  getWorstIndicator,
-  type StatuspageIndicator,
-} from "../lib/providers";
+import { ALL_PROVIDER_IDS, getWorstIndicator, type StatuspageIndicator } from "../lib/providers";
 import { fetchProviderStatus, toSafeIndicator } from "./ai-status.service";
 
 // --- Hooks ---

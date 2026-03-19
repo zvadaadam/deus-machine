@@ -8,15 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import {
-  Plus,
-  Trash2,
-  Loader2,
-  FileJson,
-  ChevronDown,
-  ChevronRight,
-  Wand2,
-} from "lucide-react";
+import { Plus, Trash2, Loader2, FileJson, ChevronDown, ChevronRight, Wand2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -67,10 +59,13 @@ export function EnvironmentSection() {
     }
   }, [manifestData]);
 
-  const updateDraft = useCallback(<K extends keyof ManifestDraft>(key: K, value: ManifestDraft[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-    setIsDirty(true);
-  }, []);
+  const updateDraft = useCallback(
+    <K extends keyof ManifestDraft>(key: K, value: ManifestDraft[K]) => {
+      setDraft((prev) => ({ ...prev, [key]: value }));
+      setIsDirty(true);
+    },
+    []
+  );
 
   const handleSave = useCallback(() => {
     if (!selectedRepoId) return;
@@ -188,7 +183,9 @@ export function EnvironmentSection() {
                 disabled={detecting}
                 className="shrink-0"
               >
-                {detecting && <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />}
+                {detecting && (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
+                )}
                 Generate
               </Button>
             </div>
@@ -251,7 +248,9 @@ export function EnvironmentSection() {
             </Label>
             <Select
               value={draft.runScriptMode}
-              onValueChange={(v) => updateDraft("runScriptMode", v as "concurrent" | "nonconcurrent")}
+              onValueChange={(v) =>
+                updateDraft("runScriptMode", v as "concurrent" | "nonconcurrent")
+              }
             >
               <SelectTrigger id="run-mode" className="w-full">
                 <SelectValue />
@@ -273,7 +272,12 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("requires", [...draft.requires, { id: crypto.randomUUID(), tool: "", version: "" }])}
+                onClick={() =>
+                  updateDraft("requires", [
+                    ...draft.requires,
+                    { id: crypto.randomUUID(), tool: "", version: "" },
+                  ])
+                }
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -309,7 +313,12 @@ export function EnvironmentSection() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateDraft("requires", draft.requires.filter((_, j) => j !== i))}
+                  onClick={() =>
+                    updateDraft(
+                      "requires",
+                      draft.requires.filter((_, j) => j !== i)
+                    )
+                  }
                   className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
                 >
                   <Trash2 className="size-3.5" />
@@ -328,7 +337,12 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("env", [...draft.env, { id: crypto.randomUUID(), key: "", value: "" }])}
+                onClick={() =>
+                  updateDraft("env", [
+                    ...draft.env,
+                    { id: crypto.randomUUID(), key: "", value: "" },
+                  ])
+                }
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -336,7 +350,9 @@ export function EnvironmentSection() {
               </Button>
             </div>
             {draft.env.length === 0 && (
-              <p className="text-muted-foreground text-base">No environment variables configured.</p>
+              <p className="text-muted-foreground text-base">
+                No environment variables configured.
+              </p>
             )}
             {draft.env.map((envVar, i) => (
               <div key={envVar.id} className="flex items-center gap-2">
@@ -364,7 +380,12 @@ export function EnvironmentSection() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateDraft("env", draft.env.filter((_, j) => j !== i))}
+                  onClick={() =>
+                    updateDraft(
+                      "env",
+                      draft.env.filter((_, j) => j !== i)
+                    )
+                  }
                   className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
                 >
                   <Trash2 className="size-3.5" />
@@ -383,7 +404,9 @@ export function EnvironmentSection() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => updateDraft("tasks", [...draft.tasks, { ...EMPTY_TASK, id: crypto.randomUUID() }])}
+                onClick={() =>
+                  updateDraft("tasks", [...draft.tasks, { ...EMPTY_TASK, id: crypto.randomUUID() }])
+                }
                 className="h-7 gap-1 px-2 text-xs"
               >
                 <Plus className="size-3" />
@@ -405,7 +428,12 @@ export function EnvironmentSection() {
                   next[i] = updated;
                   updateDraft("tasks", next);
                 }}
-                onRemove={() => updateDraft("tasks", draft.tasks.filter((_, j) => j !== i))}
+                onRemove={() =>
+                  updateDraft(
+                    "tasks",
+                    draft.tasks.filter((_, j) => j !== i)
+                  )
+                }
               />
             ))}
           </div>
@@ -419,7 +447,11 @@ export function EnvironmentSection() {
               onClick={() => setRawJsonOpen(!rawJsonOpen)}
               className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 text-sm transition-colors duration-200"
             >
-              {rawJsonOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              {rawJsonOpen ? (
+                <ChevronDown className="size-3.5" />
+              ) : (
+                <ChevronRight className="size-3.5" />
+              )}
               <FileJson className="size-3.5" />
               <span>Raw JSON preview</span>
             </button>
@@ -435,14 +467,20 @@ export function EnvironmentSection() {
           {/* Save / Reset / Generate */}
           <div className="flex items-center gap-2">
             <Button onClick={handleSave} disabled={!isDirty || saveMutation.isPending} size="sm">
-              {saveMutation.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />}
+              {saveMutation.isPending && (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
+              )}
               Save
             </Button>
             <Button variant="outline" size="sm" onClick={handleReset} disabled={!isDirty}>
               Reset
             </Button>
             <Button variant="ghost" size="sm" onClick={handleDetect} disabled={detecting}>
-              {detecting ? <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" /> : <Wand2 className="mr-1.5 size-3.5" />}
+              {detecting ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Wand2 className="mr-1.5 size-3.5" />
+              )}
               Auto-detect
             </Button>
             {isDirty && <span className="text-muted-foreground text-xs">Unsaved changes</span>}

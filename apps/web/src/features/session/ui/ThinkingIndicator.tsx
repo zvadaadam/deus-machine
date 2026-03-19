@@ -37,11 +37,7 @@ interface ThinkingIndicatorProps {
   className?: string;
 }
 
-export function ThinkingIndicator({
-  level,
-  onClick,
-  className,
-}: ThinkingIndicatorProps) {
+export function ThinkingIndicator({ level, onClick, className }: ThinkingIndicatorProps) {
   const style = LEVEL_STYLE[level];
   const displayLabel = LEVEL_DISPLAY[level];
 
@@ -54,9 +50,9 @@ export function ThinkingIndicator({
           aria-label={`Thinking: ${displayLabel}`}
           className={cn(
             "flex h-8 items-center rounded-lg px-2",
-            "transition-colors duration-200 ease",
+            "ease transition-colors duration-200",
             "hover:bg-accent",
-            "focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-1",
+            "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
             className
           )}
         >

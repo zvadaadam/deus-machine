@@ -62,7 +62,10 @@ export function RepositoryItem({
                 <button
                   type="button"
                   aria-label={`New workspace in ${repoName}`}
-                  onClick={(e) => { e.stopPropagation(); onNewWorkspace(repository.repo_id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNewWorkspace(repository.repo_id);
+                  }}
                   className="text-text-muted hover:text-text-tertiary cursor-pointer [&_*]:cursor-pointer"
                 >
                   <Plus className="h-4 w-4" />
@@ -103,7 +106,11 @@ export function RepositoryItem({
                       <m.li
                         initial={reduceMotion ? false : { opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.22, ease: [0.165, 0.84, 0.44, 1], delay: reduceMotion ? 0 : 0.02 }}
+                        transition={{
+                          duration: 0.22,
+                          ease: [0.165, 0.84, 0.44, 1],
+                          delay: reduceMotion ? 0 : 0.02,
+                        }}
                       >
                         <OpenDevsRepositoryBanner
                           onNewWorkspace={() => onNewWorkspace(repository.repo_id)}
@@ -114,7 +121,11 @@ export function RepositoryItem({
                     <m.li
                       initial={reduceMotion ? false : { opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18, ease: [0.165, 0.84, 0.44, 1], delay: reduceMotion ? 0 : 0.03 }}
+                      transition={{
+                        duration: 0.18,
+                        ease: [0.165, 0.84, 0.44, 1],
+                        delay: reduceMotion ? 0 : 0.03,
+                      }}
                     >
                       <SidebarRow
                         variant="action"

@@ -16,7 +16,12 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { isElectronEnv, listen, createListenerGroup, WORKSPACE_PROGRESS } from "@/platform/electron";
+import {
+  isElectronEnv,
+  listen,
+  createListenerGroup,
+  WORKSPACE_PROGRESS,
+} from "@/platform/electron";
 import type { RepoGroup } from "@shared/types/workspace";
 import {
   applyWorkspaceProgressToRepoGroups,

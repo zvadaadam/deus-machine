@@ -11,7 +11,14 @@
 
 import { useState, useEffect } from "react";
 import { BrowserPanel } from "./BrowserPanel";
-import { emit, invoke, isElectronEnv, listen, BROWSER_WORKSPACE_CHANGE, CHAT_INSERT } from "@/platform/electron";
+import {
+  emit,
+  invoke,
+  isElectronEnv,
+  listen,
+  BROWSER_WORKSPACE_CHANGE,
+  CHAT_INSERT,
+} from "@/platform/electron";
 import type { DetachedBrowserWorkspaceContext } from "@/features/browser/store";
 import {
   useChatInsertStore,
@@ -67,17 +74,14 @@ export function DetachedBrowserWindow() {
 
   // Listen for workspace changes from the main window
   useEffect(() => {
-    const unlistenPromise = listen(
-      BROWSER_WORKSPACE_CHANGE,
-      (event) => {
-        setWorkspaceContext((prev) => ({
-          workspaceId: event.payload.workspaceId,
-          directoryName: event.payload.directoryName ?? prev?.directoryName ?? null,
-          repoName: event.payload.repoName ?? prev?.repoName ?? null,
-          branch: event.payload.branch ?? prev?.branch ?? null,
-        }));
-      }
-    );
+    const unlistenPromise = listen(BROWSER_WORKSPACE_CHANGE, (event) => {
+      setWorkspaceContext((prev) => ({
+        workspaceId: event.payload.workspaceId,
+        directoryName: event.payload.directoryName ?? prev?.directoryName ?? null,
+        repoName: event.payload.repoName ?? prev?.repoName ?? null,
+        branch: event.payload.branch ?? prev?.branch ?? null,
+      }));
+    });
 
     return () => {
       unlistenPromise.then((unlisten) => unlisten());

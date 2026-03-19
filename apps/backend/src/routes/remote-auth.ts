@@ -55,7 +55,7 @@ app.post("/remote-auth/pair", async (c) => {
   const { token, device } = createDeviceToken(
     deviceName ?? "Unknown Device",
     clientIp ?? null,
-    userAgent,
+    userAgent
   );
 
   return c.json({

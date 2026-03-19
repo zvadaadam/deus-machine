@@ -11,7 +11,7 @@ const mockGetAgent = vi.fn(() => undefined);
 
 vi.mock("../agents/registry", () => ({
   getRegisteredAgentTypes: () => mockGetRegisteredAgentTypes(),
-  getAgent: (...args: unknown[]) => mockGetAgent(...args),
+  getAgent: (...args: unknown[]) => mockGetAgent(args[0]),
 }));
 
 vi.mock("../event-broadcaster", () => ({

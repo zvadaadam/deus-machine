@@ -31,7 +31,7 @@ export function CliStatusRow({
         {installed === null ? (
           <Loader2 className="h-4 w-4 animate-spin text-white/50" />
         ) : installed ? (
-          <Check className="h-4 w-4 text-success" />
+          <Check className="text-success h-4 w-4" />
         ) : (
           <X className="h-4 w-4 text-white/40" />
         )}

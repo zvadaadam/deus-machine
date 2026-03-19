@@ -17,9 +17,7 @@ export function useCollapsedSizePercent(
   // Rough estimate for first render — corrected synchronously in useLayoutEffect.
   // 0.65 ≈ panel group's share of window (sidebar ~240px + sidecar ~58px ≈ 35%).
   const [pct, setPct] = useState(() =>
-    typeof window !== "undefined"
-      ? (stripWidthPx / (window.innerWidth * 0.65)) * 100
-      : 3
+    typeof window !== "undefined" ? (stripWidthPx / (window.innerWidth * 0.65)) * 100 : 3
   );
 
   // Synchronous measurement before first paint — no flash

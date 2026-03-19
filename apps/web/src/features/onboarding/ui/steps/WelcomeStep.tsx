@@ -12,9 +12,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
     <div className="flex w-full flex-col items-center gap-6 py-6">
       {/* Logo / Title */}
       <div className="flex flex-col items-center gap-2">
-        <p className="text-xs font-medium tracking-wide text-white/25 uppercase">
-          Welcome to
-        </p>
+        <p className="text-xs font-medium tracking-wide text-white/25 uppercase">Welcome to</p>
         <h1
           className="text-[42px] font-bold tracking-[0.02em] text-white"
           style={{ fontFamily: "var(--font-pixel)" }}

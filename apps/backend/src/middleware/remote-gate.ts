@@ -15,7 +15,8 @@ function isRemoteEnabled(): boolean {
   if (now < cacheExpiry) return cachedEnabled;
 
   const settings = getAllSettings();
-  cachedEnabled = settings.remote_access_enabled === true || settings.remote_access_enabled === "true";
+  cachedEnabled =
+    settings.remote_access_enabled === true || settings.remote_access_enabled === "true";
   cacheExpiry = now + CACHE_TTL_MS;
   return cachedEnabled;
 }

@@ -28,9 +28,7 @@ export function toSafeIndicator(value: unknown): StatuspageIndicator {
 
 // --- Fetchers ---
 
-export async function fetchProviderStatus(
-  providerId: string
-): Promise<StatuspageStatusResponse> {
+export async function fetchProviderStatus(providerId: string): Promise<StatuspageStatusResponse> {
   const config = PROVIDER_REGISTRY[providerId];
   if (!config) throw new Error(`Unknown provider: ${providerId}`);
 

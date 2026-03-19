@@ -15,7 +15,7 @@
 // BROWSER_UTILS_SETUP, and builders reference window.__opendevsBrowserUtils.
 
 /** The IIFE string to eval in WKWebView — installs browser utils on window.__opendevsBrowserUtils. */
-import BROWSER_UTILS_SETUP from './dist-inject/browser-utils.js?raw';
+import BROWSER_UTILS_SETUP from "./dist-inject/browser-utils.js?raw";
 export { BROWSER_UTILS_SETUP };
 
 // Shorthand preamble for builder functions — verifies utils are loaded.

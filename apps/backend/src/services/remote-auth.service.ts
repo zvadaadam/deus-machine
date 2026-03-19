@@ -38,26 +38,106 @@ const RATE_LIMIT_LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // 100 short, memorable words for pairing codes
 const WORD_LIST = [
-  "ALPHA", "BEAR", "BOLT", "BRAVE", "BYTE",
-  "CEDAR", "CLOUD", "CORAL", "CRANE", "CROWN",
-  "DAWN", "DELTA", "DRIFT", "DUNE", "EAGLE",
-  "EMBER", "FERN", "FLAME", "FLASH", "FLINT",
-  "FORGE", "FROST", "GLOW", "GROVE", "HAWK",
-  "HAVEN", "HAZE", "HELM", "HIVE", "IRON",
-  "JADE", "KEEN", "LAKE", "LARK", "LEAF",
-  "LIGHT", "LIME", "LINK", "LUNA", "LYNX",
-  "MAPLE", "MARS", "MESA", "MINT", "MIST",
-  "MOSS", "NIGHT", "NODE", "NOVA", "OAK",
-  "OPAL", "ORBIT", "PALM", "PEAK", "PINE",
-  "PIXEL", "PLUM", "POLAR", "PULSE", "QUARTZ",
-  "RAIN", "RAPID", "REEF", "RIDGE", "RIVER",
-  "ROBIN", "RUNE", "RUSH", "SAGE", "SHELL",
-  "SILK", "SKY", "SLATE", "SOLAR", "SPARK",
-  "SPIRE", "STEEL", "STONE", "STORM", "SWIFT",
-  "THORN", "TIDE", "TIGER", "TRAIL", "TREE",
-  "VALE", "VAPOR", "VINE", "VIPER", "WAVE",
-  "WHALE", "WIND", "WING", "WOLF", "WREN",
-  "YACHT", "YARN", "ZENITH", "ZINC", "ZONE",
+  "ALPHA",
+  "BEAR",
+  "BOLT",
+  "BRAVE",
+  "BYTE",
+  "CEDAR",
+  "CLOUD",
+  "CORAL",
+  "CRANE",
+  "CROWN",
+  "DAWN",
+  "DELTA",
+  "DRIFT",
+  "DUNE",
+  "EAGLE",
+  "EMBER",
+  "FERN",
+  "FLAME",
+  "FLASH",
+  "FLINT",
+  "FORGE",
+  "FROST",
+  "GLOW",
+  "GROVE",
+  "HAWK",
+  "HAVEN",
+  "HAZE",
+  "HELM",
+  "HIVE",
+  "IRON",
+  "JADE",
+  "KEEN",
+  "LAKE",
+  "LARK",
+  "LEAF",
+  "LIGHT",
+  "LIME",
+  "LINK",
+  "LUNA",
+  "LYNX",
+  "MAPLE",
+  "MARS",
+  "MESA",
+  "MINT",
+  "MIST",
+  "MOSS",
+  "NIGHT",
+  "NODE",
+  "NOVA",
+  "OAK",
+  "OPAL",
+  "ORBIT",
+  "PALM",
+  "PEAK",
+  "PINE",
+  "PIXEL",
+  "PLUM",
+  "POLAR",
+  "PULSE",
+  "QUARTZ",
+  "RAIN",
+  "RAPID",
+  "REEF",
+  "RIDGE",
+  "RIVER",
+  "ROBIN",
+  "RUNE",
+  "RUSH",
+  "SAGE",
+  "SHELL",
+  "SILK",
+  "SKY",
+  "SLATE",
+  "SOLAR",
+  "SPARK",
+  "SPIRE",
+  "STEEL",
+  "STONE",
+  "STORM",
+  "SWIFT",
+  "THORN",
+  "TIDE",
+  "TIGER",
+  "TRAIL",
+  "TREE",
+  "VALE",
+  "VAPOR",
+  "VINE",
+  "VIPER",
+  "WAVE",
+  "WHALE",
+  "WIND",
+  "WING",
+  "WOLF",
+  "WREN",
+  "YACHT",
+  "YARN",
+  "ZENITH",
+  "ZINC",
+  "ZONE",
 ];
 
 // ---- In-memory state ----
@@ -103,7 +183,9 @@ export function validatePairCode(code: string): boolean {
   const upper = code.toUpperCase().trim();
   const entry = activeCodes.get(upper);
   if (!entry) {
-    console.log(`[Auth] Code "${upper}" not found. Active codes: ${activeCodes.size} (keys: ${[...activeCodes.keys()].join(", ") || "none"})`);
+    console.log(
+      `[Auth] Code "${upper}" not found. Active codes: ${activeCodes.size} (keys: ${[...activeCodes.keys()].join(", ") || "none"})`
+    );
     return false;
   }
   if (entry.expiresAt <= Date.now()) {
@@ -138,17 +220,19 @@ function generateId(): string {
 export function createDeviceToken(
   name: string,
   ip: string | null,
-  userAgent: string | null,
+  userAgent: string | null
 ): { token: string; device: PairedDevice } {
   const token = randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
   const id = generateId();
 
   const db = getDatabase();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO paired_devices (id, name, token_hash, ip_address, user_agent)
     VALUES (?, ?, ?, ?, ?)
-  `).run(id, name || "Unknown Device", tokenHash, ip, userAgent);
+  `
+  ).run(id, name || "Unknown Device", tokenHash, ip, userAgent);
 
   const device = db.prepare("SELECT * FROM paired_devices WHERE id = ?").get(id) as PairedDevice;
   return { token, device };
@@ -158,21 +242,29 @@ export function createDeviceToken(
 export function validateDeviceToken(token: string): PairedDevice | null {
   const tokenHash = hashToken(token);
   const db = getDatabase();
-  return (db.prepare("SELECT * FROM paired_devices WHERE token_hash = ?").get(tokenHash) as PairedDevice) ?? null;
+  return (
+    (db
+      .prepare("SELECT * FROM paired_devices WHERE token_hash = ?")
+      .get(tokenHash) as PairedDevice) ?? null
+  );
 }
 
 /** Update last_seen_at for a device by token hash. */
 export function updateLastSeen(tokenHash: string): void {
   const db = getDatabase();
-  db.prepare("UPDATE paired_devices SET last_seen_at = datetime('now') WHERE token_hash = ?").run(tokenHash);
+  db.prepare("UPDATE paired_devices SET last_seen_at = datetime('now') WHERE token_hash = ?").run(
+    tokenHash
+  );
 }
 
 /** List all paired devices (token_hash excluded from the returned objects for safety). */
 export function listDevices(): Omit<PairedDevice, "token_hash">[] {
   const db = getDatabase();
-  const rows = db.prepare(
-    "SELECT id, name, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC",
-  ).all() as Omit<PairedDevice, "token_hash">[];
+  const rows = db
+    .prepare(
+      "SELECT id, name, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC"
+    )
+    .all() as Omit<PairedDevice, "token_hash">[];
   return rows;
 }
 

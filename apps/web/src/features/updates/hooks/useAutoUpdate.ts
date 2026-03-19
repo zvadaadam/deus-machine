@@ -48,7 +48,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
   useEffect(() => {
     if (!isElectronEnv) return;
 
-    const unlisten = window.electronAPI.onUpdateState((updateState: unknown) => {
+    const unlisten = window.electronAPI!.onUpdateState((updateState: unknown) => {
       const s = updateState as {
         stage: UpdateStage;
         version?: string;
@@ -74,7 +74,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     setState((prev) => ({ ...prev, stage: "checking" }));
 
     try {
-      const result = (await window.electronAPI.checkForUpdates()) as {
+      const result = (await window.electronAPI!.checkForUpdates()) as {
         available: boolean;
         version?: string;
         releaseNotes?: string;
@@ -100,7 +100,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       if (!isDownloadingRef.current) {
         isDownloadingRef.current = true;
         setState((prev) => ({ ...prev, stage: "downloading" }));
-        await window.electronAPI.downloadUpdate();
+        await window.electronAPI!.downloadUpdate();
       }
 
       return false;
@@ -117,7 +117,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
     if (!isElectronEnv) return;
     try {
       localStorage.removeItem(PENDING_VERSION_KEY);
-      await window.electronAPI.installUpdate();
+      await window.electronAPI!.installUpdate();
     } catch (err) {
       console.error("Failed to install update:", err);
     }

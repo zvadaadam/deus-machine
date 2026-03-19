@@ -368,10 +368,12 @@ export class AgentClient {
 
     try {
       const rawResult = await this.withTimeout(
-        this.peer.request(AGENT_RPC_METHODS.INITIALIZE, {
-          version: PROTOCOL_VERSION,
-          capabilities: {},
-        }),
+        Promise.resolve(
+          this.peer.request(AGENT_RPC_METHODS.INITIALIZE, {
+            version: PROTOCOL_VERSION,
+            capabilities: {},
+          })
+        ),
         HANDSHAKE_TIMEOUT_MS,
         "initialize"
       );

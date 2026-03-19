@@ -29,27 +29,73 @@ import { simulatorService } from "../api/simulator.service";
 
 const HID_KEYCODES: Record<string, number> = {
   // Letters (0x04–0x1D)
-  KeyA: 0x04, KeyB: 0x05, KeyC: 0x06, KeyD: 0x07, KeyE: 0x08, KeyF: 0x09,
-  KeyG: 0x0a, KeyH: 0x0b, KeyI: 0x0c, KeyJ: 0x0d, KeyK: 0x0e, KeyL: 0x0f,
-  KeyM: 0x10, KeyN: 0x11, KeyO: 0x12, KeyP: 0x13, KeyQ: 0x14, KeyR: 0x15,
-  KeyS: 0x16, KeyT: 0x17, KeyU: 0x18, KeyV: 0x19, KeyW: 0x1a, KeyX: 0x1b,
-  KeyY: 0x1c, KeyZ: 0x1d,
+  KeyA: 0x04,
+  KeyB: 0x05,
+  KeyC: 0x06,
+  KeyD: 0x07,
+  KeyE: 0x08,
+  KeyF: 0x09,
+  KeyG: 0x0a,
+  KeyH: 0x0b,
+  KeyI: 0x0c,
+  KeyJ: 0x0d,
+  KeyK: 0x0e,
+  KeyL: 0x0f,
+  KeyM: 0x10,
+  KeyN: 0x11,
+  KeyO: 0x12,
+  KeyP: 0x13,
+  KeyQ: 0x14,
+  KeyR: 0x15,
+  KeyS: 0x16,
+  KeyT: 0x17,
+  KeyU: 0x18,
+  KeyV: 0x19,
+  KeyW: 0x1a,
+  KeyX: 0x1b,
+  KeyY: 0x1c,
+  KeyZ: 0x1d,
   // Digits (0x1E–0x27)
-  Digit1: 0x1e, Digit2: 0x1f, Digit3: 0x20, Digit4: 0x21, Digit5: 0x22,
-  Digit6: 0x23, Digit7: 0x24, Digit8: 0x25, Digit9: 0x26, Digit0: 0x27,
+  Digit1: 0x1e,
+  Digit2: 0x1f,
+  Digit3: 0x20,
+  Digit4: 0x21,
+  Digit5: 0x22,
+  Digit6: 0x23,
+  Digit7: 0x24,
+  Digit8: 0x25,
+  Digit9: 0x26,
+  Digit0: 0x27,
   // Control keys
-  Enter: 0x28, Backspace: 0x2a, Tab: 0x2b, Space: 0x2c,
+  Enter: 0x28,
+  Backspace: 0x2a,
+  Tab: 0x2b,
+  Space: 0x2c,
   // Punctuation
-  Minus: 0x2d, Equal: 0x2e, BracketLeft: 0x2f, BracketRight: 0x30,
-  Backslash: 0x31, Semicolon: 0x33, Quote: 0x34, Backquote: 0x35,
-  Comma: 0x36, Period: 0x37, Slash: 0x38,
+  Minus: 0x2d,
+  Equal: 0x2e,
+  BracketLeft: 0x2f,
+  BracketRight: 0x30,
+  Backslash: 0x31,
+  Semicolon: 0x33,
+  Quote: 0x34,
+  Backquote: 0x35,
+  Comma: 0x36,
+  Period: 0x37,
+  Slash: 0x38,
   // Modifiers
   CapsLock: 0x39,
-  ShiftLeft: 0xe1, ShiftRight: 0xe5,
-  ControlLeft: 0xe0, ControlRight: 0xe4,
-  AltLeft: 0xe2, AltRight: 0xe6,
+  ShiftLeft: 0xe1,
+  ShiftRight: 0xe5,
+  ControlLeft: 0xe0,
+  ControlRight: 0xe4,
+  AltLeft: 0xe2,
+  AltRight: 0xe6,
   // Arrow keys
-  ArrowRight: 0x4f, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
+  ArrowRight: 0x4f,
+  ArrowLeft: 0x50,
+  ArrowDown: 0x51,
+  ArrowUp: 0x52,
 };
 
 // ---------------------------------------------------------------------------
@@ -140,7 +186,10 @@ export function SimulatorStreamViewer({
   // -------------------------------------------------------------------------
 
   const getNormalizedCoords = useCallback(
-    (e: React.MouseEvent | React.WheelEvent | MouseEvent, updateLast = true): { x: number; y: number } | null => {
+    (
+      e: React.MouseEvent | React.WheelEvent | MouseEvent,
+      updateLast = true
+    ): { x: number; y: number } | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
@@ -171,7 +220,8 @@ export function SimulatorStreamViewer({
       if (!isLive) return;
       viewportRef.current?.focus();
       const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
+      if (coords)
+        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
     },
     [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
   );
@@ -180,7 +230,8 @@ export function SimulatorStreamViewer({
     (e: React.MouseEvent) => {
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
-      if (coords) simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
+      if (coords)
+        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
     },
     [isLive, workspaceId, getNormalizedCoords, warnTouchFailed]
   );
@@ -203,7 +254,9 @@ export function SimulatorStreamViewer({
       if (!isLive) return;
       const coords = lastCoordsRef.current;
       if (coords) {
-        simulatorService.sendTouch(workspaceIdRef.current, coords.x, coords.y, "ended").catch(warnTouchFailed);
+        simulatorService
+          .sendTouch(workspaceIdRef.current, coords.x, coords.y, "ended")
+          .catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     };
@@ -221,7 +274,9 @@ export function SimulatorStreamViewer({
       const coords = getNormalizedCoords(e, false);
       if (!coords) return;
       e.preventDefault();
-      simulatorService.sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY).catch(() => {});
+      simulatorService
+        .sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY)
+        .catch(() => {});
     },
     [isLive, workspaceId, getNormalizedCoords]
   );
@@ -287,10 +342,7 @@ export function SimulatorStreamViewer({
       onKeyUp={handleKeyUp}
     >
       {streamUrl && (
-        <canvas
-          ref={canvasRef}
-          className="pointer-events-none max-h-full max-w-full select-none"
-        />
+        <canvas ref={canvasRef} className="pointer-events-none max-h-full max-w-full select-none" />
       )}
       {children}
     </div>

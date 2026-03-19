@@ -78,15 +78,14 @@ export function DesignPanel({ workspaceId }: DesignPanelProps) {
 
       {/* Empty state — promote pencil.dev */}
       {isEmpty && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center animate-fade-in-up">
+        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <PenTool className="text-muted-foreground/50 h-5 w-5" />
           </div>
           <div className="space-y-1.5">
             <p className="text-foreground text-sm font-medium">No design files found</p>
             <p className="text-muted-foreground max-w-[240px] text-xs leading-relaxed">
-              Add{" "}
-              <code className="bg-muted/60 rounded-md px-1 py-0.5 font-mono text-xs">.pen</code>{" "}
+              Add <code className="bg-muted/60 rounded-md px-1 py-0.5 font-mono text-xs">.pen</code>{" "}
               files to your project to design alongside your code.
             </p>
           </div>

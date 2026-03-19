@@ -149,7 +149,7 @@ export function useFileMention({
       try {
         const searchResults = await apiClient.post<FuzzyFileResult[]>(
           ENDPOINTS.WORKSPACE_FILES_SEARCH(workspaceId),
-          { query, limit: 15 },
+          { query, limit: 15 }
         );
         // Only apply results if this is still the latest search
         if (searchIdRef.current !== currentSearchId) return;

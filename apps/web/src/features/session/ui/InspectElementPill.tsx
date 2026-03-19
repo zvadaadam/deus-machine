@@ -7,12 +7,7 @@
  */
 
 import { MousePointer2, Palette } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { InspectElement } from "../lib/parseInspectTags";
 
 interface InspectElementPillProps {
@@ -34,7 +29,10 @@ export function InspectElementPill({ element }: InspectElementPillProps) {
   }
   if (element.props) {
     // Show React props (most actionable data for local dev)
-    const propEntries = element.props.split(";").map((s) => s.trim()).filter(Boolean);
+    const propEntries = element.props
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
     for (const entry of propEntries.slice(0, 5)) {
       tooltipLines.push(entry);
     }
@@ -43,14 +41,20 @@ export function InspectElementPill({ element }: InspectElementPillProps) {
     }
   }
   if (element.attributes) {
-    const attrEntries = element.attributes.split(";").map((s) => s.trim()).filter(Boolean);
+    const attrEntries = element.attributes
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
     for (const entry of attrEntries.slice(0, 4)) {
       tooltipLines.push(entry);
     }
   }
   if (element.styles) {
     // Show styles in tooltip (formatted as CSS lines)
-    const styleEntries = element.styles.split(";").map((s) => s.trim()).filter(Boolean);
+    const styleEntries = element.styles
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
     for (const entry of styleEntries.slice(0, 6)) {
       tooltipLines.push(entry);
     }
@@ -67,16 +71,14 @@ export function InspectElementPill({ element }: InspectElementPillProps) {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="bg-primary/12 border-primary/20 text-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs font-medium leading-tight">
+          <span className="bg-primary/12 border-primary/20 text-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 align-baseline text-xs leading-tight font-medium">
             <Icon className="text-primary inline-block h-3 w-3 shrink-0" />
-            <span className="text-foreground/60 font-mono text-2xs">{`<${element.tagName}>`}</span>
-            {element.innerText && (
-              <span className="max-w-[120px] truncate">{label}</span>
-            )}
+            <span className="text-foreground/60 text-2xs font-mono">{`<${element.tagName}>`}</span>
+            {element.innerText && <span className="max-w-[120px] truncate">{label}</span>}
           </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-xs">
-          <p className="font-mono text-2xs whitespace-pre-wrap break-all">{tooltipContent}</p>
+          <p className="text-2xs font-mono break-all whitespace-pre-wrap">{tooltipContent}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

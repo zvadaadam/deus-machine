@@ -52,43 +52,34 @@ const STEPS = [
  * the state feel calmer but less distinctive. We accept this — the copy
  * is the differentiation; the animation was decoration.
  */
-export function OpenDevsEmptyState({
-  parentBranch,
-  className,
-}: OpenDevsEmptyStateProps) {
+export function OpenDevsEmptyState({ parentBranch, className }: OpenDevsEmptyStateProps) {
   return (
     <div
       className={cn(
-        "flex h-full flex-col items-center justify-center animate-fade-in-up",
+        "animate-fade-in-up flex h-full flex-col items-center justify-center",
         className
       )}
     >
       <div className="flex w-full max-w-[280px] flex-col items-center gap-6">
-
         {/* Semantic anchor — PR icon at low primary opacity */}
-        <GitPullRequest
-          className="h-4 w-4 text-primary/30"
-          strokeWidth={1.5}
-          aria-hidden
-        />
+        <GitPullRequest className="text-primary/30 h-4 w-4" strokeWidth={1.5} aria-hidden />
 
         {/* Identity copy — the reorienting moment */}
         <div className="text-center">
           {/* Same label treatment as standard empty state: uppercase, tracking, muted/60 */}
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">
+          <h2 className="text-muted-foreground/60 text-xs font-semibold tracking-wide uppercase">
             Workspace ready
           </h2>
 
           {/* The sentence that makes the mirror tangible */}
-          <p className="mt-1.5 text-sm text-text-secondary leading-snug tracking-[-0.011em]">
+          <p className="text-text-secondary mt-1.5 text-sm leading-snug tracking-[-0.011em]">
             You&apos;re building the tool you&apos;re in.
           </p>
 
           {/* Branch context — only shown when available */}
           {parentBranch && (
-            <p className="mt-1 text-xs text-text-muted leading-normal">
-              Branched from{" "}
-              <span className="font-mono text-text-tertiary">{parentBranch}</span>.
+            <p className="text-text-muted mt-1 text-xs leading-normal">
+              Branched from <span className="text-text-tertiary font-mono">{parentBranch}</span>.
             </p>
           )}
         </div>
@@ -97,7 +88,7 @@ export function OpenDevsEmptyState({
         <div
           className={cn(
             "w-full overflow-hidden rounded-xl",
-            "border border-border-subtle",
+            "border-border-subtle border",
             "bg-bg-elevated"
           )}
         >
@@ -108,25 +99,19 @@ export function OpenDevsEmptyState({
                 key={step.label}
                 className={cn(
                   "flex items-center gap-3 px-3.5 py-2.5",
-                  i < STEPS.length - 1 && "border-b border-border-subtle"
+                  i < STEPS.length - 1 && "border-border-subtle border-b"
                 )}
               >
                 {/* Step icon */}
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  <Icon
-                    className="h-3.5 w-3.5 text-text-muted"
-                    strokeWidth={1.75}
-                    aria-hidden
-                  />
+                  <Icon className="text-text-muted h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
                 </div>
 
                 {/* Step label */}
-                <span className="flex-1 text-xs text-text-tertiary">
-                  {step.label}
-                </span>
+                <span className="text-text-tertiary flex-1 text-xs">{step.label}</span>
 
                 {/* Monospace step index — far right, whisper weight */}
-                <span className="shrink-0 font-mono text-2xs text-text-muted/35">
+                <span className="text-2xs text-text-muted/35 shrink-0 font-mono">
                   {String(step.num).padStart(2, "0")}
                 </span>
               </div>
@@ -135,9 +120,7 @@ export function OpenDevsEmptyState({
         </div>
 
         {/* Closing invitation — plain text, not a button */}
-        <p className="text-center text-xs text-text-muted/55">
-          What would you like to change?
-        </p>
+        <p className="text-text-muted/55 text-center text-xs">What would you like to change?</p>
       </div>
     </div>
   );

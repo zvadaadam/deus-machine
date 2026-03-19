@@ -25,7 +25,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         className={cn(
           "bg-popover text-popover-foreground z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-xl border p-4 shadow-md outline-hidden will-change-[transform,opacity]",
-          "data-[side=top]:[--dropdown-slide-y:4px] data-[side=bottom]:[--dropdown-slide-y:-4px]",
+          "data-[side=bottom]:[--dropdown-slide-y:-4px] data-[side=top]:[--dropdown-slide-y:4px]",
           "data-[state=open]:animate-[dropdown-enter_180ms_cubic-bezier(.215,.61,.355,1)]",
           "data-[state=closed]:animate-[dropdown-exit_150ms_cubic-bezier(.215,.61,.355,1)]",
           className
