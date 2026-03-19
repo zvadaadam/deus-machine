@@ -9,8 +9,8 @@
 // respondToAgent dependency, breaking the circular import with service.ts.
 
 import { match } from "ts-pattern";
-import type { AgentEvent } from "../../../../shared/agent-events";
-import type { QueryResource } from "../../../../shared/types/query-protocol";
+import type { AgentEvent } from "@shared/agent-events";
+import type { QueryResource } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { relay } from "./tool-relay";
 import {
@@ -47,7 +47,7 @@ const MESSAGE_RESOURCES: QueryResource[] = ["messages", "session"];
 function persistAndInvalidate(
   result: WriteResult<unknown>,
   resources: QueryResource[],
-  sessionId: string,
+  sessionId: string
 ): void {
   if (result.ok) {
     invalidate(resources, { sessionIds: [sessionId] });
@@ -94,7 +94,9 @@ export function createAgentEventHandler(deps: {
         persistAndInvalidate(persistAssistantMessage(e), MESSAGE_RESOURCES, e.sessionId);
       })
       .with({ type: "message.tool_result" }, (e) => {
-        console.log(`[AgentEvent] message.tool_result: session=${e.sessionId} msgId=${e.message.id}`);
+        console.log(
+          `[AgentEvent] message.tool_result: session=${e.sessionId} msgId=${e.message.id}`
+        );
         persistAndInvalidate(persistToolResultMessage(e), MESSAGE_RESOURCES, e.sessionId);
       })
       .with({ type: "message.result" }, (e) => {
@@ -106,27 +108,35 @@ export function createAgentEventHandler(deps: {
         persistAndInvalidate(
           persistMessageCancelled(e),
           ["messages", "sessions", "session", "stats"],
-          e.sessionId,
+          e.sessionId
         );
       })
 
       // ── Interaction requests ──────────────────────────────────────────
       .with({ type: "request.opened" }, (e) => {
-        console.log(`[AgentEvent] request.opened: session=${e.sessionId} requestId=${e.requestId} type=${e.requestType}`);
+        console.log(
+          `[AgentEvent] request.opened: session=${e.sessionId} requestId=${e.requestId} type=${e.requestType}`
+        );
       })
       .with({ type: "request.resolved" }, (e) => {
-        console.log(`[AgentEvent] request.resolved: session=${e.sessionId} requestId=${e.requestId}`);
+        console.log(
+          `[AgentEvent] request.resolved: session=${e.sessionId} requestId=${e.requestId}`
+        );
       })
 
       // ── Tool relay ────────────────────────────────────────────────────
       .with({ type: "tool.request" }, (e) => {
-        console.log(`[AgentEvent] tool.request: session=${e.sessionId} method=${e.method} requestId=${e.requestId}`);
+        console.log(
+          `[AgentEvent] tool.request: session=${e.sessionId} method=${e.method} requestId=${e.requestId}`
+        );
         void relayToolRequest(e, respondToAgent);
       })
 
       // ── Metadata ──────────────────────────────────────────────────────
       .with({ type: "agent.session_id" }, (e) => {
-        console.log(`[AgentEvent] agent.session_id: session=${e.sessionId} agentSessionId=${e.agentSessionId}`);
+        console.log(
+          `[AgentEvent] agent.session_id: session=${e.sessionId} agentSessionId=${e.agentSessionId}`
+        );
         persistAndInvalidate(persistAgentSessionId(e), SESSION_RESOURCES, e.sessionId);
       })
 
@@ -138,7 +148,7 @@ export function createAgentEventHandler(deps: {
 
 async function relayToolRequest(
   event: AgentEvent & { type: "tool.request" },
-  respondToAgent: RespondToAgentFn,
+  respondToAgent: RespondToAgentFn
 ): Promise<void> {
   const { sessionId, requestId, method } = event;
 
@@ -155,7 +165,10 @@ async function relayToolRequest(
         result: { error: err instanceof Error ? err.message : "Tool relay failed" },
       });
     } catch (respondErr) {
-      console.error(`[AgentEvent] Failed to send error response to agent: requestId=${requestId}`, respondErr);
+      console.error(
+        `[AgentEvent] Failed to send error response to agent: requestId=${requestId}`,
+        respondErr
+      );
     }
   }
 }

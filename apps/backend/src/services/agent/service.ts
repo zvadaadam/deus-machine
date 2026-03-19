@@ -22,7 +22,7 @@ import type {
   TurnStartResponse,
   TurnRespondRequest,
   SessionStopRequest,
-} from "../../../../shared/agent-events";
+} from "@shared/agent-events";
 
 // ---- Singleton ----
 
@@ -45,9 +45,7 @@ export function init(agentServerUrl: string): void {
     }),
 
     onConnected: (agents) => {
-      console.log(
-        `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
-      );
+      console.log(`[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`);
     },
     onDisconnected: () => {
       console.log("[AgentService] Disconnected from agent-server");
@@ -78,9 +76,7 @@ export function shutdown(): void {
 // ---- Public API (typed wrappers) ----
 
 /** Forward a turn/start request to the agent-server. */
-export async function forwardTurn(
-  params: TurnStartRequest
-): Promise<TurnStartResponse> {
+export async function forwardTurn(params: TurnStartRequest): Promise<TurnStartResponse> {
   if (!client) throw new Error("Agent service not initialized");
   return client.sendTurnStart(params);
 }

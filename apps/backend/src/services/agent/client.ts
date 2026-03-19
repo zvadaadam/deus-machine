@@ -38,7 +38,7 @@ import {
   type ProviderUpdateModeRequest,
   type AgentEvent,
   type AgentInfo,
-} from "../../../../shared/agent-events";
+} from "@shared/agent-events";
 
 // ============================================================================
 // Types
@@ -57,7 +57,12 @@ export interface AgentClientOptions {
   onDisconnected?: () => void;
   /** Called when the sidecar sends a frontend-facing RPC (browser, sim, diff, plan).
    *  Must relay to the frontend and return the result. */
-  onFrontendRpc?: (requestId: string, sessionId: string, method: string, params: Record<string, unknown>) => Promise<unknown>;
+  onFrontendRpc?: (
+    requestId: string,
+    sessionId: string,
+    method: string,
+    params: Record<string, unknown>
+  ) => Promise<unknown>;
 }
 
 // ============================================================================
@@ -80,7 +85,12 @@ export class AgentClient {
   private onEvent: AgentEventHandler;
   private onConnected?: (agents: AgentInfo[]) => void;
   private onDisconnected?: () => void;
-  private onFrontendRpc: (requestId: string, sessionId: string, method: string, params: Record<string, unknown>) => Promise<unknown>;
+  private onFrontendRpc: (
+    requestId: string,
+    sessionId: string,
+    method: string,
+    params: Record<string, unknown>
+  ) => Promise<unknown>;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -95,7 +105,9 @@ export class AgentClient {
     this.onEvent = options.onEvent ?? (() => {});
     this.onConnected = options.onConnected;
     this.onDisconnected = options.onDisconnected;
-    this.onFrontendRpc = options.onFrontendRpc ?? (() => Promise.reject(new Error("No frontend RPC handler registered")));
+    this.onFrontendRpc =
+      options.onFrontendRpc ??
+      (() => Promise.reject(new Error("No frontend RPC handler registered")));
   }
 
   // ==========================================================================
@@ -277,7 +289,9 @@ export class AgentClient {
       this.peer.addMethod(method, async (params: any) => {
         const requestId = crypto.randomUUID();
         const sessionId = params?.sessionId ?? "unknown";
-        console.log(`[AgentClient] Frontend RPC: method=${method} requestId=${requestId} session=${sessionId}`);
+        console.log(
+          `[AgentClient] Frontend RPC: method=${method} requestId=${requestId} session=${sessionId}`
+        );
         const result = await this.onFrontendRpc(requestId, sessionId, method, params ?? {});
         return result;
       });
@@ -302,7 +316,10 @@ export class AgentClient {
     // If parsing fails, log and skip — don't crash the client.
     const parsed = AgentEventSchema.safeParse(params);
     if (!parsed.success) {
-      console.error(`[AgentClient] Invalid event payload for "${eventName}":`, parsed.error.message);
+      console.error(
+        `[AgentClient] Invalid event payload for "${eventName}":`,
+        parsed.error.message
+      );
       return;
     }
     try {

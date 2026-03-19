@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "../protocol";
-import { AGENT_EVENT_NAMES } from "../../shared/agent-events";
+import { AGENT_EVENT_NAMES } from "@shared/agent-events";
 import {
   buildMessageResponse,
   buildErrorResponse,

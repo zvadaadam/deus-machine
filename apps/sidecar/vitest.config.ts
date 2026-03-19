@@ -14,5 +14,8 @@ export default defineConfig({
     globals: true,
     testTimeout: 15000,
     setupFiles: ["./test/setup.ts"],
+    alias: {
+      "@shared": path.resolve(__dirname, "../../shared"),
+    },
   },
 });

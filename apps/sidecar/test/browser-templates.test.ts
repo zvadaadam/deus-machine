@@ -24,14 +24,14 @@ import {
   buildEvaluateJs,
   buildWaitForTextJs,
   buildWaitForTextGoneJs,
-} from "../../src/features/browser/automation/browser-utils";
+} from "../../../apps/web/src/features/browser/automation/browser-utils";
 
 import {
   VISUAL_EFFECTS_SETUP,
   buildMoveCursorAndRippleJs,
   buildPinCursorJs,
   HIDE_CURSOR_JS,
-} from "../../src/features/browser/automation/visual-effects";
+} from "../../../apps/web/src/features/browser/automation/visual-effects";
 
 // ========================================================================
 // Helpers
@@ -44,7 +44,9 @@ function assertIsIIFE(js: string, name: string) {
   const trimmed = js.trim();
   // esbuild may prepend "use strict"; — strip it for the shape check
   const body = trimmed.replace(/^"use strict";\s*/, "");
-  expect(body, `${name} should start with (function or (() =>`).toMatch(/^\((?:function\s*\(|(?:\(\)\s*=>))/);
+  expect(body, `${name} should start with (function or (() =>`).toMatch(
+    /^\((?:function\s*\(|(?:\(\)\s*=>))/
+  );
   expect(trimmed, `${name} should end with )()`).toMatch(/\)\(\)\s*;?\s*$/);
 }
 

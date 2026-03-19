@@ -4,7 +4,7 @@
 // Stored as private git refs under refs/opendevs-checkpoints/.
 
 import { execFileSync } from "child_process";
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 
 const CHECKPOINT_SKIP_PATTERNS = [
   "merge in progress",

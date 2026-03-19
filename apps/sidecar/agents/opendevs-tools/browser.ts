@@ -13,7 +13,7 @@ import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 
 // ============================================================================
 // Snapshot file-based fallback constants

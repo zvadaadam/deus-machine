@@ -3,7 +3,7 @@
 // Orchestrates the generator lifecycle, delegates to focused modules.
 
 import { query as claudeSDK, type PermissionMode } from "@anthropic-ai/claude-agent-sdk";
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 import { createCheckpoint } from "./checkpoint";
 import { AsyncQueue } from "../async-queue";
 import { createStreamContext } from "./stream-context";

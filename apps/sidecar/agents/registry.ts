@@ -3,14 +3,14 @@
 // Each agent type (claude, codex, etc.) implements AgentHandler and
 // registers itself in the registry during sidecar startup.
 
-import { getErrorMessage } from "../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 import type { AgentType } from "../protocol";
-import type { AgentCapabilities } from "../../shared/agent-events";
-import type { QueryOptions } from "../../shared/protocol";
+import type { AgentCapabilities } from "@shared/agent-events";
+import type { QueryOptions } from "@shared/protocol";
 
 // Re-export so existing imports from registry still work
-export type { AgentCapabilities } from "../../shared/agent-events";
-export type { QueryOptions } from "../../shared/protocol";
+export type { AgentCapabilities } from "@shared/agent-events";
+export type { QueryOptions } from "@shared/protocol";
 
 // ============================================================================
 // Optional method parameter types (provider-neutral names)

@@ -9,8 +9,12 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
   },
-  "include": ["./**/*.ts", "../shared/**/*.ts"],
+  "include": ["./**/*.ts", "../../shared/**/*.ts"],
   "exclude": ["dist", "node_modules", "test/browser-templates.test.ts"]
 }

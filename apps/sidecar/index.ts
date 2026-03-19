@@ -30,7 +30,7 @@ import { StringDecoder } from "string_decoder";
 import { createServer as createHttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 
-import { getErrorMessage } from "../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 import { RpcConnection, wsTransport } from "./rpc-connection";
 import { EventBroadcaster } from "./event-broadcaster";
 import { classifyError } from "./agents/lifecycle";
