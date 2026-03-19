@@ -43,13 +43,14 @@ app.get("/sessions/:id", (c) => {
 app.get("/sessions/:id/messages", (c) => {
   const db = getDatabase();
   const sessionId = c.req.param("id");
-  // Default to 50 messages per page; cap at 500 for safety.
-  const limit = Math.min(Number(c.req.query("limit")) || 50, 500);
+  // Validate pagination: clamp limit to 1-500, reject non-positive cursors
+  const rawLimit = Number(c.req.query("limit"));
+  const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 50, 500));
   // Cursor is seq (integer), not sent_at (string with collisions)
-  const beforeRaw = c.req.query("before");
-  const afterRaw = c.req.query("after");
-  const before = beforeRaw ? Number(beforeRaw) : undefined;
-  const after = afterRaw ? Number(afterRaw) : undefined;
+  const beforeParsed = parseInt(c.req.query("before") ?? "", 10);
+  const afterParsed = parseInt(c.req.query("after") ?? "", 10);
+  const before = Number.isFinite(beforeParsed) && beforeParsed >= 1 ? beforeParsed : undefined;
+  const after = Number.isFinite(afterParsed) && afterParsed >= 1 ? afterParsed : undefined;
 
   const messages = getMessages(db, sessionId, { limit, before, after });
 

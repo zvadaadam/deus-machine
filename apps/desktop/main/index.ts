@@ -103,6 +103,23 @@ async function createWindow(): Promise<void> {
     return { action: "deny" };
   });
 
+  // Block top-level navigation to external URLs (security: prevent redirect hijacks)
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const appUrl = is.dev
+      ? process.env.ELECTRON_RENDERER_URL
+      : `file://${join(__dirname, "../renderer")}`;
+    if (appUrl && url.startsWith(appUrl)) return; // allow app navigation
+    event.preventDefault();
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        shell.openExternal(url);
+      }
+    } catch {
+      /* ignore malformed */
+    }
+  });
+
   // Track fullscreen state for CSS selectors (.fullscreen)
   mainWindow.on("enter-full-screen", () => {
     mainWindow?.webContents.send("fullscreen-change", { isFullscreen: true });

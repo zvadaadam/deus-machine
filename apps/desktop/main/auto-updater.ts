@@ -22,6 +22,7 @@ let currentState: UpdateState = { status: "idle" };
 
 function sendState(win: BrowserWindow, state: UpdateState): void {
   currentState = state;
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return;
   win.webContents.send("update:state", state);
 }
 
@@ -59,7 +60,8 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
 
   ipcMain.handle("update:check", async () => {
     try {
-      return await autoUpdater.checkForUpdates();
+      const result = await autoUpdater.checkForUpdates();
+      return result ? { updateInfo: result.updateInfo } : null;
     } catch (err) {
       console.error("[auto-updater] Check failed:", err);
       return null;
