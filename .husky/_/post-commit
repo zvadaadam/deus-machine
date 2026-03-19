@@ -1,9 +1,2 @@
-#!/bin/sh
-# Entire CLI hooks
-# Post-commit hook: condense session data if commit has Entire-Checkpoint trailer
-entire hooks git post-commit 2>/dev/null || true
-# Chain: run pre-existing hook
-_entire_hook_dir="$(dirname "$0")"
-if [ -x "$_entire_hook_dir/post-commit.pre-entire" ]; then
-    "$_entire_hook_dir/post-commit.pre-entire" "$@"
-fi
+#!/usr/bin/env sh
+. "$(dirname "$0")/h"

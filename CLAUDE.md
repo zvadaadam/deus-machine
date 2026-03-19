@@ -8,11 +8,11 @@ We treat AI chat as a first-class citizen here, code it secondary.
 
 # TechStack
 
-Desktop app built with Tauri (Rust) + React frontend + Node.js backend.
+Desktop app built with Electron + React frontend + Node.js backend. Monorepo structure with apps/ directory.
 
 **Package manager: Bun.** Always use `bun` for installing dependencies (`bun add`, `bun install`), running scripts (`bun run`), and executing tools (`bunx`). Never use `npm` or `yarn` — CI runs `bun install --frozen-lockfile` and will fail if `bun.lock` is out of sync.
 
-**Desktop-only:** We only target the Tauri desktop app. Do not write web-specific fallbacks, browser-mode polling, or `isTauriEnv` conditionals for feature parity. The HTTP/Node.js backend exists as a service layer — not as a standalone web app. Tauri IPC and events are the primary data transport.
+**Desktop-only:** We only target the Electron desktop app. Do not write web-specific fallbacks, browser-mode polling, or `isElectronEnv` conditionals for feature parity. The HTTP/Node.js backend exists as a service layer — not as a standalone web app. Electron IPC and WebSocket events are the primary data transport.
 
 ### ts-pattern (Pattern Matching)
 
@@ -41,7 +41,7 @@ return match(block)
 ```
 Frontend (React + Zustand + React Query)
     │
-    ├── WebSocket ──→ Node.js Backend (backend/)
+    ├── WebSocket ──→ Node.js Backend (apps/backend/)
     │                  ├── Query Protocol (q:subscribe/q:snapshot/q:delta)
     │                  │   All data: workspaces, stats, sessions, messages
     │                  ├── Commands (q:command/q:command_ack)
@@ -49,25 +49,25 @@ Frontend (React + Zustand + React Query)
     │                  ├── Mutations (q:mutate/q:mutate_result)
     │                  │   Sync writes: archiveWorkspace, updateTitle
     │                  ├── Events (q:event) — ephemeral push (tool relay, plan mode)
-    │                  └── Agent Client ──→ Agent-Server (sidecar/)
+    │                  └── Agent Client ──→ Agent-Server (apps/sidecar/)
     │                       ├── WebSocket (ws://127.0.0.1:{port}) — JSON-RPC 2.0
     │                       ├── turn/start, turn/cancel, turn/respond
     │                       ├── Receives canonical agent events → persists → pushes
     │                       └── Tool relay: agent → backend → frontend → backend → agent
     │
-    ├── Tauri IPC ──→ Rust Backend (src-tauri/)
-    │                  ├── Git operations (libgit2 — fast, stateless)
+    ├── Electron IPC ──→ Electron Main (apps/desktop/)
+    │                  ├── Git operations (via backend HTTP)
     │                  ├── File scanning (.gitignore-aware, cached)
-    │                  ├── Terminal / PTY sessions
-    │                  └── Process lifecycle (Node.js backend, agent-server, dev-browser)
+    │                  ├── Terminal / PTY sessions (node-pty)
+    │                  └── Process lifecycle (Node.js backend, agent-server, browser-server)
     │
-    ├── HTTP REST ──→ Node.js Backend (backend/)
+    ├── HTTP REST ──→ Node.js Backend (apps/backend/)
     │                  ├── Fallback for initial load (before WS connects)
     │                  ├── Workspace creation (git worktree + DB coordination)
     │                  ├── Config management (MCP servers, agents, hooks)
     │                  └── External services (GitHub PR status via gh CLI)
     │
-    └── Agent-Server (sidecar/) — Stateless, no DB access
+    └── Agent-Server (apps/sidecar/) — Stateless, no DB access
                        ├── Claude/Codex Agent SDKs (streaming responses)
                        ├── WebSocket server (JSON-RPC 2.0 with initialize handshake)
                        ├── Canonical event emission (12 event types → backend)
@@ -167,13 +167,13 @@ Our app owns its own SQLite database:
 ~/Library/Application Support/com.opendevs.app/opendevs.db
 ```
 
-`initDatabase()` in `backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `shared/schema.ts`. No external dependencies — the app is fully self-contained.
+`initDatabase()` in `apps/backend/src/lib/database.ts` creates all tables, indexes, and triggers on first run via the `SCHEMA_SQL` constant defined in `shared/schema.ts`. No external dependencies — the app is fully self-contained.
 
 **Schema (5 tables):** `repositories`, `workspaces`, `sessions`, `messages`, `paired_devices`
 
 **What this means for development:**
 
-- All indexes, triggers, and denormalized columns are created by our own schema — see `backend/src/lib/schema.ts`
+- All indexes, triggers, and denormalized columns are created by our own schema — see `apps/backend/src/lib/schema.ts`
 - `sessions.last_user_message_at` is maintained by app code — use it instead of correlated subqueries
 - `sessions.workspace_id`, `sessions.agent_type`, `sessions.title`, etc. are available for multi-session support
 - Only the backend writes to the DB — the agent-server is stateless (no DB access)
@@ -215,30 +215,34 @@ Frontend → HTTP REST → Node.js → SQLite                ← writes + orches
 - Rust commands are stateless reads: `(params) → data`. No business logic, no multi-step coordination
 - Node.js keeps its service layer for anything that needs orchestration
 
-## Rust Backend Structure (src-tauri/)
+## Electron Main Process (apps/desktop/)
 
 ```
-src-tauri/src/
-├── main.rs           App init, plugin registration, lifecycle hooks
-├── lib.rs            Module exports
-├── commands/         Tauri IPC command handlers (one per domain — thin wrappers over core modules)
-└── *.rs              Core managers: process lifecycle, I/O, git, DB reads, file watching, PTY
+apps/desktop/
+├── main/
+│   ├── index.ts          App init, IPC handler registration, lifecycle hooks
+│   ├── backend-process.ts  Node.js backend process management
+│   ├── sidecar-process.ts  Agent-server (sidecar) process management
+│   ├── native-handlers.ts  IPC handlers for native operations
+│   └── browser-views.ts    BrowserView management for webview automation
+└── preload/
+    └── index.ts          Preload script exposing IPC bridge to renderer
 ```
 
-Each domain (git, pty, files, browser, etc.) follows the same pattern: a **core module** (`src/{domain}.rs`) with the logic, and a **command module** (`src/commands/{domain}.rs`) that exposes it as Tauri IPC commands. The agent-server bundle lives at `src-tauri/resources/bin/index.bundled.cjs`. Rust manages the agent-server process lifecycle and passes `AGENT_SERVER_URL` to the backend.
+Each domain (git, pty, files, browser, etc.) is handled by either the Electron main process (for native operations) or the Node.js backend (for data operations). The agent-server is spawned as a child process. The Electron main process manages process lifecycle and passes `AGENT_SERVER_URL` to the backend.
 
-### Git Diff Semantics (src-tauri/src/git.rs)
+### Git Diff Semantics
 
 - **Branch resolution** (`resolve_parent_branch`): Always prefers **remote** (`origin/{branch}`) over local. Worktrees are created from remote branches, so diffs must be against the upstream target. Never change this to local-first.
-- **Diff computation** (`get_diff_stats`, `get_changed_files`, `get_file_patch`): Uses **git CLI** (`git diff --numstat <merge-base>`) instead of libgit2. libgit2's `diff_tree_to_workdir_with_index` had phantom diff issues in worktrees (thousands of false deletions). Diffs compare the merge-base against the **working directory**, capturing committed + staged + unstaged changes. AI agents often leave uncommitted changes — `diff_tree_to_tree` would miss them entirely.
+- **Diff computation** (`get_diff_stats`, `get_changed_files`, `get_file_patch`): Uses **git CLI** (`git diff --numstat <merge-base>`). Diffs compare the merge-base against the **working directory**, capturing committed + staged + unstaged changes. AI agents often leave uncommitted changes — `diff_tree_to_tree` would miss them entirely.
 - **Untracked files**: Uses `git ls-files --others --exclude-standard` to list untracked files, then counts lines with size caps (10 MB) and binary detection. New files created by agents count toward diff stats.
-- **Timeouts**: All git CLI calls use `spawn()` + `try_wait()` with deadlines (5s for short ops, 15s for diffs) to prevent hung processes from blocking the UI.
-- **Tauri IPC fallback**: Frontend `workspace.service.ts` wraps all Rust git calls in try-catch and falls through to HTTP when Tauri IPC fails (e.g., worktree deleted, HEAD missing).
+- **Timeouts**: All git CLI calls use `spawn()` with deadlines (5s for short ops, 15s for diffs) to prevent hung processes from blocking the UI.
+- **IPC fallback**: Frontend `workspace.service.ts` wraps all git calls in try-catch and falls through to HTTP when IPC fails (e.g., worktree deleted, HEAD missing).
 
-## Node.js Backend Structure (backend/)
+## Node.js Backend Structure (apps/backend/)
 
 ```
-backend/src/
+apps/backend/src/
 ├── app.ts            Hono app factory, mounts all routes under /api
 ├── server.ts         Entry point, starts Hono + connects agent-client to agent-server
 ├── lib/              Database connection, error types, sanitizers
@@ -254,18 +258,18 @@ backend/src/
 
 Pattern: each route file maps to a REST resource. Services contain reusable business logic. Middleware loads context (workspace by `:id`) and maps errors to JSON responses. The agent-client connects to the agent-server on startup and dispatches all incoming canonical events through the agent-event-handler pipeline (persist → invalidate → WS push).
 
-## Agent-Server Structure (sidecar/)
+## Agent-Server Structure (apps/sidecar/)
 
-The agent-server runs as a separate Node.js process, managed by Rust. It wraps Claude/Codex SDKs and streams canonical events to the backend via WebSocket. It is **stateless** — no database access, no direct frontend communication.
+The agent-server runs as a separate Node.js process, managed by the Electron main process. It wraps Claude/Codex SDKs and streams canonical events to the backend via WebSocket. It is **stateless** — no database access, no direct frontend communication.
 
 **Why a separate process?** Agent SDKs are long-running and need process isolation. If an agent crashes, the backend and frontend remain unaffected. The agent-server can be restarted independently.
 
-**Bundling approach:** Uses `bundle.resources` in `tauri.conf.json` (not `externalBin`). The bundle includes the pre-built `index.bundled.cjs` file.
+**Bundling approach:** The Electron main process spawns the bundled `index.bundled.cjs` file as a child process.
 
 **Transport:** WebSocket server on `ws://127.0.0.1:{port}` (default). Also supports Unix socket (`--listen unix://`) for backward compat. JSON-RPC 2.0 wire protocol with `initialize`/`initialized` handshake.
 
 ```
-sidecar/
+apps/sidecar/
 ├── index.ts              Entry point, WebSocket + Unix socket server (JSON-RPC 2.0)
 ├── rpc-connection.ts     Bidirectional JSON-RPC 2.0 peer (WebSocket + net.Socket transport)
 ├── event-broadcaster.ts  Singleton: broadcasts canonical events to all connected clients
@@ -292,7 +296,7 @@ All agent output is normalized to 12 canonical event types that flow: Agent SDK 
 ### Key Bun Scripts
 
 ```bash
-bun run build:sidecar    # Build agent-server → src-tauri/resources/bin/index.bundled.cjs
+bun run build:sidecar    # Build agent-server → apps/sidecar/dist/index.bundled.cjs
 bun run test:sidecar     # Run agent-server tests (452 tests)
 bun run test:sidecar:watch  # Watch mode for agent-server tests
 ```
@@ -830,8 +834,8 @@ src/components/ui/              ← Shadcn base primitives only
 
 Test if the backend or frontend works using the browser tool or running tests.
 
-- **Backend tests** live in `backend/test/unit/` (organized by domain: `lib/`, `middleware/`, `routes/`, `services/`). Run with `bun run test:backend`.
-- **Sidecar tests** live in `sidecar/test/`. Run with `bun run test:sidecar`.
+- **Backend tests** live in `apps/backend/test/unit/` (organized by domain: `lib/`, `middleware/`, `routes/`, `services/`). Run with `bun run test:backend`.
+- **Sidecar tests** live in `apps/sidecar/test/`. Run with `bun run test:sidecar`.
 - Tests use Vitest with `vi.mock()` and `vi.hoisted()` for module-level mocking. Keep tests outside `src/` — never colocate tests with source code.
 
 ### Debugging Frontend Layout & Spacing Issues
@@ -917,7 +921,7 @@ The only pollers are conditional git diff queries (only when sessions are "worki
 
 ### Database Rules
 
-**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `backend/src/lib/schema.ts` (and mirrored in `sidecar/db/schema.ts`). For any new query pattern, add an index to the schema:
+**Required indexes** — any new table or query pattern must have proper indexes. All indexes are defined in `apps/backend/src/lib/schema.ts` (and mirrored in `apps/sidecar/db/schema.ts`). For any new query pattern, add an index to the schema:
 
 ```sql
 -- Defined in schema.ts:
@@ -967,8 +971,8 @@ BEGIN UPDATE {table} SET updated_at = datetime('now') WHERE id = NEW.id; END;
 **Adding a new data resource to WS:**
 
 1. Add the resource name to `QUERY_RESOURCES` in `shared/events.ts`
-2. Add a `runQuery` match arm in `backend/src/services/query-engine.ts`
-3. Add invalidation calls in `backend/src/services/agent-event-handler.ts` (for agent-driven data) or the relevant route handler
+2. Add a `runQuery` match arm in `apps/backend/src/services/query-engine.ts`
+3. Add invalidation calls in `apps/backend/src/services/agent-event-handler.ts` (for agent-driven data) or the relevant route handler
 4. Use `useQuerySubscription(resource, { queryKey, params })` in the frontend hook
 5. Set `staleTime: Infinity` and `refetchOnWindowFocus: false` on the `useQuery` (WS handles freshness)
 

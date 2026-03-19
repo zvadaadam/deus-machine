@@ -1,0 +1,32 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "apps/web/src/env.d.ts",
+    "apps/web/src/**/*",
+    "apps/web/src/**/*.tsx",
+    "apps/desktop/preload/*.d.ts",
+    "shared/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "./out/types-web",
+    "declarationDir": "./out/types-web",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["apps/web/src/*"],
+      "@/app/*": ["apps/web/src/app/*"],
+      "@/features/*": ["apps/web/src/features/*"],
+      "@/platform/*": ["apps/web/src/platform/*"],
+      "@/shared/*": ["apps/web/src/shared/*"],
+      "@/components/*": ["apps/web/src/components/*"],
+      "@/lib/*": ["apps/web/src/shared/lib/*"],
+      "@/hooks/*": ["apps/web/src/shared/hooks/*"],
+      "@/ui/*": ["apps/web/src/components/ui/*"],
+      "@shared/*": ["shared/*"]
+    },
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true
+  }
+}

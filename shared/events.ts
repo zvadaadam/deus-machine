@@ -2,17 +2,18 @@
  * App Event Catalog
  *
  * Single source of truth for ALL real-time event names and their payload schemas.
- * These events flow through the app via Tauri IPC and WebSocket, but the
- * contracts are defined here regardless of transport.
+ * These events flow through the app via different transports (Electron IPC, stdout
+ * relay, Unix socket) but the contracts are defined here regardless of how
+ * they're delivered.
  *
  * Every `listen()` call in the frontend MUST use an event name from this file.
- * The Rust layer (backend.rs, sidecar.rs) must be kept in sync manually.
+ * The Electron main process (apps/desktop/main/) must be kept in sync manually.
  *
  * Adding a new event:
  *   1. Add the event name constant below
  *   2. Define the Zod schema + inferred type
  *   3. Add the mapping to AppEventMap
- *   4. If emitted from Rust, update the corresponding .rs file
+ *   4. If emitted from main process, update the corresponding handler in apps/desktop/main/
  *   5. TypeScript will enforce correct payload types at all listen() call sites
  */
 
@@ -22,29 +23,35 @@ import { z } from "zod";
 // Event Name Constants
 // ============================================================================
 
-/** Workspace events — backend → Rust → frontend */
+/** Workspace events — backend → main process → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
 
-/** File system events — Rust watcher → frontend */
+/** Sidecar RPC — sidecar → main process → frontend (bidirectional requests) */
+export const SIDECAR_REQUEST = "sidecar:request" as const;
+
+/** File system events — chokidar watcher → frontend */
 export const FS_CHANGED = "fs:changed" as const;
 
-/** PTY events — Rust PTY manager → frontend */
+/** PTY events — node-pty manager → frontend */
 export const PTY_DATA = "pty-data" as const;
 export const PTY_EXIT = "pty-exit" as const;
 
-/** Browser automation events — Rust webview → frontend */
+/** Browser automation events — Electron BrowserView → frontend */
 export const BROWSER_PAGE_LOAD = "browser:page-load" as const;
 export const BROWSER_TITLE_CHANGED = "browser:title-changed" as const;
 export const BROWSER_URL_CHANGE = "browser:url-change" as const;
 export const BROWSER_WORKSPACE_CHANGE = "browser-window:workspace-change" as const;
 
-/** Simulator events — Rust → frontend */
+/** Simulator events — main process → frontend */
 export const SIM_BUILD_LOG = "sim:build-log" as const;
 
-/** Chat insert events — Rust → frontend */
+/** Chat insert events — main process → frontend */
 export const CHAT_INSERT = "chat-insert" as const;
 
-/** Git operations — Rust → frontend */
+/** Backend lifecycle — main process → frontend */
+export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
+
+/** Git operations — main process → frontend */
 export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
 
 // ============================================================================
@@ -62,7 +69,17 @@ export const MUTATION_NAMES = ["archiveWorkspace", "updateWorkspaceTitle"] as co
 export type MutationName = (typeof MUTATION_NAMES)[number];
 
 /** Command names for the WebSocket relay protocol (async actions). */
-export const COMMAND_NAMES = ["sendMessage", "stopSession"] as const;
+export const COMMAND_NAMES = [
+  "sendMessage", "stopSession",
+  // PTY commands
+  "pty:spawn", "pty:write", "pty:resize", "pty:kill",
+  // File system commands
+  "fs:watch", "fs:unwatch",
+  // Browser server commands
+  "browser-server:start", "browser-server:stop",
+  // Git commands
+  "git:clone",
+] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
@@ -71,6 +88,14 @@ export const PROTOCOL_EVENTS = [
   "session:error",
   "session:progress",
   "tool:request",
+  // PTY events (high-throughput)
+  "pty-data", "pty-exit",
+  // File system events
+  "fs:changed",
+  // Git events
+  "git-clone-progress",
+  // Sidecar bidirectional RPC
+  "sidecar:request",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -136,6 +161,11 @@ export const SimBuildLogSchema = z.object({
 });
 export type SimBuildLogEvent = z.infer<typeof SimBuildLogSchema>;
 
+export const BackendPortChangedSchema = z.object({
+  port: z.number(),
+});
+export type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
+
 export const GitCloneProgressSchema = z.object({
   percent: z.number(),
   received: z.number(),
@@ -146,8 +176,8 @@ export const GitCloneProgressSchema = z.object({
 });
 export type GitCloneProgressEvent = z.infer<typeof GitCloneProgressSchema>;
 
-/** InspectElement schema — matches the shape emitted by the browser InSpec handler
- *  through Rust. Keep in sync with InspectElement in parseInspectTags.ts. */
+/** InspectElement schema — matches the shape emitted by the browser InSpec handler.
+ *  Keep in sync with InspectElement in parseInspectTags.ts. */
 const InspectElementSchema = z.object({
   ref: z.string(),
   tagName: z.string(),
@@ -163,7 +193,7 @@ const InspectElementSchema = z.object({
   innerHTML: z.string().optional(),
 });
 
-/** Serialized chat insert payload (Rust → frontend).
+/** Serialized chat insert payload (main process → frontend).
  *  Keep in sync with SerializedChatInsertPayload in chatInsertStore.ts. */
 export const ChatInsertSchema = z.discriminatedUnion("type", [
   z.object({
@@ -198,9 +228,10 @@ export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
 /**
  * Maps every known event name to its Zod schema for runtime validation.
  * Used by the typed `listen()` wrapper to validate payloads crossing
- * the Rust → TypeScript boundary — catches payload drift at runtime.
+ * the IPC boundary — catches payload drift at runtime.
  */
 export const AppEventSchemaMap = {
+  [BACKEND_PORT_CHANGED]: BackendPortChangedSchema,
   [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
   [FS_CHANGED]: FileChangeSchema,
   [PTY_DATA]: PtyDataSchema,
@@ -220,10 +251,13 @@ export const AppEventSchemaMap = {
 
 /**
  * Maps every app event name to its payload type.
- * Used by the typed `listen()` wrapper in platform/tauri to provide
+ * Used by the typed `listen()` wrapper in platform/electron to provide
  * autocomplete on event names and auto-inferred payload types.
  */
 export interface AppEventMap {
+  // Backend lifecycle
+  [BACKEND_PORT_CHANGED]: BackendPortChangedEvent;
+
   // Workspace
   [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
 

@@ -32,7 +32,7 @@
     },
     "dev:desktop": {
       "command": "bun run dev",
-      "description": "Start full Tauri desktop app",
+      "description": "Start full Electron desktop app",
       "icon": "monitor",
       "persistent": true,
       "mode": "nonconcurrent",
@@ -42,12 +42,6 @@
       "command": "bun run build",
       "description": "Build frontend for production",
       "icon": "hammer",
-      "depends": ["build:sidecar"]
-    },
-    "build:tauri": {
-      "command": "bun run build:tauri",
-      "description": "Build Tauri desktop binary",
-      "icon": "package",
       "depends": ["build:sidecar"]
     },
     "build:sidecar": {
