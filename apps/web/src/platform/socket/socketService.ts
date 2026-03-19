@@ -1,10 +1,10 @@
 /**
  * Sidecar Socket Service
  *
- * Communication with sidecar-v2 via backend HTTP endpoints.
+ * Communication with the agent-server (sidecar) via backend HTTP endpoints.
  *
  * Architecture:
- * React → HTTP → Backend → Unix Socket → Sidecar-v2 → Claude SDK
+ * React → HTTP → Backend → WebSocket → Agent-Server → Claude SDK
  *
  * Protocol: JSON-RPC 2.0 over NDJSON (backend handles the socket relay)
  */
@@ -73,7 +73,7 @@ class SidecarSocketService {
   }
 
   /**
-   * Send agent query to sidecar-v2
+   * Send agent query to the agent-server
    */
   async sendQuery(
     sessionId: string,
@@ -96,7 +96,7 @@ class SidecarSocketService {
     }
 
     if (import.meta.env.DEV)
-      console.log("[SOCKET] Query sent to sidecar-v2:", sessionId.substring(0, 8), parsed.data);
+      console.log("[SOCKET] Query sent to agent-server:", sessionId.substring(0, 8), parsed.data);
 
     return parsed.data;
   }
@@ -104,10 +104,7 @@ class SidecarSocketService {
   /**
    * Cancel an active query
    */
-  async cancelQuery(
-    sessionId: string,
-    agentType: AgentType = "claude"
-  ): Promise<void> {
+  async cancelQuery(sessionId: string, agentType: AgentType = "claude"): Promise<void> {
     const params: CancelRequest = {
       type: "cancel",
       id: sessionId,

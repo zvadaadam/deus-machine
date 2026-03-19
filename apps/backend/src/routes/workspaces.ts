@@ -1,17 +1,24 @@
-import { Hono } from 'hono';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
-import { spawn, execFile, execSync } from 'child_process';
-import { promisify } from 'util';
-import { uuidv7 } from '@shared/lib/uuid';
-import { getDatabase } from '../lib/database';
-import { withWorkspace, computeWorkspacePath } from '../middleware/workspace-loader';
-import { NotFoundError, ValidationError } from '../lib/errors';
-import { parseBody, PatchWorkspaceBody, CreateWorkspaceBody } from '../lib/schemas';
-import { generateUniqueName } from '../services/workspace.service';
-import { readManifestWithFallback, getSetupCommand, getArchiveCommand, getOpenDevsEnv, getNormalizedTasks, runSetupScript } from '../services/manifest.service';
-import { initializeWorkspace } from '../services/workspace-init.service';
+import { Hono } from "hono";
+import path from "path";
+import fs from "fs";
+import os from "os";
+import { spawn, execFile, execSync } from "child_process";
+import { promisify } from "util";
+import { uuidv7 } from "@shared/lib/uuid";
+import { getDatabase } from "../lib/database";
+import { withWorkspace, computeWorkspacePath } from "../middleware/workspace-loader";
+import { NotFoundError, ValidationError } from "../lib/errors";
+import { parseBody, PatchWorkspaceBody, CreateWorkspaceBody } from "../lib/schemas";
+import { generateUniqueName } from "../services/workspace.service";
+import {
+  readManifestWithFallback,
+  getSetupCommand,
+  getArchiveCommand,
+  getOpenDevsEnv,
+  getNormalizedTasks,
+  runSetupScript,
+} from "../services/manifest.service";
+import { initializeWorkspace } from "../services/workspace-init.service";
 import {
   getAllWorkspaces,
   getWorkspacesByRepo,
@@ -22,38 +29,41 @@ import {
   getAllRepositorySummaries,
   getSessionRaw,
   getSessionsByWorkspaceId,
-} from '../db';
-import type { WorkspaceWithDetailsRow } from '../db';
-import { invalidate } from '../services/query-engine';
+} from "../db";
+import type { WorkspaceWithDetailsRow } from "../db";
+import { invalidate } from "../services/query-engine";
 
 const execFileAsync = promisify(execFile);
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
 const app = new Hono<Env>();
 
-app.get('/workspaces', (c) => {
+app.get("/workspaces", (c) => {
   const db = getDatabase();
   const workspaces = getAllWorkspaces(db);
-  return c.json(workspaces.map(ws => ({ ...ws, workspace_path: computeWorkspacePath(ws) })));
+  return c.json(workspaces.map((ws) => ({ ...ws, workspace_path: computeWorkspacePath(ws) })));
 });
 
-app.get('/workspaces/by-repo', (c) => {
+app.get("/workspaces/by-repo", (c) => {
   const db = getDatabase();
-  const stateParam = c.req.query('state');
+  const stateParam = c.req.query("state");
   const workspaces = getWorkspacesByRepo(db, stateParam);
 
   const grouped: Record<string, any> = {};
-  workspaces.forEach(workspace => {
-    const repoId = workspace.repository_id || 'unknown';
+  workspaces.forEach((workspace) => {
+    const repoId = workspace.repository_id || "unknown";
     if (!grouped[repoId]) {
       grouped[repoId] = {
         repo_id: repoId,
-        repo_name: workspace.repo_name || 'Unknown',
+        repo_name: workspace.repo_name || "Unknown",
         sort_order: workspace.repo_sort_order || 999,
-        workspaces: []
+        workspaces: [],
       };
     }
-    grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+    grouped[repoId].workspaces.push({
+      ...workspace,
+      workspace_path: computeWorkspacePath(workspace),
+    });
   });
 
   // Backfill repos that have no matching workspaces (e.g. all archived)
@@ -74,23 +84,23 @@ app.get('/workspaces/by-repo', (c) => {
   return c.json(result);
 });
 
-app.get('/workspaces/:id', (c) => {
+app.get("/workspaces/:id", (c) => {
   const db = getDatabase();
-  const workspace = getWorkspaceById(db, c.req.param('id'));
-  if (!workspace) throw new NotFoundError('Workspace not found');
+  const workspace = getWorkspaceById(db, c.req.param("id"));
+  if (!workspace) throw new NotFoundError("Workspace not found");
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
-app.patch('/workspaces/:id', async (c) => {
+app.patch("/workspaces/:id", async (c) => {
   const db = getDatabase();
   const { state } = parseBody(PatchWorkspaceBody, await c.req.json());
   if (state) {
-    db.prepare('UPDATE workspaces SET state = ? WHERE id = ?').run(state, c.req.param('id'));
+    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, c.req.param("id"));
 
     // Run archive lifecycle hook (best-effort)
-    if (state === 'archived') {
+    if (state === "archived") {
       try {
-        const ws = getWorkspaceById(db, c.req.param('id'));
+        const ws = getWorkspaceById(db, c.req.param("id"));
         if (ws && ws.root_path) {
           const wsPath = computeWorkspacePath(ws);
           const manifest = readManifestWithFallback(wsPath, ws.root_path);
@@ -101,44 +111,46 @@ app.patch('/workspaces/:id', async (c) => {
               rootPath: ws.root_path,
               workspacePath: wsPath,
             });
-            const archiveProc = spawn('sh', ['-c', archiveCmd], {
+            const archiveProc = spawn("sh", ["-c", archiveCmd], {
               cwd: wsPath,
               env: { ...process.env, ...archiveEnv },
-              stdio: 'ignore',
+              stdio: "ignore",
               detached: false,
             });
-            archiveProc.on('error', (err) => {
-              console.error(`Archive hook error for workspace ${c.req.param('id')}:`, err.message);
+            archiveProc.on("error", (err) => {
+              console.error(`Archive hook error for workspace ${c.req.param("id")}:`, err.message);
             });
             archiveProc.unref();
           }
         }
       } catch (err) {
-        console.warn('[WORKSPACE] Archive lifecycle hook failed (continuing):', err);
+        console.warn("[WORKSPACE] Archive lifecycle hook failed (continuing):", err);
       }
     }
   }
-  const updated = getWorkspaceRaw(db, c.req.param('id'));
-  invalidate(['workspaces', 'sessions', 'stats']);
+  const updated = getWorkspaceRaw(db, c.req.param("id"));
+  invalidate(["workspaces", "sessions", "stats"]);
   return c.json(updated);
 });
 
 // Create workspace
-app.post('/workspaces', async (c) => {
+app.post("/workspaces", async (c) => {
   const db = getDatabase();
   const { repository_id } = parseBody(CreateWorkspaceBody, await c.req.json());
 
   const repo = getRepositoryById(db, repository_id);
-  if (!repo) throw new NotFoundError('Repository not found');
+  if (!repo) throw new NotFoundError("Repository not found");
 
   const workspace_name = generateUniqueName(db);
-  const parent_branch = repo.git_default_branch || 'main';
+  const parent_branch = repo.git_default_branch || "main";
   const workspaceId = uuidv7();
 
-  let branchPrefix = 'workspace';
+  let branchPrefix = "workspace";
   try {
-    const gitUser = execSync('git config user.name', { cwd: repo.root_path!, encoding: 'utf8' })
-      .trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const gitUser = execSync("git config user.name", { cwd: repo.root_path!, encoding: "utf8" })
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "-");
     if (gitUser) branchPrefix = gitUser;
   } catch {}
   const placeholderBranchName = `${branchPrefix}/${workspace_name}`;
@@ -160,7 +172,7 @@ app.post('/workspaces', async (c) => {
   // correctness matters more here.
   // ───────────────────────────────────────────────────────────────────
   try {
-    await execFileAsync('git', ['fetch', 'origin', parent_branch], {
+    await execFileAsync("git", ["fetch", "origin", parent_branch], {
       cwd: repo.root_path!,
       timeout: 15000,
     });
@@ -169,35 +181,51 @@ app.post('/workspaces', async (c) => {
     // whatever local state we have. The worktree will still be created
     // from the local branch — diffs might be off but it's better than
     // blocking workspace creation entirely.
-    console.warn(`[WORKSPACE] git fetch origin ${parent_branch} failed (continuing with local):`, fetchErr);
+    console.warn(
+      `[WORKSPACE] git fetch origin ${parent_branch} failed (continuing with local):`,
+      fetchErr
+    );
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO workspaces (
       id, repository_id, slug, git_branch,
       git_target_branch, state, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(workspaceId, repository_id, workspace_name, placeholderBranchName,
-    parent_branch, 'initializing');
+  `
+  ).run(
+    workspaceId,
+    repository_id,
+    workspace_name,
+    placeholderBranchName,
+    parent_branch,
+    "initializing"
+  );
 
   // Branch from origin/<parent_branch> when available (fetched above).
   // Falls back to local <parent_branch> if remote doesn't exist.
   const worktreeBase = await (async () => {
     try {
-      await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${parent_branch}`], {
-        cwd: repo.root_path!, timeout: 2000,
-      });
+      await execFileAsync(
+        "git",
+        ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${parent_branch}`],
+        {
+          cwd: repo.root_path!,
+          timeout: 2000,
+        }
+      );
       return `origin/${parent_branch}`;
     } catch {
       return parent_branch;
     }
   })();
 
-  const workspacePath = path.join(repo.root_path!, '.opendevs', workspace_name);
+  const workspacePath = path.join(repo.root_path!, ".opendevs", workspace_name);
 
   // Fire-and-forget: run the init pipeline async (don't await).
   // Pipeline handles: worktree creation → deps install → .env copy → session creation.
-  // Progress events flow: stdout → Rust backend.rs → Tauri events → Frontend.
+  // Progress events flow: stdout → Electron main process → IPC events → Frontend.
   // On fatal failure: reverse cleanup (rm dir, prune worktree, delete branch).
   initializeWorkspace({
     workspaceId,
@@ -207,54 +235,61 @@ app.post('/workspaces', async (c) => {
     branchName: placeholderBranchName,
     worktreeBase,
     parentBranch: parent_branch,
-  }).then(() => {
-    // Workspace is ready — check for manifest setup script
-    const manifest = readManifestWithFallback(workspacePath, repo.root_path!);
-    const setupCmd = manifest ? getSetupCommand(manifest) : null;
-    if (setupCmd && manifest) {
-      db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
-      const setupEnv = getOpenDevsEnv(manifest, { id: workspaceId, rootPath: repo.root_path!, workspacePath });
-      runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
-    }
-  }).catch((err) => {
-    // Belt-and-suspenders: initializeWorkspace handles its own errors,
-    // but if something truly unexpected escapes, don't leave workspace stuck.
-    console.error('[WORKSPACE] Unhandled init pipeline error:', err);
-    try {
-      db.prepare("UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'")
-        .run(workspaceId);
-      invalidate(["workspaces", "stats"]);
-    } catch {}
-  });
+  })
+    .then(() => {
+      // Workspace is ready — check for manifest setup script
+      const manifest = readManifestWithFallback(workspacePath, repo.root_path!);
+      const setupCmd = manifest ? getSetupCommand(manifest) : null;
+      if (setupCmd && manifest) {
+        db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
+        const setupEnv = getOpenDevsEnv(manifest, {
+          id: workspaceId,
+          rootPath: repo.root_path!,
+          workspacePath,
+        });
+        runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
+      }
+    })
+    .catch((err) => {
+      // Belt-and-suspenders: initializeWorkspace handles its own errors,
+      // but if something truly unexpected escapes, don't leave workspace stuck.
+      console.error("[WORKSPACE] Unhandled init pipeline error:", err);
+      try {
+        db.prepare(
+          "UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'"
+        ).run(workspaceId);
+        invalidate(["workspaces", "stats"]);
+      } catch {}
+    });
 
   const workspace = getWorkspaceForMiddleware(db, workspaceId);
-  if (!workspace) throw new NotFoundError('Workspace not found after creation');
+  if (!workspace) throw new NotFoundError("Workspace not found after creation");
 
   // Push immediately so clients see the workspace in 'initializing' state.
   // Query-protocol subscribers get snapshots + q:invalidate for unmounted caches.
   // The init pipeline will invalidate again when it transitions to 'ready'.
-  invalidate(['workspaces', 'stats']);
+  invalidate(["workspaces", "stats"]);
 
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
 // List all sessions for a workspace (used by chat tab reconstruction)
-app.get('/workspaces/:id/sessions', (c) => {
+app.get("/workspaces/:id/sessions", (c) => {
   const db = getDatabase();
-  const workspaceId = c.req.param('id');
+  const workspaceId = c.req.param("id");
   const workspace = getWorkspaceRaw(db, workspaceId);
-  if (!workspace) throw new NotFoundError('Workspace not found');
+  if (!workspace) throw new NotFoundError("Workspace not found");
   const sessions = getSessionsByWorkspaceId(db, workspaceId);
   return c.json(sessions);
 });
 
 // Create a new session for an existing workspace
-app.post('/workspaces/:id/sessions', (c) => {
+app.post("/workspaces/:id/sessions", (c) => {
   const db = getDatabase();
-  const workspaceId = c.req.param('id');
+  const workspaceId = c.req.param("id");
 
   const workspace = getWorkspaceRaw(db, workspaceId);
-  if (!workspace) throw new NotFoundError('Workspace not found');
+  if (!workspace) throw new NotFoundError("Workspace not found");
 
   const sessionId = uuidv7();
 
@@ -269,7 +304,7 @@ app.post('/workspaces/:id/sessions', (c) => {
   });
 
   createSession();
-  invalidate(['workspaces', 'sessions', 'stats']);
+  invalidate(["workspaces", "sessions", "stats"]);
 
   const session = getSessionRaw(db, sessionId);
   return c.json(session);
@@ -278,9 +313,9 @@ app.post('/workspaces/:id/sessions', (c) => {
 // ─── Manifest & Task Endpoints ──────────────────────────────
 
 // Get parsed manifest + normalized tasks for a workspace
-app.get('/workspaces/:id/manifest', withWorkspace, (c) => {
-  const workspace = c.get('workspace');
-  const workspacePath = c.get('workspacePath');
+app.get("/workspaces/:id/manifest", withWorkspace, (c) => {
+  const workspace = c.get("workspace");
+  const workspacePath = c.get("workspacePath");
   if (!workspace.root_path) {
     return c.json({ manifest: null, tasks: [] });
   }
@@ -291,30 +326,32 @@ app.get('/workspaces/:id/manifest', withWorkspace, (c) => {
 });
 
 // Retry failed setup
-app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
+app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
   const db = getDatabase();
-  const workspace = c.get('workspace');
-  const workspacePath = c.get('workspacePath');
+  const workspace = c.get("workspace");
+  const workspacePath = c.get("workspacePath");
 
-  if (workspace.setup_status !== 'failed') {
-    throw new ValidationError('Can only retry when setup_status is failed');
+  if (workspace.setup_status !== "failed") {
+    throw new ValidationError("Can only retry when setup_status is failed");
   }
 
   if (!workspace.root_path) {
-    throw new ValidationError('Repository path not found');
+    throw new ValidationError("Repository path not found");
   }
 
   // Re-read manifest (AI agent may have fixed it, or it was added to repo root via settings)
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
   const setupCmd = manifest ? getSetupCommand(manifest) : null;
   if (!setupCmd || !manifest) {
-    db.prepare("UPDATE workspaces SET setup_status = 'none', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
-      .run(workspace.id);
-    return c.json({ setup_status: 'none' });
+    db.prepare(
+      "UPDATE workspaces SET setup_status = 'none', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
+    ).run(workspace.id);
+    return c.json({ setup_status: "none" });
   }
 
-  db.prepare("UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
-    .run(workspace.id);
+  db.prepare(
+    "UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
+  ).run(workspace.id);
 
   const setupEnv = getOpenDevsEnv(manifest, {
     id: workspace.id,
@@ -323,16 +360,16 @@ app.post('/workspaces/:id/retry-setup', withWorkspace, (c) => {
   });
   runSetupScript(db, workspace.id, setupCmd, setupEnv, workspacePath);
 
-  return c.json({ setup_status: 'running' });
+  return c.json({ setup_status: "running" });
 });
 
 // Get setup logs
-app.get('/workspaces/:id/setup-logs', withWorkspace, (c) => {
-  const workspace = c.get('workspace');
+app.get("/workspaces/:id/setup-logs", withWorkspace, (c) => {
+  const workspace = c.get("workspace");
   const setupLogPath = path.join(os.tmpdir(), `opendevs-${workspace.id}-setup.log`);
   try {
     if (!fs.existsSync(setupLogPath)) return c.json({ logs: null });
-    const logs = fs.readFileSync(setupLogPath, 'utf8');
+    const logs = fs.readFileSync(setupLogPath, "utf8");
     return c.json({ logs });
   } catch {
     return c.json({ logs: null });
@@ -340,20 +377,20 @@ app.get('/workspaces/:id/setup-logs', withWorkspace, (c) => {
 });
 
 // Run a task — validates task exists, returns info for frontend PTY spawn
-app.post('/workspaces/:id/tasks/:name/run', withWorkspace, (c) => {
-  const workspace = c.get('workspace');
-  const workspacePath = c.get('workspacePath');
-  const taskName = c.req.param('name');
+app.post("/workspaces/:id/tasks/:name/run", withWorkspace, (c) => {
+  const workspace = c.get("workspace");
+  const workspacePath = c.get("workspacePath");
+  const taskName = c.req.param("name");
 
   if (!workspace.root_path) {
-    throw new ValidationError('Repository path not found');
+    throw new ValidationError("Repository path not found");
   }
 
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  if (!manifest) throw new NotFoundError('No opendevs.json manifest found');
+  if (!manifest) throw new NotFoundError("No opendevs.json manifest found");
 
   const tasks = getNormalizedTasks(manifest);
-  const task = tasks.find(t => t.name === taskName);
+  const task = tasks.find((t) => t.name === taskName);
   if (!task) throw new NotFoundError(`Task "${taskName}" not found in manifest`);
 
   const ptyId = `task-${workspace.id}-${taskName}-${Date.now()}`;

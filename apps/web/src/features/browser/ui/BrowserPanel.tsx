@@ -57,7 +57,7 @@ import { getErrorMessage } from "@shared/lib/errors";
 const MAX_LOGS = 500;
 const PERSIST_DEBOUNCE_MS = 300;
 
-/** Browser info from Rust get_cookie_browsers command */
+/** Browser info from get_cookie_browsers IPC command */
 interface InstalledBrowser {
   name: string;
   keychain_service: string;
@@ -65,7 +65,7 @@ interface InstalledBrowser {
   available: boolean;
 }
 
-/** Decrypted cookie from Rust sync_browser_cookies command */
+/** Decrypted cookie from sync_browser_cookies IPC command */
 interface DecryptedCookie {
   name: string;
   value: string;

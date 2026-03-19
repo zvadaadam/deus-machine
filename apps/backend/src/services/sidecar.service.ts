@@ -1,7 +1,7 @@
 /**
  * Sidecar Service — Backend
  *
- * Spawns and manages the sidecar-v2 Node.js process and its Unix domain socket.
+ * Spawns and manages the agent-server (sidecar) Node.js process and its WebSocket connection.
  * Handles JSON-RPC 2.0 relay between frontend (via HTTP/WS) and sidecar.
  *
  * Protocol: JSON-RPC 2.0 over newline-delimited JSON (NDJSON)
@@ -111,11 +111,17 @@ export async function spawnSidecar(): Promise<string> {
 
     sidecarProcess.on("error", (err) => {
       console.error("[sidecar] Spawn error:", err);
-      if (!resolved) { resolved = true; reject(err); }
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
     });
 
     setTimeout(() => {
-      if (!resolved) { resolved = true; reject(new Error("Sidecar did not emit SOCKET_PATH within 15s")); }
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("Sidecar did not emit SOCKET_PATH within 15s"));
+      }
     }, 15_000);
   });
 }
@@ -139,7 +145,10 @@ export function stopSidecar(): void {
 
 export function connectToSidecar(path: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (connected && socket && socketPath === path) { resolve(); return; }
+    if (connected && socket && socketPath === path) {
+      resolve();
+      return;
+    }
     disconnectSocket();
     socketPath = path;
 
@@ -166,7 +175,10 @@ export function connectToSidecar(path: string): Promise<void> {
 
 function disconnectSocket(): void {
   connected = false;
-  if (socket) { socket.destroy(); socket = null; }
+  if (socket) {
+    socket.destroy();
+    socket = null;
+  }
   while (responseQueue.length > 0) {
     const waiter = responseQueue.shift()!;
     clearTimeout(waiter.timer);
@@ -203,11 +215,13 @@ function setupSocketReader(sock: Socket): void {
         if (hasMethod && hasId) {
           // Sidecar → Frontend REQUEST (bidirectional RPC)
           console.log(`[sidecar-socket] Sidecar request: ${msg.method} (id=${msg.id})`);
-          broadcast(JSON.stringify({
-            type: "q:event",
-            event: "sidecar:request",
-            data: { id: msg.id, method: msg.method, params: msg.params ?? null },
-          }));
+          broadcast(
+            JSON.stringify({
+              type: "q:event",
+              event: "sidecar:request",
+              data: { id: msg.id, method: msg.method, params: msg.params ?? null },
+            })
+          );
         } else if (hasId) {
           // Response to frontend-initiated request
           dispatchResponse(line);
@@ -259,5 +273,9 @@ export function sendResponseToSidecar(response: string): void {
 
 // ---- Status ----
 
-export function isSidecarConnected(): boolean { return connected; }
-export function getSidecarSocketPath(): string | null { return socketPath; }
+export function isSidecarConnected(): boolean {
+  return connected;
+}
+export function getSidecarSocketPath(): string | null {
+  return socketPath;
+}

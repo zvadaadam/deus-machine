@@ -26,7 +26,7 @@ const REPO = {
 /**
  * Detects whether a git_clone error means the repo already exists on disk.
  *
- * Rust git_clone returns several variants depending on the code path:
+ * git_clone returns several variants depending on the code path:
  *   - "already contains a git repository" -- .git dir found in target (pre-clone check)
  *   - "already exists and is not empty" -- non-empty target dir without .git
  *   - "already exists" -- git CLI stderr when target dir exists
@@ -162,8 +162,8 @@ export function OpenDevsStep({ onBack, onComplete }: OpenDevsStepProps) {
       <div className="-mt-4 space-y-2">
         <h2 className="text-2xl font-semibold text-white">Shape OpenDevs with us</h2>
         <p className="text-sm text-white/50">
-          OpenDevs is built by the people who use it. Clone the source, send a PR, or share an
-          idea. You have the power to shape it.
+          OpenDevs is built by the people who use it. Clone the source, send a PR, or share an idea.
+          You have the power to shape it.
         </p>
       </div>
 

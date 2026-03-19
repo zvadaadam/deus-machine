@@ -106,7 +106,7 @@ bun run package:mac    # Package macOS app
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guide and best practices
 - **[CLAUDE.md](CLAUDE.md)** - Project instructions and guidelines
 
-**Note:** Color system and typography are defined in `src/renderer/src/global.css` using Tailwind CSS v4's `@theme` directive.
+**Note:** Color system and typography are defined in `apps/web/src/global.css` using Tailwind CSS v4's `@theme` directive.
 
 ## Design Principles
 
@@ -122,39 +122,39 @@ We follow design inspiration from Linear, Vercel, Stripe, Airbnb, and Perplexity
 
 ```
 opendevs/
-├── src/
-│   ├── main/                    # Electron main process
-│   │   ├── index.ts             # App entry, window lifecycle
-│   │   ├── backend-process.ts   # Backend child process manager
-│   │   ├── sidecar-process.ts   # Sidecar manager + socket relay
-│   │   ├── pty-handlers.ts      # Terminal (node-pty)
-│   │   ├── browser-views.ts     # BrowserView management
-│   │   └── native-handlers.ts   # OS integrations (dialogs, theme)
-│   ├── preload/                 # Electron preload scripts
-│   └── renderer/src/            # React frontend
-│       ├── app/                 # App initialization
-│       ├── features/            # Feature modules
-│       │   ├── session/         # Session management
-│       │   ├── workspace/       # Workspace management
-│       │   ├── terminal/        # Terminal integration
-│       │   └── browser/         # Browser automation
-│       ├── platform/            # Platform APIs (Electron IPC)
-│       ├── shared/              # Shared utilities
-│       │   ├── api/             # API client
-│       │   ├── config/          # Configuration
-│       │   └── lib/             # Utility functions
-│       └── components/          # UI components
-│           └── ui/              # Shadcn components (edit freely)
-├── apps/backend/                # Node.js API server
-│   ├── src/
-│   │   ├── routes/              # REST endpoints
-│   │   ├── services/            # Business logic
-│   │   └── db/                  # Database queries
-│   └── server.cjs               # Entry point
-├── apps/sidecar/                # Claude Agent SDK process
-│   ├── index.ts                 # JSON-RPC server over Unix socket
-│   ├── agents/                  # Agent handlers
-│   └── db/                      # Direct SQLite writes
+├── apps/
+│   ├── desktop/                 # Electron main + preload
+│   │   ├── main/
+│   │   │   ├── index.ts             # App entry, window lifecycle
+│   │   │   ├── backend-process.ts   # Backend child process manager
+│   │   │   ├── sidecar-process.ts   # Sidecar manager + socket relay
+│   │   │   ├── pty-handlers.ts      # Terminal (node-pty)
+│   │   │   ├── browser-views.ts     # BrowserView management
+│   │   │   └── native-handlers.ts   # OS integrations (dialogs, theme)
+│   │   └── preload/                 # Electron preload scripts
+│   ├── web/src/                 # React frontend
+│   │   ├── app/                 # App initialization
+│   │   ├── features/            # Feature modules
+│   │   │   ├── session/         # Session management
+│   │   │   ├── workspace/       # Workspace management
+│   │   │   ├── terminal/        # Terminal integration
+│   │   │   └── browser/         # Browser automation
+│   │   ├── platform/            # Platform APIs (Electron IPC)
+│   │   ├── shared/              # Shared utilities
+│   │   │   ├── api/             # API client
+│   │   │   ├── config/          # Configuration
+│   │   │   └── lib/             # Utility functions
+│   │   └── components/          # UI components
+│   │       └── ui/              # Shadcn components (edit freely)
+│   ├── backend/                 # Node.js API server
+│   │   ├── src/
+│   │   │   ├── routes/              # REST endpoints
+│   │   │   ├── services/            # Business logic
+│   │   │   └── db/                  # Database queries
+│   │   └── server.cjs               # Entry point
+│   └── sidecar/                 # Claude Agent SDK process
+│       ├── index.ts                 # JSON-RPC server over WebSocket
+│       └── agents/                  # Agent handlers
 ├── shared/                      # Shared types and constants
 └── tests/                       # Test files
 ```
@@ -211,7 +211,7 @@ Agents are specialized subagents that Claude auto-delegates to. They run in isol
 When working on this project:
 
 - Follow the guidelines in [CLAUDE.md](CLAUDE.md)
-- Shadcn components in `src/renderer/src/components/ui/` are owned code - edit freely
+- Shadcn components in `apps/web/src/components/ui/` are owned code - edit freely
 - Use semantic colors from the design system (CSS variables in `global.css`)
 - Keep animations fast (200-300ms)
 - Documentation lives IN the code (use inline comments)

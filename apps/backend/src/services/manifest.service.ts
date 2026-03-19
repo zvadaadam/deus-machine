@@ -1,10 +1,14 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { spawn } from 'child_process';
-import type BetterSqlite3 from 'better-sqlite3';
-import { OpenDevsManifestSchema, type OpenDevsManifest, type NormalizedTask } from '../lib/opendevs-manifest';
-import { emitProgress } from './workspace-init.service';
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { spawn } from "child_process";
+import type BetterSqlite3 from "better-sqlite3";
+import {
+  OpenDevsManifestSchema,
+  type OpenDevsManifest,
+  type NormalizedTask,
+} from "../lib/opendevs-manifest";
+import { emitProgress } from "./workspace-init.service";
 
 /**
  * Read and normalize opendevs.json manifests.
@@ -15,18 +19,18 @@ import { emitProgress } from './workspace-init.service';
 
 export function readManifest(dirPath: string): OpenDevsManifest | null {
   try {
-    const manifestPath = path.join(dirPath, 'opendevs.json');
+    const manifestPath = path.join(dirPath, "opendevs.json");
     if (!fs.existsSync(manifestPath)) return null;
 
-    const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     const parsed = OpenDevsManifestSchema.safeParse(raw);
     if (!parsed.success) {
-      console.error('[MANIFEST] Invalid opendevs.json:', parsed.error.issues);
+      console.error("[MANIFEST] Invalid opendevs.json:", parsed.error.issues);
       return null;
     }
     return parsed.data;
   } catch (error) {
-    console.error('[MANIFEST] Error reading opendevs.json:', error);
+    console.error("[MANIFEST] Error reading opendevs.json:", error);
     return null;
   }
 }
@@ -46,14 +50,14 @@ export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[]
   if (!manifest.tasks) return [];
 
   return Object.entries(manifest.tasks).map(([name, entry]) => {
-    if (typeof entry === 'string') {
+    if (typeof entry === "string") {
       return {
         name,
         command: entry,
         description: null,
-        icon: 'terminal',
+        icon: "terminal",
         persistent: false,
-        mode: 'concurrent' as const,
+        mode: "concurrent" as const,
         depends: [],
         env: {},
       };
@@ -62,9 +66,9 @@ export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[]
       name,
       command: entry.command,
       description: entry.description ?? null,
-      icon: entry.icon ?? 'terminal',
+      icon: entry.icon ?? "terminal",
       persistent: entry.persistent ?? false,
-      mode: entry.mode ?? 'concurrent',
+      mode: entry.mode ?? "concurrent",
       depends: entry.depends ?? [],
       env: entry.env ?? {},
     };
@@ -74,7 +78,7 @@ export function getNormalizedTasks(manifest: OpenDevsManifest): NormalizedTask[]
 /** Build environment variables for script execution */
 export function getOpenDevsEnv(
   manifest: OpenDevsManifest,
-  ctx: { id: string; rootPath: string; workspacePath: string },
+  ctx: { id: string; rootPath: string; workspacePath: string }
 ): Record<string, string> {
   return {
     ...(manifest.env ?? {}),
@@ -89,18 +93,21 @@ export function getOpenDevsEnv(
  * Workspace worktrees may not have opendevs.json if it was added after creation.
  * Checks the worktree first (agent may have modified it), then falls back to repo root.
  */
-export function readManifestWithFallback(workspacePath: string, repoRootPath: string): OpenDevsManifest | null {
+export function readManifestWithFallback(
+  workspacePath: string,
+  repoRootPath: string
+): OpenDevsManifest | null {
   return readManifest(workspacePath) ?? readManifest(repoRootPath);
 }
 
 /** Write a manifest object to opendevs.json */
 export function writeManifest(dirPath: string, manifest: OpenDevsManifest): boolean {
   try {
-    const manifestPath = path.join(dirPath, 'opendevs.json');
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+    const manifestPath = path.join(dirPath, "opendevs.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
     return true;
   } catch (error) {
-    console.error('[MANIFEST] Error writing opendevs.json:', error);
+    console.error("[MANIFEST] Error writing opendevs.json:", error);
     return false;
   }
 }
@@ -109,76 +116,136 @@ export function writeManifest(dirPath: string, manifest: OpenDevsManifest): bool
  * Scan a project directory and generate a suggested opendevs.json manifest.
  * Reads package.json, Cargo.toml, Makefile, etc. to infer scripts and tasks.
  */
-export function detectManifestFromProject(rootPath: string, repoName: string): Record<string, unknown> {
+export function detectManifestFromProject(
+  rootPath: string,
+  repoName: string
+): Record<string, unknown> {
   const manifest: Record<string, unknown> = { version: 1, name: repoName };
   const tasks: Record<string, unknown> = {};
   const requires: Record<string, string> = {};
 
   // Detect Node.js / Bun project
-  const pkgJsonPath = path.join(rootPath, 'package.json');
+  const pkgJsonPath = path.join(rootPath, "package.json");
   if (fs.existsSync(pkgJsonPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-      const pm = (fs.existsSync(path.join(rootPath, 'bun.lock')) || fs.existsSync(path.join(rootPath, 'bun.lockb'))) ? 'bun' :
-                 fs.existsSync(path.join(rootPath, 'pnpm-lock.yaml')) ? 'pnpm' :
-                 fs.existsSync(path.join(rootPath, 'yarn.lock')) ? 'yarn' : 'npm';
-      const run = pm === 'npm' ? 'npm run' : `${pm} run`;
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
+      const pm =
+        fs.existsSync(path.join(rootPath, "bun.lock")) ||
+        fs.existsSync(path.join(rootPath, "bun.lockb"))
+          ? "bun"
+          : fs.existsSync(path.join(rootPath, "pnpm-lock.yaml"))
+            ? "pnpm"
+            : fs.existsSync(path.join(rootPath, "yarn.lock"))
+              ? "yarn"
+              : "npm";
+      const run = pm === "npm" ? "npm run" : `${pm} run`;
 
-      requires[pm] = '>= 1.0';
-      if (pm !== 'bun') requires.node = '>= 18';
+      requires[pm] = ">= 1.0";
+      if (pm !== "bun") requires.node = ">= 18";
 
       manifest.scripts = { setup: `${pm} install` };
       manifest.lifecycle = { setup: `${pm} install` };
 
       const scripts = pkg.scripts || {};
-      if (scripts.dev) tasks.dev = { command: `${run} dev`, description: 'Start dev server', icon: 'play', persistent: true };
-      if (scripts.build) tasks.build = { command: `${run} build`, description: 'Build for production', icon: 'hammer' };
-      if (scripts.test) tasks.test = { command: `${run} test`, description: 'Run tests', icon: 'check-circle' };
-      if (scripts.lint) tasks.lint = { command: `${run} lint`, description: 'Lint code', icon: 'search-code' };
-      if (scripts.format) tasks.format = { command: `${run} format`, description: 'Format code', icon: 'paintbrush' };
-      if (scripts.typecheck) tasks.typecheck = { command: `${run} typecheck`, description: 'Type check', icon: 'search-code' };
-      if (scripts.start) tasks.start = { command: `${run} start`, description: 'Start production server', icon: 'rocket', persistent: true };
-    } catch { /* invalid package.json — skip */ }
+      if (scripts.dev)
+        tasks.dev = {
+          command: `${run} dev`,
+          description: "Start dev server",
+          icon: "play",
+          persistent: true,
+        };
+      if (scripts.build)
+        tasks.build = {
+          command: `${run} build`,
+          description: "Build for production",
+          icon: "hammer",
+        };
+      if (scripts.test)
+        tasks.test = { command: `${run} test`, description: "Run tests", icon: "check-circle" };
+      if (scripts.lint)
+        tasks.lint = { command: `${run} lint`, description: "Lint code", icon: "search-code" };
+      if (scripts.format)
+        tasks.format = { command: `${run} format`, description: "Format code", icon: "paintbrush" };
+      if (scripts.typecheck)
+        tasks.typecheck = {
+          command: `${run} typecheck`,
+          description: "Type check",
+          icon: "search-code",
+        };
+      if (scripts.start)
+        tasks.start = {
+          command: `${run} start`,
+          description: "Start production server",
+          icon: "rocket",
+          persistent: true,
+        };
+    } catch {
+      /* invalid package.json — skip */
+    }
   }
 
   // Detect Rust project
-  const cargoPath = path.join(rootPath, 'Cargo.toml');
+  const cargoPath = path.join(rootPath, "Cargo.toml");
   if (fs.existsSync(cargoPath)) {
-    requires.cargo = '>= 1.0';
-    if (!manifest.scripts) manifest.scripts = { setup: 'cargo build' };
-    if (!manifest.lifecycle) manifest.lifecycle = { setup: 'cargo build' };
-    if (!tasks.build) tasks.build = { command: 'cargo build --release', description: 'Build release', icon: 'hammer' };
-    if (!tasks.test) tasks.test = { command: 'cargo test', description: 'Run tests', icon: 'check-circle' };
-    tasks.clippy = { command: 'cargo clippy', description: 'Lint with Clippy', icon: 'search-code' };
+    requires.cargo = ">= 1.0";
+    if (!manifest.scripts) manifest.scripts = { setup: "cargo build" };
+    if (!manifest.lifecycle) manifest.lifecycle = { setup: "cargo build" };
+    if (!tasks.build)
+      tasks.build = {
+        command: "cargo build --release",
+        description: "Build release",
+        icon: "hammer",
+      };
+    if (!tasks.test)
+      tasks.test = { command: "cargo test", description: "Run tests", icon: "check-circle" };
+    tasks.clippy = {
+      command: "cargo clippy",
+      description: "Lint with Clippy",
+      icon: "search-code",
+    };
   }
 
   // Detect Python project
-  const pyprojectPath = path.join(rootPath, 'pyproject.toml');
-  const requirementsPath = path.join(rootPath, 'requirements.txt');
+  const pyprojectPath = path.join(rootPath, "pyproject.toml");
+  const requirementsPath = path.join(rootPath, "requirements.txt");
   if (fs.existsSync(pyprojectPath) || fs.existsSync(requirementsPath)) {
-    requires.python = '>= 3.10';
-    const hasUv = fs.existsSync(path.join(rootPath, 'uv.lock'));
-    const pip = hasUv ? 'uv pip' : 'pip';
-    if (!manifest.scripts) manifest.scripts = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
-    if (!manifest.lifecycle) manifest.lifecycle = { setup: fs.existsSync(requirementsPath) ? `${pip} install -r requirements.txt` : `${pip} install -e .` };
-    if (!tasks.test) tasks.test = { command: 'pytest', description: 'Run tests', icon: 'check-circle' };
+    requires.python = ">= 3.10";
+    const hasUv = fs.existsSync(path.join(rootPath, "uv.lock"));
+    const pip = hasUv ? "uv pip" : "pip";
+    if (!manifest.scripts)
+      manifest.scripts = {
+        setup: fs.existsSync(requirementsPath)
+          ? `${pip} install -r requirements.txt`
+          : `${pip} install -e .`,
+      };
+    if (!manifest.lifecycle)
+      manifest.lifecycle = {
+        setup: fs.existsSync(requirementsPath)
+          ? `${pip} install -r requirements.txt`
+          : `${pip} install -e .`,
+      };
+    if (!tasks.test)
+      tasks.test = { command: "pytest", description: "Run tests", icon: "check-circle" };
   }
 
   // Detect Makefile
-  const makefilePath = path.join(rootPath, 'Makefile');
+  const makefilePath = path.join(rootPath, "Makefile");
   if (fs.existsSync(makefilePath)) {
     try {
-      const content = fs.readFileSync(makefilePath, 'utf-8');
+      const content = fs.readFileSync(makefilePath, "utf-8");
       const targets = content.match(/^([a-zA-Z_-]+)\s*:/gm);
       if (targets) {
-        for (const match of targets.slice(0, 8)) { // Cap at 8 tasks
-          const target = match.replace(':', '').trim();
-          if (['all', '.PHONY', '.DEFAULT'].includes(target)) continue;
+        for (const match of targets.slice(0, 8)) {
+          // Cap at 8 tasks
+          const target = match.replace(":", "").trim();
+          if (["all", ".PHONY", ".DEFAULT"].includes(target)) continue;
           if (tasks[target]) continue; // Don't overwrite more specific detections
           tasks[target] = `make ${target}`;
         }
       }
-    } catch { /* unreadable Makefile — skip */ }
+    } catch {
+      /* unreadable Makefile — skip */
+    }
   }
 
   if (Object.keys(requires).length > 0) manifest.requires = requires;
@@ -192,49 +259,62 @@ export function runSetupScript(
   workspaceId: string,
   setupCmd: string,
   setupEnv: Record<string, string>,
-  workspacePath: string,
+  workspacePath: string
 ): void {
   const setupLogPath = path.join(os.tmpdir(), `opendevs-${workspaceId}-setup.log`);
   const setupLog = fs.createWriteStream(setupLogPath);
 
-  const setupProc = spawn('sh', ['-c', setupCmd], {
+  const setupProc = spawn("sh", ["-c", setupCmd], {
     cwd: workspacePath,
     env: { ...process.env, ...setupEnv },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ["ignore", "pipe", "pipe"],
   });
   setupProc.stdout.pipe(setupLog);
   setupProc.stderr.pipe(setupLog);
 
-  const timer = setTimeout(() => {
-    setupProc.kill('SIGTERM');
-    setTimeout(() => { try { setupProc.kill('SIGKILL'); } catch {} }, 5000);
-  }, 5 * 60 * 1000);
+  const timer = setTimeout(
+    () => {
+      setupProc.kill("SIGTERM");
+      setTimeout(() => {
+        try {
+          setupProc.kill("SIGKILL");
+        } catch {}
+      }, 5000);
+    },
+    5 * 60 * 1000
+  );
 
   let finished = false;
-  const finish = (status: 'completed' | 'failed', error?: string) => {
+  const finish = (status: "completed" | "failed", error?: string) => {
     if (finished) return;
     finished = true;
     clearTimeout(timer);
-    try { setupLog.end(); } catch {}
-    if (status === 'completed') {
-      db.prepare("UPDATE workspaces SET setup_status = 'completed', error_message = NULL, updated_at = datetime('now') WHERE id = ?").run(workspaceId);
+    try {
+      setupLog.end();
+    } catch {}
+    if (status === "completed") {
+      db.prepare(
+        "UPDATE workspaces SET setup_status = 'completed', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
+      ).run(workspaceId);
     } else {
-      db.prepare("UPDATE workspaces SET setup_status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?").run(error, workspaceId);
+      db.prepare(
+        "UPDATE workspaces SET setup_status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?"
+      ).run(error, workspaceId);
     }
     // Emit progress event so frontend clears diff caches and re-fetches clean data.
     // Uses the same OPENDEVS_WORKSPACE_PROGRESS protocol that initializeWorkspace() uses
-    // (Rust backend.rs parses the prefix → Tauri event → useWorkspaceInitEvents hook).
-    const step = status === 'completed' ? 'setup_done' : 'setup_failed';
-    const label = status === 'completed' ? 'Setup complete' : `Setup failed: ${error ?? 'unknown'}`;
+    // (Electron's backend-process.ts parses the prefix → IPC event → useWorkspaceInitEvents hook).
+    const step = status === "completed" ? "setup_done" : "setup_failed";
+    const label = status === "completed" ? "Setup complete" : `Setup failed: ${error ?? "unknown"}`;
     emitProgress(workspaceId, step, label);
   };
 
-  setupProc.on('close', (code) => {
-    if (code === 0) finish('completed');
-    else finish('failed', `Setup exited with code ${code}`);
+  setupProc.on("close", (code) => {
+    if (code === 0) finish("completed");
+    else finish("failed", `Setup exited with code ${code}`);
   });
 
-  setupProc.on('error', (err) => {
-    finish('failed', `Setup spawn error: ${err.message}`);
+  setupProc.on("error", (err) => {
+    finish("failed", `Setup spawn error: ${err.message}`);
   });
 }

@@ -1,7 +1,7 @@
-import { execFileSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { isExecError } from '@shared/lib/errors';
+import { execFileSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import { isExecError } from "@shared/lib/errors";
 
 const parentBranchCache = new Map<string, { branch: string; expiresAt: number }>();
 const PARENT_BRANCH_CACHE_TTL_MS = 5000;
@@ -10,41 +10,49 @@ export function verifyBranchExists(root_path: string, branch: string): string {
   const checks = [
     `refs/heads/${branch}`,
     `refs/remotes/origin/${branch}`,
-    'refs/heads/main',
-    'refs/heads/master',
+    "refs/heads/main",
+    "refs/heads/master",
   ];
   for (const ref of checks) {
     try {
-      execFileSync('git', ['show-ref', '--verify', '--quiet', ref], { cwd: root_path, timeout: 2000 });
-      if (ref.endsWith('/main')) return 'main';
-      if (ref.endsWith('/master')) return 'master';
+      execFileSync("git", ["show-ref", "--verify", "--quiet", ref], {
+        cwd: root_path,
+        timeout: 2000,
+      });
+      if (ref.endsWith("/main")) return "main";
+      if (ref.endsWith("/master")) return "master";
       return branch;
     } catch {}
   }
-  return 'main';
+  return "main";
 }
 
 export function detectDefaultBranch(root_path: string): string {
   const strategies = [
     {
-      name: 'origin HEAD',
+      name: "origin HEAD",
       fn: () => {
-        const output = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
-          cwd: root_path, encoding: 'utf-8', timeout: 2000
+        const output = execFileSync("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], {
+          cwd: root_path,
+          encoding: "utf-8",
+          timeout: 2000,
         }).trim();
-        return output.replace(/^refs\/remotes\/origin\//, '');
-      }
+        return output.replace(/^refs\/remotes\/origin\//, "");
+      },
     },
     {
-      name: 'current branch',
-      fn: () => execFileSync('git', ['branch', '--show-current'], {
-        cwd: root_path, encoding: 'utf-8', timeout: 2000
-      }).trim()
+      name: "current branch",
+      fn: () =>
+        execFileSync("git", ["branch", "--show-current"], {
+          cwd: root_path,
+          encoding: "utf-8",
+          timeout: 2000,
+        }).trim(),
     },
     {
-      name: 'default fallback',
-      fn: () => 'main'
-    }
+      name: "default fallback",
+      fn: () => "main",
+    },
   ];
 
   for (const strategy of strategies) {
@@ -56,7 +64,7 @@ export function detectDefaultBranch(root_path: string): string {
     } catch {}
   }
 
-  return 'main';
+  return "main";
 }
 
 /**
@@ -71,8 +79,7 @@ export function detectDefaultBranch(root_path: string): string {
  *   2. Diffs show "what changed in this workspace vs upstream"
  *   3. PRs target the remote branch, so diffs match what the PR shows
  *
- * The Rust equivalent lives in src-tauri/src/git.rs::resolve_parent_branch.
- * Both MUST stay in sync — same candidate order, same remote-first logic.
+ * This is the authoritative implementation of parent branch resolution.
  * ──────────────────────────────────────────────────────────────────
  */
 export function resolveParentBranch(
@@ -80,22 +87,28 @@ export function resolveParentBranch(
   parentBranch: string | null,
   defaultBranch: string | null
 ): string {
-  const cacheKey = `${workspacePath}::${parentBranch || ''}::${defaultBranch || ''}`;
+  const cacheKey = `${workspacePath}::${parentBranch || ""}::${defaultBranch || ""}`;
   const cached = parentBranchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.branch;
   }
 
-  const candidates = [parentBranch, defaultBranch, 'main', 'master', 'develop'].filter(Boolean) as string[];
+  const candidates = [parentBranch, defaultBranch, "main", "master", "develop"].filter(
+    Boolean
+  ) as string[];
 
   // Try remote branches first — this is intentional, see docstring above
   for (const branch of candidates) {
-    const ref = branch.startsWith('origin/') ? branch : `origin/${branch}`;
+    const ref = branch.startsWith("origin/") ? branch : `origin/${branch}`;
     try {
-      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/${ref}`], {
-        cwd: workspacePath, timeout: 2000
+      execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`], {
+        cwd: workspacePath,
+        timeout: 2000,
       });
-      parentBranchCache.set(cacheKey, { branch: ref, expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS });
+      parentBranchCache.set(cacheKey, {
+        branch: ref,
+        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
+      });
       return ref;
     } catch {}
   }
@@ -103,22 +116,32 @@ export function resolveParentBranch(
   // Try local branches
   for (const branch of candidates) {
     try {
-      execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], {
-        cwd: workspacePath, timeout: 2000
+      execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+        cwd: workspacePath,
+        timeout: 2000,
       });
-      parentBranchCache.set(cacheKey, { branch, expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS });
+      parentBranchCache.set(cacheKey, {
+        branch,
+        expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
+      });
       return branch;
     } catch {}
   }
 
-  const fallback = defaultBranch || 'main';
-  parentBranchCache.set(cacheKey, { branch: fallback, expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS });
+  const fallback = defaultBranch || "main";
+  parentBranchCache.set(cacheKey, {
+    branch: fallback,
+    expiresAt: Date.now() + PARENT_BRANCH_CACHE_TTL_MS,
+  });
   return fallback;
 }
 
-export function resolveWorkspaceRelativePath(workspacePath: string, filePath: string): string | null {
-  if (!filePath || typeof filePath !== 'string') return null;
-  if (filePath.includes('\0')) return null;
+export function resolveWorkspaceRelativePath(
+  workspacePath: string,
+  filePath: string
+): string | null {
+  if (!filePath || typeof filePath !== "string") return null;
+  if (filePath.includes("\0")) return null;
 
   const normalized = path.normalize(filePath);
   if (path.isAbsolute(normalized)) return null;
@@ -126,7 +149,7 @@ export function resolveWorkspaceRelativePath(workspacePath: string, filePath: st
   const resolved = path.resolve(workspacePath, normalized);
   const relative = path.relative(workspacePath, resolved);
 
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     return null;
   }
 
@@ -134,14 +157,14 @@ export function resolveWorkspaceRelativePath(workspacePath: string, filePath: st
 }
 
 export function normalizeGitPath(pathToken: string): string | null {
-  if (!pathToken || typeof pathToken !== 'string') return null;
+  if (!pathToken || typeof pathToken !== "string") return null;
   let cleaned = pathToken.trim();
   if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
     cleaned = cleaned.slice(1, -1);
   }
-  if (cleaned.startsWith('a/')) {
+  if (cleaned.startsWith("a/")) {
     cleaned = cleaned.slice(2);
-  } else if (cleaned.startsWith('b/')) {
+  } else if (cleaned.startsWith("b/")) {
     cleaned = cleaned.slice(2);
   }
   return cleaned;
@@ -152,7 +175,7 @@ export function splitGitDiffTokens(value: string): string[] {
   const tokens: string[] = [];
   let i = 0;
   while (i < value.length && tokens.length < 2) {
-    while (value[i] === ' ') i += 1;
+    while (value[i] === " ") i += 1;
     if (i >= value.length) break;
     if (value[i] === '"') {
       let end = i + 1;
@@ -161,7 +184,7 @@ export function splitGitDiffTokens(value: string): string[] {
       i = end + 1;
     } else {
       let end = i;
-      while (end < value.length && value[end] !== ' ') end += 1;
+      while (end < value.length && value[end] !== " ") end += 1;
       tokens.push(value.slice(i, end));
       i = end + 1;
     }
@@ -182,45 +205,58 @@ export function extractDiffInfo(diffOutput: string): DiffInfo {
   let isNew = false;
   let isDeleted = false;
 
-  for (const line of diffOutput.split('\n')) {
-    if (line.startsWith('diff --git ')) {
-      const tokens = splitGitDiffTokens(line.slice('diff --git '.length));
+  for (const line of diffOutput.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      const tokens = splitGitDiffTokens(line.slice("diff --git ".length));
       if (tokens[0]) oldPath = normalizeGitPath(tokens[0]);
       if (tokens[1]) newPath = normalizeGitPath(tokens[1]);
       continue;
     }
-    if (line.startsWith('rename from ')) {
-      oldPath = normalizeGitPath(line.slice('rename from '.length));
+    if (line.startsWith("rename from ")) {
+      oldPath = normalizeGitPath(line.slice("rename from ".length));
       continue;
     }
-    if (line.startsWith('rename to ')) {
-      newPath = normalizeGitPath(line.slice('rename to '.length));
+    if (line.startsWith("rename to ")) {
+      newPath = normalizeGitPath(line.slice("rename to ".length));
       continue;
     }
-    if (line.startsWith('new file mode')) { isNew = true; continue; }
-    if (line.startsWith('deleted file mode')) { isDeleted = true; continue; }
-    if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+    if (line.startsWith("new file mode")) {
+      isNew = true;
+      continue;
+    }
+    if (line.startsWith("deleted file mode")) {
+      isDeleted = true;
+      continue;
+    }
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
       const match = line.match(/^(---|\+\+\+)\s+([^\t\r\n]+)(.*)$/);
       if (!match) continue;
       const [, prefix, fileName] = match;
-      if (fileName === '/dev/null') {
-        if (prefix === '---') isNew = true;
-        if (prefix === '+++') isDeleted = true;
+      if (fileName === "/dev/null") {
+        if (prefix === "---") isNew = true;
+        if (prefix === "+++") isDeleted = true;
         continue;
       }
-      if (prefix === '---' && !oldPath) oldPath = normalizeGitPath(fileName);
-      else if (prefix === '+++' && !newPath) newPath = normalizeGitPath(fileName);
+      if (prefix === "---" && !oldPath) oldPath = normalizeGitPath(fileName);
+      else if (prefix === "+++" && !newPath) newPath = normalizeGitPath(fileName);
     }
   }
 
   return { oldPath, newPath, isNew, isDeleted };
 }
 
-export function getGitFileContent(workspacePath: string, ref: string, filePath: string): string | null {
+export function getGitFileContent(
+  workspacePath: string,
+  ref: string,
+  filePath: string
+): string | null {
   if (!filePath) return null;
   try {
-    return execFileSync('git', ['show', `${ref}:${filePath}`], {
-      cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+    return execFileSync("git", ["show", `${ref}:${filePath}`], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 5000,
     }).toString();
   } catch {
     return null;
@@ -229,25 +265,33 @@ export function getGitFileContent(workspacePath: string, ref: string, filePath: 
 
 export function getMergeBase(workspacePath: string, parentBranch: string): string {
   try {
-    return execFileSync('git', ['merge-base', parentBranch, 'HEAD'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
+    return execFileSync("git", ["merge-base", parentBranch, "HEAD"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+      .toString()
+      .trim();
   } catch {
     // Fallback to HEAD — shows only uncommitted changes.
     // Previous fallback (parentBranch) caused phantom diffs when origin/main
     // advanced far beyond HEAD (thousands of false deletions).
     console.warn(`[GIT] merge-base failed for ${parentBranch}, falling back to HEAD`);
-    return 'HEAD';
+    return "HEAD";
   }
 }
 
 /** Returns untracked files (not ignored, not staged) in the workspace. */
 function getUntrackedFiles(workspacePath: string): string[] {
   try {
-    const output = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
-    return output ? output.split('\n') : [];
+    const output = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+      .toString()
+      .trim();
+    return output ? output.split("\n") : [];
   } catch {
     return [];
   }
@@ -259,7 +303,7 @@ function countFileLines(filePath: string): number {
     const stat = fs.statSync(filePath);
     if (stat.size > 10 * 1024 * 1024) return 0;
     const buf = fs.readFileSync(filePath);
-    // Detect binary files (null bytes in first 8KB) — matches Rust + route pattern
+    // Detect binary files (null bytes in first 8KB)
     const sample = buf.subarray(0, 8192);
     if (sample.includes(0)) return 0;
     // Count lines (not newlines) to match git's line-counting semantics.
@@ -282,17 +326,24 @@ function countFileLines(filePath: string): number {
  * Uses `git diff <merge-base>` (without HEAD) to include committed + staged + unstaged
  * changes to tracked files. Separately counts untracked file lines as additions.
  */
-export function getDiffStats(workspacePath: string, parentBranch: string): { additions: number; deletions: number } {
+export function getDiffStats(
+  workspacePath: string,
+  parentBranch: string
+): { additions: number; deletions: number } {
   try {
     const mergeBase = getMergeBase(workspacePath, parentBranch);
 
     // Diff merge-base against working directory (committed + staged + unstaged tracked changes)
-    const output = execFileSync('git', ['diff', mergeBase, '--shortstat'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
+    const output = execFileSync("git", ["diff", mergeBase, "--shortstat"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+      .toString()
+      .trim();
 
-    let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || '0', 10);
-    const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || '0', 10);
+    let additions = parseInt(output.match(/(\d+)\s+insertion(?:s)?/)?.[1] || "0", 10);
+    const deletions = parseInt(output.match(/(\d+)\s+deletion(?:s)?/)?.[1] || "0", 10);
 
     // Add untracked files (each line counts as an addition)
     for (const file of getUntrackedFiles(workspacePath)) {
@@ -309,20 +360,31 @@ export function getDiffStats(workspacePath: string, parentBranch: string): { add
  * Per-file change list from merge-base to working directory.
  * Includes tracked changes (committed + staged + unstaged) and untracked files.
  */
-export function getDiffFiles(workspacePath: string, parentBranch: string): Array<{ file: string; additions: number; deletions: number }> {
+export function getDiffFiles(
+  workspacePath: string,
+  parentBranch: string
+): Array<{ file: string; additions: number; deletions: number }> {
   try {
     const mergeBase = getMergeBase(workspacePath, parentBranch);
     const files: Array<{ file: string; additions: number; deletions: number }> = [];
 
     // Tracked changes: diff merge-base against working directory
-    const output = execFileSync('git', ['diff', mergeBase, '--numstat'], {
-      cwd: workspacePath, encoding: 'utf-8', timeout: 5000
-    }).toString().trim();
+    const output = execFileSync("git", ["diff", mergeBase, "--numstat"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+      .toString()
+      .trim();
 
     if (output) {
-      for (const line of output.split('\n')) {
-        const [additions, deletions, file] = line.split('\t');
-        files.push({ file, additions: parseInt(additions, 10) || 0, deletions: parseInt(deletions, 10) || 0 });
+      for (const line of output.split("\n")) {
+        const [additions, deletions, file] = line.split("\t");
+        files.push({
+          file,
+          additions: parseInt(additions, 10) || 0,
+          deletions: parseInt(deletions, 10) || 0,
+        });
       }
     }
 
@@ -352,8 +414,11 @@ export function getFileDiff(workspacePath: string, parentBranch: string, filePat
   const mergeBase = getMergeBase(workspacePath, parentBranch);
 
   // Diff merge-base against working directory for tracked files
-  const output = execFileSync('git', ['diff', mergeBase, '--', safePath], {
-    cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+  const output = execFileSync("git", ["diff", mergeBase, "--", safePath], {
+    cwd: workspacePath,
+    encoding: "utf-8",
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 5000,
   }).toString();
 
   if (output) return output;
@@ -361,8 +426,11 @@ export function getFileDiff(workspacePath: string, parentBranch: string, filePat
   // File might be untracked — use --no-index to generate a diff from /dev/null
   // git diff --no-index exits with code 1 when differences exist, so catch the error
   try {
-    return execFileSync('git', ['diff', '--no-index', '--', '/dev/null', safePath], {
-      cwd: workspacePath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, timeout: 5000
+    return execFileSync("git", ["diff", "--no-index", "--", "/dev/null", safePath], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 5000,
     }).toString();
   } catch (e: unknown) {
     // Exit code 1 = differences found (expected); stdout contains the diff
@@ -372,7 +440,7 @@ export function getFileDiff(workspacePath: string, parentBranch: string, filePat
 }
 
 export function getOpenCommand(target: string): { cmd: string; args: string[] } {
-  if (process.platform === 'win32') return { cmd: 'cmd', args: ['/c', 'start', '', target] };
-  if (process.platform === 'darwin') return { cmd: 'open', args: [target] };
-  return { cmd: 'xdg-open', args: [target] };
+  if (process.platform === "win32") return { cmd: "cmd", args: ["/c", "start", "", target] };
+  if (process.platform === "darwin") return { cmd: "open", args: [target] };
+  return { cmd: "xdg-open", args: [target] };
 }

@@ -1,7 +1,7 @@
 # One-click macOS release workflow (Electron Builder)
 #
 # TODO: This workflow needs to be rewritten for Electron Builder.
-# The previous Tauri-based release workflow has been removed.
+# The previous release workflow has been removed.
 # See RELEASE.md for the planned release flow.
 #
 # Trigger: GitHub Actions UI → "Run workflow" → enter version

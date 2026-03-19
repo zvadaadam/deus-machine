@@ -199,7 +199,7 @@ const TreeNode = memo(function TreeNode({
             // Change status from diff data takes priority
             node.change_status === "deleted" && "line-through opacity-50",
             node.change_status === "added" && "text-success/80",
-            // Fallback to git_status from Rust scan
+            // Fallback to git_status from file scan
             !node.change_status && node.git_status === "deleted" && "line-through opacity-50",
             !node.change_status && node.git_status === "added" && "text-success/80",
             !node.change_status && node.git_status === "untracked" && "text-info/80"

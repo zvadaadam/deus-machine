@@ -4,9 +4,9 @@
 //
 // Architecture:
 // 1. Wraps JS code in error-handling IIFE that returns a string result
-// 2. Calls eval_browser_webview_with_result (Rust → ObjC → WKWebView)
-// 3. WKWebView's completion handler sends the result back via mpsc channel
-// 4. Rust command returns the result directly to TypeScript
+// 2. Calls eval_browser_webview (Electron → BrowserView.executeJavaScript)
+// 3. Electron resolves the JS result via its internal completion handler
+// 4. IPC returns the result directly to TypeScript
 //
 // For Promise-based results (e.g. BrowserWaitFor polling), the wrapper stores
 // the result in a global variable and returns a sentinel. TypeScript then polls
@@ -71,7 +71,7 @@ export async function evalWithResult(
     }
   })()`;
 
-  // Call the native evaluateJavaScript:completionHandler: via Rust
+  // Call the native executeJavaScript via Electron IPC
   const result = await invoke<string>("eval_browser_webview_with_result", {
     label,
     js: wrappedJs,

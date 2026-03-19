@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // CJS bootstrap: re-launches with tsx ESM support, then runs the TS entry point.
-// Preserves `node backend/server.cjs` interface for dev.sh and Rust backend.rs.
+// Preserves `node backend/server.cjs` interface for dev.sh and Electron main process.
 const { spawn } = require('child_process');
 const path = require('path');
 const { pathToFileURL } = require('url');

@@ -45,7 +45,7 @@ export const WorkspaceService = {
       try {
         return await dbGetWorkspacesByRepo(state);
       } catch {
-        // Rust DB failed — fall through to HTTP
+        // IPC failed — fall through to HTTP
       }
     }
     const query = state ? `?state=${state}` : "";
@@ -70,7 +70,7 @@ export const WorkspaceService = {
           workspace.git_default_branch || ""
         );
       } catch {
-        // Rust git failed (e.g., worktree deleted) — fall through to HTTP
+        // IPC git failed (e.g., worktree deleted) — fall through to HTTP
       }
     }
     return apiClient.get<DiffStats>(ENDPOINTS.WORKSPACE_DIFF_STATS(id));
@@ -101,7 +101,7 @@ export const WorkspaceService = {
           totalCount: result.total_count,
         };
       } catch {
-        // Rust git failed — fall through to HTTP
+        // IPC git failed — fall through to HTTP
       }
     }
     const result = await apiClient.get<{
@@ -140,7 +140,7 @@ export const WorkspaceService = {
           newContent: data.new_content ?? null,
         };
       } catch {
-        // Rust git failed — fall through to HTTP
+        // IPC git failed — fall through to HTTP
       }
     }
     const data = await apiClient.get<{

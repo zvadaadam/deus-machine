@@ -35,7 +35,7 @@ export const SessionService = {
         const session = await dbGetSession(id);
         if (session) return session;
       } catch {
-        // Rust DB failed — fall through to HTTP
+        // IPC failed — fall through to HTTP
       }
     }
     return apiClient.get<Session>(ENDPOINTS.SESSION_BY_ID(id));
@@ -58,7 +58,7 @@ export const SessionService = {
           after: params?.after,
         });
       } catch {
-        // Rust DB failed — fall through to HTTP
+        // IPC failed — fall through to HTTP
       }
     }
     const searchParams = new URLSearchParams();

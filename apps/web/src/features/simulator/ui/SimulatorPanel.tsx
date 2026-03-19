@@ -25,14 +25,14 @@
  * workspaceId. This means:
  * - Workspace A streams → switch to B → A's streaming state persists in store
  * - Switch back to A → component reads store, sees "streaming" immediately
- * - No Rust round-trip, no async probe, no idle flash on switch-back
+ * - No IPC round-trip, no async probe, no idle flash on switch-back
  *
- * The Rust session (ScreenCapture + MjpegServer) is managed independently in
+ * The native session (ScreenCapture + MjpegServer) is managed independently in
  * SimulatorSessions (HashMap<workspace_id, SimSession>). Its lifetime is:
  *   Created: user clicks Start (or agent calls SimulatorStart)
- *   Destroyed: user clicks Stop (or app closes — handled in main.rs)
+ *   Destroyed: user clicks Stop (or app closes — handled in Electron main)
  * It is NEVER destroyed on workspace switch. The component does not own
- * the Rust session — it is a view onto it.
+ * the native session — it is a view onto it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -147,14 +147,14 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   //
   // On workspace switch (prop change):
   //   • Store has a live phase for new workspace → streamUrl is non-null →
-  //     MJPEG effect reconnects immediately with zero Rust IPC calls.
-  //   • Store has idle + Rust has a session → mount effect probes and upgrades.
-  //   • Store has idle + Rust has no session → user sees idle, clicks Start.
+  //     MJPEG effect reconnects immediately with zero IPC calls.
+  //   • Store has idle + native session exists → mount effect probes and upgrades.
+  //   • Store has idle + no native session → user sees idle, clicks Start.
   //
   // The three planes are fully disentangled:
   //   Component plane  — always-mounted, workspaceId prop changes on switch
   //   Display plane    — this store, keyed by workspaceId, persists across switches
-  //   Session plane    — Rust HashMap, created by Start, destroyed by Stop only
+  //   Session plane    — native HashMap, created by Start, destroyed by Stop only
   // ---------------------------------------------------------------------------
   const state: SimPhase = useSimulatorStatusStore((s) => s.sessions[workspaceId] ?? IDLE_PHASE);
 
@@ -170,12 +170,12 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // callbacks can detect if this component unmounted before they resolved.
   const workspaceGenerationRef = useRef(0);
 
-  // On mount: restore persisted UDID + probe Rust for app-restart recovery.
+  // On mount: restore persisted UDID + probe backend for app-restart recovery.
   //
-  // App-restart scenario: Rust process was killed and restarted (no sessions),
+  // App-restart scenario: backend process was killed and restarted (no sessions),
   // but the store still has { phase: "idle" } for this workspace. Meanwhile the
-  // simulator was left booted. We probe get_stream_info once (fast Mutex read,
-  // ~1ms) — if Rust already has a session we reconnect; if not, we stay idle
+  // simulator was left booted. We probe get_stream_info once (fast read,
+  // ~1ms) — if the backend already has a session we reconnect; if not, we stay idle
   // and the auto-reconnect effect below will re-establish streaming if the
   // selected sim is still "Booted".
   //
@@ -195,11 +195,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     const persistedUdid = layout.simulatorUdid ?? null;
     updateSelectedUdid(persistedUdid);
 
-    // Probe Rust if the display plane shows idle OR stuck at booting.
-    // Idle: normal first-mount or app-restart where Rust may already have a session.
+    // Probe backend if the display plane shows idle OR stuck at booting.
+    // Idle: normal first-mount or app-restart where backend may already have a session.
     // Booting: recovery for rare edge case where the async completion was lost
-    // (e.g. app crashed mid-boot). If Rust has a live stream, upgrade to streaming.
-    // If Rust has nothing, reset to idle so the user can retry.
+    // (e.g. app crashed mid-boot). If backend has a live stream, upgrade to streaming.
+    // If backend has nothing, reset to idle so the user can retry.
     const currentPhase = simulatorStoreActions.getSession(workspaceId).phase;
     if ((currentPhase === "idle" || currentPhase === "booting") && layout.simulatorUdid) {
       simulatorService.getStreamInfo(workspaceId).then((stream) => {
@@ -212,7 +212,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
           });
           updateSelectedUdid(layout.simulatorUdid!);
         } else if (currentPhase === "booting") {
-          // Rust has no session but store says booting — stuck state, reset.
+          // Backend has no session but store says booting — stuck state, reset.
           simulatorStoreActions.clearWorkspaceSession(workspaceId);
         }
       });
@@ -267,7 +267,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   });
 
   // Probe for Xcode project on mount and when workspace changes.
-  // Fast filesystem scan via Rust — no xcodebuild, no side effects.
+  // Fast filesystem scan via IPC — no xcodebuild, no side effects.
   useEffect(() => {
     let cancelled = false;
 
@@ -289,7 +289,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildLogEndRef = useRef<HTMLDivElement>(null);
 
-  // Listen for build log events streamed from Rust during xcodebuild.
+  // Listen for build log events streamed from Electron main during xcodebuild.
   // Payload is { workspaceId, line } — filter to only this workspace so
   // concurrent builds in different workspaces don't interleave logs.
   useEffect(() => {
@@ -407,15 +407,15 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
   // -------------------------------------------------------------------------
   // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
-  // The mount effect above handles the fast path: if Rust already has a session
-  // in memory (normal run), it reconnects immediately via getStreamInfo.
+  // The mount effect above handles the fast path: if the backend already has a
+  // session in memory (normal run), it reconnects immediately via getStreamInfo.
   //
-  // This effect handles the slower path: Rust was restarted (no sessions in
+  // This effect handles the slower path: backend was restarted (no sessions in
   // memory), but simctl still shows the simulator as "Booted". We re-establish
   // the MJPEG capture by calling startStreaming.
   //
   // Fires only when:
-  //   - Phase is idle (mount effect found no Rust session, or user never started)
+  //   - Phase is idle (mount effect found no backend session, or user never started)
   //   - The selected simulator is actually booted
   //   - This workspace previously claimed this simulator (ownership guard)
   //
@@ -517,10 +517,10 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     }
   };
 
-  // Stop everything — destroys the Rust session and returns display plane to idle.
+  // Stop everything — destroys the native session and returns display plane to idle.
   //
-  // This is the ONLY place in the frontend that should destroy a Rust session
-  // (besides app close, handled in main.rs).  Component unmount does NOT call
+  // This is the ONLY place in the frontend that should destroy a native session
+  // (besides app close, handled in Electron main).  Component unmount does NOT call
   // stopStreaming — that would destroy live sessions on workspace switch.
   const handleStop = async () => {
     // dispatch STOP transitions any active state → idle (auto-deleted from map).

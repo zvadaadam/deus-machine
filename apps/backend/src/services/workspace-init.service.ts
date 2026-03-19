@@ -9,7 +9,7 @@
  *   5. Session creation + state transition to 'ready' (fatal)
  *
  * Each step updates the workspace's `init_stage` column in DB and emits
- * a structured stdout line that Rust parses and relays as a Tauri event:
+ * a structured stdout line that Electron main process parses and relays as an IPC event:
  *   OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
  *
  * Design decisions:
@@ -19,13 +19,13 @@
  * - Structured init pipeline with deps install
  */
 
-import fs from 'fs';
-import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { uuidv7 } from '@shared/lib/uuid';
-import { getDatabase } from '../lib/database';
-import { invalidate } from './query-engine';
+import fs from "fs";
+import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { uuidv7 } from "@shared/lib/uuid";
+import { getDatabase } from "../lib/database";
+import { invalidate } from "./query-engine";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,7 +33,11 @@ const execFileAsync = promisify(execFile);
 export function isRetryableDbError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
-  return msg.includes('sqlite_busy') || msg.includes('database is locked') || msg.includes('database is busy');
+  return (
+    msg.includes("sqlite_busy") ||
+    msg.includes("database is locked") ||
+    msg.includes("database is busy")
+  );
 }
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -60,8 +64,8 @@ interface InitStage {
 
 /**
  * Emit workspace init progress via stdout JSON protocol.
- * Rust's backend.rs reads stdout line-by-line and relays lines
- * prefixed with OPENDEVS_WORKSPACE_PROGRESS: as Tauri events.
+ * Electron's backend-process.ts reads stdout line-by-line and relays lines
+ * prefixed with OPENDEVS_WORKSPACE_PROGRESS: as IPC events.
  */
 export function emitProgress(workspaceId: string, step: string, label: string): void {
   const payload = JSON.stringify({ workspaceId, step, label });
@@ -70,7 +74,7 @@ export function emitProgress(workspaceId: string, step: string, label: string): 
 
 function updateInitStage(workspaceId: string, stage: string): void {
   const db = getDatabase();
-  db.prepare('UPDATE workspaces SET init_stage = ? WHERE id = ?').run(stage, workspaceId);
+  db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspaceId);
 }
 
 // ─── Package Manager Detection ──────────────────────────────────
@@ -86,21 +90,21 @@ interface PackageManager {
  */
 export function detectPackageManager(dir: string): PackageManager | null {
   // Check lockfiles in priority order (bun first — project default)
-  if (fs.existsSync(path.join(dir, 'bun.lock')) || fs.existsSync(path.join(dir, 'bun.lockb'))) {
-    return { command: 'bun', args: ['install', '--frozen-lockfile'] };
+  if (fs.existsSync(path.join(dir, "bun.lock")) || fs.existsSync(path.join(dir, "bun.lockb"))) {
+    return { command: "bun", args: ["install", "--frozen-lockfile"] };
   }
-  if (fs.existsSync(path.join(dir, 'yarn.lock'))) {
-    return { command: 'yarn', args: ['install', '--frozen-lockfile'] };
+  if (fs.existsSync(path.join(dir, "yarn.lock"))) {
+    return { command: "yarn", args: ["install", "--frozen-lockfile"] };
   }
-  if (fs.existsSync(path.join(dir, 'pnpm-lock.yaml'))) {
-    return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
+  if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) {
+    return { command: "pnpm", args: ["install", "--frozen-lockfile"] };
   }
-  if (fs.existsSync(path.join(dir, 'package-lock.json'))) {
-    return { command: 'npm', args: ['ci'] };
+  if (fs.existsSync(path.join(dir, "package-lock.json"))) {
+    return { command: "npm", args: ["ci"] };
   }
   // package.json exists but no lockfile — try npm install
-  if (fs.existsSync(path.join(dir, 'package.json'))) {
-    return { command: 'npm', args: ['install'] };
+  if (fs.existsSync(path.join(dir, "package.json"))) {
+    return { command: "npm", args: ["install"] };
   }
   return null;
 }
@@ -110,7 +114,7 @@ export function detectPackageManager(dir: string): PackageManager | null {
 async function cleanupWorktree(
   repoRootPath: string,
   workspacePath: string,
-  branchName: string,
+  branchName: string
 ): Promise<void> {
   // Remove worktree directory
   try {
@@ -118,22 +122,22 @@ async function cleanupWorktree(
       fs.rmSync(workspacePath, { recursive: true, force: true });
     }
   } catch (e) {
-    console.warn('[WORKSPACE] Failed to remove worktree directory:', e);
+    console.warn("[WORKSPACE] Failed to remove worktree directory:", e);
   }
 
   // Prune git worktree references
   try {
-    await execFileAsync('git', ['worktree', 'prune'], {
+    await execFileAsync("git", ["worktree", "prune"], {
       cwd: repoRootPath,
       timeout: 5_000,
     });
   } catch (e) {
-    console.warn('[WORKSPACE] Failed to prune worktrees:', e);
+    console.warn("[WORKSPACE] Failed to prune worktrees:", e);
   }
 
   // Delete the orphaned branch
   try {
-    await execFileAsync('git', ['branch', '-D', branchName], {
+    await execFileAsync("git", ["branch", "-D", branchName], {
       cwd: repoRootPath,
       timeout: 5_000,
     });
@@ -146,43 +150,45 @@ async function cleanupWorktree(
 
 const STAGES: InitStage[] = [
   {
-    name: 'worktree',
-    label: 'Creating worktree...',
+    name: "worktree",
+    label: "Creating worktree...",
     fatal: true,
     async run(ctx) {
-      await execFileAsync('git', [
-        'worktree', 'add', '-b', ctx.branchName, ctx.workspacePath, ctx.worktreeBase,
-      ], { cwd: ctx.repoRootPath, timeout: 30_000 });
+      await execFileAsync(
+        "git",
+        ["worktree", "add", "-b", ctx.branchName, ctx.workspacePath, ctx.worktreeBase],
+        { cwd: ctx.repoRootPath, timeout: 30_000 }
+      );
     },
     async cleanup(ctx) {
       await cleanupWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName);
     },
   },
   {
-    name: 'dependencies',
-    label: 'Installing dependencies...',
+    name: "dependencies",
+    label: "Installing dependencies...",
     fatal: false,
     async run(ctx) {
       const pm = detectPackageManager(ctx.workspacePath);
       if (!pm) {
-        console.log('[WORKSPACE] No package.json found, skipping dependency install');
+        console.log("[WORKSPACE] No package.json found, skipping dependency install");
         return;
       }
       console.log(`[WORKSPACE] Installing dependencies with ${pm.command}...`);
       await execFileAsync(pm.command, pm.args, {
         cwd: ctx.workspacePath,
         timeout: 120_000, // 2 min max for large installs
-        env: { ...process.env, CI: '1' }, // Suppress interactive prompts
+        env: { ...process.env, CI: "1" }, // Suppress interactive prompts
       });
     },
   },
   {
-    name: 'hooks',
-    label: 'Setting up environment...',
+    name: "hooks",
+    label: "Setting up environment...",
     fatal: false,
     async run(ctx) {
       // Copy .env from repo root if it exists and worktree doesn't have one
-      const envFiles = ['.env', '.env.local'];
+      const envFiles = [".env", ".env.local"];
       for (const envFile of envFiles) {
         const src = path.join(ctx.repoRootPath, envFile);
         const dst = path.join(ctx.workspacePath, envFile);
@@ -198,8 +204,8 @@ const STAGES: InitStage[] = [
     },
   },
   {
-    name: 'git-clean',
-    label: 'Verifying workspace...',
+    name: "git-clean",
+    label: "Verifying workspace...",
     fatal: false,
     async run(ctx) {
       // After deps install and .env copy, the working directory may have
@@ -207,15 +213,15 @@ const STAGES: InitStage[] = [
       // package manager, generated build cache files). Reset tracked files
       // to match the index so the diff pipeline sees zero changes on a
       // fresh workspace branched from origin/main.
-      await execFileAsync('git', ['checkout', '--', '.'], {
+      await execFileAsync("git", ["checkout", "--", "."], {
         cwd: ctx.workspacePath,
         timeout: 10_000,
       });
     },
   },
   {
-    name: 'session',
-    label: 'Finalizing...',
+    name: "session",
+    label: "Finalizing...",
     fatal: true,
     async run(ctx) {
       // Retry with exponential backoff to handle SQLITE_BUSY / database-locked
@@ -263,7 +269,7 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     } catch (err) {
       // SQLITE_BUSY can fire when sidecar holds the DB — log but don't
       // abort, otherwise cleanup never runs and worktrees leak.
-      console.warn('[WORKSPACE] Failed to update init_stage:', err);
+      console.warn("[WORKSPACE] Failed to update init_stage:", err);
     }
     emitProgress(ctx.workspaceId, stage.name, stage.label);
 
@@ -277,9 +283,9 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
         // Reverse-order cleanup of completed stages
         for (const done of [...completed].reverse()) {
           if (done.cleanup) {
-            await done.cleanup(ctx).catch((e) =>
-              console.warn(`[WORKSPACE] Cleanup for "${done.name}" failed:`, e)
-            );
+            await done
+              .cleanup(ctx)
+              .catch((e) => console.warn(`[WORKSPACE] Cleanup for "${done.name}" failed:`, e));
           }
         }
 
@@ -288,10 +294,10 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
           "UPDATE workspaces SET state = 'error', init_stage = ?, error_message = ? WHERE id = ?"
         ).run(stage.name, (err as Error).message, ctx.workspaceId);
 
-        emitProgress(ctx.workspaceId, 'error', `Failed at: ${stage.name}`);
+        emitProgress(ctx.workspaceId, "error", `Failed at: ${stage.name}`);
 
         // Workspace transitioned to 'error' — notify connected clients.
-        invalidate(['workspaces', 'stats']);
+        invalidate(["workspaces", "stats"]);
         return;
       }
       // Non-fatal: log and continue to next stage
@@ -299,9 +305,9 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     }
   }
 
-  emitProgress(ctx.workspaceId, 'done', 'Ready');
+  emitProgress(ctx.workspaceId, "done", "Ready");
 
   // Workspace transitioned to 'ready' — push to all connected clients.
   // Query-protocol subscribers get fresh snapshots + q:invalidate for unmounted caches.
-  invalidate(['workspaces', 'stats', 'sessions']);
+  invalidate(["workspaces", "stats", "sessions"]);
 }

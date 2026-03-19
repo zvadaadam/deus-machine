@@ -50,7 +50,7 @@ build({
   logLevel: "info",
 })
   .then(() => {
-    console.log("Sidecar-v2 build complete!");
+    console.log("Sidecar build complete!");
   })
   .catch((error) => {
     console.error("Build failed:", error);
