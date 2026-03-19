@@ -11,8 +11,8 @@
 // Callers (event-handler.ts) call invalidate() after persistence succeeds.
 
 import { getDatabase } from "../../lib/database";
-import { uuidv7 } from "../../../../shared/lib/uuid";
-import { getErrorMessage } from "../../../../shared/lib/errors";
+import { uuidv7 } from "@shared/lib/uuid";
+import { getErrorMessage } from "@shared/lib/errors";
 import type {
   MessageAssistantEvent,
   MessageToolResultEvent,
@@ -23,7 +23,7 @@ import type {
   SessionErrorEvent,
   SessionCancelledEvent,
   AgentSessionIdEvent,
-} from "../../../../shared/agent-events";
+} from "@shared/agent-events";
 
 // ============================================================================
 // WriteResult type (mirrors sidecar's pattern)

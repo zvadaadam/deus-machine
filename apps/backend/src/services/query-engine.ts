@@ -36,7 +36,7 @@ import {
   type CommandName,
   type QueryResource,
   type QServerFrame,
-} from "../../../shared/types/query-protocol";
+} from "@shared/types/query-protocol";
 
 // ---- Subscription State ----
 
@@ -173,11 +173,12 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
         try {
           const db = getDatabase();
           const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
-          const allowedStates = new Set(stateFilter.split(",").map(s => s.trim()));
-          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds)
-            .filter(ws => allowedStates.has(ws.state));
+          const allowedStates = new Set(stateFilter.split(",").map((s) => s.trim()));
+          const changedWorkspaces = getWorkspacesBySessionIds(db, ctx.sessionIds).filter((ws) =>
+            allowedStates.has(ws.state)
+          );
           if (changedWorkspaces.length > 0) {
-            const withPaths = changedWorkspaces.map(ws => ({
+            const withPaths = changedWorkspaces.map((ws) => ({
               ...ws,
               workspace_path: computeWorkspacePath(ws),
             }));
@@ -228,7 +229,6 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
       }
     }
   }
-
 }
 
 // ---- Frame Handlers ----
@@ -378,7 +378,6 @@ function handleToolResponse(msg: QueryParams): void {
   }
 }
 
-
 // ---- Query Dispatch ----
 
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
@@ -390,8 +389,11 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       const state = readStringParam(params, "state") ?? "ready,initializing";
       const workspaces = getWorkspacesByRepo(db, state);
 
-      const grouped: Record<string, { repo_id: string; repo_name: string; sort_order: number; workspaces: unknown[] }> = {};
-      workspaces.forEach(workspace => {
+      const grouped: Record<
+        string,
+        { repo_id: string; repo_name: string; sort_order: number; workspaces: unknown[] }
+      > = {};
+      workspaces.forEach((workspace) => {
         const repoId = workspace.repository_id || "unknown";
         if (!grouped[repoId]) {
           grouped[repoId] = {
@@ -401,7 +403,10 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
             workspaces: [],
           };
         }
-        grouped[repoId].workspaces.push({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
+        grouped[repoId].workspaces.push({
+          ...workspace,
+          workspace_path: computeWorkspacePath(workspace),
+        });
       });
 
       // Backfill repos that have no matching workspaces (e.g. all archived)
@@ -441,9 +446,8 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       });
 
       const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
-      const hasNewer = rows.length > 0
-        ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq)
-        : false;
+      const hasNewer =
+        rows.length > 0 ? hasNewerMessages(db, sessionId, rows[rows.length - 1].seq) : false;
 
       return { messages: rows, has_older: hasOlder, has_newer: hasNewer };
     })

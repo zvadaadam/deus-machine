@@ -6,18 +6,18 @@
 // shared/protocol.ts. MCP-facing RPC schemas (browser, simulator, diff,
 // terminal, plan mode) live in rpc-schemas.ts; re-exported here.
 
-import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "../shared/enums";
+import { AgentTypeSchema, ErrorCategorySchema, SessionStatusSchema } from "@shared/enums";
 import {
   EnterPlanModeNotificationSchema,
   ErrorResponseSchema,
   MessageResponseSchema,
   StatusChangedNotificationSchema,
-} from "../shared/session-events";
+} from "@shared/session-events";
 
 // Canonical schemas — re-exported for existing sidecar imports.
-export { QueryOptionsSchema, QueryRequestSchema } from "../shared/protocol";
+export { QueryOptionsSchema, QueryRequestSchema } from "@shared/protocol";
 
-export type { QueryOptions, QueryRequest } from "../shared/protocol";
+export type { QueryOptions, QueryRequest } from "@shared/protocol";
 
 // ============================================================================
 // RPC Method & Notification Constants (sidecar-only)
@@ -33,7 +33,7 @@ export const FRONTEND_NOTIFICATIONS = {
 
 /** RPC methods the sidecar can call on the frontend (request/response).
  *  Canonical definition in shared/agent-events.ts; re-exported here. */
-export { FRONTEND_RPC_METHODS } from "../shared/agent-events";
+export { FRONTEND_RPC_METHODS } from "@shared/agent-events";
 
 // ============================================================================
 // Zod Schemas (shared — re-exported for backwards compatibility)

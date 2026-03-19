@@ -10,7 +10,7 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { EventBroadcaster } from "../../event-broadcaster";
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 
 /**
  * Creates the iOS simulator automation tool definitions for a given session.

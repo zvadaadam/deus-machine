@@ -5,7 +5,7 @@
 
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db";
-import { uuidv7 } from "../../../shared/lib/uuid";
+import { uuidv7 } from "@shared/lib/uuid";
 
 /**
  * Persist a user message and mark session as working.
@@ -14,7 +14,7 @@ import { uuidv7 } from "../../../shared/lib/uuid";
 export function writeUserMessage(
   sessionId: string,
   content: string,
-  model?: string,
+  model?: string
 ): { success: true; messageId: string } | { success: false; error: string } {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
@@ -27,10 +27,12 @@ export function writeUserMessage(
   const messageModel = model || "opus";
 
   db.transaction(() => {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO messages (id, session_id, role, content, sent_at, model)
       VALUES (?, ?, 'user', ?, ?, ?)
-    `).run(messageId, sessionId, content, sentAt, messageModel);
+    `
+    ).run(messageId, sessionId, content, sentAt, messageModel);
 
     db.prepare(
       "UPDATE sessions SET status = 'working', last_user_message_at = ?, error_message = NULL, error_category = NULL, updated_at = datetime('now') WHERE id = ?"

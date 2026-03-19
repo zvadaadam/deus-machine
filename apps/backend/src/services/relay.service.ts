@@ -7,9 +7,15 @@ import { execSync } from "child_process";
 import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
-import type { ServerFrame, RelayFrame } from "../../../shared/types/relay";
+import type { ServerFrame, RelayFrame } from "@shared/types/relay";
 import { getSetting, saveSetting } from "./settings.service";
-import { getRelayCredentials, generateRelayCredentials, validateDeviceToken, validatePairCode, createDeviceToken } from "./remote-auth.service";
+import {
+  getRelayCredentials,
+  generateRelayCredentials,
+  validateDeviceToken,
+  validatePairCode,
+  createDeviceToken,
+} from "./remote-auth.service";
 import { DEFAULT_RELAY_URL } from "../lib/network";
 import {
   addConnection,
@@ -65,9 +71,14 @@ function getServerName(): string {
 
   if (platform() === "darwin") {
     try {
-      const name = execSync("scutil --get ComputerName", { encoding: "utf-8", timeout: 2000 }).trim();
+      const name = execSync("scutil --get ComputerName", {
+        encoding: "utf-8",
+        timeout: 2000,
+      }).trim();
       if (name) return name;
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   const host = hostname().replace(/\.local$/, "");
@@ -140,7 +151,12 @@ export function disconnectFromRelay(): void {
   unlinkAll();
 }
 
-export function getRelayStatus(): { connected: boolean; clients: number; serverId: string | null; relayUrl: string | null } {
+export function getRelayStatus(): {
+  connected: boolean;
+  clients: number;
+  serverId: string | null;
+  relayUrl: string | null;
+} {
   const effectiveUrl = relayUrl ?? (getSetting("relay_url") as string | undefined) ?? null;
   const creds = serverId ? null : getRelayCredentials();
   const effectiveServerId = serverId ?? creds?.serverId ?? null;
@@ -172,7 +188,12 @@ function openTunnel(): void {
   tunnelWs.on("open", () => {
     console.log("[Relay] Tunnel connected, registering...");
     reconnectAttempt = 0;
-    sendToRelay({ type: "register", serverId: serverId!, relayToken: relayToken!, serverName: getServerName() });
+    sendToRelay({
+      type: "register",
+      serverId: serverId!,
+      relayToken: relayToken!,
+      serverName: getServerName(),
+    });
   });
 
   tunnelWs.on("message", (raw: Buffer | string) => {
@@ -218,7 +239,8 @@ function handleRelayFrame(frame: RelayFrame): void {
         // Virtual WsSendable routes data back through the relay tunnel
         const virtualWs: WsSendable = {
           send(data: string | ArrayBuffer) {
-            const payload = typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
+            const payload =
+              typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
             sendToRelay({ type: "data", clientId: f.clientId, payload });
           },
           close() {
@@ -276,7 +298,12 @@ function handleRelayFrame(frame: RelayFrame): void {
 
 function handlePairRequest(pairId: string, code: string, deviceName: string): void {
   if (!validatePairCode(code)) {
-    sendToRelay({ type: "pair_response", pairId, success: false, reason: "Invalid or expired pairing code" });
+    sendToRelay({
+      type: "pair_response",
+      pairId,
+      success: false,
+      reason: "Invalid or expired pairing code",
+    });
     console.log(`[Relay] Pair request ${pairId} rejected: invalid code`);
     return;
   }

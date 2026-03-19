@@ -1,8 +1,8 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createServer as createHttpServer, type Server as HttpServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
-import { AgentClient, type AgentClientOptions } from '../../../src/services/agent/client';
-import { AGENT_RPC_METHODS, AGENT_EVENT_NAMES } from '../../../../shared/agent-events';
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createServer as createHttpServer, type Server as HttpServer } from "http";
+import { WebSocketServer, WebSocket } from "ws";
+import { AgentClient, type AgentClientOptions } from "../../../src/services/agent/client";
+import { AGENT_RPC_METHODS, AGENT_EVENT_NAMES } from "@shared/agent-events";
 
 // ============================================================================
 // Test server helper
@@ -26,11 +26,11 @@ async function createTestServer(): Promise<TestServer> {
   const received: unknown[] = [];
   let lastClient: WebSocket | null = null;
 
-  wss.on('connection', (ws) => {
+  wss.on("connection", (ws) => {
     lastClient = ws;
-    ws.on('message', (data) => {
+    ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(typeof data === 'string' ? data : data.toString());
+        const msg = JSON.parse(typeof data === "string" ? data : data.toString());
         received.push(msg);
       } catch {
         // Ignore
@@ -39,9 +39,9 @@ async function createTestServer(): Promise<TestServer> {
   });
 
   const port = await new Promise<number>((resolve) => {
-    httpServer.listen(0, '127.0.0.1', () => {
+    httpServer.listen(0, "127.0.0.1", () => {
       const addr = httpServer.address();
-      resolve(typeof addr === 'object' && addr ? addr.port : 0);
+      resolve(typeof addr === "object" && addr ? addr.port : 0);
     });
   });
 
@@ -50,7 +50,9 @@ async function createTestServer(): Promise<TestServer> {
     wss,
     port,
     url: `ws://127.0.0.1:${port}`,
-    get lastClient() { return lastClient; },
+    get lastClient() {
+      return lastClient;
+    },
     received,
     close: () => {
       wss.close();
@@ -65,7 +67,7 @@ function waitFor(fn: () => boolean, timeoutMs = 5000): Promise<void> {
     const start = Date.now();
     const check = () => {
       if (fn()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error('waitFor timed out'));
+      if (Date.now() - start > timeoutMs) return reject(new Error("waitFor timed out"));
       setTimeout(check, 20);
     };
     check();
@@ -74,19 +76,19 @@ function waitFor(fn: () => boolean, timeoutMs = 5000): Promise<void> {
 
 // Helper: send a JSON-RPC response back to the client
 function sendResponse(ws: WebSocket, id: number, result: unknown): void {
-  ws.send(JSON.stringify({ jsonrpc: '2.0', id, result }));
+  ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
 }
 
 // Helper: send a JSON-RPC notification to the client
 function sendNotification(ws: WebSocket, method: string, params: unknown): void {
-  ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
+  ws.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
 }
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-describe('AgentClient', () => {
+describe("AgentClient", () => {
   let server: TestServer;
   let client: AgentClient;
 
@@ -103,8 +105,8 @@ describe('AgentClient', () => {
   // Connection & Handshake
   // ==========================================================================
 
-  describe('connection and handshake', () => {
-    it('connects and completes the initialize handshake', async () => {
+  describe("connection and handshake", () => {
+    it("connects and completes the initialize handshake", async () => {
       const onConnected = vi.fn();
 
       client = new AgentClient({
@@ -118,20 +120,20 @@ describe('AgentClient', () => {
 
       const initRequest = server.received[0] as any;
       expect(initRequest.method).toBe(AGENT_RPC_METHODS.INITIALIZE);
-      expect(initRequest.params).toEqual({ version: '1.0', capabilities: {} });
+      expect(initRequest.params).toEqual({ version: "1.0", capabilities: {} });
       expect(initRequest.id).toBeDefined();
 
       // Respond with agents list
       sendResponse(server.lastClient!, initRequest.id, {
-        version: '1.0',
+        version: "1.0",
         agents: [
           {
-            type: 'claude',
+            type: "claude",
             capabilities: {
               auth: true,
               workspaceInit: true,
               contextUsage: true,
-              modelSwitch: 'in-session',
+              modelSwitch: "in-session",
               multiTurn: true,
               sessionResume: true,
               permissionMode: true,
@@ -149,17 +151,15 @@ describe('AgentClient', () => {
 
       // Verify onConnected callback was called
       await waitFor(() => onConnected.mock.calls.length > 0);
-      expect(onConnected).toHaveBeenCalledWith([
-        expect.objectContaining({ type: 'claude' }),
-      ]);
+      expect(onConnected).toHaveBeenCalledWith([expect.objectContaining({ type: "claude" })]);
 
       // Verify client state
       expect(client.isConnected()).toBe(true);
       expect(client.getAgents()).toHaveLength(1);
-      expect(client.getAgents()[0].type).toBe('claude');
+      expect(client.getAgents()[0].type).toBe("claude");
     });
 
-    it('reports disconnection via callback', async () => {
+    it("reports disconnection via callback", async () => {
       const onDisconnected = vi.fn();
       const onConnected = vi.fn();
 
@@ -174,7 +174,7 @@ describe('AgentClient', () => {
       await waitFor(() => server.received.length > 0);
       const initReq = server.received[0] as any;
       sendResponse(server.lastClient!, initReq.id, {
-        version: '1.0',
+        version: "1.0",
         agents: [],
       });
       await waitFor(() => onConnected.mock.calls.length > 0);
@@ -192,7 +192,7 @@ describe('AgentClient', () => {
   // Event handling
   // ==========================================================================
 
-  describe('event handling', () => {
+  describe("event handling", () => {
     async function connectAndHandshake(opts?: Partial<AgentClientOptions>): Promise<AgentClient> {
       const ac = new AgentClient({
         url: server.url,
@@ -203,7 +203,7 @@ describe('AgentClient', () => {
       await waitFor(() => server.received.length > 0);
       const initReq = server.received[0] as any;
       sendResponse(server.lastClient!, initReq.id, {
-        version: '1.0',
+        version: "1.0",
         agents: [],
       });
       await waitFor(() => ac.isConnected());
@@ -212,7 +212,7 @@ describe('AgentClient', () => {
       return ac;
     }
 
-    it('dispatches canonical agent events to the onEvent handler', async () => {
+    it("dispatches canonical agent events to the onEvent handler", async () => {
       const events: unknown[] = [];
       client = await connectAndHandshake({
         onEvent: (event) => events.push(event),
@@ -220,42 +220,42 @@ describe('AgentClient', () => {
 
       // Send a session.started notification from server
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.SESSION_STARTED, {
-        type: 'session.started',
-        sessionId: 'sess-1',
-        agentType: 'claude',
+        type: "session.started",
+        sessionId: "sess-1",
+        agentType: "claude",
       });
 
       await waitFor(() => events.length > 0);
       expect(events[0]).toEqual({
-        type: 'session.started',
-        sessionId: 'sess-1',
-        agentType: 'claude',
+        type: "session.started",
+        sessionId: "sess-1",
+        agentType: "claude",
       });
     });
 
-    it('dispatches message.assistant events', async () => {
+    it("dispatches message.assistant events", async () => {
       const events: unknown[] = [];
       client = await connectAndHandshake({
         onEvent: (event) => events.push(event),
       });
 
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.MESSAGE_ASSISTANT, {
-        type: 'message.assistant',
-        sessionId: 'sess-1',
-        agentType: 'claude',
+        type: "message.assistant",
+        sessionId: "sess-1",
+        agentType: "claude",
         message: {
-          id: 'msg-1',
-          role: 'assistant',
-          content: [{ type: 'text', text: 'Hello!' }],
+          id: "msg-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello!" }],
         },
       });
 
       await waitFor(() => events.length > 0);
-      expect((events[0] as any).type).toBe('message.assistant');
-      expect((events[0] as any).message.id).toBe('msg-1');
+      expect((events[0] as any).type).toBe("message.assistant");
+      expect((events[0] as any).message.id).toBe("msg-1");
     });
 
-    it('ignores malformed event payloads without crashing', async () => {
+    it("ignores malformed event payloads without crashing", async () => {
       const events: unknown[] = [];
       client = await connectAndHandshake({
         onEvent: (event) => events.push(event),
@@ -263,7 +263,7 @@ describe('AgentClient', () => {
 
       // Send an invalid event (missing required fields)
       sendNotification(server.lastClient!, AGENT_EVENT_NAMES.SESSION_STARTED, {
-        type: 'session.started',
+        type: "session.started",
         // missing sessionId and agentType
       });
 
@@ -277,7 +277,7 @@ describe('AgentClient', () => {
   // RPC methods
   // ==========================================================================
 
-  describe('RPC methods', () => {
+  describe("RPC methods", () => {
     async function connectAndHandshake(): Promise<AgentClient> {
       const ac = new AgentClient({ url: server.url });
       ac.connect();
@@ -285,7 +285,7 @@ describe('AgentClient', () => {
       await waitFor(() => server.received.length > 0);
       const initReq = server.received[0] as any;
       sendResponse(server.lastClient!, initReq.id, {
-        version: '1.0',
+        version: "1.0",
         agents: [],
       });
       await waitFor(() => ac.isConnected());
@@ -293,14 +293,14 @@ describe('AgentClient', () => {
       return ac;
     }
 
-    it('sendTurnStart sends a turn/start request', async () => {
+    it("sendTurnStart sends a turn/start request", async () => {
       client = await connectAndHandshake();
 
       const ws = server.lastClient!;
 
       // Listen for the request and respond
       const responsePromise = new Promise<void>((resolve) => {
-        ws.on('message', (data) => {
+        ws.on("message", (data) => {
           const msg = JSON.parse(data.toString());
           if (msg.method === AGENT_RPC_METHODS.TURN_START) {
             sendResponse(ws, msg.id, { accepted: true });
@@ -310,28 +310,28 @@ describe('AgentClient', () => {
       });
 
       const result = await client.sendTurnStart({
-        sessionId: 'sess-1',
-        agentType: 'claude',
-        prompt: 'Hello',
-        options: { cwd: '/tmp' },
+        sessionId: "sess-1",
+        agentType: "claude",
+        prompt: "Hello",
+        options: { cwd: "/tmp" },
       });
 
       await responsePromise;
       expect(result).toEqual({ accepted: true });
     });
 
-    it('rejects when not connected', async () => {
+    it("rejects when not connected", async () => {
       client = new AgentClient({ url: server.url });
       // Don't connect
 
       await expect(
         client.sendTurnStart({
-          sessionId: 'sess-1',
-          agentType: 'claude',
-          prompt: 'Hello',
-          options: { cwd: '/tmp' },
+          sessionId: "sess-1",
+          agentType: "claude",
+          prompt: "Hello",
+          options: { cwd: "/tmp" },
         })
-      ).rejects.toThrow('not connected');
+      ).rejects.toThrow("not connected");
     });
   });
 
@@ -339,8 +339,8 @@ describe('AgentClient', () => {
   // Disconnect
   // ==========================================================================
 
-  describe('disconnect', () => {
-    it('prevents reconnection after disconnect()', async () => {
+  describe("disconnect", () => {
+    it("prevents reconnection after disconnect()", async () => {
       client = new AgentClient({ url: server.url });
       client.connect();
 

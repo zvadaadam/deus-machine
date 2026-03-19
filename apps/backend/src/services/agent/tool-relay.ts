@@ -13,8 +13,8 @@
 // Timeout handling: each tool request has a timeout (set by the agent-server).
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
-import type { ToolRequestEvent } from "../../../../shared/agent-events";
-import type { ToolRequestEventData, QServerFrame } from "../../../../shared/types/query-protocol";
+import type { ToolRequestEvent } from "@shared/agent-events";
+import type { ToolRequestEventData, QServerFrame } from "@shared/types/query-protocol";
 import { broadcast } from "../ws.service";
 
 // ---- Types ----
@@ -58,7 +58,11 @@ export function relay(event: ToolRequestEvent): Promise<unknown> {
     // Set timeout — reject if frontend doesn't respond in time
     const timer = setTimeout(() => {
       pending.delete(requestId);
-      reject(new Error(`Tool relay timed out after ${timeoutMs}ms (requestId=${requestId}, method=${method})`));
+      reject(
+        new Error(
+          `Tool relay timed out after ${timeoutMs}ms (requestId=${requestId}, method=${method})`
+        )
+      );
     }, timeoutMs);
 
     // Store the pending relay

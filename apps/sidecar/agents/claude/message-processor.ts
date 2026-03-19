@@ -3,7 +3,7 @@
 // frontend, updates stream context. The agent-server is stateless — all DB
 // writes are handled by the backend via canonical event consumption.
 
-import { getErrorMessage } from "../../../shared/lib/errors";
+import { getErrorMessage } from "@shared/lib/errors";
 import { EventBroadcaster } from "../../event-broadcaster";
 import { classifyStopReason } from "../lifecycle";
 import type { StreamContext } from "./stream-context";

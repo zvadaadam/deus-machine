@@ -20,7 +20,7 @@ import { startBrowserServer, stopBrowserServer } from "../browser-server.service
 import { persistSessionError } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
-import type { CommandName } from "../../../../shared/types/query-protocol";
+import type { CommandName } from "@shared/types/query-protocol";
 
 // ---- Types ----
 
@@ -32,84 +32,89 @@ interface CommandResult {
 
 // ---- Command Dispatch ----
 
-export async function runCommand(command: CommandName, params: QueryParams): Promise<CommandResult> {
-  return match(command)
-    .with("sendMessage", () => handleSendMessage(params))
-    .with("stopSession", () => handleStopSession(params))
-    // ---- PTY commands ----
-    .with("pty:spawn", () => {
-      const id = readString(params, "id");
-      const cmd = readString(params, "command") ?? "bash";
-      const args = Array.isArray(params.args) ? (params.args as string[]) : [];
-      const cols = readNumber(params, "cols") ?? 80;
-      const rows = readNumber(params, "rows") ?? 24;
-      const cwd = readString(params, "cwd");
-      if (!id) throw new Error("pty:spawn requires id");
+export async function runCommand(
+  command: CommandName,
+  params: QueryParams
+): Promise<CommandResult> {
+  return (
+    match(command)
+      .with("sendMessage", () => handleSendMessage(params))
+      .with("stopSession", () => handleStopSession(params))
+      // ---- PTY commands ----
+      .with("pty:spawn", () => {
+        const id = readString(params, "id");
+        const cmd = readString(params, "command") ?? "bash";
+        const args = Array.isArray(params.args) ? (params.args as string[]) : [];
+        const cols = readNumber(params, "cols") ?? 80;
+        const rows = readNumber(params, "rows") ?? 24;
+        const cwd = readString(params, "cwd");
+        if (!id) throw new Error("pty:spawn requires id");
 
-      const ptyId = spawnPty({ id, command: cmd, args, cols, rows, cwd });
-      return { commandId: ptyId };
-    })
-    .with("pty:write", () => {
-      const id = readString(params, "id");
-      if (!id) throw new Error("pty:write requires id");
-      const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
-      if (!data) throw new Error("pty:write requires data (number[])");
+        const ptyId = spawnPty({ id, command: cmd, args, cols, rows, cwd });
+        return { commandId: ptyId };
+      })
+      .with("pty:write", () => {
+        const id = readString(params, "id");
+        if (!id) throw new Error("pty:write requires id");
+        const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
+        if (!data) throw new Error("pty:write requires data (number[])");
 
-      writeToPty(id, data);
-      return {};
-    })
-    .with("pty:resize", () => {
-      const id = readString(params, "id");
-      const cols = readNumber(params, "cols");
-      const rows = readNumber(params, "rows");
-      if (!id || cols === undefined || rows === undefined) {
-        throw new Error("pty:resize requires id, cols, and rows");
-      }
+        writeToPty(id, data);
+        return {};
+      })
+      .with("pty:resize", () => {
+        const id = readString(params, "id");
+        const cols = readNumber(params, "cols");
+        const rows = readNumber(params, "rows");
+        if (!id || cols === undefined || rows === undefined) {
+          throw new Error("pty:resize requires id, cols, and rows");
+        }
 
-      resizePty(id, cols, rows);
-      return {};
-    })
-    .with("pty:kill", () => {
-      const id = readString(params, "id");
-      if (!id) throw new Error("pty:kill requires id");
+        resizePty(id, cols, rows);
+        return {};
+      })
+      .with("pty:kill", () => {
+        const id = readString(params, "id");
+        if (!id) throw new Error("pty:kill requires id");
 
-      killPty(id);
-      return {};
-    })
-    // ---- File system commands ----
-    .with("fs:watch", async () => {
-      const workspacePath = readString(params, "workspacePath");
-      if (!workspacePath) throw new Error("fs:watch requires workspacePath");
+        killPty(id);
+        return {};
+      })
+      // ---- File system commands ----
+      .with("fs:watch", async () => {
+        const workspacePath = readString(params, "workspacePath");
+        if (!workspacePath) throw new Error("fs:watch requires workspacePath");
 
-      await watchWorkspace(workspacePath);
-      return {};
-    })
-    .with("fs:unwatch", async () => {
-      const workspacePath = readString(params, "workspacePath");
-      if (!workspacePath) throw new Error("fs:unwatch requires workspacePath");
+        await watchWorkspace(workspacePath);
+        return {};
+      })
+      .with("fs:unwatch", async () => {
+        const workspacePath = readString(params, "workspacePath");
+        if (!workspacePath) throw new Error("fs:unwatch requires workspacePath");
 
-      await unwatchWorkspace(workspacePath);
-      return {};
-    })
-    // ---- Browser server commands ----
-    .with("browser-server:start", async () => {
-      const browserPath = readString(params, "browserPath");
-      if (!browserPath) throw new Error("browser-server:start requires browserPath");
+        await unwatchWorkspace(workspacePath);
+        return {};
+      })
+      // ---- Browser server commands ----
+      .with("browser-server:start", async () => {
+        const browserPath = readString(params, "browserPath");
+        if (!browserPath) throw new Error("browser-server:start requires browserPath");
 
-      const { port, authToken } = await startBrowserServer(browserPath);
-      return { commandId: `${port}:${authToken}` };
-    })
-    .with("browser-server:stop", () => {
-      stopBrowserServer();
-      return {};
-    })
-    // ---- Git commands ----
-    .with("git:clone", () => {
-      // Git clone is handled via HTTP POST /api/repos, not WS commands.
-      // This arm exists so the exhaustive match compiles; reject at runtime.
-      throw new Error("git:clone is not available as a WS command — use POST /api/repos instead");
-    })
-    .exhaustive();
+        const { port, authToken } = await startBrowserServer(browserPath);
+        return { commandId: `${port}:${authToken}` };
+      })
+      .with("browser-server:stop", () => {
+        stopBrowserServer();
+        return {};
+      })
+      // ---- Git commands ----
+      .with("git:clone", () => {
+        // Git clone is handled via HTTP POST /api/repos, not WS commands.
+        // This arm exists so the exhaustive match compiles; reject at runtime.
+        throw new Error("git:clone is not available as a WS command — use POST /api/repos instead");
+      })
+      .exhaustive()
+  );
 }
 
 // ---- sendMessage ----
@@ -125,7 +130,9 @@ function handleSendMessage(params: QueryParams): CommandResult {
   // 1. Persist the user message
   const result = writeUserMessage(sessionId, content, model);
   if (!result.success) throw new Error(result.error);
-  invalidate(["workspaces", "sessions", "session", "messages", "stats"], { sessionIds: [sessionId] });
+  invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
+    sessionIds: [sessionId],
+  });
 
   // 2. Forward to agent-server (fire-and-forget — ACK already sent)
   const agentType = readString(params, "agentType") || "claude";
@@ -137,18 +144,21 @@ function handleSendMessage(params: QueryParams): CommandResult {
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
   if (agentService.isConnected()) {
-    agentService.forwardTurn({
-      sessionId,
-      agentType,
-      prompt: content,
-      options: buildTurnOptions(params, model, existingAgentSessionId),
-    }).then((response) => {
-      if (!response.accepted) {
-        handleAgentRejection(sessionId, agentType, response.reason);
-      }
-    }).catch((err) => {
-      handleAgentError(sessionId, agentType, err);
-    });
+    agentService
+      .forwardTurn({
+        sessionId,
+        agentType,
+        prompt: content,
+        options: buildTurnOptions(params, model, existingAgentSessionId),
+      })
+      .then((response) => {
+        if (!response.accepted) {
+          handleAgentRejection(sessionId, agentType, response.reason);
+        }
+      })
+      .catch((err) => {
+        handleAgentError(sessionId, agentType, err);
+      });
   }
 
   return { commandId: result.messageId };
@@ -170,7 +180,9 @@ function handleStopSession(params: QueryParams): CommandResult {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
-  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
+  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
+    sessionId
+  );
   invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   return {};
 }
@@ -180,7 +192,7 @@ function handleStopSession(params: QueryParams): CommandResult {
 function buildTurnOptions(
   params: QueryParams,
   model: string | undefined,
-  resume: string | null,
+  resume: string | null
 ): Record<string, unknown> {
   return {
     cwd: readString(params, "cwd") || "",

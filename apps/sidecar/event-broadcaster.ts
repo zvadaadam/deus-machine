@@ -6,9 +6,9 @@
 
 import type { RpcConnection } from "./rpc-connection";
 import { FRONTEND_NOTIFICATIONS, FRONTEND_RPC_METHODS } from "./protocol";
-import { AGENT_EVENT_NAMES } from "../shared/agent-events";
-import type { AgentEvent, InteractionRequestType } from "../shared/agent-events";
-import type { AgentType, ErrorCategory } from "../shared/enums";
+import { AGENT_EVENT_NAMES } from "@shared/agent-events";
+import type { AgentEvent, InteractionRequestType } from "@shared/agent-events";
+import type { AgentType, ErrorCategory } from "@shared/enums";
 import type {
   MessageResponse,
   ErrorResponse,
