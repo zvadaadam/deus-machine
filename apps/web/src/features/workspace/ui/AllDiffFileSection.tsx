@@ -16,13 +16,11 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight, FileCode } from "lucide-react";
 import { DiffViewer } from "./DiffViewer";
 import { useFileDiff } from "../api/workspace.queries";
-import type { WorkspaceGitInfo } from "../api/workspace.service";
 import type { FileChange } from "@/shared/types";
 
 interface AllDiffFileSectionProps {
   workspaceId: string;
   fileChange: FileChange;
-  workspaceGitInfo: WorkspaceGitInfo;
   isActive: boolean;
   sectionRef: (filePath: string, el: HTMLDivElement | null) => void;
   /** Key counter — when it changes, section resets to expanded state */
@@ -34,7 +32,6 @@ interface AllDiffFileSectionProps {
 function AllDiffFileSectionInner({
   workspaceId,
   fileChange,
-  workspaceGitInfo,
   isActive,
   sectionRef,
   expandStateKey,
@@ -82,8 +79,7 @@ function AllDiffFileSectionInner({
   // Fetch diff only when near-visible
   const { data, isLoading, error } = useFileDiff(
     isNearVisible ? workspaceId : null,
-    isNearVisible ? filePath : null,
-    workspaceGitInfo
+    isNearVisible ? filePath : null
   );
 
   return (

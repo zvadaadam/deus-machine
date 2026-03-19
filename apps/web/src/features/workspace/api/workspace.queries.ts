@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { produce } from "immer";
-import { WorkspaceService, type WorkspaceGitInfo } from "./workspace.service";
+import { WorkspaceService } from "./workspace.service";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
@@ -73,13 +73,12 @@ export function useStats() {
 export function useDiffStats(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo,
   isWatched: boolean = false,
   workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!, workspace),
+    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
     enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     // Events handle invalidation when watched; fall back to polling otherwise
@@ -105,23 +104,6 @@ export function useDiffStats(
  */
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
-
-  const workspaceInfoMap = useMemo(() => {
-    const map = new Map<string, WorkspaceGitInfo>();
-    repoGroups.forEach((g) => {
-      g.workspaces.forEach((w) => {
-        if (w.state !== "ready") return;
-        map.set(w.id, {
-          root_path: w.root_path,
-          slug: w.slug,
-          workspace_path: w.workspace_path,
-          git_target_branch: w.git_target_branch ?? undefined,
-          git_default_branch: w.git_default_branch,
-        });
-      });
-    });
-    return map;
-  }, [repoGroups]);
 
   // Stable, de-duplicated IDs for query key — only ready workspaces.
   const workspaceIds = useMemo(() => {
@@ -168,7 +150,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
         const batch = idsToFetch.slice(i, i + BATCH_SIZE);
         const settled = await Promise.allSettled(
-          batch.map((id) => WorkspaceService.fetchDiffStats(id, workspaceInfoMap.get(id)))
+          batch.map((id) => WorkspaceService.fetchDiffStats(id))
         );
 
         batch.forEach((id, j) => {
@@ -198,14 +180,13 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
 export function useFileChanges(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo,
   isWatched: boolean = false,
   workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchDiffFiles(workspaceId!, workspace);
+      const result = await WorkspaceService.fetchDiffFiles(workspaceId!);
       return {
         files: result.files || [],
         truncated: result.truncated ?? false,
@@ -230,12 +211,11 @@ export function useFileChanges(
 export function useUncommittedFiles(
   workspaceId: string | null,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo,
   workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.uncommittedFiles(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchUncommittedFiles(workspace),
+    queryFn: () => WorkspaceService.fetchUncommittedFiles(workspaceId!),
     enabled: !!workspaceId && workspaceState === "ready",
     staleTime: 30000,
     refetchInterval: sessionStatus === "working" ? 5000 : false,
@@ -254,12 +234,11 @@ export function useLastTurnFiles(
   workspaceId: string | null,
   sessionId: string | null | undefined,
   sessionStatus?: string | null,
-  workspace?: WorkspaceGitInfo,
   workspaceState?: string | null
 ) {
   return useQuery({
     queryKey: queryKeys.workspaces.lastTurnFiles(workspaceId || "", sessionId || undefined),
-    queryFn: () => WorkspaceService.fetchLastTurnFiles(workspace, sessionId || undefined),
+    queryFn: () => WorkspaceService.fetchLastTurnFiles(workspaceId!, sessionId || undefined),
     enabled: !!workspaceId && !!sessionId && workspaceState === "ready",
     staleTime: 30000,
     refetchInterval: sessionStatus === "working" ? 5000 : false,
@@ -319,15 +298,11 @@ export function usePRStatus(
 /**
  * Fetch specific file diff
  */
-export function useFileDiff(
-  workspaceId: string | null,
-  filePath: string | null,
-  workspace?: WorkspaceGitInfo
-) {
+export function useFileDiff(workspaceId: string | null, filePath: string | null) {
   return useQuery({
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!, workspace);
+      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
       return result;
     },
     enabled: !!workspaceId && !!filePath,
@@ -390,20 +365,16 @@ export function useCreateWorkspace() {
 
 /**
  * Fetch available branches for a workspace/repo.
- * Uses IPC (git CLI). Returns [] gracefully in browser/Storybook.
+ * TODO: Add backend endpoint for listing branches. Currently returns [].
  */
-export function useBranches(workspacePath: string | null) {
+export function useBranches(_workspacePath: string | null) {
   return useQuery({
-    queryKey: ["branches", workspacePath],
+    queryKey: ["branches", _workspacePath],
     queryFn: async () => {
-      const { isElectronAvailable } = await import("@/platform/electron/invoke");
-      if (!isElectronAvailable()) {
-        return [];
-      }
-      const { gitListBranches } = await import("@/platform/electron/git");
-      return await gitListBranches(workspacePath!);
+      // TODO: Call backend endpoint when available
+      return [] as Array<{ name: string; is_current: boolean; is_remote: boolean }>;
     },
-    enabled: !!workspacePath,
+    enabled: !!_workspacePath,
     staleTime: 30_000,
   });
 }

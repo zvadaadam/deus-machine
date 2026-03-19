@@ -17,7 +17,6 @@ import {
   useUncommittedFiles,
   useLastTurnFiles,
 } from "@/features/workspace";
-import type { WorkspaceGitInfo } from "@/features/workspace";
 import { CodePanelContent } from "@/features/workspace/ui/CodePanelContent";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
@@ -68,26 +67,6 @@ export function RightSidePanel({
     branch: workspace.git_branch,
   });
 
-  // Workspace git info for file changes query (IPC path)
-  // Must include all fields — missing parent_branch/workspace_path causes
-  // incorrect branch resolution and phantom diffs.
-  const workspaceGitInfo: WorkspaceGitInfo = useMemo(
-    () => ({
-      root_path: workspace.root_path,
-      slug: workspace.slug,
-      workspace_path: workspace.workspace_path,
-      git_target_branch: workspace.git_target_branch ?? undefined,
-      git_default_branch: workspace.git_default_branch,
-    }),
-    [
-      workspace.root_path,
-      workspace.slug,
-      workspace.workspace_path,
-      workspace.git_target_branch,
-      workspace.git_default_branch,
-    ]
-  );
-
   // Don't query diffs until the worktree checkout is complete — during "initializing"
   // git is still writing files, producing phantom diffs that clear on next fetch.
   const isReady = workspace.state === "ready";
@@ -96,7 +75,6 @@ export function RightSidePanel({
   const { data: fileChangesData } = useFileChanges(
     isReady ? workspace.id : null,
     workspace.session_status,
-    workspaceGitInfo,
     isWatched,
     workspace.state
   );
@@ -108,7 +86,6 @@ export function RightSidePanel({
   const { data: uncommittedData } = useUncommittedFiles(
     isReady ? workspace.id : null,
     workspace.session_status,
-    workspaceGitInfo,
     workspace.state
   );
   const uncommittedFiles = useMemo(() => uncommittedData ?? [], [uncommittedData]);
@@ -117,7 +94,6 @@ export function RightSidePanel({
     isReady ? workspace.id : null,
     workspace.current_session_id,
     workspace.session_status,
-    workspaceGitInfo,
     workspace.state
   );
   const lastTurnFiles = useMemo(() => lastTurnData ?? [], [lastTurnData]);
@@ -166,7 +142,6 @@ export function RightSidePanel({
           onFileClick={handleFileClick}
           filterMode={filterMode}
           onFilterModeChange={handleFilterModeChange}
-          workspaceGitInfo={workspaceGitInfo}
           onReview={onReview}
         />
       )}
