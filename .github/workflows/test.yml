@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Rebuild better-sqlite3 for Node.js
+        # bun install compiles native modules for Bun's ABI, but vitest runs
+        # under Node.js which has a different NODE_MODULE_VERSION. Rebuild
+        # better-sqlite3 specifically for the Node.js version used in CI.
+        run: cd node_modules/better-sqlite3 && bunx node-gyp rebuild
+
       - name: Run tests
         run: bun run test:backend
 
