@@ -6,36 +6,55 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { randomBytes } from "crypto";
-import { join } from "path";
+import { resolve as resolvePath } from "path";
+import { existsSync } from "fs";
 
 let browserProcess: ChildProcess | null = null;
 let browserPort: number | null = null;
 let browserAuthToken: string | null = null;
 
-export async function startBrowserServer(browserPath: string): Promise<{ port: number; authToken: string }> {
+export async function startBrowserServer(
+  browserPath: string
+): Promise<{ port: number; authToken: string }> {
   if (browserProcess) {
     return { port: browserPort!, authToken: browserAuthToken! };
   }
 
+  // Security: validate browserPath before executing it as a Node.js script.
+  const resolvedPath = browserPath.startsWith(".")
+    ? resolvePath(process.cwd(), browserPath)
+    : resolvePath(browserPath);
+
+  // Must be a JavaScript file
+  if (
+    !resolvedPath.endsWith(".js") &&
+    !resolvedPath.endsWith(".cjs") &&
+    !resolvedPath.endsWith(".mjs")
+  ) {
+    throw new Error("Browser server path must be a JavaScript file (.js, .cjs, or .mjs)");
+  }
+
+  // Must not contain null bytes (path traversal defense)
+  if (resolvedPath.includes("\0")) {
+    throw new Error("Browser server path contains null bytes");
+  }
+
+  // Must exist on disk
+  if (!existsSync(resolvedPath)) {
+    throw new Error(`Browser server script not found: ${resolvedPath}`);
+  }
+
   browserAuthToken = randomBytes(16).toString("hex");
 
-  const resolvedPath = browserPath.startsWith(".")
-    ? join(process.cwd(), browserPath)
-    : browserPath;
-
   return new Promise<{ port: number; authToken: string }>((resolve, reject) => {
-    browserProcess = spawn(
-      process.execPath,
-      [resolvedPath],
-      {
-        env: {
-          ...process.env,
-          AUTH_TOKEN: browserAuthToken!,
-          PORT: "0",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    );
+    browserProcess = spawn(process.execPath, [resolvedPath], {
+      env: {
+        ...process.env,
+        AUTH_TOKEN: browserAuthToken!,
+        PORT: "0",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     let resolved = false;
 
@@ -63,18 +82,29 @@ export async function startBrowserServer(browserPath: string): Promise<{ port: n
       console.log(`[browser-server] Exited with code=${code}`);
       browserProcess = null;
       browserPort = null;
-      if (!resolved) { resolved = true; reject(new Error(`Browser server exited before ready (code=${code})`)); }
+      browserAuthToken = null;
+      if (!resolved) {
+        resolved = true;
+        reject(new Error(`Browser server exited before ready (code=${code})`));
+      }
     });
 
     browserProcess.on("error", (err) => {
       console.error("[browser-server] Spawn error:", err);
       browserProcess = null;
       browserPort = null;
-      if (!resolved) { resolved = true; reject(err); }
+      browserAuthToken = null;
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
     });
 
     setTimeout(() => {
-      if (!resolved) { resolved = true; reject(new Error("Browser server did not emit PORT within 10s")); }
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("Browser server did not emit PORT within 10s"));
+      }
     }, 10_000);
   });
 }
@@ -83,7 +113,9 @@ export function stopBrowserServer(): void {
   if (browserProcess) {
     browserProcess.kill("SIGTERM");
     const proc = browserProcess;
-    const forceTimer = setTimeout(() => { if (proc && !proc.killed) proc.kill("SIGKILL"); }, 3_000);
+    const forceTimer = setTimeout(() => {
+      if (proc && !proc.killed) proc.kill("SIGKILL");
+    }, 3_000);
     proc.on("exit", () => clearTimeout(forceTimer));
     browserProcess = null;
     browserPort = null;
@@ -91,7 +123,11 @@ export function stopBrowserServer(): void {
   }
 }
 
-export function getBrowserServerStatus(): { running: boolean; port: number | null; authToken: string | null } {
+export function getBrowserServerStatus(): {
+  running: boolean;
+  port: number | null;
+  authToken: string | null;
+} {
   return {
     running: browserProcess !== null && !browserProcess.killed,
     port: browserPort,

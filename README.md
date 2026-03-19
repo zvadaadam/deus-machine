@@ -29,27 +29,27 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed development guide.
 ```
 ┌─────────────────────────────────┐
 │   React/Vite Frontend (1420)   │
-└────────────┬────────────────────┘
-             │ HTTP REST API + WebSocket
-┌────────────▼────────────────────┐
-│   Electron Main Process        │
-│   • Window management           │
-│   • PTY (node-pty)              │
-│   • BrowserView management      │
-│   • Sidecar socket relay        │
-└────────────┬────────────────────┘
-             │ Child Process
-┌────────────▼────────────────────┐
-│   Node.js Backend (Dynamic)    │
-│   • Hono API Server             │
-│   • SQLite Database             │
-│   • Workspace management        │
-└────────────┬────────────────────┘
-             │ Unix Socket
-┌────────────▼────────────────────┐
-│   Sidecar (Claude Agent SDK)   │
-│   (One per app instance)        │
-└─────────────────────────────────┘
+└───────┬─────────────┬───────────┘
+        │             │ HTTP REST API + WebSocket
+        │  ┌──────────▼────────────────────┐
+        │  │   Node.js Backend (Dynamic)   │
+        │  │   • Hono API Server            │
+        │  │   • SQLite Database            │
+        │  │   • Workspace management       │
+        │  │   • Sidecar socket relay       │
+        │  └──────────┬────────────────────┘
+        │             │ WebSocket (JSON-RPC 2.0)
+        │  ┌──────────▼────────────────────┐
+        │  │   Sidecar (Claude Agent SDK)  │
+        │  │   (One per app instance)       │
+        │  └───────────────────────────────┘
+        │ IPC (preload bridge)
+┌───────▼─────────────────────────┐
+│   Electron Main Process         │
+│   • Window management            │
+│   • PTY (node-pty)               │
+│   • BrowserView management       │
+└──────────────────────────────────┘
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
@@ -187,24 +187,24 @@ This repo ships with custom Claude Code agents and skills for a structured dev w
 
 Agents are specialized subagents that Claude auto-delegates to. They run in isolated context with their own tools and model.
 
-| Agent | Model | What it does |
-|-------|-------|-------------|
-| `code-reviewer` | Sonnet | Quick read-only code review. Has persistent memory. |
-| `dev` | Opus | TDD developer. Writes failing test first, implements, refactors. |
-| `deep-reviewer` | Opus | Thorough reviewer. Writes structured review docs. |
+| Agent           | Model  | What it does                                                     |
+| --------------- | ------ | ---------------------------------------------------------------- |
+| `code-reviewer` | Sonnet | Quick read-only code review. Has persistent memory.              |
+| `dev`           | Opus   | TDD developer. Writes failing test first, implements, refactors. |
+| `deep-reviewer` | Opus   | Thorough reviewer. Writes structured review docs.                |
 
 ### Skills (Slash Commands)
 
-| Command | What it does |
-|---------|-------------|
-| `/commit` | Analyzes staged changes, writes a good commit message |
-| `/pr` | Creates a PR with risk tier, test plan, structured description |
-| `/test` | Auto-detects what changed, runs the right test suites |
-| `/debug [error]` | Traces root cause through the codebase, suggests fix |
-| `/review` | Quick code review of changes |
-| `/deep-review` | Thorough audit, writes review file |
-| `/dev [task]` | TDD implementation: failing test -> pass -> refactor |
-| `/explore [area]` | Deep-dive into a codebase area |
+| Command           | What it does                                                   |
+| ----------------- | -------------------------------------------------------------- |
+| `/commit`         | Analyzes staged changes, writes a good commit message          |
+| `/pr`             | Creates a PR with risk tier, test plan, structured description |
+| `/test`           | Auto-detects what changed, runs the right test suites          |
+| `/debug [error]`  | Traces root cause through the codebase, suggests fix           |
+| `/review`         | Quick code review of changes                                   |
+| `/deep-review`    | Thorough audit, writes review file                             |
+| `/dev [task]`     | TDD implementation: failing test -> pass -> refactor           |
+| `/explore [area]` | Deep-dive into a codebase area                                 |
 
 ## Contributing
 

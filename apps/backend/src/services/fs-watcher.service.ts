@@ -52,14 +52,18 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
 
   const onFileChange = (changeType: string): void => {
     pendingCount++;
-    pendingType = pendingType === "mixed" || pendingType === changeType ? changeType : "mixed";
+    pendingType =
+      pendingType === "mixed" ? "mixed" : pendingType === changeType ? changeType : "mixed";
 
     const existing = debounceTimers.get(workspacePath);
     if (existing) clearTimeout(existing);
-    debounceTimers.set(workspacePath, setTimeout(() => {
-      flushChanges();
-      debounceTimers.delete(workspacePath);
-    }, DEBOUNCE_MS));
+    debounceTimers.set(
+      workspacePath,
+      setTimeout(() => {
+        flushChanges();
+        debounceTimers.delete(workspacePath);
+      }, DEBOUNCE_MS)
+    );
   };
 
   watcher

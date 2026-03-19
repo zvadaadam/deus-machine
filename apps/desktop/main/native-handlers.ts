@@ -9,15 +9,7 @@
  * snake_case names here must match the renderer exactly.
  */
 
-import {
-  ipcMain,
-  dialog,
-  nativeTheme,
-  BrowserWindow,
-  shell,
-  Menu,
-  app,
-} from "electron";
+import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "electron";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
@@ -80,18 +72,21 @@ export function registerNativeHandlers(): void {
   // Confirm dialog
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:confirm", async (_e, { message, detail }: { message: string; detail?: string }) => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (!win) return false;
-    const { response } = await dialog.showMessageBox(win, {
-      type: "question",
-      buttons: ["Cancel", "Confirm"],
-      defaultId: 1,
-      message,
-      detail,
-    });
-    return response === 1;
-  });
+  ipcMain.handle(
+    "native:confirm",
+    async (_e, { message, detail }: { message: string; detail?: string }) => {
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      if (!win) return false;
+      const { response } = await dialog.showMessageBox(win, {
+        type: "question",
+        buttons: ["Cancel", "Confirm"],
+        defaultId: 1,
+        message,
+        detail,
+      });
+      return response === 1;
+    }
+  );
 
   // -------------------------------------------------------------------------
   // Theme
@@ -106,31 +101,46 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:openExternal", (_e, { url }: { url: string }) => {
-    shell.openExternal(url);
+    // Security: only allow http/https URLs to prevent shell command injection
+    // via custom protocol handlers (e.g., file://, javascript:, vbscript:).
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        shell.openExternal(url);
+      }
+    } catch {
+      // Ignore malformed URLs
+    }
   });
 
   // -------------------------------------------------------------------------
   // Context menu
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:contextMenu", (_e, { items }: { items: Array<{ id: string; label: string; type?: string; enabled?: boolean }> }) => {
-    return new Promise<string | null>((resolve) => {
-      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-      if (!win) {
-        resolve(null);
-        return;
-      }
-      const menu = Menu.buildFromTemplate(
-        items.map((item) => ({
-          label: item.label,
-          click: () => resolve(item.id),
-          type: item.type as "normal" | "separator" | undefined,
-          enabled: item.enabled ?? true,
-        }))
-      );
-      menu.popup({ window: win, callback: () => resolve(null) });
-    });
-  });
+  ipcMain.handle(
+    "native:contextMenu",
+    (
+      _e,
+      { items }: { items: Array<{ id: string; label: string; type?: string; enabled?: boolean }> }
+    ) => {
+      return new Promise<string | null>((resolve) => {
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+        if (!win) {
+          resolve(null);
+          return;
+        }
+        const menu = Menu.buildFromTemplate(
+          items.map((item) => ({
+            label: item.label,
+            click: () => resolve(item.id),
+            type: item.type as "normal" | "separator" | undefined,
+            enabled: item.enabled ?? true,
+          }))
+        );
+        menu.popup({ window: win, callback: () => resolve(null) });
+      });
+    }
+  );
 
   // -------------------------------------------------------------------------
   // Backend connection info (renderer needs this to connect WebSocket)
@@ -163,7 +173,11 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("native:maximize", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
-      win.isMaximized() ? win.unmaximize() : win.maximize();
+      if (win.isMaximized()) {
+        win.unmaximize();
+      } else {
+        win.maximize();
+      }
     }
   });
 
@@ -269,31 +283,37 @@ export function registerNativeHandlers(): void {
 
   // Renderer calls invoke("open_in_app", { appId, workspacePath })
   // We accept both the old native: shape AND the new snake_case shape.
-  ipcMain.handle("native:openInApp", async (_e, { appPath, filePath }: { appPath: string; filePath: string }) => {
-    try {
-      await execFileAsync("open", ["-a", appPath, filePath]);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-
-  ipcMain.handle("open_in_app", async (_e, { appId, workspacePath }: { appId: string; workspacePath: string }) => {
-    try {
-      // Look up the app path from the cached installed apps list.
-      // appId is our internal identifier (e.g., "cursor", "vscode"), not the macOS app name.
-      const apps = await getInstalledAppsList();
-      const app_ = apps.find((a) => a.id === appId);
-      if (!app_) {
-        console.warn(`[open_in_app] App not found: ${appId}`);
+  ipcMain.handle(
+    "native:openInApp",
+    async (_e, { appPath, filePath }: { appPath: string; filePath: string }) => {
+      try {
+        await execFileAsync("open", ["-a", appPath, filePath]);
+        return true;
+      } catch {
         return false;
       }
-      await execFileAsync("open", ["-a", app_.path, workspacePath]);
-      return true;
-    } catch {
-      return false;
     }
-  });
+  );
+
+  ipcMain.handle(
+    "open_in_app",
+    async (_e, { appId, workspacePath }: { appId: string; workspacePath: string }) => {
+      try {
+        // Look up the app path from the cached installed apps list.
+        // appId is our internal identifier (e.g., "cursor", "vscode"), not the macOS app name.
+        const apps = await getInstalledAppsList();
+        const app_ = apps.find((a) => a.id === appId);
+        if (!app_) {
+          console.warn(`[open_in_app] App not found: ${appId}`);
+          return false;
+        }
+        await execFileAsync("open", ["-a", app_.path, workspacePath]);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  );
 
   // -------------------------------------------------------------------------
   // App info
@@ -397,7 +417,17 @@ async function getInstalledAppsList(): Promise<InstalledApp[]> {
       try {
         const iconPath = `${appPath}/Contents/Resources/AppIcon.icns`;
         const tmpPng = `/tmp/opendevs-icon-${app.id}.png`;
-        await execFileAsync("sips", ["-s", "format", "png", "-z", "64", "64", iconPath, "--out", tmpPng]);
+        await execFileAsync("sips", [
+          "-s",
+          "format",
+          "png",
+          "-z",
+          "64",
+          "64",
+          iconPath,
+          "--out",
+          tmpPng,
+        ]);
         const fs = await import("fs/promises");
         const buf = await fs.readFile(tmpPng);
         icon = `data:image/png;base64,${buf.toString("base64")}`;
