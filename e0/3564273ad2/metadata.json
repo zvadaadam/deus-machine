@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "e03564273ad2",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/web/src/app/layouts/RightSidePanel.tsx",
+    "apps/web/src/features/file-browser/api/index.ts",
+    "apps/web/src/features/file-browser/api/useFiles.ts",
+    "apps/web/src/features/file-browser/api/useFilesRust.ts",
+    "apps/web/src/features/file-browser/index.ts",
+    "apps/web/src/features/file-browser/ui/FileBrowserPanel.tsx",
+    "apps/web/src/features/repository/api/repository.service.ts",
+    "apps/web/src/features/session/api/session.service.ts",
+    "apps/web/src/features/session/hooks/useAgentRpcHandler.ts",
+    "apps/web/src/features/workspace/api/index.ts",
+    "apps/web/src/features/workspace/api/workspace.queries.ts",
+    "apps/web/src/features/workspace/api/workspace.service.ts",
+    "apps/web/src/features/workspace/ui/AllDiffFileSection.tsx",
+    "apps/web/src/features/workspace/ui/AllFilesDiffViewer.tsx",
+    "apps/web/src/features/workspace/ui/CodePanelContent.tsx",
+    "apps/web/src/platform/electron/db.ts",
+    "apps/web/src/platform/electron/git.ts",
+    "apps/web/src/shared/config/api.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e0/3564273ad2/0/metadata.json",
+      "transcript": "/e0/3564273ad2/0/full.jsonl",
+      "content_hash": "/e0/3564273ad2/0/content_hash.txt",
+      "prompt": "/e0/3564273ad2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12911,
+    "cache_creation_tokens": 2881065,
+    "cache_read_tokens": 228942230,
+    "output_tokens": 279316,
+    "api_call_count": 957
+  }
+}
