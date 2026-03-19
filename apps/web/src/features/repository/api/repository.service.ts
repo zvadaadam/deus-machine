@@ -35,7 +35,7 @@ export const RepoService = {
       try {
         return await dbGetStats();
       } catch {
-        // Rust DB failed — fall through to HTTP
+        // IPC failed — fall through to HTTP
       }
     }
     return apiClient.get<Stats>(ENDPOINTS.STATS);

@@ -8,13 +8,13 @@
  *
  * 2. DISPLAY PLANE (this store) — per-workspace phase + full session metadata.
  *    Persists across workspace switches so the component can remount without
- *    re-probing Rust.  SimulatorPanel writes here; ContentTabBar reads the
+ *    re-probing via IPC.  SimulatorPanel writes here; ContentTabBar reads the
  *    phase label; any future viewer reads the stream URL directly.
  *
  * The component plane (SimulatorPanel mount/unmount) is NOT represented here —
  * it is purely ephemeral React rendering.  Workspace switch unmounts the
  * component but leaves this store untouched → session survives → on remount
- * the component reads existing state and reconnects with zero Rust round-trip.
+ * the component reads existing state and reconnects with zero IPC round-trip.
  *
  * DESIGN RULE: `clearWorkspaceSession` is called ONLY on explicit user Stop or
  * when `stop_streaming` succeeds.  It is NEVER called from a component's
@@ -60,7 +60,7 @@ interface SimulatorStore {
    * Prefer `dispatch()` for transitions within the normal lifecycle.
    * Use `setSession` only for recovery paths (mount probes, auto-reconnect)
    * where the event model doesn't apply because the transition comes from
-   * observing external state (Rust session probe) rather than a user/agent action.
+   * observing external state (IPC session probe) rather than a user/agent action.
    */
   setSession: (workspaceId: string, phase: SimPhase) => void;
 
@@ -91,9 +91,7 @@ export const useSimulatorStatusStore = create<SimulatorStore>()((set, get) => ({
 
     if (next === null) {
       if (import.meta.env.DEV) {
-        console.warn(
-          `[SimStore] Illegal transition: ${current.phase} + ${event.type} → rejected`
-        );
+        console.warn(`[SimStore] Illegal transition: ${current.phase} + ${event.type} → rejected`);
       }
       return false;
     }

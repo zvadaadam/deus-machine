@@ -10,7 +10,7 @@
 import * as Sentry from "@sentry/node";
 
 // Initialize Sentry before anything else.
-// DSN passed as env var from Rust process manager (not hardcoded — open source repo).
+// DSN passed as env var from Electron main process (not hardcoded — open source repo).
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
@@ -524,7 +524,7 @@ class UnifiedSidecar {
    * 1. Clean up stale resources
    * 2. Initialize agent handlers
    * 3. Listen on the selected transport
-   * 4. Print connection info to stdout (consumed by the Rust process manager)
+   * 4. Print connection info to stdout (consumed by the Electron main process)
    */
   async start(): Promise<void> {
     await this.cleanup();
@@ -583,7 +583,7 @@ class UnifiedSidecar {
         console.log(`Agent-server listening on ws://127.0.0.1:${port}`);
         console.log(`Sidecar PID: ${process.pid}`);
 
-        // Machine-readable output for the Rust process manager.
+        // Machine-readable output for the Electron main process.
         // LISTEN_URL is the new canonical output; SOCKET_PATH kept for transition.
         originalLog(`LISTEN_URL=ws://127.0.0.1:${port}`);
         resolve();

@@ -48,9 +48,8 @@ export function useWorkspaceActions({
   // Reset target branch when workspace changes (render-time pattern).
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
   const prevWsIdRef = useRef(selectedWorkspaceId);
-   
+
   if (prevWsIdRef.current !== selectedWorkspaceId) {
-     
     prevWsIdRef.current = selectedWorkspaceId;
     setSelectedTargetBranch(selectedWorkspace?.git_default_branch ?? "main");
   }
@@ -81,7 +80,7 @@ export function useWorkspaceActions({
   const { mutate: archiveWorkspace } = useArchiveWorkspace();
   const handleArchive = useCallback(() => {
     if (!selectedWorkspace) return;
-    // Release simulator resources before archiving — the Rust session would
+    // Release simulator resources before archiving — the native session would
     // otherwise leak in the HashMap until app close (no lifecycle hook exists).
     const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
     if (simSession.phase !== "idle") {

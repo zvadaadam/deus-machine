@@ -118,7 +118,7 @@ export function OnboardingOverlay() {
 
   // ── Enter/exit onboarding mode (StrictMode-safe) ────────────────────
   // React 18 StrictMode double-mounts: mount → unmount → remount.
-  // No ref guard — let enter run every mount. The Rust code is idempotent
+  // No ref guard — let enter run every mount. The native code is idempotent
   // (saves frame only once, restores on exit, re-saves on next enter).
   // Sequence in StrictMode: enter → exit → enter → stays entered. ✅
   useEffect(() => {

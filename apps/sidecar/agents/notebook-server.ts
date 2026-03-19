@@ -12,7 +12,7 @@ import * as fs from "fs";
  * Resolves the absolute path to the bundled notebook MCP server.
  *
  * Strategy:
- * - The sidecar runs from `src-tauri/resources/bin/index.bundled.cjs` (both dev and prod).
+ * - The sidecar runs from its bundled CJS file (both dev and prod).
  * - The notebook server is bundled to `notebook-server.bundled.cjs` in the same directory.
  * - We resolve relative to `process.argv[1]` (the sidecar entry point).
  */
@@ -56,7 +56,9 @@ export function createNotebookMCPServer(
         // whitelist (HOME, PATH, SHELL, TERM, USER, LOGNAME on macOS).
         // Filter out undefined values (process.env values are string | undefined).
         ...Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+          Object.entries(process.env).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined
+          )
         ),
         NOTEBOOK_CWD: workingDirectory,
         NOTEBOOK_PATH: notebookPath,

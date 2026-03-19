@@ -10,7 +10,7 @@
  * - Event forwarding (page-load, title, url, navigation)
  * - Network request tracking via session.webRequest
  *
- * Handler names match the Tauri-style snake_case names the renderer calls
+ * Handler names match the snake_case names the renderer calls
  * via invoke(). The preload's browserInvoke() uses "browser:" prefixed names
  * for its own methods, but generic invoke() calls use snake_case.
  */

@@ -111,7 +111,7 @@ const BROWSER_SCREENSHOT_TIMEOUT_MS = 15_000;
  *  visual effects + eval. Visual cursor animation up to 3s + eval up to 8s. */
 const BROWSER_INTERACTION_TIMEOUT_MS = 15_000;
 
-/** Timeout for simulator screenshot — Rust ObjC bridge capture + JPEG
+/** Timeout for simulator screenshot — native capture + JPEG
  *  encoding + base64 transfer. Typically <2s but allow headroom. */
 const SIMULATOR_SCREENSHOT_TIMEOUT_MS = 10_000;
 

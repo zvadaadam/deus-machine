@@ -66,7 +66,7 @@ interface FileBrowserPanelProps {
 }
 
 /**
- * Overlay change data (additions/deletions) from git diff onto the Rust-scanned tree.
+ * Overlay change data (additions/deletions) from git diff onto the IPC-scanned tree.
  * Builds a path→change lookup and walks the tree to decorate matching files.
  */
 function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): FileTreeNode[] {
@@ -371,37 +371,37 @@ export function FileBrowserPanel({
           {/* Right-side actions — visible in Changes mode */}
           {filterMode === "changes" && (
             <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-xs transition-colors duration-200 ease-[ease]">
-                  <SlidersHorizontal className="h-[11px] w-[11px]" />
-                  <span>{changesFilterLabel(changesFilter)}</span>
-                  <ChevronDown className="h-[10px] w-[10px]" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[140px]">
-                {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
-                  <DropdownMenuItem
-                    key={value}
-                    onClick={() => setChangesFilter(value)}
-                    className="gap-2 text-xs"
-                  >
-                    <Check
-                      className={cn(
-                        "h-3 w-3",
-                        changesFilter === value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {label}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-lg py-1 text-xs transition-colors duration-200 ease-[ease]">
+                    <SlidersHorizontal className="h-[11px] w-[11px]" />
+                    <span>{changesFilterLabel(changesFilter)}</span>
+                    <ChevronDown className="h-[10px] w-[10px]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[140px]">
+                  {CHANGES_FILTER_OPTIONS.map(([value, label]) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => setChangesFilter(value)}
+                      className="gap-2 text-xs"
+                    >
+                      <Check
+                        className={cn(
+                          "h-3 w-3",
+                          changesFilter === value ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
+                    <RefreshCw className="h-3 w-3" />
+                    Refresh files
                   </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleRefresh} className="gap-2 text-xs">
-                  <RefreshCw className="h-3 w-3" />
-                  Refresh files
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
@@ -434,7 +434,8 @@ export function FileBrowserPanel({
       {fileChangesTruncated && filterMode === "changes" && (
         <div className="border-border/30 bg-muted/20 border-b px-2.5 py-1.5">
           <p className="text-muted-foreground text-xs">
-            Showing {fileChanges.length.toLocaleString()} of {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
+            Showing {fileChanges.length.toLocaleString()} of{" "}
+            {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
           </p>
         </div>
       )}

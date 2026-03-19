@@ -794,7 +794,7 @@ export function useBrowserRpcHandler(
       }
 
       try {
-        // Build optional crop rect for Rust command
+        // Build optional crop rect for screenshot command
         const rect = params.rect as
           | { x: number; y: number; width: number; height: number }
           | undefined;
@@ -806,7 +806,7 @@ export function useBrowserRpcHandler(
           invokeArgs.rectHeight = rect.height;
         }
 
-        // Call the native Rust command (WKWebView.takeSnapshot on macOS)
+        // Call the native screenshot command (Electron BrowserView.capturePage)
         const base64 = await invoke<string>("screenshot_browser_webview", invokeArgs);
 
         // Visual feedback: camera flash effect AFTER capture (so it doesn't appear in the image)

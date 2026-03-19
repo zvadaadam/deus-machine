@@ -14,8 +14,8 @@ import { getErrorMessage } from "@shared/lib/errors";
 
 /**
  * Creates the iOS simulator automation tool definitions for a given session.
- * These tools control the iOS simulator via the existing Rust sim-core
- * infrastructure (ObjC bridge for MJPEG streaming, HID input, xcodebuild).
+ * These tools control the iOS simulator via the Electron main process
+ * (MJPEG streaming, HID input, xcodebuild).
  */
 export function createSimulatorTools(sessionId: string): SdkMcpToolDefinition<any>[] {
   return [

@@ -181,7 +181,7 @@ export function MainContent({
 
   // --- Reset panel sizes on workspace switch ---
   // ResizablePanelGroup has no key prop — it stays mounted across workspace
-  // switches so SimulatorPanel and BrowserPanel keep their Rust sessions alive.
+  // switches so SimulatorPanel and BrowserPanel keep their native sessions alive.
   // Without the key, react-resizable-panels won't re-apply defaultSize on
   // re-render. We must imperatively collapse/expand panels to match the
   // per-workspace Zustand state when the selected workspace changes.

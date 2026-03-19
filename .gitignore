@@ -58,14 +58,12 @@ database/
 
 # Logs
 logs/
-*.log
 backend.log
 backend-*.log
 frontend.log
 
 # OS
 Thumbs.DB
-.DS_Store
 
 # Temporary files
 tmp/

@@ -21,7 +21,7 @@ import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
  * Follows the same pattern as useBrowserRpcHandler's getActiveTab/onAutoCreateTab.
  */
 export interface SimulatorRpcCallbacks {
-  /** Workspace ID for routing commands to the correct Rust session. */
+  /** Workspace ID for routing commands to the correct native session. */
   workspaceId: string;
   /** Boot a simulator by UDID and start streaming. Returns StreamInfo on success. */
   onBootSimulator: (udid: string) => Promise<StreamInfo | null>;

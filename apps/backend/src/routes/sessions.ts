@@ -1,7 +1,7 @@
-import { Hono } from 'hono';
-import { getDatabase } from '../lib/database';
-import { NotFoundError } from '../lib/errors';
-import { parseBody, CreateMessageBody } from '../lib/schemas';
+import { Hono } from "hono";
+import { getDatabase } from "../lib/database";
+import { NotFoundError } from "../lib/errors";
+import { parseBody, CreateMessageBody } from "../lib/schemas";
 import {
   getAllSessions,
   getSessionById,
@@ -10,44 +10,44 @@ import {
   hasOlderMessages,
   hasNewerMessages,
   getMessageById,
-} from '../db';
-import { invalidate } from '../services/query-engine';
-import { writeUserMessage } from '../services/message-writer';
+} from "../db";
+import { invalidate } from "../services/query-engine";
+import { writeUserMessage } from "../services/message-writer";
 
 /**
  * Session Routes
  *
  * Sessions are associated with workspaces. Agent runtime (Claude SDK)
- * is managed by sidecar-v2 (Rust-spawned). This route handles:
+ * is managed by the agent-server (sidecar). This route handles:
  * - Session CRUD
  * - User message persistence
  * - Session status updates
  *
- * Frontend communicates with sidecar-v2 via Tauri IPC for agent queries.
+ * Frontend communicates with the agent-server via WebSocket JSON-RPC.
  */
 
 const app = new Hono();
 
-app.get('/sessions', (c) => {
+app.get("/sessions", (c) => {
   const db = getDatabase();
   return c.json(getAllSessions(db));
 });
 
-app.get('/sessions/:id', (c) => {
+app.get("/sessions/:id", (c) => {
   const db = getDatabase();
-  const session = getSessionById(db, c.req.param('id'));
-  if (!session) throw new NotFoundError('Session not found');
+  const session = getSessionById(db, c.req.param("id"));
+  if (!session) throw new NotFoundError("Session not found");
   return c.json(session);
 });
 
-app.get('/sessions/:id/messages', (c) => {
+app.get("/sessions/:id/messages", (c) => {
   const db = getDatabase();
-  const sessionId = c.req.param('id');
+  const sessionId = c.req.param("id");
   // Default to 50 messages per page; cap at 500 for safety.
-  const limit = Math.min(Number(c.req.query('limit')) || 50, 500);
+  const limit = Math.min(Number(c.req.query("limit")) || 50, 500);
   // Cursor is seq (integer), not sent_at (string with collisions)
-  const beforeRaw = c.req.query('before');
-  const afterRaw = c.req.query('after');
+  const beforeRaw = c.req.query("before");
+  const afterRaw = c.req.query("after");
   const before = beforeRaw ? Number(beforeRaw) : undefined;
   const after = afterRaw ? Number(afterRaw) : undefined;
 
@@ -69,16 +69,16 @@ app.get('/sessions/:id/messages', (c) => {
  * Gateway/web fallback for saving user messages. The primary desktop path
  * now uses the sidecar socket (saveUserMessage in sidecar/db/session-writer.ts)
  * which atomically persists the message + dispatches the agent in one call.
- * This endpoint is kept for non-Tauri clients (cloud relay, web gateway).
+ * This endpoint is kept for non-desktop clients (cloud relay, web gateway).
  */
-app.post('/sessions/:id/messages', async (c) => {
-  const sessionId = c.req.param('id');
+app.post("/sessions/:id/messages", async (c) => {
+  const sessionId = c.req.param("id");
   const { content, model } = parseBody(CreateMessageBody, await c.req.json());
 
   const result = writeUserMessage(sessionId, content, model);
   if (!result.success) throw new NotFoundError(result.error);
 
-  invalidate(['workspaces', 'sessions', 'messages', 'stats']);
+  invalidate(["workspaces", "sessions", "messages", "stats"]);
 
   const db = getDatabase();
   const createdMessage = getMessageById(db, result.messageId);
@@ -89,17 +89,19 @@ app.post('/sessions/:id/messages', async (c) => {
  * POST /sessions/:id/stop
  *
  * Marks session as idle and cancels latest user message.
- * Actual agent cancellation is done via Tauri IPC → sidecar-v2.
+ * Actual agent cancellation is done via WebSocket → agent-server.
  */
-app.post('/sessions/:id/stop', (c) => {
+app.post("/sessions/:id/stop", (c) => {
   const db = getDatabase();
-  const sessionId = c.req.param('id');
+  const sessionId = c.req.param("id");
 
   const session = getSessionRaw(db, sessionId);
-  if (!session) throw new NotFoundError('Session not found');
+  if (!session) throw new NotFoundError("Session not found");
 
-  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(sessionId);
-  invalidate(['workspaces', 'sessions', 'stats']);
+  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
+    sessionId
+  );
+  invalidate(["workspaces", "sessions", "stats"]);
 
   const updatedSession = getSessionRaw(db, sessionId);
   return c.json({ success: true, session: updatedSession });

@@ -5,26 +5,35 @@
 The frontend currently uses **three overlapping transport layers** to communicate with the backend/sidecar:
 
 ### 1. WebSocket Query Protocol (`q:command`)
+
 Used by: PTY, file watcher, browser server
+
 ```
 Frontend → WS sendCommand("pty:spawn") → Backend query-engine → node-pty
 ```
+
 Clean, consistent, works well.
 
 ### 2. HTTP Sidecar Relay (`socketService.ts`)
+
 Used by: sending messages, stopping sessions
+
 ```
 Frontend → socketService.sendQuery() → HTTP POST /api/sidecar/send → Backend → Unix Socket → Sidecar
 Frontend → socketService.cancelQuery() → HTTP POST /api/sidecar/send → Backend → Unix Socket → Sidecar
 ```
+
 Frontend is aware of the sidecar's existence and speaks to it through the backend as a dumb pipe.
 
 ### 3. Mixed WS + HTTP for Sidecar RPC
+
 Used by: agent plan approval, question answering, getDiff
+
 ```
 Sidecar → Unix Socket → Backend → WS q:event "sidecar:request" → Frontend  (WS inbound)
 Frontend → HTTP POST /api/sidecar/respond → Backend → Unix Socket → Sidecar  (HTTP outbound)
 ```
+
 Requests arrive via WebSocket, responses go back via HTTP. Asymmetric.
 
 ### Why This Is a Problem
@@ -37,7 +46,7 @@ Requests arrive via WebSocket, responses go back via HTTP. Asymmetric.
 
 4. **Three protocols for one connection.** WS for subscriptions/commands, HTTP for sidecar relay, HTTP for REST fallback. The WebSocket is already there and handles PTY/fs/browser commands — there's no reason messages and sidecar RPC shouldn't flow through it too.
 
-5. **The sidecar relay endpoints are unnecessary.** `/api/sidecar/send`, `/api/sidecar/respond`, `/api/sidecar/status` exist only because the frontend was ported from Tauri (which had direct Unix socket access) and the HTTP relay was a quick bridge. Now that we have a proper WebSocket query protocol, these endpoints are redundant.
+5. **The sidecar relay endpoints are unnecessary.** `/api/sidecar/send`, `/api/sidecar/respond`, `/api/sidecar/status` exist only because the frontend was originally built with Tauri (which had direct Unix socket access) and the HTTP relay was a quick bridge. Now that we have a proper WebSocket query protocol, these endpoints are redundant.
 
 ---
 
@@ -48,6 +57,7 @@ Requests arrive via WebSocket, responses go back via HTTP. Asymmetric.
 ### Message Sending
 
 **Before:**
+
 ```
 Frontend → socketService.sendQuery() → HTTP → Backend → Unix Socket → Sidecar
                                                                         ↓
@@ -55,6 +65,7 @@ Frontend → socketService.sendQuery() → HTTP → Backend → Unix Socket → 
 ```
 
 **After:**
+
 ```
 Frontend → sendCommand("sendMessage", { sessionId, content, model, agentType })
              ↓
@@ -72,12 +83,14 @@ The backend's existing `sendMessage` handler (query-engine.ts:365-377) already d
 ### Session Stopping
 
 **Before:**
+
 ```
 Frontend → socketService.cancelQuery() → HTTP → Backend → Sidecar
 Frontend → SessionService.stop() → HTTP → Backend → DB update
 ```
 
 **After:**
+
 ```
 Frontend → sendCommand("stopSession", { sessionId, agentType })
              ↓
@@ -92,12 +105,14 @@ The backend's existing `stopSession` handler (query-engine.ts:378-389) already d
 ### Sidecar RPC Responses
 
 **Before:**
+
 ```
 Frontend receives sidecar:request via WS q:event     ← WS inbound
 Frontend sends response via HTTP POST /api/sidecar/respond  ← HTTP outbound
 ```
 
 **After:**
+
 ```
 Frontend receives sidecar:request via WS q:event     ← WS inbound (same)
 Frontend → sendCommand("sidecar:respond", { id, result })  ← WS outbound
@@ -113,24 +128,24 @@ Symmetric: both directions use WebSocket.
 
 ## What Gets Deleted
 
-| File / Endpoint | Reason |
-|----------------|--------|
-| `apps/web/src/platform/socket/socketService.ts` | Entire file. All functionality moves to WS commands. |
-| `apps/backend/src/routes/sidecar.ts` | All 3 endpoints (`/api/sidecar/send`, `/respond`, `/status`). No longer needed. |
-| `socketService` imports in `session.queries.ts` | Replace with `sendCommand()` calls. |
-| `socketService` imports in `useSessionActions.ts` | Replace with `sendCommand()` calls. |
-| HTTP POST to `/api/sidecar/respond` in `useAgentRpcHandler.ts` | Replace with `sendCommand("sidecar:respond", ...)`. |
+| File / Endpoint                                                | Reason                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `apps/web/src/platform/socket/socketService.ts`                | Entire file. All functionality moves to WS commands.                            |
+| `apps/backend/src/routes/sidecar.ts`                           | All 3 endpoints (`/api/sidecar/send`, `/respond`, `/status`). No longer needed. |
+| `socketService` imports in `session.queries.ts`                | Replace with `sendCommand()` calls.                                             |
+| `socketService` imports in `useSessionActions.ts`              | Replace with `sendCommand()` calls.                                             |
+| HTTP POST to `/api/sidecar/respond` in `useAgentRpcHandler.ts` | Replace with `sendCommand("sidecar:respond", ...)`.                             |
 
 ## What Gets Added
 
-| Location | Change |
-|----------|--------|
-| `query-engine.ts` `sendMessage` handler | After DB write, relay `{ type: "query", ... }` to sidecar via `sidecarService.sendMessage()` |
-| `query-engine.ts` `stopSession` handler | Before/after DB write, send cancel to sidecar via `sidecarService.sendMessage()` |
-| `query-engine.ts` new `sidecar:respond` command | Relay response to sidecar via `sidecarService.sendResponseToSidecar()` |
-| `session.queries.ts` `useSendMessage` | Replace `socketService.sendQuery()` with `sendCommand("sendMessage", ...)` |
-| `useSessionActions.ts` `stopSession` | Replace `socketService.cancelQuery()` with `sendCommand("stopSession", ...)` |
-| `useAgentRpcHandler.ts` `sendResponse` | Replace HTTP POST with `sendCommand("sidecar:respond", ...)` |
+| Location                                        | Change                                                                                       |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `query-engine.ts` `sendMessage` handler         | After DB write, relay `{ type: "query", ... }` to sidecar via `sidecarService.sendMessage()` |
+| `query-engine.ts` `stopSession` handler         | Before/after DB write, send cancel to sidecar via `sidecarService.sendMessage()`             |
+| `query-engine.ts` new `sidecar:respond` command | Relay response to sidecar via `sidecarService.sendResponseToSidecar()`                       |
+| `session.queries.ts` `useSendMessage`           | Replace `socketService.sendQuery()` with `sendCommand("sendMessage", ...)`                   |
+| `useSessionActions.ts` `stopSession`            | Replace `socketService.cancelQuery()` with `sendCommand("stopSession", ...)`                 |
+| `useAgentRpcHandler.ts` `sendResponse`          | Replace HTTP POST with `sendCommand("sidecar:respond", ...)`                                 |
 
 ## What Gets Modified (Frontend)
 

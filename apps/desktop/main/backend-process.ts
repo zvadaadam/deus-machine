@@ -29,11 +29,11 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     ? join(process.resourcesPath, "backend", "server.cjs")
     : join(__dirname, "../../backend/server.cjs");
 
-  // Database path — prefer legacy Tauri location (com.opendevs.ide) if it exists,
+  // Database path — prefer legacy location (com.opendevs.ide) if it exists,
   // otherwise use Electron's userData dir (~/Library/Application Support/opendevs/).
-  const legacyTauriPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
+  const legacyDbPath = join(app.getPath("appData"), "com.opendevs.ide", "opendevs.db");
   const electronDbPath = join(app.getPath("userData"), "opendevs.db");
-  const dbPath = existsSync(legacyTauriPath) ? legacyTauriPath : electronDbPath;
+  const dbPath = existsSync(legacyDbPath) ? legacyDbPath : electronDbPath;
 
   // Sidecar bundle path
   const sidecarPath = app.isPackaged
@@ -63,7 +63,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
     let resolved = false;
     let stdoutBuffer = "";
 
-    // Parse port from stdout (same pattern as current Rust BackendManager)
+    // Parse port from stdout
     backendProcess.stdout?.on("data", (data: Buffer) => {
       stdoutBuffer += data.toString();
       const lines = stdoutBuffer.split("\n");
@@ -79,7 +79,6 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
 
         // Match both formats: "[BACKEND_PORT]12345" (primary) and
         // "Backend server started on port 12345" (legacy fallback).
-        // The Rust BackendManager uses [BACKEND_PORT] — match that first.
         const portMatch =
           trimmed.match(/^\[BACKEND_PORT\](\d+)$/) ||
           trimmed.match(/Backend server started on port (\d+)/);
@@ -91,7 +90,7 @@ export async function spawnBackend(): Promise<{ port: number; authToken: string 
 
         // Relay workspace init progress events to the renderer.
         // Backend emits: OPENDEVS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
-        // We parse the JSON and forward it as an IPC event (same as Rust BackendManager).
+        // We parse the JSON and forward it as an IPC event to the renderer.
         // SYNC: Event name must match shared/events.ts (AppEventMap["workspace:progress"])
         if (trimmed.startsWith("OPENDEVS_WORKSPACE_PROGRESS:")) {
           const jsonStr = trimmed.slice("OPENDEVS_WORKSPACE_PROGRESS:".length);
