@@ -39,12 +39,12 @@ function readVscdbProjects(
   seen: Set<string>
 ) {
   if (!existsSync(dbPath)) return;
+  let db: InstanceType<typeof Database> | undefined;
   try {
-    const db = new Database(dbPath, { readonly: true });
+    db = new Database(dbPath, { readonly: true });
     const row = db
       .prepare("SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'")
       .get() as { value: string } | undefined;
-    db.close();
 
     if (!row?.value) return;
     const data = JSON.parse(row.value);
@@ -60,6 +60,8 @@ function readVscdbProjects(
     }
   } catch {
     // Silently skip if DB is locked or malformed
+  } finally {
+    db?.close();
   }
 }
 

@@ -57,9 +57,13 @@ export async function startBrowserServer(
     });
 
     let resolved = false;
+    let stdoutBuffer = "";
 
     browserProcess.stdout?.on("data", (data: Buffer) => {
-      for (const line of data.toString().split("\n")) {
+      stdoutBuffer += data.toString();
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() ?? ""; // Keep incomplete last line in buffer
+      for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith("PORT=")) {
           const port = parseInt(trimmed.slice("PORT=".length), 10);
@@ -103,6 +107,9 @@ export async function startBrowserServer(
     setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        browserProcess = null;
+        browserPort = null;
+        browserAuthToken = null;
         reject(new Error("Browser server did not emit PORT within 10s"));
       }
     }, 10_000);
@@ -114,9 +121,9 @@ export function stopBrowserServer(): void {
     browserProcess.kill("SIGTERM");
     const proc = browserProcess;
     const forceTimer = setTimeout(() => {
-      if (proc && !proc.killed) proc.kill("SIGKILL");
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
     }, 3_000);
-    proc.on("exit", () => clearTimeout(forceTimer));
+    proc.once("exit", () => clearTimeout(forceTimer));
     browserProcess = null;
     browserPort = null;
     browserAuthToken = null;
