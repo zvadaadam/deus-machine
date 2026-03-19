@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "ee5982bc8b31",
+  "strategy": "manual-commit",
+  "branch": "zvadaadam/explore-manus-app",
+  "checkpoints_count": 48,
+  "files_touched": [
+    ".husky/_/commit-msg",
+    ".husky/_/post-commit",
+    ".husky/_/pre-push",
+    ".husky/_/prepare-commit-msg"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ee/5982bc8b31/0/metadata.json",
+      "transcript": "/ee/5982bc8b31/0/full.jsonl",
+      "content_hash": "/ee/5982bc8b31/0/content_hash.txt",
+      "prompt": "/ee/5982bc8b31/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12593,
+    "cache_creation_tokens": 2247603,
+    "cache_read_tokens": 125359612,
+    "output_tokens": 212572,
+    "api_call_count": 680
+  }
+}
